@@ -1961,7 +1961,8 @@ function joint_obs(o; observe = true)
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
             tests_analysed = observe ? o.cumulative_tests_analysed :
-                             missing, tests_offset = 0))
+                             missing,
+            tests_offset = o.cumulative_tests_analysed_offset))
 end
 
 ## Dummy non-missing confirmed/tested counts instantiate the laboratory
