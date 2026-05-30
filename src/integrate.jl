@@ -5,7 +5,27 @@
 # forecast integrals). Also defines `ExportDeathDelay`, which carries
 # a precomputed onset-to-death CDF on a fixed grid.
 
-_integrate_kernel(u, p) = p.f(p.halfwidth * (u + 1) + p.lo)
+# Reduce an integrand `g` over the reference domain `[-1, 1]` against the
+# `alg` Gauss-Legendre rule. The package only ever integrates on `[-1, 1]`
+# (each method folds the change of variables into `g`), so the SciML
+# `scale = (ub - lb) / 2 = 1` and `shift = 0`, leaving the bare weighted
+# sum `Σ wᵢ g(xᵢ)`. Calling `g` directly here — rather than through a
+# SciML `IntegralProblem`/`solve` parameter boundary — lets Julia
+# specialise on `g`'s concrete return type, so the result type is inferred
+# (AD tangents and `Dual`s propagate) and the loop allocates nothing. The
+# accumulation order matches the reference `gauss_legendre`
+# (`w₁ g(x₁) + …`), so values are reproduced bit-for-bit. `alg.nodes` and
+# `alg.weights` are the very nodes/weights `gausslegendre(n)` built into
+# the algorithm object, so the rule is identical.
+@inline function _gl_reduce(g::G, alg) where {G}
+    nodes = alg.nodes
+    weights = alg.weights
+    @inbounds acc = weights[1] * g(nodes[1])
+    @inbounds for i in 2:length(nodes)
+        acc += weights[i] * g(nodes[i])
+    end
+    return acc
+end
 
 """
 Integrate a scalar function `f` over `[lo, hi]` by Gauss-Legendre
@@ -13,12 +33,13 @@ quadrature. The reference domain `[-1, 1]` is mapped onto `[lo, hi]`,
 so any forward integral in the package can share one integrator. Returns
 zero when `hi <= lo`. The default scheme is [`CUMULATIVE_INTEGRAL_ALG`](@ref).
 """
-function integrate(f, lo, hi; alg = CUMULATIVE_INTEGRAL_ALG)
+function integrate(f::F, lo, hi; alg = CUMULATIVE_INTEGRAL_ALG) where {F}
     hi <= lo && return zero(hi - lo)
     halfwidth = (hi - lo) / 2
-    prob = IntegralProblem(_integrate_kernel, (-1.0, 1.0),
-        (; f, halfwidth, lo))
-    return halfwidth * solve(prob, alg).u
+    g = let f = f, halfwidth = halfwidth, lo = lo
+        u -> f(halfwidth * (u + one(u)) + lo)
+    end
+    return halfwidth * _gl_reduce(g, alg)
 end
 
 # Change of variables clustering the reference nodes towards `hi`. With
@@ -26,11 +47,11 @@ end
 # the map `d = span · vᵖ` sends the dense end of the reference grid to
 # `s = hi` and stretches the sparse end out to `s = lo`. The Jacobian
 # `dd/du = span · p · vᵖ⁻¹ / 2` is folded into the integrand so a single
-# fixed `solve` covers the whole domain.
-function _clustered_kernel(u, p)
+# fixed-node reduction covers the whole domain.
+function _clustered_kernel(u, f, hi, span, expo)
     v = (u + one(u)) / 2
-    d = p.span * v^p.expo
-    return p.f(p.hi - d) * (p.span * p.expo * v^(p.expo - one(p.expo)) / 2)
+    d = span * v^expo
+    return f(hi - d) * (span * expo * v^(expo - one(expo)) / 2)
 end
 
 """
@@ -45,7 +66,7 @@ integrated exactly; when `scale ≥ hi - lo` the map reduces to the uniform
 method. Returns zero when `hi <= lo`. The default scheme is
 [`DEATH_INTEGRAL_ALG`](@ref).
 """
-function integrate(f, lo, hi, scale; alg = DEATH_INTEGRAL_ALG)
+function integrate(f::F, lo, hi, scale; alg = DEATH_INTEGRAL_ALG) where {F}
     hi <= lo && return zero(hi - lo)
     span = hi - lo
     # `expo` places ~half the nodes within `scale` of `hi`; `expo = 1`
@@ -55,9 +76,12 @@ function integrate(f, lo, hi, scale; alg = DEATH_INTEGRAL_ALG)
     (isfinite(scale) && scale > zero(scale)) ||
         return integrate(f, lo, hi; alg)
     expo = max(one(span), log(span / scale) / log(oftype(span, 2)))
-    prob = IntegralProblem(_clustered_kernel, (-1.0, 1.0),
-        (; f, hi, span, expo))
-    return solve(prob, alg).u
+    # The clustered Jacobian is folded into the kernel, so the reduction
+    # carries no outer `halfwidth` factor (unlike the uniform method).
+    g = let f = f, hi = hi, span = span, expo = expo
+        u -> _clustered_kernel(u, f, hi, span, expo)
+    end
+    return _gl_reduce(g, alg)
 end
 
 # Clustering scale for a delay distribution, `mean + K·std`: the width of
