@@ -2,22 +2,21 @@
 # to fit every Turing model.
 
 """
-Mooncake reverse-mode AD with default `Mooncake.Config()`. Used as
-the NUTS `adtype` keyword.
+The package-default AD type used as the NUTS `adtype` keyword. Returns
+the Enzyme reverse-mode (runtime-activity-off) config from
+`enzyme_adtype`. Enzyme is the default because it is validated correct
+against Mooncake and finite differences, is ~14% faster per gradient,
+and the type-stable Gauss-Legendre `integrate` removed the need for
+runtime activity. Mooncake remains available via `mooncake_adtype`.
 """
-default_adtype() = AutoMooncake(; config = Mooncake.Config())
+default_adtype() = enzyme_adtype()
 
 """
-Enzyme reverse-mode AD with runtime activity and `Duplicated` function
-annotation, the configuration the joint model's analytical gamma-CDF
-rule needs (see `ext/BVDOutbreakSizeEnzymeExt.jl`). Returns an
-`ADTypes.AutoEnzyme`; pass to `nuts_sample(model; adtype = ...)`.
-
-`enzyme_adtype` is a stub; loading Enzyme (`using Enzyme`) activates
-the method via `BVDOutbreakSizeEnzymeExt`. Calling `enzyme_adtype`
-without Enzyme loaded raises a `MethodError`.
+Mooncake reverse-mode AD with default `Mooncake.Config()`. The previous
+package default, kept as an opt-in backend; pass to
+`nuts_sample(model; adtype = mooncake_adtype())`.
 """
-function enzyme_adtype end
+mooncake_adtype() = AutoMooncake(; config = Mooncake.Config())
 
 """
 NUTS on `model`, parallel chains via `MCMCThreads`. Chains

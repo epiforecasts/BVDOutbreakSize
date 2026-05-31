@@ -6,7 +6,7 @@ using DataFrames: DataFrame, rename
 using Chain: @chain
 using Random: MersenneTwister
 using Dates: Date, date2epochdays, epochdays2date
-using ADTypes: AutoMooncake
+using ADTypes: AutoMooncake, AutoEnzyme
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore, NoTangent
 using SpecialFunctions: digamma, loggamma
@@ -34,7 +34,7 @@ export REPORT_SCENARIOS,
        summary_table, posterior_summary,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
-       nuts_sample, default_adtype, enzyme_adtype,
+       nuts_sample, default_adtype, enzyme_adtype, mooncake_adtype,
        DEATH_INTEGRAL_ALG, CUMULATIVE_INTEGRAL_ALG,
        integrate, delay_convolution, onset_rescale,
        integrate_cumulative, integrate_exports_deaths,
@@ -74,6 +74,7 @@ include("constants.jl")
 include("data.jl")
 include("sampling.jl")
 include("gamma_cdf.jl")
+include("enzyme.jl")
 include("integrate.jl")
 include("expectations.jl")
 include("summaries.jl")

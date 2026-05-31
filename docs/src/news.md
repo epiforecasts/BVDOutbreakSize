@@ -104,10 +104,10 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Infrastructure
 
-- Added optional Enzyme reverse-mode AD, selected with `enzyme_adtype()`,
-  alongside the default Mooncake backend. Gradients match Mooncake across
-  every model including the full joint and fitting runs at the same speed,
-  so Mooncake stays the default.
+- Made Enzyme reverse-mode (runtime-activity-off) automatic differentiation the default backend.
+It is validated correct against Mooncake and finite differences across every model including the full joint, and is about 14% faster per gradient.
+The type-stable Gauss-Legendre quadrature in `integrate` removed the need for runtime activity, so plain `Enzyme.Reverse` resolves activity statically.
+Mooncake remains available via `mooncake_adtype()`.
 - Fixed a posterior-predictive grid regression under AlgebraOfGraphics
   0.12 and widened the AoG compat bound to include 0.12; bumped the
   `softprops/action-gh-release` Action to v3.

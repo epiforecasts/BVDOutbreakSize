@@ -1,20 +1,29 @@
-module BVDOutbreakSizeEnzymeExt
+# Enzyme reverse-mode AD glue: the package-default `AutoEnzyme` config
+# and the EnzymeRules needed for the gamma-CDF and gamma normalising
+# constants. Enzyme is a hard dependency, so these load with the package.
 
-import BVDOutbreakSize
-using BVDOutbreakSize: _gamma_cdf, _gamma_cdf_partials
-using ADTypes: AutoEnzyme
 using Enzyme: Enzyme
 using Enzyme.EnzymeRules: EnzymeRules
 using SpecialFunctions: gamma, digamma
 
-# Reverse-mode Enzyme with runtime activity (so per-value activity is
-# resolved through the quadrature and distribution constructors) and a
-# `Duplicated` function annotation (so the closure over the observed data
-# is differentiated, not treated as read-only). This is the config the
-# `_gamma_cdf` / `gamma` rules below are validated against.
-function BVDOutbreakSize.enzyme_adtype()
+"""
+Enzyme reverse-mode AD with a `Duplicated` function annotation (so the
+closure over the observed data is differentiated, not treated as
+read-only). Runtime activity is not enabled: it was previously needed
+because the old `Integrals.solve`-based `integrate` returned `Any`,
+defeating Enzyme's static activity analysis through the quadrature. Now
+that `integrate` is type-stable, activity is resolved statically and
+plain `Enzyme.Reverse` produces correct gradients (validated against
+Mooncake and finite differences across the joint and single-stream
+models). Dropping runtime activity is faster and allocates less than the
+runtime-activity-on config. This is the config the `_gamma_cdf` / `gamma`
+rules below are validated against, and the package default returned by
+`default_adtype`. Returns an `ADTypes.AutoEnzyme`; pass to
+`nuts_sample(model; adtype = ...)`.
+"""
+function enzyme_adtype()
     return AutoEnzyme(;
-        mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
+        mode = Enzyme.Reverse,
         function_annotation = Enzyme.Duplicated)
 end
 
@@ -41,5 +50,3 @@ EnzymeRules.@easy_rule(_gamma_cdf(α::Real, θ::Real, x::Real),
 # `gamma` outside the `_gamma_cdf` rule, so without this their gradients are
 # corrupted.
 EnzymeRules.@easy_rule(gamma(x::Real), (Ω * digamma(x),))
-
-end
