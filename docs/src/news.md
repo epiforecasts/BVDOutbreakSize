@@ -27,6 +27,19 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Modelling
 
+- Reparameterised growth to sample the growth rate `r` directly
+  (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
+  with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still
+  exposed. This is the exact reciprocal pushforward of the old `τ` prior,
+  so the implied priors are unchanged.
+- Recentred the doubling-count prior on a base that advances with the
+  cut-off: `m ~ Normal(m_prior_centre(as_of), 3)`, centre
+  `9 + (cut-off − 18 May)/14` doublings, based on McCabe et al.'s
+  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the 14-day
+  doubling time, so it tracks data refreshes.
+- Added a partially-pooled DRC and Uganda ascertainment extension: a
+  logit-scale reporting fraction applied to the latent incidence, fitting
+  the reported suspected-case count alongside the deaths and exports.
 - Added a laboratory pipeline coupling the cumulative tests-analysed and
   confirmed-case streams to the latent incidence, introducing a testing
   fraction, PCR sensitivity and a report-to-confirmation (lab-turnaround)
@@ -39,8 +52,7 @@ each push to `main` also republishes the rendered analysis and the
   streams per sitrep vintage: `bvd_joint` conditions on the
   between-vintage increments rather than a single cut-off total, and a
   single-vintage stream reduces exactly to the cumulative likelihood,
-  recovering the McCabe et al. configuration. Each case bin carries a
-  per-bin random-effect DRC ascertainment, confirmed cases enter as
+  recovering the McCabe et al. configuration. Confirmed cases enter as
   per-vintage NegBinomial increments with per-test positivity a derived
   quantity, and each stream carries its own vintage offsets so a lagging
   stream is not assumed to run to the cut-off.
@@ -49,6 +61,11 @@ each push to `main` also republishes the rendered analysis and the
 - Added `forecast_vs_truth_trajectory`: scores the retrospective forecast
   against the observed cumulative at every sitrep date across the horizon,
   not just the endpoint.
+- Cut quadratures from the time-varying convolution: the laboratory
+  background tested-volume integral now uses a closed-form gamma-CDF
+  integral (`_gamma_cdf_integral`) instead of a per-draw quadrature, with
+  an analytic reverse-mode rule, speeding up the lab-pipeline likelihood
+  without changing the model.
 
 ### Outputs
 
@@ -81,8 +98,13 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Infrastructure
 
-- Added optional Enzyme reverse-mode automatic differentiation, selected with `enzyme_adtype()`, alongside the default Mooncake backend.
-Gradients match Mooncake across every model including the full joint, and end-to-end fitting runs at the same speed, so Mooncake stays the default.
+- Added optional Enzyme reverse-mode AD, selected with `enzyme_adtype()`,
+  alongside the default Mooncake backend. Gradients match Mooncake across
+  every model including the full joint and fitting runs at the same speed,
+  so Mooncake stays the default.
+- Fixed a posterior-predictive grid regression under AlgebraOfGraphics
+  0.12 and widened the AoG compat bound to include 0.12; bumped the
+  `softprops/action-gh-release` Action to v3.
 
 ## v1.2.0
 

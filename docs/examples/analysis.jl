@@ -60,14 +60,13 @@
 #   so the priors carry the published 95% credible intervals on
 #   $\alpha$ and $\theta$ rather than collapsing onto Rosello's point
 #   estimate.
-# - *NegBinomial likelihood on deaths and reported cases* with a
-#   single shared surveillance dispersion $k$. McCabe et al. use
-#   Poisson for deaths and do not have a cases-ascertainment
-#   model at all. Exports stay Poisson because two observations
-#   would not identify a separate dispersion. The McCabe et al.
-#   "exact NegBinomial CIs" on Method 1 are the conventional
-#   binomial-inversion procedure, not an estimated dispersion.
-# - *Ascertainment extension* (not in McCabe et al.). A logit-scale
+# - *NegBinomial likelihood on deaths and reported cases* with a shared
+#   surveillance dispersion $k$, to account for over-dispersion in the
+#   passive-surveillance counts. This differs from the Poisson likelihood
+#   McCabe et al. use for the Method 2 deaths, and they do not model the
+#   reported cases. We assume exports follow a Poisson distribution, as
+#   two observations would not identify a separate dispersion.
+# - *Ascertainment extension*. A logit-scale
 #   hyperprior on the reporting fraction, applied to the latent
 #   $C(T)$, gives a joint posterior over the reported suspected-case
 #   count alongside deaths and exports.
@@ -80,7 +79,7 @@
 #   handles right-truncation of the tested observation. PCR sensitivity
 #   and testing fraction are separately identified given both
 #   observations.
-# - *Per-vintage fit of the DRC streams* (not in McCabe et al.). The
+# - *Per-vintage fit of the DRC streams*. The
 #   suspected-case, confirmed-case and suspected-death likelihoods model
 #   the new cases and deaths reported in each sitrep, conditioning on the
 #   between-vintage increments against the same intensities as the
@@ -89,16 +88,14 @@
 #   to the cumulative single-total likelihood, recovering the McCabe et
 #   al. configuration. The confirmed convolution shares one quadrature
 #   across all sitrep edges rather than re-integrating at each. The case
-#   streams carry a *per-bin random-effect* DRC ascertainment, with each
-#   sitrep drawing its own $p_{\text{DRC},v}$ from the pooled hyperprior,
-#   so surveillance variation across the window is absorbed rather than
-#   baked into a single shared scalar.
-# - *No-onward-transmission counterfactual* (not in McCabe et al.).
+#   streams use a single DRC ascertainment fraction $p_{\text{DRC}}$
+#   applied to every sitrep vintage.
+# - *No-onward-transmission counterfactual*.
 #   Projects the future expected deaths from cases already infected
 #   by $T$, integrating $i(s)\cdot(1 - F_d(T - s))$ per draw — a
 #   lower bound on the eventual death toll if every onward
 #   transmission stopped today.
-# - *Posterior-predictive forecasts* (not in McCabe et al.). A
+# - *Posterior-predictive forecasts*. A
 #   one-week-ahead projection of each stream from the joint posterior,
 #   plus a retrospective check that refits the original report's data
 #   and projects it forward to the current cut-off to compare against
@@ -152,7 +149,7 @@
 #   earlier cases and add newly-reporting health zones, and ascertainment
 #   likely rose over the window as the response scaled up. The increments
 #   therefore mix true incidence with backfill and changing detection,
-#   which the per-bin ascertainment random effect only partly absorbs.
+#   which the ascertainment fraction does not absorb.
 #   The most recent sitrep's increment is also not corrected for
 #   right-truncation, so it is exposed as is, with the same caveat as the
 #   latest cumulative total.
@@ -473,34 +470,48 @@ vintage_table #hide
 # ```
 #
 # so that the cumulative case count at the cut-off is $C(T) = 2^m$
-# with $m = T/\tau$ the number of doublings since seeding. McCabe et al.
-# vary the doubling time over a sensitivity sweep of 7 / 14 / 21
-# days; here $\tau$ has a LogNormal prior centred at the main scenario
-# (14 d) with log-SD 0.4, giving a 95% prior interval of roughly
-# $(6, 31)$ d that encompasses the full sweep:
+# with $m = T/\tau$ the number of doublings since seeding. McCabe et al.'s
+# primary assumption is the doubling time, which they vary over a
+# sensitivity sweep of 7 / 14 / 21 days; each choice of doubling time
+# implies a growth rate $r = \log 2/\tau$. We place the prior on that
+# implied growth rate $r$ directly, centred at the main-scenario doubling
+# time (14 d, so $r = \log 2/14$) with log-SD 0.4:
 #
 # ```math
-# \tau \sim \mathrm{LogNormal}(\log 14,\ 0.4). \tag{2}
+# r \sim \mathrm{LogNormal}(\log(\log 2 / 14),\ 0.4),
+# \qquad
+# \tau = \frac{\log 2}{r}. \tag{2}
 # ```
 #
-# Rather than sampling $\tau$ and $T$ directly (which are ridge-
-# correlated through $C(T) = \exp(r T)$), the model samples $\tau$ and
-# the *doubling-time multiplier* $m = T/\tau$. Then $C(T) = 2^m$ is
-# near-orthogonal to $\tau$. $m$ is centred at 7 ($C(T) = 2^7 = 128$)
-# with SD 2.5, truncated below at zero:
+# Because $r = \log 2/\tau$ is a reciprocal, putting this LogNormal on $r$
+# is exactly equivalent to a $\mathrm{LogNormal}(\log 14, 0.4)$ prior on
+# the doubling time: a reciprocal negates and shifts the log-scale mean
+# but preserves the log-scale SD 0.4, so the implied doubling-time prior
+# is unchanged (95% interval roughly $(6, 31)$ d, spanning the full
+# sweep), as is every derived quantity. Only the sampled coordinate
+# differs.
+#
+# Rather than sampling $T$ directly (ridge-correlated with $r$ through
+# $C(T) = \exp(r T)$), the model samples the *doubling count*
+# $m = T/\tau$. Then $C(T) = 2^m$ is near-orthogonal to $r$. We give $m$
+# a truncated-Normal prior with SD 3, centred on a base assumption that
+# advances with the cut-off date:
 #
 # ```math
-# m \sim \mathrm{Normal}(7,\ 2.5)\ \text{on}\ (0, \infty). \tag{3}
+# m \sim \mathrm{Normal}(m_0,\ 3)\ \text{on}\ (0, \infty),
+# \qquad
+# m_0 = 9 + \frac{\text{cut-off} - \text{18 May 2026}}{14}. \tag{3}
 # ```
 #
-# This gives 95% prior support of roughly $m \in (2, 12)$, i.e.
-# $C(T) \in (4, 4000)$. The range is chosen to span the number of
-# doublings plausible under the doubling times McCabe et al. sweep
-# (7–21 days) over a likely few weeks to months of spread since
-# seeding — it is motivated by their scenario *settings*. The growth
-# rate $r$ and the elapsed time
-# $T = m\cdot\tau$ are exposed as deterministics so they appear in
-# posterior tables and pair plots.
+# The base assumption is McCabe et al.'s first report (18 May 2026): its
+# Method 2 central scenario of 501 cases is a doubling count
+# $m = \log_2 501 \approx 9$. Each day that the cut-off runs past that
+# report adds a fraction of a doubling at the central 14-day doubling
+# time, so the size prior stays centred on the plausible outbreak as the
+# data are refreshed rather than being fixed at the report-date value.
+# The doubling time $\tau$, the elapsed time $T = m\cdot\tau$ and $C(T)$
+# are exposed as deterministics so they appear in posterior tables and
+# pair plots.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: exponential_growth_model</summary>
@@ -773,12 +784,11 @@ cfr_prior_fig #hide
 
 # ##### Surveillance dispersion
 #
-# We assume the passive-surveillance counts are reported with negative
-# binomial observation error around their expected value, using the
-# same error model for both streams it applies to — suspected deaths
-# and reported cases in the DRC — with a single shared dispersion $k$
-# because they come from the same surveillance system. Under the
-# mean-$\mu$ / dispersion-$k$ parameterisation a count $Y$ has
+# We assume the surveillance counts are reported with negative binomial
+# observation error around their expected value, with a single shared
+# dispersion $k$ for the suspected-death, reported-case and
+# confirmed-case streams. Under the mean-$\mu$ / dispersion-$k$
+# parameterisation a count $Y$ has
 #
 # ```math
 # Y \sim \mathrm{NegBinomial}(\mu,\ k), \qquad
@@ -804,9 +814,6 @@ cfr_prior_fig #hide
 # many orders of magnitude, so the pair plots and summary table show
 # dispersion on both the sampled $1/\sqrt{k}$ scale, which is easier to
 # read, and the more familiar $k$ scale.
-# Because each stream contributes essentially one aggregate count, $k$
-# is only weakly identified, so this prior carries the inference and is
-# set to reflect the overdispersion we expect from passive surveillance.
 # This extends the McCabe et al. report, which uses a Poisson likelihood
 # for the Method 2 deaths and does not model the reported case counts at
 # all; the negative binomial adds overdispersion to absorb
@@ -1094,7 +1101,7 @@ cfr_prior_fig #hide
 # background streams. Ideally it would also be informed by a known
 # background rate of non-BVD presentations from routine surveillance or
 # other data sources. The dispersion $k$ (equation (9)) is shared with
-# the deaths and tested likelihoods.
+# the deaths and confirmed likelihoods.
 #
 # $\mu_{\text{bg}} = \lambda_{\text{bg}}\, T$ assumes the non-BVD
 # background rate is constant in time and independent of the outbreak.
@@ -1110,39 +1117,21 @@ cfr_prior_fig #hide
 # the implied positivity.
 #
 # As for the deaths, we model each sitrep's new suspected cases rather
-# than only the latest cumulative total.
-# Surveillance intensity varies across the window, so each sitrep draws
-# its own ascertainment as a per-bin random effect: with the pooled
-# ascertainment hyperparameters $\mu_{\text{logit}}, \tau_{\text{logit}}$
-# and IID offsets $z_{\text{DRC},v} \sim \mathrm{Normal}(0, 1)$,
-#
-# ```math
-# p_{\text{DRC},v} = \mathrm{logistic}(\mu_{\text{logit}}
-#     + \tau_{\text{logit}}\, z_{\text{DRC},v}), \tag{20a}
-# ```
-#
-# from the same population as the cumulative $p_{\text{DRC}}$, the
-# pooling shrinking sitreps toward the hyperprior mean where the data
-# are uninformative (an IID effect, not a random walk). Writing the
-# unit-ascertainment BVD-suspected cumulative
+# than only the latest cumulative total. The DRC ascertainment fraction
+# $p_{\text{DRC}}$ (equation (11)) is applied to every sitrep's
+# increment. Writing the unit-ascertainment BVD-suspected cumulative
 # $\mu_{\text{BVD},0}(s) = \int_0^s e^{r u} f_{\text{rep}}(s - u)\,du$,
 # the new suspected cases in sitrep $v$ have mean
 #
 # ```math
 # \mu_v^{\text{rep}}
-#   = p_{\text{DRC},v}\,\bigl(\mu_{\text{BVD},0}(s_v)
+#   = p_{\text{DRC}}\,\bigl(\mu_{\text{BVD},0}(s_v)
 #     - \mu_{\text{BVD},0}(s_{v-1})\bigr)
 #     + \lambda_{\text{bg}}\,(s_v - s_{v-1}),
 # \quad
-# \Delta Y_v^{\text{rep}} \sim \mathrm{NegBinomial}(\mu_v^{\text{rep}}, k). \tag{20b}
+# \Delta Y_v^{\text{rep}} \sim
+#     \mathrm{NegBinomial}(\mu_v^{\text{rep}}, k). \tag{20}
 # ```
-#
-# Applying $p_{\text{DRC},v}$ to the new-case increment of the
-# unit-ascertainment cumulative, rather than inside the integrand, keeps
-# the mean linear in the random-effect draw.
-# Reported and confirmed sitreps for the same date share their
-# $p_{\text{DRC},v}$ draw, the BVD pool being shared between the two
-# streams.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>
@@ -1258,16 +1247,16 @@ cfr_prior_fig #hide
 # suspected cumulative with the lab-convolved
 # $I_{\text{lab},0}(s) = \int_0^s \mu_{\text{BVD},0}(s')\,
 #     f_{\text{lab}}(s - s')\,ds'$ and gating by the testing fraction
-# $\tau$ and sensitivity $s$.
-# Reported and confirmed sitreps for the same date share their per-bin
-# ascertainment draw:
+# $\tau$ and sensitivity $s$. The new confirmed cases in sitrep $v$ have
+# mean
 #
 # ```math
 # \mu_v^{\text{conf}}
-#   = p_{\text{DRC},v}\, s\, \tau\,
+#   = p_{\text{DRC}}\, s\, \tau\,
 #     \bigl(I_{\text{lab},0}(s_v) - I_{\text{lab},0}(s_{v-1})\bigr),
 # \quad
-# \Delta Y_v^{\text{conf}} \sim \mathrm{NegBinomial}(\mu_v^{\text{conf}}, k). \tag{25a}
+# \Delta Y_v^{\text{conf}} \sim
+#     \mathrm{NegBinomial}(\mu_v^{\text{conf}}, k). \tag{25a}
 # ```
 #
 # The tested-volume and per-test positivity terms (equations (23)-(24))
@@ -1278,8 +1267,8 @@ cfr_prior_fig #hide
 #     $\mu_{\text{BVD},0}$ is evaluated once on a fixed quadrature node
 #     set over $[0, T]$ and reused across every sitrep edge, sweeping
 #     the lab-delay weight over the shared nodes.
-#     Per-bin ascertainment is applied to the returned increment, so
-#     this precomputation does not depend on the random-effect draws.
+#     The ascertainment fraction is applied to the returned increment, so
+#     this precomputation does not depend on it.
 #     The suspected and death convolutions use the gamma closed form
 #     and need no quadrature.
 
@@ -1649,7 +1638,7 @@ prior_C_table #hide
 #md # ```
 
 prior_pair_fig = plot_pair(prior_chn,
-    [:τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
         :λ_bg, :τ_test, :s_test, :positivity, :p_positive]);
 
@@ -1676,20 +1665,36 @@ prior_pair_fig #hide
 genetic_seeding = T -> genetic_seeding_model(T, obs.genetic_tmrca_days;
     tmrca_days_sd = obs.genetic_tmrca_days_sd)
 
+## Growth submodel whose doubling-count prior centre advances with the
+## cut-off date (base value at McCabe's first report; see
+## `m_prior_centre`), so every fit uses the size prior appropriate to its
+## own `as_of_date`.
+function growth_for(o)
+    exponential_growth_model(
+        m_prior = truncated(Normal(m_prior_centre(o.as_of_date), 3.0);
+        lower = 0))
+end
+growth_now = growth_for(obs)
+
 fit_args = joint_obs(obs)
 chn_joint = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
     fit_args.export_deaths; fit_args.kw...,
+    growth = growth_now,
     first_export_detection_delta = obs.first_export_detection_delta,
     genetic = genetic_seeding));
 
-chn_exports = nuts_sample(exports_only_model(obs.exported_cases));
-chn_deaths = nuts_sample(deaths_only_model(obs.total_deaths));
-chn_cases = nuts_sample(cases_only_model(obs.reported_cases));
+chn_exports = nuts_sample(
+    exports_only_model(obs.exported_cases; growth = growth_now));
+chn_deaths = nuts_sample(
+    deaths_only_model(obs.total_deaths; growth = growth_now));
+chn_cases = nuts_sample(
+    cases_only_model(obs.reported_cases; growth = growth_now));
 chn_confirmed = nuts_sample(
-    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed));
+    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed;
+    growth = growth_now));
 chn_exports_deaths = nuts_sample(
-    exports_deaths_only_model(obs.export_deaths_daily));
+    exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now));
 
 posterior_C_joint = vec(Array(chn_joint[:cumulative_cases]));
 posterior_C_exports = vec(Array(chn_exports[:cumulative_cases]));
@@ -1826,7 +1831,8 @@ diagnostics_table( #hide
 # cases. Each reproduction drops exports so only the deaths likelihood
 # is instantiated, conditions on that version's deaths ($88$ for 18 May,
 # $131$ for 20 May), and `Turing.fix`-pins the Method 2 main-scenario
-# values ($\tau = 14$ d, $\mathrm{CFR} = 30\%$ for 18 May and $33\%$ for
+# values (the growth rate to the $\tau = 14$ d scenario via
+# $r = \log 2/14$, $\mathrm{CFR} = 30\%$ for 18 May and $33\%$ for
 # 20 May, $\alpha = 4.42$, $\beta = 0.388$/d), with the deaths
 # NegBinomial made Poisson-like. The only sampled latent is $m$, the
 # number of doublings since seeding ($C(T) = 2^m$). A close match
@@ -2001,7 +2007,7 @@ start_date_fig #hide
 
 # The full posterior summary table reports equal-tailed 30%, 60% and
 # 90% credible intervals on the key joint-fit parameters: growth rate
-# $r$, doubling-time multiplier $m$, days since seeding $T$, CFR, the
+# $r$, doubling count $m$, days since seeding $T$, CFR, the
 # DRC and Uganda ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$, the
 # pooling SD $\tau_{\text{logit}}$, the surveillance dispersion on both
 # the sampled $1/\sqrt{k}$ scale and the more familiar $k$ scale, the
@@ -2017,7 +2023,7 @@ start_date_fig #hide
 #md # ```
 
 joint_summary = summary_table(chn_joint,
-    [:r, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
+    [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
         :s_test, :τ_test, :λ_bg, :positivity, :p_positive,
         :cumulative_cases]; digits = 2);
@@ -2037,7 +2043,7 @@ joint_summary #hide
 #md # ```
 
 posterior_pair_fig = plot_pair(chn_joint,
-    [:τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit];
     prior = prior_chn);
 
@@ -2266,6 +2272,7 @@ report_args = joint_obs(obs_report)
 chn_joint_report = nuts_sample(
     bvd_joint(obs_report.exported_cases, report_args.deaths,
     report_args.reported, report_args.export_deaths; report_args.kw...,
+    growth = growth_for(obs_report),
     first_export_detection_delta =
     obs_report.first_export_detection_delta));
 posterior_C_joint_report = vec(Array(chn_joint_report[:cumulative_cases]));
@@ -2380,6 +2387,7 @@ community_delay = delay_model(;
 chn_joint_community = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
     fit_args.export_deaths; fit_args.kw...,
+    growth = growth_now,
     first_export_detection_delta = obs.first_export_detection_delta,
     genetic = genetic_seeding,
     deaths = (total_deaths,
@@ -2464,6 +2472,7 @@ genetic_seeding_clock19 = T -> genetic_seeding_model(T,
 chn_joint_clock19 = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
     fit_args.export_deaths; fit_args.kw...,
+    growth = growth_now,
     first_export_detection_delta = obs.first_export_detection_delta,
     genetic = genetic_seeding_clock19));
 
@@ -2732,13 +2741,15 @@ chn_joint_report_20may = nuts_sample(
     bvd_joint(obs_report_20may.exported_cases,
     report_20may_args.deaths, report_20may_args.reported,
     report_20may_args.export_deaths; report_20may_args.kw...,
+    growth = growth_for(obs_report_20may),
     first_export_detection_delta =
     obs_report_20may.first_export_detection_delta));
 posterior_C_joint_report_20may = vec(Array(chn_joint_report_20may[:cumulative_cases]));
 
 imperial_fixed = Turing.fix(
     imperial_only_model(missing, 88),       # exports missing → pure Method 2
-    (τ = 14.0, CFR = 0.30, α = 4.42, θ = 1/0.388,
+    ## Pin the τ = 14 d scenario through the growth rate r = log(2)/14.
+    (r = log(2) / 14, CFR = 0.30, α = 4.42, θ = 1/0.388,
         inv_sqrt_k = 1e-3)
 )
 chn_imperial = nuts_sample(imperial_fixed);
@@ -2746,7 +2757,8 @@ posterior_C_imperial = vec(Array(chn_imperial[:cumulative_cases]));
 
 imperial_fixed_20may = Turing.fix(
     imperial_only_model(missing, 131),      # exports missing → pure Method 2
-    (τ = 14.0, CFR = 0.33, α = 4.42, θ = 1/0.388,
+    ## Pin the τ = 14 d scenario through the growth rate r = log(2)/14.
+    (r = log(2) / 14, CFR = 0.33, α = 4.42, θ = 1/0.388,
         inv_sqrt_k = 1e-3)
 )
 chn_imperial_20may = nuts_sample(imperial_fixed_20may);

@@ -6,16 +6,35 @@
 
 """
 Prior on the cumulative case count `C(T) = exp(r·T)` via a doublings
-parameterisation. Samples a doubling time `τ` and a doubling-time
-multiplier `m = T/τ`, then exposes `(τ, m, r, T, C_T, cumulative)` as
-deterministics for downstream submodels.
+parameterisation. Samples the exponential growth rate `r` and a
+doubling-count `m = T/τ`, then exposes `(τ, m, r, T, C_T, cumulative)`
+as deterministics for downstream submodels.
+
+McCabe et al.'s primary assumption is the doubling time (their 7/14/21-day
+sweep); each doubling time implies a growth rate `r = log(2)/τ`, and the
+prior is placed on that implied `r`, with `τ = log(2)/r` recovered as a
+deterministic. The default `r ~ LogNormal(log(log(2)/14), 0.4)` is
+exactly equivalent to a `LogNormal(log(14), 0.4)` prior on the doubling
+time: because `r = log(2)/τ` is a reciprocal, the log-scale SD `0.4` is
+preserved, so the implied doubling-time prior (and every derived
+quantity) matches that prior on `τ`.
+
+The default doubling-count prior `m ~ Normal(9, 3)` (truncated at 0) is
+centred on `m = 9` (`C_T = 2^9 = 512`), the doubling count implied by
+McCabe et al.'s first-report (18 May 2026) Method 2 central scenario of
+501 cases (`log2(501) ≈ 9`). For a fit at a later cut-off, pass an
+`m_prior` whose centre advances from that base date via
+[`m_prior_centre`](@ref) so the prior tracks the elapsed time. This is a
+weakly-informative centring choice (SD 3 gives 95% support ≈ `m ∈ (3, 15)`,
+`C_T ∈ (8, 32000)`); the fit is dominated by the likelihood, so it mainly
+sets where the joint sampler starts.
 """
 @model function exponential_growth_model(;
-        tau_prior = LogNormal(log(14), 0.4),
-        m_prior = truncated(Normal(7.0, 2.5); lower = 0))
-    τ ~ tau_prior
+        r_prior = LogNormal(log(log(2) / 14), 0.4),
+        m_prior = truncated(Normal(9.0, 3.0); lower = 0))
+    r ~ r_prior
     m ~ m_prior
-    r := log(2) / τ
+    τ := log(2) / r
     T := m * τ
     C_T := 2.0 ^ m
     cumulative = s -> exp(r * s)

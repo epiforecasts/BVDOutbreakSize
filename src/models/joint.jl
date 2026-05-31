@@ -172,12 +172,9 @@ the McCabe et al. Method 2 configuration. Pass a vector of `missing`
 entries (with matching offsets) to drop a stream while keeping the model
 usable as a prior- and posterior-predictive generator.
 
-DRC ascertainment is a per-bin random effect drawn from the pooled
-hyperprior via [`daily_ascertainment_model`](@ref): each case bin sees
-its own `p_drc_t = logistic(μ_logit + τ_logit · z_drc_t)`. Reported and
-confirmed bins for the same vintage share their draw (the BVD pool is
-shared between the two streams). With a single bin the random effect is
-one draw from the same population as the pooled scalar `p_drc`.
+DRC ascertainment is a single fixed fraction `p_drc` (the pooled scalar
+from [`pooled_ascertainment_model`](@ref)) applied to every reported and
+confirmed vintage bin, shared between the two streams.
 
 `tests_analysed` is a single cumulative testing-volume count observed at
 its own elapsed time `tests_offset` before the cut-off, so it stays
@@ -211,7 +208,6 @@ disable the factor entirely.
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        daily_ascertainment = daily_ascertainment_model,
         deaths_ascertainment = deaths_ascertainment_model(),
         p_deaths_fixed::Union{Nothing, Real} = nothing,
         test_positivity = test_positivity_model(),
@@ -231,8 +227,6 @@ disable the factor entirely.
     asc_state ~ to_submodel(ascertainment, false)
     k = dispersion_state.k
     p_uganda = asc_state.p_uganda
-    μ_logit = asc_state.μ_logit
-    τ_logit = asc_state.τ_logit
     if p_deaths_fixed === nothing
         deaths_asc_state ~ to_submodel(deaths_ascertainment, false)
         p_deaths = deaths_asc_state.p_deaths
@@ -249,18 +243,12 @@ disable the factor entirely.
         deaths(total_deaths, growth_state, k, death_edges;
             p_deaths = p_deaths), false)
 
-    ## Per-bin random-effect DRC ascertainment, shared between the
-    ## reported and confirmed case streams. One length-`max(n_rep,
-    ## n_conf)` block is drawn and a prefix is indexed for each stream;
-    ## this assumes the two streams are aligned on the same oldest-first
-    ## vintages (true here — both start 18 May), so bin `v` is the same
-    ## calendar vintage in each.
+    ## Fixed per-stream DRC ascertainment: every reported and confirmed
+    ## vintage bin uses the pooled scalar `p_drc`, shared between the two
+    ## streams.
     n_rep = length(reported_offsets)
     n_conf = length(confirmed_offsets)
-    n_asc = max(n_rep, n_conf)
-    daily_asc_state ~ to_submodel(
-        daily_ascertainment(n_asc, μ_logit, τ_logit), false)
-    p_drc_per_bin = daily_asc_state.p_drc_t
+    p_drc_per_bin = fill(asc_state.p_drc, max(n_rep, n_conf))
 
     reported_edges = [T - δ for δ in reported_offsets]
     reported_state ~ to_submodel(

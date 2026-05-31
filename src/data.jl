@@ -153,3 +153,39 @@ function load_observations(
         )
     )
 end
+
+## Doubling-count prior base: McCabe et al.'s first report (18 May
+## 2026), whose Method 2 central scenario of 501 cases implies a
+## doubling count `m = log2(501) ≈ 9`. The prior centre advances from
+## this base by one doubling per `M_PRIOR_DOUBLING_DAYS` (the central
+## 14-day doubling time) of elapsed time to the cut-off.
+const M_PRIOR_BASE_DATE = "2026-05-18"
+const M_PRIOR_BASE = 9.0
+const M_PRIOR_DOUBLING_DAYS = 14.0
+
+"""
+    m_prior_centre(as_of_date; base_date, m_base, doubling_days)
+
+Centre for the doubling-count prior `m`, based on `m_base` doublings at
+`base_date` and advancing by one doubling per `doubling_days` of elapsed
+time to `as_of_date`:
+
+```math
+m_0 = m_\\text{base} +
+    \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
+```
+
+The base is McCabe et al.'s first report (18 May 2026; Method 2 central
+501 cases ⇒ `m ≈ 9`), advancing at the central 14-day doubling time, so
+the prior stays centred on the plausible outbreak size as the cut-off
+moves — it tracks data refreshes without manual edits, and a
+McCabe-date fit recovers the base value.
+"""
+function m_prior_centre(as_of_date::AbstractString;
+        base_date::AbstractString = M_PRIOR_BASE_DATE,
+        m_base::Real = M_PRIOR_BASE,
+        doubling_days::Real = M_PRIOR_DOUBLING_DAYS)
+    elapsed = date2epochdays(Date(as_of_date)) -
+              date2epochdays(Date(base_date))
+    return m_base + elapsed / doubling_days
+end
