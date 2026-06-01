@@ -791,12 +791,16 @@ cfr_prior_fig #hide
 # Expected cumulative deaths at the cut-off are the CFR-weighted
 # discrete convolution of onsets with the onset-to-death PMF (equation
 # (10)). The model conditions on the between-vintage increment at each
-# sitrep date with a NegBinomial likelihood sharing $k$. The cut-off
-# total is fitted separately:
+# sitrep date with a NegBinomial likelihood sharing $k$. The death
+# history ends at the cut-off, so the cut-off total is the final
+# increment's cumulative and is not scored separately. Writing
+# $\mu_i = \mathrm{CFR} \cdot \mathrm{conv}(\mathrm{onsets},\, f_d)$
+# cumulated to sitrep day $d_i$, the increment at vintage $i$ is
 #
 # ```math
-# Y_{\text{deaths}} \sim \mathrm{NegBinomial}(\mathrm{CFR}
-#     \cdot \mathrm{conv}(\mathrm{onsets},\, f_d)[n],\ k). \tag{18}
+# Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim
+#     \mathrm{NegBinomial}(\mu_i - \mu_{i-1},\ k),
+#     \qquad \mu_0 = 0. \tag{18}
 # ```
 
 #md # ```@raw html
@@ -1355,33 +1359,86 @@ posterior_pair_fig = plot_pair(chn_joint,
 posterior_pair_fig #hide
 
 # A posterior predictive check draws replicated observations from the
-# fitted joint model and compares them to the observed counts. The
-# four panels are the four count-based data streams.
+# fitted joint model and compares them to the observed counts. The three
+# DRC sitrep streams are now real per-vintage observations, so the
+# replicated cumulative trajectory is shown across the situation-report
+# dates with the observed series overlaid. The single-count Uganda export
+# and export-death streams keep their scalar predictive check.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
 #md # ```
 
+## Drop the increment counts but keep each stream's vintage day grid, so
+## `predict` resamples the per-vintage increments rather than holding them
+## at the observed values.
+_days_only(h) = (; days = h.days, counts = Int[]);
+
 pp_joint = predict(
     bvd_joint(
         obs.n, missing, missing, missing, missing, missing, missing;
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        lab_history = obs.lab_history,
+        deaths_history = _days_only(obs.deaths_history),
+        reported_history = _days_only(obs.reported_history),
+        confirmed_history = _days_only(obs.confirmed_history),
+        lab_history = _days_only(obs.lab_history),
         breakpoint = _BREAKPOINT),
     chn_joint);
 
+## Per-vintage increment draws for one stream: stack the indexed
+## `increments[i]` predict slices into per-draw increment vectors that
+## `plot_vintage_ppc` cumulates into replicated cumulative trajectories.
+function _vintage_replicates(pp, prefix, m)
+    cols = [vec(Array(pp[Symbol("$prefix.increments[$i]")])) for i in 1:m]
+    return [getindex.(cols, d) for d in eachindex(cols[1])]
+end;
+
+## Grid day-index → INSP situation-report date label.
+_vintage_dates(days) = string.(obs.seeding .+ Day.(days .- 1));
+
+reported_panel = (;
+    title = "Suspected cases",
+    dates = _vintage_dates(obs.reported_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "cases_state.reported_increments",
+        length(obs.reported_history.days)),
+    observed = obs.reported_history.counts, colour = :steelblue);
+confirmed_panel = (;
+    title = "Confirmed cases",
+    dates = _vintage_dates(obs.confirmed_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "confirmed_state.confirmed_increments",
+        length(obs.confirmed_history.days)),
+    observed = obs.confirmed_history.counts, colour = :seagreen);
+deaths_panel = (;
+    title = "Suspected deaths",
+    dates = _vintage_dates(obs.deaths_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "deaths_state.death_increments",
+        length(obs.deaths_history.days)),
+    observed = obs.deaths_history.counts, colour = :firebrick);
+
+joint_vintage_ppc_fig = plot_vintage_ppc(
+    [reported_panel, confirmed_panel, deaths_panel]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_vintage_ppc_fig #hide
+
+# The Uganda export and export-death streams are single cut-off counts,
+# checked as scalar posterior predictives.
+
+#md # ```@raw html
+#md # <details><summary>Export posterior predictive plot</summary>
+#md # ```
+
 pp_exports = vec(Array(pp_joint[:exported_cases]));
-pp_deaths = vec(Array(pp_joint[:total_deaths]));
-pp_cases = vec(Array(pp_joint[:reported_cases]));
 pp_exports_deaths = vec(Array(pp_joint[:exports_deaths]));
 
 joint_ppc_fig = plot_posterior_predictive(
-    pp_exports, pp_deaths,
-    obs.exported_cases, obs.total_deaths;
-    pp_cases = pp_cases,
-    obs_cases = obs.reported_cases,
+    pp_exports, nothing,
+    obs.exported_cases, nothing;
     pp_exports_deaths = pp_exports_deaths,
     obs_exports_deaths = obs.exports_deaths);
 

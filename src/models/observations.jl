@@ -45,10 +45,12 @@ non-empty it already ends at the cut-off (the last vintage count equals
 separate cut-off total is not scored again. When the history is empty but
 a cut-off `total` is supplied (e.g. the tests-analysed stream, whose dated
 vintage history is absent), the cut-off becomes a single vintage point at
-day `n` so the total is still scored as one increment. When both are empty
-or `total` is `missing`, the increments are `missing` so the caller is a
-predictive generator. Returns `(; days, obs_increments)` with
-`obs_increments` either an `Int` vector or `missing`.
+day `n` so the total is still scored as one increment. A history with
+`days` but empty `counts` keeps the vintage day grid while leaving the
+increments `missing`, the posterior-predictive generator path that
+`predict` resamples. When both are empty or `total` is `missing`, the
+increments are `missing` over zero days. Returns `(; days, obs_increments)`
+with `obs_increments` either an `Int` vector or `missing`.
 """
 function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
     if !isempty(history.counts)
@@ -56,6 +58,8 @@ function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
         obs_increments = diff(vcat(zero(eltype(history.counts)),
             collect(history.counts)))
         return (; days, obs_increments)
+    elseif !isempty(history.days)
+        return (; days = collect(history.days), obs_increments = missing)
     elseif !ismissing(total)
         return (; days = [Int(n)], obs_increments = [Int(total)])
     else

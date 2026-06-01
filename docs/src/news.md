@@ -44,6 +44,14 @@ each push to `main` also republishes the rendered analysis and the
   per-vintage NegBinomial increments with per-test positivity a derived
   quantity, and each stream carries its own vintage offsets so a lagging
   stream is not assumed to run to the cut-off.
+- Expressed the per-vintage DRC stream likelihoods as proper vector
+  observations: each between-vintage increment is now an observed `~`
+  draw (`<stream>_increments.increments[i]`) rather than an
+  `@addlogprob!` term, so `predict` replicates the full vintage series
+  and the joint fits under NUTS without `check_model = false`. The
+  likelihood is unchanged (a NegativeBinomial on each modelled increment
+  sharing the dispersion `k`); the redundant scalar cut-off term was
+  dropped because the histories already end at the cut-off.
 - Added `confirmed_only_model`, a single-stream composer that fits the
   laboratory pipeline in isolation for the per-stream comparison.
 - Added `forecast_vs_truth_trajectory`: scores the retrospective forecast
