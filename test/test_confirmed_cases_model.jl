@@ -1,7 +1,8 @@
 @testitem "confirmed_cases_model exposes lab-pipeline positivity" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
                            infection_model, onset_incidence_model
-    using Turing: @model, to_submodel, returned, VarInfo
+    using Turing: @model, to_submodel, returned
+    using Turing.DynamicPPL: VarInfo
     using Random: MersenneTwister
 
     ## Build daily onsets and the shared report kernel / background /
