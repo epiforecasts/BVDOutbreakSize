@@ -14,7 +14,7 @@ using Turing.DynamicPPL: InitFromPrior
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
-using Distributions: Distribution, pdf, logpdf, Poisson,
+using Distributions: Distribution, pdf, Poisson,
                      NegativeBinomial, Normal, LogNormal, Beta,
                      truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
