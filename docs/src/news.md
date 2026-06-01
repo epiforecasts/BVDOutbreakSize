@@ -69,10 +69,13 @@ each push to `main` also republishes the rendered analysis and the
   streams, included in the per-stream-versus-joint grid and the
   one-week-ahead forecast; the laboratory streams and the per-vintage
   time-series table also appear in the data table.
-- `plot_vintage_ppc`: a posterior-predictive-across-the-sitrep-series
-  figure that reconstructs the cumulative replicate at each vintage and
-  overlays the observed trajectory, checking the fit against the whole
-  series rather than only the latest total.
+- `plot_vintage_conditional_ppc`: a conditional one-step-ahead
+  predictive across the sitrep series.
+  Each vintage conditions on the observed previous cumulative and
+  predicts only the new increment, `ŷ_v = y_{v-1} + Δ_v` with `y_0 = 0`,
+  carrying full posterior uncertainty.
+  This replaces the earlier unconditional `plot_vintage_ppc`, whose
+  running sum of modelled increments let errors compound across sitreps.
 
 ### Documentation
 

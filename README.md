@@ -2,9 +2,9 @@
 
 **Authors:** Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/stable) &nbsp; [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/dev) &nbsp; [![Tests](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml/badge.svg)](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml) &nbsp; [![codecov](https://codecov.io/gh/epiforecasts/BVDOutbreakSize/branch/main/graph/badge.svg)](https://codecov.io/gh/epiforecasts/BVDOutbreakSize) &nbsp; [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) &nbsp; [![Code Style: SciML](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle) &nbsp; [![DOI](https://zenodo.org/badge/1243778099.svg)](https://doi.org/10.5281/zenodo.20312758)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/stable) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/dev) [![Tests](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml/badge.svg)](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/epiforecasts/BVDOutbreakSize/branch/main/graph/badge.svg)](https://codecov.io/gh/epiforecasts/BVDOutbreakSize) [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![Code Style: SciML](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle) [![DOI](https://zenodo.org/badge/1243778099.svg)](https://doi.org/10.5281/zenodo.20312758)
 
-**Last updated:** 29 May 2026. This is a live report, re-run as new
+**Last updated:** 1 June 2026. This is a live report, re-run as new
 data arrive, so the estimates change between updates.
 
 **Data as of:** 26 May 2026. DRC counts come from the situation reports
@@ -24,9 +24,12 @@ revised in a [20 May 2026 update](https://www.imperial.ac.uk/media/imperial-coll
 estimates the size with two analyses, geographic spread from the cases
 exported to Uganda and back-calculation from suspected deaths in DRC.
 Building on that work, we re-analyse the same problem as a single joint
-Bayesian model over the latent cumulative case count, fitting
+Bayesian model over the latent cumulative infection count, fitting
 all streams together with priors on the nuisance parameters that the
-report varies in scenario sweeps. Beyond the exported cases and DRC
+report varies in scenario sweeps. Infections are the root of the
+generative process; symptom onsets follow after a sampled incubation
+period, and every observed stream sits downstream of those onsets
+through its own reporting delay. Beyond the exported cases and DRC
 deaths the report uses, we condition on two further streams, the
 reported cases in DRC (with an ascertainment component) and the deaths
 among exported cases in Uganda. We fit the DRC streams to the full
@@ -43,6 +46,9 @@ effect of newer data from the change in method we also fit the model
 to the data as of each report version in sequence (18 May, then the
 20 May update), comparing against both a joint reimplementation of the
 report's approach and its original published estimates at each version.
+We report the cumulative infection count as the headline quantity, with
+the cumulative case count recovered downstream through the incubation
+period for comparison with the report.
 
 **Scope.** This work is motivated by adding an external view of the
 current situation, based on our understanding of real-time infectious
