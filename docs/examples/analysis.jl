@@ -605,43 +605,36 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Ascertainment — partial pooling between DRC and Uganda
+# ##### Ascertainment — independent DRC and Uganda fractions
 #
-# Two surveillance systems detect cases: DRC passive surveillance (the
-# reported suspected-case count) and Uganda's point-of-entry / hospital
-# surveillance (the exported-case count). Each captures only a fraction
-# of the true cases passing through it, and each fraction is informed by
-# essentially a single aggregate data point, so neither is well
-# identified on its own. The two ascertainment fractions $p_{\text{DRC}}$
-# and $p_{\text{Uganda}}$ share a logit-scale hyperprior with mean $\mu$
-# and pooling strength $\tau$, centred on an assumed reporting fraction of
-# $25\%$:
-#
-# ```math
-# \mu \sim \mathrm{Normal}(\mathrm{logit}(0.25),\ 1),
-# \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{14}
-# ```
+# Two surveillance systems detect cases: DRC passive community
+# surveillance (the reported suspected-case count) and Uganda's
+# point-of-entry / hospital surveillance (the exported-case count). Each
+# captures only a fraction of the true cases passing through it. The two
+# systems are distinct, so the two ascertainment fractions
+# $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ are estimated independently,
+# each with its own logit-scale prior centred on an assumed reporting
+# fraction of $25\%$:
 #
 # ```math
-# \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
+# \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mathrm{logit}(0.25),\ 0.6),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{15}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mathrm{logit}(0.25),\ 0.6). \tag{14}
 # ```
 #
-# The prior is sampled in non-centred form: standard-normal offsets are
-# scaled by $\tau$ and added to $\mu$, avoiding the funnel geometry of the
-# centred recursion. The cases likelihood uses $p_{\text{DRC}}$; the two
-# Uganda-side likelihoods use $p_{\text{Uganda}}$.
+# The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
+# likelihoods use $p_{\text{Uganda}}$. A partially pooled alternative
+# ([`pooled_ascertainment_model`](@ref)) shares a logit-scale hyperprior
+# between the two systems for sensitivity analyses.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: pooled_ascertainment_model</summary>
+#md # <details><summary>Submodel: independent_ascertainment_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.pooled_ascertainment_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.independent_ascertainment_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html

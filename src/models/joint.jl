@@ -32,7 +32,7 @@ exports likelihood only. See [`exports_model`](@ref).
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         exports = exports_model,
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = independent_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     asc_state ~ to_submodel(ascertainment)
@@ -78,7 +78,7 @@ then conditions on the reported-cases likelihood. See
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = independent_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -109,7 +109,7 @@ cases and, when present, the tests-analysed stream. See
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = independent_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -142,7 +142,7 @@ See [`exports_deaths_model`](@ref).
         deaths = deaths_model,
         exports = exports_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = independent_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -209,7 +209,7 @@ and per-test (`test_positivity`) positivities.
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model(),
+        ascertainment = independent_ascertainment_model(),
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)

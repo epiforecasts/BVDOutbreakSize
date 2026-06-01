@@ -279,10 +279,37 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
+Independent ascertainment fractions for the DRC and Uganda surveillance
+systems. The two countries run different surveillance systems — DRC
+passive community surveillance and Uganda point-of-entry / hospital
+detection — so each ascertainment fraction has its own logit-scale prior
+with no shared parameter. Used by [`reported_cases_model`](@ref),
+[`exports_model`](@ref) and [`exports_deaths_model`](@ref); this is the
+composer default.
+
+Both fractions default to a logit-Normal prior centred on a reporting
+fraction of 0.25 with SD 0.6 (95% support roughly 0.09–0.51), weakly
+informative about the low-ascertainment regime typical of passive BVD /
+Ebola surveillance in rural Ituri. Pass `drc_prior` / `uganda_prior` to
+set the two systems' priors separately.
+"""
+@model function independent_ascertainment_model(;
+        drc_prior = Normal(logit(0.25), 0.6),
+        uganda_prior = Normal(logit(0.25), 0.6))
+    logit_p_drc ~ drc_prior
+    logit_p_uganda ~ uganda_prior
+    p_drc := logistic(logit_p_drc)
+    p_uganda := logistic(logit_p_uganda)
+    return (; logit_p_drc, logit_p_uganda, p_drc, p_uganda)
+end
+
+"""
 Partially pooled ascertainment fractions for the DRC and Uganda
 surveillance systems, sampled in non-centred form to avoid the funnel
-geometry. Both logit-scale fractions share a hyperprior with mean `μ` and
-pooling strength `τ`. Used by the reported-cases and exports streams.
+geometry. Both logit-scale fractions share a hyperprior with mean `μ`
+and pooling strength `τ`. An alternative to the composer-default
+[`independent_ascertainment_model`](@ref) for sensitivity analyses that
+share strength between the two systems.
 """
 @model function pooled_ascertainment_model(;
         mu_prior = Normal(logit(0.25), 1.0),
