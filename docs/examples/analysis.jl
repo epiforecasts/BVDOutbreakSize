@@ -1105,15 +1105,22 @@ cfr_prior_fig #hide
 
 # ##### Reported cases
 #
-# $C(T)$ is the latent count of true BVD cases — those that would test
-# positive if sampled, not the count actually tested or confirmed (only
-# a fraction $\tau$ are tested, see the lab pipeline below). Suspected
-# reports include test-negative referrals — alternative differential
-# diagnoses such as malaria or other febrile illness — whose rate we
-# assume is set by background prevalence and surveillance intensity, not
-# by BVD growth. We therefore model the suspected stream as the sum of a
-# BVD-driven component and a non-BVD background that accrues with elapsed
-# surveillance time:
+# $C(T)$ is the latent cumulative *infection* count (equation (1)), not a
+# count of reported, tested or confirmed cases. A true BVD case reaches
+# the suspected stream only after its symptoms have appeared — the
+# incubation period of the previous section — and it has been ascertained;
+# only a fraction $\tau$ of those are later tested (see the lab pipeline
+# below). The BVD-driven suspected term therefore acts on the *onset*
+# trajectory, the infection trajectory mapped through the incubation
+# period, which we write as $e^{rs}$ below in the same shorthand as the
+# deaths convolution (equation (16)) — the incubation rescale is the
+# moment-generating-function factor introduced in the incubation section.
+# Suspected reports also include test-negative referrals — alternative
+# differential diagnoses such as malaria or other febrile illness — whose
+# rate we assume is set by background prevalence and surveillance
+# intensity, not by BVD growth. We therefore model the suspected stream as
+# the sum of a BVD-driven (accepted) component and a non-BVD background
+# that accrues with elapsed surveillance time:
 #
 # ```math
 # \mu_{\text{BVD}} = p_{\text{DRC}}
@@ -2186,7 +2193,28 @@ posterior_pair_fig = plot_pair(chn_joint,
 
 posterior_pair_fig #hide
 
-# A second pair plot covers the laboratory-pipeline parameters that the
+# ### Reporting process
+#
+# The streams above all observe the same latent infections through the
+# surveillance pipeline: infections become onsets after the incubation
+# period, onsets enter the suspected line list after the onset-to-report
+# delay, and a sampled fraction of suspected cases are laboratory-confirmed
+# after the report-to-lab delay. The parameters of that pipeline are what
+# turn the headline infection count into the much smaller observed counts,
+# so it is worth looking at them directly.
+#
+# The observed suspected count mixes two parts: an *accepted*
+# (BVD-attributable) component $\mu_{\text{BVD}}$ and a non-BVD background
+# $\mu_{\text{bg}}$ (equation (18)). Only the total is observed; the
+# accepted share is the per-suspected positivity
+# $\pi = \mu_{\text{BVD}} / \mu_{\text{cases}}$, reported in the summary
+# table above. Multiplying the suspected total by $\pi$ recovers the
+# unobserved accepted-BVD suspected count, the surveillance system's own
+# implied view of how many suspected reports are genuine BVD, which is
+# distinct again from the laboratory-confirmed count (only a fraction
+# $\tau$ are tested, with PCR sensitivity $s$).
+#
+# A pair plot covers the laboratory-pipeline parameters that the
 # confirmed and tests-analysed streams add: the onset-to-report delay
 # shape and scale $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, the
 # report-to-lab delay $\alpha_{\text{lab}}$, $\theta_{\text{lab}}$, PCR
@@ -2220,6 +2248,34 @@ lab_pair_fig #hide
 # roughly fourfold gap between reported and true cases. The pair plot
 # above shows its posterior against the prior, so how far below one the
 # fraction sits is what sets that scaling.
+#
+# The confirmed-case stream enters the joint fit as a single cumulative
+# total at the cut-off, not as the per-sitrep series. The model can fit
+# the confirmed series per vintage (the same between-vintage construction
+# as the suspected and death streams, kept in the code), but the
+# per-vintage confirmed likelihood breaks joint convergence: the
+# increments are tiny and non-monotone (33, 18, 6, 22, 4, 18, 4, 1, 15),
+# and each bin mean is the product $p_{\text{DRC}}\,s\,\tau\,\Delta
+# I_{\text{lab}}$ of factors that are shared across bins and only weakly
+# identified, so splitting the total into bins opens a multiplicative
+# ridge between the lab-delay shape and those factors rather than adding
+# information. With the tests-analysed total alongside it, the single
+# cumulative confirmed count still pins the per-test positivity, which is
+# what the laboratory stream contributes. Recovering the temporal
+# confirmed signal cleanly is tracked as follow-up work.
+#
+# Two features of the laboratory model are worth flagging. The
+# report-to-lab delay is a single Gamma kernel convolved against the
+# (cumulative) suspected trajectory, so confirmations are assumed to
+# follow reports by a roughly fixed turnaround. In practice the lab
+# cleared an initial backlog — 403 of 662 received specimens analysed by
+# the cut-off, with testing in Ituri stalled mid-period — so some early
+# confirmations correspond to much older reports than a short turnaround
+# kernel allows; a heavier-tailed or batch-aware delay would represent
+# that better. The non-BVD background enters testing the same way
+# (constant-rate arrivals convolved against the lab-delay CDF), so it
+# inherits the same fixed-turnaround assumption. Both are reasons the
+# confirmed series is hard to fit per vintage rather than as a total.
 #
 # A posterior predictive check draws replicated observations from the
 # fitted joint model and compares them to the observed counts. If the
