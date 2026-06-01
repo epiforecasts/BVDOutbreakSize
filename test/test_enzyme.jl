@@ -7,6 +7,14 @@
 ## default) for both a single-stream composer and the full joint. Tagged
 ## `:slow` for the one-off Enzyme compilation. Mooncake remains the default
 ## backend; Enzyme is the validated opt-in.
+##
+## The two gradient items run off Windows only: Enzyme reverse-mode
+## differentiation crashes the Julia process on Windows with a native
+## `EXCEPTION_ACCESS_VIOLATION` in the stack unwinder (an Enzyme/Windows
+## issue, not a model issue — the gradients match Mooncake on Linux and
+## macOS), and a process-level segfault cannot be caught in-test, so the
+## items are skipped there. The adtype-construction item below runs
+## everywhere.
 
 @testitem "enzyme_adtype is an AutoEnzyme with runtime activity" tags=[
     :slow, :ad] begin
@@ -44,14 +52,24 @@ end
 @testitem "Enzyme gradient matches Mooncake on a single-stream model" tags=[
     :slow, :ad] setup=[EnzymeGrad] begin
     using BVDOutbreakSize: exports_only_model
-    model=exports_only_model(3, 2)
-    @test adgrad(model, enzyme_adtype()) ≈ adgrad(model, default_adtype()) rtol=1e-6
+    if Sys.iswindows()
+        @test_skip "Enzyme reverse-mode segfaults on Windows"
+    else
+        model=exports_only_model(3, 2)
+        @test adgrad(model, enzyme_adtype()) ≈
+              adgrad(model, default_adtype()) rtol=1e-6
+    end
 end
 
 @testitem "Enzyme gradient matches Mooncake on the joint" tags=[
     :slow, :ad] setup=[EnzymeGrad] begin
     using BVDOutbreakSize: bvd_joint
-    ## All streams plus the lab pipeline and the intervention breakpoint.
-    model=bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
-    @test adgrad(model, enzyme_adtype()) ≈ adgrad(model, default_adtype()) rtol=1e-6
+    if Sys.iswindows()
+        @test_skip "Enzyme reverse-mode segfaults on Windows"
+    else
+        ## All streams plus the lab pipeline and the intervention breakpoint.
+        model=bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
+        @test adgrad(model, enzyme_adtype()) ≈
+              adgrad(model, default_adtype()) rtol=1e-6
+    end
 end
