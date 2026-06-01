@@ -1,14 +1,18 @@
 @testitem "test_sensitivity_model samples a probability" begin
     using BVDOutbreakSize: test_sensitivity_model
-    using Random: MersenneTwister
-    s = rand(MersenneTwister(1), test_sensitivity_model()).s_test
+    using Random: seed!
+    ## A submodel's `(; ...)` return tuple (with the derived fields) comes
+    ## from calling it; `rand(rng, model)` returns only sampled variables.
+    seed!(1)
+    s = test_sensitivity_model()().s_test
     @test 0 <= s <= 1
 end
 
 @testitem "lab_delay_model returns a normalised daily PMF" begin
     using BVDOutbreakSize: lab_delay_model
-    using Random: MersenneTwister
-    d = rand(MersenneTwister(1), lab_delay_model(20))
+    using Random: seed!
+    seed!(1)
+    d = lab_delay_model(20)()
     @test all(>=(0), d.pmf)
     @test isapprox(sum(d.pmf), 1; atol = 1e-8)
     @test d.mean > 0
@@ -16,8 +20,9 @@ end
 
 @testitem "test_positivity_model samples background and testing fraction" begin
     using BVDOutbreakSize: test_positivity_model
-    using Random: MersenneTwister
-    s = rand(MersenneTwister(1), test_positivity_model())
+    using Random: seed!
+    seed!(1)
+    s = test_positivity_model()()
     @test s.λ_bg >= 0
     @test 0 <= s.τ_test <= 1
 end
