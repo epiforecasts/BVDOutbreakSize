@@ -33,7 +33,13 @@ end
 
 @testitem "Aqua: piracies" tags=[:quality] begin
     using Aqua, BVDOutbreakSize
-    Aqua.test_piracies(BVDOutbreakSize)
+    using SpecialFunctions: gamma
+    # `src/enzyme.jl` defines `EnzymeRules` for `SpecialFunctions.gamma`
+    # (Enzyme ships no rule and mis-lowers it; the model reaches `gamma`
+    # via `pdf(Gamma, ·)` / `mgf` outside the `_gamma_cdf` rule, so the
+    # rule is required for correct Enzyme gradients). This is deliberate
+    # AD glue for an upstream function, so treat its type as own.
+    Aqua.test_piracies(BVDOutbreakSize; treat_as_own = [typeof(gamma)])
 end
 
 @testitem "Aqua: persistent_tasks" tags=[:quality] begin
