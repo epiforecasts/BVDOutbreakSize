@@ -155,13 +155,17 @@ function load_observations(
 end
 
 ## Doubling-count prior base: McCabe et al.'s first report (18 May
-## 2026), whose Method 2 central scenario of 501 cases implies a
-## doubling count `m = log2(501) ≈ 9`. The prior centre advances from
-## this base by one doubling per `M_PRIOR_DOUBLING_DAYS` (the central
-## 14-day doubling time) of elapsed time to the cut-off.
+## 2026), whose Method 2 central scenario of 501 cases implies a doubling
+## count `log2(501) ≈ 9`. `C(T) = 2^m` is now the cumulative *infection*
+## count, but 9 is kept as a weakly-informative centre of the same
+## order: the prior only sets where the sampler starts and the fit is
+## likelihood-dominated, so the small incubation rescale between
+## infections and cases is not worth carrying here. The centre advances
+## by one doubling per `M_PRIOR_DOUBLING_DAYS` (the central 14-day
+## doubling time) of elapsed time to the cut-off.
 const M_PRIOR_BASE_DATE = "2026-05-18"
-const M_PRIOR_BASE = 9.0
 const M_PRIOR_DOUBLING_DAYS = 14.0
+const M_PRIOR_BASE = 9.0
 
 """
     m_prior_centre(as_of_date; base_date, m_base, doubling_days)
@@ -178,8 +182,10 @@ m_0 = m_\\text{base} +
 The base is McCabe et al.'s first report (18 May 2026; Method 2 central
 501 cases ⇒ `m ≈ 9`), advancing at the central 14-day doubling time, so
 the prior stays centred on the plausible outbreak size as the cut-off
-moves — it tracks data refreshes without manual edits, and a
-McCabe-date fit recovers the base value.
+moves — it tracks data refreshes without manual edits, and a McCabe-date
+fit recovers the base value. `C(T) = 2^m` is now the cumulative
+*infection* count; 9 is kept as a weakly-informative centre of the same
+order rather than rescaled to a case-equivalent infection count.
 """
 function m_prior_centre(as_of_date::AbstractString;
         base_date::AbstractString = M_PRIOR_BASE_DATE,

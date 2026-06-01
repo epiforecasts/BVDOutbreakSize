@@ -167,9 +167,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_ppc returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_conditional_ppc figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
-    using BVDOutbreakSize: plot_vintage_ppc
+    using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(21)
     dates = ["2026-05-18", "2026-05-19", "2026-05-20",
         "2026-05-21", "2026-05-22", "2026-05-23"]
@@ -177,10 +177,35 @@ end
     ## returns them (here a plain vector of draws).
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
     observed = cumsum([18, 9, 12, 7, 6, 5])
-    fig = plot_vintage_ppc([
+    fig = plot_vintage_conditional_ppc([
         (; title = "Suspected", dates = dates,
             replicates = reps, observed = observed, colour = :steelblue),
         (; title = "Confirmed", dates = dates,
             replicates = reps, observed = observed)])
     @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "conditional one-step-ahead predictive construction" begin
+    ## The conditional one-step-ahead cumulative at vintage v is the
+    ## observed previous cumulative plus the drawn increment: ŷ_v =
+    ## y_{v-1} + Δ_v with y_0 = 0. We reproduce the construction used by
+    ## `plot_vintage_conditional_ppc` on a tiny synthetic example and
+    ## check it against the closed form, including the bin-1 baseline 0.
+    observed = [18, 27, 39, 46]          # cumulative y_1..y_n
+    n = length(observed)
+    obs_cum = float.(observed)
+    obs_prev = [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n]
+    @test obs_prev == [0.0, 18.0, 27.0, 39.0]   # y_{v-1}, y_0 = 0
+
+    increments = [3.0, 5.0, 8.0, 2.0]    # Δ_1..Δ_n for one draw
+    cond = obs_prev .+ increments
+    ## Bin 1 conditions on baseline 0, the rest on the observed previous
+    ## cumulative; nothing here is a running sum of modelled increments.
+    @test cond[1] == 0.0 + increments[1]
+    for v in 2:n
+        @test cond[v] == observed[v - 1] + increments[v]
+    end
+    ## Sanity: the conditional reconstruction is not the unconditional
+    ## cumulative sum of the increments unless the data matched exactly.
+    @test cond != cumsum(increments)
 end

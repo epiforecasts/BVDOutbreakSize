@@ -27,6 +27,18 @@
 #
 # ## What we do differently from McCabe et al.
 #
+# - *Infections as the latent quantity.* The exponential trajectory is
+#   the cumulative *infection* count. Each infected person develops
+#   symptoms after an incubation period, so the onsets we can observe are
+#   the infections delayed by that period. The cases reported to date are
+#   then only the infections whose symptoms have appeared and been
+#   recorded, and the cumulative case count McCabe et al. estimate is
+#   recovered from the infections for comparison. The incubation period
+#   is sampled from a prior, like every other delay in the model. It
+#   cannot be fitted from the BDBV line list (no exposure dates), so we
+#   take the Bundibugyo estimate the line-list reanalysis recommends
+#   [bdbv_linelist_analysis_2026](@cite): a mean of 6.3 days from the
+#   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
 #   $\tau$, case fatality ratio (CFR), onset-to-death shape and scale,
 #   detection window $w$,
@@ -153,6 +165,14 @@
 #   The most recent sitrep's increment is also not corrected for
 #   right-truncation, so it is exposed as is, with the same caveat as the
 #   latest cumulative total.
+# - *The reporting format has changed.* From SitRep 013 (27 May) INSP
+#   began revising the suspected-case line list downward as suspects were
+#   investigated and either confirmed or ruled out, and from SitRep 014
+#   (28 May) it stopped publishing a suspected-death headline. The cut-off
+#   here (26 May, SitRep 012 revised re-issue) predates this, but the same
+#   reclassification may already be acting within the fitted window, so
+#   there may be more uncertainty in the reported counts than the model
+#   cut-off on its current basis.
 # - *Onset-to-death delay anchored on Isiro 2012.* A single-
 #   outbreak fit; the delay distribution reporting here follows
 #   [charniga2024](@cite) but cross-outbreak heterogeneity is
@@ -394,6 +414,7 @@ vintage_table #hide
 # | Parameter | Exports | Deaths | Cases | Confirmed & tested | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Growth $C(s) = e^{rs}$ | ● | ● | ● | ● | ● | ● | ● |
+# | Incubation period |  | ● | ● | ● | ● |  |  |
 # | Onset-to-death delay |  | ● |  |  | ● |  |  |
 # | Case-fatality ratio |  | ● |  |  | ● |  |  |
 # | Onset-to-report delay |  |  | ● | ● |  |  |  |
@@ -409,9 +430,9 @@ vintage_table #hide
 # The model components, in the order they appear below:
 #
 # 1. **Building-block submodels** — one per parameter family
-#    (growth, onset-to-death delay, CFR, onset-to-report delay,
-#    report-to-lab delay, PCR sensitivity, testing fraction and
-#    background rate, detection window, daily
+#    (growth, incubation period, onset-to-death delay, CFR,
+#    onset-to-report delay, report-to-lab delay, PCR sensitivity, testing
+#    fraction and background rate, detection window, daily
 #    traveller volume, surveillance dispersion, ascertainment). Each
 #    samples its own
 #    priors and returns a small NamedTuple of values. These sections
@@ -521,6 +542,42 @@ vintage_table #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ##### Incubation period
+#
+# The growth trajectory above counts *infections*. People are only seen
+# once they develop symptoms, so the onsets that drive every observed
+# stream are the infections shifted forward by the incubation period.
+# Treating the trajectory as onsets directly would date the outbreak
+# wrongly and understate how many people are already infected. We
+# therefore sample the incubation period as a delay, like every other
+# delay in the model, and convolve it with the infection trajectory to
+# get onsets; the per-stream reporting delays then act on those onsets.
+#
+# The incubation period cannot be fitted from the BDBV line list, which
+# has no exposure dates [bdbv_linelist_analysis_2026](@cite), so we take
+# the Bundibugyo estimate from the 2007 Uganda outbreak: a mean of 6.3
+# days (95% CI 5.2-7.3) [macneil2010](@cite). We put the prior on the
+# mean and the coefficient of variation so MacNeil et al.'s reported
+# uncertainty on the mean is carried through directly, and recover the
+# gamma shape and scale from them. MacNeil et al. give no interval on the
+# spread, so the coefficient of variation has a weakly-informative prior
+# chosen to keep individual incubation times within their observed 2-20
+# day range.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: incubation_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.incubation_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1132,6 +1189,32 @@ cfr_prior_fig #hide
 # \Delta Y_v^{\text{rep}} \sim
 #     \mathrm{NegBinomial}(\mu_v^{\text{rep}}, k). \tag{20}
 # ```
+#
+# ##### Per-sitrep conditional predictive
+#
+# The per-sitrep increment likelihoods (equations (17b) and (20)) give a
+# matching per-sitrep diagnostic.
+# Let a stream have observed cumulative counts $y_1, \dots, y_n$ at the
+# sitrep edges.
+# The conditional one-step-ahead predictive of the cumulative at sitrep
+# $v$ conditions on the *observed* previous cumulative and predicts only
+# the new increment,
+#
+# ```math
+# \hat{y}_v = y_{v-1} + \Delta_v, \qquad y_0 = 0, \tag{20a}
+# ```
+#
+# where $\Delta_v$ is the posterior-predictive between-vintage increment
+# for bin $v$, a draw from $\mathrm{NegBinomial}(\mu_v, k)$, the same
+# increment the model samples in predictive mode.
+# This is the "filtered" one-step-ahead predictive.
+# It differs from reconstructing the cumulative as the running sum of the
+# modelled increments $\sum_{u \le v} \Delta_u$, an unconditional check
+# whose errors compound across sitreps because every step builds on
+# earlier modelled increments rather than on what was observed.
+# Conditioning each step on the observed previous cumulative isolates the
+# model's one-step increment prediction, so a mismatch at one sitrep is
+# attributed to that sitrep alone and does not propagate down the series.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>
@@ -1265,15 +1348,6 @@ cfr_prior_fig #hide
 # The tested-volume and per-test positivity terms (equations (23)-(24))
 # are observed once, at the laboratory stream's own cut-off, which need
 # not be the case cut-off if lab reporting lags behind.
-#
-# !!! note "Integration trick — share one quadrature across sitreps"
-#     $\mu_{\text{BVD},0}$ is evaluated once on a fixed quadrature node
-#     set over $[0, T]$ and reused across every sitrep edge, sweeping
-#     the lab-delay weight over the shared nodes.
-#     The ascertainment fraction is applied to the returned increment, so
-#     this precomputation does not depend on it.
-#     The suspected and death convolutions use the gamma closed form
-#     and need no quadrature.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
@@ -1546,6 +1620,15 @@ cfr_prior_fig #hide
 # down to exactly the McCabe et al. joint configuration. Either stream may
 # be `missing`: passing `missing` for exports recovers a pure Method 2
 # (deaths-only) fit without instantiating the exports likelihood.
+#
+# McCabe et al. estimate a case count and do not separate infection from
+# symptom onset, so this reimplementation fits no incubation period: its
+# trajectory is the case count directly. Our joint model instead treats
+# the trajectory as infections and recovers cases downstream through the
+# incubation period. To compare on the same footing we report the case
+# count from both, our joint $C(T)$ mapped to onsets and the
+# reimplementation's $C(T)$ taken as cases; the infection count is an
+# extra quantity reported only for the joint model.
 
 #md # ```@raw html
 #md # <details><summary>Composer: report reimplementation</summary>
@@ -1709,6 +1792,7 @@ chn_exports_deaths = nuts_sample(
     exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now));
 
 posterior_C_joint = vec(Array(chn_joint[:cumulative_cases]));
+posterior_C_infections_joint = vec(Array(chn_joint[:cumulative_infections]));
 posterior_C_exports = vec(Array(chn_exports[:cumulative_cases]));
 posterior_C_deaths = vec(Array(chn_deaths[:cumulative_cases]));
 posterior_C_cases = vec(Array(chn_cases[:cumulative_cases]));
@@ -1734,7 +1818,8 @@ diagnostics_table( #hide
     "exports (cases)" => chn_exports, #hide
     "exports (deaths)" => chn_exports_deaths, #hide
     "deaths (DRC)" => chn_deaths, #hide
-    "cases (DRC)" => chn_cases) #hide
+    "cases (DRC)" => chn_cases, #hide
+    "confirmed (DRC)" => chn_confirmed) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -1956,16 +2041,34 @@ summary_ranges #hide
 
 # ### Joint model estimates
 #
-# Our main result is an estimate of the current cumulative case load —
-# both reported and unreported cases — at the report date. It is the
-# joint posterior over the cumulative case count, obtained by fitting
-# all four data streams together: the cases exported to Uganda, the
-# suspected deaths in the DRC, the reported cases in the DRC (with an
-# ascertainment component) and the deaths among exported cases in
-# Uganda.
+# Our main result is an estimate of how far the outbreak has spread by
+# the data cut-off, obtained by fitting all four data streams together:
+# the cases exported to Uganda, the suspected deaths in the DRC, the
+# reported cases in the DRC (with an ascertainment component) and the
+# deaths among exported cases in Uganda.
 #
-# We report the cumulative case count first as a credible-interval
-# table and then as a posterior density.
+# We report two cumulative counts, both as of the data cut-off. The
+# headline quantity is the cumulative *infection* count, everyone
+# infected by the cut-off whether or not they have yet developed
+# symptoms. The cumulative *case* count is the subset whose symptoms have
+# appeared by the cut-off; it is smaller than the infection count because
+# some of the most recently infected are still within their incubation
+# period, and it is the quantity McCabe et al. estimate, so we carry it
+# for the comparison below. We report each as a credible-interval table
+# and a posterior density, infections first.
+
+#md # ```@raw html
+#md # <details><summary>Cumulative infection count summary table</summary>
+#md # ```
+
+cumulative_infections_summary = summary_table(
+    chn_joint, [:cumulative_infections]; digits = 0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+cumulative_infections_summary #hide
 
 #md # ```@raw html
 #md # <details><summary>Cumulative case count summary table</summary>
@@ -1981,19 +2084,34 @@ cumulative_cases_summary = summary_table(
 cumulative_cases_summary #hide
 
 #md # ```@raw html
-#md # <details><summary>Cumulative case count density</summary>
+#md # <details><summary>Cumulative infection and case count densities</summary>
 #md # ```
 
+joint_infections_density_fig = plot_cumulative_cases(
+    "infections" => posterior_C_infections_joint; scenarios = []);
+
 joint_density_fig = plot_cumulative_cases(
-    "joint" => posterior_C_joint; scenarios = []);
+    "cases" => posterior_C_joint; scenarios = []);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+joint_infections_density_fig #hide
+
 joint_density_fig #hide
 
-# The cumulative case count $C(T) = \exp(r T)$ is set jointly by the
+# Reading these together:
+#
+# - **Infections to date** is the headline count, $C(T) = \exp(r T)$:
+#   everyone infected by the data cut-off.
+# - **Cases (symptom onset to date)** is the smaller subset who have
+#   already developed symptoms by the cut-off, $C(T)$ scaled by the share
+#   past the incubation period. The gap between the two is the recently
+#   infected still incubating, and it is this case count that lines up
+#   with McCabe et al. and the reported surveillance counts.
+#
+# The cumulative infection count $C(T) = \exp(r T)$ is set jointly by the
 # doubling time $\tau$ (equivalently the growth rate
 # $r = \log 2/\tau$) and
 # the time since seeding $T$. Read as a calendar date, $T$ places the
@@ -2149,22 +2267,27 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# ### Posterior predictive across the sitrep series
+# ### Conditional one-step-ahead predictive across the sitrep series
 #
 # The panels above collapse each DRC stream to a single total. Because
-# the suspected-case and death streams are fitted per vintage, the
-# posterior predictive also covers their full sitrep trajectory, not just
-# the latest count. Reconstructing the cumulative replicate at each
-# vintage (the running sum of the per-bin increment draws) and comparing
-# it to the observed cumulative series shows whether the fitted growth
-# tracks the shape of the reported curve over time, rather than only
-# hitting the cut-off total.
+# the suspected-case and death streams are fitted per vintage, we can
+# also check the fit one sitrep at a time. For each vintage we condition
+# on what was actually observed at the previous sitrep and predict only
+# the new between-vintage increment, $\hat{y}_v = y_{v-1} + \Delta_v$
+# with $y_0 = 0$, defined in the [observation model](@ref "Per-sitrep
+# conditional predictive"). Each step carries the full posterior
+# uncertainty of the new increment while anchoring on the observed
+# previous cumulative, so the diagnostic isolates the model's per-step
+# increment prediction and its errors do not compound across the series.
+# The observed cumulative counts are overlaid as points; if the fit is
+# reasonable each point sits inside the predictive ribbon for its
+# vintage.
 
 #md # ```@raw html
-#md # <details><summary>Per-vintage posterior predictive trajectories</summary>
+#md # <details><summary>Per-vintage conditional one-step-ahead predictive</summary>
 #md # ```
 
-vintage_ppc_fig = plot_vintage_ppc([
+vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
