@@ -52,17 +52,19 @@ end
         breakpoint = 30)
     pp = predict(gen, chn)
 
-    ## The indexed per-vintage increment variables must be replicated for
-    ## each DRC stream, under the stream's prefixed submodel name.
+    ## `predict` replicates each DRC stream's per-vintage increments as one
+    ## vector-valued variable under the stream's prefixed submodel name.
+    ## Each draw is the full increment vector; the replicated cumulative
+    ## must be non-negative and finite.
     for (prefix, m) in (
         ("cases_state.reported_increments", length(rh.days)),
         ("confirmed_state.confirmed_increments", length(ch.days)),
         ("deaths_state.death_increments", length(dh.days)))
-        for i in 1:m
-            key = Symbol("$prefix.increments[$i]")
-            v = vec(Array(pp[key]))
-            @test all(isfinite, v)
-            @test all(v .>= 0)
-        end
+        key = first(k for k in keys(pp)
+        if occursin("$prefix.increments", string(k)))
+        draws = vec(collect(pp[key]))
+        @test !isempty(draws)
+        @test all(d -> length(d) == m, draws)
+        @test all(d -> all(isfinite, d) && all(>=(0), d), draws)
     end
 end

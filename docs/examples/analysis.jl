@@ -1384,12 +1384,15 @@ pp_joint = predict(
         breakpoint = _BREAKPOINT),
     chn_joint);
 
-## Per-vintage increment draws for one stream: stack the indexed
-## `increments[i]` predict slices into per-draw increment vectors that
-## `plot_vintage_ppc` cumulates into replicated cumulative trajectories.
-function _vintage_replicates(pp, prefix, m)
-    cols = [vec(Array(pp[Symbol("$prefix.increments[$i]")])) for i in 1:m]
-    return [getindex.(cols, d) for d in eachindex(cols[1])]
+## `predict` stores each stream's per-vintage increments as one
+## vector-valued variable (`<stream>_increments.increments`); the slice is
+## an iter×chain matrix of per-draw increment vectors, exactly the
+## `replicates` shape `plot_vintage_ppc` cumulates into the replicated
+## cumulative trajectory. Find it by its prefix among the predict keys.
+function _vintage_replicates(pp, prefix)
+    key = first(k for k in keys(pp)
+    if occursin("$prefix.increments", string(k)))
+    return collect(pp[key])
 end;
 
 ## Grid day-index → INSP situation-report date label.
@@ -1399,22 +1402,19 @@ reported_panel = (;
     title = "Suspected cases",
     dates = _vintage_dates(obs.reported_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "cases_state.reported_increments",
-        length(obs.reported_history.days)),
+        pp_joint, "cases_state.reported_increments"),
     observed = obs.reported_history.counts, colour = :steelblue);
 confirmed_panel = (;
     title = "Confirmed cases",
     dates = _vintage_dates(obs.confirmed_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.confirmed_increments",
-        length(obs.confirmed_history.days)),
+        pp_joint, "confirmed_state.confirmed_increments"),
     observed = obs.confirmed_history.counts, colour = :seagreen);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "deaths_state.death_increments",
-        length(obs.deaths_history.days)),
+        pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
 
 joint_vintage_ppc_fig = plot_vintage_ppc(
@@ -1433,8 +1433,17 @@ joint_vintage_ppc_fig #hide
 #md # <details><summary>Export posterior predictive plot</summary>
 #md # ```
 
-pp_exports = vec(Array(pp_joint[:exported_cases]));
-pp_exports_deaths = vec(Array(pp_joint[:exports_deaths]));
+## The replicated export counts are nested under their submodel prefix;
+## match the full prefixed varname so the deterministic
+## `expected_exports_deaths_T` is not picked up by a loose substring.
+function _scalar_replicates(pp, name)
+    key = first(k for k in keys(pp) if occursin(name, string(k)))
+    return vec(Array(pp[key]))
+end;
+
+pp_exports = _scalar_replicates(pp_joint, "exports_state.exported_cases");
+pp_exports_deaths = _scalar_replicates(
+    pp_joint, "exports_deaths_state.exports_deaths");
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
