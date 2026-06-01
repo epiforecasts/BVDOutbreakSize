@@ -63,7 +63,9 @@
     @test dh.offsets isa AbstractVector{<:Integer}
     ## 18-26 May vintages: nine entries. The 23 May deaths use the
     ## SitRep 009 zone-row sum (220), not the erroneous 119 headline.
-    @test dh.values == [131, 148, 160, 175, 204, 220, 223, 238, 238]
+    ## The 26 May value uses the revised re-issue SitRep 012_v2 (246),
+    ## correcting the original SitRep 012 headline of 238.
+    @test dh.values == [131, 148, 160, 175, 204, 220, 223, 238, 246]
     @test length(dh.offsets) == 9
     ## Offsets are days before cut-off, sorted ascending (oldest first,
     ## largest offset first), so edges = T - offset are ascending.
