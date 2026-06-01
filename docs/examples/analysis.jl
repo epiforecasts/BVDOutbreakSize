@@ -1082,8 +1082,6 @@ chn_joint = nuts_sample(
     obs.tests_analysed;
     deaths_history = obs.deaths_history,
     reported_history = obs.reported_history,
-    confirmed_history = obs.confirmed_history,
-    lab_history = obs.lab_history,
     breakpoint = _BREAKPOINT,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days));
@@ -1104,7 +1102,6 @@ chn_cases = nuts_sample(
 
 chn_confirmed = nuts_sample(
     confirmed_only_model(obs.n, obs.confirmed_cases;
-    confirmed_history = obs.confirmed_history,
     breakpoint = _BREAKPOINT));
 
 ## This composer keeps the deaths and exports submodels only for their
@@ -1372,8 +1369,6 @@ pp_joint = predict(
         obs.n, missing, missing, missing, missing, missing, missing;
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
-        confirmed_history = _days_only(obs.confirmed_history),
-        lab_history = _days_only(obs.lab_history),
         breakpoint = _BREAKPOINT),
     chn_joint);
 
@@ -1397,12 +1392,6 @@ reported_panel = (;
     replicates = _vintage_replicates(
         pp_joint, "cases_state.reported_increments"),
     observed = obs.reported_history.counts, colour = :steelblue);
-confirmed_panel = (;
-    title = "Confirmed cases",
-    dates = _vintage_dates(obs.confirmed_history.days),
-    replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.confirmed_increments"),
-    observed = obs.confirmed_history.counts, colour = :seagreen);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -1410,8 +1399,13 @@ deaths_panel = (;
         pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
 
+## Confirmed cases are fitted as a single cumulative total, not a sitrep
+## series, so they are not in this per-vintage check (the lab-processing
+## delays behind the confirmed counts change over time in ways that are
+## difficult to model). The suspected-case and death streams remain
+## per-vintage.
 joint_vintage_ppc_fig = plot_vintage_ppc(
-    [reported_panel, confirmed_panel, deaths_panel]);
+    [reported_panel, deaths_panel]);
 
 #md # ```@raw html
 #md # </details>

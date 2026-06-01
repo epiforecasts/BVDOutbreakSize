@@ -35,15 +35,17 @@ each push to `main` also republishes the rendered analysis and the
 - Rewrote the suspected-cases stream as a BVD-driven onset-to-report
   convolution plus an additive non-BVD background rate, exposing the
   implied per-suspected positivity as a derived quantity.
-- Fit the DRC suspected-case, laboratory-confirmed and suspected-death
-  streams per sitrep vintage: `bvd_joint` conditions on the
-  between-vintage increments rather than a single cut-off total, and a
-  single-vintage stream reduces exactly to the cumulative likelihood,
-  recovering the McCabe et al. configuration. Each case bin carries a
-  per-bin random-effect DRC ascertainment, confirmed cases enter as
-  per-vintage NegBinomial increments with per-test positivity a derived
-  quantity, and each stream carries its own vintage offsets so a lagging
+- Fit the DRC suspected-case and suspected-death streams per sitrep
+  vintage: `bvd_joint` conditions on the between-vintage increments rather
+  than a single cut-off total, and a single-vintage stream reduces exactly
+  to the cumulative likelihood, recovering the McCabe et al.
+  configuration. Each stream carries its own vintage offsets so a lagging
   stream is not assumed to run to the cut-off.
+- Fit the laboratory-confirmed cases as a single cumulative total with
+  per-test positivity a derived quantity: the confirmed counts are small
+  and the lab-processing delays behind them change over time in ways that
+  are difficult to model, so only the cut-off total is used (matching the
+  integral model, #162).
 - Expressed the per-vintage DRC stream likelihoods as proper vector
   observations: each between-vintage increment is now an observed `~`
   draw (`<stream>_increments.increments[i]`) rather than an
