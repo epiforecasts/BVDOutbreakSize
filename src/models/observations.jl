@@ -76,7 +76,7 @@ reduce to the original likelihood.
         delay = delay_model(),
         cfr = cfr_model(),
         p_deaths::Real = 1.0,
-        onset_scale::Real = 1.0)
+        onset_fraction::Real = 1.0)
     r = growth_state.r
 
     delay_state ~ to_submodel(delay, false)
@@ -90,14 +90,14 @@ reduce to the original likelihood.
               "$(length(total_deaths)) vs $n)")
 
     ## CFR-weighted cumulative expected deaths at each bin edge. The
-    ## latent trajectory is cumulative *infections*, so `onset_scale`
+    ## latent trajectory is cumulative *infections*, so `onset_fraction`
     ## (the incubation mgf) maps it onto onsets before the onset-to-death
     ## convolution; the drift factor `p_deaths` scales the whole
     ## trajectory. The between-edge increment is the per-bin NegBinomial
     ## mean (with a NaN / Inf-safe positive clamp via
     ## `daily_increment_kernel`).
     Λ_at_edges = [s <= zero(s) ? zero(s) :
-                  p_deaths * onset_scale *
+                  p_deaths * onset_fraction *
                   delay_convolution(CFR, r, s, f_death)
                   for s in t_edges]
     bin_means = daily_increment_kernel(Λ_at_edges)
@@ -115,11 +115,11 @@ end
 """
 Reported (suspected) cases likelihood. Couples the observed DRC
 suspected-case counts to `C(T)` as the sum of (i) a BVD-driven
-contribution `p_drc · onset_scale · ∫₀^s exp(r·u) · f_rep(s-u) du` using
+contribution `p_drc · onset_fraction · ∫₀^s exp(r·u) · f_rep(s-u) du` using
 the onset-to-report delay [`report_delay_model`](@ref) and (ii) a non-BVD
 background `λ_bg · s`, with `λ_bg` and the testing fraction `τ_test`
 supplied by [`test_positivity_model`](@ref). The latent trajectory is
-cumulative *infections*, so `onset_scale` (the incubation mgf) maps it
+cumulative *infections*, so `onset_fraction` (the incubation mgf) maps it
 onto onsets before the onset-to-report convolution; the background term
 is non-BVD and unscaled.
 
@@ -147,7 +147,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
         p_drc_per_bin::AbstractVector, t_edges::AbstractVector;
         report_delay = report_delay_model(),
         test_positivity = test_positivity_model(),
-        onset_scale::Real = 1.0)
+        onset_fraction::Real = 1.0)
     report_state ~ to_submodel(report_delay, false)
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
@@ -165,11 +165,11 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
 
     ## Unit-ascertainment BVD cumulative onsets at each bin edge (Gamma
     ## closed form), the infection trajectory mapped onto onsets by
-    ## `onset_scale` (the incubation mgf). Per-bin ascertainment is
+    ## `onset_fraction` (the incubation mgf). Per-bin ascertainment is
     ## applied below on the between-edge increment so each bin's mean
     ## tracks its own random-effect draw.
     μ_BVD0_at_edges = [s <= zero(s) ? zero(s) :
-                       onset_scale *
+                       onset_fraction *
                        delay_convolution(one(eltype(p_drc_per_bin)),
                            r, s, f_rep) for s in t_edges]
     ΔμBVD0 = daily_increment_kernel(μ_BVD0_at_edges)
@@ -253,7 +253,7 @@ the cumulative confirmed likelihood.
         t_edges::AbstractVector, tests_edge::Real;
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
-        onset_scale::Real = 1.0)
+        onset_fraction::Real = 1.0)
     lab_state ~ to_submodel(lab_delay, false)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     f_lab = lab_state.dist
@@ -275,13 +275,14 @@ the cumulative confirmed likelihood.
     ## [0, T]; the outer quadrature of I_lab,0 is reused across every bin
     ## edge. Per-bin ascertainment is then applied on the between-edge
     ## I_lab,0 increment so each bin's mean tracks its own draw.
-    ## The latent trajectory is cumulative *infections*, so `onset_scale`
+    ## The latent trajectory is cumulative *infections*, so `onset_fraction`
     ## (the incubation mgf) maps it onto onsets before the onset-to-report
     ## and report-to-lab convolutions; it scales the whole BVD lab
     ## cumulative, hence both the confirmed counts and the BVD tested
     ## volume below.
     trajectory = DailyBVDTrajectory(T, r, f_rep)
-    I_lab0_edges = onset_scale .* delay_convolution(trajectory, t_edges, f_lab)
+    I_lab0_edges = onset_fraction .*
+                   delay_convolution(trajectory, t_edges, f_lab)
     ΔIlab0 = daily_increment_kernel(I_lab0_edges)
 
     Tt = eltype(I_lab0_edges)
@@ -402,7 +403,7 @@ likelihoods share person-time.
         window::Real,
         daily_travellers::Real,
         source_population::Real = ITURI_POPULATION,
-        onset_scale::Real = 1.0)
+        onset_fraction::Real = 1.0)
     cumulative = growth_state.cumulative
     T = growth_state.T
     q = daily_travellers / source_population
@@ -411,10 +412,10 @@ likelihoods share person-time.
     ## Precompute the onset-to-death CDF once and reuse it across every
     ## bin edge below (`T - s ≤ window` over the domain; see
     ## `ExportDeathDelay`). The latent trajectory is cumulative
-    ## *infections*, so `onset_scale` (the incubation mgf) maps it onto
+    ## *infections*, so `onset_fraction` (the incubation mgf) maps it onto
     ## onsets before the onset-to-death convolution.
     delay = ExportDeathDelay(delay_dist, window)
-    Λ(t) = onset_scale * expected_exports_deaths(
+    Λ(t) = onset_fraction * expected_exports_deaths(
         cumulative, delay, CFR, p_uganda, q, t, window)
 
     ## Pre-death zero stretch as one Poisson observed at 0; `missing`

@@ -12,7 +12,7 @@ ascertainment, then conditions on the exports likelihood only. See
 The exports count sees infections directly (the detection window absorbs
 the infection-to-detection delay), so the incubation period is not
 identified by this stream: it is sampled only to expose
-`cumulative_cases = C_T · onset_scale` as a prior-predictive
+`cumulative_cases = C_T · onset_fraction` as a prior-predictive
 case-equivalent of the latent infections, and is drawn from its prior.
 """
 @model function exports_only_model(
@@ -32,7 +32,7 @@ case-equivalent of the latent infections, and is drawn from its prior.
     exports_state ~ to_submodel(
         exports(exported_cases, growth_state, asc_state.p_uganda), false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -60,9 +60,9 @@ dispersion, then conditions on the deaths likelihood only. See
     deaths_vec = Union{Missing, Int}[total_deaths]
     deaths_state ~ to_submodel(
         deaths(deaths_vec, growth_state, k, [growth_state.T];
-            onset_scale = os), false)
+            onset_fraction = os), false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -93,9 +93,9 @@ reported-cases likelihood. See [`reported_cases_model`](@ref).
     reported_vec = Union{Missing, Int}[reported_cases]
     reported_state ~ to_submodel(
         reported_cases_submodel(reported_vec, growth_state, k,
-            [asc_state.p_drc], [growth_state.T]; onset_scale = os), false)
+            [asc_state.p_drc], [growth_state.T]; onset_fraction = os), false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -140,9 +140,9 @@ likelihood. See [`confirmed_cases_model`](@ref).
             [asc_state.p_drc], λ_bg, τ_test, f_rep, [T], T;
             lab_delay = lab_delay,
             test_sensitivity = test_sensitivity,
-            onset_scale = os), false)
+            onset_fraction = os), false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -183,10 +183,10 @@ on the dated export-deaths likelihood. See
             window = window_state.w,
             daily_travellers = daily_travellers,
             source_population = source_population,
-            onset_scale = os),
+            onset_fraction = os),
         false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -286,7 +286,7 @@ disable the factor entirely.
     death_edges = [T - δ for δ in death_offsets]
     deaths_state ~ to_submodel(
         deaths(total_deaths, growth_state, k, death_edges;
-            p_deaths = p_deaths, onset_scale = os), false)
+            p_deaths = p_deaths, onset_fraction = os), false)
 
     ## Fixed per-stream DRC ascertainment: every reported and confirmed
     ## vintage bin uses the pooled scalar `p_drc`, shared between the two
@@ -301,7 +301,7 @@ disable the factor entirely.
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
             test_positivity = test_positivity,
-            onset_scale = os), false)
+            onset_fraction = os), false)
 
     if !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
@@ -313,7 +313,7 @@ disable the factor entirely.
                 confirmed_edges, tests_edge;
                 lab_delay = lab_delay,
                 test_sensitivity = test_sensitivity,
-                onset_scale = os), false)
+                onset_fraction = os), false)
     end
 
     exports_deaths_state ~ to_submodel(
@@ -323,7 +323,7 @@ disable the factor entirely.
             window = exports_state.w,
             daily_travellers = exports_state.daily_travellers,
             source_population = source_population,
-            onset_scale = os),
+            onset_fraction = os),
         false)
     detection_timing_state ~ to_submodel(
         exports_detection_timing(growth_state, p_uganda;
@@ -334,7 +334,7 @@ disable the factor entirely.
             source_population = source_population),
         false)
 
-    onset_scale := os
+    onset_fraction := os
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -347,7 +347,7 @@ reported-cases or deaths-among-exports likelihood). Passing
 only) fit.
 
 Unlike the other composers this fits no incubation period: McCabe et al.
-model cases directly, so `C_T` is the case trajectory (`onset_scale = 1`)
+model cases directly, so `C_T` is the case trajectory (`onset_fraction = 1`)
 and `cumulative_infections` and `cumulative_cases` coincide. This keeps
 `cumulative_cases` comparable with the report's published case estimates.
 """
@@ -378,7 +378,7 @@ and `cumulative_infections` and `cumulative_cases` coincide. This keeps
 
     ## No incubation layer: McCabe et al. model cases directly, so the
     ## onset-to-death convolution acts on `C_T` as the case trajectory
-    ## (`onset_scale = 1`). `cumulative_infections` and `cumulative_cases`
+    ## (`onset_fraction = 1`). `cumulative_infections` and `cumulative_cases`
     ## therefore coincide here, both equal to `C_T`.
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T

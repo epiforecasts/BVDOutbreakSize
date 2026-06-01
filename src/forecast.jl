@@ -7,29 +7,29 @@
 # uncertainty.
 
 # Deaths convolution evaluated at horizon `Th = T + h`, sharing the
-# package-wide `delay_convolution` integrator. `onset_scale` maps the
+# package-wide `delay_convolution` integrator. `onset_fraction` maps the
 # latent infection trajectory onto onsets (the incubation mgf), matching
 # `deaths_model`.
 function _forecast_deaths_mean(r, Th, α, θ, CFR;
-        onset_scale = 1.0, alg = DEATH_INTEGRAL_ALG)
-    return onset_scale * delay_convolution(CFR, r, Th, Gamma(α, θ); alg)
+        onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
+    return onset_fraction * delay_convolution(CFR, r, Th, Gamma(α, θ); alg)
 end
 
 # Reported (suspected) cases at horizon `Th`: the truth-anchored BVD
 # contribution plus the non-BVD background. The BVD contribution reuses
 # `delay_convolution` as a delay-convolved cumulative integrator at unit
 # ascertainment to compute `∫₀^{Th} exp(r·s) · f_rep(Th-s) ds`, scaled by
-# `onset_scale` (the incubation mgf) since the latent trajectory is
+# `onset_fraction` (the incubation mgf) since the latent trajectory is
 # infections; the background contribution `λ_bg · Th` is non-BVD and
 # unscaled.
 function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
-        onset_scale = 1.0, alg = DEATH_INTEGRAL_ALG)
+        onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     conv = delay_convolution(one(p_drc), r, Th, Gamma(α_rep, θ_rep); alg)
-    return onset_scale * p_drc * conv + λ_bg * Th
+    return onset_fraction * p_drc * conv + λ_bg * Th
 end
 
 function _forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test; onset_scale = 1.0, alg = DEATH_INTEGRAL_ALG)
+        p_drc, s_test, τ_test; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     d_rep = Gamma(α_rep, θ_rep)
     d_lab = Gamma(α_lab, θ_lab)
     ## Inner BVD-reported trajectory in closed form; only the outer lab
@@ -38,16 +38,16 @@ function _forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
     bvd_reported_at = let r = r, p_drc = p_drc, d_rep = d_rep
         u -> p_drc * delay_convolution(one(p_drc), r, u, d_rep)
     end
-    return onset_scale * s_test * τ_test *
+    return onset_fraction * s_test * τ_test *
            delay_convolution(bvd_reported_at, Th, d_lab; alg)
 end
 
 # Cumulative tests analysed at horizon `Th`: τ_test gates both the BVD
-# contribution (lab-completed BVD samples, scaled by `onset_scale`) and
+# contribution (lab-completed BVD samples, scaled by `onset_fraction`) and
 # the non-BVD background (constant arrival rate λ_bg convolved against
 # F_lab, unscaled).
 function _forecast_tests_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, λ_bg, τ_test; onset_scale = 1.0, alg = DEATH_INTEGRAL_ALG)
+        p_drc, λ_bg, τ_test; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     d_rep = Gamma(α_rep, θ_rep)
     d_lab = Gamma(α_lab, θ_lab)
     ## Inner BVD-reported trajectory in closed form; only the outer lab
@@ -56,7 +56,7 @@ function _forecast_tests_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
     bvd_reported_at = let r = r, p_drc = p_drc, d_rep = d_rep
         u -> p_drc * delay_convolution(one(p_drc), r, u, d_rep)
     end
-    bvd_tested = onset_scale *
+    bvd_tested = onset_fraction *
                  delay_convolution(bvd_reported_at, Th, d_lab; alg)
     ## Background tested volume at `Th`: ∫₀^Th F_lab(Th - u) du =
     ## ∫₀^Th F_lab(v) dv, the closed form `_gamma_cdf_integral`.
@@ -119,9 +119,9 @@ function forecast_reported(chn;
     θ_rep = _draws(chn, :θ_rep)
     λ_bg = _draws(chn, :λ_bg)
     ## Incubation draws map the latent infection trajectory onto onsets
-    ## (the `onset_scale = mgf(incubation, −r)` of the observation
+    ## (the `onset_fraction = mgf(incubation, −r)` of the observation
     ## models). Absent on chains predating the infection layer, where
-    ## `onset_scale = 1` recovers the previous behaviour.
+    ## `onset_fraction = 1` recovers the previous behaviour.
     has_incubation = all(haskey_chain(chn, n) for n in (:α_inc, :θ_inc))
     α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
     θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
@@ -154,14 +154,14 @@ function forecast_reported(chn;
         Th = T[i] + horizon
         os = has_incubation ?
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
-        ## DRC reported cases: onset_scale · p_drc · ∫₀^{T+h} exp(r·s) ·
+        ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
         ## f_rep(T+h-s) ds + λ_bg · (T+h).
         μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
-            pr[i], λ_bg[i]; onset_scale = os, alg)
+            pr[i], λ_bg[i]; onset_fraction = os, alg)
         cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
-        ## DRC deaths: onset_scale · CFR · ∫_0^{T+h} exp(r·s) f(T+h−s) ds.
+        ## DRC deaths: onset_fraction · CFR · ∫_0^{T+h} exp(r·s) f(T+h−s) ds.
         μ_deaths = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
-            onset_scale = os, alg)
+            onset_fraction = os, alg)
         deaths_cum[i] = _nb_rand(rng, k[i], μ_deaths)
         ## Uganda exports: p_uganda · q · ∫_{T+h−w}^{T+h} C(s) ds (closed
         ## form for exponential growth). Exports see infections directly —
@@ -173,12 +173,12 @@ function forecast_reported(chn;
         if has_lab
             μ_confirmed = _forecast_confirmed_mean(r[i], Th,
                 α_rep[i], θ_rep[i], α_lab[i], θ_lab[i], pr[i],
-                s_test[i], τ_test_draws[i]; onset_scale = os, alg)
+                s_test[i], τ_test_draws[i]; onset_fraction = os, alg)
             confirmed_cum[i] = _nb_rand(rng, k[i], μ_confirmed)
             if has_tests
                 μ_tests = _forecast_tests_mean(r[i], Th,
                     α_rep[i], θ_rep[i], α_lab[i], θ_lab[i],
-                    pr[i], λ_bg[i], τ_test_draws[i]; onset_scale = os, alg)
+                    pr[i], λ_bg[i], τ_test_draws[i]; onset_fraction = os, alg)
                 tests_cum[i] = _nb_rand(rng, k[i], μ_tests)
             end
         end

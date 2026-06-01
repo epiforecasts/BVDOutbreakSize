@@ -3,7 +3,7 @@
 ## cumulative symptom onsets the downstream delays act on. Under
 ## exponential growth the infection-to-onset convolution is the exact
 ## constant factor `mgf(incubation, −r)`, so `cumulative_cases =
-## onset_scale · cumulative_infections` holds per draw.
+## onset_fraction · cumulative_infections` holds per draw.
 
 @testitem "incubation_model samples a plausible Gamma delay" tags=[:slow] begin
     using Turing: sample, Prior
@@ -79,7 +79,7 @@ end
             chain_type = FlexiChains.VNChain, progress = false)
         infections = vec(Array(chn[:cumulative_infections]))
         cases = vec(Array(chn[:cumulative_cases]))
-        os = vec(Array(chn[:onset_scale]))
+        os = vec(Array(chn[:onset_fraction]))
         r = vec(Array(chn[:r]))
         α = vec(Array(chn[:α_inc]))
         θ = vec(Array(chn[:θ_inc]))
@@ -96,7 +96,7 @@ end
     import FlexiChains
     using BVDOutbreakSize: imperial_only_model
 
-    ## No incubation layer: cases and infections coincide (onset_scale 1).
+    ## No incubation layer: cases and infections coincide (onset_fraction 1).
     chn = sample(imperial_only_model(2, 136), Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false)
     infections = vec(Array(chn[:cumulative_infections]))

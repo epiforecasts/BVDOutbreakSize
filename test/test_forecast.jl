@@ -146,7 +146,7 @@ end
     @test fig !== nothing
 end
 
-@testitem "forecast BVD means apply the incubation onset_scale" begin
+@testitem "forecast BVD means apply the incubation onset_fraction" begin
     using Distributions: Gamma
     using BVDOutbreakSize: onset_rescale
     import BVDOutbreakSize as B
@@ -159,13 +159,13 @@ end
     os = onset_rescale(Gamma(3.0, 2.1), r)
 
     ## Deaths and confirmed are purely BVD-driven, so the whole mean
-    ## scales by onset_scale.
-    d1 = B._forecast_deaths_mean(r, Th, α, θ, CFR; onset_scale = os)
+    ## scales by onset_fraction.
+    d1 = B._forecast_deaths_mean(r, Th, α, θ, CFR; onset_fraction = os)
     d0 = B._forecast_deaths_mean(r, Th, α, θ, CFR)
     @test d1 ≈ os * d0
 
     c1 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test; onset_scale = os)
+        p_drc, s_test, τ_test; onset_fraction = os)
     c0 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
         p_drc, s_test, τ_test)
     @test c1 ≈ os * c0
@@ -173,17 +173,17 @@ end
     ## Reported cases scale only the BVD part; the non-BVD background
     ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.
     rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
-        onset_scale = os)
+        onset_fraction = os)
     rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg)
     bvd0 = rc0 - λ_bg * Th
     @test rc1 ≈ os * bvd0 + λ_bg * Th
     @test rc1 > os * rc0
 
-    ## Default onset_scale = 1 recovers the pre-infection-layer mean.
+    ## Default onset_fraction = 1 recovers the pre-infection-layer mean.
     @test B._forecast_deaths_mean(r, Th, α, θ, CFR) ≈ d0
 end
 
-@testitem "committed-deaths counterfactual applies onset_scale" begin
+@testitem "committed-deaths counterfactual applies onset_fraction" begin
     using Distributions: Gamma
     using BVDOutbreakSize: onset_rescale
     import BVDOutbreakSize as B
@@ -191,7 +191,7 @@ end
     r, T, α, θ, CFR = 0.05, 100.0, 4.3, 2.6, 0.3
     os = onset_rescale(Gamma(3.0, 2.1), r)
     base = B._committed_deaths_one(r, T, α, θ, CFR)
-    scaled = B._committed_deaths_one(r, T, α, θ, CFR; onset_scale = os)
+    scaled = B._committed_deaths_one(r, T, α, θ, CFR; onset_fraction = os)
     @test scaled ≈ os * base
 end
 

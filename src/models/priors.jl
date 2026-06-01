@@ -123,7 +123,7 @@ Used by the joint composer and the onset-driven single-stream composers
 to map the latent cumulative *infections* `C(T) = exp(r·T)` onto the
 cumulative symptom onsets the downstream delays act on. Under exponential
 growth the convolution is the exact constant rescale `mgf(incubation,
-−r)`, applied as the `onset_scale` of [`deaths_model`](@ref),
+−r)`, applied as the `onset_fraction` of [`deaths_model`](@ref),
 [`reported_cases_model`](@ref), [`confirmed_cases_model`](@ref) and
 [`exports_deaths_model`](@ref).
 """
