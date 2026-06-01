@@ -2,11 +2,11 @@
 # onset incidence from the generating infection process. A stream
 # convolves the onsets with its own sampled onset-to-event delay, scales
 # by the relevant ascertainment / CFR / positivity / travel factor, and
-# reads the cumulative expected count off the daily series at each vintage
-# day, fitting the between-vintage increments (and the cut-off total).
-# Convolutions replace the integral model's continuous onset-to-event
-# integrals while preserving the v1.3.0 per-vintage time-series
-# likelihoods.
+# bins the daily series into per-vintage increments (the first bin is the
+# cumulative up to the first vintage, the rest inter-vintage sums), fitting
+# them against the observed increments. Convolutions replace the integral
+# model's continuous onset-to-event integrals while preserving the v1.3.0
+# per-vintage time-series likelihoods.
 
 """
 NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean `μ`
@@ -23,16 +23,28 @@ function safe_nbinomial(k, μ)
 end
 
 """
-Cumulative of a daily series `daily` read off at the vintage day indices
-`days` (1-based into the grid). Each entry is the running sum up to and
-including that day, giving the modelled cumulative count at each vintage.
-Days beyond the series length are clamped to the final cumulative. Pure
-and AD-transparent; the output element type follows `daily`.
+Modelled between-vintage increments of a daily series `daily`, summed
+directly into the bins delimited by the vintage day indices `days` (1-based
+into the grid, ascending). The first increment is the cumulative count up
+to the first vintage day (`sum(daily[1:days[1]])`); each later increment is
+the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
+bin needs the cumulative. This avoids the cumulative-then-difference round
+trip — the daily series is binned once into the quantities the likelihood
+scores. Day indices are clamped to the grid. Pure and AD-transparent; the
+output element type follows `daily`.
 """
-function cumulative_at(daily::AbstractVector, days::AbstractVector{<:Integer})
-    cum = cumsum(daily)
-    n = length(cum)
-    return [cum[clamp(d, 1, n)] for d in days]
+function bin_increments(daily::AbstractVector,
+        days::AbstractVector{<:Integer})
+    n = length(daily)
+    out = Vector{eltype(daily)}(undef, length(days))
+    prev = 0
+    @inbounds for (i, d) in enumerate(days)
+        hi = clamp(Int(d), 0, n)
+        lo = clamp(prev, 0, n)
+        out[i] = hi > lo ? sum(@view daily[(lo + 1):hi]) : zero(eltype(daily))
+        prev = hi
+    end
+    return out
 end
 
 """
@@ -68,26 +80,24 @@ function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
 end
 
 """
-Per-vintage cumulative-history likelihood for one stream, expressed as a
-proper vector likelihood. Given the modelled cumulative `expected_cum` at
-each vintage day, scores the between-vintage increments with
-NegativeBinomials sharing the dispersion `k` (one per vintage). The
-modelled increment for vintage `i` is `expected_cum[i] - expected_cum[i-1]`
-(the first is `expected_cum[1]`).
+Per-vintage increment likelihood for one stream, expressed as a proper
+vector likelihood. Given the modelled per-vintage increments `modelled`
+(see [`bin_increments`](@ref)), scores them against the observed
+increments with NegativeBinomials sharing the dispersion `k` (one per
+vintage).
 
-The observed increments are passed as `obs_increments` and scored with a
-loop of scalar `~` so the stream is real observed data that `predict`
+The observed increments are passed as `increments` and scored with a loop
+of scalar `~` so the stream is real observed data that `predict`
 replicates. The increment variable is named `increments`, so under a
 prefixed submodel attachment the predict keys are `<prefix>.increments[i]`.
-When `obs_increments` is `missing` the increments are sampled, making the
+When `increments` is `missing` the increments are sampled, making the
 submodel a predictive generator. When it is empty (zero vintages) the
 likelihood is a no-op. Returns the modelled and (when present) observed
 increments for reuse.
 """
-@model function vintage_increments_model(expected_cum::AbstractVector,
+@model function vintage_increments_model(modelled::AbstractVector,
         increments::Union{Missing, AbstractVector{<:Integer}},
         k::Real)
-    modelled = diff(vcat(zero(eltype(expected_cum)), expected_cum))
     n = length(modelled)
     ## `increments` is the model argument scored on the LHS of `~`, so a
     ## supplied vector is observed data DynamicPPL conditions on and a
@@ -133,9 +143,9 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
 
     n = length(deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
-    expected_cum = cumulative_at(deaths_daily, vobs.days)
+    modelled_increments = bin_increments(deaths_daily, vobs.days)
     death_increments ~ to_submodel(
-        vintage_increments_model(expected_cum, vobs.obs_increments, k))
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
 
     raw_total = sum(deaths_daily)
     expected_deaths_T := safe_rate(raw_total)
@@ -185,9 +195,9 @@ sitrep.
 
     n = length(reports_daily)
     vobs = vintage_obs(reported_history, reported_cases, n)
-    expected_cum = cumulative_at(reports_daily, vobs.days)
+    modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
-        vintage_increments_model(expected_cum, vobs.obs_increments, k))
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
 
     raw_total = sum(reports_daily)
     expected_reports := safe_rate(raw_total)
@@ -257,14 +267,14 @@ totals at the cut-off as derived quantities.
 
     n = length(confirmed_daily)
     cvobs = vintage_obs(confirmed_history, confirmed_cases, n)
-    confirmed_cum = cumulative_at(confirmed_daily, cvobs.days)
+    confirmed_inc = bin_increments(confirmed_daily, cvobs.days)
     confirmed_increments ~ to_submodel(
-        vintage_increments_model(confirmed_cum, cvobs.obs_increments, k))
+        vintage_increments_model(confirmed_inc, cvobs.obs_increments, k))
 
     tvobs = vintage_obs(lab_history, tests_analysed, n)
-    tested_cum = cumulative_at(tested_daily, tvobs.days)
+    tested_inc = bin_increments(tested_daily, tvobs.days)
     tested_increments ~ to_submodel(
-        vintage_increments_model(tested_cum, tvobs.obs_increments, k))
+        vintage_increments_model(tested_inc, tvobs.obs_increments, k))
 
     expected_confirmed := safe_rate(sum(confirmed_daily))
     expected_tested := safe_rate(sum(tested_daily))
