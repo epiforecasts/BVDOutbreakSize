@@ -15,8 +15,11 @@
     f2(x) = sin(0.1 * x) + 2.0
     f3(x) = pdf(Gamma(4.3, 2.6), x)
 
-    ## Reference values captured from the pre-fix `solve`-based
-    ## implementation; the hand-rolled rule must reproduce them.
+    ## Golden reference values from the previous Integrals.jl
+    ## `GaussLegendre` solver (`IntegralProblem` / `solve`), captured before
+    ## the switch to the hand-rolled rule. Integrals.jl is no longer a
+    ## dependency, so they are pinned here as constants; the hand-rolled
+    ## `integrate` must reproduce the Integrals.jl results.
     UNIFORM_GOLDEN = [
         ((f1, 0.0, 10.0), 15.679106409586298),
         ((f1, 0.0, 1.0), 1.5065282584468584),
@@ -37,7 +40,7 @@
     ]
 end
 
-@testitem "integrate: identical to reference" setup=[IntegrateGolden] begin
+@testitem "integrate: matches Integrals.jl golden values" setup=[IntegrateGolden] begin
     using BVDOutbreakSize: integrate
     for ((f, lo, hi), want) in UNIFORM_GOLDEN
         got = integrate(f, lo, hi)
