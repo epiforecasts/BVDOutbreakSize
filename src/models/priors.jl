@@ -101,6 +101,32 @@ outbreak data anchors this prior. Used by [`confirmed_cases_model`](@ref).
 end
 
 """
+Incubation-period prior, the infection-to-symptom-onset delay that sits
+at the head of the generative process. Samples a gamma shape `α_inc` and
+scale `θ_inc` from truncated-normal priors and returns the resulting
+`Gamma(α_inc, θ_inc)` distribution. The defaults are centred on a mean of
+about 9 days with an SD of about 7 days (`α ≈ 1.6`, `θ ≈ 5.5`), in line
+with published Ebolavirus incubation estimates; no Bundibugyo-specific
+2026 line list anchors them, so the centres are weakly informative and
+need human sign-off.
+
+Used by the joint composer and the onset-driven single-stream composers
+to map the latent cumulative *infections* `C(T) = exp(r·T)` onto the
+cumulative symptom onsets the downstream delays act on. Under exponential
+growth the convolution is the exact constant rescale `mgf(incubation,
+−r)`, applied as the `onset_scale` of [`deaths_model`](@ref),
+[`reported_cases_model`](@ref), [`confirmed_cases_model`](@ref) and
+[`exports_deaths_model`](@ref).
+"""
+@model function incubation_model(;
+        alpha_prior = truncated(Normal(1.6, 0.5); lower = 0.1),
+        theta_prior = truncated(Normal(5.5, 1.5); lower = 0.1))
+    α_inc ~ alpha_prior
+    θ_inc ~ theta_prior
+    return (; α = α_inc, θ = θ_inc, dist = Gamma(α_inc, θ_inc))
+end
+
+"""
 PCR sensitivity prior for the GeneXpert Ebola assay. Beta(30, 2): mean
 0.94, 95% interval 0.84-0.99. Sits just below the 100% (95% CI
 84.6-100%, n = 22) clinical sensitivity on field whole blood reported

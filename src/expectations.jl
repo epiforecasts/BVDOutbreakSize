@@ -3,6 +3,24 @@
 # expected deaths-among-exports.
 
 """
+Infection-to-onset rescale under exponential growth. The latent
+cumulative *infections* trajectory is ``C(s) = e^{r s}``; convolving it
+with the incubation-period density `f` gives the cumulative symptom
+onsets
+
+```math
+\\int_0^{s} e^{r u}\\, f(s - u)\\, du = e^{r s}\\, M_f(-r),
+```
+
+a constant rescale of the same exponential by the incubation
+moment-generating function ``M_f(-r)``. Onsets lag infections, so the
+factor lies in ``(0, 1]`` and `onset_rescale(f, 0) = 1`. Applied as the
+`onset_scale` of the onset-driven observation submodels so every
+downstream delay acts on onsets rather than infections.
+"""
+onset_rescale(delay_dist, r) = mgf(delay_dist, -r)
+
+"""
 Delay-convolved cumulative-incidence count by time `T` under
 exponential growth at rate `r`:
 

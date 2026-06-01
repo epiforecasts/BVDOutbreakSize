@@ -13,14 +13,22 @@ ascertainment, then conditions on the exports likelihood only. See
         exported_cases::Union{Missing, Integer};
         growth = exponential_growth_model(),
         exports = exports_model,
-        ascertainment = independent_ascertainment_model())
+        ascertainment = independent_ascertainment_model(),
+        incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     asc_state ~ to_submodel(ascertainment, false)
+    incubation_state ~ to_submodel(incubation, false)
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
+    ## Exports see infections directly: the detection window already
+    ## folds the infection-to-detection delay into `w`, so the count
+    ## likelihood is not rescaled by the incubation period.
     exports_state ~ to_submodel(
         exports(exported_cases, growth_state, asc_state.p_uganda), false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
@@ -32,19 +40,25 @@ dispersion, then conditions on the deaths likelihood only. See
         total_deaths::Union{Missing, Integer};
         growth = exponential_growth_model(),
         deaths = deaths_model,
-        dispersion = surveillance_dispersion_model())
+        dispersion = surveillance_dispersion_model(),
+        incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
+    incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
     ## Single cumulative total at the cut-off: a length-1 vintage vector
     ## whose only edge is `T`, so the per-vintage deaths likelihood
     ## reduces to the cumulative single-total NegBinomial (Method 2).
     deaths_vec = Union{Missing, Int}[total_deaths]
     deaths_state ~ to_submodel(
-        deaths(deaths_vec, growth_state, k, [growth_state.T]), false)
+        deaths(deaths_vec, growth_state, k, [growth_state.T];
+            onset_scale = os), false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
@@ -57,11 +71,14 @@ reported-cases likelihood. See [`reported_cases_model`](@ref).
         growth = exponential_growth_model(),
         reported_cases_submodel = reported_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = independent_ascertainment_model())
+        ascertainment = independent_ascertainment_model(),
+        incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
+    incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
     ## Single cumulative total at the cut-off: a length-1 vintage vector
     ## with the pooled scalar ascertainment and the single edge `T`, so
@@ -70,9 +87,11 @@ reported-cases likelihood. See [`reported_cases_model`](@ref).
     reported_vec = Union{Missing, Int}[reported_cases]
     reported_state ~ to_submodel(
         reported_cases_submodel(reported_vec, growth_state, k,
-            [asc_state.p_drc], [growth_state.T]), false)
+            [asc_state.p_drc], [growth_state.T]; onset_scale = os), false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
@@ -94,26 +113,32 @@ likelihood. See [`confirmed_cases_model`](@ref).
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
-        test_sensitivity = test_sensitivity_model())
+        test_sensitivity = test_sensitivity_model(),
+        incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
     report_state ~ to_submodel(report_delay, false)
     test_positivity_state ~ to_submodel(test_positivity, false)
+    incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
     λ_bg = test_positivity_state.λ_bg
     τ_test = test_positivity_state.τ_test
     f_rep = report_state.dist
     T = growth_state.T
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
     confirmed_vec = Union{Missing, Int}[confirmed_cases]
     confirmed_state ~ to_submodel(
         confirmed(confirmed_vec, tests_analysed, growth_state, k,
             [asc_state.p_drc], λ_bg, τ_test, f_rep, [T], T;
             lab_delay = lab_delay,
-            test_sensitivity = test_sensitivity), false)
+            test_sensitivity = test_sensitivity,
+            onset_scale = os), false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
@@ -131,6 +156,7 @@ on the dated export-deaths likelihood. See
         traveller = traveller_volume_model(),
         exports_deaths_model = exports_deaths_model,
         ascertainment = independent_ascertainment_model(),
+        incubation = incubation_model(),
         source_population::Real = ITURI_POPULATION,
         pre_start_deaths::Union{Missing, Integer} = 0)
     growth_state ~ to_submodel(growth, false)
@@ -138,6 +164,8 @@ on the dated export-deaths likelihood. See
     cfr_state ~ to_submodel(cfr, false)
     window_state ~ to_submodel(window, false)
     asc_state ~ to_submodel(ascertainment, false)
+    incubation_state ~ to_submodel(incubation, false)
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
     travel_state ~ to_submodel(traveller, false)
     daily_travellers = travel_state.daily_travellers
@@ -148,10 +176,13 @@ on the dated export-deaths likelihood. See
             pre_start_deaths = pre_start_deaths,
             window = window_state.w,
             daily_travellers = daily_travellers,
-            source_population = source_population),
+            source_population = source_population,
+            onset_scale = os),
         false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
@@ -214,6 +245,7 @@ disable the factor entirely.
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
+        incubation = incubation_model(),
         genetic = nothing,
         source_population::Real = ITURI_POPULATION,
         pre_start_deaths::Union{Missing, Integer} = 0,
@@ -225,6 +257,7 @@ disable the factor entirely.
     end
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
+    incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
     p_uganda = asc_state.p_uganda
     if p_deaths_fixed === nothing
@@ -234,6 +267,12 @@ disable the factor entirely.
         p_deaths = p_deaths_fixed
     end
     T = growth_state.T
+    ## The latent trajectory `exp(r·s)` is cumulative infections; the
+    ## incubation mgf at −r maps it onto symptom onsets, the series every
+    ## onset-driven stream below conditions on. Exports and the export
+    ## detection timing see infections directly because the detection
+    ## window absorbs the infection-to-detection delay.
+    os = onset_rescale(incubation_state.dist, growth_state.r)
 
     exports_state ~ to_submodel(
         exports(exported_cases, growth_state, p_uganda), false)
@@ -241,7 +280,7 @@ disable the factor entirely.
     death_edges = [T - δ for δ in death_offsets]
     deaths_state ~ to_submodel(
         deaths(total_deaths, growth_state, k, death_edges;
-            p_deaths = p_deaths), false)
+            p_deaths = p_deaths, onset_scale = os), false)
 
     ## Fixed per-stream DRC ascertainment: every reported and confirmed
     ## vintage bin uses the pooled scalar `p_drc`, shared between the two
@@ -255,7 +294,8 @@ disable the factor entirely.
         reported_cases_submodel(reported_cases, growth_state, k,
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
-            test_positivity = test_positivity), false)
+            test_positivity = test_positivity,
+            onset_scale = os), false)
 
     if !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
@@ -266,7 +306,8 @@ disable the factor entirely.
                 reported_state.τ_test, reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;
                 lab_delay = lab_delay,
-                test_sensitivity = test_sensitivity), false)
+                test_sensitivity = test_sensitivity,
+                onset_scale = os), false)
     end
 
     exports_deaths_state ~ to_submodel(
@@ -275,7 +316,8 @@ disable the factor entirely.
             pre_start_deaths = pre_start_deaths,
             window = exports_state.w,
             daily_travellers = exports_state.daily_travellers,
-            source_population = source_population),
+            source_population = source_population,
+            onset_scale = os),
         false)
     detection_timing_state ~ to_submodel(
         exports_detection_timing(growth_state, p_uganda;
@@ -286,7 +328,9 @@ disable the factor entirely.
             source_population = source_population),
         false)
 
-    cumulative_cases := growth_state.C_T
+    onset_scale := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
 end
 
 """
