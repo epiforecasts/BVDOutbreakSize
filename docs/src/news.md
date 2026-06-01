@@ -37,9 +37,10 @@ each push to `main` also republishes the rendered analysis and the
   `9 + (cut-off − 18 May)/14` doublings, based on McCabe et al.'s
   first-report Method 2 central (501 cases, `log2 ≈ 9`) and the 14-day
   doubling time, so it tracks data refreshes.
-- Added a partially-pooled DRC and Uganda ascertainment extension: a
-  logit-scale reporting fraction applied to the latent incidence, fitting
-  the reported suspected-case count alongside the deaths and exports.
+- Added an independent DRC and Uganda ascertainment extension: a
+  logit-scale reporting fraction for each surveillance system applied to
+  the latent incidence, fitting the reported suspected-case count
+  alongside the deaths and exports.
 - Added a laboratory pipeline coupling the cumulative tests-analysed and
   confirmed-case streams to the latent incidence, introducing a testing
   fraction, PCR sensitivity and a report-to-confirmation (lab-turnaround)
@@ -48,14 +49,16 @@ each push to `main` also republishes the rendered analysis and the
 - Rewrote the suspected-cases stream as a BVD-driven onset-to-report
   convolution plus an additive non-BVD background rate, exposing the
   implied per-suspected positivity as a derived quantity.
-- Fit the DRC suspected-case, laboratory-confirmed and suspected-death
-  streams per sitrep vintage: `bvd_joint` conditions on the
-  between-vintage increments rather than a single cut-off total, and a
-  single-vintage stream reduces exactly to the cumulative likelihood,
-  recovering the McCabe et al. configuration. Confirmed cases enter as
-  per-vintage NegBinomial increments with per-test positivity a derived
-  quantity, and each stream carries its own vintage offsets so a lagging
+- Fit the DRC suspected-case and suspected-death streams per sitrep
+  vintage: `bvd_joint` conditions on the between-vintage increments rather
+  than a single cut-off total, and a single-vintage stream reduces exactly
+  to the cumulative likelihood, recovering the McCabe et al.
+  configuration. Each stream carries its own vintage offsets so a lagging
   stream is not assumed to run to the cut-off.
+- Fit the laboratory-confirmed cases as a single cumulative total with
+  per-test positivity a derived quantity: the confirmed counts are small
+  and the lab-processing delays behind them change over time in ways that
+  are difficult to model, so only the cut-off total is used.
 - Added `confirmed_only_model`, a single-stream composer that fits the
   laboratory pipeline in isolation for the per-stream comparison.
 - Added `forecast_vs_truth_trajectory`: scores the retrospective forecast
