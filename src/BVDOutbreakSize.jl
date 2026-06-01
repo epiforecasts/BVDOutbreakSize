@@ -9,8 +9,7 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
-using Turing: @model, MCMCThreads, NUTS, sample, to_submodel,
-              @addlogprob!
+using Turing: @model, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,

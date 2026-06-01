@@ -36,37 +36,78 @@ function cumulative_at(daily::AbstractVector, days::AbstractVector{<:Integer})
 end
 
 """
-Add the per-vintage cumulative-history likelihood for one stream. Given
-the modelled cumulative `expected_cum` at each vintage day and the
-observed cumulative `counts`, scores the between-vintage increments with
+Resolve a stream's per-vintage observation into the vintage day indices
+and the observed between-vintage increment vector to score, given the
+dated cumulative `history` `(; days, counts)`, the cut-off total `total`
+and the grid length `n` (day `n` is the cut-off). When the history is
+non-empty it already ends at the cut-off (the last vintage count equals
+`total`), so the increments are differenced from the history alone and the
+separate cut-off total is not scored again. When the history is empty but
+a cut-off `total` is supplied (e.g. the tests-analysed stream, whose dated
+vintage history is absent), the cut-off becomes a single vintage point at
+day `n` so the total is still scored as one increment. When both are empty
+or `total` is `missing`, the increments are `missing` so the caller is a
+predictive generator. Returns `(; days, obs_increments)` with
+`obs_increments` either an `Int` vector or `missing`.
+"""
+function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
+    if !isempty(history.counts)
+        days = history.days
+        obs_increments = diff(vcat(zero(eltype(history.counts)),
+            collect(history.counts)))
+        return (; days, obs_increments)
+    elseif !ismissing(total)
+        return (; days = [Int(n)], obs_increments = [Int(total)])
+    else
+        return (; days = Int[], obs_increments = missing)
+    end
+end
+
+"""
+Per-vintage cumulative-history likelihood for one stream, expressed as a
+proper vector likelihood. Given the modelled cumulative `expected_cum` at
+each vintage day, scores the between-vintage increments with
 NegativeBinomials sharing the dispersion `k` (one per vintage). The
-observed increment for vintage `i` is `counts[i] - counts[i-1]` (the first
-is `counts[1]`). The counts are fixed data rather than a sampled quantity,
-so the likelihood is added with `@addlogprob!` (a continuous function of
-`expected_cum` that differentiates cleanly under Mooncake) rather than a
-discrete `~`, which the NUTS model check would otherwise reject. A no-op
-when `counts` is empty, so the caller doubles as a predictive generator.
-Returns the modelled increments for reuse.
+modelled increment for vintage `i` is `expected_cum[i] - expected_cum[i-1]`
+(the first is `expected_cum[1]`).
+
+The observed increments are passed as `obs_increments` and scored with a
+loop of scalar `~` so the stream is real observed data that `predict`
+replicates. The increment variable is named `increments`, so under a
+prefixed submodel attachment the predict keys are `<prefix>.increments[i]`.
+When `obs_increments` is `missing` the increments are sampled, making the
+submodel a predictive generator. When it is empty (zero vintages) the
+likelihood is a no-op. Returns the modelled and (when present) observed
+increments for reuse.
 """
 @model function vintage_increments_model(expected_cum::AbstractVector,
-        counts::AbstractVector{<:Integer}, k::Real)
-    increments = diff(vcat(zero(eltype(expected_cum)), expected_cum))
-    obs_increments = diff(vcat(zero(eltype(counts)), counts))
-    if !isempty(obs_increments)
-        lp = sum(logpdf(safe_nbinomial(k, safe_rate(increments[i])),
-                     obs_increments[i]) for i in eachindex(obs_increments))
-        @addlogprob! lp
+        increments::Union{Missing, AbstractVector{<:Integer}},
+        k::Real)
+    modelled = diff(vcat(zero(eltype(expected_cum)), expected_cum))
+    n = length(modelled)
+    ## `increments` is the model argument scored on the LHS of `~`, so a
+    ## supplied vector is observed data DynamicPPL conditions on and a
+    ## `missing` argument is sampled (the predictive-generator path). The
+    ## indexed `increments[i]` keeps the predict keys
+    ## (`<prefix>.increments[i]`) replicable.
+    if ismissing(increments)
+        increments = Vector{Union{Missing, Int}}(missing, n)
     end
-    return (; increments, obs_increments)
+    for i in 1:n
+        increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+    end
+    return (; modelled, increments)
 end
 
 """
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
 daily onsets with the sampled onset-to-death delay, scales by the CFR, and
 reads the modelled cumulative deaths at each vintage day off the daily
-series, fitting the between-vintage increments with a NegativeBinomial
-sharing the surveillance dispersion `k` ([`surveillance_dispersion_model`]
-(@ref)) and the cut-off total likewise. Samples the onset-to-death delay
+series, fitting the between-vintage increments as observed `~` data with a
+NegativeBinomial sharing the surveillance dispersion `k`
+([`surveillance_dispersion_model`](@ref)). The death history ends at the
+cut-off, so the cut-off total is the final increment and is not scored
+separately. Samples the onset-to-death delay
 and the CFR via injected submodels. The onset-to-death prior is centred on
 the Bayesian BDBV line-list reanalysis (mean 11.2 d, SD 5.4 d; the
 `bdbv-linelist-analysis` submodule), the same source the integral model
@@ -86,13 +127,14 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
     CFR = cfr_state.CFR
     deaths_daily = CFR .* convolve_delay(onsets, od_state.pmf)
 
-    expected_cum = cumulative_at(deaths_daily, deaths_history.days)
-    _inc ~ to_submodel(vintage_increments_model(expected_cum,
-            deaths_history.counts, k), false)
+    n = length(deaths_daily)
+    vobs = vintage_obs(deaths_history, total_deaths, n)
+    expected_cum = cumulative_at(deaths_daily, vobs.days)
+    death_increments ~ to_submodel(
+        vintage_increments_model(expected_cum, vobs.obs_increments, k))
 
     raw_total = sum(deaths_daily)
     expected_deaths_T := safe_rate(raw_total)
-    total_deaths ~ safe_nbinomial(k, expected_deaths_T)
 
     return (; CFR, od_pmf = od_state.pmf, deaths_daily, expected_deaths_T)
 end
@@ -137,19 +179,14 @@ sitrep.
     bvd_reports_daily = convolve_delay(onsets, report_pmf)
     reports_daily = p_drc .* bvd_reports_daily .+ λ_bg
 
-    expected_cum = cumulative_at(reports_daily, reported_history.days)
-    _inc ~ to_submodel(vintage_increments_model(expected_cum,
-            reported_history.counts, k), false)
+    n = length(reports_daily)
+    vobs = vintage_obs(reported_history, reported_cases, n)
+    expected_cum = cumulative_at(reports_daily, vobs.days)
+    reported_increments ~ to_submodel(
+        vintage_increments_model(expected_cum, vobs.obs_increments, k))
 
     raw_total = sum(reports_daily)
     expected_reports := safe_rate(raw_total)
-    ## Score the cut-off total only when supplied; a `missing` count makes
-    ## this submodel a predictive generator (it would otherwise add a
-    ## sampled discrete variable that the NUTS model check rejects). The
-    ## expected suspected total is still exposed deterministically.
-    if !ismissing(reported_cases)
-        reported_cases ~ safe_nbinomial(k, expected_reports)
-    end
 
     ## Implied per-suspected positivity at the cut-off: BVD share of the
     ## expected suspected total.
@@ -170,14 +207,18 @@ streams driven by the shared renewal onsets:
   report-to-confirmation (lab-turnaround) delay, then scaled by the DRC
   ascertainment `p_drc`, the PCR sensitivity `s_test` and the testing
   fraction `τ_test`. The modelled cumulative confirmed cases are read off
-  at each `confirmed_history` vintage day and the increments fitted with a
-  NegativeBinomial sharing `k`. The cut-off total is fitted likewise.
+  at each `confirmed_history` vintage day and the increments fitted as
+  observed `~` data with a NegativeBinomial sharing `k`. The confirmed
+  history ends at the cut-off, so the cut-off total is the final increment
+  and is not scored separately.
 - Tests analysed. The tested daily volume is `τ_test` times the sum of the
   `p_drc`-scaled BVD lab series and the non-BVD background `λ_bg` carried
   through the same lab delay. Its cumulative is read off at the
   `lab_history` vintage days (so a lab stream that lags the case cut-off is
   right-truncated by reading the running cumulative at its own days) and
-  the increments fitted with a NegativeBinomial sharing `k`. Confirmed
+  the increments fitted with a NegativeBinomial sharing `k`. When the
+  dated `lab_history` is absent, the cut-off `tests_analysed` total is
+  scored as a single vintage point at day `n`. Confirmed
   counts are not re-observed conditional on the tested volume, so the two
   lab streams are not double-counted.
 
@@ -210,28 +251,19 @@ totals at the cut-off as derived quantities.
     confirmed_daily = (p_drc * s_test * τ_test) .* bvd_lab_daily
     tested_daily = τ_test .* (p_drc .* bvd_lab_daily .+ bg_lab_daily)
 
-    confirmed_cum = cumulative_at(confirmed_daily, confirmed_history.days)
-    _cinc ~ to_submodel(vintage_increments_model(confirmed_cum,
-            confirmed_history.counts, k), false)
+    n = length(confirmed_daily)
+    cvobs = vintage_obs(confirmed_history, confirmed_cases, n)
+    confirmed_cum = cumulative_at(confirmed_daily, cvobs.days)
+    confirmed_increments ~ to_submodel(
+        vintage_increments_model(confirmed_cum, cvobs.obs_increments, k))
 
-    tested_cum = cumulative_at(tested_daily, lab_history.days)
-    _tinc ~ to_submodel(vintage_increments_model(tested_cum,
-            lab_history.counts, k), false)
+    tvobs = vintage_obs(lab_history, tests_analysed, n)
+    tested_cum = cumulative_at(tested_daily, tvobs.days)
+    tested_increments ~ to_submodel(
+        vintage_increments_model(tested_cum, tvobs.obs_increments, k))
 
     expected_confirmed := safe_rate(sum(confirmed_daily))
-    if !ismissing(confirmed_cases)
-        confirmed_cases ~ safe_nbinomial(k, expected_confirmed)
-    end
-
     expected_tested := safe_rate(sum(tested_daily))
-    ## Only score the tested-volume likelihood when the count is supplied.
-    ## Leaving it `missing` would otherwise add a redundant sampled
-    ## discrete variable that the NUTS model check rejects (the same reason
-    ## the dropped-stream composers pass `check_model = false`); the
-    ## expected tested volume is still exposed deterministically above.
-    if !ismissing(tests_analysed)
-        tests_analysed ~ safe_nbinomial(k, expected_tested)
-    end
 
     ## Per-test positivity: PCR sensitivity times the BVD share of the
     ## tested pool, for comparison with the sitrep positivity rate.

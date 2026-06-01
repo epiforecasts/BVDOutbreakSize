@@ -29,15 +29,15 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
-`check_model = false` disables Turing's pre-sampling model check. A
-composer that drops a stream (passes `missing`) leaves that stream's
-likelihood as a sampled discrete draw (`Poisson` / `NegativeBinomial`)
-whose value feeds nothing downstream. The check rejects any model with
-a sampled discrete variable, even a redundant one, so a composer that
-conditions on one stream while leaving another's count `missing` (e.g.
-[`exports_deaths_only_model`](@ref), which keeps the deaths and exports
-submodels only for their `CFR`, onset-to-death PMF and export onsets)
-cannot otherwise be fitted. The continuous parameters are unaffected.
+`check_model = false` disables Turing's pre-sampling model check, which
+rejects any model with a sampled discrete variable even when its value
+feeds nothing downstream. The per-vintage DRC streams are now scored as
+observed `~` data, so a composer conditioning on them passes the check
+with the default `check_model = true`. The escape is needed only by
+[`exports_deaths_only_model`](@ref), which runs the exports submodel in
+predictive mode (`exported_cases ~ Poisson` with a `missing` count) purely
+for the export onsets, leaving a sampled discrete `Poisson` draw. The
+continuous parameters are unaffected.
 """
 function nuts_sample(model;
         samples::Integer = 1_000,
