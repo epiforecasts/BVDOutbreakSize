@@ -23,13 +23,12 @@ end
     @test isapprox(sum(pmf), 1.0; atol = 1e-10)
 end
 
-@testitem "discretise_censored: fallback is uniform when dist is degenerate" begin
+@testitem "discretise_censored: PMF contract (non-negative, sums to 1)" begin
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
     using Distributions: LogNormal
 
-    ## A LogNormal with σ → 0 has near-zero double-censored mass at
-    ## extreme nmax; the fallback returns a uniform vector.
-    ## We test the output contract: sums to 1, non-negative, length nmax+1.
+    ## The discretised delay is a proper PMF over lags 0…nmax: non-negative
+    ## and summing to one, length nmax+1.
     d = lognormal_meansd(2.0, 1.0)
     pmf = discretise_censored(d, 60)
     @test length(pmf) == 61

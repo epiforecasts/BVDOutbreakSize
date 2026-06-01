@@ -115,8 +115,10 @@ day. Exposes the daily infection incidence, its cumulative sum, and the
 reported growth summaries: the current growth rate `r` and
 `doubling_time`, the implied initial growth rate `r0`, and the outbreak
 age `T` (the seeding-to-cut-off time, derived as the smooth crossing where
-cumulative infections reach one; see [`seeding_age`](@ref)). Returns
-`(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
+cumulative infections reach one; see [`seeding_age`](@ref)). Requires a
+grid of `n ≥ 2` days for the current growth rate (the cut-off grid always
+spans the seeding window); a single-day grid falls back to zero growth.
+Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
 """
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
@@ -133,7 +135,12 @@ cumulative infections reach one; see [`seeding_age`](@ref)). Returns
     seed_vec = seed_infections(seed_state.I0, r0, length(g))
     infections = renewal_infections(Rt, g, seed_vec)
     cumulative = cumsum(infections)
-    r = log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1]))
+    ## Current growth rate from the last two days; n ≥ 2 (the cut-off grid
+    ## always spans the seeding window, so this holds in practice), with a
+    ## zero-growth fallback on a degenerate single-day grid.
+    r = n >= 2 ?
+        log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1])) :
+        zero(eltype(infections))
     return (; infections, cumulative, Rt, g, I0 = seed_state.I0, r0, r,
         T = seeding_age(cumulative, n), C_T = cumulative[n],
         doubling_time = doubling_time(r))
