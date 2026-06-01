@@ -219,14 +219,29 @@ streams. Samples
 - `τ_test` — the fraction of suspected cases that are sampled and routed
   to the laboratory pipeline.
 
+The default `λ_bg` prior is a half-normal
+`truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
+expected suspected-case count over the grid is `λ_bg · T`, with `T` the
+seeding-to-cut-off span. The prior is deliberately informative because
+`λ_bg` is degenerate with outbreak size (the per-vintage reported mean
+mixes the `p_drc`-scaled BVD increment with `λ_bg · Δt`), so a diffuse
+prior lets the background absorb arbitrarily many suspected cases and
+resolve at the high end where the deaths and exports streams anchor `C_T`.
+A background-noise process must not be able to explain more suspected
+cases than were ever reported. With SD 1.0 the median background is
+≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
+≈ 1077 suspected cases observed by the 26 May cut-off while still
+admitting a genuine non-BVD signal; a wider SD left a second posterior
+mode in which the background explains the majority of suspected cases.
+Pass `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
+(mean ≈ 0.71).
+
 The derived per-suspected positivity is exposed inside
-[`reported_cases_model`](@ref); the per-test positivity is exposed inside
-[`confirmed_cases_model`](@ref). The prior centres follow integral
-`main`: a wide half-normal on the background rate and a `Beta(5, 2)`
-testing fraction (mean ≈ 0.71). Returns `(; λ_bg, τ_test)`.
+[`reported_cases_model`](@ref); the per-test positivity inside
+[`confirmed_cases_model`](@ref). Returns `(; λ_bg, τ_test)`.
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 10.0); lower = 0),
+        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
         fraction_tested_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
