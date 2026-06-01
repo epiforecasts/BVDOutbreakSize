@@ -9,13 +9,16 @@
 # under the no-onward-transmission counterfactual is `obs_deaths + ΔD`.
 
 function _committed_deaths_one(r, T, α, θ, CFR;
-        alg = DEATH_INTEGRAL_ALG)
+        onset_scale = 1.0, alg = DEATH_INTEGRAL_ALG)
     delay_dist = Gamma(α, θ)
     scale = _delay_scale(delay_dist)
     g = let r = r, T = T, delay_dist = delay_dist
         s -> r * exp(r * s) * ccdf(delay_dist, T - s)
     end
-    return CFR * integrate(g, zero(T), T, scale; alg)
+    ## `onset_scale` (the incubation mgf) maps the latent infection
+    ## trajectory onto onsets before the onset-to-death survival tail,
+    ## matching `deaths_model`.
+    return onset_scale * CFR * integrate(g, zero(T), T, scale; alg)
 end
 
 """
@@ -47,13 +50,21 @@ function predict_no_onward_deaths(chn;
     α_draws = _draws(chn, :α)
     θ_draws = _draws(chn, :θ)
     CFR_draws = _draws(chn, :CFR)
+    ## Incubation draws map the latent infection trajectory onto onsets;
+    ## absent on chains predating the infection layer, where
+    ## `onset_scale = 1` recovers the previous behaviour.
+    has_incubation = all(haskey_chain(chn, n) for n in (:α_inc, :θ_inc))
+    α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
+    θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
 
     n = length(r_draws)
     delta = Vector{Float64}(undef, n)
     @inbounds for i in 1:n
+        os = has_incubation ?
+             onset_rescale(Gamma(α_inc[i], θ_inc[i]), r_draws[i]) : 1.0
         delta[i] = _committed_deaths_one(r_draws[i], T_draws[i],
             α_draws[i], θ_draws[i],
-            CFR_draws[i]; alg)
+            CFR_draws[i]; onset_scale = os, alg)
     end
     total = float(obs_deaths) .+ delta
     return DataFrame(delta_deaths = delta, total_projected = total)
