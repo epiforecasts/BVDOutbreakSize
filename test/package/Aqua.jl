@@ -38,5 +38,9 @@ end
 
 @testitem "Aqua: persistent_tasks" tags=[:quality] begin
     using Aqua, BVDOutbreakSize
-    Aqua.test_persistent_tasks(BVDOutbreakSize)
+    # Loading the package pulls heavy AD/plotting dependencies, so the
+    # subprocess can take well over the 10 s default to settle. Raise the
+    # timeout to avoid false positives where a slow load is mistaken for a
+    # lingering task.
+    Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 60)
 end
