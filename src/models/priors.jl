@@ -189,9 +189,9 @@ Independent ascertainment fractions for the DRC and Uganda surveillance
 systems. The two countries run different surveillance systems — DRC
 passive community surveillance and Uganda point-of-entry / hospital
 detection — so each ascertainment fraction has its own logit-scale prior
-with no shared parameter. Used by [`reported_cases_model`](@ref),
-[`exports_model`](@ref) and [`exports_deaths_model`](@ref); this is the
-composer default.
+with no shared parameter. An alternative to the composer-default
+[`pooled_ascertainment_model`](@ref) for sensitivity analyses that do
+not share strength between the two systems.
 
 Both fractions default to a logit-Normal prior centred on a reporting
 fraction of 0.25 with SD 0.6 (95% support roughly 0.09–0.51), weakly
@@ -213,9 +213,9 @@ end
 Partially pooled ascertainment fractions for the DRC and Uganda
 surveillance systems, sampled in non-centred form to avoid the funnel
 geometry. Both logit-scale fractions share a hyperprior with mean `μ`
-and pooling strength `τ`. An alternative to the composer-default
-[`independent_ascertainment_model`](@ref) for sensitivity analyses that
-share strength between the two systems.
+and pooling strength `τ`. Used by [`reported_cases_model`](@ref),
+[`exports_model`](@ref) and [`exports_deaths_model`](@ref); this is the
+composer default.
 """
 @model function pooled_ascertainment_model(;
         mu_prior = Normal(logit(0.25), 1.0),
