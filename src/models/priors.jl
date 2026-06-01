@@ -30,9 +30,12 @@ Generation-interval submodel. The mean and SD are sampled from priors
 centred on the Ebola virus disease serial interval as a generation-time
 proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), so the
 generation time is estimated around the published value rather than
-fixed. Discretised with [`censored_delay_model`](@ref); the lag-0 bin is
-dropped and the remainder renormalised, so an infectee is always infected
-strictly after its infector. Returns `(; g, gi_mean, gi_sd)`.
+fixed. Both the mean and SD are sampled, so the published uncertainty
+propagates into the generation interval. Discretised with
+[`censored_delay_model`](@ref); the lag-0 bin is dropped and the remainder
+renormalised, left-truncating the generation interval at one day so an
+infectee is infected strictly after its infector. Returns
+`(; g, gi_mean, gi_sd)`.
 """
 @model function generation_interval_model(nmax::Integer;
         mean_prior = truncated(Normal(15.3, 3.0); lower = 1),
@@ -54,15 +57,18 @@ matching the non-centred ascertainment block. Daily log-`R_t` is the
 linear interpolation between knots ([`interpolate_knots`](@ref)). An
 intervention at `breakpoint` (e.g. the first WHO situation report) adds a
 sampled effect `intervention_effect` shaped by a logistic ramp
-([`sigmoid_ramp`](@ref)), so transmission changes gradually over `ramp`
-days rather than instantly; `breakpoint = missing` drops the term.
+([`sigmoid_ramp`](@ref)), so transmission changes gradually over the ramp
+window rather than instantly; `breakpoint = missing` drops the term. The
+ramp scale `ramp` defaults to 14 days, a fortnight transition reflecting
+that a response (case finding, isolation, vaccination) takes weeks to bite
+rather than switching at a single date; pass `ramp` to widen or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
 @model function rt_walk_model(n::Integer;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
-        ramp::Real = 7.0,
+        ramp::Real = 14.0,
         log_r0_prior = Normal(log(1.3), 0.4),
         sigma_prior = truncated(Normal(0, 0.2); lower = 0),
         effect_prior = Normal(0, 0.5))
