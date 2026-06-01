@@ -1133,16 +1133,35 @@ cfr_prior_fig #hide
 # below. Half-Normal prior:
 #
 # ```math
-# \lambda_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 10)\ \text{per day}. \tag{20}
+# \lambda_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1)\ \text{per day}. \tag{20}
 # ```
 #
-# The prior is intentionally broad: $\lambda_{\text{bg}}$ is identified
-# from the suspected/confirmed contrast — and, once the tests-analysed
-# observation is included, from the testing-volume gate on the BVD and
-# background streams. Ideally it would also be informed by a known
-# background rate of non-BVD presentations from routine surveillance or
-# other data sources. The dispersion $k$ (equation (9)) is shared with
-# the deaths and confirmed likelihoods.
+# The prior is informative because $\lambda_{\text{bg}}$ is degenerate
+# with outbreak size: the per-bin reported mean is
+# $p_{\text{DRC}}\,\Delta\mu_{\text{BVD}} + \lambda_{\text{bg}}\,\Delta t$,
+# so a diffuse prior lets the background absorb arbitrarily many
+# suspected cases and resolve at the high end where the deaths and
+# exports streams anchor $C(T)$.
+# A background-noise process must not be able to explain more suspected
+# cases than were ever reported, so the SD of $1$ is chosen from the
+# observed suspected total $1077$ at the $26$ May cut-off over the
+# elapsed window $T \approx 132$ days: it puts the median background at
+# $\approx 0.67$ per day ($\approx 89$ cases, $\approx 8\%$ of observed)
+# and the $95\%$ prior bound at $\approx 2.0$ per day ($\approx 259$
+# cases, $\approx 24\%$ of observed), keeping the background a modest
+# minority of the suspected total while still admitting a genuine
+# non-BVD signal.
+# A wider SD ($\approx 1.5$) leaves a second posterior mode in which
+# $\lambda_{\text{bg}}$ runs to $\approx 8$ per day and the background
+# explains the majority of suspected cases; SD $1$ keeps the fit in the
+# regime where the BVD trajectory drives the suspected total.
+# $\lambda_{\text{bg}}$ is identified from the suspected/confirmed
+# contrast — and, once the tests-analysed observation is included, from
+# the testing-volume gate on the BVD and background streams.
+# Ideally it would also be informed by a known background rate of
+# non-BVD presentations from routine surveillance or other data
+# sources. The dispersion $k$ (equation (9)) is shared with the deaths
+# and confirmed likelihoods.
 #
 # $\mu_{\text{bg}} = \lambda_{\text{bg}}\, T$ assumes the non-BVD
 # background rate is constant in time and independent of the outbreak.
