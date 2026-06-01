@@ -160,7 +160,7 @@
 #   here (26 May, SitRep 012 revised re-issue) predates this, but the same
 #   reclassification may already be acting within the fitted window, so
 #   there may be more uncertainty in the reported counts than the model
-#   cut-off on its current basis, tracked separately for a model and
+#   cut-off on its current basis.
 #   data-format decision.
 # - *Onset-to-death delay anchored on Isiro 2012.* A single-
 #   outbreak fit; the delay distribution reporting here follows
