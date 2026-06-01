@@ -1,74 +1,145 @@
-# BVD outbreak observation manifest (renewal model).
+# Observations for the 2026 DRC Bundibugyo virus disease outbreak.
+# Each entry pairs a numeric value with a short source citation;
+# both are loaded by `load_observations` and printed in the
+# walkthrough.
 #
-# Cumulative national totals by the cut-off date plus per-vintage
-# histories used for the time-series likelihoods. All dates ISO-8601;
-# counts integers. DRC counts (suspected cases, suspected deaths,
-# confirmed cases and the laboratory totals) are the national cumulative
-# figures from the INSP situation reports for the 17th Ebola epidemic
-# (https://insp.cd/ebola-17eme-epidemie/), read from the report PDFs
-# (https://github.com/INRB-UMIE/Ebola_DRC_2026), recorded in
-# data/insp_sitrep_scanned.csv. The 23 May report (SitRep 009) prints 119
-# cumulative suspected deaths in its headline but its per-zone rows sum to
-# 220, so we use the auditable zone-sum. The cut-off (26 May) is the
-# latest report (SitRep 012). The model uses suspected counts.
+# DRC counts (suspected cases, suspected deaths, confirmed cases and the
+# laboratory totals) are the NATIONAL cumulative figures reported in the
+# INSP (DRC Institut National de Santé Publique) situation reports for
+# the 17th Ebola epidemic (https://insp.cd/ebola-17eme-epidemie/), read
+# directly from the situation-report PDFs
+# (https://github.com/INRB-UMIE/Ebola_DRC_2026, data/insp_sitrep/raw).
+# We use the report headline and laboratory-section totals rather than
+# the published per-zone daily CSVs.
+# The CSVs are split by health zone and drop counts that cannot be
+# attributed to a zone (`échantillons sans fiche`) or that a zone did
+# not report (`ND`), so their zone sums understate the national totals.
+# The scanned figures are recorded in data/insp_sitrep_scanned.csv; they
+# were read from the PDFs via an LLM agent and independently re-scanned
+# by a second agent (see the methods section of the walkthrough).
+#
+# Where a report's headline total disagrees with the sum of its own
+# per-zone table, we take the auditable zone-table sum: the 23 May report
+# (SitRep 009) prints 119 cumulative suspected deaths in its headline,
+# but its per-zone rows sum to 220, the value used here. Figures are
+# keyed by the report's `date de rapportage`. The 26 May cut-off is the
+# latest available report (SitRep 012). The 18-22 May points predate the
+# national cumulative-headline format and retain the WHO AFRO /
+# early-report baseline (18 May = 516 cases, 131 deaths, matching the WHO
+# AFRO joint sitrep 01). The model uses suspected counts.
 
-# Cut-off date (last day of the daily grid).
-cutoff_date = 2026-05-26
+as_of_date = "2026-05-26"
 
-# First day of the daily grid. Set ~4 months before the cut-off so the
-# grid comfortably contains the genetic TMRCA seeding bound (2026-03-25,
-# 62 days before the cut-off) and the early growth phase. Grid length
-# n = cutoff - seeding + 1 = 121 days.
-seeding_date = 2026-01-26
+[exported_cases]
+value  = 3
+source = "WHO DON 2026-DON602, 2026-DON603, and WHO Director-General Ministerial Briefing 25 May 2026 — three travel-related (DRC) cases imported into Uganda: (i) elderly man admitted Kampala 11 May 2026, died 14 May; (ii) second import confirmed 16 May 2026 in Kampala with no apparent link to the first; (iii) woman from DRC who travelled Arua to Entebbe to Kampala with mild symptoms, tested positive on follow-up, announced 23 May 2026 (https://www.aljazeera.com/news/2026/5/23/uganda-confirms-three-new-ebola-cases-bringing-total-to-five). Two additional Uganda confirmed cases announced 23 May (a driver and a healthcare worker) are domestic contacts of import #1 and are excluded — this model treats Uganda as imports only."
 
-# First WHO joint situation report; intervention breakpoint for R_t.
-who_first_sitrep_date = 2026-05-18
+[exports_deaths]
+value  = 1
+source = "WHO DON 2026-DON602 — one death (import #1, died 14 May 2026). No deaths reported among imports #2 or #3 as of the 23 May 2026 cut-off."
 
-# Genetic TMRCA seeding bound, days before the cut-off (mean BEAST TMRCA
-# 2026-03-25 at the 1.2e-3 clock rate; a soft lower bound on the outbreak
-# age, since broader sequencing only pushes the TMRCA older).
-tmrca_days = 62
+[first_export_detection_date]
+value  = "2026-05-11"
+source = "WHO DON 2026-DON602 — import #1 hospital-admitted 11 May 2026 (point-of-entry/hospital detection date). Used as a one-sided timing bound on T. Detection dates for imports #2 (confirmed 16 May) and #3 (announced 23 May; underlying detection date not published) are not used by the model: only the earliest detection enters the timing term."
 
-[streams]
-# National cumulative totals reported by INSP / WHO by the cut-off.
-# exported_cases: three travel-related DRC cases imported into Uganda
-# (WHO DON 2026-DON602/603); Uganda is treated as imports only.
-exported_cases = 3
-# exports_deaths: one death among the Uganda imports (import #1, 14 May).
-exports_deaths = 1
-# total_deaths: INSP SitRep 012 (26 May) national cumulative suspected
-# deaths (front-page Cumul Décès suspects).
-total_deaths = 238
-# reported_cases: INSP SitRep 012 (26 May) national cumulative suspected
-# cases (front-page Cumul cas suspects).
-reported_cases = 1077
-# confirmed_cases: INSP SitRep 012 (26 May) section IV.3 LABORATOIRE
-# Cumul positifs (national cumulative laboratory-confirmed cases).
-confirmed_cases = 121
-# tests_analysed: INSP SitRep 012 (26 May) section IV.3 LABORATOIRE
-# Cumul échantillons analysés (specimens whose processing has completed).
-# Pairs with confirmed_cases for the per-test positivity (121/403 ≈ 30%).
-tests_analysed = 403
+[export_death_dates]
+value  = ["2026-05-14"]
+source = "WHO DON 2026-DON602 — the fatal Uganda export (import #1) was hospital-admitted 11 May 2026 and died 14 May 2026 (hospital-recorded death date). A list of dated export deaths; loaded as a daily series and fitted with a binned-Poisson likelihood that bounds T."
 
-[histories]
-# Per-vintage cumulative snapshots: day index into the grid (1-based,
-# days since seeding_date; cut-off is day n = 121) and cumulative count.
-# The daily likelihood fits the between-vintage increments. The 18-22 May
-# points predate the national-headline format and use the WHO AFRO /
-# early-report baseline (18 May matches WHO joint sitrep 01).
+[total_deaths]
+value  = 238
+source = "INSP SitRep 012 (data as of 26 May 2026), front-page `Cumul Décès suspects`, read from the situation-report PDF. National cumulative suspected deaths; recorded in data/insp_sitrep_scanned.csv."
 
-[histories.reported]
-# National cumulative suspected cases, INSP SitReps for 18-26 May 2026.
-days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
-counts = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
+[reported_cases]
+value  = 1077
+source = "INSP SitRep 012 (data as of 26 May 2026), front-page `Cumul cas suspects`, read from the situation-report PDF. National cumulative suspected cases; recorded in data/insp_sitrep_scanned.csv. This report carries no per-zone case table, so the headline could not be cross-checked against a zone-row sum."
 
-[histories.confirmed]
-# National cumulative laboratory-confirmed cases (lab Cumul positifs).
-days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
-counts = [33, 51, 57, 79, 83, 101, 105, 106, 121]
+# Cumulative national suspected-case totals across INSP situation-report
+# vintages. We trust each vintage's cumulative-at-date count but not the
+# per-case timing (heavy backfill; the report date is the publication
+# date, not symptom onset), so the model fits the between-vintage
+# increments rather than the nested cumulative totals. The 23-26 May
+# values are the INSP report headline totals (SitReps 009-012); the
+# 18-22 May values predate that headline format and retain the WHO AFRO
+# / early-report baseline (18 May = 516 matches WHO joint sitrep 01).
+# The cut-off (26 May) matches `reported_cases`.
+[reported_case_history]
+dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
+          "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+          "2026-05-26"]
+values = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
+source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://github.com/INRB-UMIE/Ebola_DRC_2026, data/insp_sitrep/raw; recorded in data/insp_sitrep_scanned.csv). National cumulative suspected cases from each report's headline; the 18-22 May points use the WHO AFRO / early-report baseline."
 
-[histories.deaths]
-# National cumulative suspected deaths. 23 May uses the SitRep 009 zone-
-# row sum (220) because its headline (119) is a data-entry error.
-days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
-counts = [131, 148, 160, 175, 204, 220, 223, 238, 238]
+[confirmed_cases]
+value  = 121
+source = "INSP SitRep 012 (data as of 26 May 2026) section IV.3 LABORATOIRE — `Cumul positifs` (equal to the front-page `Cumul cas confirmés`), read from the situation-report PDF. National cumulative laboratory-confirmed cases, including positives not yet linked to a reporting zone (`échantillons sans fiche`). Pairs with [cumulative_tests_analysed] for the per-test positivity (121/403 ≈ 30%); the cut-off matches the end of [confirmed_case_history]."
+
+[cumulative_tests_analysed]
+value  = 403
+source = "INSP SitRep 012 (data as of 26 May 2026) section IV.3 LABORATOIRE — `Cumul échantillons analysés`, read from the situation-report PDF. Cumulative number of suspected-case specimens that the Bunia/INRB pipeline has completed processing by the cut-off. Of 662 specimens received, 403 have been analysed, leaving a 259-specimen backlog; this gives a natural right-truncation handle on the per-test positivity rate (121/403 ≈ 30%). Testing in Ituri stalled mid-period (SitRep 011, 25 May: `Aucun échantillon n'a été analysé en Ituri`)."
+
+# Cumulative national confirmed-case totals across INSP situation-report
+# vintages (the lab-section `Cumul positifs`, equal to the front-page
+# `Cumul cas confirmés`). Same caveats as `reported_case_history`: the
+# daily likelihood fits the between-vintage increments. The 23-26 May
+# values are the report totals (which include positives not yet linked
+# to a zone); 18-22 May use the early-report baseline. Dates match the
+# suspected history so the streams share day boundaries. The cut-off
+# (26 May, 121) matches `confirmed_cases`.
+[confirmed_case_history]
+dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
+          "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+          "2026-05-26"]
+values = [33, 51, 57, 79, 83, 101, 105, 106, 121]
+source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs`); the 18-22 May points use the early-report baseline."
+
+# Cumulative national suspected-death totals across INSP situation-report
+# vintages. Same caveats as `reported_case_history`: the daily
+# likelihood fits the between-vintage increments. The 23-26 May values
+# are the report totals (SitReps 009-012); 18-22 May use the WHO AFRO /
+# early-report baseline (18 May = 131 matches WHO joint sitrep 01). The
+# 26 May cut-off (238) matches `total_deaths`.
+# Note: the 23 May report (SitRep 009) prints 119 cumulative suspected
+# deaths in its headline and Tableau IV total, but its per-zone rows
+# sum to 220 (Mongbalu 88, Rwampara 69, Bunia 48, ...), so the printed
+# total is a data-entry error; we use the zone-row sum 220. An
+# independent re-scan of the PDF confirmed this.
+[death_history]
+dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
+          "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
+          "2026-05-26"]
+values = [131, 148, 160, 175, 204, 220, 223, 238, 238]
+source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative suspected deaths; 23 May uses the SitRep 009 Tableau IV zone-row sum (220) because the report total (119) is a data-entry error; 18-22 May use the WHO AFRO / early-report baseline."
+
+[daily_outbound_travellers]
+value  = 1871
+source = "McCabe et al. Table 3 — mean daily PoE flow across seven Uganda-DRC border points, Ituri side"
+
+[daily_outbound_travellers_sd]
+value  = 200
+source = "PoE-to-PoE variation and sitrep sampling uncertainty; ~10% CV"
+
+[source_population]
+value  = 4392200
+source = "McCabe et al. Table 1 — Ituri Province population"
+
+# Genetic TMRCA. A soft lower bound on the seeding time T, the time to
+# the most recent common ancestor of the first sequenced cases. It is a
+# lower bound because adding sequences only pushes the TMRCA older, and
+# the sampled tree is geographically narrow (9 of 10 genomes from
+# Bunia), so broader sampling could move it earlier. `date` is the
+# BEAST mean TMRCA reported in the 2026-05-21 temporal-tree update.
+# `days_sd` is the SD on the location of the floor (uncertainty in the
+# estimate, in either direction), not a constraint on how old T can be;
+# it is derived from the reported 95% HPD interval (about +/- 30 days,
+# so SD ~ 15 days). `alt_date` / `alt_days_sd` carry the same estimate
+# under the faster 1.9e-3 early-epidemic clock rate (mean 2026-04-11,
+# 95% HPD 2026-03-23 to 2026-04-28, so SD ~ 9 days), used by the
+# clock-rate sensitivity. Both dates are converted to days before
+# `as_of_date` at load time, so they track changes to the cut-off.
+[genetic_tmrca]
+date        = "2026-03-25"
+days_sd     = 15
+alt_date    = "2026-04-11"
+alt_days_sd = 9
+source = "BEAST v10.5.0 temporal tree of the first 10 BDBV genomes (virological2026, 2026-05-21 update; HKY substitution model, strict molecular clock, exponential coalescent prior). Mean TMRCA 2026-03-25, 95% HPD 2026-02-20 to 2026-04-20, at the 1.2e-3 substitutions/site/year clock rate (holmes2016, all public 2013-2016 EBOV data) matching this analysis. The faster 1.9e-3 early-epidemic rate gives a more recent mean TMRCA of 2026-04-11 (HPD 2026-03-23 to 2026-04-28). Estimate is Bunia-specific and a lower bound, since further or geographically broader sequencing only pushes the TMRCA older. Using the genetic TMRCA as a seeding bound follows a suggestion of N. Ferguson (ferguson2026)."

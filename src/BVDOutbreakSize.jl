@@ -5,7 +5,7 @@ using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
 using Random: MersenneTwister
-using Dates: Date, date2epochdays, epochdays2date
+using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
@@ -29,7 +29,7 @@ using CairoMakie: Figure, Axis, hist!, density!, vlines!, vspan!,
 export REPORT_SCENARIOS,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD,
-       load_observations, m_prior_centre,
+       load_observations,
        summary_table, posterior_summary,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
