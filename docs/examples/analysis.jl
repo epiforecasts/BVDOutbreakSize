@@ -27,17 +27,16 @@
 #
 # ## What we do differently from McCabe et al.
 #
-# - *Infections as the latent quantity.* The exponential trajectory
-#   $C(s) = e^{r s}$ is the cumulative *infection* count. Symptom onsets
-#   follow after a sampled incubation period, so the cumulative onsets
-#   are $C(s)$ convolved with the incubation density; under exponential
-#   growth this is the exact constant rescale $M_{\text{inc}}(-r)$ by the
-#   incubation moment-generating function. Every observed stream sits
-#   downstream of onsets through its own reporting delay, and the
-#   cumulative case count is recovered as $C(T)\,M_{\text{inc}}(-r)$ for
-#   comparison with McCabe et al. The incubation period cannot be fitted
-#   from the BDBV line list (no exposure dates), so we use the
-#   Bundibugyo estimate the line-list reanalysis recommends
+# - *Infections as the latent quantity.* The exponential trajectory is
+#   the cumulative *infection* count. Each infected person develops
+#   symptoms after an incubation period, so the onsets we can observe are
+#   the infections delayed by that period. The cases reported to date are
+#   then only the infections whose symptoms have appeared and been
+#   recorded, and the cumulative case count McCabe et al. estimate is
+#   recovered from the infections for comparison. The incubation period
+#   is sampled from a prior, like every other delay in the model. It
+#   cannot be fitted from the BDBV line list (no exposure dates), so we
+#   take the Bundibugyo estimate the line-list reanalysis recommends
 #   [bdbv_linelist_analysis_2026](@cite): a mean of 6.3 days from the
 #   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
@@ -407,6 +406,7 @@ vintage_table #hide
 # | Parameter | Exports | Deaths | Cases | Confirmed & tested | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Growth $C(s) = e^{rs}$ | ● | ● | ● | ● | ● | ● | ● |
+# | Incubation period |  | ● | ● | ● | ● |  |  |
 # | Onset-to-death delay |  | ● |  |  | ● |  |  |
 # | Case-fatality ratio |  | ● |  |  | ● |  |  |
 # | Onset-to-report delay |  |  | ● | ● |  |  |  |
@@ -422,9 +422,9 @@ vintage_table #hide
 # The model components, in the order they appear below:
 #
 # 1. **Building-block submodels** — one per parameter family
-#    (growth, onset-to-death delay, CFR, onset-to-report delay,
-#    report-to-lab delay, PCR sensitivity, testing fraction and
-#    background rate, detection window, daily
+#    (growth, incubation period, onset-to-death delay, CFR,
+#    onset-to-report delay, report-to-lab delay, PCR sensitivity, testing
+#    fraction and background rate, detection window, daily
 #    traveller volume, surveillance dispersion, ascertainment). Each
 #    samples its own
 #    priors and returns a small NamedTuple of values. These sections
@@ -534,6 +534,42 @@ vintage_table #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ##### Incubation period
+#
+# The growth trajectory above counts *infections*. People are only seen
+# once they develop symptoms, so the onsets that drive every observed
+# stream are the infections shifted forward by the incubation period.
+# Treating the trajectory as onsets directly would date the outbreak
+# wrongly and understate how many people are already infected. We
+# therefore sample the incubation period as a delay, like every other
+# delay in the model, and convolve it with the infection trajectory to
+# get onsets; the per-stream reporting delays then act on those onsets.
+#
+# The incubation period cannot be fitted from the BDBV line list, which
+# has no exposure dates [bdbv_linelist_analysis_2026](@cite), so we take
+# the Bundibugyo estimate from the 2007 Uganda outbreak: a mean of 6.3
+# days (95% CI 5.2-7.3) [macneil2010](@cite). We put the prior on the
+# mean and the coefficient of variation so MacNeil et al.'s reported
+# uncertainty on the mean is carried through directly, and recover the
+# gamma shape and scale from them. MacNeil et al. give no interval on the
+# spread, so the coefficient of variation has a weakly-informative prior
+# chosen to keep individual incubation times within their observed 2-20
+# day range.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: incubation_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.incubation_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1262,15 +1298,6 @@ cfr_prior_fig #hide
 # The tested-volume and per-test positivity terms (equations (23)-(24))
 # are observed once, at the laboratory stream's own cut-off, which need
 # not be the case cut-off if lab reporting lags behind.
-#
-# !!! note "Integration trick — share one quadrature across sitreps"
-#     $\mu_{\text{BVD},0}$ is evaluated once on a fixed quadrature node
-#     set over $[0, T]$ and reused across every sitrep edge, sweeping
-#     the lab-delay weight over the shared nodes.
-#     The ascertainment fraction is applied to the returned increment, so
-#     this precomputation does not depend on it.
-#     The suspected and death convolutions use the gamma closed form
-#     and need no quadrature.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
@@ -1731,7 +1758,8 @@ diagnostics_table( #hide
     "exports (cases)" => chn_exports, #hide
     "exports (deaths)" => chn_exports_deaths, #hide
     "deaths (DRC)" => chn_deaths, #hide
-    "cases (DRC)" => chn_cases) #hide
+    "cases (DRC)" => chn_cases, #hide
+    "confirmed (DRC)" => chn_confirmed) #hide
 
 #md # ```@raw html
 #md # </details>
