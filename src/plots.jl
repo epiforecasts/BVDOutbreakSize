@@ -576,27 +576,41 @@ function plot_forecast_vs_truth(fc::DataFrame;
 end
 
 """
-Per-vintage posterior-predictive trajectories for the DRC streams. For
-each `panel` the posterior-predictive cumulative count is reconstructed
-by cumulatively summing the per-bin replicate increments, then
-summarised by vintage as a median line with shaded 50% and 90%
-predictive ribbons; the observed cumulative counts are overlaid as
-points. This shows how the fit tracks the full sitrep series rather than
-only the latest total. Each `panel` is a `NamedTuple`
+Per-vintage conditional one-step-ahead posterior-predictive for the DRC
+streams. For each `panel` the predicted cumulative count at vintage `v`
+conditions on the *observed* cumulative at the previous vintage and adds
+only the posterior-predictive between-vintage increment,
+``\\hat{y}_v = y_{v-1} + \\Delta_v`` with ``y_0 = 0``. The increment
+``\\Delta_v`` is the per-bin replicate draw the model already samples in
+predictive mode, so each step carries the full posterior uncertainty of
+the *new* increment while anchoring on what was actually observed at the
+preceding sitrep. This is the "filtered" one-step-ahead predictive: it
+isolates the model's per-step increment prediction and does not let
+errors compound across the series, unlike a running sum of the modelled
+increments. The result is summarised by vintage as a median line with
+shaded 50% and 90% predictive ribbons; the observed cumulative counts
+are overlaid as points. Each `panel` is a `NamedTuple`
 `(; title, dates, replicates, observed)`, where `replicates` is a vector
 of per-draw increment vectors (one entry per vintage, oldest first) and
-`observed` the matching cumulative counts. `colour` is optional per
-panel.
+`observed` the matching observed cumulative counts used as the
+conditioning baselines. `colour` is optional per panel.
 """
-function plot_vintage_ppc(panels::AbstractVector; xlabel = "Sitrep date")
+function plot_vintage_conditional_ppc(
+        panels::AbstractVector; xlabel = "Sitrep date")
     fig = Figure(; size = (380 * length(panels), 380))
     for (j, p) in enumerate(panels)
         n = length(p.dates)
         colour = get(p, :colour, :steelblue)
+        ## Observed cumulative at the previous vintage is the conditioning
+        ## baseline for each step (`y_0 = 0`); `obs_prev[v]` is `y_{v-1}`.
+        obs_cum = float.(p.observed)
+        obs_prev = [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n]
         ## `replicates` may arrive as a draws×chains matrix of per-bin
         ## vectors (FlexiChains slice); flatten to one vector of draws.
-        cum = [cumsum(collect(r)) for r in vec(collect(p.replicates))]
-        q(i, pr) = quantile([c[i] for c in cum], pr)
+        ## Each draw's conditional cumulative at vintage `v` is the
+        ## observed previous cumulative plus the drawn increment `Δ_v`.
+        cond = [obs_prev .+ collect(r) for r in vec(collect(p.replicates))]
+        q(i, pr) = quantile([c[i] for c in cond], pr)
         med = [q(i, 0.5) for i in 1:n]
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]

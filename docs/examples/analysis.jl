@@ -1116,6 +1116,32 @@ cfr_prior_fig #hide
 # \Delta Y_v^{\text{rep}} \sim
 #     \mathrm{NegBinomial}(\mu_v^{\text{rep}}, k). \tag{20}
 # ```
+#
+# ##### Per-sitrep conditional predictive
+#
+# The per-sitrep increment likelihoods (equations (17b) and (20)) give a
+# matching per-sitrep diagnostic.
+# Let a stream have observed cumulative counts $y_1, \dots, y_n$ at the
+# sitrep edges.
+# The conditional one-step-ahead predictive of the cumulative at sitrep
+# $v$ conditions on the *observed* previous cumulative and predicts only
+# the new increment,
+#
+# ```math
+# \hat{y}_v = y_{v-1} + \Delta_v, \qquad y_0 = 0, \tag{20a}
+# ```
+#
+# where $\Delta_v$ is the posterior-predictive between-vintage increment
+# for bin $v$, a draw from $\mathrm{NegBinomial}(\mu_v, k)$, the same
+# increment the model samples in predictive mode.
+# This is the "filtered" one-step-ahead predictive.
+# It differs from reconstructing the cumulative as the running sum of the
+# modelled increments $\sum_{u \le v} \Delta_u$, an unconditional check
+# whose errors compound across sitreps because every step builds on
+# earlier modelled increments rather than on what was observed.
+# Conditioning each step on the observed previous cumulative isolates the
+# model's one-step increment prediction, so a mismatch at one sitrep is
+# attributed to that sitrep alone and does not propagate down the series.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>
@@ -2133,22 +2159,27 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# ### Posterior predictive across the sitrep series
+# ### Conditional one-step-ahead predictive across the sitrep series
 #
 # The panels above collapse each DRC stream to a single total. Because
-# the suspected-case and death streams are fitted per vintage, the
-# posterior predictive also covers their full sitrep trajectory, not just
-# the latest count. Reconstructing the cumulative replicate at each
-# vintage (the running sum of the per-bin increment draws) and comparing
-# it to the observed cumulative series shows whether the fitted growth
-# tracks the shape of the reported curve over time, rather than only
-# hitting the cut-off total.
+# the suspected-case and death streams are fitted per vintage, we can
+# also check the fit one sitrep at a time. For each vintage we condition
+# on what was actually observed at the previous sitrep and predict only
+# the new between-vintage increment, $\hat{y}_v = y_{v-1} + \Delta_v$
+# with $y_0 = 0$, defined in the [observation model](@ref "Per-sitrep
+# conditional predictive"). Each step carries the full posterior
+# uncertainty of the new increment while anchoring on the observed
+# previous cumulative, so the diagnostic isolates the model's per-step
+# increment prediction and its errors do not compound across the series.
+# The observed cumulative counts are overlaid as points; if the fit is
+# reasonable each point sits inside the predictive ribbon for its
+# vintage.
 
 #md # ```@raw html
-#md # <details><summary>Per-vintage posterior predictive trajectories</summary>
+#md # <details><summary>Per-vintage conditional one-step-ahead predictive</summary>
 #md # ```
 
-vintage_ppc_fig = plot_vintage_ppc([
+vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
