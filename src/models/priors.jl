@@ -23,16 +23,16 @@ preserved, so the implied doubling-time prior (and every derived
 quantity) matches that prior on `τ`.
 
 The default doubling-count prior `m ~ Normal(M_PRIOR_BASE, 3)` (truncated
-at 0) is centred on `M_PRIOR_BASE ≈ 9.43`: McCabe et al.'s first-report
-(18 May 2026) Method 2 central scenario of 501 cases (`log2(501) ≈ 9`)
-lifted by the `−log2(onset_scale) ≈ 0.43` infection offset, so the
-implied *case* count at the base still matches McCabe while `C_T = 2^m`
-counts infections (`2^9.43 ≈ 689`). For a fit at a later cut-off, pass an
-`m_prior` whose centre advances from that base date via
-[`m_prior_centre`](@ref) so the prior tracks the elapsed time. This is a
-weakly-informative centring choice (SD 3 gives 95% support ≈ `m ∈ (3, 15)`,
-`C_T ∈ (8, 32000)`); the fit is dominated by the likelihood, so it mainly
-sets where the joint sampler starts.
+at 0) is centred on `M_PRIOR_BASE = 9` (`C_T = 2^9 = 512`), the doubling
+count implied by McCabe et al.'s first-report (18 May 2026) Method 2
+central scenario of 501 cases (`log2(501) ≈ 9`). `C_T = 2^m` is now the
+cumulative *infection* count; 9 is kept as a weakly-informative centre of
+the same order rather than rescaled to a case-equivalent infection count.
+For a fit at a later cut-off, pass an `m_prior` whose centre advances from
+that base date via [`m_prior_centre`](@ref) so the prior tracks the
+elapsed time. This is a weakly-informative centring choice (SD 3 gives 95%
+support ≈ `m ∈ (3, 15)`, `C_T ∈ (8, 32000)`); the fit is dominated by the
+likelihood, so it mainly sets where the joint sampler starts.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / 14), 0.4),
