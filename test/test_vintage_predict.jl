@@ -31,7 +31,7 @@ end
     :slow] begin
     import FlexiChains
     using BVDOutbreakSize: bvd_joint, nuts_sample
-    using Turing: predict
+    using Turing: predict, @varname
 
     n = 40
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
@@ -54,15 +54,15 @@ end
 
     ## `predict` replicates each DRC stream's per-vintage increments as one
     ## vector-valued variable under the stream's prefixed submodel name.
-    ## Each draw is the full increment vector; the replicated cumulative
+    ## Each draw is the full increment vector; every replicated increment
     ## must be non-negative and finite.
-    for (prefix, m) in (
-        ("cases_state.reported_increments", length(rh.days)),
-        ("confirmed_state.confirmed_increments", length(ch.days)),
-        ("deaths_state.death_increments", length(dh.days)))
-        key = first(k for k in keys(pp)
-        if occursin("$prefix.increments", string(k)))
-        draws = vec(collect(pp[key]))
+    keys = (
+        FlexiChains.Parameter(@varname(cases_state.reported_increments.increments)),
+        FlexiChains.Parameter(@varname(confirmed_state.confirmed_increments.increments)),
+        FlexiChains.Parameter(@varname(deaths_state.death_increments.increments)))
+    lens = (length(rh.days), length(ch.days), length(dh.days))
+    for (key, m) in zip(keys, lens)
+        draws = vec(pp[key])
         @test !isempty(draws)
         @test all(d -> length(d) == m, draws)
         @test all(d -> all(isfinite, d) && all(>=(0), d), draws)

@@ -44,7 +44,7 @@ end
 @testitem "Enzyme gradient matches Mooncake on a single-stream model" tags=[
     :slow, :ad] setup=[EnzymeGrad] begin
     using BVDOutbreakSize: exports_only_model
-    model = exports_only_model(3, 2)
+    model=exports_only_model(3, 2)
     @test adgrad(model, enzyme_adtype()) ≈ adgrad(model, default_adtype()) rtol=1e-6
 end
 
@@ -52,6 +52,6 @@ end
     :slow, :ad] setup=[EnzymeGrad] begin
     using BVDOutbreakSize: bvd_joint
     ## All streams plus the lab pipeline and the intervention breakpoint.
-    model = bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
+    model=bvd_joint(20, 2, 3, 5, 1, 4, 10; breakpoint = 14)
     @test adgrad(model, enzyme_adtype()) ≈ adgrad(model, default_adtype()) rtol=1e-6
 end
