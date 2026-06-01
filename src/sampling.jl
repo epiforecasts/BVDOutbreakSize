@@ -8,6 +8,8 @@ the NUTS `adtype` keyword.
 default_adtype() = AutoMooncake(; config = Mooncake.Config())
 
 """
+    enzyme_adtype()
+
 Enzyme reverse-mode AD type, an opt-in alternative to the default
 [`default_adtype`](@ref) (Mooncake). Defined by the package's Enzyme
 weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`); calling it
