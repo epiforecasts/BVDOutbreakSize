@@ -166,13 +166,33 @@ Test-positivity machinery. Samples
   to the laboratory pipeline; together with the lab-delay CDF this
   handles right-truncation of the per-test positivity observation.
 
+The default `λ_bg` prior is a half-normal
+`truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
+expected suspected-case count over the window is `λ_bg · T`, where `T`
+is the latent seeding-to-cut-off time (≈ 132 days on current data).
+The prior is deliberately informative because `λ_bg` is degenerate
+with outbreak size (the per-bin reported mean is
+`p_drc · ΔμBVD0 + λ_bg · Δt`), so a diffuse prior lets the background
+absorb arbitrarily many suspected cases and resolve at the high end
+where the deaths and exports streams anchor `C_T`. A background-noise
+process must not be able to explain more suspected cases than were
+ever reported. With SD 1.0 the median background is ≈ 0.67/day (≈ 89
+cases, ≈ 8% of the 1077 observed at the 26 May cut-off) and the 95%
+prior bound is ≈ 2.0/day (≈ 259 cases, ≈ 24% of observed), keeping the
+background a modest minority of the suspected total while still
+admitting a genuine non-BVD signal. A wider SD (≈ 1.5) was tried but
+left a second posterior mode in which `λ_bg` runs to ≈ 8/day and the
+background explains the majority of suspected cases; SD 1.0 keeps the
+fit in the regime where the BVD trajectory, not the background, drives
+the suspected total. Pass `lambda_prior` to override.
+
 The derived per-suspected positivity `μ_BVD / μ_cases` is exposed
 inside [`reported_cases_model`](@ref); the per-test positivity
 `s · BVD_tested / (BVD_tested + bg_tested)` is exposed inside
 [`confirmed_cases_model`](@ref).
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 10.0); lower = 0),
+        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
         fraction_tested_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
