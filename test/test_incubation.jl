@@ -61,3 +61,47 @@ end
     expected = infections .* mgf.(Gamma.(α, θ), -r)
     @test all(@. isapprox(cases, expected; rtol = 1e-6))
 end
+
+@testitem "onset-driven composers expose infections and cases" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using Distributions: Gamma, mgf
+    using BVDOutbreakSize: deaths_only_model, exports_deaths_only_model,
+                           confirmed_only_model
+
+    ## Each onset-driven single-stream composer should expose both the
+    ## latent infections and the incubation-rescaled cases, with
+    ## cases = infections · mgf(incubation, −r) per draw.
+    for mdl in (deaths_only_model(missing),
+        exports_deaths_only_model(Int[]),
+        confirmed_only_model(missing))
+        chn = sample(mdl, Prior(), 100;
+            chain_type = FlexiChains.VNChain, progress = false)
+        infections = vec(Array(chn[:cumulative_infections]))
+        cases = vec(Array(chn[:cumulative_cases]))
+        os = vec(Array(chn[:onset_scale]))
+        r = vec(Array(chn[:r]))
+        α = vec(Array(chn[:α_inc]))
+        θ = vec(Array(chn[:θ_inc]))
+
+        @test all(isfinite, infections) && all(>(0), infections)
+        @test all(0 .< os .<= 1)
+        @test all(@. isapprox(os, mgf(Gamma(α, θ), -r); rtol = 1e-6))
+        @test all(@. isapprox(cases, infections * os; rtol = 1e-6))
+    end
+end
+
+@testitem "imperial_only_model has cases equal to infections" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: imperial_only_model
+
+    ## No incubation layer: cases and infections coincide (onset_scale 1).
+    chn = sample(imperial_only_model(2, 136), Prior(), 100;
+        chain_type = FlexiChains.VNChain, progress = false)
+    infections = vec(Array(chn[:cumulative_infections]))
+    cases = vec(Array(chn[:cumulative_cases]))
+
+    @test all(isfinite, infections) && all(>(0), infections)
+    @test infections == cases
+end
