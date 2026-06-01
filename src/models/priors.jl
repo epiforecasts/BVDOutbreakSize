@@ -107,17 +107,22 @@ end
 
 """
 Incubation-period prior, the infection-to-symptom-onset delay that sits
-at the head of the generative process. Samples a gamma shape `α_inc` and
-scale `θ_inc` from truncated-normal priors and returns the resulting
+at the head of the generative process. Samples the mean and coefficient
+of variation, recovers the gamma shape `α_inc = 1/CV²` and scale
+`θ_inc = mean·CV²` as deterministics, and returns the resulting
 `Gamma(α_inc, θ_inc)` distribution.
 
 The incubation period cannot be fitted from the BDBV line list (the
 Rosello deposit has no exposure dates), so the line-list reanalysis
 recommends the MacNeil et al. (2010) Bundibugyo estimate from the 2007
 Uganda outbreak instead: a mean of 6.3 days (95% CI 5.2-7.3, n = 24).
-The defaults centre the shape and scale on that mean (`α ≈ 3.0`,
-`θ ≈ 2.1`, mean ≈ 6.3 d) with an implied SD of about 3.6 days; the
-dispersion is a weakly-informative choice rather than a fitted quantity.
+The prior is placed on the mean and the CV so MacNeil's uncertainty is
+carried directly: `mean ~ Normal(6.3, 0.54)` reproduces the reported 95%
+CI 5.2-7.3 (SD = CI half-width / 1.96). MacNeil give no interval on the
+spread, so the CV prior `Normal(0.55, 0.12)` is a weakly-informative
+modelling choice spanning the dispersion implied by their 2-20 day
+observed range; the CV prior needs human sign-off, the mean prior does
+not.
 
 Used by the joint composer and the onset-driven single-stream composers
 to map the latent cumulative *infections* `C(T) = exp(r·T)` onto the
@@ -128,11 +133,14 @@ growth the convolution is the exact constant rescale `mgf(incubation,
 [`exports_deaths_model`](@ref).
 """
 @model function incubation_model(;
-        alpha_prior = truncated(Normal(3.0, 1.0); lower = 0.1),
-        theta_prior = truncated(Normal(2.1, 0.7); lower = 0.1))
-    α_inc ~ alpha_prior
-    θ_inc ~ theta_prior
-    return (; α = α_inc, θ = θ_inc, dist = Gamma(α_inc, θ_inc))
+        mean_prior = truncated(Normal(6.3, 0.54); lower = 0.1),
+        cv_prior = truncated(Normal(0.55, 0.12); lower = 0.1))
+    mean_inc ~ mean_prior
+    cv_inc ~ cv_prior
+    α_inc := inv(cv_inc^2)
+    θ_inc := mean_inc * cv_inc^2
+    return (; α = α_inc, θ = θ_inc, mean = mean_inc, cv = cv_inc,
+        dist = Gamma(α_inc, θ_inc))
 end
 
 """
