@@ -168,9 +168,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_ppc returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
-    using BVDOutbreakSize: plot_vintage_ppc
+    using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(21)
     dates = ["2026-05-18", "2026-05-19", "2026-05-20",
         "2026-05-21", "2026-05-22", "2026-05-23"]
@@ -178,7 +178,7 @@ end
     ## returns them (here a plain vector of draws).
     reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
     observed = cumsum([18, 9, 12, 7, 6, 5])
-    fig = plot_vintage_ppc([
+    fig = plot_vintage_conditional_ppc([
         (; title = "Suspected", dates = dates,
             replicates = reps, observed = observed, colour = :steelblue),
         (; title = "Confirmed", dates = dates,

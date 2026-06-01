@@ -1375,8 +1375,9 @@ pp_joint = predict(
 ## `predict` stores each stream's per-vintage increments as one
 ## vector-valued variable (`<stream>_increments.increments`); the slice is
 ## an iter×chain matrix of per-draw increment vectors, exactly the
-## `replicates` shape `plot_vintage_ppc` cumulates into the replicated
-## cumulative trajectory. Find it by its prefix among the predict keys.
+## `replicates` shape `plot_vintage_conditional_ppc` anchors on each
+## vintage's observed previous cumulative for the one-step-ahead
+## predictive. Find it by its prefix among the predict keys.
 function _vintage_replicates(pp, prefix)
     key = first(k for k in keys(pp)
     if occursin("$prefix.increments", string(k)))
@@ -1404,7 +1405,7 @@ deaths_panel = (;
 ## delays behind the confirmed counts change over time in ways that are
 ## difficult to model). The suspected-case and death streams remain
 ## per-vintage.
-joint_vintage_ppc_fig = plot_vintage_ppc(
+joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, deaths_panel]);
 
 #md # ```@raw html
