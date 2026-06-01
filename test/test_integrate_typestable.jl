@@ -5,68 +5,54 @@
 ## That `Any` propagated into `expected_exports_deaths`, boxing the
 ## exports-deaths likelihood inside the NUTS inner loop. The fix evaluates
 ## the same fixed Gauss-Legendre rule directly so Julia specialises on the
-## integrand's concrete return type. The numerical test pins agreement
-## with the Integrals.jl reference computed live in the test environment.
+## integrand's concrete return type. These tests pin both the restored
+## type stability and bit-for-bit-close agreement with the reference rule.
 
-@testsnippet IntegrateRef begin
+@testsnippet IntegrateGolden begin
     using Distributions: Gamma, pdf
-    import Integrals
 
     f1(x) = exp(0.013 * x) + 0.5
     f2(x) = sin(0.1 * x) + 2.0
     f3(x) = pdf(Gamma(4.3, 2.6), x)
 
-    ## Reference oracle: the previous Integrals.jl implementation of
-    ## `integrate` — the same fixed Gauss-Legendre rule (n = 32 uniform,
-    ## n = 64 clustered) routed through `IntegralProblem` / `solve`,
-    ## computed live here so the hand-rolled rule is checked against the
-    ## actual library, not pinned constants. Integrals.jl is a test-only
-    ## dependency; it is dropped from the package itself.
-    function ref_uniform(f, lo, hi; n = 32)
-        hi <= lo && return zero(hi - lo)
-        hw = (hi - lo) / 2
-        prob = Integrals.IntegralProblem(
-            (u, p) -> p.f(p.hw * (u + 1) + p.lo), (-1.0, 1.0),
-            (; f, hw, lo))
-        return hw * Integrals.solve(prob, Integrals.GaussLegendre(; n)).u
-    end
-    function ref_clustered(f, lo, hi, scale; n = 64)
-        hi <= lo && return zero(hi - lo)
-        (isfinite(scale) && scale > zero(scale)) ||
-            return ref_uniform(f, lo, hi; n)
-        span = hi - lo
-        expo = max(one(span), log(span / scale) / log(oftype(span, 2)))
-        prob = Integrals.IntegralProblem(
-            (u, p) -> begin
-                v = (u + one(u)) / 2
-                d = p.span * v^p.expo
-                p.f(p.hi - d) *
-                (p.span * p.expo * v^(p.expo - one(p.expo)) / 2)
-            end, (-1.0, 1.0), (; f, hi, span, expo))
-        return Integrals.solve(prob, Integrals.GaussLegendre(; n)).u
-    end
-
-    UNIFORM_CASES = [(f1, 0.0, 10.0), (f1, 0.0, 1.0), (f2, 2.0, 50.0),
-        (f3, 0.0, 40.0), (f1, 5.0, 5.0), (f1, 10.0, 5.0)]
-    CLUSTERED_CASES = [(f1, 0.0, 10.0, 2.0), (f2, 2.0, 50.0, 5.0),
-        (f3, 0.0, 360.0, 0.5), (f1, 0.0, 40.0, 1.0e6),
-        (f1, 0.0, 10.0, 0.0), (f1, 0.0, 10.0, -1.0),
-        (f1, 0.0, 10.0, Inf), (f1, 5.0, 5.0, 2.0)]
+    ## Golden reference values from the previous Integrals.jl
+    ## `GaussLegendre` solver (`IntegralProblem` / `solve`), captured before
+    ## the switch to the hand-rolled rule. Integrals.jl is no longer a
+    ## dependency, so they are pinned here as constants; the hand-rolled
+    ## `integrate` must reproduce the Integrals.jl results.
+    UNIFORM_GOLDEN = [
+        ((f1, 0.0, 10.0), 15.679106409586298),
+        ((f1, 0.0, 1.0), 1.5065282584468584),
+        ((f2, 2.0, 50.0), 102.96404392378018),
+        ((f3, 0.0, 40.0), 0.9997571129065723),
+        ((f1, 5.0, 5.0), 0.0),
+        ((f1, 10.0, 5.0), 0.0)
+    ]
+    CLUSTERED_GOLDEN = [
+        ((f1, 0.0, 10.0, 2.0), 15.679106399481002),
+        ((f2, 2.0, 50.0, 5.0), 102.96404392380417),
+        ((f3, 0.0, 360.0, 0.5), 1.0021325794366642),
+        ((f1, 0.0, 40.0, 1.0e6), 72.46366536145278),
+        ((f1, 0.0, 10.0, 0.0), 15.679106409586293),
+        ((f1, 0.0, 10.0, -1.0), 15.679106409586293),
+        ((f1, 0.0, 10.0, Inf), 15.679106409586293),
+        ((f1, 5.0, 5.0, 2.0), 0.0)
+    ]
 end
 
-@testitem "integrate: matches Integrals.jl reference" setup=[IntegrateRef] begin
+@testitem "integrate: matches Integrals.jl golden values" setup=[IntegrateGolden] begin
     using BVDOutbreakSize: integrate
-    for (f, lo, hi) in UNIFORM_CASES
-        @test isapprox(integrate(f, lo, hi), ref_uniform(f, lo, hi);
-            rtol = 1e-10, atol = 1e-12)
+    for ((f, lo, hi), want) in UNIFORM_GOLDEN
+        got = integrate(f, lo, hi)
+        @test isapprox(got, want; rtol = 1e-10, atol = 0.0)
     end
-    for (f, lo, hi, sc) in CLUSTERED_CASES
-        @test isapprox(integrate(f, lo, hi, sc),
-            ref_clustered(f, lo, hi, sc); rtol = 1e-10, atol = 1e-12)
+    for ((f, lo, hi, sc), want) in CLUSTERED_GOLDEN
+        got = integrate(f, lo, hi, sc)
+        @test isapprox(got, want; rtol = 1e-10, atol = 0.0)
     end
 end
 
-@testitem "integrate: type stable" setup=[IntegrateRef] begin
+@testitem "integrate: type stable" setup=[IntegrateGolden] begin
     using BVDOutbreakSize: integrate
     using Test: @inferred
     @test (@inferred integrate(f1, 0.0, 10.0)) isa Float64
@@ -86,7 +72,7 @@ end
     @test val isa Float64
 end
 
-@testitem "integrate: allocation-free" setup=[IntegrateRef] begin
+@testitem "integrate: allocation-free" setup=[IntegrateGolden] begin
     using BVDOutbreakSize: integrate, expected_exports_deaths,
                            ExportDeathDelay
     using Distributions: Gamma

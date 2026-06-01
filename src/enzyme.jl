@@ -7,23 +7,23 @@ using Enzyme.EnzymeRules: EnzymeRules
 using SpecialFunctions: gamma, digamma
 
 """
-Enzyme reverse-mode AD with a `Duplicated` function annotation (so the
-closure over the observed data is differentiated, not treated as
-read-only). Runtime activity is not enabled: it was previously needed
-because the old `Integrals.solve`-based `integrate` returned `Any`,
-defeating Enzyme's static activity analysis through the quadrature. Now
-that `integrate` is type-stable, activity is resolved statically and
-plain `Enzyme.Reverse` produces correct gradients (validated against
-Mooncake and finite differences across the joint and single-stream
-models). Dropping runtime activity is faster and allocates less than the
-runtime-activity-on config. This is the config the `_gamma_cdf` / `gamma`
-rules below are validated against, and the package default returned by
+Enzyme reverse-mode AD with runtime activity and a `Duplicated` function
+annotation (so the closure over the observed data is differentiated, not
+treated as read-only). Runtime activity is enabled because parts of the
+joint model — for example the upstream-infections incubation convolution
+— use a constant as temporary storage for active memory, a pattern
+Enzyme cannot prove non-differentiable statically; without runtime
+activity it raises `EnzymeRuntimeActivityError` on the full joint. The
+type-stable `integrate` (a hand-rolled Gauss-Legendre quadrature, not
+`Integrals.solve`) keeps Enzyme faster than Mooncake even with runtime
+activity on; the bulk of that speedup is the type-stable quadrature, not
+the activity setting. This is the package default returned by
 `default_adtype`. Returns an `ADTypes.AutoEnzyme`; pass to
 `nuts_sample(model; adtype = ...)`.
 """
 function enzyme_adtype()
     return AutoEnzyme(;
-        mode = Enzyme.Reverse,
+        mode = Enzyme.set_runtime_activity(Enzyme.Reverse),
         function_annotation = Enzyme.Duplicated)
 end
 

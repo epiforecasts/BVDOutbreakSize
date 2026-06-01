@@ -104,9 +104,10 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Infrastructure
 
-- Made Enzyme reverse-mode (runtime-activity-off) automatic differentiation the default backend.
-It is validated correct against Mooncake and finite differences across every model including the full joint, and is about 14% faster per gradient.
-The type-stable Gauss-Legendre quadrature in `integrate` removed the need for runtime activity, so plain `Enzyme.Reverse` resolves activity statically.
+- Made Enzyme reverse-mode automatic differentiation the default backend.
+It is validated correct against Mooncake and finite differences, and on the full joint is about 1.3x faster per gradient and allocates about 1.8x less.
+The speedup comes from the type-stable hand-rolled Gauss-Legendre quadrature in `integrate` (replacing `Integrals.solve`), which removed the type instability that previously taxed every backend.
+Runtime activity is kept on because parts of the joint (the upstream-infections incubation convolution) defeat Enzyme's static activity analysis.
 Mooncake remains available via `mooncake_adtype()`.
 - Fixed a posterior-predictive grid regression under AlgebraOfGraphics
   0.12 and widened the AoG compat bound to include 0.12; bumped the
