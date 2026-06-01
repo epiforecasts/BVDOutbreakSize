@@ -24,7 +24,7 @@ end
 
 @testitem "confirmed_only_model conditions on the lab pipeline" begin
     using BVDOutbreakSize: confirmed_only_model
-    using Turing: logjoint
+    using Turing.DynamicPPL: logjoint
     using Random: MersenneTwister
 
     m = confirmed_only_model(40, 27;
