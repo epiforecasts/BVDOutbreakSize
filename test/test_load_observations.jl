@@ -27,6 +27,9 @@
     @test obs.total_deaths >= 0
     @test obs.reported_cases >= 0
     @test obs.confirmed_cases >= 0
+    ## Tests-analysed is an optional scalar laboratory stream.
+    @test ismissing(obs.tests_analysed) ||
+          (obs.tests_analysed isa Integer && obs.tests_analysed >= 0)
 
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
