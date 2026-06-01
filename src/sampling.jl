@@ -10,15 +10,17 @@ default_adtype() = AutoMooncake(; config = Mooncake.Config())
 """
     enzyme_adtype()
 
-Enzyme reverse-mode AD type, a validated opt-in alternative to the default
+Enzyme reverse-mode AD type, an opt-in alternative to the default
 [`default_adtype`](@ref) (Mooncake). Defined by the package's Enzyme
 weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`); calling it
 without `Enzyme` loaded raises a `MethodError`. Load `Enzyme` to activate
 the extension. The `SpecialFunctions.gamma` `EnzymeRule` that the Beta and
 NegativeBinomial normalising constants reach is supplied by
-CensoredDistributions' own Enzyme extension. The full renewal joint
-differentiates under Enzyme and the gradient matches Mooncake (see
-`test/test_enzyme.jl`); Mooncake remains the package default.
+CensoredDistributions' own Enzyme extension. Enzyme differentiates the
+single-stream composers and matches Mooncake; differentiating the full
+joint is platform-dependent (it can hit an upstream Enzyme/LLVM compile
+failure on some systems, see `test/test_enzyme.jl`), so Mooncake remains
+the package default for fitting.
 """
 function enzyme_adtype end
 
