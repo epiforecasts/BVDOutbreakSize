@@ -8,6 +8,12 @@
 Exports-only composer (Method 1 analogue). Samples growth and
 ascertainment, then conditions on the exports likelihood only. See
 [`exports_model`](@ref).
+
+The exports count sees infections directly (the detection window absorbs
+the infection-to-detection delay), so the incubation period is not
+identified by this stream: it is sampled only to expose
+`cumulative_cases = C_T · onset_scale` as a prior-predictive
+case-equivalent of the latent infections, and is drawn from its prior.
 """
 @model function exports_only_model(
         exported_cases::Union{Missing, Integer};
@@ -339,6 +345,11 @@ mirroring the joint configuration in the Imperial report (no
 reported-cases or deaths-among-exports likelihood). Passing
 `missing` for `exported_cases` reduces to a pure Method 2 (deaths-
 only) fit.
+
+Unlike the other composers this fits no incubation period: McCabe et al.
+model cases directly, so `C_T` is the case trajectory (`onset_scale = 1`)
+and `cumulative_infections` and `cumulative_cases` coincide. This keeps
+`cumulative_cases` comparable with the report's published case estimates.
 """
 @model function imperial_only_model(
         exported_cases::Union{Missing, Integer},
@@ -365,5 +376,10 @@ only) fit.
     deaths_state ~ to_submodel(
         deaths(deaths_vec, growth_state, k, [growth_state.T]), false)
 
+    ## No incubation layer: McCabe et al. model cases directly, so the
+    ## onset-to-death convolution acts on `C_T` as the case trajectory
+    ## (`onset_scale = 1`). `cumulative_infections` and `cumulative_cases`
+    ## therefore coincide here, both equal to `C_T`.
+    cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T
 end
