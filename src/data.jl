@@ -155,13 +155,31 @@ function load_observations(
 end
 
 ## Doubling-count prior base: McCabe et al.'s first report (18 May
-## 2026), whose Method 2 central scenario of 501 cases implies a
-## doubling count `m = log2(501) ≈ 9`. The prior centre advances from
-## this base by one doubling per `M_PRIOR_DOUBLING_DAYS` (the central
+## 2026), whose Method 2 central scenario of 501 *cases* implies a
+## case-count doubling count `log2(501) ≈ 9`. The prior centre advances
+## from this base by one doubling per `M_PRIOR_DOUBLING_DAYS` (the central
 ## 14-day doubling time) of elapsed time to the cut-off.
 const M_PRIOR_BASE_DATE = "2026-05-18"
-const M_PRIOR_BASE = 9.0
 const M_PRIOR_DOUBLING_DAYS = 14.0
+## `C(T) = 2^m` is the cumulative *infection* count, while McCabe's anchor
+## is a case count and cases = infections · `onset_scale`, with
+## `onset_scale = mgf(incubation, −r)` the incubation rescale. To keep the
+## prior centred on the same ~501 cases the base shifts up by
+## `−log2(onset_scale)`: more infections than cases by `T`. The offset is
+## evaluated at the central doubling time and the incubation prior mean
+## (MacNeil 2010, mean 6.3 d ⇒ `Gamma(3.0, 2.1)`); the Gamma mgf at `−r`
+## is the closed form `(1 + θr)^{-α}`. See `incubation_model`.
+const M_PRIOR_CASE_BASE = 9.0
+## Incubation prior mean shape/scale (MacNeil 2010, mean 6.3 d); see
+## `incubation_model`. The central growth rate is one doubling per
+## `M_PRIOR_DOUBLING_DAYS`.
+const _M_PRIOR_INC_SHAPE = 3.0
+const _M_PRIOR_INC_SCALE = 2.1
+let r = log(2) / M_PRIOR_DOUBLING_DAYS
+    mgf = (1 + _M_PRIOR_INC_SCALE * r)^(-_M_PRIOR_INC_SHAPE)
+    global const M_PRIOR_INFECTION_OFFSET = -log2(mgf)
+end
+const M_PRIOR_BASE = M_PRIOR_CASE_BASE + M_PRIOR_INFECTION_OFFSET
 
 """
     m_prior_centre(as_of_date; base_date, m_base, doubling_days)
@@ -176,10 +194,13 @@ m_0 = m_\\text{base} +
 ```
 
 The base is McCabe et al.'s first report (18 May 2026; Method 2 central
-501 cases ⇒ `m ≈ 9`), advancing at the central 14-day doubling time, so
-the prior stays centred on the plausible outbreak size as the cut-off
-moves — it tracks data refreshes without manual edits, and a
-McCabe-date fit recovers the base value.
+501 cases), advancing at the central 14-day doubling time, so the prior
+stays centred on the plausible outbreak size as the cut-off moves — it
+tracks data refreshes without manual edits. Because `C(T) = 2^m` is now
+the cumulative *infection* count, `m_base` carries the
+`−log2(onset_scale)` offset (`M_PRIOR_INFECTION_OFFSET ≈ 0.43`) above the
+case-count `log2(501) ≈ 9`, so the implied *case* count at the base date
+still matches McCabe's central scenario.
 """
 function m_prior_centre(as_of_date::AbstractString;
         base_date::AbstractString = M_PRIOR_BASE_DATE,
