@@ -3,3 +3,4 @@ sitrep,report_date,suspected_cases,suspected_deaths,confirmed_cases,samples_rece
 010,2026-05-24,906,223,105,431,295,105,"report notes a data-entry error (erreur de saisie); 4 positives received without sample detail; 257 samples sent to INRB Kinshasa"
 011,2026-05-25,998,238,106,431,295,106,"aucun echantillon analyse en Ituri this day; 203 unanalysed samples sent to Kinshasa; samples analysed flat at 295"
 012,2026-05-26,1077,238,121,662,403,121,"cut-off vintage; no per-zone case table in this report to cross-check the headline"
+012_v2,2026-05-26,1077,246,121,,,121,"revised re-issue (SitRep_MVE_012-2026_v2); suspected deaths corrected 238->246; confirmed deaths reported as 17 (under-estimated, late confirmation); this re-issue drops the lab Tableau IV present in the original 012 (received 662 / analysed 403); used for the cut-off suspected-death value"
