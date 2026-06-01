@@ -79,17 +79,17 @@
 #   handles right-truncation of the tested observation. PCR sensitivity
 #   and testing fraction are separately identified given both
 #   observations.
-# - *Per-vintage fit of the DRC streams*. The
-#   suspected-case, confirmed-case and suspected-death likelihoods model
-#   the new cases and deaths reported in each sitrep, conditioning on the
-#   between-vintage increments against the same intensities as the
-#   cumulative likelihoods, sharpening the growth rate $r$ and the
-#   surveillance dispersion $k$. A stream with a single vintage reduces
-#   to the cumulative single-total likelihood, recovering the McCabe et
-#   al. configuration. The confirmed convolution shares one quadrature
-#   across all sitrep edges rather than re-integrating at each. The case
-#   streams use a single DRC ascertainment fraction $p_{\text{DRC}}$
-#   applied to every sitrep vintage.
+# - *Per-vintage fit of the DRC suspected streams*. The suspected-case
+#   and suspected-death likelihoods model the new cases and deaths
+#   reported in each sitrep, conditioning on the between-vintage
+#   increments against the same intensities as the cumulative
+#   likelihoods, sharpening the growth rate $r$ and the surveillance
+#   dispersion $k$. A stream with a single vintage reduces to the
+#   cumulative single-total likelihood, recovering the McCabe et al.
+#   configuration. The confirmed counts are small and the lab-processing
+#   delays behind them change over time in ways that are difficult to
+#   model, so confirmed cases enter only as a cumulative total. The case
+#   streams use a single DRC ascertainment fraction $p_{\text{DRC}}$.
 # - *No-onward-transmission counterfactual*.
 #   Projects the future expected deaths from cases already infected
 #   by $T$, integrating $i(s)\cdot(1 - F_d(T - s))$ per draw — a
@@ -1226,22 +1226,25 @@ cfr_prior_fig #hide
 # total and the lab-delay integrals above, so the data can pull $\tau$
 # well below the prior mean if that is what they imply.
 #
-# As for the suspected stream (equation (20b)), we model the new
-# confirmed cases in each sitrep, replacing the unit-ascertainment
-# suspected cumulative with the lab-convolved
-# $I_{\text{lab},0}(s) = \int_0^s \mu_{\text{BVD},0}(s')\,
-#     f_{\text{lab}}(s - s')\,ds'$ and gating by the testing fraction
-# $\tau$ and sensitivity $s$. The new confirmed cases in sitrep $v$ have
-# mean
+# The confirmed cases enter as a single cumulative total at the
+# laboratory stream's cut-off, replacing the unit-ascertainment suspected
+# cumulative with the lab-convolved
+# $I_{\text{lab},0}(T) = \int_0^T \mu_{\text{BVD},0}(s')\,
+#     f_{\text{lab}}(T - s')\,ds'$ and gating by the testing fraction
+# $\tau$ and sensitivity $s$:
 #
 # ```math
-# \mu_v^{\text{conf}}
-#   = p_{\text{DRC}}\, s\, \tau\,
-#     \bigl(I_{\text{lab},0}(s_v) - I_{\text{lab},0}(s_{v-1})\bigr),
+# \mu^{\text{conf}}
+#   = p_{\text{DRC}}\, s\, \tau\, I_{\text{lab},0}(T),
 # \quad
-# \Delta Y_v^{\text{conf}} \sim
-#     \mathrm{NegBinomial}(\mu_v^{\text{conf}}, k). \tag{25a}
+# Y^{\text{conf}} \sim
+#     \mathrm{NegBinomial}(\mu^{\text{conf}}, k). \tag{25a}
 # ```
+#
+# The confirmed counts are small and the lab-processing delays behind
+# them change over time in ways that are difficult to model, so we
+# currently use only the cumulative confirmed total at the cut-off rather
+# than the per-sitrep vintages.
 #
 # The tested-volume and per-test positivity terms (equations (23)-(24))
 # are observed once, at the laboratory stream's own cut-off, which need
@@ -1580,11 +1583,20 @@ function joint_obs(o; observe = true)
               fill(missing, length(h.values)), h.offsets)
     rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
     dth, dth_off = _stream(o.death_history, o.total_deaths)
+    ## Confirmed cases enter as a single cumulative total at the cut-off
+    ## (offset 0), like the tests-analysed count. The per-sitrep confirmed
+    ## counts are small and the lab-processing delays behind them change
+    ## over time in ways that are difficult to model, so we currently use
+    ## only the cumulative total. With the tests-analysed total this gives
+    ## the per-test positivity.
     have_conf = o.confirmed_case_history !== missing ||
                 o.confirmed_cases !== missing
+    conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
+                 o.confirmed_case_history === missing ? missing :
+                 o.confirmed_case_history.values[end]
     conf,
     conf_off = have_conf ?
-               _stream(o.confirmed_case_history, o.confirmed_cases) :
+               (Union{Missing, Int}[observe ? conf_total : missing], [0]) :
                (Union{Missing, Int}[], Int[])
     edaily = observe ? o.export_deaths_daily :
              fill(missing, length(o.export_deaths_daily))
@@ -2093,10 +2105,10 @@ pp_joint = predict(
         genetic = genetic_seeding),
     chn_joint);
 pp_exports = vec(Array(pp_joint[:exported_cases]));
-## The DRC deaths, reported and confirmed streams are per-vintage
-## increment vectors; sum each draw's bins for the cumulative-total
-## posterior predictive. Export deaths are a per-day series held the
-## same way.
+## The DRC deaths and reported streams are per-vintage increment vectors
+## and confirmed is a single cumulative total; sum each draw's bins for
+## the cumulative-total posterior predictive. Export deaths are a per-day
+## series held the same way.
 pp_deaths = vec(sum.(pp_joint[@varname(total_deaths)]));
 pp_cases = vec(sum.(pp_joint[@varname(reported_cases)]));
 pp_confirmed = vec(sum.(pp_joint[@varname(confirmed_cases)]));
@@ -2124,8 +2136,8 @@ joint_ppc_fig #hide
 # ### Posterior predictive across the sitrep series
 #
 # The panels above collapse each DRC stream to a single total. Because
-# the suspected, confirmed and death streams are fitted per vintage, the
-# posterior predictive also covers the full sitrep trajectory, not just
+# the suspected-case and death streams are fitted per vintage, the
+# posterior predictive also covers their full sitrep trajectory, not just
 # the latest count. Reconstructing the cumulative replicate at each
 # vintage (the running sum of the per-bin increment draws) and comparing
 # it to the observed cumulative series shows whether the fitted growth
@@ -2141,10 +2153,6 @@ vintage_ppc_fig = plot_vintage_ppc([
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
         observed = obs.reported_case_history.values, colour = :steelblue),
-    (; title = "Confirmed cases",
-        dates = obs.confirmed_case_history.dates,
-        replicates = collect(pp_joint[@varname(confirmed_cases)]),
-        observed = obs.confirmed_case_history.values, colour = :purple),
     (; title = "Suspected deaths",
         dates = obs.death_history.dates,
         replicates = collect(pp_joint[@varname(total_deaths)]),
