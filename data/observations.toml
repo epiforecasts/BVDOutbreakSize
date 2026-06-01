@@ -1,44 +1,74 @@
-# BVD outbreak observation manifest.
+# BVD outbreak observation manifest (renewal model).
 #
-# Cumulative totals by the cut-off date plus per-vintage histories used
-# for time-series likelihoods. All dates ISO-8601; counts integers.
+# Cumulative national totals by the cut-off date plus per-vintage
+# histories used for the time-series likelihoods. All dates ISO-8601;
+# counts integers. DRC counts (suspected cases, suspected deaths,
+# confirmed cases and the laboratory totals) are the national cumulative
+# figures from the INSP situation reports for the 17th Ebola epidemic
+# (https://insp.cd/ebola-17eme-epidemie/), read from the report PDFs
+# (https://github.com/INRB-UMIE/Ebola_DRC_2026), recorded in
+# data/insp_sitrep_scanned.csv. The 23 May report (SitRep 009) prints 119
+# cumulative suspected deaths in its headline but its per-zone rows sum to
+# 220, so we use the auditable zone-sum. The cut-off (26 May) is the
+# latest report (SitRep 012). The model uses suspected counts.
 
 # Cut-off date (last day of the daily grid).
-cutoff_date = 2026-05-23
+cutoff_date = 2026-05-26
 
-# Seeding-window-aware start date (first day of the daily grid).
-seeding_date = 2026-05-01
+# First day of the daily grid. Set ~4 months before the cut-off so the
+# grid comfortably contains the genetic TMRCA seeding bound (2026-03-25,
+# 62 days before the cut-off) and the early growth phase. Grid length
+# n = cutoff - seeding + 1 = 121 days.
+seeding_date = 2026-01-26
 
 # First WHO joint situation report; intervention breakpoint for R_t.
 who_first_sitrep_date = 2026-05-18
 
-# Genetic TMRCA bound (days before cut-off) on the seeding age.
-tmrca_days = 30
+# Genetic TMRCA seeding bound, days before the cut-off (mean BEAST TMRCA
+# 2026-03-25 at the 1.2e-3 clock rate; a soft lower bound on the outbreak
+# age, since broader sequencing only pushes the TMRCA older).
+tmrca_days = 62
 
 [streams]
-# Cumulative suspected cases reported by WHO/health ministry by cutoff.
-exported_cases = 2
-total_deaths = 18
-reported_cases = 905
-confirmed_cases = 27
-exports_deaths = 0
+# National cumulative totals reported by INSP / WHO by the cut-off.
+# exported_cases: three travel-related DRC cases imported into Uganda
+# (WHO DON 2026-DON602/603); Uganda is treated as imports only.
+exported_cases = 3
+# exports_deaths: one death among the Uganda imports (import #1, 14 May).
+exports_deaths = 1
+# total_deaths: INSP SitRep 012 (26 May) national cumulative suspected
+# deaths (front-page Cumul Décès suspects).
+total_deaths = 238
+# reported_cases: INSP SitRep 012 (26 May) national cumulative suspected
+# cases (front-page Cumul cas suspects).
+reported_cases = 1077
+# confirmed_cases: INSP SitRep 012 (26 May) section IV.3 LABORATOIRE
+# Cumul positifs (national cumulative laboratory-confirmed cases).
+confirmed_cases = 121
+# tests_analysed: INSP SitRep 012 (26 May) section IV.3 LABORATOIRE
+# Cumul échantillons analysés (specimens whose processing has completed).
+# Pairs with confirmed_cases for the per-test positivity (121/403 ≈ 30%).
+tests_analysed = 403
 
 [histories]
-# Per-vintage cumulative snapshots (day index into the grid + count).
-# Day index is days since seeding_date (1-based); cutoff is day n.
-
-[histories.deaths]
-days = [13, 18, 23]
-counts = [10, 14, 18]
+# Per-vintage cumulative snapshots: day index into the grid (1-based,
+# days since seeding_date; cut-off is day n = 121) and cumulative count.
+# The daily likelihood fits the between-vintage increments. The 18-22 May
+# points predate the national-headline format and use the WHO AFRO /
+# early-report baseline (18 May matches WHO joint sitrep 01).
 
 [histories.reported]
-days = [13, 18, 23]
-counts = [340, 516, 905]
+# National cumulative suspected cases, INSP SitReps for 18-26 May 2026.
+days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
+counts = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
 
 [histories.confirmed]
-days = [13, 18, 23]
-counts = [9, 17, 27]
+# National cumulative laboratory-confirmed cases (lab Cumul positifs).
+days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
+counts = [33, 51, 57, 79, 83, 101, 105, 106, 121]
 
-[histories.lab]
-days = [18, 23]
-counts = [12, 27]
+[histories.deaths]
+# National cumulative suspected deaths. 23 May uses the SitRep 009 zone-
+# row sum (220) because its headline (119) is a data-entry error.
+days = [113, 114, 115, 116, 117, 118, 119, 120, 121]
+counts = [131, 148, 160, 175, 204, 220, 223, 238, 238]

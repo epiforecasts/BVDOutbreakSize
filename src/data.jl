@@ -35,6 +35,8 @@ function load_observations(
         reported_cases = Int(streams["reported_cases"]),
         confirmed_cases = Int(streams["confirmed_cases"]),
         exports_deaths = Int(streams["exports_deaths"]),
+        tests_analysed = haskey(streams, "tests_analysed") ?
+                         Int(streams["tests_analysed"]) : missing,
         deaths_history = history("deaths"),
         reported_history = history("reported"),
         confirmed_history = history("confirmed"),

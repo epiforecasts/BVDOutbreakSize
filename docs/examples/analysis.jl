@@ -617,7 +617,7 @@ chn_joint = nuts_sample(
     bvd_joint(
     obs.n, obs.exported_cases, obs.total_deaths,
     obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-    obs.lab_history.counts[end];
+    obs.tests_analysed;
     deaths_history = obs.deaths_history,
     reported_history = obs.reported_history,
     confirmed_history = obs.confirmed_history,
