@@ -1061,16 +1061,21 @@ cumulative_density_fig #hide
 
 # ### Comparison with McCabe et al.
 #
-# Our joint fit against the 15 published McCabe et al. scenario
-# estimates (both report versions, 18 and 20 May 2026). For each
-# scenario the table records the narrowest joint credible interval
-# that contains it, so coverage can be read off directly.
+# The McCabe et al. scenario estimates are cumulative reported *cases*.
+# The renewal $C_T$ is cumulative *infections*, the latent pool before
+# ascertainment, so it is not directly comparable to those figures.
+# We compare like for like against the model's expected cumulative
+# reported cases, the ascertained quantity, while reporting the infection
+# count $C_T$ separately as the latent outbreak size.
+# For each scenario the table records the narrowest joint credible
+# interval that contains it, so coverage can be read off directly.
 
 #md # ```@raw html
 #md # <details><summary>Joint coverage table</summary>
 #md # ```
 
-coverage_table = comparison_table(posterior_C_joint);
+posterior_reports_joint = vec(Array(chn_joint[:expected_reports_T]));
+coverage_table = comparison_table(posterior_reports_joint);
 
 #md # ```@raw html
 #md # </details>
@@ -1078,15 +1083,16 @@ coverage_table = comparison_table(posterior_C_joint);
 
 coverage_table #hide
 
-# The joint $C_T$ density with the 15 published scenario point
-# estimates overlaid as faint dashed rules:
+# The joint expected-reported-cases density with the 15 published
+# scenario point estimates overlaid as faint dashed rules (both are
+# reported-case counts, so the overlay is like for like):
 
 #md # ```@raw html
-#md # <details><summary>Joint C_T density with published scenarios</summary>
+#md # <details><summary>Joint reported-cases density with published scenarios</summary>
 #md # ```
 
 imperial_density_fig = plot_cumulative_cases(
-    "joint (current data)" => posterior_C_joint);
+    "joint (current data)" => posterior_reports_joint);
 
 #md # ```@raw html
 #md # </details>
