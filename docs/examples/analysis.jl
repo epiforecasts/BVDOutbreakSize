@@ -2256,7 +2256,9 @@ lab_pair_fig #hide
 # per-vintage confirmed likelihood breaks joint convergence: the
 # increments are tiny and non-monotone (33, 18, 6, 22, 4, 18, 4, 1, 15),
 # and each bin mean is the product $p_{\text{DRC}}\,s\,\tau\,\Delta
-# I_{\text{lab}}$ of factors that are shared across bins and only weakly
+# I_{\text{lab}}$ of the ascertainment, sensitivity and testing fraction
+# with the between-vintage lab-convolved increment $\Delta I_{\text{lab}}$
+# (equation (25a)) — factors that are shared across bins and only weakly
 # identified, so splitting the total into bins opens a multiplicative
 # ridge between the lab-delay shape and those factors rather than adding
 # information. With the tests-analysed total alongside it, the single
