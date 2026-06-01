@@ -104,11 +104,15 @@ end
 Incubation-period prior, the infection-to-symptom-onset delay that sits
 at the head of the generative process. Samples a gamma shape `α_inc` and
 scale `θ_inc` from truncated-normal priors and returns the resulting
-`Gamma(α_inc, θ_inc)` distribution. The defaults are centred on a mean of
-about 9 days with an SD of about 7 days (`α ≈ 1.6`, `θ ≈ 5.5`), in line
-with published Ebolavirus incubation estimates; no Bundibugyo-specific
-2026 line list anchors them, so the centres are weakly informative and
-need human sign-off.
+`Gamma(α_inc, θ_inc)` distribution.
+
+The incubation period cannot be fitted from the BDBV line list (the
+Rosello deposit has no exposure dates), so the line-list reanalysis
+recommends the MacNeil et al. (2010) Bundibugyo estimate from the 2007
+Uganda outbreak instead: a mean of 6.3 days (95% CI 5.2-7.3, n = 24).
+The defaults centre the shape and scale on that mean (`α ≈ 3.0`,
+`θ ≈ 2.1`, mean ≈ 6.3 d) with an implied SD of about 3.6 days; the
+dispersion is a weakly-informative choice rather than a fitted quantity.
 
 Used by the joint composer and the onset-driven single-stream composers
 to map the latent cumulative *infections* `C(T) = exp(r·T)` onto the
@@ -119,8 +123,8 @@ growth the convolution is the exact constant rescale `mgf(incubation,
 [`exports_deaths_model`](@ref).
 """
 @model function incubation_model(;
-        alpha_prior = truncated(Normal(1.6, 0.5); lower = 0.1),
-        theta_prior = truncated(Normal(5.5, 1.5); lower = 0.1))
+        alpha_prior = truncated(Normal(3.0, 1.0); lower = 0.1),
+        theta_prior = truncated(Normal(2.1, 0.7); lower = 0.1))
     α_inc ~ alpha_prior
     θ_inc ~ theta_prior
     return (; α = α_inc, θ = θ_inc, dist = Gamma(α_inc, θ_inc))

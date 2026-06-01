@@ -19,16 +19,18 @@
 
     @test all(isfinite, α) && all(>(0), α)
     @test all(isfinite, θ) && all(>(0), θ)
-    ## Prior mean incubation period sits in a plausible Ebolavirus range.
+    ## Prior mean incubation period is centred on the MacNeil et al.
+    ## (2010) Bundibugyo estimate of 6.3 days recommended by the BDBV
+    ## line-list reanalysis.
     incubation_means = α .* θ
-    @test 6.0 <= Statistics.mean(incubation_means) <= 13.0
+    @test 5.0 <= Statistics.mean(incubation_means) <= 8.0
 end
 
 @testitem "onset_rescale equals the incubation mgf at −r" begin
     using Distributions: Gamma, mgf
     using BVDOutbreakSize: onset_rescale
 
-    d = Gamma(1.6, 5.5)
+    d = Gamma(3.0, 2.1)
     for r in (0.0, 0.02, 0.05, 0.1)
         @test onset_rescale(d, r) ≈ mgf(d, -r)
         ## Onsets lag infections, so the rescale shrinks the trajectory.

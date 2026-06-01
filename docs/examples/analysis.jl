@@ -27,6 +27,19 @@
 #
 # ## What we do differently from McCabe et al.
 #
+# - *Infections as the latent quantity.* The exponential trajectory
+#   $C(s) = e^{r s}$ is the cumulative *infection* count. Symptom onsets
+#   follow after a sampled incubation period, so the cumulative onsets
+#   are $C(s)$ convolved with the incubation density; under exponential
+#   growth this is the exact constant rescale $M_{\text{inc}}(-r)$ by the
+#   incubation moment-generating function. Every observed stream sits
+#   downstream of onsets through its own reporting delay, and the
+#   cumulative case count is recovered as $C(T)\,M_{\text{inc}}(-r)$ for
+#   comparison with McCabe et al. The incubation period cannot be fitted
+#   from the BDBV line list (no exposure dates), so we use the
+#   Bundibugyo estimate the line-list reanalysis recommends
+#   [bdbv_linelist_analysis_2026](@cite): a mean of 6.3 days from the
+#   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
 #   $\tau$, case fatality ratio (CFR), onset-to-death shape and scale,
 #   detection window $w$,
