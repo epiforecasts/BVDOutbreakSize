@@ -5,10 +5,13 @@
 # duplication.
 
 """
-Prior on the cumulative case count `C(T) = exp(r·T)` via a doublings
+Prior on the cumulative infection count `C(T) = exp(r·T)` via a doublings
 parameterisation. Samples the exponential growth rate `r` and a
 doubling-count `m = T/τ`, then exposes `(τ, m, r, T, C_T, cumulative)`
-as deterministics for downstream submodels.
+as deterministics for downstream submodels. `C(T)` is the latent
+*infection* count; the composers map it onto symptom onsets through the
+incubation period (see [`incubation_model`](@ref)) before the per-stream
+delays act.
 
 McCabe et al.'s primary assumption is the doubling time (their 7/14/21-day
 sweep); each doubling time implies a growth rate `r = log(2)/τ`, and the
@@ -19,19 +22,21 @@ time: because `r = log(2)/τ` is a reciprocal, the log-scale SD `0.4` is
 preserved, so the implied doubling-time prior (and every derived
 quantity) matches that prior on `τ`.
 
-The default doubling-count prior `m ~ Normal(9, 3)` (truncated at 0) is
-centred on `m = 9` (`C_T = 2^9 = 512`), the doubling count implied by
-McCabe et al.'s first-report (18 May 2026) Method 2 central scenario of
-501 cases (`log2(501) ≈ 9`). For a fit at a later cut-off, pass an
-`m_prior` whose centre advances from that base date via
-[`m_prior_centre`](@ref) so the prior tracks the elapsed time. This is a
-weakly-informative centring choice (SD 3 gives 95% support ≈ `m ∈ (3, 15)`,
-`C_T ∈ (8, 32000)`); the fit is dominated by the likelihood, so it mainly
-sets where the joint sampler starts.
+The default doubling-count prior `m ~ Normal(M_PRIOR_BASE, 3)` (truncated
+at 0) is centred on `M_PRIOR_BASE = 9` (`C_T = 2^9 = 512`), the doubling
+count implied by McCabe et al.'s first-report (18 May 2026) Method 2
+central scenario of 501 cases (`log2(501) ≈ 9`). `C_T = 2^m` is now the
+cumulative *infection* count; 9 is kept as a weakly-informative centre of
+the same order rather than rescaled to a case-equivalent infection count.
+For a fit at a later cut-off, pass an `m_prior` whose centre advances from
+that base date via [`m_prior_centre`](@ref) so the prior tracks the
+elapsed time. This is a weakly-informative centring choice (SD 3 gives 95%
+support ≈ `m ∈ (3, 15)`, `C_T ∈ (8, 32000)`); the fit is dominated by the
+likelihood, so it mainly sets where the joint sampler starts.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / 14), 0.4),
-        m_prior = truncated(Normal(9.0, 3.0); lower = 0))
+        m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
     τ := log(2) / r
@@ -98,6 +103,44 @@ outbreak data anchors this prior. Used by [`confirmed_cases_model`](@ref).
     α_lab ~ alpha_prior
     θ_lab ~ theta_prior
     return (; α = α_lab, θ = θ_lab, dist = Gamma(α_lab, θ_lab))
+end
+
+"""
+Incubation-period prior, the infection-to-symptom-onset delay that sits
+at the head of the generative process. Samples the mean and coefficient
+of variation, recovers the gamma shape `α_inc = 1/CV²` and scale
+`θ_inc = mean·CV²` as deterministics, and returns the resulting
+`Gamma(α_inc, θ_inc)` distribution.
+
+The incubation period cannot be fitted from the BDBV line list (the
+Rosello deposit has no exposure dates), so the line-list reanalysis
+recommends the MacNeil et al. (2010) Bundibugyo estimate from the 2007
+Uganda outbreak instead: a mean of 6.3 days (95% CI 5.2-7.3, n = 24).
+The prior is placed on the mean and the CV so MacNeil's uncertainty is
+carried directly: `mean ~ Normal(6.3, 0.54)` reproduces the reported 95%
+CI 5.2-7.3 (SD = CI half-width / 1.96). MacNeil give no interval on the
+spread, so the CV prior `Normal(0.55, 0.12)` is a weakly-informative
+modelling choice spanning the dispersion implied by their 2-20 day
+observed range; the CV prior needs human sign-off, the mean prior does
+not.
+
+Used by the joint composer and the onset-driven single-stream composers
+to map the latent cumulative *infections* `C(T) = exp(r·T)` onto the
+cumulative symptom onsets the downstream delays act on. Under exponential
+growth the convolution is the exact constant rescale `mgf(incubation,
+−r)`, applied as the `onset_fraction` of [`deaths_model`](@ref),
+[`reported_cases_model`](@ref), [`confirmed_cases_model`](@ref) and
+[`exports_deaths_model`](@ref).
+"""
+@model function incubation_model(;
+        mean_prior = truncated(Normal(6.3, 0.54); lower = 0.1),
+        cv_prior = truncated(Normal(0.55, 0.12); lower = 0.1))
+    mean_inc ~ mean_prior
+    cv_inc ~ cv_prior
+    α_inc := inv(cv_inc^2)
+    θ_inc := mean_inc * cv_inc^2
+    return (; α = α_inc, θ = θ_inc, mean = mean_inc, cv = cv_inc,
+        dist = Gamma(α_inc, θ_inc))
 end
 
 """
