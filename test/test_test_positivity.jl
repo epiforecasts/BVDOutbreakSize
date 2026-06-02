@@ -10,15 +10,30 @@
     using Statistics: minimum
     using BVDOutbreakSize: test_sensitivity_model
 
-    ## Positivity = s·q ≤ s, so the observed peak positivity 0.479 is a
-    ## hard lower bound on sensitivity. The default prior truncates
-    ## Beta(6,2) at 0.45, removing the spurious low-s mode. Every draw must
-    ## clear the floor.
+    ## Beta(6,2) truncated at 0.48: the observed peak positivity is a near-
+    ## lower bound on s under high specificity, and flooring s is the
+    ## convergence guarantee (modelled specificity alone leaves the low-s
+    ## multimodality). Every draw clears the floor.
     chn = sample(MersenneTwister(20260518), test_sensitivity_model(),
         Prior(), 5_000; progress = false)
     s = vec(Array(chn[:s_test]))
-    @test all(s .>= 0.45)
-    @test minimum(s) >= 0.45
+    @test all(s .>= 0.48)
+    @test minimum(s) >= 0.48
+end
+
+@testitem "specificity prior is informative and high" begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: mean, quantile
+    using BVDOutbreakSize: test_specificity_model
+
+    ## Default Beta(50, 1.5): mean ≈ 0.97, tight, most mass above 0.95.
+    chn = sample(MersenneTwister(20260518), test_specificity_model(),
+        Prior(), 10_000; progress = false)
+    sp = vec(Array(chn[:spec_test]))
+    @test isapprox(mean(sp), 50 / 51.5; atol = 0.01)   # Beta mean
+    @test quantile(sp, 0.05) > 0.90                     # tight high tail
+    @test all(0 .< sp .< 1)
 end
 
 @testitem "background ramp: closed-form rate and cumulative" begin
@@ -173,15 +188,14 @@ end
     @test all(0 .<= pos .<= 1)
 end
 
-@testitem "confirmed ramp Δλ=0 reproduces constant" tags=[:slow] begin
-    ## A confirmed_cases_model built with a Δλ=0 ramp and priority OFF
-    ## (κ=1) must give finite per-edge positivity in (0, 1), for matched
-    ## (λ0, delays, growth). Priority off recovers the proportional share.
+@testitem "confirmed exhaustion+specificity: per-edge positivity valid" tags=[:slow] begin
+    ## The per-vintage confirmed_cases_model (exhaustion + modelled
+    ## specificity) must give finite per-edge positivity in (0, 1) for
+    ## matched delays/growth across the 4 lab vintages.
     using Turing: sample, Prior, @model, to_submodel
     import FlexiChains
     using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
                            report_delay_model, surveillance_dispersion_model,
-                           test_priority_model,
                            background_ramp, BACKGROUND_RAMP_SCALE
 
     A = [211, 295, 295, 403]
@@ -196,9 +210,7 @@ end
         conf_state ~ to_submodel(
             confirmed_cases_model(confirmed, analysed, 211,
                 growth_state, disp_state.k, fill(0.3, length(confirmed)),
-                bg, 0.7, rep_state.dist, edges, 126.0;
-                test_priority = test_priority_model(priority_off = true)),
-            false)
+                bg, 0.7, rep_state.dist, edges, 126.0), false)
         pp := conf_state.p_pos
     end
 
@@ -210,39 +222,38 @@ end
     @test all(isfinite, pp_mat)
 end
 
-@testitem "priority_bvd_tested: κ=1 proportional, saturation, monotone" begin
-    using BVDOutbreakSize: priority_bvd_tested
+@testitem "exhausted_bvd_tested: min(B,A) exhaustion limit" begin
+    using BVDOutbreakSize: exhausted_bvd_tested
 
-    B, N, s = 80.0, 600.0, 0.75
-    ## κ=1 is proportional sampling: BVD_tested = B·A/N, so the BVD share
-    ## of the analysed batch is the pool share B/N (the no-priority model).
-    for A in (100.0, 300.0, 600.0)
-        @test priority_bvd_tested(B, N, A, 1.0) ≈ B * (A / N)
-    end
-    ## Analysed ≥ pool: the pool is fully drained, so all available BVD
-    ## (B, since B ≤ N here) is tested.
-    @test priority_bvd_tested(B, 100.0, 200.0, 3.0) ≈ B
-    ## B clamped into [0, N]: a pool with N < B caps BVD tested at N.
-    @test priority_bvd_tested(900.0, 600.0, 600.0, 2.0) ≈ 600.0
-    @test priority_bvd_tested(80.0, 50.0, 200.0, 3.0) ≈ 50.0
-    ## Empty analysed / pool -> zero.
-    @test priority_bvd_tested(B, N, 0.0, 3.0) == 0.0
-    @test priority_bvd_tested(B, N, 100.0, 0.0) == 0.0  # (1-x)^0 = 1 -> 0
-
-    ## Stronger priority front-loads BVD: for fixed A < N, BVD_tested
-    ## rises with κ, so the positivity s·BVD_tested/A is higher early.
-    A = 211.0
-    bts = [priority_bvd_tested(B, N, A, κ) for κ in (1.0, 3.0, 8.0)]
-    @test issorted(bts)
-    ## Positives saturate toward s·B while analysed climbs: with κ>1 the
-    ## per-test positivity falls across rising A and positives plateau.
-    κ = 4.0
+    ## Cream BVD first: test min(B, A). A < B → all-BVD A; A ≥ B → all B.
+    @test exhausted_bvd_tested(80.0, 50.0) ≈ 50.0     # A < B, A all-BVD
+    @test exhausted_bvd_tested(80.0, 200.0) ≈ 80.0    # A ≥ B, exhausted
+    @test exhausted_bvd_tested(150.0, 211.0) ≈ 150.0
+    ## Empty analysed or empty backlog → zero.
+    @test exhausted_bvd_tested(80.0, 0.0) == 0.0
+    @test exhausted_bvd_tested(0.0, 200.0) == 0.0
+    ## Exhausted backlog (B fixed, A rising): positives plateau at s·B,
+    ## positivity = s·B/A falls.
+    B, s = 140.0, 0.7
     As = [211.0, 295.0, 295.0, 403.0]
-    pos = [priority_bvd_tested(B, N, A, κ) for A in As]
-    ppos = [s * priority_bvd_tested(B, N, A, κ) / A for A in As]
-    @test all(pos .<= B .+ 1e-9)                        # BVD tested ≤ B
-    @test ppos[1] > ppos[end]                          # positivity falls
-    @test issorted(pos)                                # positives plateau up
+    pos = [s * exhausted_bvd_tested(B, A) for A in As]    # ≈ s·B each
+    ppos = pos ./ As
+    @test all(isapprox.(pos, s * B; atol = 1e-9))         # plateau
+    @test ppos[1] > ppos[end]                              # positivity falls
+end
+
+@testitem "specificity term: spec=1 is s·q, false positives raise p_pos" begin
+    ## p_pos = s·q + (1−spec)·(1−q). Perfect specificity (spec=1) recovers
+    ## the true-positive-only s·q; lower spec adds false positives.
+    s, q = 0.7, 0.6
+    ppos(spec) = s * q + (1 - spec) * (1 - q)
+    @test ppos(1.0) ≈ s * q                       # perfect specificity
+    @test ppos(0.97) > s * q                       # FP raise positivity
+    @test ppos(0.90) > ppos(0.97)                  # lower spec → higher
+    ## All-BVD batch (q=1): no background to false-positive, p_pos = s.
+    @test (s * 1.0 + (1 - 0.95) * 0.0) ≈ s
+    ## All-background batch (q=0): p_pos = false-positive rate 1−spec.
+    @test (s * 0.0 + (1 - 0.95) * 1.0) ≈ 0.05
 end
 
 @testitem "default λ_bg prior matches half-normal SD 1" tags=[:slow] begin

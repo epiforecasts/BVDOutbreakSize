@@ -1705,26 +1705,48 @@ function joint_obs(o; observe = true)
               fill(missing, length(h.values)), h.offsets)
     rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
     dth, dth_off = _stream(o.death_history, o.total_deaths)
-    ## Confirmed cases enter as a single cumulative total at the cut-off
-    ## (offset 0), like the tests-analysed count. The per-sitrep confirmed
-    ## counts are small and the lab-processing delays behind them change
-    ## over time in ways that are difficult to model, so we currently use
-    ## only the cumulative total. With the tests-analysed total this gives
-    ## the per-test positivity.
+    ## Confirmed cases enter PER VINTAGE over the lab vintages that carry an
+    ## analysed denominator (`samples_analysed_history`, the 23-26 May
+    ## sitreps with denominators 211/295/295/403). Each vintage's cumulative
+    ## confirmed count is observed as a Binomial on its analysed count, so
+    ## the joint conditions on the per-vintage positivity trajectory
+    ## (exhaustion + modelled specificity in `confirmed_cases_model`) rather
+    ## than a single cumulative total. Confirmed counts are aligned to the
+    ## analysed offsets. When no per-vintage analysed history is available,
+    ## fall back to the single cumulative total at the cut-off.
     have_conf = o.confirmed_case_history !== missing ||
                 o.confirmed_cases !== missing
-    conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
-                 o.confirmed_case_history === missing ? missing :
-                 o.confirmed_case_history.values[end]
-    conf,
-    conf_off = have_conf ?
-               (Union{Missing, Int}[observe ? conf_total : missing], [0]) :
-               (Union{Missing, Int}[], Int[])
+    have_pervintage = have_conf &&
+                      o.confirmed_case_history !== missing &&
+                      o.samples_analysed_history !== missing
+    if have_pervintage
+        sa = o.samples_analysed_history
+        ch = o.confirmed_case_history
+        ## Cumulative confirmed at each analysed-vintage offset.
+        idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
+        any(isnothing, idx) &&
+            error("confirmed history missing an analysed-vintage offset")
+        conf_vals = [ch.values[i] for i in idx]
+        conf = observe ? Union{Missing, Int}[conf_vals...] :
+               fill(missing, length(conf_vals))
+        conf_off = collect(sa.offsets)
+        analysed = Union{Missing, Int}[sa.values...]
+    else
+        conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
+                     o.confirmed_case_history === missing ? missing :
+                     o.confirmed_case_history.values[end]
+        conf,
+        conf_off = have_conf ?
+                   (Union{Missing, Int}[observe ? conf_total : missing],
+            [0]) : (Union{Missing, Int}[], Int[])
+        analysed = Union{Missing, Int}[]
+    end
     edaily = observe ? o.export_deaths_daily :
              fill(missing, length(o.export_deaths_daily))
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
+            samples_analysed = analysed,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
@@ -1758,7 +1780,8 @@ prior_C_table #hide
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
-        :λ0, :Δλ, :τ_test, :s_test, :positivity, :p_positive]);
+        :λ0, :Δλ, :τ_test, :s_test, :spec_test,
+        :positivity, :p_positive]);
 
 #md # ```@raw html
 #md # </details>
@@ -2178,7 +2201,7 @@ start_date_fig #hide
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
-        :s_test, :τ_test, :λ0, :Δλ, :positivity, :p_positive,
+        :s_test, :spec_test, :τ_test, :λ0, :Δλ, :positivity, :p_positive,
         :cumulative_cases]; digits = 2);
 
 #md # ```@raw html
@@ -2236,7 +2259,7 @@ posterior_pair_fig #hide
 #md # ```
 
 lab_pair_fig = plot_pair(chn_joint,
-    [:α_rep, :θ_rep, :α_lab, :θ_lab, :s_test, :τ_test,
+    [:α_rep, :θ_rep, :α_lab, :θ_lab, :s_test, :spec_test, :τ_test,
         :λ0, :Δλ, :cumulative_cases];
     prior = prior_chn);
 

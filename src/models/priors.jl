@@ -145,71 +145,57 @@ end
 
 """
 PCR sensitivity prior. `Beta(6, 2)` (mean 0.75, 95% interval 0.39-0.97)
-truncated at `lower = 0.45`. Confirmation runs on the altona RealStar
+truncated at `lower = 0.48`. Confirmation runs on the altona RealStar
 Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11-67 RNA
 copies per reaction; the rapid Cepheid GeneXpert Ebola assay is
 Zaire-ebolavirus-specific and does not reliably detect Bundibugyo. The
 Beta keeps good analytical sensitivity plausible while carrying downside
 mass for early low-viral-load specimens and field handling.
 
-The lower truncation encodes a data-implied identifiability bound. With
-near-perfect assay specificity the per-test positivity is `s · q` with
-`q ∈ (0, 1]` the BVD share of the tested batch, so positivity `≤ s`: the
-observed *peak* positivity (0.479 at the first lab vintage) is a hard
-lower bound on the sensitivity, `s ≥ 0.48`. Without the floor the joint
-has a spurious low-sensitivity mode (`s ≈ 0.44`) that pairs with a tiny
-background-funded outbreak and cannot reach the observed peak; that mode
-is the residual small-outbreak multimodality (issue #151). Truncating at
-0.45 (just below the peak, for safety) removes it: in a 4-chain joint fit
-the worst R̂ falls from ≈ 1.50 to ≈ 1.18, the collapsed small-outbreak
-chain disappears (`P(s < 0.45)` 0.24 → 0.00, `P(C_T < 300)` 0.25 → 0.02)
-and all chains agree on the outbreak size. Pass `sensitivity_prior` to
-override (e.g. an untruncated `Beta(6, 2)` for a sensitivity analysis).
-Used by [`confirmed_cases_model`](@ref).
+The lower truncation at 0.48 is the data-implied identifiability bound
+and the convergence guarantee. Even with the false-positive term of the
+modelled specificity (`p_pos = s·q + (1−spec)·(1−q)`, see
+[`test_specificity_model`](@ref) and [`confirmed_cases_model`](@ref)), a
+free `s` admits a spurious low-sensitivity mode (`s ≈ 0.44`) that pairs
+with a tiny background/false-positive-funded outbreak — the residual
+small-outbreak multimodality (issue #151). Tightening the specificity
+prior alone does not remove it: in 4-chain joint fits the worst R̂ stays
+≈ 1.2-1.5 across specificity means from 0.97 up to 0.999. Flooring `s` at
+the observed peak positivity (0.479, a near-lower bound under high
+specificity) collapses the mode and is what brings the joint to
+R̂ ≤ 1.05. Pass `sensitivity_prior` to override (e.g. an untruncated
+`Beta(6, 2)` for a sensitivity analysis). Used by
+[`confirmed_cases_model`](@ref).
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = truncated(Beta(6.0, 2.0); lower = 0.45))
+        sensitivity_prior = truncated(Beta(6.0, 2.0); lower = 0.48))
     s_test ~ sensitivity_prior
     return (; s_test)
 end
 
 """
-Priority (triage) testing strength prior. The laboratory does not analyse
-the suspect pool in arrival order; it triages, testing the
-highest-pre-test-probability (most-likely-BVD) samples first. The
-cumulative BVD samples *tested* therefore saturate toward the BVD
-available in the pool as the analysed count grows, while later batches
-drain a low-yield background backlog. This produces the observed
-saturating confirmed positives (101, 105, 106, 121) against a near-
-doubling analysed volume (211, 295, 295, 403) and the falling per-vintage
-positivity (0.48 → 0.30) that a constant or ramped background cannot.
+PCR specificity prior. The per-test positivity of the confirmed stream is
+`p_pos = s·q + (1−spec)·(1−q)`, where `q` is the BVD share of the
+analysed batch (see [`confirmed_cases_model`](@ref)): true positives at
+sensitivity `s` plus false positives at false-positive rate `1−spec` on
+the non-BVD share. Modelling specificity lets the observed positivity
+exceed `s·q` (it can include false positives), so the observed peak no
+longer pins a hard lower bound on the sensitivity, replacing the earlier
+`s`-floor.
 
-Parameterised by a single front-loading strength `κ ≥ 1` (see
-[`priority_bvd_tested`](@ref)): with `B` BVD available, `N` the total
-available pool and `A` analysed, the cumulative BVD tested is
-`B · (1 − (1 − A/N)^κ)`. `κ = 1` is proportional (no-priority) sampling,
-`bvd_tested = B·A/N`, which makes the per-test positivity the available
-BVD share `s·B/N` — exactly the old constant-background model, so
-`Δκ = 0` (the `priority_off` flag) is the backward-compatible reduction.
-Larger `κ` front-loads BVD more strongly; `κ → ∞` creams all BVD into the
-first analysed samples (positivity → `s` early), which over-predicts the
-observed early 0.48, so the prior keeps `κ` soft. `κ = 1 + Δκ` with the
-default `Δκ ~ Normal+(0, 2)` (κ median ≈ 2.3, 95% ≈ 1–5): with only four
-lab vintages the strength is weakly identified, so the prior is
-deliberately informative and the BVD pool is tied to the trajectory (not
-a free pool-size parameter). Pass `delta_kappa_prior` to override.
+The default `Beta(50, 1.5)` is informative and high — mean ≈ 0.97, with
+most mass above 0.95 and a modest lower tail — reflecting the altona
+RealStar RT-PCR confirmation assay's strong analytical specificity. The
+prior is deliberately tight: a loose specificity prior lets the
+false-positive term absorb the positivity signal and reintroduces the
+low-sensitivity / small-outbreak multimodality (issue #151) the `s`-floor
+had suppressed. Pass `specificity_prior` to override (e.g. a looser Beta
+for a sensitivity analysis). Used by [`confirmed_cases_model`](@ref).
 """
-@model function test_priority_model(;
-        delta_kappa_prior = truncated(Normal(0.0, 2.0); lower = 0),
-        priority_off::Bool = false)
-    if priority_off
-        Δκ = 0.0
-        κ_priority = 1.0
-    else
-        Δκ ~ delta_kappa_prior
-        κ_priority = 1.0 + Δκ
-    end
-    return (; Δκ, κ_priority)
+@model function test_specificity_model(;
+        specificity_prior = Beta(50.0, 1.5))
+    spec_test ~ specificity_prior
+    return (; spec_test)
 end
 
 """

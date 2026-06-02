@@ -163,34 +163,32 @@ function bg_tested_integral(b::BackgroundRamp{T}, α, θ, t;
 end
 
 """
-Cumulative BVD samples *tested* under soft priority (triage) testing.
-The laboratory analyses the suspect pool in order of pre-test BVD
-probability, creaming the most-likely-BVD samples first, so the BVD
-fraction of the analysed batch is highest early and falls as the pool is
-drained. Given `B` BVD samples available in the pool, `N` total samples
-available (`B` BVD plus background) and `A` samples analysed, the
-cumulative BVD tested is
+Cumulative BVD samples *tested* under priority (triage) testing in the
+exhaustion limit. The laboratory analyses the suspect backlog in order of
+pre-test BVD probability, creaming the most-likely-BVD samples first.
+With `B` BVD samples available in the backlog and `A` samples analysed,
+all of `B` is tested once `A ≥ B` (the BVD pool is exhausted) and `A`
+all-BVD samples are tested while `A < B`:
 
 ```math
-\\text{BVD}_\\text{tested}(A) = B\\,\\bigl(1 - (1 - A/N)^{\\kappa}\\bigr),
+\\text{BVD}_\\text{tested}(A) = \\min(B, A).
 ```
 
-a concave front-loading in the analysed fraction `A/N` controlled by the
-strength `κ ≥ 1` (see [`test_priority_model`](@ref)). `κ = 1` is
-proportional sampling `B·A/N` (the BVD share of the analysed batch is the
-pool share `B/N`, recovering the no-priority model); `κ → ∞` creams all
-`B` into the first analysed samples. `A/N` is clamped to `[0, 1]` (a pool
-smaller than the analysed count is fully drained, so all `B` is tested),
-and `B` is clamped to `[0, N]`. The background tested is the remainder
-`A − BVD_tested(A)`, and the per-test positivity is
-`s · BVD_tested(A) / A`. AD-friendly: smooth in `B`, `N`, `A` and `κ`.
+The background tested is the remainder `A − BVD_tested(A) = max(A − B, 0)`,
+and the per-test positivity combines true and false positives,
+`s · q + (1 − \\text{spec}) · (1 − q)` with the analysed BVD share
+`q = BVD_tested(A) / A` (see [`confirmed_cases_model`](@ref)). On the
+outbreak data the backlog is exhausted at every vintage (`A ≫ B`), so
+`BVD_tested ≈ B`: positives plateau at the true-positive ceiling `s·B`
+while the analysed volume climbs and positivity falls. The soft
+front-loading strength `κ` of the earlier parameterisation is dropped —
+it is inoperative under exhaustion (all of `B` is tested regardless),
+leaving this clean exhaustion limit. `min` is AD-compatible.
 """
-function priority_bvd_tested(B, N, A, κ)
-    R = float(promote_type(typeof(B), typeof(N), typeof(A), typeof(κ)))
-    (A <= zero(A) || N <= zero(N)) && return zero(R)
-    Bc = clamp(B, zero(R), convert(R, N))
-    frac = clamp(A / N, zero(R), one(R))
-    return convert(R, Bc * (one(R) - (one(R) - frac)^κ))
+function exhausted_bvd_tested(B, A)
+    R = float(promote_type(typeof(B), typeof(A)))
+    (A <= zero(A) || B <= zero(B)) && return zero(R)
+    return convert(R, min(B, A))
 end
 
 """

@@ -238,49 +238,52 @@ Binomial (equations (23)-(24) of the walkthrough):
 ```math
 C_v \\sim \\mathrm{Binomial}(A_v,\\ p_{pos,v}),
 \\qquad
-p_{pos,v} = \\frac{s_{test}\\, \\text{BVD}_{tested}(A_v)}{A_v},
+p_{pos,v} = s_{test}\\, q_v + (1 - \\text{spec})\\,(1 - q_v),
+\\qquad
+q_v = \\frac{\\text{BVD}_{tested}(A_v)}{A_v},
 ```
 
 where `A_v` is the cumulative analysed count to edge `v`
-(`samples_analysed`, a *known* denominator, not modelled) and
-`BVD_tested(A_v)` is the cumulative BVD among those `A_v` analysed
-samples under **priority (triage) testing**: the lab analyses the suspect
-pool in order of pre-test BVD probability, creaming the most-likely-BVD
-samples first. With `B_v` BVD available, `N_v` the total available pool
-and strength `κ` (see [`test_priority_model`](@ref),
-[`priority_bvd_tested`](@ref)),
+(`samples_analysed`, a *known* denominator, not modelled), `q_v` the BVD
+share of the analysed batch, `s_test` the PCR sensitivity (true positives
+on the BVD share) and `1 − spec` the false-positive rate (false positives
+on the non-BVD share; see [`test_specificity_model`](@ref)). Modelling
+specificity lets the observed positivity exceed `s·q`, so the peak no
+longer forces a hard lower bound on `s`. `BVD_tested(A_v)` is the
+cumulative BVD among those `A_v` analysed under **priority/exhaustion
+testing**: the lab triages, creaming the most-likely-BVD samples first,
+so with `B_v` BVD available (see below),
 
 ```math
-\\text{BVD}_{tested}(A_v) = B_v\\,\\bigl(1 - (1 - A_v/N_v)^{\\kappa}\\bigr),
-\\qquad \\text{bg}_{tested}(A_v) = A_v - \\text{BVD}_{tested}(A_v).
+\\text{BVD}_{tested}(A_v) = \\min(B_v,\\ A_v),
+\\qquad \\text{bg}_{tested}(A_v) = A_v - \\text{BVD}_{tested}(A_v)
 ```
 
-The cumulative BVD tested saturates toward `B_v` as `A_v` grows, so the
-confirmed positives plateau while the analysed volume climbs and the
-per-test positivity falls — the observed saturating-positives /
-falling-positivity pattern that a constant or ramped background cannot
-produce. `κ = 1` is proportional sampling, `BVD_tested = B·A/N`, giving
-`p_pos = s·B/N` (the old available-BVD-share model); `Δκ = 0` is the
-backward-compatible reduction. The cumulative form is robust to vintages
-with zero newly-analysed samples (e.g. the 25 May Ituri stoppage).
+([`exhausted_bvd_tested`](@ref)). On the data the BVD backlog is exhausted
+at every vintage (`A_v ≫ B_v`), so `BVD_tested ≈ B_v`: positives plateau
+near the ceiling `s·B_v` (plus false positives) while the analysed volume
+climbs and the per-test positivity falls — the observed
+saturating-positives / falling-positivity pattern a constant or ramped
+background cannot produce. The earlier soft front-loading strength `κ` is
+dropped: it is inoperative under exhaustion (all of `B` is tested
+regardless). The cumulative form is robust to vintages with zero
+newly-analysed samples (e.g. the 25 May Ituri stoppage).
 
-The available pool is the FULL cumulative lab-eligible backlog to each
+The available backlog is the FULL cumulative lab-eligible pool to each
 vintage (the high-suspicion samples the lab triages first are those
 accumulated since seeding, not just the last few days): `B_v` is
 `p_{DRC,v}` times
 ``I_{lab,0}(s_v) = \\int_0^{s_v} \\mu_{BVD,0}(u)\\, f_{lab}(s_v - u)\\,du``,
 `μ_BVD,0` the unit-ascertainment onset-to-report BVD cumulative (kernel
-`f_rep` from [`reported_cases_model`](@ref)) and `s_test` the PCR
-sensitivity. A [`DailyBVDTrajectory`](@ref) precomputes `μ_BVD,0` once on
-a shared Gauss-Legendre node set. The background available is the
-constant-rate non-BVD backlog
+`f_rep` from [`reported_cases_model`](@ref)). A [`DailyBVDTrajectory`](@ref)
+precomputes `μ_BVD,0` once on a shared Gauss-Legendre node set. The
+background available is the constant-rate non-BVD backlog
 ``\\int_0^{s_v} \\lambda_{bg}\\, F_{lab}(s_v - u)\\,du`` (via
-[`bg_tested_integral`](@ref); the ramp is dormant, `Δλ = 0`), so the
-time-variation lives in the testing order / exhaustion, not the
-background rate. Anchoring the pool to the short reporting window instead
-starves it (the analysed counts far exceed an 8-day BVD slice), so
-`report_onset_offset` is retained only for API symmetry with the
-reported/ramp path and does not shrink the priority pool.
+[`bg_tested_integral`](@ref); the ramp is dormant, `Δλ = 0`). Anchoring
+the pool to the short reporting window instead starves it (the analysed
+counts far exceed an 8-day BVD slice), so `report_onset_offset` is
+retained only for API symmetry with the reported/ramp path and does not
+shrink the backlog.
 
 `samples_analysed` is the per-vintage analysed denominator vector aligned
 with `t_edges`. Pass a vector of `missing` entries (with a non-missing
@@ -311,15 +314,15 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         t_edges::AbstractVector, tests_edge::Real;
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
-        test_priority = test_priority_model(),
+        test_specificity = test_specificity_model(),
         report_onset_offset::Union{Nothing, Real} = nothing,
         onset_fraction::Real = 1.0)
     lab_state ~ to_submodel(lab_delay, false)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
-    priority_state ~ to_submodel(test_priority, false)
+    specificity_state ~ to_submodel(test_specificity, false)
     f_lab = lab_state.dist
     s_test = sensitivity_state.s_test
-    κ_priority = priority_state.κ_priority
+    spec_test = specificity_state.spec_test
     r = growth_state.r
     T = growth_state.T
     α_lab = lab_state.α
@@ -330,7 +333,7 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     ## anchoring the pool to the short reporting window starves it (the
     ## analysed counts 211-403 far exceed an 8-day BVD slice), collapsing
     ## positivity. `report_onset_offset` is retained for API symmetry with
-    ## the reported/ramp path but does not shrink the priority pool.
+    ## the reported/ramp path but does not shrink the backlog pool.
     background_pool = background_ramp(bg.λ0, bg.Δλ, bg.scale, zero(T))
 
     n = length(t_edges)
@@ -361,31 +364,30 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     Tt = eltype(I_lab0_edges)
     p_pos = Vector{Tt}(undef, n)
     Λ_at_edges = Vector{Tt}(undef, n)
-    ## Priority/exhaustion testing on cumulative counts. The lab analyses
-    ## the suspect backlog in order of pre-test BVD probability, creaming
-    ## the most-likely-BVD samples first, so the BVD share of the analysed
-    ## batch is highest early and falls as the backlog drains. The available
-    ## pool is the FULL cumulative lab-eligible backlog to each vintage:
+    ## Priority/exhaustion testing with modelled specificity, on cumulative
+    ## counts. The lab analyses the suspect backlog in order of pre-test BVD
+    ## probability, creaming the most-likely-BVD samples first. The
+    ## available backlog to each vintage is the FULL cumulative lab-eligible
+    ## pool:
     ##  - BVD available  B_i = p_DRC · I_lab,0(s_i)  (all BVD eligible to
     ##    date — the high-suspicion samples the lab triages first);
     ##  - background available bg_i = ∫_0^{s_i} λ_bg F_lab du (constant-rate
-    ##    non-BVD backlog, lab-convolved, via `bg_tested_integral`);
-    ##  - total pool N_i = B_i + bg_i.
-    ## The observed cumulative analysed `A_i` (data) draws from this pool
-    ## with BVD front-loaded by strength κ: BVD_tested = B·(1−(1−A/N)^κ)
-    ## (`priority_bvd_tested`), background-tested = A − BVD_tested, and the
-    ## per-test positivity = s · BVD_tested / A. When the BVD backlog is
-    ## exhausted (A ≥ N) all of B is tested regardless of κ, so positives
-    ## plateau at s·B while A climbs and positivity = s·B/A falls — the
-    ## exhaustion limit that reproduces the saturating positives. κ = 1
-    ## (priority off) gives BVD_tested = B·A/N, i.e. positivity = s·B/N,
-    ## the proportional (no-priority) reduction. The binomial conditions on
-    ## the observed analysed denominator. The pool is the lab-eligible
-    ## suspect count (not thinned by `τ_test`, which stays the
-    ## suspected-stream sampling fraction in `reported_cases_model`).
+    ##    non-BVD backlog, lab-convolved, via `bg_tested_integral`).
+    ## Among the observed cumulative analysed `A_i` (data), the BVD tested
+    ## is the exhaustion limit `min(B_i, A_i)` (`exhausted_bvd_tested`); the
+    ## remainder `A_i − BVD_tested` is background tested. The per-test
+    ## positivity combines true and false positives,
+    ##   p_pos = s·q + (1 − spec)·(1 − q),  q = BVD_tested / A,
+    ## with `s` the sensitivity and `1 − spec` the false-positive rate (see
+    ## [`test_specificity_model`](@ref)). On the data the backlog is
+    ## exhausted at every vintage (A ≫ B), so BVD_tested ≈ B: positives
+    ## plateau at the ceiling s·B (+ false positives) while A climbs and
+    ## positivity falls. The binomial conditions on the observed analysed
+    ## denominator. The pool is the lab-eligible suspect count (not thinned
+    ## by `τ_test`, which stays the suspected-stream sampling fraction in
+    ## `reported_cases_model`).
     bvd_tested_unit = zero(Tt)
-    bvd_avail_te = zero(Tt)
-    bg_avail_te = zero(Tt)
+    bg_tested_te = zero(Tt)
     N_te = zero(Tt)
     for i in 1:n
         raw_bvd = p_drc_per_bin[i] * I_lab0_edges[i]
@@ -397,9 +399,12 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         N_i = bvd_avail + bg_avail
         A_i = samples_analysed[i] === missing ? N_i :
               convert(Tt, samples_analysed[i])
-        bvd_tested = priority_bvd_tested(bvd_avail, N_i, A_i, κ_priority)
-        bvd_tested = max(bvd_tested, eps(Tt))
-        p_raw = A_i > zero(Tt) ? s_test * bvd_tested / A_i : zero(Tt)
+        bvd_tested = exhausted_bvd_tested(bvd_avail, A_i)
+        ## Background actually tested = analysed minus BVD tested (the
+        ## low-yield remainder), clamped at zero.
+        bg_tested_i = max(A_i - bvd_tested, zero(Tt))
+        q = A_i > zero(Tt) ? bvd_tested / A_i : zero(Tt)
+        p_raw = s_test * q + (one(Tt) - spec_test) * (one(Tt) - q)
         p_pos[i] = isfinite(p_raw) ?
                    clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
         ## Expected cumulative confirmed: analysed denominator × cumulative
@@ -409,8 +414,7 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
                          convert(Tt, samples_analysed[i]))
         if t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge)))
             bvd_tested_unit = bvd_tested
-            bvd_avail_te = bvd_avail
-            bg_avail_te = bg_avail
+            bg_tested_te = bg_tested_i
             N_te = N_i
         end
     end
@@ -429,27 +433,28 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     end
 
     ## Tested-volume mean at `tests_edge`: the total available pool
-    ## N = BVD available + background available (lab-eligible counts
-    ## accrued over the testing window from `t_report`); this is the
-    ## expected processed volume the analysed-count NegBinomial conditions
-    ## on. `BVD_tested` is the priority-creamed BVD among the analysed
-    ## samples at `tests_edge`.
+    ## N = BVD available + background available (lab-eligible backlog); this
+    ## is the expected processed volume the analysed-count NegBinomial
+    ## conditions on. `BVD_tested` is the exhausted BVD creamed among the
+    ## analysed samples at `tests_edge`; `bg_tested` is the background
+    ## ACTUALLY tested there (analysed minus BVD tested), not the available
+    ## background pool.
     BVD_tested := isfinite(bvd_tested_unit) ?
                   max(bvd_tested_unit, eps(typeof(bvd_tested_unit))) :
                   eps(typeof(bvd_tested_unit))
-    bg_tested := isfinite(bg_avail_te) ?
-                 max(bg_avail_te, eps(typeof(bg_avail_te))) :
-                 eps(typeof(bg_avail_te))
+    bg_tested := isfinite(bg_tested_te) ?
+                 max(bg_tested_te, eps(typeof(bg_tested_te))) :
+                 eps(typeof(bg_tested_te))
 
     expected_tested := isfinite(N_te) ? max(N_te, eps(typeof(N_te))) :
                        eps(typeof(N_te))
-    ## Per-test positivity at `tests_edge`: s × priority BVD share of the
-    ## analysed batch. Exposed for comparison with the sitrep
-    ## `Taux de positivité`. Uses the observed analysed count at the
-    ## tested-volume edge when present, else the modelled pool N.
+    ## Per-test positivity at `tests_edge`: true positives s·q plus false
+    ## positives (1−spec)·(1−q) on the analysed BVD share q. Exposed for
+    ## comparison with the sitrep `Taux de positivité`. Uses the observed
+    ## analysed count at the tested-volume edge when present, else N.
     A_te = tests_analysed === missing ? N_te : convert(Tt, tests_analysed)
-    p_pos_raw = A_te > zero(Tt) ? s_test * bvd_tested_unit / A_te :
-                zero(Tt)
+    q_te = A_te > zero(Tt) ? bvd_tested_unit / A_te : zero(Tt)
+    p_pos_raw = s_test * q_te + (one(Tt) - spec_test) * (one(Tt) - q_te)
     p_positive := isfinite(p_pos_raw) ?
                   clamp(p_pos_raw,
         eps(typeof(p_pos_raw)),
@@ -467,7 +472,7 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     expected_confirmed_total := Λ_at_edges[end]
 
     return (; expected_tested, p_positive, p_pos,
-        BVD_tested, bg_tested, s_test, τ_test, p_drc_per_bin,
+        BVD_tested, bg_tested, s_test, spec_test, τ_test, p_drc_per_bin,
         expected_confirmed_total,
         lab_delay_dist = f_lab,
         I_lab0_edges, Λ_at_edges)
