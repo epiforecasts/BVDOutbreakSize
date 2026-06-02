@@ -144,17 +144,31 @@ growth the convolution is the exact constant rescale `mgf(incubation,
 end
 
 """
-PCR sensitivity prior. Beta(6, 2): mean 0.75, 95% interval 0.39-0.97.
-Confirmation runs on the altona RealStar Filovirus Screen RT-PCR, which
-detects Bundibugyo virus at 11-67 RNA copies per reaction; the rapid
-Cepheid GeneXpert Ebola assay is Zaire-ebolavirus-specific and does not
-reliably detect Bundibugyo. The prior keeps good analytical sensitivity
-plausible while carrying substantial downside mass for early
-low-viral-load specimens and field handling. Used by
-[`confirmed_cases_model`](@ref).
+PCR sensitivity prior. `Beta(6, 2)` (mean 0.75, 95% interval 0.39-0.97)
+truncated at `lower = 0.45`. Confirmation runs on the altona RealStar
+Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11-67 RNA
+copies per reaction; the rapid Cepheid GeneXpert Ebola assay is
+Zaire-ebolavirus-specific and does not reliably detect Bundibugyo. The
+Beta keeps good analytical sensitivity plausible while carrying downside
+mass for early low-viral-load specimens and field handling.
+
+The lower truncation encodes a data-implied identifiability bound. With
+near-perfect assay specificity the per-test positivity is `s · q` with
+`q ∈ (0, 1]` the BVD share of the tested batch, so positivity `≤ s`: the
+observed *peak* positivity (0.479 at the first lab vintage) is a hard
+lower bound on the sensitivity, `s ≥ 0.48`. Without the floor the joint
+has a spurious low-sensitivity mode (`s ≈ 0.44`) that pairs with a tiny
+background-funded outbreak and cannot reach the observed peak; that mode
+is the residual small-outbreak multimodality (issue #151). Truncating at
+0.45 (just below the peak, for safety) removes it: in a 4-chain joint fit
+the worst R̂ falls from ≈ 1.50 to ≈ 1.18, the collapsed small-outbreak
+chain disappears (`P(s < 0.45)` 0.24 → 0.00, `P(C_T < 300)` 0.25 → 0.02)
+and all chains agree on the outbreak size. Pass `sensitivity_prior` to
+override (e.g. an untruncated `Beta(6, 2)` for a sensitivity analysis).
+Used by [`confirmed_cases_model`](@ref).
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(6.0, 2.0))
+        sensitivity_prior = truncated(Beta(6.0, 2.0); lower = 0.45))
     s_test ~ sensitivity_prior
     return (; s_test)
 end

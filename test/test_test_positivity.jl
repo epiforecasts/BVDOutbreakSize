@@ -4,6 +4,23 @@
 ## than were observed: it is degenerate with outbreak size, so a diffuse
 ## prior resolves at the high end where deaths and exports anchor `C_T`.
 
+@testitem "sensitivity prior is floored at the data-implied bound" begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: minimum
+    using BVDOutbreakSize: test_sensitivity_model
+
+    ## Positivity = s·q ≤ s, so the observed peak positivity 0.479 is a
+    ## hard lower bound on sensitivity. The default prior truncates
+    ## Beta(6,2) at 0.45, removing the spurious low-s mode. Every draw must
+    ## clear the floor.
+    chn = sample(MersenneTwister(20260518), test_sensitivity_model(),
+        Prior(), 5_000; progress = false)
+    s = vec(Array(chn[:s_test]))
+    @test all(s .>= 0.45)
+    @test minimum(s) >= 0.45
+end
+
 @testitem "background ramp: closed-form rate and cumulative" begin
     using BVDOutbreakSize: background_ramp, bg_rate, bg_cumulative
 
