@@ -734,13 +734,27 @@ vintage_table #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: lab_delay_model</summary>
+#md # <details><summary>Submodel: test_selection_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.lab_delay_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.test_selection_model()), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: test_specificity_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.test_specificity_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1393,9 +1407,8 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
-#md #         Int[], Int[], missing, nothing, 1.0, Float64[],
-#md #         BVDOutbreakSize.background_ramp(1.0, 0.0, 7.0), 1.0,
-#md #         nothing, Float64[], 1.0)), "\n```"))
+#md #         Int[], Int[], Union{Missing, Int}[], missing, nothing, 1.0,
+#md #         Float64[], 0.0, 0.7, nothing, Float64[], 1.0)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1731,6 +1744,19 @@ function joint_obs(o; observe = true)
                fill(missing, length(conf_vals))
         conf_off = collect(sa.offsets)
         analysed = Union{Missing, Int}[sa.values...]
+        ## Per-vintage cumulative samples received (`Cumul échantillons
+        ## reçus`), aligned to the analysed offsets, condition the forwarded
+        ## fraction τ_forward via `R_v ~ NegBinomial(τ_forward·N_susp,v, k)`.
+        if o.samples_received_history !== missing
+            sr = o.samples_received_history
+            ridx = [findfirst(==(off), sr.offsets) for off in sa.offsets]
+            received = any(isnothing, ridx) ? Union{Missing, Int}[] :
+                       (observe ?
+                        Union{Missing, Int}[sr.values[i] for i in ridx] :
+                        fill(missing, length(ridx)))
+        else
+            received = Union{Missing, Int}[]
+        end
     else
         conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
                      o.confirmed_case_history === missing ? missing :
@@ -1740,6 +1766,7 @@ function joint_obs(o; observe = true)
                    (Union{Missing, Int}[observe ? conf_total : missing],
             [0]) : (Union{Missing, Int}[], Int[])
         analysed = Union{Missing, Int}[]
+        received = Union{Missing, Int}[]
     end
     edaily = observe ? o.export_deaths_daily :
              fill(missing, length(o.export_deaths_daily))
@@ -1747,15 +1774,16 @@ function joint_obs(o; observe = true)
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
             samples_analysed = analysed,
+            samples_received = received,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
 
 ## Dummy non-missing confirmed/tested counts instantiate the laboratory
-## submodel so its priors (α_lab, θ_lab, s, plus the derived per-test
-## positivity) appear in the prior chain for the lab-pipeline pair plot.
-## Under `Prior()` the likelihood is discarded, so the placeholder values
-## do not influence the sampled priors.
+## submodel so its priors (s, spec, the severe-first selection q0/qinf/
+## decay_scale, plus the derived per-test positivity) appear in the prior
+## chain for the lab-pipeline pair plot. Under `Prior()` the likelihood is
+## discarded, so the placeholder values do not influence the sampled priors.
 prior_args = joint_obs(obs; observe = false)
 prior_chn = sample(
     bvd_joint(missing, prior_args.deaths, prior_args.reported,
@@ -1780,7 +1808,8 @@ prior_C_table #hide
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
-        :λ0, :Δλ, :τ_test, :s_test, :spec_test,
+        :λ_bg, :τ_forward, :s_test, :spec_test,
+        :q0, :qinf, :decay_scale,
         :positivity, :p_positive]);
 
 #md # ```@raw html
@@ -1823,6 +1852,7 @@ chn_joint = nuts_sample(
     fit_args.export_deaths; fit_args.kw...,
     growth = growth_now,
     first_export_detection_delta = obs.first_export_detection_delta,
+    report_onset_offset = report_onset_offset(obs.as_of_date),
     genetic = genetic_seeding));
 
 chn_exports = nuts_sample(
@@ -2200,9 +2230,10 @@ start_date_fig #hide
 
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
-        :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
-        :s_test, :spec_test, :τ_test, :λ0, :Δλ, :positivity, :p_positive,
-        :cumulative_cases]; digits = 2);
+        :inv_sqrt_k, :k, :α_rep, :θ_rep,
+        :s_test, :spec_test, :τ_forward, :λ_bg, :q0, :qinf, :decay_scale,
+        :positivity, :p_positive, :q_cutoff, :q_baseline,
+        :cumulative_infections, :cumulative_cases]; digits = 2);
 
 #md # ```@raw html
 #md # </details>
@@ -2259,8 +2290,8 @@ posterior_pair_fig #hide
 #md # ```
 
 lab_pair_fig = plot_pair(chn_joint,
-    [:α_rep, :θ_rep, :α_lab, :θ_lab, :s_test, :spec_test, :τ_test,
-        :λ0, :Δλ, :cumulative_cases];
+    [:α_rep, :θ_rep, :s_test, :spec_test, :τ_forward,
+        :λ_bg, :q0, :qinf, :decay_scale, :cumulative_cases];
     prior = prior_chn);
 
 #md # ```@raw html
@@ -2317,17 +2348,22 @@ pp_joint = predict(
         pre_start_deaths = missing,
         pre_detection_exports = missing,
         first_export_detection_delta = obs.first_export_detection_delta,
+        report_onset_offset = report_onset_offset(obs.as_of_date),
         genetic = genetic_seeding),
     chn_joint);
 pp_exports = vec(Array(pp_joint[:exported_cases]));
-## The DRC deaths and reported streams are per-vintage increment vectors
-## and confirmed is a single cumulative total; sum each draw's bins for
-## the cumulative-total posterior predictive. Export deaths are a per-day
-## series held the same way.
+## The DRC deaths and reported streams are per-vintage increment vectors;
+## sum each draw's bins for the cumulative-total posterior predictive.
+## Confirmed is a per-vintage *cumulative* vector (Binomial on the analysed
+## denominator), so the cut-off total is the last vintage, not the sum.
+## Export deaths are a per-day series summed the same way as the increments.
 pp_deaths = vec(sum.(pp_joint[@varname(total_deaths)]));
 pp_cases = vec(sum.(pp_joint[@varname(reported_cases)]));
-pp_confirmed = vec(sum.(pp_joint[@varname(confirmed_cases)]));
-pp_tests = vec(Array(pp_joint[:tests_analysed]));
+pp_confirmed = vec([v[end] for v in pp_joint[@varname(confirmed_cases)]]);
+## The tested-volume stream is now the per-vintage cumulative samples
+## *received* (`R_v ~ NegBinomial(τ_forward · N_susp,v, k)`), not a single
+## tests-analysed total; take the last vintage's cumulative for the panel.
+pp_tests = vec([v[end] for v in pp_joint[@varname(samples_received)]]);
 pp_exports_deaths = vec(sum.(pp_joint[@varname(export_deaths_daily)]));
 
 joint_ppc_fig = plot_posterior_predictive(
@@ -2338,7 +2374,7 @@ joint_ppc_fig = plot_posterior_predictive(
     pp_exports_deaths = pp_exports_deaths,
     obs_exports_deaths = obs.exports_deaths,
     pp_tests = pp_tests,
-    obs_tests = obs.cumulative_tests_analysed,
+    obs_tests = obs.samples_received_history.values[end],
     pp_confirmed = pp_confirmed,
     obs_confirmed = obs.confirmed_cases);
 
@@ -2441,7 +2477,8 @@ forecast = forecast_reported(chn_joint;
     obs_deaths = obs.total_deaths,
     obs_exports = EXPORTED_CASES,
     obs_confirmed = obs.confirmed_cases,
-    obs_tests = obs.cumulative_tests_analysed);
+    obs_tests = obs.samples_received_history.values[end],
+    report_onset_offset = report_onset_offset(obs.as_of_date));
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
@@ -2866,12 +2903,16 @@ pp_exports_deaths_only = vec(sum.(predict(
     exports_deaths_only_model(fill(missing, length(obs.export_deaths_daily));
         pre_start_deaths = missing),
     chn_exports_deaths)[@varname(export_deaths_daily)]));
-## Laboratory-pipeline fit: predict both lab observations from the
-## confirmed-only posterior for the individual row of the grid.
+## Laboratory-pipeline fit: predict the confirmed Binomial and the
+## received-count NegBinomial from the confirmed-only posterior for the
+## individual row of the grid. Both are single-vintage vectors here.
 pp_confirmed_only_chn = predict(
-    confirmed_only_model(missing, missing), chn_confirmed);
-pp_confirmed_only = vec(Array(pp_confirmed_only_chn[:confirmed_cases]));
-pp_tests_only = vec(Array(pp_confirmed_only_chn[:tests_analysed]));
+    confirmed_only_model(missing, obs.cumulative_tests_analysed),
+    chn_confirmed);
+pp_confirmed_only = vec([v[end]
+    for v in pp_confirmed_only_chn[@varname(confirmed_cases)]]);
+pp_tests_only = vec([v[end]
+    for v in pp_confirmed_only_chn[@varname(samples_received)]]);
 
 ppc_grid_fig = plot_posterior_predictive_grid(;
     individual = (; exports = pp_exports_only,
@@ -2890,7 +2931,7 @@ ppc_grid_fig = plot_posterior_predictive_grid(;
         exports_deaths = obs.exports_deaths,
         deaths = obs.total_deaths,
         cases = obs.reported_cases,
-        tests = obs.cumulative_tests_analysed,
+        tests = obs.samples_received_history.values[end],
         confirmed = obs.confirmed_cases)
 );
 
