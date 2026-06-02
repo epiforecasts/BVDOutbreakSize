@@ -41,16 +41,21 @@
 #   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
 #   $\tau$, case fatality ratio (CFR), onset-to-death shape and scale,
-#   detection window $w$,
 #   daily traveller volume and surveillance dispersion all have
 #   priors and are sampled jointly. McCabe et al.
 #   [mccabe2026](@cite) fix each and
 #   sweep.
-# - *Exact cumulative integral for exports* —
-#   $q\cdot\int_{T-w}^{T} C(s)\,ds$ with travel rate $q$ — rather than
-#   the small-$rw$ simplification $q\cdot w\cdot C(T)$ used by McCabe et
-#   al. (and by [imai2020](@cite) before them). The two forms agree
-#   as $r \to 0$.
+# - *Explicit onset-to-detection delay for exports.* A case is
+#   detectable abroad from symptom onset until it is detected, so the
+#   exports follow a delay convolution of the onset trajectory rather
+#   than McCabe et al.'s fixed detection window $w$. The
+#   onset-to-detection delay reuses the DRC onset-to-report delay, so the
+#   suspected-case stream informs it rather than a standalone prior. The
+#   rectangular-window form $q\cdot\int_{T-w}^{T} C(s)\,ds$ is kept for
+#   the McCabe et al. comparison, where we still use this exact integral
+#   rather than the small-$rw$ simplification $q\cdot w\cdot C(T)$ of
+#   McCabe et al. (and [imai2020](@cite) before them); the two forms
+#   agree as $r \to 0$.
 # - *Exact (not large-$T$ approximate) deaths convolution.* For a
 #   gamma delay the convolution integral has an exact closed form
 #   that carries a $\gamma(\alpha, (\beta + r)T)/\Gamma(\alpha)$
@@ -189,12 +194,15 @@
 #   refits the joint model under the faster early-epidemic rate to show
 #   how much the timing, growth-rate and outbreak-size estimates are
 #   impacted.
-# - *Detection window is weakly motivated.* $w$ lumps incubation and
-#   onset-to-detection together — both poorly characterised for BVD —
-#   so the quantity itself is loosely defined. Its prior is even less
-#   grounded: it simply spans the 10–20 day windows McCabe et al. sweep,
-#   with no independent estimate behind it, so the exports stream leans
-#   on an assumption rather than data.
+# - *Export detection delay reuses the DRC reporting delay.* The default
+#   model replaces McCabe et al.'s lumped detection window with an
+#   onset-to-detection delay convolution, with incubation handled by the
+#   infection-to-onset step. We assume the onset-to-detection delay abroad
+#   equals the DRC onset-to-report delay, so the suspected-case stream
+#   pins it; the single export count cannot identify a separate delay. The
+#   export timing therefore rests on this assumption rather than an
+#   independent Uganda estimate. McCabe et al.'s rectangular window is
+#   kept for the comparison.
 # - *Exports treated as DRC importations only.* The exports likelihood
 #   conditions on the three WHO-confirmed travel-related cases in
 #   Uganda and excludes the two domestic contacts (a driver and a
@@ -414,15 +422,14 @@ vintage_table #hide
 # | Parameter | Exports | Deaths | Cases | Confirmed & tested | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Growth $C(s) = e^{rs}$ | ● | ● | ● | ● | ● | ● | ● |
-# | Incubation period |  | ● | ● | ● | ● |  |  |
+# | Incubation period | ● | ● | ● | ● | ● | ● |  |
 # | Onset-to-death delay |  | ● |  |  | ● |  |  |
 # | Case-fatality ratio |  | ● |  |  | ● |  |  |
-# | Onset-to-report delay |  |  | ● | ● |  |  |  |
+# | Onset-to-report delay | ● |  | ● | ● | ● | ● |  |
 # | Report-to-lab delay |  |  |  | ● |  |  |  |
 # | PCR sensitivity $s$ |  |  |  | ● |  |  |  |
 # | Testing fraction $\tau$ |  |  |  | ● |  |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  |  |  |
-# | Detection window | ● |  |  |  | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● | ● |  |
 # | Traveller volume | ● |  |  |  | ● | ● |  |
@@ -787,12 +794,15 @@ vintage_table #hide
 cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
 cfr_prior_fig #hide
 
-# ##### Detection window
+# ##### Detection window (McCabe comparison)
 #
 # $w$ is the mean time during which a case is still infectious and
-# detectable abroad (incubation + onset-to-detection). The prior is
+# detectable abroad (incubation + onset-to-detection). This rectangular
+# window is the McCabe et al. mechanism, kept for the comparison through
+# `imperial_only_model`; the default export model instead uses the
+# onset-to-detection delay convolution described next. The prior is
 # based on the detection windows McCabe et al. sweep in their Method 1
-# scenarios (10, 15 and 20 days): it is centred on their central 15-day
+# scenarios (10, 15 and 20 days). It is centred on their central 15-day
 # value with an SD wide enough to cover the 10–20 day range.
 #
 # ```math
