@@ -273,3 +273,35 @@ end
     @test f_det.α ≈ α_rep
     @test f_det.θ ≈ θ_rep
 end
+
+@testitem "window detection-timing survival matches expected_exports" begin
+    using Distributions: Gamma
+    using Turing: sample, Prior
+    using FlexiChains: VNChain
+    using BVDOutbreakSize: exports_detection_timing_model, expected_exports
+
+    ## Exercises the window-based detection-timing submodel (the McCabe
+    ## revert-path component, off the default joint path): its survival
+    ## term must equal the at-risk person-time `expected_exports` at the
+    ## earlier elapsed time `t1 = T - delta`.
+    r = 0.05
+    growth_state = (; cumulative = s -> exp(r * s), T = 90.0, r = r)
+    p_uganda = 0.25
+    daily_travellers = 1871.0
+    source_population = 4_392_200.0
+    window = 15.0
+    delta = 10.0
+
+    model = exports_detection_timing_model(growth_state, p_uganda;
+        delta = delta, window = window,
+        daily_travellers = daily_travellers,
+        source_population = source_population)
+    chn = sample(model, Prior(), 1; chain_type = VNChain, progress = false)
+
+    got = only(vec(Array(chn[:survived_exports])))
+    q = daily_travellers / source_population
+    want = expected_exports(growth_state.cumulative, p_uganda, q,
+        growth_state.T - delta, window; r = r)
+    @test got ≈ want rtol = 1e-8
+    @test got > 0
+end

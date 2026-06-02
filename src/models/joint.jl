@@ -253,14 +253,14 @@ DRC onset-to-report delay `f_rep` sampled by
 [`reported_cases_model`](@ref): "symptom onset → entering surveillance as
 a suspected case" is taken to be the same process abroad as in the DRC,
 the export count is a single datum that cannot identify its own delay,
-and sharing the exact draw lets the reported-cases stream pin it. To fix
-back to the McCabe et al. rectangular detection-window assumption for
-comparison, pass `exports = exports_model`,
-`exports_deaths_model = exports_deaths_model` and
-`exports_detection_timing = exports_detection_timing_model` (the
-window-based submodels). Pass a different `report_delay` returning a
-fixed `Gamma` (with no `~` sampling) to pin the delay distribution rather
-than learning it.
+and sharing the exact draw lets the reported-cases stream pin it. The
+McCabe et al. rectangular detection-window configuration is provided as a
+separate comparison by [`imperial_only_model`](@ref) (exports and deaths,
+window-based); the window submodels (`exports_model`,
+`exports_deaths_model`, `exports_detection_timing_model`) take a window
+rather than a delay, so they are not drop-in `bvd_joint` kwargs. Pass a
+`report_delay` returning a fixed `Gamma` (with no `~` sampling) to pin the
+export onset-to-report delay rather than learning it.
 """
 @model function bvd_joint(
         exported_cases::Union{Missing, Integer},
