@@ -144,16 +144,17 @@ growth the convolution is the exact constant rescale `mgf(incubation,
 end
 
 """
-PCR sensitivity prior for the GeneXpert Ebola assay. Beta(30, 2): mean
-0.94, 95% interval 0.84-0.99. Sits just below the 100% (95% CI
-84.6-100%, n = 22) clinical sensitivity on field whole blood reported
-in the Sierra Leone Zaire-ebolavirus field evaluation, leaving room for
-early-infection low-viral-load specimens, field handling, and the lack
-of Bundibugyo-specific validations. Used by
+PCR sensitivity prior. Beta(6, 2): mean 0.75, 95% interval 0.39-0.97.
+Confirmation runs on the altona RealStar Filovirus Screen RT-PCR, which
+detects Bundibugyo virus at 11-67 RNA copies per reaction; the rapid
+Cepheid GeneXpert Ebola assay is Zaire-ebolavirus-specific and does not
+reliably detect Bundibugyo. The prior keeps good analytical sensitivity
+plausible while carrying substantial downside mass for early
+low-viral-load specimens and field handling. Used by
 [`confirmed_cases_model`](@ref).
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(30.0, 2.0))
+        sensitivity_prior = Beta(6.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
 end

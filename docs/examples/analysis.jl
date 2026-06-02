@@ -1323,19 +1323,20 @@ cfr_prior_fig #hide
 # of suspected cases that get routed to the lab:
 #
 # ```math
-# s \sim \mathrm{Beta}(30,\ 2), \qquad
+# s \sim \mathrm{Beta}(6,\ 2), \qquad
 # \tau \sim \mathrm{Beta}(5,\ 2). \tag{25}
 # ```
 #
-# The sensitivity prior has mean $0.94$ and $95\%$ interval
-# $0.84$-$0.99$. The Cepheid GeneXpert Ebola assay reported $100\%$
-# ($95\%$ CI $84.6$-$100\%$, $n = 22$) clinical sensitivity on field
-# whole blood in the Sierra Leone Zaire ebolavirus field evaluation
-# [semper2016](@cite); analytical performance studies place the limit
-# of detection in the tens of copies per mL on whole blood
-# [pinsky2015](@cite). The prior sits just below the field point
-# estimate to leave room for early-infection low-viral-load specimens,
-# field handling, and the lack of Bundibugyo-specific validations.
+# Confirmation runs on the altona RealStar Filovirus Screen RT-PCR at
+# INRB; the rapid Cepheid GeneXpert Ebola assay is Zaire-ebolavirus-specific
+# and does not reliably detect Bundibugyo virus
+# [cepheid_xpert_ebola_ifu](@cite). The RealStar kit detects Bundibugyo
+# virus at $11$-$67$ RNA copies per reaction in laboratory and field
+# evaluation [rieger2016](@cite) but has no published field sensitivity for
+# this variant, and early low-viral-load specimens and field handling lower
+# real-world detection. The $\mathrm{Beta}(6, 2)$ prior (mean $0.75$, $95\%$
+# interval $\sim 0.39$-$0.97$) keeps good analytical sensitivity plausible
+# while carrying substantial downside mass for those field losses.
 #
 # The testing fraction $\tau$ has a $\mathrm{Beta}(5, 2)$ prior (mean
 # $0.71$, $95\%$ interval $\sim 0.40$-$0.95$). As with the background
