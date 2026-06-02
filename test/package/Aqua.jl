@@ -38,5 +38,10 @@ end
 
 @testitem "Aqua: persistent_tasks" tags=[:quality] begin
     using Aqua, BVDOutbreakSize
-    Aqua.test_persistent_tasks(BVDOutbreakSize)
+    ## Give the check a longer settle window (`tmax`): loading the package
+    ## pulls heavy precompiled dependencies (Turing, Makie,
+    ## CensoredDistributions), and on a loaded CI runner the default
+    ## threshold can false-positive on still-finishing precompile work
+    ## rather than a genuine lingering task.
+    Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 30.0)
 end
