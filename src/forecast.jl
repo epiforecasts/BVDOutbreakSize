@@ -112,12 +112,12 @@ function forecast_reported(chn;
     α = _draws(chn, :α)
     θ = _draws(chn, :θ)
     ## Uganda exports use either the McCabe rectangular detection window
-    ## `w` or the explicit onset-to-detection delay `Gamma(α_det, θ_det)`,
-    ## depending on which export mechanism the chain was fitted with.
+    ## `w` or the explicit onset-to-detection delay convolution. The delay
+    ## reuses the DRC onset-to-report delay `Gamma(α_rep, θ_rep)`, so there
+    ## is no separate export-delay parameter; the chain is identified as
+    ## window- vs delay-fitted by the presence of `w`.
     has_window = haskey_chain(chn, :w)
     w = has_window ? _draws(chn, :w) : nothing
-    α_det = has_window ? nothing : _draws(chn, :α_det)
-    θ_det = has_window ? nothing : _draws(chn, :θ_det)
     pr = _draws(chn, :p_drc)
     pu = _draws(chn, :p_uganda)
     k = _draws(chn, :k)
@@ -178,7 +178,7 @@ function forecast_reported(chn;
             μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
         else
             μ_exports = expected_exports_delay(r[i], pu[i], q, Th,
-                Gamma(α_det[i], θ_det[i]); onset_fraction = os, alg = alg)
+                Gamma(α_rep[i], θ_rep[i]); onset_fraction = os, alg = alg)
         end
         exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
         if has_lab
