@@ -28,6 +28,13 @@ Fields returned:
 - `confirmed_case_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC laboratory-confirmed counts. Drives the daily
   confirmed-cases likelihood. `missing` when absent.
+- `samples_received_history::Union{NamedTuple, Missing}` — same layout for
+  the cumulative lab samples received (`Cumul échantillons reçus`). Ready
+  for the batching follow-up; `missing` when absent.
+- `samples_analysed_history::Union{NamedTuple, Missing}` — same layout for
+  the cumulative lab samples analysed (`Cumul échantillons analysés`).
+  Supplies the per-vintage denominator for the confirmed-case binomial
+  likelihood. `missing` when absent.
 - `death_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC suspected deaths. Drives the daily deaths likelihood.
   `missing` when absent.
@@ -104,6 +111,8 @@ function load_observations(
                           Int(_val("confirmed_cases")) : missing,
         reported_case_history = _history("reported_case_history"),
         confirmed_case_history = _history("confirmed_case_history"),
+        samples_received_history = _history("samples_received_history"),
+        samples_analysed_history = _history("samples_analysed_history"),
         death_history = _history("death_history"),
         cumulative_tests_analysed = haskey(raw, "cumulative_tests_analysed") ?
                                     Int(_val("cumulative_tests_analysed")) :
@@ -138,6 +147,14 @@ function load_observations(
             confirmed_case_history = haskey(raw, "confirmed_case_history") ?
                                      String(raw["confirmed_case_history"]["source"]) :
                                      missing,
+            samples_received_history = haskey(raw,
+                "samples_received_history") ?
+                                       String(raw["samples_received_history"]["source"]) :
+                                       missing,
+            samples_analysed_history = haskey(raw,
+                "samples_analysed_history") ?
+                                       String(raw["samples_analysed_history"]["source"]) :
+                                       missing,
             death_history = haskey(raw, "death_history") ?
                             String(raw["death_history"]["source"]) :
                             missing,

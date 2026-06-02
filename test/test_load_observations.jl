@@ -74,6 +74,44 @@
     @test !isempty(obs.sources.death_history)
 end
 
+@testitem "load_observations returns the lab-throughput histories" begin
+    using BVDOutbreakSize: load_observations
+    obs = load_observations()
+
+    ## samples received / analysed span the four 23-26 May vintages whose
+    ## lab Tableau IV is present, aligned with the tail of the confirmed
+    ## history so the binomial denominator and numerator share dates.
+    for h in (obs.samples_received_history, obs.samples_analysed_history)
+        @test h isa NamedTuple
+        @test hasproperty(h, :dates)
+        @test hasproperty(h, :offsets)
+        @test hasproperty(h, :values)
+        @test h.values isa AbstractVector{<:Integer}
+        @test length(h.values) == 4
+        ## Oldest first, so edges = T - offset are ascending.
+        @test issorted(h.offsets; rev = true)
+    end
+
+    @test obs.samples_received_history.values == [418, 431, 431, 662]
+    @test obs.samples_analysed_history.values == [211, 295, 295, 403]
+    ## Analysed never exceeds received; both align with the lab cut-off.
+    @test all(obs.samples_analysed_history.values .<=
+              obs.samples_received_history.values)
+    @test obs.samples_analysed_history.values[end] ==
+          obs.cumulative_tests_analysed
+    @test obs.samples_received_history.dates ==
+          obs.samples_analysed_history.dates
+    ## Per-vintage confirmed positives never exceed samples analysed (the
+    ## binomial denominator), checked on the shared 23-26 May tail.
+    ch = obs.confirmed_case_history
+    tail = ch.values[(end - 3):end]
+    @test all(tail .<= obs.samples_analysed_history.values)
+
+    @test obs.sources.samples_received_history isa String
+    @test obs.sources.samples_analysed_history isa String
+    @test !isempty(obs.sources.samples_analysed_history)
+end
+
 @testitem "export_deaths_daily is a daily series to the cut-off" begin
     using BVDOutbreakSize: load_observations
 

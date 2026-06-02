@@ -93,6 +93,29 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
 values = [33, 51, 57, 79, 83, 101, 105, 106, 121]
 source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs`); the 18-22 May points use the early-report baseline."
 
+# Cumulative national laboratory throughput across INSP situation-report
+# vintages, the lab-section `Cumul échantillons reçus` (samples received)
+# and `Cumul échantillons analysés` (samples analysed). A per-test
+# denominator only exists from SitRep 009 (23 May), the first report to
+# carry a lab Tableau IV; the 18-22 May reports predate that format and
+# the 26 May revised re-issue (SitRep 012_v2) drops the table, so the
+# series spans the four 23-26 May vintages whose `samples_analysed`
+# denominator the confirmed-case binomial conditions on. Dates align with
+# the tail of `confirmed_case_history` so the streams share boundaries.
+# The 25 May analysed total is flat at 295: testing in Ituri stalled
+# (SitRep 011: `Aucun échantillon n'a été analysé en Ituri`), with 203
+# unanalysed samples sent to Kinshasa. The 26 May received (662) /
+# analysed (403) pair matches `cumulative_tests_analysed`.
+[samples_received_history]
+dates  = ["2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26"]
+values = [418, 431, 431, 662]
+source = "INSP situation reports 009-012 (23-26 May 2026) section IV.3 LABORATOIRE — `Cumul échantillons reçus`, read from the PDFs (recorded in data/insp_sitrep_scanned.csv)."
+
+[samples_analysed_history]
+dates  = ["2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26"]
+values = [211, 295, 295, 403]
+source = "INSP situation reports 009-012 (23-26 May 2026) section IV.3 LABORATOIRE — `Cumul échantillons analysés`, read from the PDFs (recorded in data/insp_sitrep_scanned.csv); the 25 May value is flat at 295 because no samples were analysed in Ituri that day."
+
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
 # likelihood fits the between-vintage increments. The 23-26 May values
