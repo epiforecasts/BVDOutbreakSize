@@ -489,11 +489,16 @@ infection→detection delay-survival expectation
 window of the McCabe path is replaced by the infection→detection survival
 `f_det`. Because the at-risk clock starts at infection, the detection
 survival is 1 at age 0 (a just-infected traveller is certainly not yet
-detected). The pre-death survival stretch and per-day
-[`daily_increment_kernel`](@ref) structure are unchanged. `f_det`
-(the incubation ⊕ onset-to-report delay, see [`combined_delay`](@ref))
-and `daily_travellers` are supplied by [`exports_delay_model`](@ref) so
-the two Uganda-side likelihoods share person-time.
+detected). The death timing is likewise keyed to infection: `delay_dist`
+is the infection→death delay (incubation ⊕ onset-to-death, see
+[`combined_delay`](@ref)), not the bare onset-to-death delay, so deaths
+are not timed one incubation period too early. The pre-death survival
+stretch and per-day [`daily_increment_kernel`](@ref) structure are
+unchanged. `f_det` (the incubation ⊕ onset-to-report delay) and
+`daily_travellers` are supplied by [`exports_delay_model`](@ref) so the
+two Uganda-side likelihoods share person-time. Incubation enters both
+`f_det` and `delay_dist`, a slight accepted double-count of the shared
+incubation period (better than omitting it on death entirely).
 """
 @model function exports_deaths_delay_model(
         export_deaths_daily::AbstractVector,
@@ -507,8 +512,8 @@ the two Uganda-side likelihoods share person-time.
     q = daily_travellers / source_population
     n = length(export_deaths_daily)   # days from earliest death to cut-off
 
-    ## Per-edge intensity is the infection→detection delay-survival
-    ## expectation: the onset-to-death CDF weighted by the
+    ## Per-edge intensity is the infection-keyed delay-survival
+    ## expectation: the infection→death CDF weighted by the
     ## infection→detection survival, which is 1 at age 0.
     Λ(t) = expected_exports_deaths_delay(
         cumulative, f_det, delay_dist, CFR, p_uganda, q, t)

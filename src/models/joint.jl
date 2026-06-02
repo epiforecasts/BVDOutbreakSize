@@ -162,14 +162,14 @@ end
 
 """
 Deaths-among-exports-only composer. Samples growth, onset-to-death
-delay, CFR, the incubation and onset-to-report delays (combined into the
-infection→detection delay), traveller volume and ascertainment, then
-conditions on the dated export-deaths likelihood. Defaults to the
-explicit infection→detection delay mechanism
-[`exports_deaths_delay_model`](@ref). The infection→detection delay is
-the incubation period convolved with the DRC onset-to-report delay,
-moment-matched to one Gamma via [`combined_delay`](@ref); see
-[`exports_deaths_delay_model`](@ref).
+delay, CFR, the incubation and onset-to-report delays, traveller volume
+and ascertainment, then conditions on the dated export-deaths
+likelihood. Defaults to the explicit infection-keyed delay mechanism
+[`exports_deaths_delay_model`](@ref). Both the export at-risk clock and
+the export-death timing run from infection: the infection→detection
+delay is incubation ⊕ onset-to-report and the infection→death delay is
+incubation ⊕ onset-to-death, each moment-matched to one Gamma via
+[`combined_delay`](@ref); see [`exports_deaths_delay_model`](@ref).
 """
 @model function exports_deaths_only_model(
         export_deaths_daily::AbstractVector;
@@ -196,11 +196,15 @@ moment-matched to one Gamma via [`combined_delay`](@ref); see
 
     ## Infection→detection delay = incubation ⊕ onset-to-report,
     ## moment-matched to one Gamma; the export at-risk clock runs from
-    ## infection, so the survival is 1 at age 0.
+    ## infection, so the survival is 1 at age 0. Export deaths are also
+    ## timed from infection: the death delay is incubation ⊕ onset-to-death
+    ## (incubation appears in both, a slight accepted double-count of the
+    ## shared incubation, better than omitting it on death entirely).
     f_det = combined_delay(incubation_state.dist, report_state.dist)
+    f_death = combined_delay(incubation_state.dist, delay_state.dist)
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(export_deaths_daily, growth_state,
-            cfr_state.CFR, delay_state.dist, asc_state.p_uganda;
+            cfr_state.CFR, f_death, asc_state.p_uganda;
             pre_start_deaths = pre_start_deaths,
             f_det = f_det,
             daily_travellers = daily_travellers,
@@ -261,8 +265,13 @@ process abroad as in the DRC, the export count is a single datum that
 cannot identify its own delay, and sharing the exact draws lets the
 incubation and reported-cases streams pin it. Because the incubation
 period sits inside that delay the export likelihoods carry no separate
-incubation rescale. The McCabe et al. rectangular detection-window
-configuration is provided as a separate comparison by
+incubation rescale. The export-death timing is likewise keyed to
+infection: its death delay is incubation ⊕ onset-to-death (again via
+[`combined_delay`](@ref)), so deaths are not timed one incubation period
+too early. Incubation therefore enters both the detection and death
+delays, a slight accepted double-count of the shared incubation period.
+The McCabe et al. rectangular detection-window configuration is provided
+as a separate comparison by
 [`imperial_only_model`](@ref) (exports and deaths, window-based); the
 window submodels (`exports_model`, `exports_deaths_model`,
 `exports_detection_timing_model`) take a window rather than a delay, so
@@ -369,9 +378,17 @@ export infection→detection delay rather than learning it.
     exports_state ~ to_submodel(
         exports(exported_cases, growth_state, p_uganda, f_det), false)
 
+    ## Export deaths are also timed from infection: the death delay is
+    ## incubation ⊕ onset-to-death, moment-matched to one Gamma, so the
+    ## death timing carries the incubation period rather than firing one
+    ## incubation period too early. (Detection and death share the same
+    ## onset, so incubation appears in both `f_det` and `f_death`; this
+    ## slight double-count of the shared incubation is accepted as better
+    ## than omitting incubation on death entirely.)
+    f_death = combined_delay(incubation_state.dist, deaths_state.delay_dist)
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(export_deaths_daily, growth_state,
-            deaths_state.CFR, deaths_state.delay_dist, p_uganda;
+            deaths_state.CFR, f_death, p_uganda;
             pre_start_deaths = pre_start_deaths,
             f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,

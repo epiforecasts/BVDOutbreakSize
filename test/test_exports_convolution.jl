@@ -189,9 +189,10 @@ end
     mccabe = expected_exports_deaths(
         cumulative, f_death, CFR, p, q, T, w)
 
-    ## As the onset-to-detection Gamma collapses toward a point mass at
+    ## As the infection→detection Gamma collapses toward a point mass at
     ## `w` the detection survival becomes the top-hat 1{t-s<w}, so the
-    ## delay form converges to the window form.
+    ## delay form converges to the window form (with the same death CDF
+    ## `f_death` in both).
     rels = Float64[]
     for α in (20.0, 80.0, 320.0)
         f_det = Gamma(α, w / α)
@@ -201,6 +202,34 @@ end
     end
     @test rels[end] < 1e-2
     @test rels[end] < rels[1]
+end
+
+@testitem "export deaths timed from infection shift later than onset" begin
+    using Distributions: Gamma, mean
+    using BVDOutbreakSize: expected_exports_deaths_delay, combined_delay
+    r = 0.05
+    cumulative = s -> exp(r * s)
+    f_det = Gamma(2.0, 4.5)
+    incubation = Gamma(1.1, 5.7)          # mean ≈ 6.27 d
+    onset_to_death = Gamma(4.3, 2.6)      # bare onset-to-death
+
+    ## Timing death from infection (incubation ⊕ onset-to-death) pushes
+    ## the death CDF later by one incubation period, so fewer export
+    ## deaths have accrued by any given cut-off than under the bare
+    ## onset-to-death delay (which omits incubation and fires too early).
+    infection_to_death = combined_delay(incubation, onset_to_death)
+    @test mean(infection_to_death) > mean(onset_to_death)
+
+    args = (cumulative, f_det)
+    tail = (0.30, 0.25, 1871 / 4_392_200)
+    for T in (40.0, 70.0, 100.0)
+        with_inc = expected_exports_deaths_delay(
+            args..., infection_to_death, tail..., T)
+        without_inc = expected_exports_deaths_delay(
+            args..., onset_to_death, tail..., T)
+        ## Later death timing => strictly fewer accrued export deaths.
+        @test with_inc < without_inc
+    end
 end
 
 ## The closed-form Gamma-CDF path must differentiate: gradients of both

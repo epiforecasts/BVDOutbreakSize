@@ -245,18 +245,19 @@ is replaced by the infection→detection survival
 with `cumulative` the infection trajectory ``C(s) = e^{r s}``, `f_det`
 the infection→detection Gamma delay (incubation ⊕ onset-to-report, see
 [`combined_delay`](@ref); survival ``\\overline{F}_{det}``), `f_death`
-the onset-to-death Gamma delay (CDF ``F_{death}``), `CFR` the
-case-fatality ratio, `p` the detection probability and `q` the per-day
-per-capita travel rate (so the result is in cases). Because the at-risk
-clock starts at infection, the detection survival is 1 at age 0 (a
-just-infected traveller is certainly not yet detected). The survival and
-the death CDF are both evaluated through the Gamma closed form
-[`_gamma_cdf`](@ref), which carries the reverse-mode rule for the shape
-derivative, so the integrand is closed-form and only the outer integral
-is quadrature (clustered near `t` where the integrand has mass). As the
-infection→detection delay collapses to a point mass at `w` the survival
-becomes the top-hat and this reduces exactly to
-[`expected_exports_deaths`](@ref). Uses [`DEATH_INTEGRAL_ALG`](@ref).
+the infection→death Gamma delay (incubation ⊕ onset-to-death, CDF
+``F_{death}``), `CFR` the case-fatality ratio, `p` the detection
+probability and `q` the per-day per-capita travel rate (so the result is
+in cases). Both delays are keyed to infection, the same clock as `C(s)`:
+the detection survival is 1 at age 0 (a just-infected traveller is
+certainly not yet detected) and the death CDF is 0 at age 0 (no time has
+elapsed for death). The survival and the death CDF are both evaluated
+through the Gamma closed form [`_gamma_cdf`](@ref), which carries the
+reverse-mode rule for the shape derivative, so the integrand is
+closed-form and only the outer integral is quadrature (clustered near `t`
+where the integrand has mass). As both delays collapse to point masses
+this reduces exactly to [`expected_exports_deaths`](@ref). Uses
+[`DEATH_INTEGRAL_ALG`](@ref).
 """
 function expected_exports_deaths_delay(cumulative, f_det::Gamma,
         f_death::Gamma, CFR, p, q, t; alg = DEATH_INTEGRAL_ALG)
