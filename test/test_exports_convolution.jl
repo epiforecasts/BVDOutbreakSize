@@ -272,7 +272,7 @@ end
     using Distributions: Gamma
     using FiniteDifferences: central_fdm, grad
     using Mooncake: Mooncake
-    using BVDOutbreakSize: expected_exports_deaths_delay
+    using BVDOutbreakSize: expected_exports_deaths_delay, combined_delay
     CFR = 0.30
     p = 0.25
     q = 1871 / 4_392_200
@@ -289,6 +289,22 @@ end
     gd = grad(central_fdm(5, 1), fast, x)[1]
     @test all(isfinite, gf)
     @test gf ≈ gd rtol = 1e-4
+
+    ## The composer path differentiates through combined_delay on BOTH
+    ## the detection (incubation ⊕ onset-to-report) and death (incubation
+    ## ⊕ onset-to-death) delays: x =
+    ## [r, α_inc, θ_inc, α_rep, θ_rep, α_death, θ_death].
+    via(x) = expected_exports_deaths_delay(
+        s -> exp(x[1] * s),
+        combined_delay(Gamma(x[2], x[3]), Gamma(x[4], x[5])),
+        combined_delay(Gamma(x[2], x[3]), Gamma(x[6], x[7])),
+        CFR, p, q, T)
+    xv = [0.05, 1.1, 5.7, 2.5, 4.5, 4.3, 2.6]
+    cache_v = Mooncake.prepare_gradient_cache(via, xv)
+    gfv = Mooncake.value_and_gradient!!(cache_v, via, xv)[2][2]
+    gdv = grad(central_fdm(5, 1), via, xv)[1]
+    @test all(isfinite, gfv)
+    @test gfv ≈ gdv rtol = 1e-4
 end
 
 @testitem "bvd_joint delay defaults sample from the prior" tags=[:slow] begin
