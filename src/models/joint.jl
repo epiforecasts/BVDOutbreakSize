@@ -128,7 +128,7 @@ likelihood. See [`confirmed_cases_model`](@ref).
     test_positivity_state ~ to_submodel(test_positivity, false)
     incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
-    λ_bg = test_positivity_state.λ_bg
+    bg = test_positivity_state.bg
     τ_test = test_positivity_state.τ_test
     f_rep = report_state.dist
     T = growth_state.T
@@ -141,7 +141,7 @@ likelihood. See [`confirmed_cases_model`](@ref).
     confirmed_state ~ to_submodel(
         confirmed(confirmed_vec, analysed_vec, tests_analysed,
             growth_state, k,
-            [asc_state.p_drc], λ_bg, τ_test, f_rep, [T], T;
+            [asc_state.p_drc], bg, τ_test, f_rep, [T], T;
             lab_delay = lab_delay,
             test_sensitivity = test_sensitivity,
             onset_fraction = os), false)
@@ -341,7 +341,7 @@ disable the factor entirely.
         lab_state ~ to_submodel(
             lab_throughput(samples_received, samples_analysed,
                 confirmed_cases, growth_state, k,
-                p_drc_per_bin[1:n_conf], reported_state.λ_bg,
+                p_drc_per_bin[1:n_conf], reported_state.bg,
                 reported_state.τ_test, reported_state.report_delay_dist,
                 lab_cap_state.κ_lab, confirmed_edges;
                 test_sensitivity = test_sensitivity,
@@ -360,7 +360,7 @@ disable the factor entirely.
         confirmed_state ~ to_submodel(
             confirmed(confirmed_cases, analysed_vec, tests_analysed,
                 growth_state, k,
-                p_drc_per_bin[1:n_conf], reported_state.λ_bg,
+                p_drc_per_bin[1:n_conf], reported_state.bg,
                 reported_state.τ_test, reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;
                 lab_delay = lab_delay,

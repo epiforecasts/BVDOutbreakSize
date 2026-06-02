@@ -191,13 +191,50 @@ The derived per-suspected positivity `μ_BVD / μ_cases` is exposed
 inside [`reported_cases_model`](@ref); the per-test positivity
 `s · BVD_tested / (BVD_tested + bg_tested)` is exposed inside
 [`confirmed_cases_model`](@ref).
+
+## Saturating ramp background
+
+The background is a saturating ramp in time (issue: lab-stream
+data-model mismatch). The per-day non-BVD rate is
+`λ_bg(t) = λ0 + Δλ·(1 − e^(−t/scale))`, rising from the baseline `λ0`
+towards `λ0 + Δλ` over the surveillance scale-up timescale `scale`
+(see [`BackgroundRamp`](@ref)). A constant-rate background plus
+exponential BVD forces the per-test positivity to *rise* over the lab
+vintages, but the observed cumulative positivity *falls*
+(0.48 → 0.30 over 23-26 May); a background that broadens as the
+suspected-case definition widens pulls positivity down and lets the
+joint converge without the lab stream fighting the BVD trajectory.
+
+`λ0` is the baseline rate (default half-normal `Normal+(0, 1)`, the
+previous `λ_bg` prior) and `Δλ` the ramp amplitude (default half-normal
+`Normal+(0, 1)`). `scale` is a fixed keyword (default
+[`BACKGROUND_RAMP_SCALE`](@ref) ≈ 7 days): the four lab vintages cannot
+identify it, so it is not sampled. Pass `ramp_amplitude_prior =
+Dirac(0.0)` (or `Δλ` pinned to zero) to recover the constant background
+`λ_bg(t) = λ0`, `μ_bg(t) = λ0·t`, exactly — the default `delta_zero`
+flag keeps backward compatibility off, with `Δλ` sampled.
+
+Returns the legacy scalar `λ_bg = λ0` (the baseline rate, so existing
+constant-background callers keep working), the sampled `λ0` / `Δλ`, the
+fixed `scale`, the [`BackgroundRamp`](@ref) `bg` and a `μ_bg` cumulative
+closure for the downstream observation submodels.
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        fraction_tested_prior = Beta(5.0, 2.0))
-    λ_bg ~ lambda_prior
+        ramp_amplitude_prior = truncated(Normal(0.0, 1.0); lower = 0),
+        fraction_tested_prior = Beta(5.0, 2.0),
+        scale::Real = BACKGROUND_RAMP_SCALE,
+        delta_zero::Bool = false)
+    λ0 ~ lambda_prior
+    if delta_zero
+        Δλ = zero(λ0)
+    else
+        Δλ ~ ramp_amplitude_prior
+    end
     τ_test ~ fraction_tested_prior
-    return (; λ_bg, τ_test)
+    bg = background_ramp(λ0, Δλ, scale)
+    μ_bg = t -> bg_cumulative(bg, t)
+    return (; λ_bg = λ0, λ0, Δλ, scale, bg, μ_bg, τ_test)
 end
 
 """

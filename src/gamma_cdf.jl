@@ -40,6 +40,103 @@ function _gamma_cdf_integral(α, θ, x)
 end
 
 """
+Saturating ramp non-BVD background. Carries the baseline rate `λ0`, the
+ramp amplitude `Δλ` and the scale-up timescale `scale`. The per-day
+non-BVD suspected-case arrival rate
+
+```math
+\\lambda_{bg}(t) = \\lambda_0 + \\Delta\\lambda\\,(1 - e^{-t/\\text{scale}})
+```
+
+rises from `λ0` towards `λ0 + Δλ` over the surveillance scale-up window
+`scale`. Its cumulative
+
+```math
+\\mu_{bg}(t) = \\lambda_0\\, t
+    + \\Delta\\lambda\\,\\bigl(t - \\text{scale} + \\text{scale}\\,
+    e^{-t/\\text{scale}}\\bigr),
+\\qquad \\mu_{bg}(0) = 0.
+```
+
+`Δλ = 0` recovers the constant-rate background `λ_bg(t) = λ0`,
+`μ_bg(t) = λ0·t`, exactly. Models the broadening suspected-case
+definition / surveillance ramp-up that pulls the observed per-test
+positivity down over the lab vintages (the constant-rate background plus
+exponential BVD instead forces positivity to rise). Construct with
+[`background_ramp`](@ref); the rate is [`bg_rate`](@ref) and the
+cumulative [`bg_cumulative`](@ref).
+"""
+struct BackgroundRamp{T}
+    λ0::T
+    Δλ::T
+    scale::T
+end
+
+"""
+Build a [`BackgroundRamp`](@ref) from the baseline rate `λ0`, ramp
+amplitude `Δλ` and fixed scale-up timescale `scale`, promoting to a
+common element type so AD tangents flow through `λ0` and `Δλ`.
+"""
+function background_ramp(λ0, Δλ, scale)
+    T = float(promote_type(typeof(λ0), typeof(Δλ), typeof(scale)))
+    return BackgroundRamp{T}(convert(T, λ0), convert(T, Δλ),
+        convert(T, scale))
+end
+
+"""
+Instantaneous non-BVD background rate `λ_bg(t)` of a
+[`BackgroundRamp`](@ref). Returns `λ0` exactly when `Δλ = 0`.
+"""
+function bg_rate(b::BackgroundRamp, t)
+    return b.λ0 + b.Δλ * (one(t) - exp(-t / b.scale))
+end
+
+"""
+Cumulative non-BVD background `μ_bg(t)` of a [`BackgroundRamp`](@ref),
+the integral of [`bg_rate`](@ref) from `0` to `t`. `μ_bg(0) = 0` and
+`Δλ = 0` reduces to `λ0·t`. Returns zero for `t ≤ 0`.
+"""
+function bg_cumulative(b::BackgroundRamp, t)
+    t <= zero(t) && return zero(b.λ0 * t)
+    return b.λ0 * t +
+           b.Δλ * (t - b.scale + b.scale * exp(-t / b.scale))
+end
+
+"""
+Cumulative background *tested* volume of a [`BackgroundRamp`](@ref):
+the time-varying background arrivals convolved against the lab-delay CDF
+`F_lab` and right-truncated at the testing cut-off `t`,
+
+```math
+\\int_0^t \\lambda_{bg}(u)\\, F_{lab}(t - u)\\, du
+  = (\\lambda_0 + \\Delta\\lambda)\\, G(t) - \\Delta\\lambda\\, H(t),
+```
+
+where ``G(t) = \\int_0^t F_{lab}(t-u)\\,du`` is the closed-form
+[`_gamma_cdf_integral`](@ref) and
+``H(t) = \\int_0^t e^{-u/\\text{scale}}\\, F_{lab}(t-u)\\,du`` is the
+ramp's exponential weighting, evaluated numerically with the shared
+[`integrate`](@ref) quadrature. With `Δλ = 0` only the closed-form term
+`λ0·G(t)` remains, reproducing the constant-rate background tested
+volume exactly. Returns zero for `t ≤ 0`.
+"""
+function bg_tested_integral(b::BackgroundRamp{T}, α, θ, t;
+        alg = DEATH_INTEGRAL_ALG) where {T}
+    R = float(promote_type(T, typeof(α), typeof(θ), typeof(t)))
+    t <= zero(t) && return zero(R)
+    G = _gamma_cdf_integral(α, θ, t)
+    iszero(b.Δλ) && return convert(R, b.λ0 * G)
+    ## H(t) = ∫₀ᵗ e^{-u/scale} F_lab(t-u) du, the ramp's exponential
+    ## weighting of the lab-delay CDF. No closed form, so reuse the shared
+    ## quadrature; the integrand peaks near u = 0 (small delay argument
+    ## t - u ≈ t) and decays, so the uniform rule on [0, t] is adequate.
+    H = integrate(zero(t), t; alg) do u
+        exp(-u / b.scale) * _gamma_cdf(α, θ, t - u)
+    end
+    return convert(R, (b.λ0 + b.Δλ) * G - b.Δλ * H)
+end
+
+"""
 Series sum of term derivatives for `∂_α P(α, z)`, using the
 absolutely-convergent Kummer expansion
 

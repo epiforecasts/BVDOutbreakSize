@@ -20,12 +20,14 @@ end
 # `delay_convolution` as a delay-convolved cumulative integrator at unit
 # ascertainment to compute `∫₀^{Th} exp(r·s) · f_rep(Th-s) ds`, scaled by
 # `onset_fraction` (the incubation mgf) since the latent trajectory is
-# infections; the background contribution `λ_bg · Th` is non-BVD and
-# unscaled.
-function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
+# infections; the background contribution is the ramp cumulative
+# `μ_bg(Th)` (`λ0 · Th` when `Δλ = 0`), non-BVD and unscaled.
+function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, bg::BackgroundRamp;
         onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     conv = delay_convolution(one(p_drc), r, Th, Gamma(α_rep, θ_rep); alg)
-    return onset_fraction * p_drc * conv + λ_bg * Th
+    ## Background contribution is the ramp cumulative μ_bg(Th); with Δλ = 0
+    ## this is the old constant `λ_bg · Th`.
+    return onset_fraction * p_drc * conv + bg_cumulative(bg, Th)
 end
 
 function _forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
@@ -44,10 +46,11 @@ end
 
 # Cumulative tests analysed at horizon `Th`: τ_test gates both the BVD
 # contribution (lab-completed BVD samples, scaled by `onset_fraction`) and
-# the non-BVD background (constant arrival rate λ_bg convolved against
+# the non-BVD background (saturating-ramp rate λ_bg(u) convolved against
 # F_lab, unscaled).
 function _forecast_tests_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, λ_bg, τ_test; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
+        p_drc, bg::BackgroundRamp, τ_test;
+        onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     d_rep = Gamma(α_rep, θ_rep)
     d_lab = Gamma(α_lab, θ_lab)
     ## Inner BVD-reported trajectory in closed form; only the outer lab
@@ -58,9 +61,10 @@ function _forecast_tests_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
     end
     bvd_tested = onset_fraction *
                  delay_convolution(bvd_reported_at, Th, d_lab; alg)
-    ## Background tested volume at `Th`: ∫₀^Th F_lab(Th - u) du =
-    ## ∫₀^Th F_lab(v) dv, the closed form `_gamma_cdf_integral`.
-    bg_tested = λ_bg * _gamma_cdf_integral(α_lab, θ_lab, Th)
+    ## Background tested volume at `Th`: ∫₀^Th λ_bg(u) F_lab(Th - u) du, the
+    ## ramp arrivals convolved against the lab-delay CDF. With Δλ = 0 this
+    ## reduces to the constant `λ0 · ∫₀^Th F_lab(v) dv`.
+    bg_tested = bg_tested_integral(bg, α_lab, θ_lab, Th; alg)
     return τ_test * (bvd_tested + bg_tested)
 end
 
@@ -86,9 +90,10 @@ per draw and columns:
   and `obs_confirmed` is supplied. Otherwise these columns are absent.
 
 DRC reported cases follow the additive expectation
-`p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg · (T+h)`, with
+`p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + μ_bg(T+h)`, with
 `f_rep = Gamma(α_rep, θ_rep)` for the BVD-driven contribution and
-`λ_bg` the per-day non-BVD background. Laboratory-confirmed cases
+`μ_bg` the saturating-ramp non-BVD background cumulative (`λ0 · t` when
+`Δλ = 0`). Laboratory-confirmed cases
 follow `s_test · p_drc · ∫₀^{T+h} exp(r·s) · f_conf(T+h-s) ds`, with
 `f_conf` the moment-matched Gamma of `f_rep ∗ f_lab` and `s_test` the
 PCR sensitivity. Exports use `p_uganda · q` with
@@ -117,7 +122,17 @@ function forecast_reported(chn;
     k = _draws(chn, :k)
     α_rep = _draws(chn, :α_rep)
     θ_rep = _draws(chn, :θ_rep)
-    λ_bg = _draws(chn, :λ_bg)
+    ## Background ramp draws. New chains carry the baseline `λ0` and ramp
+    ## amplitude `Δλ`; chains predating the ramp carry only the constant
+    ## `λ_bg`, recovered here as `λ0` with `Δλ = 0` (so `bg_*` reduce to the
+    ## old constant-rate forms).
+    if haskey_chain(chn, :λ0)
+        λ0 = _draws(chn, :λ0)
+        Δλ = haskey_chain(chn, :Δλ) ? _draws(chn, :Δλ) : zeros(length(λ0))
+    else
+        λ0 = _draws(chn, :λ_bg)
+        Δλ = zeros(length(λ0))
+    end
     ## Incubation draws map the latent infection trajectory onto onsets
     ## (the `onset_fraction = mgf(incubation, −r)` of the observation
     ## models). Absent on chains predating the infection layer, where
@@ -156,8 +171,9 @@ function forecast_reported(chn;
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
         ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
         ## f_rep(T+h-s) ds + λ_bg · (T+h).
+        bg_i = background_ramp(λ0[i], Δλ[i], BACKGROUND_RAMP_SCALE)
         μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
-            pr[i], λ_bg[i]; onset_fraction = os, alg)
+            pr[i], bg_i; onset_fraction = os, alg)
         cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
         ## DRC deaths: onset_fraction · CFR · ∫_0^{T+h} exp(r·s) f(T+h−s) ds.
         μ_deaths = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
@@ -178,7 +194,7 @@ function forecast_reported(chn;
             if has_tests
                 μ_tests = _forecast_tests_mean(r[i], Th,
                     α_rep[i], θ_rep[i], α_lab[i], θ_lab[i],
-                    pr[i], λ_bg[i], τ_test_draws[i]; onset_fraction = os, alg)
+                    pr[i], bg_i, τ_test_draws[i]; onset_fraction = os, alg)
                 tests_cum[i] = _nb_rand(rng, k[i], μ_tests)
             end
         end
@@ -339,7 +355,9 @@ function forecast_vs_truth_trajectory(chn;
             daily_travellers, source_population,
             obs_cases = baseline_cases, obs_deaths = baseline_deaths,
             obs_exports = 0, seed, alg)
-        for (label, col, obs) in (
+        for (label,
+            col,
+            obs) in (
             ("DRC reported cases", :cases_cum, cases[i]),
             ("DRC deaths", :deaths_cum, deaths[i]))
             s = posterior_summary(fc[!, col])

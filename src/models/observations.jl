@@ -117,11 +117,13 @@ Reported (suspected) cases likelihood. Couples the observed DRC
 suspected-case counts to `C(T)` as the sum of (i) a BVD-driven
 contribution `p_drc · onset_fraction · ∫₀^s exp(r·u) · f_rep(s-u) du` using
 the onset-to-report delay [`report_delay_model`](@ref) and (ii) a non-BVD
-background `λ_bg · s`, with `λ_bg` and the testing fraction `τ_test`
-supplied by [`test_positivity_model`](@ref). The latent trajectory is
-cumulative *infections*, so `onset_fraction` (the incubation mgf) maps it
-onto onsets before the onset-to-report convolution; the background term
-is non-BVD and unscaled.
+background whose cumulative is the saturating ramp `μ_bg(s)` (see
+[`BackgroundRamp`](@ref) and [`test_positivity_model`](@ref)), so each
+bin's background increment is `μ_bg(s_k) − μ_bg(s_{k−1})`. With `Δλ = 0`
+this is the constant `λ0 · Δt`. The latent trajectory is cumulative
+*infections*, so `onset_fraction` (the incubation mgf) maps it onto
+onsets before the onset-to-report convolution; the background term is
+non-BVD and unscaled.
 
 The observation is a per-vintage vector `reported_cases` aligned with
 `t_edges` (elapsed time since seeding to each sitrep date, ascending,
@@ -152,6 +154,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
     τ_test = test_positivity_state.τ_test
+    bg = test_positivity_state.bg
     f_rep = report_state.dist
     r = growth_state.r
 
@@ -178,10 +181,16 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     Λ_at_edges = Vector{Tt}(undef, n)
     bin_means = Vector{Tt}(undef, n)
     Λ_prev = zero(Tt)
+    μ_bg_prev = zero(Tt)
     for i in 1:n
         s_k = t_edges[i]
-        Δt = i == 1 ? s_k : (s_k - t_edges[i - 1])
-        raw = p_drc_per_bin[i] * ΔμBVD0[i] + λ_bg * max(Δt, zero(Δt))
+        ## Background increment is the cumulative ramp difference
+        ## μ_bg(s_k) − μ_bg(s_{k−1}); with Δλ = 0 this is λ0·(s_k − s_{k−1}),
+        ## the old constant-rate `λ_bg · Δt`.
+        μ_bg_k = bg_cumulative(bg, s_k)
+        Δμ_bg = max(μ_bg_k - μ_bg_prev, zero(Tt))
+        μ_bg_prev = μ_bg_k
+        raw = p_drc_per_bin[i] * ΔμBVD0[i] + Δμ_bg
         μ_i = isfinite(raw) ? max(raw, eps(typeof(raw))) :
               eps(typeof(raw))
         bin_means[i] = μ_i
@@ -200,7 +209,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
 
     expected_reports_total := Λ_at_edges[end]
 
-    return (; p_drc_per_bin, λ_bg, τ_test,
+    return (; p_drc_per_bin, λ_bg, bg, τ_test,
         expected_reports_total, positivity,
         report_delay_dist = f_rep,
         μ_BVD0_at_edges, Λ_at_edges)
@@ -242,11 +251,14 @@ with `μ_BVD,0` the unit-ascertainment onset-to-report BVD cumulative
 (kernel `f_rep` passed in from [`reported_cases_model`](@ref)) and
 `s_test` the PCR sensitivity. A [`DailyBVDTrajectory`](@ref) precomputes
 `μ_BVD,0` once on a shared Gauss-Legendre node set so the outer
-quadrature is reused across every edge. `bg_tested_v` is the between-edge
-increment of ``\\tau\\,\\lambda_{bg} \\int_0^{s} F_{lab}(s - u)\\,du``
-(via `_gamma_cdf`, finite α gradient under Mooncake, see #138), so the
-constant-rate non-BVD background convolved against the lab-delay CDF is
-right-truncated by the integration limits.
+quadrature is reused across every edge. `bg_tested_v` is the cumulative
+``\\tau\\,\\int_0^{s} \\lambda_{bg}(u)\\, F_{lab}(s - u)\\,du`` of the
+saturating-ramp background (see [`BackgroundRamp`](@ref) and
+[`bg_tested_integral`](@ref)) convolved against the lab-delay CDF and
+right-truncated by the integration limits. With `Δλ = 0` the ramp rate
+is constant and this reduces to the closed-form
+``\\tau\\,\\lambda_0\\,\\int_0^{s} F_{lab}(s - u)\\,du`` (via `_gamma_cdf`,
+finite α gradient under Mooncake, see #138).
 
 `samples_analysed` is the per-vintage analysed denominator vector aligned
 with `t_edges`. Pass a vector of `missing` entries (with a non-missing
@@ -272,7 +284,8 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         samples_analysed::AbstractVector,
         tests_analysed::Union{Missing, Integer},
         growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, λ_bg::Real, τ_test::Real, f_rep,
+        p_drc_per_bin::AbstractVector, bg::BackgroundRamp, τ_test::Real,
+        f_rep,
         t_edges::AbstractVector, tests_edge::Real;
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
@@ -324,9 +337,9 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     ##
     ## BVD cumulative tested volume to edge i: τ · p_DRC · I_lab,0(s_i)
     ## (the lab-convolved unit-ascertainment trajectory). Background
-    ## cumulative tested volume: τ · λ_bg · ∫₀^{s_i} F_lab(s_i - u) du,
-    ## the constant-rate non-BVD arrivals convolved against the lab-delay
-    ## CDF and right-truncated at the edge (`_gamma_cdf_integral`). τ_test
+    ## cumulative tested volume: τ · ∫₀^{s_i} λ_bg(u) F_lab(s_i - u) du,
+    ## the saturating-ramp non-BVD arrivals convolved against the lab-delay
+    ## CDF and right-truncated at the edge (`bg_tested_integral`). τ_test
     ## scales both, so it cancels in the positivity ratio: the absolute
     ## p_DRC·s·τ confirmed scale no longer enters, and the binomial
     ## conditions on the observed analysed denominator.
@@ -337,9 +350,14 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     for i in 1:n
         raw_bvd = p_drc_per_bin[i] * I_lab0_edges[i]
         bvd_cum = isfinite(raw_bvd) ? max(raw_bvd, eps(Tt)) : eps(Tt)
+        ## Background cumulative tested volume to edge i:
+        ## τ · ∫₀^{s_i} λ_bg(u) F_lab(s_i − u) du, the time-varying ramp
+        ## arrivals convolved against the lab-delay CDF and right-truncated
+        ## at the edge. With Δλ = 0 this reduces to the constant-rate
+        ## τ · λ0 · _gamma_cdf_integral.
         bg_cum = max(
-            τ_test * λ_bg *
-            _gamma_cdf_integral(α_lab, θ_lab, oftype(T, t_edges[i])),
+            τ_test * bg_tested_integral(bg, α_lab, θ_lab,
+                oftype(T, t_edges[i])),
             zero(Tt))
         bvd_tested = τ_test * bvd_cum
         denom = bvd_tested + bg_cum
@@ -370,7 +388,7 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     end
 
     ## Tested-volume mean at `tests_edge`: τ · (BVD tested + background
-    ## tested). The background arrives at constant rate λ_bg and is
+    ## tested). The background arrives at the ramp rate λ_bg(u) and is
     ## convolved against F_lab so only samples processed by `tests_edge`
     ## count.
     raw_bvd_tested = τ_test * bvd_tested_unit
@@ -378,8 +396,8 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
                   max(raw_bvd_tested, eps(typeof(raw_bvd_tested))) :
                   eps(typeof(raw_bvd_tested))
     te = oftype(T, tests_edge)
-    bg_integral = _gamma_cdf_integral(α_lab, θ_lab, te)
-    raw_bg_tested = τ_test * λ_bg * bg_integral
+    bg_integral = bg_tested_integral(bg, α_lab, θ_lab, te)
+    raw_bg_tested = τ_test * bg_integral
     bg_tested := isfinite(raw_bg_tested) ?
                  max(raw_bg_tested, eps(typeof(raw_bg_tested))) :
                  eps(typeof(raw_bg_tested))
@@ -428,7 +446,9 @@ The daily generative process over `1:D` (`D = round(T)`):
   onsets-to-report are the increments of the Gamma closed-form
   ``p_{DRC}\\,\\mu_{BVD,0}(d)`` (kernel `f_rep`, shared with
   [`reported_cases_model`](@ref)); daily non-BVD background arrives at the
-  constant rate `λ_bg`. A receipt fraction `τ_recv` thins both into
+  saturating-ramp rate `λ_bg(d)` (the ramp cumulative increment over day
+  `d`; constant `λ0` when `Δλ = 0`). A receipt fraction `τ_recv` thins
+  both into
   samples *received* by the lab on day `d`.
 - *Backlog drain.* Received samples join a FIFO backlog drained at `κ`
   per day, `processed_d = min(κ_d, backlog_{d-1} + arrivals_d)`, with the
@@ -462,7 +482,8 @@ edge reduces each stream to its cumulative single-total likelihood.
         samples_analysed::AbstractVector,
         confirmed_cases::AbstractVector,
         growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, λ_bg::Real, τ_recv::Real, f_rep,
+        p_drc_per_bin::AbstractVector, bg::BackgroundRamp, τ_recv::Real,
+        f_rep,
         κ_lab::Real, t_edges::AbstractVector;
         test_sensitivity = test_sensitivity_model(),
         stoppage_days::AbstractVector = Int[],
@@ -515,12 +536,18 @@ edge reduces each stream to its cumulative single-total likelihood.
     proc_at = Vector{Tt}(undef, n)
     q_at = Vector{Tt}(undef, n)
     μ_prev = zero(Tt)
+    μ_bg_prev = zero(Tt)
     vi = 1
     for d in 1:D
         Δμ = max(μ_bvd_cum[d] - μ_prev, zero(Tt))
         μ_prev = μ_bvd_cum[d]
         a_bvd = τ_recv * p_for_day[d] * Δμ
-        a_bg = τ_recv * λ_bg
+        ## Daily background arrivals = ramp cumulative increment over day d,
+        ## μ_bg(d) − μ_bg(d−1). With Δλ = 0 this is the constant λ0 per day.
+        μ_bg_d = bg_cumulative(bg, oftype(T, d))
+        Δμ_bg = max(μ_bg_d - μ_bg_prev, zero(Tt))
+        μ_bg_prev = μ_bg_d
+        a_bg = τ_recv * Δμ_bg
         recv_cum += a_bvd + a_bg
         bl_bvd += a_bvd
         bl_bg += a_bg

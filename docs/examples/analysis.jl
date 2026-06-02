@@ -1393,7 +1393,8 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
-#md #         Int[], Int[], missing, nothing, 1.0, Float64[], 1.0, 1.0,
+#md #         Int[], Int[], missing, nothing, 1.0, Float64[],
+#md #         BVDOutbreakSize.background_ramp(1.0, 0.0, 7.0), 1.0,
 #md #         nothing, Float64[], 1.0)), "\n```"))
 #md # ```
 
@@ -1757,7 +1758,7 @@ prior_C_table #hide
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
-        :λ_bg, :τ_test, :s_test, :positivity, :p_positive]);
+        :λ0, :Δλ, :τ_test, :s_test, :positivity, :p_positive]);
 
 #md # ```@raw html
 #md # </details>
@@ -2177,7 +2178,7 @@ start_date_fig #hide
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
-        :s_test, :τ_test, :λ_bg, :positivity, :p_positive,
+        :s_test, :τ_test, :λ0, :Δλ, :positivity, :p_positive,
         :cumulative_cases]; digits = 2);
 
 #md # ```@raw html
@@ -2236,7 +2237,7 @@ posterior_pair_fig #hide
 
 lab_pair_fig = plot_pair(chn_joint,
     [:α_rep, :θ_rep, :α_lab, :θ_lab, :s_test, :τ_test,
-        :λ_bg, :cumulative_cases];
+        :λ0, :Δλ, :cumulative_cases];
     prior = prior_chn);
 
 #md # ```@raw html

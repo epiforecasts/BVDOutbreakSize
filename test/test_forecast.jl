@@ -150,11 +150,15 @@ end
     using Distributions: Gamma
     using BVDOutbreakSize: onset_rescale
     import BVDOutbreakSize as B
+    using BVDOutbreakSize: background_ramp, bg_cumulative,
+                           BACKGROUND_RAMP_SCALE
 
     r = 0.05
     Th = 107.0
     α, θ, CFR = 4.3, 2.6, 0.3
     α_rep, θ_rep, p_drc, λ_bg = 4.0, 3.0, 0.2, 1.5
+    ## Constant background ramp (Δλ = 0): bg cumulative is λ0·Th.
+    bg = background_ramp(λ_bg, 0.0, BACKGROUND_RAMP_SCALE)
     α_lab, θ_lab, s_test, τ_test = 2.0, 1.5, 0.9, 0.6
     os = onset_rescale(Gamma(3.0, 2.1), r)
 
@@ -172,11 +176,13 @@ end
 
     ## Reported cases scale only the BVD part; the non-BVD background
     ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.
-    rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
+    rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, bg;
         onset_fraction = os)
-    rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg)
-    bvd0 = rc0 - λ_bg * Th
-    @test rc1 ≈ os * bvd0 + λ_bg * Th
+    rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, bg)
+    bg_cum = bg_cumulative(bg, Th)
+    @test bg_cum ≈ λ_bg * Th        # Δλ = 0 reduces to the constant form
+    bvd0 = rc0 - bg_cum
+    @test rc1 ≈ os * bvd0 + bg_cum
     @test rc1 > os * rc0
 
     ## Default onset_fraction = 1 recovers the pre-infection-layer mean.
