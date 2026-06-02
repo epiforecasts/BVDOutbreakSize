@@ -149,14 +149,25 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
         p_drc_per_bin::AbstractVector, t_edges::AbstractVector;
         report_delay = report_delay_model(),
         test_positivity = test_positivity_model(),
+        report_onset_offset::Union{Nothing, Real} = nothing,
         onset_fraction::Real = 1.0)
     report_state ~ to_submodel(report_delay, false)
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
     τ_test = test_positivity_state.τ_test
-    bg = test_positivity_state.bg
     f_rep = report_state.dist
     r = growth_state.r
+    ## Anchor the background ramp to reporting onset: the background clock
+    ## starts at `t_report = T − report_onset_offset` (clamped at 0), so
+    ## non-BVD suspects accrue only once case-finding has begun, and the
+    ## ramp is still climbing across the late lab window. `nothing`
+    ## (the default) keeps the seeding-anchored ramp (`t_report = 0`),
+    ## which with `Δλ = 0` recovers the constant background exactly.
+    t_report = report_onset_offset === nothing ? zero(growth_state.T) :
+               max(growth_state.T - report_onset_offset,
+        zero(growth_state.T))
+    bg = background_ramp(test_positivity_state.λ0,
+        test_positivity_state.Δλ, test_positivity_state.scale, t_report)
 
     n = length(t_edges)
     n == length(p_drc_per_bin) ||

@@ -10,11 +10,13 @@
     λ0, Δλ, scale = 0.7, 1.3, 7.0
     b = background_ramp(λ0, Δλ, scale)
 
-    ## μ_bg(0) = 0 exactly.
+    ## μ_bg(0) = 0 exactly (clock starts at t_report = 0 here).
     @test bg_cumulative(b, 0.0) == 0.0
     @test bg_cumulative(b, -5.0) == 0.0
-    ## Rate rises from λ0 towards λ0 + Δλ.
-    @test bg_rate(b, 0.0) ≈ λ0
+    ## Rate is zero at/before the onset and rises from λ0 just after it
+    ## towards λ0 + Δλ (half-open: nothing accrues at exactly t_report).
+    @test bg_rate(b, 0.0) == 0.0
+    @test bg_rate(b, 1e-9) ≈ λ0
     @test bg_rate(b, 1e6) ≈ λ0 + Δλ
     ## Cumulative is the analytic integral of the rate (FD check).
     h = 1e-5
@@ -64,6 +66,55 @@ end
         @test isapprox(bg_tested_integral(b, α_lab, θ_lab, t), ref;
             rtol = 1e-6)
     end
+end
+
+@testitem "background ramp: reporting-onset anchoring" begin
+    using BVDOutbreakSize: background_ramp, bg_rate, bg_cumulative,
+                           bg_tested_integral, integrate, _gamma_cdf,
+                           _gamma_cdf_integral
+
+    λ0, Δλ, scale, t_report = 0.6, 1.2, 5.0, 120.0
+    b = background_ramp(λ0, Δλ, scale, t_report)
+
+    ## Nothing accrues before reporting onset.
+    for t in (0.0, 60.0, 119.9, t_report)
+        @test bg_rate(b, t) == 0.0
+        @test bg_cumulative(b, t) == 0.0
+        @test bg_tested_integral(b, 2.0, 1.5, t) == 0.0
+    end
+    ## After onset the clock is Δt = t − t_report: rate climbs from λ0.
+    @test bg_rate(b, t_report + 1e-9) ≈ λ0
+    @test bg_rate(b, t_report + 1e6) ≈ λ0 + Δλ
+    ## Cumulative is the integral of the rate from t_report (FD + quad).
+    h = 1e-5
+    for t in (123.0, 126.0, 140.0)
+        num = (bg_cumulative(b, t + h) - bg_cumulative(b, t - h)) / (2h)
+        @test isapprox(num, bg_rate(b, t); rtol = 1e-6)
+        q = integrate(u -> bg_rate(b, u), t_report, t)
+        @test isapprox(bg_cumulative(b, t), q; rtol = 1e-8)
+    end
+    ## Δλ = 0 with t_report > 0 is the shifted-constant μ_bg = λ0·(t−t_report).
+    b0 = background_ramp(λ0, 0.0, scale, t_report)
+    α, θ = 2.0, 1.5
+    for t in (123.0, 130.0)
+        Δt = t - t_report
+        @test bg_cumulative(b0, t) ≈ λ0 * Δt
+        @test bg_tested_integral(b0, α, θ, t) ≈
+              λ0 * _gamma_cdf_integral(α, θ, Δt)
+    end
+    ## Tested integral matches a direct quadrature anchored at t_report.
+    for t in (123.0, 126.0, 145.0)
+        ref = integrate(t_report, t) do u
+            bg_rate(b, u) * _gamma_cdf(α, θ, t - u)
+        end
+        @test isapprox(bg_tested_integral(b, α, θ, t), ref; rtol = 1e-6)
+    end
+    ## Positivity geometry: anchored ramp still climbing across 4 daily
+    ## edges, so the background tested volume grows materially while a
+    ## seeding-anchored saturated ramp (t_report=0) is flat there.
+    edges = [123.0, 124.0, 125.0, 126.0]
+    bgt = [bg_tested_integral(b, α, θ, e) for e in edges]
+    @test all(diff(bgt) .> 0)
 end
 
 @testitem "reported_cases ramp Δλ=0 reproduces constant" tags=[:slow] begin

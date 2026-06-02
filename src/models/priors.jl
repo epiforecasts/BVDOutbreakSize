@@ -192,32 +192,41 @@ inside [`reported_cases_model`](@ref); the per-test positivity
 `s · BVD_tested / (BVD_tested + bg_tested)` is exposed inside
 [`confirmed_cases_model`](@ref).
 
-## Saturating ramp background
+## Saturating ramp background, anchored to reporting onset
 
-The background is a saturating ramp in time (issue: lab-stream
-data-model mismatch). The per-day non-BVD rate is
-`λ_bg(t) = λ0 + Δλ·(1 − e^(−t/scale))`, rising from the baseline `λ0`
-towards `λ0 + Δλ` over the surveillance scale-up timescale `scale`
-(see [`BackgroundRamp`](@ref)). A constant-rate background plus
-exponential BVD forces the per-test positivity to *rise* over the lab
-vintages, but the observed cumulative positivity *falls*
-(0.48 → 0.30 over 23-26 May); a background that broadens as the
-suspected-case definition widens pulls positivity down and lets the
-joint converge without the lab stream fighting the BVD trajectory.
+The background is a saturating ramp in time, anchored to surveillance /
+reporting onset rather than seeding (issue: lab-stream data-model
+mismatch). With the ramp clock starting at the reporting-onset elapsed
+time `t_report` (`Δt = t − t_report`), the per-day non-BVD rate is
+`λ_bg(t) = 0` for `t ≤ t_report` and
+`λ_bg(t) = λ0 + Δλ·(1 − e^(−Δt/scale))` afterwards, rising from the
+baseline `λ0` towards `λ0 + Δλ` over the surveillance scale-up timescale
+`scale` once case-finding has begun (see [`BackgroundRamp`](@ref)). A
+constant-rate background plus exponential BVD forces the per-test
+positivity to *rise* over the lab vintages, but the observed cumulative
+positivity *falls* (0.48 → 0.30 over 23-26 May); a background that
+broadens as the suspected-case definition widens, anchored so it is
+still climbing across the late lab window, pulls positivity down there
+(a seeding-anchored ramp has saturated long before the cut-off).
 
 `λ0` is the baseline rate (default half-normal `Normal+(0, 1)`, the
 previous `λ_bg` prior) and `Δλ` the ramp amplitude (default half-normal
 `Normal+(0, 1)`). `scale` is a fixed keyword (default
-[`BACKGROUND_RAMP_SCALE`](@ref) ≈ 7 days): the four lab vintages cannot
-identify it, so it is not sampled. Pass `ramp_amplitude_prior =
-Dirac(0.0)` (or `Δλ` pinned to zero) to recover the constant background
-`λ_bg(t) = λ0`, `μ_bg(t) = λ0·t`, exactly — the default `delta_zero`
-flag keeps backward compatibility off, with `Δλ` sampled.
+[`BACKGROUND_RAMP_SCALE`](@ref)): the four lab vintages cannot identify
+it, so it is not sampled. The reporting-onset offset is supplied by the
+observation submodels via [`report_onset_offset`](@ref) and the latent
+`T`, so `t_report = T − offset`; this submodel returns the sampled
+`λ0` / `Δλ` and the fixed `scale` for the observation models to build the
+anchored [`BackgroundRamp`](@ref). The `delta_zero` flag fixes `Δλ = 0`,
+which with `t_report = 0` (the default seeding-anchored ramp returned
+here) recovers the constant background `λ_bg(t) = λ0`, `μ_bg(t) = λ0·t`,
+exactly.
 
 Returns the legacy scalar `λ_bg = λ0` (the baseline rate, so existing
 constant-background callers keep working), the sampled `λ0` / `Δλ`, the
-fixed `scale`, the [`BackgroundRamp`](@ref) `bg` and a `μ_bg` cumulative
-closure for the downstream observation submodels.
+fixed `scale`, a seeding-anchored [`BackgroundRamp`](@ref) `bg`
+(`t_report = 0`) and a `μ_bg` cumulative closure for any caller that does
+not supply a reporting offset.
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),

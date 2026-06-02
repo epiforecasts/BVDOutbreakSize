@@ -120,7 +120,8 @@ likelihood. See [`confirmed_cases_model`](@ref).
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
-        incubation = incubation_model())
+        incubation = incubation_model(),
+        report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
@@ -128,11 +129,16 @@ likelihood. See [`confirmed_cases_model`](@ref).
     test_positivity_state ~ to_submodel(test_positivity, false)
     incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
-    bg = test_positivity_state.bg
     τ_test = test_positivity_state.τ_test
     f_rep = report_state.dist
     T = growth_state.T
     os = onset_rescale(incubation_state.dist, growth_state.r)
+    ## Reporting-anchored background ramp (see [`reported_cases_model`](@ref));
+    ## `nothing` keeps the seeding-anchored clock (`t_report = 0`).
+    t_report = report_onset_offset === nothing ? zero(T) :
+               max(T - report_onset_offset, zero(T))
+    bg = background_ramp(test_positivity_state.λ0,
+        test_positivity_state.Δλ, test_positivity_state.scale, t_report)
 
     confirmed_vec = Union{Missing, Int}[confirmed_cases]
     ## Single-vintage analysed denominator for the confirmed Binomial: the
@@ -245,6 +251,16 @@ which the lab processed nothing (the 25 May Ituri stoppage). Without
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
 disable the factor entirely.
+
+`report_onset_offset` anchors the non-BVD background ramp to
+surveillance / reporting onset: the background clock starts at
+`t_report = T − report_onset_offset` rather than at seeding, so non-BVD
+suspects accrue only once case-finding has begun and the ramp is still
+climbing across the late lab vintages (see [`reported_cases_model`](@ref)
+and [`report_onset_offset`](@ref)). Pass
+`report_onset_offset(as_of_date)` (8 days for the 26 May cut-off); the
+default `nothing` keeps the seeding-anchored ramp (`t_report = 0`) and,
+with `Δλ = 0`, the constant background.
 """
 @model function bvd_joint(
         exported_cases::Union{Missing, Integer},
@@ -282,7 +298,8 @@ disable the factor entirely.
         source_population::Real = ITURI_POPULATION,
         pre_start_deaths::Union{Missing, Integer} = 0,
         pre_detection_exports::Union{Missing, Integer} = 0,
-        first_export_detection_delta::Union{Missing, Real} = missing)
+        first_export_detection_delta::Union{Missing, Real} = missing,
+        report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
     if genetic !== nothing
         genetic_state ~ to_submodel(genetic(growth_state.T), false)
@@ -327,6 +344,7 @@ disable the factor entirely.
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
             test_positivity = test_positivity,
+            report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
     if !isempty(confirmed_cases) && !isempty(samples_received)

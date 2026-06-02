@@ -99,6 +99,11 @@ follow `s_test · p_drc · ∫₀^{T+h} exp(r·s) · f_conf(T+h-s) ds`, with
 PCR sensitivity. Exports use `p_uganda · q` with
 `q = daily_travellers / source_population`. Assumes growth continues
 unchanged over the horizon (no interventions, no saturation).
+
+`report_onset_offset` anchors the background ramp to reporting onset
+(`t_report = T − report_onset_offset`), matching the fit; pass the same
+value used in [`bvd_joint`](@ref) (see [`report_onset_offset`](@ref)).
+The default `nothing` keeps the seeding-anchored clock (`t_report = 0`).
 """
 function forecast_reported(chn;
         horizon::Real = 7,
@@ -110,6 +115,7 @@ function forecast_reported(chn;
         obs_confirmed::Union{Real, Missing} = missing,
         obs_tests::Union{Real, Missing} = missing,
         seed::Integer = 20260520,
+        report_onset_offset::Union{Nothing, Real} = nothing,
         alg = DEATH_INTEGRAL_ALG)
     r = _draws(chn, :r)
     T = _draws(chn, :T)
@@ -170,8 +176,13 @@ function forecast_reported(chn;
         os = has_incubation ?
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
         ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
-        ## f_rep(T+h-s) ds + λ_bg · (T+h).
-        bg_i = background_ramp(λ0[i], Δλ[i], BACKGROUND_RAMP_SCALE)
+        ## f_rep(T+h-s) ds + μ_bg(T+h). The background ramp is anchored to
+        ## reporting onset, `t_report = T − report_onset_offset` (clamped at
+        ## 0); `nothing` keeps the seeding-anchored clock (`t_report = 0`).
+        t_report_i = report_onset_offset === nothing ? zero(T[i]) :
+                     max(T[i] - report_onset_offset, zero(T[i]))
+        bg_i = background_ramp(λ0[i], Δλ[i], BACKGROUND_RAMP_SCALE,
+            t_report_i)
         μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
             pr[i], bg_i; onset_fraction = os, alg)
         cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
@@ -340,6 +351,7 @@ function forecast_vs_truth_trajectory(chn;
         baseline_cases::Real = 0,
         baseline_deaths::Real = 0,
         seed::Integer = 20260520,
+        report_onset_offset::Union{Nothing, Real} = nothing,
         digits::Integer = 0,
         alg = DEATH_INTEGRAL_ALG)
     length(dates) == length(cases) == length(deaths) ||
@@ -354,7 +366,7 @@ function forecast_vs_truth_trajectory(chn;
         fc = forecast_reported(chn; horizon = h,
             daily_travellers, source_population,
             obs_cases = baseline_cases, obs_deaths = baseline_deaths,
-            obs_exports = 0, seed, alg)
+            obs_exports = 0, seed, report_onset_offset, alg)
         for (label,
             col,
             obs) in (

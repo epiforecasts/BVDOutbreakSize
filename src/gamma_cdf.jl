@@ -40,98 +40,124 @@ function _gamma_cdf_integral(α, θ, x)
 end
 
 """
-Saturating ramp non-BVD background. Carries the baseline rate `λ0`, the
-ramp amplitude `Δλ` and the scale-up timescale `scale`. The per-day
-non-BVD suspected-case arrival rate
+Saturating ramp non-BVD background, anchored to surveillance/reporting
+onset. Carries the baseline rate `λ0`, the ramp amplitude `Δλ`, the
+scale-up timescale `scale` and the reporting-onset elapsed time
+`t_report` (the latent time at which case-finding begins; before it
+there is no surveillance so no background suspects accrue). The per-day
+non-BVD suspected-case arrival rate, with the ramp clock starting at
+`t_report`,
 
 ```math
-\\lambda_{bg}(t) = \\lambda_0 + \\Delta\\lambda\\,(1 - e^{-t/\\text{scale}})
+\\lambda_{bg}(t) = \\begin{cases}
+0, & t \\le t_{report}, \\\\
+\\lambda_0 + \\Delta\\lambda\\,
+    \\bigl(1 - e^{-(t - t_{report})/\\text{scale}}\\bigr),
+    & t > t_{report},
+\\end{cases}
 ```
 
 rises from `λ0` towards `λ0 + Δλ` over the surveillance scale-up window
-`scale`. Its cumulative
+`scale` once reporting has begun. Its cumulative is the integral from
+`t_report`,
 
 ```math
-\\mu_{bg}(t) = \\lambda_0\\, t
-    + \\Delta\\lambda\\,\\bigl(t - \\text{scale} + \\text{scale}\\,
-    e^{-t/\\text{scale}}\\bigr),
-\\qquad \\mu_{bg}(0) = 0.
+\\mu_{bg}(t) = \\int_{t_{report}}^{t} \\lambda_{bg}(u)\\, du
+  = \\lambda_0\\,\\Delta t + \\Delta\\lambda\\,
+    \\bigl(\\Delta t - \\text{scale}
+    + \\text{scale}\\, e^{-\\Delta t/\\text{scale}}\\bigr),
+\\quad \\Delta t = t - t_{report},
 ```
 
-`Δλ = 0` recovers the constant-rate background `λ_bg(t) = λ0`,
-`μ_bg(t) = λ0·t`, exactly. Models the broadening suspected-case
-definition / surveillance ramp-up that pulls the observed per-test
-positivity down over the lab vintages (the constant-rate background plus
-exponential BVD instead forces positivity to rise). Construct with
-[`background_ramp`](@ref); the rate is [`bg_rate`](@ref) and the
-cumulative [`bg_cumulative`](@ref).
+`μ_bg(t) = 0` for `t ≤ t_report`. Anchoring to reporting onset (rather
+than seeding) lets the ramp still be climbing across the late lab
+vintages, so the broadening suspected-case definition pulls the observed
+per-test positivity *down* there; a seeding-anchored ramp has long since
+saturated by the cut-off and cannot. `Δλ = 0` *and* `t_report = 0`
+recover the constant-rate background `λ_bg(t) = λ0`, `μ_bg(t) = λ0·t`,
+exactly. Construct with [`background_ramp`](@ref); the rate is
+[`bg_rate`](@ref) and the cumulative [`bg_cumulative`](@ref).
 """
 struct BackgroundRamp{T}
     λ0::T
     Δλ::T
     scale::T
+    t_report::T
 end
 
 """
 Build a [`BackgroundRamp`](@ref) from the baseline rate `λ0`, ramp
-amplitude `Δλ` and fixed scale-up timescale `scale`, promoting to a
-common element type so AD tangents flow through `λ0` and `Δλ`.
+amplitude `Δλ`, fixed scale-up timescale `scale` and reporting-onset
+elapsed time `t_report` (default `0`, recovering the seeding-anchored
+clock), promoting to a common element type so AD tangents flow through
+`λ0`, `Δλ` and `t_report`.
 """
-function background_ramp(λ0, Δλ, scale)
-    T = float(promote_type(typeof(λ0), typeof(Δλ), typeof(scale)))
+function background_ramp(λ0, Δλ, scale, t_report = zero(scale))
+    T = float(promote_type(typeof(λ0), typeof(Δλ), typeof(scale),
+        typeof(t_report)))
     return BackgroundRamp{T}(convert(T, λ0), convert(T, Δλ),
-        convert(T, scale))
+        convert(T, scale), convert(T, t_report))
 end
 
 """
 Instantaneous non-BVD background rate `λ_bg(t)` of a
-[`BackgroundRamp`](@ref). Returns `λ0` exactly when `Δλ = 0`.
+[`BackgroundRamp`](@ref). Zero before reporting onset `t_report`; for
+`t > t_report` returns `λ0` exactly when `Δλ = 0`.
 """
 function bg_rate(b::BackgroundRamp, t)
-    return b.λ0 + b.Δλ * (one(t) - exp(-t / b.scale))
+    Δt = t - b.t_report
+    Δt <= zero(Δt) && return zero(b.λ0 * Δt)
+    return b.λ0 + b.Δλ * (one(Δt) - exp(-Δt / b.scale))
 end
 
 """
 Cumulative non-BVD background `μ_bg(t)` of a [`BackgroundRamp`](@ref),
-the integral of [`bg_rate`](@ref) from `0` to `t`. `μ_bg(0) = 0` and
-`Δλ = 0` reduces to `λ0·t`. Returns zero for `t ≤ 0`.
+the integral of [`bg_rate`](@ref) from the reporting onset `t_report` to
+`t`. `μ_bg(t) = 0` for `t ≤ t_report`; with `Δλ = 0` it reduces to
+`λ0·(t − t_report)`.
 """
 function bg_cumulative(b::BackgroundRamp, t)
-    t <= zero(t) && return zero(b.λ0 * t)
-    return b.λ0 * t +
-           b.Δλ * (t - b.scale + b.scale * exp(-t / b.scale))
+    Δt = t - b.t_report
+    Δt <= zero(Δt) && return zero(b.λ0 * Δt)
+    return b.λ0 * Δt +
+           b.Δλ * (Δt - b.scale + b.scale * exp(-Δt / b.scale))
 end
 
 """
 Cumulative background *tested* volume of a [`BackgroundRamp`](@ref):
-the time-varying background arrivals convolved against the lab-delay CDF
-`F_lab` and right-truncated at the testing cut-off `t`,
+the time-varying background arrivals (from reporting onset `t_report`)
+convolved against the lab-delay CDF `F_lab` and right-truncated at the
+testing cut-off `t`,
 
 ```math
-\\int_0^t \\lambda_{bg}(u)\\, F_{lab}(t - u)\\, du
-  = (\\lambda_0 + \\Delta\\lambda)\\, G(t) - \\Delta\\lambda\\, H(t),
+\\int_{t_{report}}^{t} \\lambda_{bg}(u)\\, F_{lab}(t - u)\\, du
+  = (\\lambda_0 + \\Delta\\lambda)\\, G - \\Delta\\lambda\\, H,
 ```
 
-where ``G(t) = \\int_0^t F_{lab}(t-u)\\,du`` is the closed-form
-[`_gamma_cdf_integral`](@ref) and
-``H(t) = \\int_0^t e^{-u/\\text{scale}}\\, F_{lab}(t-u)\\,du`` is the
-ramp's exponential weighting, evaluated numerically with the shared
+where, writing the substitution `v = u - t_report` and
+`Δt = t - t_report`,
+``G = \\int_{0}^{Δt} F_{lab}(Δt - v)\\,dv`` is the closed-form
+[`_gamma_cdf_integral`](@ref) at `Δt`, and
+``H = \\int_{0}^{Δt} e^{-v/\\text{scale}}\\, F_{lab}(Δt - v)\\,dv`` is
+the ramp's exponential weighting, evaluated numerically with the shared
 [`integrate`](@ref) quadrature. With `Δλ = 0` only the closed-form term
-`λ0·G(t)` remains, reproducing the constant-rate background tested
-volume exactly. Returns zero for `t ≤ 0`.
+`λ0·G` remains, reproducing the constant-rate background tested volume
+exactly when `t_report = 0`. Returns zero for `t ≤ t_report`.
 """
 function bg_tested_integral(b::BackgroundRamp{T}, α, θ, t;
         alg = DEATH_INTEGRAL_ALG) where {T}
     R = float(promote_type(T, typeof(α), typeof(θ), typeof(t)))
-    t <= zero(t) && return zero(R)
-    G = _gamma_cdf_integral(α, θ, t)
+    Δt = t - b.t_report
+    Δt <= zero(Δt) && return zero(R)
+    G = _gamma_cdf_integral(α, θ, Δt)
     iszero(b.Δλ) && return convert(R, b.λ0 * G)
-    ## H(t) = ∫₀ᵗ e^{-u/scale} F_lab(t-u) du, the ramp's exponential
-    ## weighting of the lab-delay CDF. No closed form, so reuse the shared
-    ## quadrature; the integrand peaks near u = 0 (small delay argument
-    ## t - u ≈ t) and decays, so the uniform rule on [0, t] is adequate.
-    H = integrate(zero(t), t; alg) do u
-        exp(-u / b.scale) * _gamma_cdf(α, θ, t - u)
+    ## H = ∫₀^{Δt} e^{-v/scale} F_lab(Δt-v) dv, the ramp's exponential
+    ## weighting of the lab-delay CDF (clock measured from reporting
+    ## onset). No closed form, so reuse the shared quadrature; the
+    ## integrand peaks near v = 0 (small delay argument Δt - v ≈ Δt) and
+    ## decays, so the uniform rule on [0, Δt] is adequate.
+    H = integrate(zero(Δt), Δt; alg) do v
+        exp(-v / b.scale) * _gamma_cdf(α, θ, Δt - v)
     end
     return convert(R, (b.λ0 + b.Δλ) * G - b.Δλ * H)
 end

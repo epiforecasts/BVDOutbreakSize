@@ -212,3 +212,21 @@ function m_prior_centre(as_of_date::AbstractString;
               date2epochdays(Date(base_date))
     return m_base + elapsed / doubling_days
 end
+
+"""
+    report_onset_offset(as_of_date; base_date)
+
+Days between surveillance/reporting onset (`base_date`, McCabe et al.'s
+first report 18 May 2026) and the cut-off `as_of_date`. Used to anchor
+the non-BVD background ramp to reporting onset: the background-clock
+elapsed time is `t_report = T - report_onset_offset`, so background
+suspects accrue only once case-finding has begun rather than from the
+latent seeding time. For the 26 May cut-off this is 8 days. Returns zero
+when the cut-off is the base date (the McCabe-date configuration), which
+collapses the offset and leaves `t_report = T`.
+"""
+function report_onset_offset(as_of_date::AbstractString;
+        base_date::AbstractString = M_PRIOR_BASE_DATE)
+    return date2epochdays(Date(as_of_date)) -
+           date2epochdays(Date(base_date))
+end
