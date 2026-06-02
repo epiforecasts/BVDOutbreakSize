@@ -232,6 +232,15 @@ supplies the binomial denominator for any `missing` `samples_analysed`
 entry. Per-test positivity is exposed as a derived quantity. Pass
 `tests_analysed = missing` to drop the tested-volume NegBinomial.
 
+When `samples_received` is also supplied (non-empty), the confirmed/lab
+path switches to the constant-capacity batch model
+[`lab_throughput_model`](@ref) (#174): a daily FIFO backlog drained at a
+single capacity `κ` (from [`lab_capacity_model`](@ref)) jointly generates
+received, analysed and positive counts, replacing the fixed lab-delay
+Gamma. `lab_stoppage_offsets` lists days (offsets before the cut-off) on
+which the lab processed nothing (the 25 May Ituri stoppage). Without
+`samples_received` the binomial confirmed|analysed path is used.
+
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
@@ -247,6 +256,8 @@ disable the factor entirely.
         confirmed_cases::AbstractVector = Union{Missing, Int}[],
         confirmed_offsets::AbstractVector = reported_offsets,
         samples_analysed::AbstractVector = Union{Missing, Int}[],
+        samples_received::AbstractVector = Union{Missing, Int}[],
+        lab_stoppage_offsets::AbstractVector = Int[],
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         growth = exponential_growth_model(),
@@ -254,6 +265,7 @@ disable the factor entirely.
         deaths = deaths_model,
         reported_cases_submodel = reported_cases_model,
         confirmed = confirmed_cases_model,
+        lab_throughput = lab_throughput_model,
         exports_deaths_model = exports_deaths_model,
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
@@ -263,6 +275,7 @@ disable the factor entirely.
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
+        lab_capacity = lab_capacity_model(),
         test_sensitivity = test_sensitivity_model(),
         incubation = incubation_model(),
         genetic = nothing,
@@ -316,7 +329,25 @@ disable the factor entirely.
             test_positivity = test_positivity,
             onset_fraction = os), false)
 
-    if !isempty(confirmed_cases)
+    if !isempty(confirmed_cases) && !isempty(samples_received)
+        ## Constant-capacity batch lab model (#174): the FIFO backlog
+        ## drained at κ replaces the fixed lab-delay Gamma for the
+        ## confirmed/analysed path, so received, analysed and positives all
+        ## flow from one drain rather than competing with a delay
+        ## distribution. Samples the capacity prior here.
+        confirmed_edges = [T - δ for δ in confirmed_offsets]
+        lab_cap_state ~ to_submodel(lab_capacity, false)
+        stoppage_days = [Int(round(T - δ)) for δ in lab_stoppage_offsets]
+        lab_state ~ to_submodel(
+            lab_throughput(samples_received, samples_analysed,
+                confirmed_cases, growth_state, k,
+                p_drc_per_bin[1:n_conf], reported_state.λ_bg,
+                reported_state.τ_test, reported_state.report_delay_dist,
+                lab_cap_state.κ_lab, confirmed_edges;
+                test_sensitivity = test_sensitivity,
+                stoppage_days = stoppage_days,
+                onset_fraction = os), false)
+    elseif !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
         tests_edge = T - tests_offset
         ## Per-vintage analysed denominators for the confirmed Binomial.

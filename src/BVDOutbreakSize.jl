@@ -60,9 +60,11 @@ export REPORT_SCENARIOS,
        surveillance_dispersion_model, pooled_ascertainment_model,
        independent_ascertainment_model,
        daily_ascertainment_model, deaths_ascertainment_model,
+       lab_capacity_model,
 # observation models
        exports_model, deaths_model,
        reported_cases_model, confirmed_cases_model,
+       lab_throughput_model,
        exports_deaths_model,
        exports_detection_timing_model,
 # joint composers

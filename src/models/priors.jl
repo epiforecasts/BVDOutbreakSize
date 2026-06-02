@@ -200,6 +200,29 @@ inside [`reported_cases_model`](@ref); the per-test positivity
 end
 
 """
+Laboratory daily processing-capacity prior for the constant-capacity
+batch model (issue #174). Samples a single constant daily analysis
+capacity `κ` (samples a laboratory can process per day) on a log scale.
+The FIFO backlog of received specimens is drained at `κ` per day, so
+`κ` sets the lab turnaround in place of a fixed onset-to-lab Gamma delay:
+when arrivals exceed `κ` a backlog builds and analysis lags receipt,
+recovering the observed mid-period stall without a separate delay
+distribution.
+
+Default `LogNormal(log(80), 0.5)`: median ≈ 80 samples/day, 95% interval
+≈ 30-210. Anchored on the observed daily analysed increments across the
+four 23-26 May vintages (211 → 295 → 295 → 403, i.e. ≈ 84, 0, 108 per
+day; the zero is the 25 May Ituri stoppage fixed externally), so the
+prior centres on the order of the realised batch size while staying wide.
+Used by [`lab_throughput_model`](@ref).
+"""
+@model function lab_capacity_model(;
+        capacity_prior = LogNormal(log(80.0), 0.5))
+    κ_lab ~ capacity_prior
+    return (; κ_lab)
+end
+
+"""
 Case-fatality ratio prior. Default `Beta(6.6, 13.4)` has mean ≈ 0.33,
 matching the CDC summary for past BVD outbreaks. Used by
 [`deaths_model`](@ref) and [`exports_deaths_model`](@ref).

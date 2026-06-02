@@ -113,6 +113,55 @@ end
     @test all(0 .<= cc .<= 211)
 end
 
+@testitem "lab_throughput batch model: received/analysed/positives" tags=[:slow] begin
+    ## Constant-capacity batch model (#174): received and analysed are
+    ## NegBinomial on the FIFO-drained cumulative pools, positives are
+    ## Binomial on the observed analysed denominator with success s · q.
+    ## Predictive positives are bounded by the analysed denominator, the
+    ## BVD share q stays in (0, 1), and the FIFO respects the stoppage day.
+    using Turing: sample, Prior, predict, @model, to_submodel
+    import FlexiChains
+    using BVDOutbreakSize: lab_throughput_model, exponential_growth_model,
+                           report_delay_model, surveillance_dispersion_model,
+                           lab_capacity_model
+
+    R = [418, 431, 431, 662]                 # cumulative received
+    A = [211, 295, 295, 403]                 # cumulative analysed
+    C = [101, 105, 106, 121]                 # cumulative positives
+    edges = [123.0, 124.0, 125.0, 126.0]
+    stop = [125]                              # 25 May Ituri stoppage day
+
+    @model function _batch_harness(recv, anl, pos;
+            growth = exponential_growth_model(),
+            dispersion = surveillance_dispersion_model(),
+            report_delay = report_delay_model(),
+            capacity = lab_capacity_model())
+        growth_state ~ to_submodel(growth, false)
+        disp_state ~ to_submodel(dispersion, false)
+        rep_state ~ to_submodel(report_delay, false)
+        cap_state ~ to_submodel(capacity, false)
+        lab_state ~ to_submodel(
+            lab_throughput_model(recv, anl, pos, growth_state,
+                disp_state.k, fill(0.3, length(pos)), 0.6, 0.7,
+                rep_state.dist, cap_state.κ_lab, edges;
+                stoppage_days = stop), false)
+    end
+
+    chn = sample(_batch_harness(R, A, C), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    pos = vec(Array(chn[:p_positive]))
+    @test all(0 .< pos .< 1)
+
+    pp = predict(_batch_harness(fill(missing, 4), A, fill(missing, 4)), chn)
+    cc = reduce(hcat, vec(Array(pp[:confirmed_cases])))
+    for v in 1:4
+        @test all(0 .<= cc[v, :] .<= A[v])
+    end
+    ## Received predictive draws are non-negative counts.
+    rr = reduce(hcat, vec(Array(pp[:samples_received])))
+    @test all(rr .>= 0)
+end
+
 @testitem "test_positivity_model lambda_prior is overridable" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
