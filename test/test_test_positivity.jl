@@ -58,8 +58,8 @@ end
     using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
                            report_delay_model, surveillance_dispersion_model
 
-    A = [211, 295, 295, 403]                 # samples analysed per vintage
-    C = [101, 4, 1, 15]                       # confirmed increments
+    A = [211, 295, 295, 403]                 # cumulative analysed
+    C = [101, 105, 106, 121]                  # cumulative confirmed
     edges = [123.0, 124.0, 125.0, 126.0]      # vintage elapsed times
 
     @model function _binom_harness(confirmed, analysed;
@@ -74,8 +74,6 @@ end
                 growth_state, disp_state.k, fill(0.3, length(confirmed)),
                 0.6, 0.7, rep_state.dist, edges, 126.0), false)
     end
-
-    using Turing: @model, to_submodel
 
     chn = sample(_binom_harness(C, A), Prior(), 300;
         chain_type = FlexiChains.VNChain, progress = false)

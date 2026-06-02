@@ -210,10 +210,10 @@ end
 Laboratory pipeline likelihood. Models the lab-confirmed cases over time
 and, where available, the testing volume that gates them.
 
-`confirmed_cases` (`Cumul positifs`) is a per-vintage increment vector
-aligned with `t_edges`. Each vintage's confirmed count is observed
-conditional on its analysed denominator through a Binomial (equations
-(23)-(24) of the walkthrough):
+`confirmed_cases` (`Cumul positifs`) is a per-vintage *cumulative* vector
+aligned with `t_edges`. Each vintage's cumulative confirmed count is
+observed conditional on its cumulative analysed denominator through a
+Binomial (equations (23)-(24) of the walkthrough):
 
 ```math
 C_v \\sim \\mathrm{Binomial}(A_v,\\ p_{pos,v}),
@@ -222,15 +222,17 @@ p_{pos,v} = \\frac{s_{test}\\, \\text{BVD}_{tested,v}}
                   {\\text{BVD}_{tested,v} + \\text{bg}_{tested,v}},
 ```
 
-where `A_v` is the per-vintage analysed count (`samples_analysed`,
-treated as a *known* denominator, not modelled) and
-`BVD_tested_v` / `bg_tested_v` are the between-vintage increments of the
-lab-convolved BVD and background tested volumes. The testing fraction
-`τ_test` cancels in the positivity ratio and the absolute confirmed scale
-is fixed by the observed `A_v`, so the `p_DRC · s · τ` multiplicative
-ridge that breaks the per-vintage NegBinomial fit (#163) is removed.
+where `A_v` is the cumulative analysed count to edge `v`
+(`samples_analysed`, treated as a *known* denominator, not modelled) and
+`BVD_tested_v` / `bg_tested_v` are the cumulative lab-convolved BVD and
+background tested volumes to that edge. The testing fraction `τ_test`
+cancels in the positivity ratio and the absolute confirmed scale is fixed
+by the observed `A_v`, so the `p_DRC · s · τ` multiplicative ridge that
+breaks the per-vintage NegBinomial fit (#163) is removed. The cumulative
+form is robust to vintages with zero newly-analysed samples (e.g. the
+25 May Ituri stoppage), which an increment binomial cannot represent.
 
-`BVD_tested_v` is `τ · p_{DRC,v}` times the between-edge increment of
+`BVD_tested_v` is `τ · p_{DRC,v}` times the cumulative
 
 ```math
 I_{lab,0}(s) = \\int_0^{s} \\mu_{BVD,0}(u)\\, f_{lab}(s - u)\\,du,
@@ -307,55 +309,59 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     trajectory = DailyBVDTrajectory(T, r, f_rep)
     I_lab0_edges = onset_fraction .*
                    delay_convolution(trajectory, t_edges, f_lab)
-    ΔIlab0 = daily_increment_kernel(I_lab0_edges)
-
-    ## Background tested cumulative at each edge: constant-rate λ_bg
-    ## arrivals convolved against the lab-delay CDF and right-truncated at
-    ## the edge, ∫₀^s F_lab(s - u) du = ∫₀^s F_lab(v) dv (the closed form
-    ## `_gamma_cdf_integral`). Difference to per-vintage increments.
-    bg_cum_edges = [τ_test * λ_bg *
-                    _gamma_cdf_integral(α_lab, θ_lab, oftype(T, s))
-                    for s in t_edges]
-    Δbg = daily_increment_kernel(bg_cum_edges)
 
     Tt = eltype(I_lab0_edges)
     p_pos = Vector{Tt}(undef, n)
     Λ_at_edges = Vector{Tt}(undef, n)
-    ## Cumulative unit-ascertainment-weighted BVD tested volume (before
-    ## the τ gate) accumulated up to `tests_edge`, summing the same
-    ## per-bin ascertainment increments the confirmed positivity uses.
+    ## Cumulative tested pools at each edge. The confirmed binomial is on
+    ## *cumulative* counts (cumulative positives among cumulative
+    ## analysed), so the positivity is the cumulative BVD share of the
+    ## tested pool rather than a per-vintage increment ratio. This matches
+    ## the single-total reduction exactly and is robust to vintages with
+    ## zero newly-analysed samples (e.g. the 25 May Ituri stoppage), where
+    ## an increment binomial would put a positive count against a zero
+    ## denominator.
+    ##
+    ## BVD cumulative tested volume to edge i: τ · p_DRC · I_lab,0(s_i)
+    ## (the lab-convolved unit-ascertainment trajectory). Background
+    ## cumulative tested volume: τ · λ_bg · ∫₀^{s_i} F_lab(s_i - u) du,
+    ## the constant-rate non-BVD arrivals convolved against the lab-delay
+    ## CDF and right-truncated at the edge (`_gamma_cdf_integral`). τ_test
+    ## scales both, so it cancels in the positivity ratio: the absolute
+    ## p_DRC·s·τ confirmed scale no longer enters, and the binomial
+    ## conditions on the observed analysed denominator.
+    ## τ-free BVD tested cumulative at the latest edge within `tests_edge`;
+    ## `I_lab0_edges` is already cumulative, so this is just that edge's
+    ## value (no differencing needed).
     bvd_tested_unit = zero(Tt)
-    Λ_prev = zero(Tt)
     for i in 1:n
-        raw_bvd = p_drc_per_bin[i] * ΔIlab0[i]
-        bvd_inc = isfinite(raw_bvd) ? max(raw_bvd, eps(typeof(raw_bvd))) :
-                  eps(typeof(raw_bvd))
-        ## Per-vintage BVD and background tested increments. τ_test
-        ## cancels in the positivity ratio (it scales both), so the
-        ## absolute p_DRC·s·τ confirmed scale no longer enters: the
-        ## binomial conditions on the observed analysed denominator.
-        bvd_tested_inc = τ_test * bvd_inc
-        bg_tested_inc = max(Δbg[i], zero(Tt))
-        denom = bvd_tested_inc + bg_tested_inc
-        p_raw = s_test * bvd_tested_inc / denom
+        raw_bvd = p_drc_per_bin[i] * I_lab0_edges[i]
+        bvd_cum = isfinite(raw_bvd) ? max(raw_bvd, eps(Tt)) : eps(Tt)
+        bg_cum = max(
+            τ_test * λ_bg *
+            _gamma_cdf_integral(α_lab, θ_lab, oftype(T, t_edges[i])),
+            zero(Tt))
+        bvd_tested = τ_test * bvd_cum
+        denom = bvd_tested + bg_cum
+        p_raw = s_test * bvd_tested / denom
         p_pos[i] = isfinite(p_raw) ?
                    clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
-        ## Expected confirmed cumulative kept as a derived diagnostic
-        ## (analysed denominator × positivity, summed over vintages).
-        Λ_prev += p_pos[i] *
-                  (samples_analysed[i] === missing ? zero(Tt) :
-                   convert(Tt, samples_analysed[i]))
-        Λ_at_edges[i] = Λ_prev
+        ## Expected cumulative confirmed: analysed denominator × cumulative
+        ## positivity, a derived diagnostic.
+        Λ_at_edges[i] = p_pos[i] *
+                        (samples_analysed[i] === missing ? zero(Tt) :
+                         convert(Tt, samples_analysed[i]))
         if t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge)))
-            bvd_tested_unit += bvd_inc
+            bvd_tested_unit = bvd_cum
         end
     end
 
     ## Confirmed counts observed conditional on the analysed denominator
-    ## via a Binomial (equation (24)). `A_v` is data, not modelled, which
-    ## removes the multiplicative ridge of the NegBinomial-increment form.
-    ## A `missing` denominator falls back to the cumulative `tests_analysed`
-    ## so predictive draws still have an integer denominator.
+    ## via a cumulative Binomial (equation (24)). `A_v` is data, not
+    ## modelled, which removes the multiplicative ridge of the
+    ## NegBinomial-increment form. A `missing` denominator falls back to
+    ## the cumulative `tests_analysed` so predictive draws still have an
+    ## integer denominator.
     for i in 1:n
         A_i = samples_analysed[i] === missing ?
               (tests_analysed === missing ? 0 : tests_analysed) :
