@@ -20,11 +20,115 @@ without Enzyme loaded raises a `MethodError`.
 function enzyme_adtype end
 
 """
+TensorBoard streaming callback for `nuts_sample`, mirroring the
+optional Enzyme backend. `tensorboard_callback(logdir; every = 1,
+kwargs...)` returns an AbstractMCMC callback closure that opens a
+`TensorBoardLogger.TBLogger(logdir; kwargs...)` and, every `every`
+steps on each chain, logs scalar diagnostics (log-density, a
+divergence flag and running divergence count, and step size / tree
+depth when available) to the TensorBoard event files under `logdir`.
+
+`tensorboard_callback` is a stub; loading TensorBoardLogger
+(`using TensorBoardLogger`) activates the method via
+`BVDOutbreakSizeTensorBoardLoggerExt`. Calling it without
+TensorBoardLogger loaded raises an informative `ErrorException`.
+
+Pass the result to `nuts_sample`:
+
+```julia
+using TensorBoardLogger
+nuts_sample(model; callback = tensorboard_callback("logs/run"))
+```
+
+then view the run with `tensorboard --logdir logs/run`.
+
+See also: [`progress_callback`](@ref), [`nuts_sample`](@ref).
+"""
+function tensorboard_callback(logdir; kwargs...)
+    throw(ErrorException(
+        "tensorboard_callback requires TensorBoardLogger. Load it with " *
+        "`using TensorBoardLogger` (it is an optional dependency) and " *
+        "retry. logdir = $(repr(logdir))"))
+end
+
+@doc raw"""
+A lightweight, dependency-free streaming progress callback for
+`nuts_sample`. Returns a closure matching the AbstractMCMC callback
+signature
+
+```julia
+callback(rng, model, sampler, transition, state, iteration; kwargs...)
+```
+
+which, every `every` iterations on each chain, appends one line to
+the file at `path` recording the iteration number, the transition
+log-density, and a running count of divergent transitions.
+
+The same closure is invoked from every thread `MCMCThreads()` spawns,
+so the divergence tally and file writes are shared across chains and
+guarded by a `ReentrantLock`. Tail the file live during a fit with
+`tail -f <path>`.
+
+Field access is defensive. The log-density is read from
+`transition.lp` and the divergence flag from
+`transition.stat.numerical_error`; both are wrapped in `try`/`catch`,
+so a transition that does not expose these fields yields `missing`
+log-density / no divergence increment rather than crashing the fit.
+The running divergence count is a single total over all chains, reset
+implicitly each time a fresh callback is constructed.
+
+See also: [`tensorboard_callback`](@ref), [`nuts_sample`](@ref).
+"""
+function progress_callback(; path::AbstractString, every::Integer = 10)
+    lock = ReentrantLock()
+    ndivergent = Ref(0)
+    return function (rng, model, sampler, transition, state, iteration;
+            kwargs...)
+        try
+            divergent = false
+            try
+                divergent = transition.stat.numerical_error === true
+            catch
+                divergent = false
+            end
+            if divergent
+                Base.@lock lock (ndivergent[] += 1)
+            end
+            if iteration % every == 0
+                lp = try
+                    transition.lp
+                catch
+                    missing
+                end
+                Base.@lock lock begin
+                    open(path, "a") do io
+                        println(io,
+                            "iteration=$(iteration) lp=$(lp) " *
+                            "divergences=$(ndivergent[])")
+                    end
+                end
+            end
+        catch
+            # A streaming progress callback must never abort a fit.
+        end
+        return nothing
+    end
+end
+
+"""
 NUTS on `model`, parallel chains via `MCMCThreads`. Chains
 initialise from the prior (`InitFromPrior()`) to keep the sampler
 in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
+
+Pass `callback` to stream live fit progress (iteration, log-density,
+divergences) instead of waiting for the whole fit. Use
+[`progress_callback`](@ref) for a dependency-free file/stdout stream,
+or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
+`using TensorBoardLogger`). The callback is forwarded to `sample` only
+when non-`nothing`. Any additional `kwargs` are passed through to
+`sample`.
 """
 function nuts_sample(model;
         samples::Integer = 1_000,
@@ -33,8 +137,11 @@ function nuts_sample(model;
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
-        init = InitFromPrior())
+        init = InitFromPrior(),
+        callback = nothing,
+        kwargs...)
     rng = MersenneTwister(seed)
+    cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     return sample(
         rng,
         model,
@@ -42,6 +149,8 @@ function nuts_sample(model;
         MCMCThreads(),
         samples, chains;
         initial_params = fill(init, chains),
-        progress = progress
+        progress = progress,
+        cb_kwargs...,
+        kwargs...
     )
 end
