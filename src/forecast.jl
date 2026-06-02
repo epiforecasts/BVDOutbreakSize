@@ -111,7 +111,13 @@ function forecast_reported(chn;
     CFR = _draws(chn, :CFR)
     α = _draws(chn, :α)
     θ = _draws(chn, :θ)
-    w = _draws(chn, :w)
+    ## Uganda exports use either the McCabe rectangular detection window
+    ## `w` or the explicit onset-to-detection delay `Gamma(α_det, θ_det)`,
+    ## depending on which export mechanism the chain was fitted with.
+    has_window = haskey_chain(chn, :w)
+    w = has_window ? _draws(chn, :w) : nothing
+    α_det = has_window ? nothing : _draws(chn, :α_det)
+    θ_det = has_window ? nothing : _draws(chn, :θ_det)
     pr = _draws(chn, :p_drc)
     pu = _draws(chn, :p_uganda)
     k = _draws(chn, :k)
@@ -163,12 +169,17 @@ function forecast_reported(chn;
         μ_deaths = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
             onset_fraction = os, alg)
         deaths_cum[i] = _nb_rand(rng, k[i], μ_deaths)
-        ## Uganda exports: p_uganda · q · ∫_{T+h−w}^{T+h} C(s) ds (closed
-        ## form for exponential growth). Exports see infections directly —
-        ## the detection window absorbs the infection-to-detection delay —
-        ## so they are not rescaled by the incubation period.
-        lo = max(Th - w[i], zero(Th))
-        μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
+        ## Uganda exports. With the McCabe window: p_uganda · q ·
+        ## ∫_{T+h−w}^{T+h} C(s) ds (closed form), unscaled by incubation.
+        ## With the onset-to-detection delay: the delay-survival person-
+        ## time integral, onset-rescaled by `os`.
+        if has_window
+            lo = max(Th - w[i], zero(Th))
+            μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
+        else
+            μ_exports = expected_exports_delay(r[i], pu[i], q, Th,
+                Gamma(α_det[i], θ_det[i]); onset_fraction = os, alg = alg)
+        end
         exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
         if has_lab
             μ_confirmed = _forecast_confirmed_mean(r[i], Th,
@@ -339,7 +350,9 @@ function forecast_vs_truth_trajectory(chn;
             daily_travellers, source_population,
             obs_cases = baseline_cases, obs_deaths = baseline_deaths,
             obs_exports = 0, seed, alg)
-        for (label, col, obs) in (
+        for (label,
+            col,
+            obs) in (
             ("DRC reported cases", :cases_cum, cases[i]),
             ("DRC deaths", :deaths_cum, deaths[i]))
             s = posterior_summary(fc[!, col])

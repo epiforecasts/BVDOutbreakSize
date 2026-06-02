@@ -6,19 +6,22 @@
 
 """
 Exports-only composer (Method 1 analogue). Samples growth and
-ascertainment, then conditions on the exports likelihood only. See
-[`exports_model`](@ref).
+ascertainment, then conditions on the exports likelihood only. Defaults
+to the explicit onset-to-detection delay mechanism
+[`exports_delay_model`](@ref); pass `exports = exports_model` to fix back
+to the McCabe et al. rectangular detection window.
 
-The exports count sees infections directly (the detection window absorbs
-the infection-to-detection delay), so the incubation period is not
-identified by this stream: it is sampled only to expose
-`cumulative_cases = C_T · onset_fraction` as a prior-predictive
-case-equivalent of the latent infections, and is drawn from its prior.
+With the delay mechanism the exports count sees onsets through the
+delay-survival convolution, so the incubation period is weakly identified
+by this stream through `onset_fraction = mgf(incubation, −r)`, which
+maps the latent infection trajectory onto onsets. `cumulative_cases =
+C_T · onset_fraction` is exposed as a prior-predictive case-equivalent of
+the latent infections.
 """
 @model function exports_only_model(
         exported_cases::Union{Missing, Integer};
         growth = exponential_growth_model(),
-        exports = exports_model,
+        exports = exports_delay_model,
         ascertainment = independent_ascertainment_model(),
         incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
@@ -26,11 +29,11 @@ case-equivalent of the latent infections, and is drawn from its prior.
     incubation_state ~ to_submodel(incubation, false)
     os = onset_rescale(incubation_state.dist, growth_state.r)
 
-    ## Exports see infections directly: the detection window already
-    ## folds the infection-to-detection delay into `w`, so the count
-    ## likelihood is not rescaled by the incubation period.
+    ## Exports see onsets through the onset-to-detection delay
+    ## convolution, so the count likelihood is onset-rescaled by `os`.
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, asc_state.p_uganda), false)
+        exports(exported_cases, growth_state, asc_state.p_uganda;
+            onset_fraction = os), false)
 
     onset_fraction := os
     cumulative_infections := growth_state.C_T
@@ -148,19 +151,23 @@ likelihood. See [`confirmed_cases_model`](@ref).
 end
 
 """
-Deaths-among-exports-only composer. Samples growth, delay, CFR,
-detection window, traveller volume and ascertainment, then conditions
-on the dated export-deaths likelihood. See
-[`exports_deaths_model`](@ref).
+Deaths-among-exports-only composer. Samples growth, onset-to-death
+delay, CFR, the onset-to-detection delay, traveller volume and
+ascertainment, then conditions on the dated export-deaths likelihood.
+Defaults to the explicit onset-to-detection delay mechanism
+[`exports_deaths_delay_model`](@ref); pass
+`exports_deaths_model = exports_deaths_model` together with a
+`detection_window_model` to fix back to the McCabe et al. rectangular
+detection window. See [`exports_deaths_delay_model`](@ref).
 """
 @model function exports_deaths_only_model(
         export_deaths_daily::AbstractVector;
         growth = exponential_growth_model(),
         delay = delay_model(),
         cfr = cfr_model(),
-        window = detection_window_model(),
+        onset_to_detection = onset_to_detection_delay_model(),
         traveller = traveller_volume_model(),
-        exports_deaths_model = exports_deaths_model,
+        exports_deaths_model = exports_deaths_delay_model,
         ascertainment = independent_ascertainment_model(),
         incubation = incubation_model(),
         source_population::Real = ITURI_POPULATION,
@@ -168,7 +175,7 @@ on the dated export-deaths likelihood. See
     growth_state ~ to_submodel(growth, false)
     delay_state ~ to_submodel(delay, false)
     cfr_state ~ to_submodel(cfr, false)
-    window_state ~ to_submodel(window, false)
+    detect_state ~ to_submodel(onset_to_detection, false)
     asc_state ~ to_submodel(ascertainment, false)
     incubation_state ~ to_submodel(incubation, false)
     os = onset_rescale(incubation_state.dist, growth_state.r)
@@ -180,7 +187,7 @@ on the dated export-deaths likelihood. See
         exports_deaths_model(export_deaths_daily, growth_state,
             cfr_state.CFR, delay_state.dist, asc_state.p_uganda;
             pre_start_deaths = pre_start_deaths,
-            window = window_state.w,
+            f_det = detect_state.dist,
             daily_travellers = daily_travellers,
             source_population = source_population,
             onset_fraction = os),
@@ -224,6 +231,19 @@ to drop it.
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
 disable the factor entirely.
+
+The Uganda exports streams default to the explicit onset-to-detection
+delay mechanism ([`exports_delay_model`](@ref),
+[`exports_deaths_delay_model`](@ref),
+[`exports_detection_timing_delay_model`](@ref)), which convolves the
+onset trajectory with the sampled onset-to-detection delay. To fix back
+to the McCabe et al. rectangular detection-window assumption for
+comparison, pass `exports = exports_model`,
+`exports_deaths_model = exports_deaths_model` and
+`exports_detection_timing = exports_detection_timing_model` (the
+window-based submodels). Passing an `onset_to_detection` submodel that
+returns a fixed `Gamma` (with no `~` sampling) pins the delay
+distribution rather than learning it.
 """
 @model function bvd_joint(
         exported_cases::Union{Missing, Integer},
@@ -237,12 +257,12 @@ disable the factor entirely.
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         growth = exponential_growth_model(),
-        exports = exports_model,
+        exports = exports_delay_model,
         deaths = deaths_model,
         reported_cases_submodel = reported_cases_model,
         confirmed = confirmed_cases_model,
-        exports_deaths_model = exports_deaths_model,
-        exports_detection_timing = exports_detection_timing_model,
+        exports_deaths_model = exports_deaths_delay_model,
+        exports_detection_timing = exports_detection_timing_delay_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = independent_ascertainment_model(),
         deaths_ascertainment = deaths_ascertainment_model(),
@@ -275,13 +295,15 @@ disable the factor entirely.
     T = growth_state.T
     ## The latent trajectory `exp(r·s)` is cumulative infections; the
     ## incubation mgf at −r maps it onto symptom onsets, the series every
-    ## onset-driven stream below conditions on. Exports and the export
-    ## detection timing see infections directly because the detection
-    ## window absorbs the infection-to-detection delay.
+    ## onset-driven stream below conditions on. With the default delay
+    ## mechanism the exports and export-detection-timing streams also see
+    ## onsets through the onset-to-detection delay convolution, so they
+    ## are onset-rescaled by `os` too.
     os = onset_rescale(incubation_state.dist, growth_state.r)
 
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, p_uganda), false)
+        exports(exported_cases, growth_state, p_uganda;
+            onset_fraction = os), false)
 
     death_edges = [T - δ for δ in death_offsets]
     deaths_state ~ to_submodel(
@@ -320,7 +342,7 @@ disable the factor entirely.
         exports_deaths_model(export_deaths_daily, growth_state,
             deaths_state.CFR, deaths_state.delay_dist, p_uganda;
             pre_start_deaths = pre_start_deaths,
-            window = exports_state.w,
+            f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,
             source_population = source_population,
             onset_fraction = os),
@@ -329,9 +351,10 @@ disable the factor entirely.
         exports_detection_timing(growth_state, p_uganda;
             delta = first_export_detection_delta,
             pre_detection_exports = pre_detection_exports,
-            window = exports_state.w,
+            f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,
-            source_population = source_population),
+            source_population = source_population,
+            onset_fraction = os),
         false)
 
     onset_fraction := os
@@ -350,6 +373,12 @@ Unlike the other composers this fits no incubation period: McCabe et al.
 model cases directly, so `C_T` is the case trajectory (`onset_fraction = 1`)
 and `cumulative_infections` and `cumulative_cases` coincide. This keeps
 `cumulative_cases` comparable with the report's published case estimates.
+
+This composer is left entirely McCabe-based as the comparison / revert
+path: it retains the rectangular detection-window assumption of
+[`exports_model`](@ref) and [`detection_window_model`](@ref), in contrast
+with the onset-to-detection delay convolution used by default in
+[`bvd_joint`](@ref) and [`exports_only_model`](@ref).
 """
 @model function imperial_only_model(
         exported_cases::Union{Missing, Integer},
