@@ -210,43 +210,64 @@ end
 Laboratory pipeline likelihood. Models the lab-confirmed cases over time
 and, where available, the testing volume that gates them.
 
-`confirmed_cases` (`Cumul positifs`) is a per-vintage vector aligned with
-`t_edges`; the model fits the between-vintage cumulative-count increments
-as independent NegBinomial terms with per-bin mean
+`confirmed_cases` (`Cumul positifs`) is a per-vintage increment vector
+aligned with `t_edges`. Each vintage's confirmed count is observed
+conditional on its analysed denominator through a Binomial (equations
+(23)-(24) of the walkthrough):
 
 ```math
-\\mu_v^{conf} = p_{DRC,v} \\cdot s_{test} \\cdot \\tau_{test} \\cdot
-               \\bigl(I_{lab,0}(s_v) - I_{lab,0}(s_{v-1})\\bigr),
+C_v \\sim \\mathrm{Binomial}(A_v,\\ p_{pos,v}),
 \\qquad
+p_{pos,v} = \\frac{s_{test}\\, \\text{BVD}_{tested,v}}
+                  {\\text{BVD}_{tested,v} + \\text{bg}_{tested,v}},
+```
+
+where `A_v` is the per-vintage analysed count (`samples_analysed`,
+treated as a *known* denominator, not modelled) and
+`BVD_tested_v` / `bg_tested_v` are the between-vintage increments of the
+lab-convolved BVD and background tested volumes. The testing fraction
+`τ_test` cancels in the positivity ratio and the absolute confirmed scale
+is fixed by the observed `A_v`, so the `p_DRC · s · τ` multiplicative
+ridge that breaks the per-vintage NegBinomial fit (#163) is removed.
+
+`BVD_tested_v` is `τ · p_{DRC,v}` times the between-edge increment of
+
+```math
 I_{lab,0}(s) = \\int_0^{s} \\mu_{BVD,0}(u)\\, f_{lab}(s - u)\\,du,
 ```
 
-where `μ_BVD,0` is the unit-ascertainment onset-to-report BVD cumulative
+with `μ_BVD,0` the unit-ascertainment onset-to-report BVD cumulative
 (kernel `f_rep` passed in from [`reported_cases_model`](@ref)) and
-`s_test` is the PCR sensitivity. A [`DailyBVDTrajectory`](@ref)
-precomputes `μ_BVD,0` once on a shared Gauss-Legendre node set so the
-outer quadrature of the lab convolution is reused across every edge.
+`s_test` the PCR sensitivity. A [`DailyBVDTrajectory`](@ref) precomputes
+`μ_BVD,0` once on a shared Gauss-Legendre node set so the outer
+quadrature is reused across every edge. `bg_tested_v` is the between-edge
+increment of ``\\tau\\,\\lambda_{bg} \\int_0^{s} F_{lab}(s - u)\\,du``
+(via `_gamma_cdf`, finite α gradient under Mooncake, see #138), so the
+constant-rate non-BVD background convolved against the lab-delay CDF is
+right-truncated by the integration limits.
+
+`samples_analysed` is the per-vintage analysed denominator vector aligned
+with `t_edges`. Pass a vector of `missing` entries (with a non-missing
+fallback `tests_analysed` for the denominators) to generate
+posterior-predictive confirmed draws.
 
 `tests_analysed` (`Cumul échantillons analysés`) is a single cumulative
 count observed at its own elapsed time `tests_edge` (which may lag the
 case cut-off `T` if lab reporting stops earlier). When present it enters
 as one NegBinomial term with mean
 ``\\tau\\,(\\text{BVD}_\\text{tested} + \\text{bg}_\\text{tested})``
-accumulated to `tests_edge`; the background tested volume uses the
-lab-delay CDF ``F_\\text{lab}`` (via `_gamma_cdf`, finite α gradient
-under Mooncake, see #138) so right-truncation is handled by the
-integration limits. The per-test positivity
-`s · BVD_tested / (BVD_tested + bg_tested)` is exposed as a derived
-quantity for comparison with the sitrep figure; confirmed counts are not
-re-observed conditional on tests, so the two streams are not
-double-counted. Pass `tests_analysed = missing` to drop the testing
-stream.
+accumulated to `tests_edge`. It also supplies the binomial denominator
+for any `missing` `samples_analysed` entry under predictive generation.
+The per-test positivity `s · BVD_tested / (BVD_tested + bg_tested)` is
+exposed as a derived quantity for comparison with the sitrep figure. Pass
+`tests_analysed = missing` to drop the tested-volume NegBinomial.
 
-A single confirmed observation (`length 1`, `t_edges = [T]`) reduces to
-the cumulative confirmed likelihood.
+A single confirmed observation (`length 1`, `t_edges = [T]`, single
+`samples_analysed`) reduces to the cumulative confirmed Binomial.
 """
 @model function confirmed_cases_model(
         confirmed_cases::AbstractVector,
+        samples_analysed::AbstractVector,
         tests_analysed::Union{Missing, Integer},
         growth_state, k::Real,
         p_drc_per_bin::AbstractVector, λ_bg::Real, τ_test::Real, f_rep,
@@ -270,6 +291,9 @@ the cumulative confirmed likelihood.
     n == length(confirmed_cases) ||
         error("confirmed_cases length must match t_edges (got " *
               "$(length(confirmed_cases)) vs $n)")
+    n == length(samples_analysed) ||
+        error("samples_analysed length must match t_edges (got " *
+              "$(length(samples_analysed)) vs $n)")
 
     ## Unit-ascertainment μ_BVD,0 at the shared Gauss-Legendre nodes over
     ## [0, T]; the outer quadrature of I_lab,0 is reused across every bin
@@ -285,29 +309,58 @@ the cumulative confirmed likelihood.
                    delay_convolution(trajectory, t_edges, f_lab)
     ΔIlab0 = daily_increment_kernel(I_lab0_edges)
 
+    ## Background tested cumulative at each edge: constant-rate λ_bg
+    ## arrivals convolved against the lab-delay CDF and right-truncated at
+    ## the edge, ∫₀^s F_lab(s - u) du = ∫₀^s F_lab(v) dv (the closed form
+    ## `_gamma_cdf_integral`). Difference to per-vintage increments.
+    bg_cum_edges = [τ_test * λ_bg *
+                    _gamma_cdf_integral(α_lab, θ_lab, oftype(T, s))
+                    for s in t_edges]
+    Δbg = daily_increment_kernel(bg_cum_edges)
+
     Tt = eltype(I_lab0_edges)
-    conf_means = Vector{Tt}(undef, n)
+    p_pos = Vector{Tt}(undef, n)
     Λ_at_edges = Vector{Tt}(undef, n)
     ## Cumulative unit-ascertainment-weighted BVD tested volume (before
     ## the τ gate) accumulated up to `tests_edge`, summing the same
-    ## per-bin ascertainment increments the confirmed likelihood uses.
+    ## per-bin ascertainment increments the confirmed positivity uses.
     bvd_tested_unit = zero(Tt)
     Λ_prev = zero(Tt)
     for i in 1:n
         raw_bvd = p_drc_per_bin[i] * ΔIlab0[i]
         bvd_inc = isfinite(raw_bvd) ? max(raw_bvd, eps(typeof(raw_bvd))) :
                   eps(typeof(raw_bvd))
-        μ_i = s_test * τ_test * bvd_inc
-        conf_means[i] = μ_i
-        Λ_prev += μ_i
+        ## Per-vintage BVD and background tested increments. τ_test
+        ## cancels in the positivity ratio (it scales both), so the
+        ## absolute p_DRC·s·τ confirmed scale no longer enters: the
+        ## binomial conditions on the observed analysed denominator.
+        bvd_tested_inc = τ_test * bvd_inc
+        bg_tested_inc = max(Δbg[i], zero(Tt))
+        denom = bvd_tested_inc + bg_tested_inc
+        p_raw = s_test * bvd_tested_inc / denom
+        p_pos[i] = isfinite(p_raw) ?
+                   clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
+        ## Expected confirmed cumulative kept as a derived diagnostic
+        ## (analysed denominator × positivity, summed over vintages).
+        Λ_prev += p_pos[i] *
+                  (samples_analysed[i] === missing ? zero(Tt) :
+                   convert(Tt, samples_analysed[i]))
         Λ_at_edges[i] = Λ_prev
         if t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge)))
             bvd_tested_unit += bvd_inc
         end
     end
 
+    ## Confirmed counts observed conditional on the analysed denominator
+    ## via a Binomial (equation (24)). `A_v` is data, not modelled, which
+    ## removes the multiplicative ridge of the NegBinomial-increment form.
+    ## A `missing` denominator falls back to the cumulative `tests_analysed`
+    ## so predictive draws still have an integer denominator.
     for i in 1:n
-        confirmed_cases[i] ~ safe_nbinomial(k, conf_means[i])
+        A_i = samples_analysed[i] === missing ?
+              (tests_analysed === missing ? 0 : tests_analysed) :
+              samples_analysed[i]
+        confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
     end
 
     ## Tested-volume mean at `tests_edge`: τ · (BVD tested + background
@@ -319,10 +372,6 @@ the cumulative confirmed likelihood.
                   max(raw_bvd_tested, eps(typeof(raw_bvd_tested))) :
                   eps(typeof(raw_bvd_tested))
     te = oftype(T, tests_edge)
-    ## Background tested volume at `te`: constant-rate λ_bg arrivals
-    ## convolved against the lab-delay CDF and right-truncated at `te`,
-    ## which is ∫₀^te F_lab(te - u) du = ∫₀^te F_lab(v) dv, the closed
-    ## form `_gamma_cdf_integral`.
     bg_integral = _gamma_cdf_integral(α_lab, θ_lab, te)
     raw_bg_tested = τ_test * λ_bg * bg_integral
     bg_tested := isfinite(raw_bg_tested) ?
@@ -330,8 +379,8 @@ the cumulative confirmed likelihood.
                  eps(typeof(raw_bg_tested))
 
     expected_tested := BVD_tested + bg_tested
-    ## Per-test positivity: s × BVD fraction in the tested pool. Exposed
-    ## for comparison against the sitrep `Taux de positivité`.
+    ## Per-test positivity at `tests_edge`: s × BVD fraction in the tested
+    ## pool. Exposed for comparison against the sitrep `Taux de positivité`.
     p_pos_raw = s_test * BVD_tested / expected_tested
     p_positive := isfinite(p_pos_raw) ?
                   clamp(p_pos_raw,
@@ -342,13 +391,14 @@ the cumulative confirmed likelihood.
     ## Single tested-volume NegBinomial at the laboratory stream's own
     ## cut-off. Sampled unconditionally so it conditions on the data when
     ## present and is generated for posterior-predictive checks when
-    ## `missing`. Confirmed counts are not re-observed conditional on it,
-    ## so the two lab streams are not double-counted.
+    ## `missing`. The confirmed binomial conditions on the *observed*
+    ## analysed denominator, not this modelled count, so the two streams
+    ## are not double-counted.
     tests_analysed ~ safe_nbinomial(k, expected_tested)
 
     expected_confirmed_total := Λ_at_edges[end]
 
-    return (; expected_tested, p_positive,
+    return (; expected_tested, p_positive, p_pos,
         BVD_tested, bg_tested, s_test, τ_test, p_drc_per_bin,
         expected_confirmed_total,
         lab_delay_dist = f_lab,

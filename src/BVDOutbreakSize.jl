@@ -18,7 +18,7 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Normal, LogNormal, Beta,
+                     NegativeBinomial, Binomial, Normal, LogNormal, Beta,
                      truncated, censored
 using StatsFuns: logit, logistic
 import FastGaussQuadrature

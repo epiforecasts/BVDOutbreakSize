@@ -1392,7 +1392,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
-#md #         Int[], missing, nothing, 1.0, Float64[], 1.0, 1.0,
+#md #         Int[], Int[], missing, nothing, 1.0, Float64[], 1.0, 1.0,
 #md #         nothing, Float64[], 1.0)), "\n```"))
 #md # ```
 

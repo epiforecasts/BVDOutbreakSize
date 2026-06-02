@@ -135,8 +135,12 @@ likelihood. See [`confirmed_cases_model`](@ref).
     os = onset_rescale(incubation_state.dist, growth_state.r)
 
     confirmed_vec = Union{Missing, Int}[confirmed_cases]
+    ## Single-vintage analysed denominator for the confirmed Binomial: the
+    ## cumulative tests-analysed count at the cut-off.
+    analysed_vec = Union{Missing, Int}[tests_analysed]
     confirmed_state ~ to_submodel(
-        confirmed(confirmed_vec, tests_analysed, growth_state, k,
+        confirmed(confirmed_vec, analysed_vec, tests_analysed,
+            growth_state, k,
             [asc_state.p_drc], λ_bg, τ_test, f_rep, [T], T;
             lab_delay = lab_delay,
             test_sensitivity = test_sensitivity,
@@ -213,12 +217,20 @@ DRC ascertainment is a single fixed fraction `p_drc` (the pooled scalar
 from [`pooled_ascertainment_model`](@ref)) applied to every reported and
 confirmed vintage bin, shared between the two streams.
 
+`samples_analysed` is the per-vintage analysed-count vector aligned with
+`confirmed_offsets`; each confirmed vintage is observed as
+`C_v ~ Binomial(A_v, p_pos_v)` conditional on its analysed denominator
+`A_v` (data, not modelled), which removes the multiplicative ridge of the
+old NegBinomial-increment confirmed likelihood (#163). When left empty it
+defaults to the cumulative `tests_analysed` for every vintage, recovering
+the single-total denominator.
+
 `tests_analysed` is a single cumulative testing-volume count observed at
 its own elapsed time `tests_offset` before the cut-off, so it stays
-robust if lab reporting lags or stops before the case cut-off. Per-test
-positivity is exposed as a derived quantity rather than re-observing the
-confirmed counts conditional on tests. Pass `tests_analysed = missing`
-to drop it.
+robust if lab reporting lags or stops before the case cut-off. It also
+supplies the binomial denominator for any `missing` `samples_analysed`
+entry. Per-test positivity is exposed as a derived quantity. Pass
+`tests_analysed = missing` to drop the tested-volume NegBinomial.
 
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
@@ -234,6 +246,7 @@ disable the factor entirely.
         death_offsets::AbstractVector = reported_offsets,
         confirmed_cases::AbstractVector = Union{Missing, Int}[],
         confirmed_offsets::AbstractVector = reported_offsets,
+        samples_analysed::AbstractVector = Union{Missing, Int}[],
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         growth = exponential_growth_model(),
@@ -306,8 +319,16 @@ disable the factor entirely.
     if !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
         tests_edge = T - tests_offset
+        ## Per-vintage analysed denominators for the confirmed Binomial.
+        ## Default to the cumulative `tests_analysed` for every vintage
+        ## when no per-vintage denominators are supplied, so a single
+        ## confirmed total still conditions on its analysed count.
+        analysed_vec = isempty(samples_analysed) ?
+                       fill(tests_analysed, n_conf) :
+                       samples_analysed
         confirmed_state ~ to_submodel(
-            confirmed(confirmed_cases, tests_analysed, growth_state, k,
+            confirmed(confirmed_cases, analysed_vec, tests_analysed,
+                growth_state, k,
                 p_drc_per_bin[1:n_conf], reported_state.λ_bg,
                 reported_state.τ_test, reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;

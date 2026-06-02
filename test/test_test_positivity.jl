@@ -47,6 +47,74 @@ end
     @test median(λ_bg) > 0.3
 end
 
+@testitem "confirmed binomial conditions on observed analysed" tags=[:slow] begin
+    ## Step 1 of #163: confirmed counts are observed as
+    ## `C_v ~ Binomial(A_v, p_pos_v)` with the analysed count `A_v` a
+    ## known denominator (data), removing the p_DRC·s·τ multiplicative
+    ## ridge. A confirmed draw must never exceed its analysed denominator,
+    ## and the per-vintage positivity must stay in (0, 1).
+    using Turing: sample, Prior, predict, @model, to_submodel
+    import FlexiChains
+    using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
+                           report_delay_model, surveillance_dispersion_model
+
+    A = [211, 295, 295, 403]                 # samples analysed per vintage
+    C = [101, 4, 1, 15]                       # confirmed increments
+    edges = [123.0, 124.0, 125.0, 126.0]      # vintage elapsed times
+
+    @model function _binom_harness(confirmed, analysed;
+            growth = exponential_growth_model(),
+            dispersion = surveillance_dispersion_model(),
+            report_delay = report_delay_model())
+        growth_state ~ to_submodel(growth, false)
+        disp_state ~ to_submodel(dispersion, false)
+        rep_state ~ to_submodel(report_delay, false)
+        confirmed_state ~ to_submodel(
+            confirmed_cases_model(confirmed, analysed, 211,
+                growth_state, disp_state.k, fill(0.3, length(confirmed)),
+                0.6, 0.7, rep_state.dist, edges, 126.0), false)
+    end
+
+    using Turing: @model, to_submodel
+
+    chn = sample(_binom_harness(C, A), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ## Per-test positivity at the cut-off, the tracked scalar diagnostic.
+    pos = vec(Array(chn[:p_positive]))
+    @test all(0 .< pos .< 1)
+
+    ## Posterior-predictive confirmed draws are bounded by the analysed
+    ## denominator vintage by vintage.
+    pp = predict(_binom_harness(fill(missing, 4), A), chn)
+    draws = vec(Array(pp[:confirmed_cases]))
+    cc = reduce(hcat, draws)            # 4 vintages × draws
+    for v in 1:4
+        @test all(cc[v, :] .<= A[v])
+        @test all(cc[v, :] .>= 0)
+    end
+end
+
+@testitem "confirmed binomial single-total reduction" tags=[:slow] begin
+    ## The length-1 confirmed vector with a single analysed denominator
+    ## must still fit and predict, keeping the McCabe single-total path
+    ## intact. Confirmed draws bounded by the single analysed total.
+    using Turing: sample, Prior, predict
+    import FlexiChains
+    using BVDOutbreakSize: confirmed_only_model
+
+    chn = sample(confirmed_only_model(101, 211), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    C = vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+    pos = vec(Array(chn[:p_positive]))
+    @test all(0 .< pos .< 1)
+
+    pp = predict(confirmed_only_model(missing, 211), chn)
+    cc = reduce(vcat, vec(Array(pp[:confirmed_cases])))
+    @test all(0 .<= cc .<= 211)
+end
+
 @testitem "test_positivity_model lambda_prior is overridable" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
