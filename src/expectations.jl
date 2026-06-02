@@ -186,7 +186,7 @@ travel rate `q` over the at-risk person-time
 `r` is the exponential growth rate, `p` the detection probability and
 `q` the per-day per-capita travel rate (so the result is in cases). The
 ``\\int_0^t e^{r s}\\, ds`` term is the exact closed form
-[`_exp_cumulative_integral`](@ref); the inner convolution uses the Gamma
+`_exp_cumulative_integral`; the inner convolution uses the Gamma
 closed form of [`delay_convolution`](@ref), so only the outer
 ``\\int_0^t \\text{detected}(s)\\, ds`` is quadrature and the path stays
 AD-friendly. As the infection→detection delay collapses to a point mass
