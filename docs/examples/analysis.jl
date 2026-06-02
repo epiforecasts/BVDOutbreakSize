@@ -2571,6 +2571,11 @@ community_delay = delay_model(;
     alpha_prior = truncated(Normal(5.6, (25.9 - 1.0) / 3.92); lower = 0),
     theta_prior = truncated(Normal(1.4, (9.5 - 0.3) / 3.92); lower = 0))
 
+## This refit overrides the deaths submodel with a closure that injects a
+## fixed delay. Enzyme (the package default) segfaults sampling this
+## variant — the captured constant submodel defeats its reverse pass — so
+## the one sensitivity fit runs under Mooncake. Every other fit uses the
+## Enzyme default.
 chn_joint_community = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
     fit_args.export_deaths; fit_args.kw...,
@@ -2582,7 +2587,8 @@ chn_joint_community = nuts_sample(
         k,
         t_edges;
         kwargs...) -> deaths_model(total_deaths, growth_state, k, t_edges;
-        delay = community_delay, kwargs...)));
+        delay = community_delay, kwargs...));
+    adtype = mooncake_adtype());
 
 posterior_C_community = vec(Array(chn_joint_community[:cumulative_cases]));
 
