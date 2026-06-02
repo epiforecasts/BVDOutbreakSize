@@ -813,6 +813,38 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ##### Onset-to-detection delay (default export mechanism)
+#
+# The default export model replaces McCabe's fixed detection window with
+# an explicit onset-to-detection delay convolution.
+# A case is at risk of detection abroad from symptom onset until the
+# onset-to-detection delay has elapsed, so the at-risk prevalence is the
+# difference between cumulative onsets and the onsets that have already
+# completed onset-to-detection.
+# Integrating this prevalence over the per-day per-capita travel rate
+# gives the expected detected exports.
+# The window form is recovered exactly as the onset-to-detection delay
+# collapses to a point mass, so this generalises rather than replaces the
+# McCabe assumption.
+# Incubation is handled upstream by the incubation `onset_fraction`, so
+# this delay is onset-to-detection only.
+# The `imperial_only_model` composer keeps the rectangular detection
+# window for comparison.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: onset_to_detection_delay_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.onset_to_detection_delay_model()), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Daily traveller volume
 #
 # The number of people crossing from the source area to Uganda each day
@@ -1027,6 +1059,20 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_model(1, nothing, 0.25)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_delay_model(1, nothing, 0.25)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1463,6 +1509,20 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_deaths_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_deaths_delay_model( Int[], nothing, 0.33, nothing, 0.25; f_det = BVDOutbreakSize.Gamma(2.0, 4.5), daily_travellers = 1871.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### First export detection — timing survival term
 #
 # The same logic applies to the *first detected export case* (Uganda's
@@ -1488,6 +1548,20 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_detection_timing_model( nothing, 0.25; delta = missing, window = 15.0, daily_travellers = 1871.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_detection_timing_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_detection_timing_delay_model( nothing, 0.25; delta = missing, f_det = BVDOutbreakSize.Gamma(2.0, 4.5), daily_travellers = 1871.0)), "\n```"))
 #md # ```
 
 #md # ```@raw html
