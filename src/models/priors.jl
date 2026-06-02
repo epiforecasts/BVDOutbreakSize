@@ -222,6 +222,36 @@ still infectious and detectable abroad. Default centred on 15 days
 end
 
 """
+Onset-to-Uganda-detection delay prior. Samples a gamma shape `α_det`
+and scale `θ_det` from truncated-normal priors and returns the
+resulting `Gamma(α_det, θ_det)` distribution. Replaces McCabe et al.'s
+rectangular detection window [`detection_window_model`](@ref) with an
+explicit delay distribution, so the exports likelihood convolves the
+onset trajectory with the delay survival rather than integrating over a
+fixed top-hat window. Used by [`exports_delay_model`](@ref),
+[`exports_deaths_delay_model`](@ref) and
+[`exports_detection_timing_delay_model`](@ref).
+
+The delay measured here is onset→detection only: incubation is handled
+upstream by the incubation `onset_fraction` (see [`incubation_model`](@ref)
+and [`onset_rescale`](@ref)), so the latent trajectory is already mapped
+onto onsets before this delay acts. The default prior is centred so the
+mean onset-to-detection delay is roughly 9 days, the old window centre of
+15 days less the ≈6.3-day incubation mean now carried by `onset_fraction`:
+`alpha_prior = truncated(Normal(2.0, 1.0); lower = 0.1)` and
+`theta_prior = truncated(Normal(4.5, 1.5); lower = 0.1)`, giving a mean of
+≈9 days. No per-sample data anchors this prior, so it is a
+weakly-informative modelling choice that needs human sign-off.
+"""
+@model function onset_to_detection_delay_model(;
+        alpha_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
+        theta_prior = truncated(Normal(4.5, 1.5); lower = 0.1))
+    α_det ~ alpha_prior
+    θ_det ~ theta_prior
+    return (; α = α_det, θ = θ_det, dist = Gamma(α_det, θ_det))
+end
+
+"""
 Prior on the mean daily traveller volume from the source area to
 Uganda. Default centred on `ITURI_DAILY_TRAVEL` with SD
 `ITURI_DAILY_TRAVEL_SD`, truncated at zero. Used by

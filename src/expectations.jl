@@ -137,6 +137,52 @@ end
 _exp_cumulative_integral(r, a, b) = exp(r * a) * expm1(r * (b - a)) / r
 
 """
+Expected cumulative detected exports by elapsed time `t` under an
+explicit onset-to-detection delay, clamped to be strictly positive and
+finite. The delay-survival generalisation of [`expected_exports`](@ref):
+instead of a rectangular detection window of fixed width `w`, a case
+detected after onset stays at risk of detection abroad only until the
+onset-to-detection delay `f_det` has elapsed. Writing the cumulative
+*onsets* as ``O(s) = \\text{onset\\_fraction}\\cdot e^{r s}`` and the
+cumulative onsets that have already completed onset→detection by `s` as
+the convolution ``\\text{conv}(s) = \\int_0^s e^{r u}\\, f_{det}(s-u)\\,du``,
+the at-risk prevalence is the difference
+
+```math
+\\text{prevalence}(s) = \\text{onset\\_fraction}\\cdot
+    \\bigl(e^{r s} - \\text{conv}(s)\\bigr),
+```
+
+and the expected detected exports accumulate the per-day per-capita
+travel rate `q` over the at-risk person-time
+
+```math
+\\mathbb{E}[\\text{exports}(t)] = p\\, q
+    \\int_0^t \\text{prevalence}(s)\\, ds
+  = p\\, q\\, \\text{onset\\_fraction}
+    \\left(\\int_0^t e^{r s}\\, ds - \\int_0^t \\text{conv}(s)\\, ds\\right).
+```
+
+`r` is the exponential growth rate, `p` the detection probability and
+`q` the per-day per-capita travel rate (so the result is in cases). The
+``\\int_0^t e^{r s}\\, ds`` term is the exact closed form
+[`_exp_cumulative_integral`](@ref); the inner convolution uses the Gamma
+closed form of [`delay_convolution`](@ref), so only the outer
+``\\int_0^t \\text{conv}(s)\\, ds`` is quadrature and the path stays
+AD-friendly. As the onset-to-detection delay collapses to a point mass at
+`w` the survival becomes the top-hat ``1\\{t-s<w\\}`` and this reduces
+exactly to the McCabe window form [`expected_exports`](@ref).
+"""
+function expected_exports_delay(r, p, q, t, f_det; onset_fraction = 1.0,
+        alg = CUMULATIVE_INTEGRAL_ALG)
+    cum_integral = _exp_cumulative_integral(r, zero(t), t)
+    removed = integrate(s -> delay_convolution(one(t), r, s, f_det),
+        zero(t), t; alg)
+    raw = p * q * onset_fraction * (cum_integral - removed)
+    return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
+end
+
+"""
 Expected cumulative deaths among detected exports by elapsed time `t`,
 clamped to be strictly positive and finite:
 
@@ -158,5 +204,52 @@ function expected_exports_deaths(cumulative, delay_dist, CFR, p, q,
     integral = integrate_exports_deaths(
         cumulative, delay_dist, window_start, t, t; alg)
     raw = CFR * p * q * integral
+    return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
+end
+
+"""
+Expected cumulative deaths among detected exports by elapsed time `t`
+under an explicit onset-to-detection delay, clamped to be strictly
+positive and finite. The delay-survival generalisation of
+[`expected_exports_deaths`](@ref): McCabe et al. integrate the
+onset-to-death CDF over the top-hat detection window `[t-w, t]`, i.e. a
+top-hat detection survival ``S(t-s) = 1\\{t-s<w\\}``. Here the indicator
+is replaced by the onset-to-detection survival
+``\\overline{F}_{det}(t-s)``, so
+
+```math
+\\mathbb{E}[D_{\\text{uganda}}(t)] = \\mathrm{CFR}\\, p\\, q\\,
+    \\text{onset\\_fraction}
+    \\int_0^t C(s)\\, \\overline{F}_{det}(t-s)\\, F_{death}(t-s)\\, ds,
+```
+
+with `cumulative` the onset trajectory ``C(s) = e^{r s}``, `f_det` the
+onset-to-detection Gamma delay (survival ``\\overline{F}_{det}``),
+`f_death` the onset-to-death Gamma delay (CDF ``F_{death}``), `CFR` the
+case-fatality ratio, `p` the detection probability and `q` the per-day
+per-capita travel rate (so the result is in cases). The survival and the
+death CDF are both evaluated through the Gamma closed form
+[`_gamma_cdf`](@ref), which carries the reverse-mode rule for the shape
+derivative, so the integrand is closed-form and only the outer integral
+is quadrature (clustered near `t` where the integrand has mass). As the
+onset-to-detection delay collapses to a point mass at `w` the survival
+becomes the top-hat and this reduces exactly to
+[`expected_exports_deaths`](@ref). Uses [`DEATH_INTEGRAL_ALG`](@ref).
+"""
+function expected_exports_deaths_delay(cumulative, f_det::Gamma,
+        f_death::Gamma, CFR, p, q, t; onset_fraction = 1.0,
+        alg = DEATH_INTEGRAL_ALG)
+    scale = _delay_scale(f_det) + _delay_scale(f_death)
+    g = let cumulative = cumulative, t = t, f_det = f_det, f_death = f_death
+        s -> begin
+            a = t - s
+            a <= zero(a) ? zero(a) :
+            cumulative(s) *
+            (one(a) - _gamma_cdf(f_det.α, f_det.θ, a)) *
+            _gamma_cdf(f_death.α, f_death.θ, a)
+        end
+    end
+    integral = integrate(g, zero(t), t, scale; alg)
+    raw = CFR * p * q * onset_fraction * integral
     return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
 end
