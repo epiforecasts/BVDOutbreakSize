@@ -205,8 +205,9 @@ end
 
     ## Small synthetic data: a single cumulative vintage per stream plus
     ## a short dated export-death series. Defaults use the delay
-    ## mechanism, so the trace carries the onset-to-detection delay
-    ## (α_det, θ_det) rather than a window `w`.
+    ## mechanism, which reuses the DRC onset-to-report delay
+    ## (α_rep, θ_rep) as the onset-to-detection delay, so the trace
+    ## carries no separate detection delay and no rectangular window `w`.
     model = bvd_joint(2, [120], [500], [0, 0, 1];
         reported_offsets = [0],
         death_offsets = [0])
@@ -222,14 +223,53 @@ end
             false
         end
 
-    ## Delay mechanism: the trace carries the onset-to-detection delay
-    ## (α_det, θ_det), exposes the latent infections and incubation-
-    ## rescaled cases, and has no rectangular detection window `w`.
-    @test _has(:α_det)
-    @test _has(:θ_det)
+    ## The detection delay is the shared report delay: α_rep / θ_rep are
+    ## present, and there is no bespoke onset-to-detection delay
+    ## (α_det / θ_det) nor a McCabe window `w`.
+    @test _has(:α_rep)
+    @test _has(:θ_rep)
+    @test !_has(:α_det)
+    @test !_has(:θ_det)
+    @test !_has(:w)
     infections = vec(Array(chn[:cumulative_infections]))
     cases = vec(Array(chn[:cumulative_cases]))
     @test all(isfinite, infections) && all(>(0), infections)
     @test all(isfinite, cases) && all(>(0), cases)
-    @test !_has(:w)
+end
+
+@testitem "bvd_joint exports reuse the reported onset-to-report delay" tags=[:slow] begin
+    using Turing: sample, Prior
+    using BVDOutbreakSize: bvd_joint, exports_delay_model
+    using Distributions: Gamma
+    import FlexiChains
+
+    ## Swap in a spy export submodel that records the `f_det` it is
+    ## handed (the 4th positional argument of exports_delay_model) on each
+    ## draw, then sample the joint model. The export detection delay must
+    ## be the reported stream's onset-to-report delay Gamma(α_rep, θ_rep),
+    ## whose parameters are exposed in the trace.
+    captured = Ref{Any}(nothing)
+
+    spy_exports(args...; kwargs...) = begin
+        captured[] = args[4]
+        exports_delay_model(args...; kwargs...)
+    end
+
+    model = bvd_joint(2, [120], [500];
+        reported_offsets = [0],
+        death_offsets = [0],
+        exports = spy_exports)
+
+    chn = sample(model, Prior(), 1;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    f_det = captured[]
+    @test f_det isa Gamma
+
+    ## The captured detection delay is the last draw's onset-to-report
+    ## Gamma; it matches that draw's α_rep / θ_rep.
+    α_rep = only(vec(Array(chn[:α_rep])))
+    θ_rep = only(vec(Array(chn[:θ_rep])))
+    @test f_det.α ≈ α_rep
+    @test f_det.θ ≈ θ_rep
 end

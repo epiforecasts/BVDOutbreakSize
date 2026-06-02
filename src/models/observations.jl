@@ -61,26 +61,27 @@ Exports likelihood with an explicit onset-to-detection delay. The
 delay-convolution counterpart of [`exports_model`](@ref): the at-risk
 export person-time is the onset-to-detection delay-survival integral
 [`expected_exports_delay`](@ref) rather than the McCabe et al.
-rectangular detection window. Samples the onset-to-detection delay
-[`onset_to_detection_delay_model`](@ref) and traveller volume submodels
-internally and exposes the sampled delay distribution `f_det` and
-`daily_travellers` for the export-deaths and detection-timing delay
+rectangular detection window. The onset-to-detection delay `f_det` is
+passed in rather than sampled here: the export count is a single datum
+and cannot identify its own delay, and "symptom onset → entering
+surveillance as a suspected case" is taken to be the same process abroad
+as the DRC onset-to-report delay, so the composers pass the `f_rep` of
+[`report_delay_model`](@ref) (the same draw the reported-cases stream
+uses, see [`reported_cases_model`](@ref)) and the reported stream pins
+it. Samples the traveller volume submodel internally and exposes `f_det`
+and `daily_travellers` for the export-deaths and detection-timing delay
 submodels. `onset_fraction` is the incubation mgf, mapping the latent
 infection trajectory onto onsets before the onset-to-detection delay
 acts. Couples to `C(T)` through a Poisson likelihood.
 """
 @model function exports_delay_model(
         exported_cases::Union{Missing, Integer},
-        growth_state, p_uganda::Real;
+        growth_state, p_uganda::Real, f_det;
         source_population::Real = ITURI_POPULATION,
-        onset_to_detection = onset_to_detection_delay_model(),
         traveller = traveller_volume_model(),
         onset_fraction::Real = 1.0)
     r = growth_state.r
     T = growth_state.T
-
-    detect_state ~ to_submodel(onset_to_detection, false)
-    f_det = detect_state.dist
 
     travel_state ~ to_submodel(traveller, false)
     daily_travellers = travel_state.daily_travellers

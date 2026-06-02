@@ -86,8 +86,9 @@ its own priors:
 - `delay_model` is the gamma onset-to-death delay.
 - `cfr_model` is the case-fatality ratio.
 - `detection_window_model` is the McCabe rectangular export detection
-  window `w`; `onset_to_detection_delay_model` is the explicit
-  onset-to-detection delay used by the default export mechanism.
+  window `w`; the default export mechanism instead reuses the DRC
+  onset-to-report delay `f_rep` (`report_delay_model`) as the
+  onset-to-detection delay.
 - `surveillance_dispersion_model` samples on the `1/√k` scale.
 - `pooled_ascertainment_model` partially pools the DRC and Uganda
   reporting fractions `p_drc` and `p_uganda` on the logit scale.
@@ -99,8 +100,8 @@ state, adding its forward integral and likelihood: `exports_model`
 `exports_deaths_model` (Poisson). The Uganda export streams have
 delay-convolution variants (`exports_delay_model`,
 `exports_deaths_delay_model`, `exports_detection_timing_delay_model`)
-that replace the rectangular detection window with an explicit
-onset-to-detection delay; these are the `bvd_joint` defaults.
+that replace the rectangular detection window with an onset-to-detection
+delay reusing the DRC `f_rep`; these are the `bvd_joint` defaults.
 
 **Composers** stitch the blocks into full generative models:
 `exports_only_model`, `deaths_only_model`, `cases_only_model`,

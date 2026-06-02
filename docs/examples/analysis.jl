@@ -828,22 +828,13 @@ cfr_prior_fig #hide
 # McCabe assumption.
 # Incubation is handled upstream by the incubation `onset_fraction`, so
 # this delay is onset-to-detection only.
+# The onset-to-detection delay reuses the DRC onset-to-report delay
+# $f_{\text{rep}}$ (`report_delay_model`): entering surveillance as a
+# suspected case is taken to be the same process abroad as in the DRC,
+# and the export count is a single datum that cannot identify its own
+# delay, so the reported-cases stream pins it.
 # The `imperial_only_model` composer keeps the rectangular detection
 # window for comparison.
-
-#md # ```@raw html
-#md # <details><summary>Submodel: onset_to_detection_delay_model</summary>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, CodeTracking, Markdown
-#md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.onset_to_detection_delay_model()), "\n```"))
-#md # ```
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ##### Daily traveller volume
 #
@@ -1088,7 +1079,7 @@ cfr_prior_fig #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.exports_delay_model(1, nothing, 0.25)), "\n```"))
+#md #     (@code_string BVDOutbreakSize.exports_delay_model(1, nothing, 0.25, BVDOutbreakSize.Gamma(2.5, 4.5))), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1828,7 +1819,7 @@ prior_C_table #hide
 #md # ```
 
 prior_pair_fig = plot_pair(prior_chn,
-    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
         :λ_bg, :τ_test, :s_test, :positivity, :p_positive]);
 
@@ -2268,7 +2259,7 @@ joint_summary #hide
 #md # ```
 
 posterior_pair_fig = plot_pair(chn_joint,
-    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit];
     prior = prior_chn);
 

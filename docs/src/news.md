@@ -88,18 +88,19 @@ each push to `main` also republishes the rendered analysis and the
   running sum of modelled increments let errors compound across sitreps.
 - Replaced McCabe et al.'s rectangular Uganda-export detection window
   with an explicit onset-to-detection delay convolution
-  (`onset_to_detection_delay_model`, `exports_delay_model`,
-  `exports_deaths_delay_model`,
+  (`exports_delay_model`, `exports_deaths_delay_model`,
   `exports_detection_timing_delay_model`), now the default in `bvd_joint`
   and `exports_only_model`. A case is at risk of detection abroad from
   onset until the onset-to-detection delay has elapsed; the expected
   detected exports integrate this at-risk prevalence over the per-day
   per-capita travel rate. The form reduces exactly to the McCabe window
   as the delay collapses to a point mass, so the window assumption is a
-  special case. The McCabe window is kept available via the swappable
-  `detection_window_model` / `exports_model` path and in
-  `imperial_only_model` for comparison. The new onset-to-detection delay
-  prior is weakly informative and needs human sign-off.
+  special case. The onset-to-detection delay reuses the DRC
+  onset-to-report delay `f_rep` from `report_delay_model` (the exact draw
+  the reported-cases stream uses), so no separate prior is introduced and
+  the reported-cases stream pins it. The McCabe window is kept available
+  via the swappable `detection_window_model` / `exports_model` path and
+  in `imperial_only_model` for comparison.
 
 ### Documentation
 
