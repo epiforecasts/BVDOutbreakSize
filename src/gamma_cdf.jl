@@ -40,155 +40,33 @@ function _gamma_cdf_integral(α, θ, x)
 end
 
 """
-Saturating ramp non-BVD background, anchored to surveillance/reporting
-onset. Carries the baseline rate `λ0`, the ramp amplitude `Δλ`, the
-scale-up timescale `scale` and the reporting-onset elapsed time
-`t_report` (the latent time at which case-finding begins; before it
-there is no surveillance so no background suspects accrue). The per-day
-non-BVD suspected-case arrival rate, with the ramp clock starting at
-`t_report`,
+Severe-first BVD share of the tested pool: a high→baseline exponential
+relaxation. The laboratory tests the most-likely-BVD (severest / most
+obvious) suspects first, so the BVD fraction `q` of the analysed batch
+starts at the early severe-cluster share `q0` and decays toward the
+broad-pool baseline `q∞` as testing widens:
 
 ```math
-\\lambda_{bg}(t) = \\begin{cases}
-0, & t \\le t_{report}, \\\\
-\\lambda_0 + \\Delta\\lambda\\,
-    \\bigl(1 - e^{-(t - t_{report})/\\text{scale}}\\bigr),
-    & t > t_{report},
-\\end{cases}
+q(c) = q_\\infty + (q_0 - q_\\infty)\\, e^{-c / \\text{scale}},
 ```
 
-rises from `λ0` towards `λ0 + Δλ` over the surveillance scale-up window
-`scale` once reporting has begun. Its cumulative is the integral from
-`t_report`,
-
-```math
-\\mu_{bg}(t) = \\int_{t_{report}}^{t} \\lambda_{bg}(u)\\, du
-  = \\lambda_0\\,\\Delta t + \\Delta\\lambda\\,
-    \\bigl(\\Delta t - \\text{scale}
-    + \\text{scale}\\, e^{-\\Delta t/\\text{scale}}\\bigr),
-\\quad \\Delta t = t - t_{report},
-```
-
-`μ_bg(t) = 0` for `t ≤ t_report`. Anchoring to reporting onset (rather
-than seeding) lets the ramp still be climbing across the late lab
-vintages, so the broadening suspected-case definition pulls the observed
-per-test positivity *down* there; a seeding-anchored ramp has long since
-saturated by the cut-off and cannot. `Δλ = 0` *and* `t_report = 0`
-recover the constant-rate background `λ_bg(t) = λ0`, `μ_bg(t) = λ0·t`,
-exactly. Construct with [`background_ramp`](@ref); the rate is
-[`bg_rate`](@ref) and the cumulative [`bg_cumulative`](@ref).
+with `c ≥ 0` the elapsed time since testing (reporting) onset and `scale`
+the relaxation timescale (days). At `c = 0` (the first vintage) `q = q0`
+(near 1 — the obvious-BVD cluster, so positivity `≈ s` identifies the
+sensitivity); as `c → ∞` `q → q∞` and STAYS there (it does not overshoot
+to zero, unlike a saturating coverage curve). The baseline `q∞` is tied to
+the count-implied BVD composition of the suspect pool in
+[`confirmed_cases_model`](@ref), pinning the plateau positivity to the
+outbreak size; `q0` and `scale` are the [`test_selection_model`](@ref)
+shape parameters. AD-safe: smooth in `q0`, `q∞`, `c`, `scale`.
 """
-struct BackgroundRamp{T}
-    λ0::T
-    Δλ::T
-    scale::T
-    t_report::T
-end
-
-"""
-Build a [`BackgroundRamp`](@ref) from the baseline rate `λ0`, ramp
-amplitude `Δλ`, fixed scale-up timescale `scale` and reporting-onset
-elapsed time `t_report` (default `0`, recovering the seeding-anchored
-clock), promoting to a common element type so AD tangents flow through
-`λ0`, `Δλ` and `t_report`.
-"""
-function background_ramp(λ0, Δλ, scale, t_report = zero(scale))
-    T = float(promote_type(typeof(λ0), typeof(Δλ), typeof(scale),
-        typeof(t_report)))
-    return BackgroundRamp{T}(convert(T, λ0), convert(T, Δλ),
-        convert(T, scale), convert(T, t_report))
-end
-
-"""
-Instantaneous non-BVD background rate `λ_bg(t)` of a
-[`BackgroundRamp`](@ref). Zero before reporting onset `t_report`; for
-`t > t_report` returns `λ0` exactly when `Δλ = 0`.
-"""
-function bg_rate(b::BackgroundRamp, t)
-    Δt = t - b.t_report
-    Δt <= zero(Δt) && return zero(b.λ0 * Δt)
-    return b.λ0 + b.Δλ * (one(Δt) - exp(-Δt / b.scale))
-end
-
-"""
-Cumulative non-BVD background `μ_bg(t)` of a [`BackgroundRamp`](@ref),
-the integral of [`bg_rate`](@ref) from the reporting onset `t_report` to
-`t`. `μ_bg(t) = 0` for `t ≤ t_report`; with `Δλ = 0` it reduces to
-`λ0·(t − t_report)`.
-"""
-function bg_cumulative(b::BackgroundRamp, t)
-    Δt = t - b.t_report
-    Δt <= zero(Δt) && return zero(b.λ0 * Δt)
-    return b.λ0 * Δt +
-           b.Δλ * (Δt - b.scale + b.scale * exp(-Δt / b.scale))
-end
-
-"""
-Cumulative background *tested* volume of a [`BackgroundRamp`](@ref):
-the time-varying background arrivals (from reporting onset `t_report`)
-convolved against the lab-delay CDF `F_lab` and right-truncated at the
-testing cut-off `t`,
-
-```math
-\\int_{t_{report}}^{t} \\lambda_{bg}(u)\\, F_{lab}(t - u)\\, du
-  = (\\lambda_0 + \\Delta\\lambda)\\, G - \\Delta\\lambda\\, H,
-```
-
-where, writing the substitution `v = u - t_report` and
-`Δt = t - t_report`,
-``G = \\int_{0}^{Δt} F_{lab}(Δt - v)\\,dv`` is the closed-form
-[`_gamma_cdf_integral`](@ref) at `Δt`, and
-``H = \\int_{0}^{Δt} e^{-v/\\text{scale}}\\, F_{lab}(Δt - v)\\,dv`` is
-the ramp's exponential weighting, evaluated numerically with the shared
-[`integrate`](@ref) quadrature. With `Δλ = 0` only the closed-form term
-`λ0·G` remains, reproducing the constant-rate background tested volume
-exactly when `t_report = 0`. Returns zero for `t ≤ t_report`.
-"""
-function bg_tested_integral(b::BackgroundRamp{T}, α, θ, t;
-        alg = DEATH_INTEGRAL_ALG) where {T}
-    R = float(promote_type(T, typeof(α), typeof(θ), typeof(t)))
-    Δt = t - b.t_report
-    Δt <= zero(Δt) && return zero(R)
-    G = _gamma_cdf_integral(α, θ, Δt)
-    iszero(b.Δλ) && return convert(R, b.λ0 * G)
-    ## H = ∫₀^{Δt} e^{-v/scale} F_lab(Δt-v) dv, the ramp's exponential
-    ## weighting of the lab-delay CDF (clock measured from reporting
-    ## onset). No closed form, so reuse the shared quadrature; the
-    ## integrand peaks near v = 0 (small delay argument Δt - v ≈ Δt) and
-    ## decays, so the uniform rule on [0, Δt] is adequate.
-    H = integrate(zero(Δt), Δt; alg) do v
-        exp(-v / b.scale) * _gamma_cdf(α, θ, Δt - v)
-    end
-    return convert(R, (b.λ0 + b.Δλ) * G - b.Δλ * H)
-end
-
-"""
-Cumulative BVD samples *tested* under priority (triage) testing in the
-exhaustion limit. The laboratory analyses the suspect backlog in order of
-pre-test BVD probability, creaming the most-likely-BVD samples first.
-With `B` BVD samples available in the backlog and `A` samples analysed,
-all of `B` is tested once `A ≥ B` (the BVD pool is exhausted) and `A`
-all-BVD samples are tested while `A < B`:
-
-```math
-\\text{BVD}_\\text{tested}(A) = \\min(B, A).
-```
-
-The background tested is the remainder `A − BVD_tested(A) = max(A − B, 0)`,
-and the per-test positivity combines true and false positives,
-`s · q + (1 − \\text{spec}) · (1 − q)` with the analysed BVD share
-`q = BVD_tested(A) / A` (see [`confirmed_cases_model`](@ref)). On the
-outbreak data the backlog is exhausted at every vintage (`A ≫ B`), so
-`BVD_tested ≈ B`: positives plateau at the true-positive ceiling `s·B`
-while the analysed volume climbs and positivity falls. The soft
-front-loading strength `κ` of the earlier parameterisation is dropped —
-it is inoperative under exhaustion (all of `B` is tested regardless),
-leaving this clean exhaustion limit. `min` is AD-compatible.
-"""
-function exhausted_bvd_tested(B, A)
-    R = float(promote_type(typeof(B), typeof(A)))
-    (A <= zero(A) || B <= zero(B)) && return zero(R)
-    return convert(R, min(B, A))
+function severe_first_share(q0, q∞, c, scale)
+    R = float(promote_type(typeof(q0), typeof(q∞), typeof(c), typeof(scale)))
+    cc = max(convert(R, c), zero(R))
+    sc = max(convert(R, scale), eps(R))
+    w = exp(-cc / sc)
+    q = convert(R, q∞) + (convert(R, q0) - convert(R, q∞)) * w
+    return clamp(q, zero(R), one(R))
 end
 
 """

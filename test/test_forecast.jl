@@ -27,9 +27,15 @@
         θ_rep ~ truncated(Normal(3.0, 0.3); lower = 0.2)
         λ_bg ~ truncated(Normal(0.0, 10.0); lower = 0)
         if include_lab
-            α_lab ~ truncated(Normal(2.0, 0.5); lower = 0.5)
-            θ_lab ~ truncated(Normal(1.5, 0.3); lower = 0.2)
+            ## Severe-first confirmed-stream draws the forecast reads:
+            ## sensitivity, specificity, the q-curve shape (q0, qinf,
+            ## decay) and the forwarded fraction.
             s_test ~ Beta(15.0, 2.0)
+            spec_test ~ Beta(50.0, 1.5)
+            q0 ~ Beta(20.0, 1.5)
+            qinf ~ Beta(6.0, 6.0)
+            decay_scale ~ truncated(Normal(0.0, 10.0); lower = 0)
+            τ_forward ~ Beta(5.0, 2.0)
         end
         return nothing
     end
@@ -150,37 +156,40 @@ end
     using Distributions: Gamma
     using BVDOutbreakSize: onset_rescale
     import BVDOutbreakSize as B
-    using BVDOutbreakSize: background_ramp, bg_cumulative,
-                           BACKGROUND_RAMP_SCALE
 
     r = 0.05
     Th = 107.0
     α, θ, CFR = 4.3, 2.6, 0.3
     α_rep, θ_rep, p_drc, λ_bg = 4.0, 3.0, 0.2, 1.5
-    ## Constant background ramp (Δλ = 0): bg cumulative is λ0·Th.
-    bg = background_ramp(λ_bg, 0.0, BACKGROUND_RAMP_SCALE)
-    α_lab, θ_lab, s_test, τ_test = 2.0, 1.5, 0.9, 0.6
+    s_test, spec_test = 0.9, 0.97
+    q0, qinf, decay_scale, τ_forward = 0.95, 0.4, 5.0, 0.6
+    t_report = Th - 8.0
     os = onset_rescale(Gamma(3.0, 2.1), r)
 
-    ## Deaths and confirmed are purely BVD-driven, so the whole mean
-    ## scales by onset_fraction.
+    ## Deaths are purely BVD-driven, so the whole mean scales by
+    ## onset_fraction.
     d1 = B._forecast_deaths_mean(r, Th, α, θ, CFR; onset_fraction = os)
     d0 = B._forecast_deaths_mean(r, Th, α, θ, CFR)
     @test d1 ≈ os * d0
 
-    c1 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test; onset_fraction = os)
-    c0 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test)
-    @test c1 ≈ os * c0
-
-    ## Reported cases scale only the BVD part; the non-BVD background
-    ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.
-    rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, bg;
+    ## Analysed volume (τ_forward · N_susp) and confirmed positives are both
+    ## positive and finite; the analysed forecast is the τ_forward share of
+    ## the suspect backlog.
+    a1 = B._forecast_tests_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg,
+        τ_forward; onset_fraction = os)
+    c1 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg,
+        s_test, spec_test, q0, qinf, decay_scale, τ_forward, t_report;
         onset_fraction = os)
-    rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, bg)
-    bg_cum = bg_cumulative(bg, Th)
-    @test bg_cum ≈ λ_bg * Th        # Δλ = 0 reduces to the constant form
+    @test a1 > 0 && isfinite(a1)
+    @test c1 > 0 && isfinite(c1)
+    @test c1 < a1          # positives are a fraction of analysed
+
+    ## Reported cases scale only the BVD part; the constant background
+    ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.
+    rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
+        onset_fraction = os)
+    rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg)
+    bg_cum = λ_bg * Th
     bvd0 = rc0 - bg_cum
     @test rc1 ≈ os * bvd0 + bg_cum
     @test rc1 > os * rc0

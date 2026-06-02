@@ -118,9 +118,9 @@ likelihood. See [`confirmed_cases_model`](@ref).
         ascertainment = pooled_ascertainment_model(),
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
-        lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
+        test_selection = test_selection_model(),
         incubation = incubation_model(),
         report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
@@ -130,28 +130,24 @@ likelihood. See [`confirmed_cases_model`](@ref).
     test_positivity_state ~ to_submodel(test_positivity, false)
     incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
-    τ_test = test_positivity_state.τ_test
+    λ_bg = test_positivity_state.λ_bg
     f_rep = report_state.dist
     T = growth_state.T
     os = onset_rescale(incubation_state.dist, growth_state.r)
-    ## Reporting-anchored background ramp (see [`reported_cases_model`](@ref));
-    ## `nothing` keeps the seeding-anchored clock (`t_report = 0`).
-    t_report = report_onset_offset === nothing ? zero(T) :
-               max(T - report_onset_offset, zero(T))
-    bg = background_ramp(test_positivity_state.λ0,
-        test_positivity_state.Δλ, test_positivity_state.scale, t_report)
 
     confirmed_vec = Union{Missing, Int}[confirmed_cases]
     ## Single-vintage analysed denominator for the confirmed Binomial: the
     ## cumulative tests-analysed count at the cut-off.
     analysed_vec = Union{Missing, Int}[tests_analysed]
+    received_vec = Union{Missing, Int}[missing]
     confirmed_state ~ to_submodel(
-        confirmed(confirmed_vec, analysed_vec, tests_analysed,
+        confirmed(confirmed_vec, analysed_vec, received_vec, tests_analysed,
             growth_state, k,
-            [asc_state.p_drc], bg, τ_test, f_rep, [T], T;
-            lab_delay = lab_delay,
+            [asc_state.p_drc], λ_bg, test_positivity_state.τ_forward,
+            f_rep, [T], T;
             test_sensitivity = test_sensitivity,
             test_specificity = test_specificity,
+            test_selection = test_selection,
             report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
@@ -241,29 +237,25 @@ supplies the binomial denominator for any `missing` `samples_analysed`
 entry. Per-test positivity is exposed as a derived quantity. Pass
 `tests_analysed = missing` to drop the tested-volume NegBinomial.
 
-When `samples_received` is also supplied (non-empty), the confirmed/lab
-path switches to the constant-capacity batch model
-[`lab_throughput_model`](@ref) (#174): a daily FIFO backlog drained at a
-single capacity `κ` (from [`lab_capacity_model`](@ref)) jointly generates
-received, analysed and positive counts, replacing the fixed lab-delay
-Gamma. `lab_stoppage_offsets` lists days (offsets before the cut-off) on
-which the lab processed nothing (the 25 May Ituri stoppage). Without
-`samples_received` the binomial confirmed|analysed path is used.
+`samples_received` is the per-vintage cumulative received-count vector
+(`Cumul échantillons reçus`). When supplied it conditions the forwarded
+fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
+with `N_susp,v` the cumulative suspect backlog (BVD-suspected plus
+background) the confirmed model already uses for the positivity baseline
+(see [`confirmed_cases_model`](@ref)). This pins `τ_forward` directly from
+received-versus-suspected; left empty it drops the received likelihood.
 
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
 disable the factor entirely.
 
-`report_onset_offset` anchors the non-BVD background ramp to
-surveillance / reporting onset: the background clock starts at
-`t_report = T − report_onset_offset` rather than at seeding, so non-BVD
-suspects accrue only once case-finding has begun and the ramp is still
-climbing across the late lab vintages (see [`reported_cases_model`](@ref)
-and [`report_onset_offset`](@ref)). Pass
-`report_onset_offset(as_of_date)` (8 days for the 26 May cut-off); the
-default `nothing` keeps the seeding-anchored ramp (`t_report = 0`) and,
-with `Δλ = 0`, the constant background.
+`report_onset_offset` sets the testing-onset clock for the severe-first
+BVD-share decay: the tested BVD fraction relaxes from `q0` toward the
+count-implied baseline over elapsed time since `t_report = T − offset`
+(see [`confirmed_cases_model`](@ref) and [`report_onset_offset`](@ref)).
+Pass `report_onset_offset(as_of_date)` (8 days for the 26 May cut-off);
+the default `nothing` anchors the clock at seeding (`t_report = 0`).
 """
 @model function bvd_joint(
         exported_cases::Union{Missing, Integer},
@@ -276,7 +268,6 @@ with `Δλ = 0`, the constant background.
         confirmed_offsets::AbstractVector = reported_offsets,
         samples_analysed::AbstractVector = Union{Missing, Int}[],
         samples_received::AbstractVector = Union{Missing, Int}[],
-        lab_stoppage_offsets::AbstractVector = Int[],
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         growth = exponential_growth_model(),
@@ -284,7 +275,6 @@ with `Δλ = 0`, the constant background.
         deaths = deaths_model,
         reported_cases_submodel = reported_cases_model,
         confirmed = confirmed_cases_model,
-        lab_throughput = lab_throughput_model,
         exports_deaths_model = exports_deaths_model,
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
@@ -293,10 +283,9 @@ with `Δλ = 0`, the constant background.
         p_deaths_fixed::Union{Nothing, Real} = nothing,
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
-        lab_delay = lab_delay_model(),
-        lab_capacity = lab_capacity_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
+        test_selection = test_selection_model(),
         incubation = incubation_model(),
         genetic = nothing,
         source_population::Real = ITURI_POPULATION,
@@ -351,25 +340,7 @@ with `Δλ = 0`, the constant background.
             report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
-    if !isempty(confirmed_cases) && !isempty(samples_received)
-        ## Constant-capacity batch lab model (#174): the FIFO backlog
-        ## drained at κ replaces the fixed lab-delay Gamma for the
-        ## confirmed/analysed path, so received, analysed and positives all
-        ## flow from one drain rather than competing with a delay
-        ## distribution. Samples the capacity prior here.
-        confirmed_edges = [T - δ for δ in confirmed_offsets]
-        lab_cap_state ~ to_submodel(lab_capacity, false)
-        stoppage_days = [Int(round(T - δ)) for δ in lab_stoppage_offsets]
-        lab_state ~ to_submodel(
-            lab_throughput(samples_received, samples_analysed,
-                confirmed_cases, growth_state, k,
-                p_drc_per_bin[1:n_conf], reported_state.bg,
-                reported_state.τ_test, reported_state.report_delay_dist,
-                lab_cap_state.κ_lab, confirmed_edges;
-                test_sensitivity = test_sensitivity,
-                stoppage_days = stoppage_days,
-                onset_fraction = os), false)
-    elseif !isempty(confirmed_cases)
+    if !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
         tests_edge = T - tests_offset
         ## Per-vintage analysed denominators for the confirmed Binomial.
@@ -379,15 +350,22 @@ with `Δλ = 0`, the constant background.
         analysed_vec = isempty(samples_analysed) ?
                        fill(tests_analysed, n_conf) :
                        samples_analysed
+        ## Per-vintage received counts (cumulative `Cumul échantillons
+        ## reçus`). When supplied they condition the forwarded fraction
+        ## `τ_forward` via a NegBinomial on the suspect backlog; an empty
+        ## vector drops the received likelihood.
+        received_vec = isempty(samples_received) ?
+                       fill(missing, n_conf) : samples_received
         confirmed_state ~ to_submodel(
-            confirmed(confirmed_cases, analysed_vec, tests_analysed,
-                growth_state, k,
-                p_drc_per_bin[1:n_conf], reported_state.bg,
-                reported_state.τ_test, reported_state.report_delay_dist,
+            confirmed(confirmed_cases, analysed_vec, received_vec,
+                tests_analysed, growth_state, k,
+                p_drc_per_bin[1:n_conf], reported_state.λ_bg,
+                reported_state.τ_forward,
+                reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;
-                lab_delay = lab_delay,
                 test_sensitivity = test_sensitivity,
                 test_specificity = test_specificity,
+                test_selection = test_selection,
                 report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
     end

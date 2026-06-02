@@ -169,16 +169,15 @@ end
     @test all(C .> 0)
 end
 
-@testitem "confirmed_only_model fits and predicts both lab streams" tags=[:slow] begin
+@testitem "confirmed_only_model fits and predicts lab streams" tags=[:slow] begin
     ## Exercises the real production submodels through the
-    ## confirmed-and-tested-only composer: a prior fit conditioned on
-    ## both lab observations must give finite C(T), and `predict` on the
-    ## same composer with missing observations must populate both the
-    ## `tests_analysed` and per-vintage `confirmed_cases` predictive
-    ## draws. The confirmed and tested streams enter as two independent
-    ## NegBinomials (per-test positivity is a derived quantity, not a
-    ## Binomial coupling), so a single confirmed draw is not bounded by
-    ## its tested draw.
+    ## confirmed-and-tested-only composer: a prior fit conditioned on the
+    ## confirmed observation must give finite C(T), and `predict` on the
+    ## same composer with missing observations must populate the
+    ## per-vintage `confirmed_cases` and `samples_received` predictive
+    ## draws. Confirmed positives are a Binomial on the analysed
+    ## denominator; received samples are a NegBinomial on the suspect
+    ## backlog (the τ_forward stream).
     using Turing: sample, Prior, predict
     import FlexiChains
     using BVDOutbreakSize: confirmed_only_model
@@ -195,9 +194,9 @@ end
     pp = predict(confirmed_only_model(missing, missing), chn)
     ## Single confirmed vintage stored as a length-1 vector per draw.
     cc = reduce(vcat, vec(Array(pp[:confirmed_cases])))
-    tt = vec(Array(pp[:tests_analysed]))
+    rr = reduce(vcat, vec(Array(pp[:samples_received])))
     @test all(cc .>= 0)
-    @test all(tt .>= 0)
+    @test all(rr .>= 0)
 end
 
 @testitem "bvd_joint initialises with tested + confirmed observations" tags=[:slow] begin

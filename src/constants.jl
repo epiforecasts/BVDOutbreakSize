@@ -101,20 +101,6 @@ nodes, so the quadrature tracks the delay's scale as it is sampled.
 const DELAY_SUPPORT_K = 10
 
 """
-    BACKGROUND_RAMP_SCALE
-
-Surveillance scale-up timescale (days) for the saturating non-BVD
-background ramp `λ_bg(t) = λ0 + Δλ·(1 − e^(−Δt/scale))`, with `Δt`
-measured from reporting onset (see [`BackgroundRamp`](@ref) and
-[`test_positivity_model`](@ref)). Fixed rather than sampled: the four lab
-vintages (23-26 May) cannot identify it. Defaults to 5 days so the ramp
-is still climbing across the 23-26 May lab window (reporting onset is
-~8 days before the 26 May cut-off), the order of the surveillance
-broadening over which the suspected-case definition widened.
-"""
-const BACKGROUND_RAMP_SCALE = 5.0
-
-"""
     EXPORT_DELAY_GRID_POINTS
 
 Number of evenly spaced grid points used to precompute the onset-to-death

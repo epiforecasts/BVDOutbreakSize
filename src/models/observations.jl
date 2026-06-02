@@ -117,10 +117,9 @@ Reported (suspected) cases likelihood. Couples the observed DRC
 suspected-case counts to `C(T)` as the sum of (i) a BVD-driven
 contribution `p_drc · onset_fraction · ∫₀^s exp(r·u) · f_rep(s-u) du` using
 the onset-to-report delay [`report_delay_model`](@ref) and (ii) a non-BVD
-background whose cumulative is the saturating ramp `μ_bg(s)` (see
-[`BackgroundRamp`](@ref) and [`test_positivity_model`](@ref)), so each
-bin's background increment is `μ_bg(s_k) − μ_bg(s_{k−1})`. With `Δλ = 0`
-this is the constant `λ0 · Δt`. The latent trajectory is cumulative
+background at the constant rate `λ_bg` (see [`test_positivity_model`](@ref)),
+so each bin's background increment is the cumulative difference
+`λ_bg·s_k − λ_bg·s_{k−1} = λ_bg · Δt`. The latent trajectory is cumulative
 *infections*, so `onset_fraction` (the incubation mgf) maps it onto
 onsets before the onset-to-report convolution; the background term is
 non-BVD and unscaled.
@@ -154,20 +153,9 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     report_state ~ to_submodel(report_delay, false)
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
-    τ_test = test_positivity_state.τ_test
+    τ_forward = test_positivity_state.τ_forward
     f_rep = report_state.dist
     r = growth_state.r
-    ## Anchor the background ramp to reporting onset: the background clock
-    ## starts at `t_report = T − report_onset_offset` (clamped at 0), so
-    ## non-BVD suspects accrue only once case-finding has begun, and the
-    ## ramp is still climbing across the late lab window. `nothing`
-    ## (the default) keeps the seeding-anchored ramp (`t_report = 0`),
-    ## which with `Δλ = 0` recovers the constant background exactly.
-    t_report = report_onset_offset === nothing ? zero(growth_state.T) :
-               max(growth_state.T - report_onset_offset,
-        zero(growth_state.T))
-    bg = background_ramp(test_positivity_state.λ0,
-        test_positivity_state.Δλ, test_positivity_state.scale, t_report)
 
     n = length(t_edges)
     n == length(p_drc_per_bin) ||
@@ -195,10 +183,9 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     μ_bg_prev = zero(Tt)
     for i in 1:n
         s_k = t_edges[i]
-        ## Background increment is the cumulative ramp difference
-        ## μ_bg(s_k) − μ_bg(s_{k−1}); with Δλ = 0 this is λ0·(s_k − s_{k−1}),
-        ## the old constant-rate `λ_bg · Δt`.
-        μ_bg_k = bg_cumulative(bg, s_k)
+        ## Constant-rate non-BVD background: cumulative μ_bg(s_k) = λ_bg·s_k,
+        ## so the between-edge increment is λ_bg·(s_k − s_{k−1}).
+        μ_bg_k = max(λ_bg * s_k, zero(Tt))
         Δμ_bg = max(μ_bg_k - μ_bg_prev, zero(Tt))
         μ_bg_prev = μ_bg_k
         raw = p_drc_per_bin[i] * ΔμBVD0[i] + Δμ_bg
@@ -220,7 +207,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
 
     expected_reports_total := Λ_at_edges[end]
 
-    return (; p_drc_per_bin, λ_bg, bg, τ_test,
+    return (; p_drc_per_bin, λ_bg, τ_forward,
         expected_reports_total, positivity,
         report_delay_dist = f_rep,
         μ_BVD0_at_edges, Λ_at_edges)
@@ -248,42 +235,42 @@ where `A_v` is the cumulative analysed count to edge `v`
 share of the analysed batch, `s_test` the PCR sensitivity (true positives
 on the BVD share) and `1 − spec` the false-positive rate (false positives
 on the non-BVD share; see [`test_specificity_model`](@ref)). Modelling
-specificity lets the observed positivity exceed `s·q`, so the peak no
-longer forces a hard lower bound on `s`. `BVD_tested(A_v)` is the
-cumulative BVD among those `A_v` analysed under **priority/exhaustion
-testing**: the lab triages, creaming the most-likely-BVD samples first,
-so with `B_v` BVD available (see below),
+specificity lets the observed positivity exceed `s·q`.
+
+`q_v` is the **severe-first** tested BVD share: the lab tests the
+most-likely-BVD (severest / most obvious) suspects first, so `q` starts at
+the early severe-cluster fraction `q0` (near 1) and relaxes to a broad-pool
+baseline `qinf` as testing widens (see [`severe_first_share`](@ref) and
+[`test_selection_model`](@ref)):
 
 ```math
-\\text{BVD}_{tested}(A_v) = \\min(B_v,\\ A_v),
-\\qquad \\text{bg}_{tested}(A_v) = A_v - \\text{BVD}_{tested}(A_v)
+q_v = q_\\infty + (q_0 - q_\\infty)\\, e^{-c_v / \\text{decay}},
+\\qquad c_v = \\max(s_v - t_{report},\\ 0),
 ```
 
-([`exhausted_bvd_tested`](@ref)). On the data the BVD backlog is exhausted
-at every vintage (`A_v ≫ B_v`), so `BVD_tested ≈ B_v`: positives plateau
-near the ceiling `s·B_v` (plus false positives) while the analysed volume
-climbs and the per-test positivity falls — the observed
-saturating-positives / falling-positivity pattern a constant or ramped
-background cannot produce. The earlier soft front-loading strength `κ` is
-dropped: it is inoperative under exhaustion (all of `B` is tested
-regardless). The cumulative form is robust to vintages with zero
-newly-analysed samples (e.g. the 25 May Ituri stoppage).
+with `c_v` the elapsed time since testing (reporting) onset
+`t_report = T − report_onset_offset`. `q` FALLS from `q0` to `qinf` and
+LEVELS OFF there (no overshoot to zero). With `q0 ≈ 1` the first vintage
+reads positivity `≈ s`, so the sensitivity is identified from the early
+data and needs no lower floor; the plateau positivity
+`s·qinf + (1−spec)(1−qinf)` holds the late vintages. `q0`, `qinf` and the
+decay timescale are sampled by [`test_selection_model`](@ref).
 
-The available backlog is the FULL cumulative lab-eligible pool to each
-vintage (the high-suspicion samples the lab triages first are those
-accumulated since seeding, not just the last few days): `B_v` is
-`p_{DRC,v}` times
-``I_{lab,0}(s_v) = \\int_0^{s_v} \\mu_{BVD,0}(u)\\, f_{lab}(s_v - u)\\,du``,
-`μ_BVD,0` the unit-ascertainment onset-to-report BVD cumulative (kernel
-`f_rep` from [`reported_cases_model`](@ref)). A [`DailyBVDTrajectory`](@ref)
-precomputes `μ_BVD,0` once on a shared Gauss-Legendre node set. The
-background available is the constant-rate non-BVD backlog
-``\\int_0^{s_v} \\lambda_{bg}\\, F_{lab}(s_v - u)\\,du`` (via
-[`bg_tested_integral`](@ref); the ramp is dormant, `Δλ = 0`). Anchoring
-the pool to the short reporting window instead starves it (the analysed
-counts far exceed an 8-day BVD slice), so `report_onset_offset` is
-retained only for API symmetry with the reported/ramp path and does not
-shrink the backlog.
+The cumulative suspect backlog at each edge is split BVD / background:
+`μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
+(the onset→report Gamma closed form, the same quantity the reported stream
+produces — no report-to-lab delay, the lab selects from the accumulated
+received queue) and `μ_bg(s_v) = λ_bg · s_v` (constant-rate non-BVD). Their
+sum `N_susp,v` is the backlog the received-count likelihood conditions on;
+their ratio `μ_BVD / N_susp` is the count-implied BVD composition, exposed
+as a diagnostic (`q_baseline_count`).
+
+`samples_received` is the per-vintage cumulative received-count vector
+(`Cumul échantillons reçus`). When supplied each vintage is observed as
+`R_v ~ NegBinomial(τ_forward · N_susp,v, k)`, pinning the forwarded
+fraction `τ_forward` directly from received-versus-suspected. A vector of
+`missing` entries drops the received likelihood (and is generated for
+predictive checks).
 
 `samples_analysed` is the per-vintage analysed denominator vector aligned
 with `t_edges`. Pass a vector of `missing` entries (with a non-missing
@@ -291,15 +278,11 @@ fallback `tests_analysed` for the denominators) to generate
 posterior-predictive confirmed draws.
 
 `tests_analysed` (`Cumul échantillons analysés`) is a single cumulative
-count observed at its own elapsed time `tests_edge` (which may lag the
-case cut-off `T` if lab reporting stops earlier). When present it enters
-as one NegBinomial term with mean
-``\\tau\\,(\\text{BVD}_\\text{tested} + \\text{bg}_\\text{tested})``
-accumulated to `tests_edge`. It also supplies the binomial denominator
-for any `missing` `samples_analysed` entry under predictive generation.
-The per-test positivity `s · BVD_tested / (BVD_tested + bg_tested)` is
-exposed as a derived quantity for comparison with the sitrep figure. Pass
-`tests_analysed = missing` to drop the tested-volume NegBinomial.
+count used only as the fallback binomial denominator for any `missing`
+`samples_analysed` entry under predictive generation. The per-test
+positivity `p_pos`, the tested BVD share `q_cutoff` and the baseline
+`q_baseline` are exposed as derived quantities for comparison with the
+sitrep figure.
 
 A single confirmed observation (`length 1`, `t_edges = [T]`, single
 `samples_analysed`) reduces to the cumulative confirmed Binomial.
@@ -307,34 +290,26 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
 @model function confirmed_cases_model(
         confirmed_cases::AbstractVector,
         samples_analysed::AbstractVector,
+        samples_received::AbstractVector,
         tests_analysed::Union{Missing, Integer},
         growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, bg::BackgroundRamp, τ_test::Real,
-        f_rep,
+        p_drc_per_bin::AbstractVector, λ_bg::Real, τ_forward::Real, f_rep,
         t_edges::AbstractVector, tests_edge::Real;
-        lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
+        test_selection = test_selection_model(),
         report_onset_offset::Union{Nothing, Real} = nothing,
         onset_fraction::Real = 1.0)
-    lab_state ~ to_submodel(lab_delay, false)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
-    f_lab = lab_state.dist
+    selection_state ~ to_submodel(test_selection, false)
     s_test = sensitivity_state.s_test
     spec_test = specificity_state.spec_test
+    q0 = selection_state.q0
+    decay_scale = selection_state.decay_scale
+    qinf = selection_state.qinf
     r = growth_state.r
     T = growth_state.T
-    α_lab = lab_state.α
-    θ_lab = lab_state.θ
-    ## The available suspect backlog the lab triages is the FULL cumulative
-    ## lab-eligible pool to each vintage (BVD accumulated since seeding plus
-    ## the non-BVD background), not just the testing-window increment:
-    ## anchoring the pool to the short reporting window starves it (the
-    ## analysed counts 211-403 far exceed an 8-day BVD slice), collapsing
-    ## positivity. `report_onset_offset` is retained for API symmetry with
-    ## the reported/ramp path but does not shrink the backlog pool.
-    background_pool = background_ramp(bg.λ0, bg.Δλ, bg.scale, zero(T))
 
     n = length(t_edges)
     n == length(p_drc_per_bin) ||
@@ -346,85 +321,77 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     n == length(samples_analysed) ||
         error("samples_analysed length must match t_edges (got " *
               "$(length(samples_analysed)) vs $n)")
+    n == length(samples_received) ||
+        error("samples_received length must match t_edges (got " *
+              "$(length(samples_received)) vs $n)")
 
-    ## Unit-ascertainment μ_BVD,0 at the shared Gauss-Legendre nodes over
-    ## [0, T]; the outer quadrature of I_lab,0 is reused across every bin
-    ## edge. Per-bin ascertainment is then applied on the between-edge
-    ## I_lab,0 increment so each bin's mean tracks its own draw.
-    ## The latent trajectory is cumulative *infections*, so `onset_fraction`
-    ## (the incubation mgf) maps it onto onsets before the onset-to-report
-    ## and report-to-lab convolutions; it scales the whole BVD lab
-    ## cumulative, hence both the confirmed counts and the BVD tested
-    ## volume below.
-    ## Full cumulative lab-eligible BVD at each bin edge (from seeding).
-    trajectory = DailyBVDTrajectory(T, r, f_rep)
-    I_lab0_edges = onset_fraction .*
-                   delay_convolution(trajectory, t_edges, f_lab)
+    ## Cumulative suspect backlog at each edge, split BVD / background. The
+    ## BVD-suspected cumulative is `μ_BVD(s) = p_DRC · onset_fraction ·
+    ## ∫₀^s e^{r u} f_rep(s−u) du` (the onset→report Gamma closed form, the
+    ## same quantity the reported stream produces); the non-BVD background
+    ## cumulative is `μ_bg(s) = λ_bg · s` (constant-rate). Their sum
+    ## `N_susp,v` is the backlog the received-count likelihood conditions on
+    ## (below). Their ratio `μ_BVD / N_susp` is the count-implied BVD
+    ## composition, exposed as a diagnostic; the q-curve baseline `qinf` is a
+    ## free parameter near the cut-off positivity, so the outbreak size stays
+    ## pinned by the deaths / exports streams and the received counts rather
+    ## than forced through this ratio.
+    t_report = report_onset_offset === nothing ? zero(T) :
+               max(T - report_onset_offset, zero(T))
 
-    Tt = eltype(I_lab0_edges)
+    Tt = typeof(float(r) * float(λ_bg) * onset_fraction * float(q0) *
+                float(decay_scale) * float(qinf))
     p_pos = Vector{Tt}(undef, n)
+    q_at = Vector{Tt}(undef, n)
+    qinf_count_at = Vector{Tt}(undef, n)
+    Nsusp_at = Vector{Tt}(undef, n)
     Λ_at_edges = Vector{Tt}(undef, n)
-    ## Priority/exhaustion testing with modelled specificity, on cumulative
-    ## counts. The lab analyses the suspect backlog in order of pre-test BVD
-    ## probability, creaming the most-likely-BVD samples first. The
-    ## available backlog to each vintage is the FULL cumulative lab-eligible
-    ## pool:
-    ##  - BVD available  B_i = p_DRC · I_lab,0(s_i)  (all BVD eligible to
-    ##    date — the high-suspicion samples the lab triages first);
-    ##  - background available bg_i = ∫_0^{s_i} λ_bg F_lab du (constant-rate
-    ##    non-BVD backlog, lab-convolved, via `bg_tested_integral`).
-    ## Among the observed cumulative analysed `A_i` (data), the BVD tested
-    ## is the exhaustion limit `min(B_i, A_i)` (`exhausted_bvd_tested`); the
-    ## remainder `A_i − BVD_tested` is background tested. The per-test
-    ## positivity combines true and false positives,
-    ##   p_pos = s·q + (1 − spec)·(1 − q),  q = BVD_tested / A,
-    ## with `s` the sensitivity and `1 − spec` the false-positive rate (see
-    ## [`test_specificity_model`](@ref)). On the data the backlog is
-    ## exhausted at every vintage (A ≫ B), so BVD_tested ≈ B: positives
-    ## plateau at the ceiling s·B (+ false positives) while A climbs and
-    ## positivity falls. The binomial conditions on the observed analysed
-    ## denominator. The pool is the lab-eligible suspect count (not thinned
-    ## by `τ_test`, which stays the suspected-stream sampling fraction in
-    ## `reported_cases_model`).
-    bvd_tested_unit = zero(Tt)
-    bg_tested_te = zero(Tt)
-    N_te = zero(Tt)
+    qinf_c = convert(Tt, qinf)
+    ## Severe-first testing with modelled specificity, on cumulative counts.
+    ## The lab tests the most-likely-BVD (severest / obvious) suspects first,
+    ## so the BVD share of the analysed batch starts at the early
+    ## severe-cluster fraction `q0` (near 1) and relaxes to the broad-pool
+    ## baseline `qinf` as testing widens (`severe_first_share`):
+    ##   q_v = qinf + (q0 − qinf)·exp(−c_v / decay_scale),
+    ## with `c_v` the elapsed time since testing (reporting) onset. q FALLS
+    ## from q0 to qinf and LEVELS OFF there (no overshoot to zero). The
+    ## per-test positivity combines true and false positives,
+    ##   p_pos = s·q + (1 − spec)·(1 − q),
+    ## with `1 − spec` the false-positive rate. With q0 ≈ 1 the first vintage
+    ## reads positivity ≈ s, identifying the sensitivity from the early data
+    ## (no floor); the plateau s·qinf + (1−spec)(1−qinf) holds the late
+    ## positivity. The binomial conditions on the observed analysed
+    ## denominator.
     for i in 1:n
-        raw_bvd = p_drc_per_bin[i] * I_lab0_edges[i]
-        bvd_avail = isfinite(raw_bvd) ? max(raw_bvd, zero(Tt)) : zero(Tt)
-        bg_avail = max(
-            bg_tested_integral(background_pool, α_lab, θ_lab,
-                oftype(T, t_edges[i])),
-            zero(Tt))
-        N_i = bvd_avail + bg_avail
-        A_i = samples_analysed[i] === missing ? N_i :
-              convert(Tt, samples_analysed[i])
-        bvd_tested = exhausted_bvd_tested(bvd_avail, A_i)
-        ## Background actually tested = analysed minus BVD tested (the
-        ## low-yield remainder), clamped at zero.
-        bg_tested_i = max(A_i - bvd_tested, zero(Tt))
-        q = A_i > zero(Tt) ? bvd_tested / A_i : zero(Tt)
+        s_i = oftype(T, t_edges[i])
+        μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
+                convert(Tt, p_drc_per_bin[i]) * onset_fraction *
+                delay_convolution(one(r), r, s_i, f_rep)
+        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
+        denom = μ_bvd + μ_bg
+        Nsusp_at[i] = denom
+        qinf_count_at[i] = denom > zero(Tt) ?
+                           clamp(μ_bvd / denom, zero(Tt), one(Tt)) :
+                           zero(Tt)
+        ## Elapsed time since testing onset for this vintage.
+        c_i = max(s_i - oftype(s_i, t_report), zero(s_i))
+        q = severe_first_share(q0, qinf_c, c_i, decay_scale)
+        q_at[i] = q
         p_raw = s_test * q + (one(Tt) - spec_test) * (one(Tt) - q)
         p_pos[i] = isfinite(p_raw) ?
                    clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
-        ## Expected cumulative confirmed: analysed denominator × cumulative
-        ## positivity, a derived diagnostic.
+        ## Expected cumulative confirmed: analysed denominator × positivity,
+        ## a derived diagnostic.
         Λ_at_edges[i] = p_pos[i] *
                         (samples_analysed[i] === missing ? zero(Tt) :
                          convert(Tt, samples_analysed[i]))
-        if t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge)))
-            bvd_tested_unit = bvd_tested
-            bg_tested_te = bg_tested_i
-            N_te = N_i
-        end
     end
 
     ## Confirmed counts observed conditional on the analysed denominator
-    ## via a cumulative Binomial (equation (24)). `A_v` is data, not
-    ## modelled, which removes the multiplicative ridge of the
-    ## NegBinomial-increment form. A `missing` denominator falls back to
-    ## the cumulative `tests_analysed` so predictive draws still have an
-    ## integer denominator.
+    ## via a Binomial. `A_v` is data, not modelled, which removes the
+    ## multiplicative ridge of the NegBinomial-increment form. A `missing`
+    ## denominator falls back to the cumulative `tests_analysed` so
+    ## predictive draws still have an integer denominator.
     for i in 1:n
         A_i = samples_analysed[i] === missing ?
               (tests_analysed === missing ? 0 : tests_analysed) :
@@ -432,218 +399,41 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
     end
 
-    ## Tested-volume mean at `tests_edge`: the total available pool
-    ## N = BVD available + background available (lab-eligible backlog); this
-    ## is the expected processed volume the analysed-count NegBinomial
-    ## conditions on. `BVD_tested` is the exhausted BVD creamed among the
-    ## analysed samples at `tests_edge`; `bg_tested` is the background
-    ## ACTUALLY tested there (analysed minus BVD tested), not the available
-    ## background pool.
-    BVD_tested := isfinite(bvd_tested_unit) ?
-                  max(bvd_tested_unit, eps(typeof(bvd_tested_unit))) :
-                  eps(typeof(bvd_tested_unit))
-    bg_tested := isfinite(bg_tested_te) ?
-                 max(bg_tested_te, eps(typeof(bg_tested_te))) :
-                 eps(typeof(bg_tested_te))
+    ## Samples received conditional on the suspect backlog. The lab forwards
+    ## a fraction `τ_forward` of the cumulative suspected backlog
+    ## `N_susp,v = μ_BVD,v + μ_bg,v` (the same BVD-suspected + background
+    ## quantities the positivity uses), so the expected cumulative received
+    ## is `τ_forward · N_susp,v`, observed through a NegBinomial sharing the
+    ## surveillance dispersion `k`. This pins `τ_forward` directly from
+    ## received-versus-suspected rather than leaning on a single tested-
+    ## volume total. A `missing` received entry is generated for predictive
+    ## checks. `τ_forward` is held constant across vintages for parsimony.
+    recv_means = Vector{Tt}(undef, n)
+    for i in 1:n
+        raw = convert(Tt, τ_forward) * Nsusp_at[i]
+        recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
+        samples_received[i] ~ safe_nbinomial(k, recv_means[i])
+    end
 
-    expected_tested := isfinite(N_te) ? max(N_te, eps(typeof(N_te))) :
-                       eps(typeof(N_te))
-    ## Per-test positivity at `tests_edge`: true positives s·q plus false
-    ## positives (1−spec)·(1−q) on the analysed BVD share q. Exposed for
-    ## comparison with the sitrep `Taux de positivité`. Uses the observed
-    ## analysed count at the tested-volume edge when present, else N.
-    A_te = tests_analysed === missing ? N_te : convert(Tt, tests_analysed)
-    q_te = A_te > zero(Tt) ? bvd_tested_unit / A_te : zero(Tt)
-    p_pos_raw = s_test * q_te + (one(Tt) - spec_test) * (one(Tt) - q_te)
-    p_positive := isfinite(p_pos_raw) ?
-                  clamp(p_pos_raw,
-        eps(typeof(p_pos_raw)),
-        one(p_pos_raw) - eps(typeof(p_pos_raw))) :
-                  eps(typeof(p_pos_raw))
-
-    ## Single tested-volume NegBinomial at the laboratory stream's own
-    ## cut-off. Sampled unconditionally so it conditions on the data when
-    ## present and is generated for posterior-predictive checks when
-    ## `missing`. The confirmed binomial conditions on the *observed*
-    ## analysed denominator, not this modelled count, so the two streams
-    ## are not double-counted.
-    tests_analysed ~ safe_nbinomial(k, expected_tested)
+    ## Per-test positivity at the lab cut-off (last edge ≤ tests_edge):
+    ## exposed for comparison with the sitrep `Taux de positivité`.
+    te_idx = something(
+        findlast(
+            i -> t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge))),
+            1:n), n)
+    p_positive := p_pos[te_idx]
+    q_cutoff := q_at[te_idx]
+    q_baseline := qinf
+    q_baseline_count := qinf_count_at[te_idx]
+    τ_forward_out := τ_forward
 
     expected_confirmed_total := Λ_at_edges[end]
+    expected_received_total := recv_means[end]
 
-    return (; expected_tested, p_positive, p_pos,
-        BVD_tested, bg_tested, s_test, spec_test, τ_test, p_drc_per_bin,
-        expected_confirmed_total,
-        lab_delay_dist = f_lab,
-        I_lab0_edges, Λ_at_edges)
-end
-
-"""
-Constant-capacity laboratory-throughput likelihood (issue #174). Models
-the three lab streams — samples received, samples analysed and confirmed
-positives — through a single daily FIFO backlog drained at a constant
-capacity `κ`, rather than a fixed onset-to-lab Gamma delay. This replaces
-the lab-delay convolution of [`confirmed_cases_model`](@ref) for the
-confirmed/analysed path: the backlog provides the lag, so the
-report-to-lab delay and the `p_DRC · s · τ` scale no longer compete for
-the same turnaround (the multiplicative ridge that breaks the per-vintage
-NegBinomial / binomial confirmed fit, #163).
-
-The daily generative process over `1:D` (`D = round(T)`):
-
-- *Arrivals.* The suspected stream feeds the lab. Daily BVD-suspected
-  onsets-to-report are the increments of the Gamma closed-form
-  ``p_{DRC}\\,\\mu_{BVD,0}(d)`` (kernel `f_rep`, shared with
-  [`reported_cases_model`](@ref)); daily non-BVD background arrives at the
-  saturating-ramp rate `λ_bg(d)` (the ramp cumulative increment over day
-  `d`; constant `λ0` when `Δλ = 0`). A receipt fraction `τ_recv` thins
-  both into
-  samples *received* by the lab on day `d`.
-- *Backlog drain.* Received samples join a FIFO backlog drained at `κ`
-  per day, `processed_d = min(κ_d, backlog_{d-1} + arrivals_d)`, with the
-  initial backlog fixed to zero and `κ_d = 0` on the externally-supplied
-  `stoppage_days` (the 25 May Ituri stoppage, documented in
-  `data/insp_sitrep_scanned.csv`). BVD and background are drained in
-  proportion to their current backlog shares (a well-mixed approximation
-  to strict FIFO: smooth for AD and adequate for cumulative totals).
-- *Observations.* At each vintage edge the cumulative received and
-  cumulative processed are NegBinomial; cumulative positives are observed
-  conditional on the *observed* cumulative analysed denominator through a
-  Binomial with success `s_test · q_v`, where `q_v` is the BVD share of
-  the cumulative processed pool.
-
-```math
-R_v \\sim \\mathrm{NegBinomial}(\\textstyle\\sum_{d \\le v} \\text{recv}_d, k),
-\\quad
-A_v \\sim \\mathrm{NegBinomial}(\\textstyle\\sum_{d \\le v} \\text{proc}_d, k),
-\\quad
-C_v \\sim \\mathrm{Binomial}(A_v^{obs},\\ s_{test}\\, q_v).
-```
-
-`samples_received`, `samples_analysed` and `confirmed_cases` are
-per-vintage *cumulative* vectors aligned with `t_edges`; `missing`
-entries are generated for predictive checks (the binomial denominator
-then falls back to the modelled cumulative processed, rounded). A single
-edge reduces each stream to its cumulative single-total likelihood.
-"""
-@model function lab_throughput_model(
-        samples_received::AbstractVector,
-        samples_analysed::AbstractVector,
-        confirmed_cases::AbstractVector,
-        growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, bg::BackgroundRamp, τ_recv::Real,
-        f_rep,
-        κ_lab::Real, t_edges::AbstractVector;
-        test_sensitivity = test_sensitivity_model(),
-        stoppage_days::AbstractVector = Int[],
-        onset_fraction::Real = 1.0)
-    sensitivity_state ~ to_submodel(test_sensitivity, false)
-    s_test = sensitivity_state.s_test
-    r = growth_state.r
-    T = growth_state.T
-
-    n = length(t_edges)
-    (n == length(p_drc_per_bin) == length(samples_received) ==
-     length(samples_analysed) == length(confirmed_cases)) ||
-        error("lab_throughput_model: stream lengths must match t_edges")
-
-    Tt = typeof(float(r) * float(τ_recv) * float(κ_lab) * onset_fraction)
-    D = max(1, Int(round(T)))
-    ## Map each vintage edge to its daily index (1..D). Edges are elapsed
-    ## times; the bin a vintage falls in is `round(edge)`.
-    edge_day = [clamp(Int(round(t_edges[i])), 1, D) for i in 1:n]
-    ## Per-vintage ascertainment broadcast onto its daily window; days up
-    ## to a vintage's edge use that vintage's `p_drc`.
-    p_for_day = Vector{Tt}(undef, D)
-    let vi = 1
-        for d in 1:D
-            while vi < n && d > edge_day[vi]
-                vi += 1
-            end
-            p_for_day[d] = convert(Tt, p_drc_per_bin[vi])
-        end
-    end
-
-    ## Daily BVD-suspected onset-to-report cumulative (Gamma closed form),
-    ## mapped onto onsets by `onset_fraction`. Differenced to daily
-    ## arrivals below.
-    μ_bvd_cum = Tt[d <= 0 ? zero(Tt) :
-                   onset_fraction *
-                   delay_convolution(one(Tt), r, oftype(T, d), f_rep)
-                   for d in 1:D]
-
-    ## FIFO backlog drained at constant capacity κ (zero on stoppage
-    ## days). BVD and background tracked separately; drained in proportion
-    ## to current backlog shares (well-mixed approximation to strict FIFO).
-    stopset = Set(Int.(stoppage_days))
-    bl_bvd = zero(Tt)
-    bl_bg = zero(Tt)
-    recv_cum = zero(Tt)
-    proc_cum = zero(Tt)
-    proc_bvd_cum = zero(Tt)
-    recv_at = Vector{Tt}(undef, n)
-    proc_at = Vector{Tt}(undef, n)
-    q_at = Vector{Tt}(undef, n)
-    μ_prev = zero(Tt)
-    μ_bg_prev = zero(Tt)
-    vi = 1
-    for d in 1:D
-        Δμ = max(μ_bvd_cum[d] - μ_prev, zero(Tt))
-        μ_prev = μ_bvd_cum[d]
-        a_bvd = τ_recv * p_for_day[d] * Δμ
-        ## Daily background arrivals = ramp cumulative increment over day d,
-        ## μ_bg(d) − μ_bg(d−1). With Δλ = 0 this is the constant λ0 per day.
-        μ_bg_d = bg_cumulative(bg, oftype(T, d))
-        Δμ_bg = max(μ_bg_d - μ_bg_prev, zero(Tt))
-        μ_bg_prev = μ_bg_d
-        a_bg = τ_recv * Δμ_bg
-        recv_cum += a_bvd + a_bg
-        bl_bvd += a_bvd
-        bl_bg += a_bg
-        total = bl_bvd + bl_bg
-        κ_d = (d in stopset) ? zero(Tt) : convert(Tt, κ_lab)
-        proc = min(κ_d, total)
-        frac = total > zero(Tt) ? proc / total : zero(Tt)
-        dr_bvd = frac * bl_bvd
-        bl_bvd -= dr_bvd
-        bl_bg -= frac * bl_bg
-        proc_cum += proc
-        proc_bvd_cum += dr_bvd
-        ## Record cumulative pools at every vintage edge landing on day d.
-        while vi <= n && edge_day[vi] == d
-            recv_at[vi] = max(recv_cum, eps(Tt))
-            proc_at[vi] = max(proc_cum, eps(Tt))
-            q_raw = proc_cum > zero(Tt) ? proc_bvd_cum / proc_cum : zero(Tt)
-            q_at[vi] = clamp(q_raw, eps(Tt), one(Tt) - eps(Tt))
-            vi += 1
-        end
-    end
-
-    ## Received and analysed as NegBinomial on the cumulative pools.
-    for i in 1:n
-        samples_received[i] ~ safe_nbinomial(k, recv_at[i])
-        samples_analysed[i] ~ safe_nbinomial(k, proc_at[i])
-    end
-
-    ## Positives conditional on the *observed* cumulative analysed
-    ## denominator via a Binomial with success s · q (BVD share of the
-    ## processed pool). A `missing` denominator falls back to the modelled
-    ## cumulative processed so predictive draws still have a denominator.
-    p_pos = Vector{Tt}(undef, n)
-    for i in 1:n
-        p_raw = s_test * q_at[i]
-        p_pos[i] = clamp(p_raw, eps(Tt), one(Tt) - eps(Tt))
-        A_i = samples_analysed[i] === missing ?
-              Int(round(proc_at[i])) : Int(samples_analysed[i])
-        confirmed_cases[i] ~ Binomial(A_i, p_pos[i])
-    end
-
-    expected_received_total := recv_at[end]
-    expected_analysed_total := proc_at[end]
-    p_positive := p_pos[end]
-
-    return (; recv_at, proc_at, q_at, p_pos, s_test, κ_lab,
-        expected_received_total, expected_analysed_total, p_positive)
+    return (; p_positive, p_pos, q_at, qinf, qinf_count_at, Nsusp_at,
+        recv_means, s_test, spec_test, q0, decay_scale, τ_forward,
+        p_drc_per_bin, expected_confirmed_total, expected_received_total,
+        Λ_at_edges)
 end
 
 """
