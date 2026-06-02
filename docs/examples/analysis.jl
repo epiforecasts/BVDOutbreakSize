@@ -214,12 +214,12 @@
 #   exported-case incidence; this treats the cohort present at time $s$
 #   as if infected at $s$. A more direct construction would convolve the
 #   onset-to-death delay against the exported-case incidence trajectory.
-# - *Ascertainment estimated independently, not separately identified.*
+# - *Ascertainment partially pooled, not separately identified.*
 #   Uganda's exported-case ascertainment $p_{\text{Uganda}}$ and DRC's
-#   reported-case ascertainment $p_{\text{DRC}}$ each have their own
-#   logit-scale prior. With a handful of suspected exports and one export
-#   death the Uganda fraction is weakly identified and leans on its
-#   prior.
+#   reported-case ascertainment $p_{\text{DRC}}$ share a logit-scale
+#   hyperprior. With a handful of suspected exports and one export
+#   death the Uganda fraction is weakly identified and leans on the
+#   pooled mean and the DRC side.
 # - *Observation streams share one case pool.* The four streams are
 #   modelled as conditionally independent given the latent cumulative
 #   incidence, but they observe overlapping individuals — exported
@@ -922,42 +922,58 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Ascertainment — independent DRC and Uganda fractions
+# ##### Ascertainment — partial pooling between DRC and Uganda
 #
 # Two surveillance systems detect cases: DRC passive surveillance (the
 # reported suspected-case count) and Uganda's point-of-entry / hospital
-# surveillance (the exported-case count). The two countries run
-# different surveillance systems, so we estimate their ascertainment
-# fractions independently, each with its own logit-scale prior centred
-# on an assumed reporting fraction of 25%:
+# surveillance (the exported-case count). Each captures only a fraction
+# of the true cases passing through it, and each fraction is informed
+# by essentially a single aggregate data point — the one reported-case
+# total and the one export count — so neither is well identified on its
+# own. We therefore centre the prior on an assumed reporting fraction
+# of 25% and partially pool the two fractions so they share strength:
+# treating them as identical would conflate two different systems,
+# while treating them as independent would leave the Uganda fraction
+# almost wholly prior-driven.
+#
+# Both ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$
+# share a logit-scale hyperprior with mean $\mu$ and SD $\tau$:
+#
+# ```math
+# \mu \sim \mathrm{Normal}(\mathrm{logit}(0.25),\ 1),
+# \qquad
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{10}
+# ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim
-#     \mathrm{Normal}(\mathrm{logit}(0.25),\ 0.6), \tag{10}
-# ```
-#
-# ```math
+#     \mathrm{Normal}(\mu,\ \tau),
+# \qquad
 # \mathrm{logit}(p_{\text{Uganda}}) \sim
-#     \mathrm{Normal}(\mathrm{logit}(0.25),\ 0.6), \tag{11}
+#     \mathrm{Normal}(\mu,\ \tau), \tag{11}
 # ```
 #
-# with $p = \mathrm{logistic}(\mathrm{logit}\,p)$. The SD of 0.6 gives
-# 95% prior support of roughly $0.09$–$0.51$, weakly informative about
-# the low-ascertainment regime typical of passive BVD / Ebola
-# surveillance in rural Ituri. Each fraction is informed by essentially
-# a single aggregate data point — the one reported-case total and the
-# one export count — so it leans on its prior. The cases likelihood uses
+# with $p = \mathrm{logistic}(\mathrm{logit}\,p)$. Here $\tau$ is the
+# pooling strength: small $\tau$ pulls the two fractions together (the
+# shared-fraction limit), large $\tau$ lets them move independently
+# (the separate-fraction limit). The cases likelihood uses
 # $p_{\text{DRC}}$; the two Uganda-side likelihoods use
 # $p_{\text{Uganda}}$.
+#
+# We sample this prior in its non-centred form: draw offsets
+# $z_{\text{DRC}}, z_{\text{Uganda}} \sim \mathrm{Normal}(0, 1)$ and set
+# $\mathrm{logit}(p) = \mu + \tau z$. This is the same prior but avoids
+# the funnel geometry of the centred form, which gave hundreds of
+# divergent transitions.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: independent_ascertainment_model</summary>
+#md # <details><summary>Submodel: pooled_ascertainment_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.independent_ascertainment_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.pooled_ascertainment_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1151,14 +1167,16 @@ cfr_prior_fig #hide
 
 # ##### Reported cases
 #
-# $C(T)$ is the latent count of true BVD cases — those that would test
-# positive if sampled, not the count actually tested or confirmed (only
-# a fraction $\tau$ are tested, see the lab pipeline below). Suspected
-# reports include test-negative referrals — alternative differential
-# diagnoses such as malaria or other febrile illness — whose rate we
-# assume is set by background prevalence and surveillance intensity, not
-# by BVD growth. We therefore model the suspected stream as the sum of a
-# BVD-driven component and a non-BVD background that accrues with elapsed
+# $C(T)$ is the latent cumulative *infection* count (equation (1)), not a
+# count of reported, tested or confirmed cases. The BVD-driven suspected
+# term acts on the *onset* trajectory — infections mapped through the
+# incubation period — written as $e^{rs}$ below in the same shorthand as
+# the deaths convolution (equation (16)). Suspected reports also include
+# test-negative referrals — alternative differential diagnoses such as
+# malaria or other febrile illness — whose rate we assume is set by
+# background prevalence and surveillance intensity, not by BVD growth. We
+# therefore model the suspected stream as the sum of a BVD-driven
+# (accepted) component and a non-BVD background that accrues with elapsed
 # surveillance time:
 #
 # ```math
@@ -1224,7 +1242,7 @@ cfr_prior_fig #hide
 #
 # As for the deaths, we model each sitrep's new suspected cases rather
 # than only the latest cumulative total. The DRC ascertainment fraction
-# $p_{\text{DRC}}$ (equation (10)) is applied to every sitrep's
+# $p_{\text{DRC}}$ (equation (11)) is applied to every sitrep's
 # increment. Writing the unit-ascertainment BVD-suspected cumulative
 # $\mu_{\text{BVD},0}(s) = \int_0^s e^{r u} f_{\text{rep}}(s - u)\,du$,
 # the new suspected cases in sitrep $v$ have mean
@@ -1588,7 +1606,7 @@ cfr_prior_fig #hide
 #
 # The joint composer samples a single dispersion scale $k$ and passes it
 # to both the deaths and cases likelihoods, so they share one passive-
-# surveillance noise scale. It also samples the two independent
+# surveillance noise scale. It also samples a single pooled set of
 # ascertainment fractions, threading $p_{\text{DRC}}$ to the cases
 # likelihood and $p_{\text{Uganda}}$ to the two Uganda-side likelihoods. The
 # window $w$ and daily traveller volume sampled by the exports
@@ -1811,7 +1829,7 @@ prior_C_table #hide
 
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
-        :p_drc, :p_uganda,
+        :p_drc, :p_uganda, :τ_logit,
         :λ_bg, :τ_test, :s_test, :positivity, :p_positive]);
 
 #md # ```@raw html
@@ -2215,8 +2233,8 @@ start_date_fig #hide
 # The full posterior summary table reports equal-tailed 30%, 60% and
 # 90% credible intervals on the key joint-fit parameters: growth rate
 # $r$, doubling count $m$, days since seeding $T$, CFR, the
-# DRC and Uganda ascertainment fractions $p_{\text{DRC}}$ and
-# $p_{\text{Uganda}}$, the surveillance dispersion on both
+# DRC and Uganda ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$, the
+# pooling SD $\tau_{\text{logit}}$, the surveillance dispersion on both
 # the sampled $1/\sqrt{k}$ scale and the more familiar $k$ scale, the
 # laboratory-pipeline parameters — onset-to-report delay shape and scale
 # $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, report-to-lab delay
@@ -2230,7 +2248,7 @@ start_date_fig #hide
 #md # ```
 
 joint_summary = summary_table(chn_joint,
-    [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda,
+    [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
         :s_test, :τ_test, :λ_bg, :positivity, :p_positive,
         :cumulative_cases]; digits = 2);
@@ -2251,7 +2269,7 @@ joint_summary #hide
 
 posterior_pair_fig = plot_pair(chn_joint,
     [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
-        :p_drc, :p_uganda];
+        :p_drc, :p_uganda, :τ_logit];
     prior = prior_chn);
 
 #md # ```@raw html
@@ -2260,7 +2278,21 @@ posterior_pair_fig = plot_pair(chn_joint,
 
 posterior_pair_fig #hide
 
-# A second pair plot covers the laboratory-pipeline parameters that the
+# ### Reporting process
+#
+# The streams above all observe the same latent infections: infections
+# become onsets after the incubation period, onsets enter the suspected
+# line list after the onset-to-report delay, and a sampled fraction are
+# laboratory-confirmed after the report-to-lab delay. The observed
+# suspected count mixes an *accepted* (BVD-attributable) part
+# $\mu_{\text{BVD}}$ and a non-BVD background $\mu_{\text{bg}}$
+# (equation (18)). Only the total is observed; the accepted share is the
+# per-suspected positivity $\pi = \mu_{\text{BVD}} / \mu_{\text{cases}}$ in
+# the summary table, so $\pi$ times the suspected total recovers the
+# unobserved accepted-BVD count (distinct again from the lab-confirmed
+# count, since only a fraction $\tau$ are tested).
+#
+# A pair plot covers the laboratory-pipeline parameters that the
 # confirmed and tests-analysed streams add: the onset-to-report delay
 # shape and scale $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, the
 # report-to-lab delay $\alpha_{\text{lab}}$, $\theta_{\text{lab}}$, PCR
@@ -2294,6 +2326,27 @@ lab_pair_fig #hide
 # roughly fourfold gap between reported and true cases. The pair plot
 # above shows its posterior against the prior, so how far below one the
 # fraction sits is what sets that scaling.
+#
+# The confirmed-case stream enters the joint fit as a single cumulative
+# total, not the per-sitrep series. The per-vintage confirmed model is
+# kept in the code but breaks joint convergence: the increments are tiny
+# and non-monotone (33, 18, 6, 22, 4, 18, 4, 1, 15), and each bin mean is
+# $p_{\text{DRC}}\,s\,\tau\,\Delta I_{\text{lab}}$ (equation (25a)) with
+# the leading factors shared across bins and only weakly identified, so
+# splitting the total opens a multiplicative ridge between the
+# report-to-lab delay and those factors rather than adding information.
+# With the tests-analysed total, the single confirmed count still pins the
+# per-test positivity. Recovering the temporal signal cleanly is follow-up
+# work.
+#
+# The report-to-lab delay is a single Gamma convolved against the
+# cumulative suspected trajectory, assuming a roughly fixed turnaround. In
+# practice the lab cleared a backlog (403 of 662 specimens analysed by the
+# cut-off, testing in Ituri stalled mid-period), so some early
+# confirmations correspond to much older reports than a short delay
+# allows; a heavier-tailed or batch-aware delay would fit better. The
+# background enters testing the same way, so it inherits the same
+# assumption.
 #
 # A posterior predictive check draws replicated observations from the
 # fitted joint model and compares them to the observed counts. If the

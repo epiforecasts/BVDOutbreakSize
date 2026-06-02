@@ -20,7 +20,6 @@ using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
                      NegativeBinomial, Normal, LogNormal, Beta,
                      truncated, censored
 using StatsFuns: logit, logistic
-using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature
 import CairoMakie
 import AlgebraOfGraphics as AoG
@@ -58,8 +57,8 @@ export REPORT_SCENARIOS,
        incubation_model,
        cfr_model, detection_window_model,
        onset_to_detection_delay_model, traveller_volume_model,
-       surveillance_dispersion_model, independent_ascertainment_model,
-       pooled_ascertainment_model,
+       surveillance_dispersion_model, pooled_ascertainment_model,
+       independent_ascertainment_model,
        daily_ascertainment_model, deaths_ascertainment_model,
 # observation models
        exports_model, exports_delay_model, deaths_model,

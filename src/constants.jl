@@ -51,6 +51,27 @@ in the underlying mobility survey.
 const ITURI_DAILY_TRAVEL_SD = 200
 
 """
+    GaussLegendre
+
+Fixed Gauss-Legendre quadrature rule on the reference domain `[-1, 1]`,
+carrying its `nodes` and `weights` (from
+`FastGaussQuadrature.gausslegendre(n)`). Construct with the node count,
+`GaussLegendre(; n = 64)`. The shared [`integrate`](@ref) reduces an
+integrand against these fields directly; the nodes and weights are the
+same rule the previous `Integrals.GaussLegendre` carried, so results are
+unchanged.
+"""
+struct GaussLegendre{N, W}
+    nodes::N
+    weights::W
+end
+
+function GaussLegendre(; n = 250)
+    nodes, weights = FastGaussQuadrature.gausslegendre(n)
+    return GaussLegendre(nodes, weights)
+end
+
+"""
     DEATH_INTEGRAL_ALG
 
 Gauss-Legendre quadrature scheme (`n = 64`) used for the deaths
