@@ -45,16 +45,23 @@
 #   priors and are sampled jointly. McCabe et al.
 #   [mccabe2026](@cite) fix each and
 #   sweep.
-# - *Explicit onset-to-detection delay for exports.* A case is
-#   detectable abroad from symptom onset until it is detected, so the
-#   exports follow a delay convolution of the onset trajectory rather
-#   than McCabe et al.'s fixed detection window $w$. The
-#   onset-to-detection delay reuses the DRC onset-to-report delay, so the
-#   suspected-case stream informs it rather than a standalone prior. The
-#   rectangular-window form $q\cdot\int_{T-w}^{T} C(s)\,ds$ is kept for
-#   the McCabe et al. comparison, where we still use this exact integral
-#   rather than the small-$rw$ simplification $q\cdot w\cdot C(T)$ of
-#   McCabe et al. (and [imai2020](@cite) before them); the two forms
+# - *Explicit infection→detection delay for exports.* Exports are
+#   travel-gated: a person is at risk of being exported from infection
+#   (they travel during incubation, before symptoms), and are detected
+#   abroad only after the full infection→detection delay. The exports
+#   therefore follow a delay convolution of the infection trajectory with
+#   an infection→detection delay, rather than McCabe et al.'s fixed
+#   detection window $w$. That delay is the incubation period convolved
+#   with the DRC onset-to-report delay, moment-matched to a single Gamma,
+#   so the incubation and suspected-case streams inform it rather than a
+#   standalone prior; its mean is the incubation mean ($\approx 6.3$ days)
+#   plus the onset-to-report mean ($\approx 11.25$ days), $\approx 17.5$
+#   days, restoring McCabe's infection→detection window meaning (and
+#   capturing pre-symptomatic travel) rather than an onset-only window.
+#   The rectangular-window form $q\cdot\int_{T-w}^{T} C(s)\,ds$ is kept
+#   for the McCabe et al. comparison, where we still use this exact
+#   integral rather than the small-$rw$ simplification $q\cdot w\cdot C(T)$
+#   of McCabe et al. (and [imai2020](@cite) before them); the two forms
 #   agree as $r \to 0$.
 # - *Exact (not large-$T$ approximate) deaths convolution.* For a
 #   gamma delay the convolution integral has an exact closed form
@@ -196,13 +203,16 @@
 #   impacted.
 # - *Export detection delay reuses the DRC reporting delay.* The default
 #   model replaces McCabe et al.'s lumped detection window with an
-#   onset-to-detection delay convolution, with incubation handled by the
-#   infection-to-onset step. We assume the onset-to-detection delay abroad
-#   equals the DRC onset-to-report delay, so the suspected-case stream
-#   pins it; the single export count cannot identify a separate delay. The
-#   export timing therefore rests on this assumption rather than an
-#   independent Uganda estimate. McCabe et al.'s rectangular window is
-#   kept for the comparison.
+#   infection→detection delay convolution. Exports are travel-gated, so
+#   the at-risk clock runs from infection (capturing pre-symptomatic
+#   travel): the delay is the incubation period convolved with the DRC
+#   onset-to-report delay, moment-matched to one Gamma. We assume the
+#   onset-to-detection step abroad equals the DRC onset-to-report delay,
+#   so the incubation and suspected-case streams pin it; the single
+#   export count cannot identify a separate delay. The export timing
+#   therefore rests on this assumption rather than an independent Uganda
+#   estimate, and on the Gamma moment-match. McCabe et al.'s rectangular
+#   window is kept for the comparison.
 # - *Exports treated as DRC importations only.* The exports likelihood
 #   conditions on the three WHO-confirmed travel-related cases in
 #   Uganda and excludes the two domestic contacts (a driver and a
@@ -823,26 +833,36 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Onset-to-detection delay (default export mechanism)
+# ##### Infection→detection delay (default export mechanism)
 #
 # The default export model replaces McCabe's fixed detection window with
-# an explicit onset-to-detection delay convolution.
-# A case is at risk of detection abroad from symptom onset until the
-# onset-to-detection delay has elapsed, so the at-risk prevalence is the
-# difference between cumulative onsets and the onsets that have already
-# completed onset-to-detection.
-# Integrating this prevalence over the per-day per-capita travel rate
-# gives the expected detected exports.
-# The window form is recovered exactly as the onset-to-detection delay
+# an explicit infection→detection delay convolution.
+# Exports are travel-gated, so the at-risk clock starts at infection: a
+# person travels during incubation, before symptoms, and is detected
+# abroad only after the full infection→detection delay has elapsed.
+# The at-risk prevalence is therefore the difference between cumulative
+# infections and the infections that have already completed
+# infection→detection, and integrating this prevalence over the per-day
+# per-capita travel rate gives the expected detected exports.
+# The window form is recovered exactly as the infection→detection delay
 # collapses to a point mass, so this generalises rather than replaces the
 # McCabe assumption.
-# Incubation is handled upstream by the incubation `onset_fraction`, so
-# this delay is onset-to-detection only.
-# The onset-to-detection delay reuses the DRC onset-to-report delay
-# $f_{\text{rep}}$ (`report_delay_model`): entering surveillance as a
-# suspected case is taken to be the same process abroad as in the DRC,
-# and the export count is a single datum that cannot identify its own
-# delay, so the reported-cases stream pins it.
+# The infection→detection delay is the incubation period (the
+# infection→onset step) convolved with the DRC onset-to-report delay
+# $f_{\text{rep}}$ (`report_delay_model`), moment-matched to a single
+# Gamma via `combined_delay`: entering surveillance as a suspected case
+# is taken to be the same process abroad as in the DRC, and the export
+# count is a single datum that cannot identify its own delay, so the
+# incubation and reported-cases streams pin it.
+# Because the incubation period sits inside this delay, the export
+# likelihoods carry no separate incubation rescale; the survival is 1 at
+# infection (a just-infected traveller is certainly not yet detected),
+# unlike a flat onset rescale.
+# Its mean is the incubation mean ($\approx 6.3$ days) plus the
+# onset-to-report mean ($\approx 11.25$ days), $\approx 17.5$ days.
+# The moment-match is an approximation: the sum of two Gammas is not
+# Gamma, but matching the first two moments is accurate for the convex
+# survival integrals here.
 # The `imperial_only_model` composer keeps the rectangular detection
 # window for comparison.
 

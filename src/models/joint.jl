@@ -7,23 +7,22 @@
 """
 Exports-only composer (Method 1 analogue). Samples growth and
 ascertainment, then conditions on the exports likelihood only. Defaults
-to the explicit onset-to-detection delay mechanism
-[`exports_delay_model`](@ref); pass `exports = exports_model` to fix back
-to the McCabe et al. rectangular detection window.
+to the explicit infection→detection delay mechanism
+[`exports_delay_model`](@ref).
 
-With the delay mechanism the exports count sees onsets through the
-delay-survival convolution, so the incubation period is weakly identified
-by this stream through `onset_fraction = mgf(incubation, −r)`, which
-maps the latent infection trajectory onto onsets. `cumulative_cases =
-C_T · onset_fraction` is exposed as a prior-predictive case-equivalent of
-the latent infections.
-
-The onset-to-detection delay reuses the DRC onset-to-report delay
-[`report_delay_model`](@ref): "symptom onset → entering surveillance as
-a suspected case" is taken to be the same process abroad as in the DRC.
-With no reported-cases stream here it is sampled from its prior; in
-[`bvd_joint`](@ref) the same draw is shared with the reported stream,
-which pins it.
+The exports stream is travel-gated: a case is at risk of being exported
+from infection (the traveller moves during incubation, pre-symptomatic)
+and detected abroad after the full infection→detection delay. That delay
+is the incubation period (see [`incubation_model`](@ref)) convolved with
+the DRC onset-to-report delay (see [`report_delay_model`](@ref)),
+moment-matched to one Gamma via [`combined_delay`](@ref): entering
+surveillance is taken to be the same process abroad as in the DRC. With
+no reported-cases stream here both delays are sampled from their priors;
+in [`bvd_joint`](@ref) the same draws are shared with the reported and
+incubation streams, which pin them. The incubation period sits inside
+`f_det`, so the exports likelihood carries no separate incubation
+rescale. `cumulative_cases = C_T · onset_fraction` is still exposed as a
+prior-predictive case-equivalent of the latent infections.
 """
 @model function exports_only_model(
         exported_cases::Union{Missing, Integer};
@@ -38,12 +37,13 @@ which pins it.
     incubation_state ~ to_submodel(incubation, false)
     os = onset_rescale(incubation_state.dist, growth_state.r)
 
-    ## Exports see onsets through the onset-to-detection delay
-    ## convolution, so the count likelihood is onset-rescaled by `os`.
-    ## The detection delay reuses the DRC onset-to-report delay `f_rep`.
+    ## Exports are travel-gated, so the at-risk clock runs from infection:
+    ## the detection delay is incubation ⊕ onset-to-report, moment-matched
+    ## to one Gamma. No separate incubation rescale (it lives in `f_det`).
+    f_det = combined_delay(incubation_state.dist, report_state.dist)
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, asc_state.p_uganda,
-            report_state.dist; onset_fraction = os), false)
+        exports(exported_cases, growth_state, asc_state.p_uganda, f_det),
+        false)
 
     onset_fraction := os
     cumulative_infections := growth_state.C_T
@@ -162,14 +162,13 @@ end
 
 """
 Deaths-among-exports-only composer. Samples growth, onset-to-death
-delay, CFR, the onset-to-report delay (reused as the onset-to-detection
-delay), traveller volume and ascertainment, then conditions on the dated
-export-deaths likelihood. Defaults to the explicit onset-to-detection
-delay mechanism [`exports_deaths_delay_model`](@ref); pass
-`exports_deaths_model = exports_deaths_model` together with a
-`detection_window_model` to fix back to the McCabe et al. rectangular
-detection window. The onset-to-detection delay reuses the DRC
-onset-to-report delay [`report_delay_model`](@ref); see
+delay, CFR, the incubation and onset-to-report delays (combined into the
+infection→detection delay), traveller volume and ascertainment, then
+conditions on the dated export-deaths likelihood. Defaults to the
+explicit infection→detection delay mechanism
+[`exports_deaths_delay_model`](@ref). The infection→detection delay is
+the incubation period convolved with the DRC onset-to-report delay,
+moment-matched to one Gamma via [`combined_delay`](@ref); see
 [`exports_deaths_delay_model`](@ref).
 """
 @model function exports_deaths_only_model(
@@ -195,14 +194,17 @@ onset-to-report delay [`report_delay_model`](@ref); see
     travel_state ~ to_submodel(traveller, false)
     daily_travellers = travel_state.daily_travellers
 
+    ## Infection→detection delay = incubation ⊕ onset-to-report,
+    ## moment-matched to one Gamma; the export at-risk clock runs from
+    ## infection, so the survival is 1 at age 0.
+    f_det = combined_delay(incubation_state.dist, report_state.dist)
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(export_deaths_daily, growth_state,
             cfr_state.CFR, delay_state.dist, asc_state.p_uganda;
             pre_start_deaths = pre_start_deaths,
-            f_det = report_state.dist,
+            f_det = f_det,
             daily_travellers = daily_travellers,
-            source_population = source_population,
-            onset_fraction = os),
+            source_population = source_population),
         false)
 
     onset_fraction := os
@@ -244,23 +246,29 @@ on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
 disable the factor entirely.
 
-The Uganda exports streams default to the explicit onset-to-detection
+The Uganda exports streams default to the explicit infection→detection
 delay mechanism ([`exports_delay_model`](@ref),
 [`exports_deaths_delay_model`](@ref),
 [`exports_detection_timing_delay_model`](@ref)), which convolves the
-onset trajectory with an onset-to-detection delay. That delay reuses the
-DRC onset-to-report delay `f_rep` sampled by
-[`reported_cases_model`](@ref): "symptom onset → entering surveillance as
-a suspected case" is taken to be the same process abroad as in the DRC,
-the export count is a single datum that cannot identify its own delay,
-and sharing the exact draw lets the reported-cases stream pin it. The
-McCabe et al. rectangular detection-window configuration is provided as a
-separate comparison by [`imperial_only_model`](@ref) (exports and deaths,
-window-based); the window submodels (`exports_model`,
-`exports_deaths_model`, `exports_detection_timing_model`) take a window
-rather than a delay, so they are not drop-in `bvd_joint` kwargs. Pass a
-`report_delay` returning a fixed `Gamma` (with no `~` sampling) to pin the
-export onset-to-report delay rather than learning it.
+infection trajectory with an infection→detection delay. The exports
+stream is travel-gated, so the at-risk clock starts at infection (the
+traveller moves during incubation, pre-symptomatic): the delay is the
+incubation period (`incubation`) convolved with the DRC onset-to-report
+delay `f_rep` (`report_delay`, the same draws the incubation and
+reported-cases streams use), moment-matched to one Gamma via
+[`combined_delay`](@ref). Entering surveillance is taken to be the same
+process abroad as in the DRC, the export count is a single datum that
+cannot identify its own delay, and sharing the exact draws lets the
+incubation and reported-cases streams pin it. Because the incubation
+period sits inside that delay the export likelihoods carry no separate
+incubation rescale. The McCabe et al. rectangular detection-window
+configuration is provided as a separate comparison by
+[`imperial_only_model`](@ref) (exports and deaths, window-based); the
+window submodels (`exports_model`, `exports_deaths_model`,
+`exports_detection_timing_model`) take a window rather than a delay, so
+they are not drop-in `bvd_joint` kwargs. Pass a `report_delay` (or
+`incubation`) returning a fixed `Gamma` (with no `~` sampling) to pin the
+export infection→detection delay rather than learning it.
 """
 @model function bvd_joint(
         exported_cases::Union{Missing, Integer},
@@ -352,12 +360,14 @@ export onset-to-report delay rather than learning it.
                 onset_fraction = os), false)
     end
 
-    ## Exports reuse the DRC onset-to-report delay `f_rep` (the exact
-    ## draw the reported-cases stream uses), so the reported stream pins
-    ## the export onset-to-detection delay rather than a separate prior.
+    ## Exports are travel-gated, so the at-risk clock runs from infection:
+    ## the detection delay is incubation ⊕ onset-to-report (the same draws
+    ## the incubation and reported-cases streams use), moment-matched to
+    ## one Gamma. No separate incubation rescale (it lives in `f_det`).
+    f_det = combined_delay(
+        incubation_state.dist, reported_state.report_delay_dist)
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, p_uganda,
-            reported_state.report_delay_dist; onset_fraction = os), false)
+        exports(exported_cases, growth_state, p_uganda, f_det), false)
 
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(export_deaths_daily, growth_state,
@@ -365,8 +375,7 @@ export onset-to-report delay rather than learning it.
             pre_start_deaths = pre_start_deaths,
             f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,
-            source_population = source_population,
-            onset_fraction = os),
+            source_population = source_population),
         false)
     detection_timing_state ~ to_submodel(
         exports_detection_timing(growth_state, p_uganda;
@@ -374,8 +383,7 @@ export onset-to-report delay rather than learning it.
             pre_detection_exports = pre_detection_exports,
             f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,
-            source_population = source_population,
-            onset_fraction = os),
+            source_population = source_population),
         false)
 
     onset_fraction := os

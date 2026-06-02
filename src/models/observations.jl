@@ -57,29 +57,29 @@ submodels internally.
 end
 
 """
-Exports likelihood with an explicit onset-to-detection delay. The
+Exports likelihood with an explicit infection→detection delay. The
 delay-convolution counterpart of [`exports_model`](@ref): the at-risk
-export person-time is the onset-to-detection delay-survival integral
+export person-time is the infection→detection delay-survival integral
 [`expected_exports_delay`](@ref) rather than the McCabe et al.
-rectangular detection window. The onset-to-detection delay `f_det` is
+rectangular detection window. The exports stream is travel-gated, so the
+at-risk clock starts at infection (the traveller moves during
+incubation, pre-symptomatic). The infection→detection delay `f_det` is
 passed in rather than sampled here: the export count is a single datum
-and cannot identify its own delay, and "symptom onset → entering
-surveillance as a suspected case" is taken to be the same process abroad
-as the DRC onset-to-report delay, so the composers pass the `f_rep` of
-[`report_delay_model`](@ref) (the same draw the reported-cases stream
-uses, see [`reported_cases_model`](@ref)) and the reported stream pins
-it. Samples the traveller volume submodel internally and exposes `f_det`
-and `daily_travellers` for the export-deaths and detection-timing delay
-submodels. `onset_fraction` is the incubation mgf, mapping the latent
-infection trajectory onto onsets before the onset-to-detection delay
-acts. Couples to `C(T)` through a Poisson likelihood.
+and cannot identify its own delay, and entering surveillance is taken to
+be the same process abroad as in the DRC, so the composers pass the
+incubation ⊕ onset-to-report delay (see [`combined_delay`](@ref),
+[`report_delay_model`](@ref) and [`reported_cases_model`](@ref)), letting
+the reported and incubation streams pin it. There is no separate
+incubation rescale here: the incubation period already sits inside
+`f_det`. Samples the traveller volume submodel internally and exposes
+`f_det` and `daily_travellers` for the export-deaths and detection-timing
+delay submodels. Couples to `C(T)` through a Poisson likelihood.
 """
 @model function exports_delay_model(
         exported_cases::Union{Missing, Integer},
         growth_state, p_uganda::Real, f_det;
         source_population::Real = ITURI_POPULATION,
-        traveller = traveller_volume_model(),
-        onset_fraction::Real = 1.0)
+        traveller = traveller_volume_model())
     r = growth_state.r
     T = growth_state.T
 
@@ -87,8 +87,7 @@ acts. Couples to `C(T)` through a Poisson likelihood.
     daily_travellers = travel_state.daily_travellers
 
     q = daily_travellers / source_population
-    expected_exports_T := expected_exports_delay(r, p_uganda, q, T, f_det;
-        onset_fraction = onset_fraction)
+    expected_exports_T := expected_exports_delay(r, p_uganda, q, T, f_det)
 
     exported_cases ~ Poisson(expected_exports_T)
 
@@ -483,16 +482,18 @@ end
 
 """
 Time-resolved deaths-among-exports likelihood with an explicit
-onset-to-detection delay. The delay-convolution counterpart of
+infection→detection delay. The delay-convolution counterpart of
 [`exports_deaths_model`](@ref): the per-edge intensity is the
-onset-to-detection delay-survival expectation
+infection→detection delay-survival expectation
 [`expected_exports_deaths_delay`](@ref), where the rectangular detection
-window of the McCabe path is replaced by the onset-to-detection survival
-`f_det`. The pre-death survival stretch and per-day
-[`daily_increment_kernel`](@ref) structure are unchanged; `onset_fraction`
-(the incubation mgf) is folded into the expectation. `f_det` and
-`daily_travellers` are supplied by [`exports_delay_model`](@ref) so the
-two Uganda-side likelihoods share person-time.
+window of the McCabe path is replaced by the infection→detection survival
+`f_det`. Because the at-risk clock starts at infection, the detection
+survival is 1 at age 0 (a just-infected traveller is certainly not yet
+detected). The pre-death survival stretch and per-day
+[`daily_increment_kernel`](@ref) structure are unchanged. `f_det`
+(the incubation ⊕ onset-to-report delay, see [`combined_delay`](@ref))
+and `daily_travellers` are supplied by [`exports_delay_model`](@ref) so
+the two Uganda-side likelihoods share person-time.
 """
 @model function exports_deaths_delay_model(
         export_deaths_daily::AbstractVector,
@@ -500,20 +501,17 @@ two Uganda-side likelihoods share person-time.
         pre_start_deaths::Union{Missing, Integer} = 0,
         f_det,
         daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION,
-        onset_fraction::Real = 1.0)
+        source_population::Real = ITURI_POPULATION)
     cumulative = growth_state.cumulative
     T = growth_state.T
     q = daily_travellers / source_population
     n = length(export_deaths_daily)   # days from earliest death to cut-off
 
-    ## Per-edge intensity is the onset-to-detection delay-survival
-    ## expectation: the onset-to-death CDF weighted by the onset-to-
-    ## detection survival, with `onset_fraction` (the incubation mgf)
-    ## mapping the infection trajectory onto onsets.
+    ## Per-edge intensity is the infection→detection delay-survival
+    ## expectation: the onset-to-death CDF weighted by the
+    ## infection→detection survival, which is 1 at age 0.
     Λ(t) = expected_exports_deaths_delay(
-        cumulative, f_det, delay_dist, CFR, p_uganda, q, t;
-        onset_fraction = onset_fraction)
+        cumulative, f_det, delay_dist, CFR, p_uganda, q, t)
 
     ## Pre-death zero stretch as one Poisson observed at 0; `missing`
     ## generates it for predictive checks.
@@ -562,14 +560,15 @@ end
 
 """
 First-export-detection timing survival term with an explicit
-onset-to-detection delay. The delay-convolution counterpart of
+infection→detection delay. The delay-convolution counterpart of
 [`exports_detection_timing_model`](@ref): the at-risk export
 person-time uses [`expected_exports_delay`](@ref) with the
-onset-to-detection survival `f_det` instead of the rectangular window.
+infection→detection survival `f_det` instead of the rectangular window.
 Adds the same one-sided `Pr(no export detected before t1)` Poisson
-observation at zero. `f_det`, `daily_travellers` and `onset_fraction`
-are supplied by [`exports_delay_model`](@ref). Passing `delta = missing`
-makes the submodel a no-op.
+observation at zero. `f_det` (the incubation ⊕ onset-to-report delay, see
+[`combined_delay`](@ref)) and `daily_travellers` are supplied by
+[`exports_delay_model`](@ref). Passing `delta = missing` makes the
+submodel a no-op.
 """
 @model function exports_detection_timing_delay_model(
         growth_state, p_uganda::Real;
@@ -577,8 +576,7 @@ makes the submodel a no-op.
         pre_detection_exports::Union{Missing, Integer} = 0,
         f_det,
         daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION,
-        onset_fraction::Real = 1.0)
+        source_population::Real = ITURI_POPULATION)
     if !ismissing(delta)
         r = growth_state.r
         T = growth_state.T
@@ -586,7 +584,7 @@ makes the submodel a no-op.
         q = daily_travellers / source_population
         survived_exports := t1 <= zero(T) ? zero(T) :
                             expected_exports_delay(r, p_uganda, q, t1,
-            f_det; onset_fraction = onset_fraction)
+            f_det)
         ## No detection before t1 as a Poisson observed at 0; `missing`
         ## generates it for predictive checks.
         pre_detection_exports ~ Poisson(max(survived_exports, zero(T)))

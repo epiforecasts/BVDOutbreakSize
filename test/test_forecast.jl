@@ -20,8 +20,13 @@
         α ~ truncated(Normal(4.3, 0.5); lower = 0.5)
         θ ~ truncated(Normal(2.6, 0.3); lower = 0.2)
         ## Window-mechanism chains carry `w`; delay-mechanism chains do
-        ## not (exports reuse the DRC report delay α_rep / θ_rep).
-        if !delay
+        ## not. Delay-mechanism export forecasts build the
+        ## infection→detection delay from the incubation (α_inc / θ_inc)
+        ## and DRC report (α_rep / θ_rep) draws.
+        if delay
+            α_inc ~ truncated(Normal(1.1, 0.3); lower = 0.3)
+            θ_inc ~ truncated(Normal(5.7, 1.0); lower = 0.5)
+        else
             w ~ truncated(Normal(15.0, 2.0); lower = 1.0)
         end
         p_drc ~ Beta(2.0, 6.0)

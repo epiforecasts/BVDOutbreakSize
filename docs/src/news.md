@@ -87,20 +87,28 @@ each push to `main` also republishes the rendered analysis and the
   This replaces the earlier unconditional `plot_vintage_ppc`, whose
   running sum of modelled increments let errors compound across sitreps.
 - Replaced McCabe et al.'s rectangular Uganda-export detection window
-  with an explicit onset-to-detection delay convolution
+  with an explicit infection→detection delay convolution
   (`exports_delay_model`, `exports_deaths_delay_model`,
   `exports_detection_timing_delay_model`), now the default in `bvd_joint`
-  and `exports_only_model`. A case is at risk of detection abroad from
-  onset until the onset-to-detection delay has elapsed; the expected
-  detected exports integrate this at-risk prevalence over the per-day
-  per-capita travel rate. The form reduces exactly to the McCabe window
-  as the delay collapses to a point mass, so the window assumption is a
-  special case. The onset-to-detection delay reuses the DRC
-  onset-to-report delay `f_rep` from `report_delay_model` (the exact draw
-  the reported-cases stream uses), so no separate prior is introduced and
-  the reported-cases stream pins it. The McCabe window is kept available
-  via the swappable `detection_window_model` / `exports_model` path and
-  in `imperial_only_model` for comparison.
+  and `exports_only_model`. Exports are travel-gated, so the at-risk
+  clock starts at infection (the traveller moves during incubation,
+  pre-symptomatic): a person is at risk of being exported and detected
+  abroad until the full infection→detection delay has elapsed, and the
+  expected detected exports integrate this at-risk prevalence over the
+  per-day per-capita travel rate. The form reduces exactly to the McCabe
+  window as the delay collapses to a point mass, so the window assumption
+  is a special case. The infection→detection delay is the incubation
+  period convolved with the DRC onset-to-report delay `f_rep` (the same
+  `incubation_model` / `report_delay_model` draws those streams use),
+  moment-matched to one Gamma via `combined_delay`, so no separate prior
+  is introduced and its mean is ~17.5 days (incubation ~6.3 + report
+  ~11.25). This corrects an earlier version that applied the incubation
+  moment as a flat scaling on an onset-to-report window, which dropped
+  pre-symptomatic travel, roughly halved the export window to ~8 days and
+  made the export-death detection survival wrong at infection age 0. The
+  McCabe window is kept available via the swappable
+  `detection_window_model` / `exports_model` path and in
+  `imperial_only_model` for comparison.
 
 ### Documentation
 

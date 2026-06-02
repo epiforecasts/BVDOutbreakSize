@@ -170,15 +170,20 @@ function forecast_reported(chn;
             onset_fraction = os, alg)
         deaths_cum[i] = _nb_rand(rng, k[i], μ_deaths)
         ## Uganda exports. With the McCabe window: p_uganda · q ·
-        ## ∫_{T+h−w}^{T+h} C(s) ds (closed form), unscaled by incubation.
-        ## With the onset-to-detection delay: the delay-survival person-
-        ## time integral, onset-rescaled by `os`.
+        ## ∫_{T+h−w}^{T+h} C(s) ds (closed form). With the delay
+        ## mechanism: the at-risk export window runs from infection, so
+        ## the detection delay is incubation ⊕ onset-to-report (combined
+        ## to one Gamma); the incubation period lives in the delay, so the
+        ## person-time integral is not separately rescaled by `os`.
         if has_window
             lo = max(Th - w[i], zero(Th))
             μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
         else
-            μ_exports = expected_exports_delay(r[i], pu[i], q, Th,
-                Gamma(α_rep[i], θ_rep[i]); onset_fraction = os, alg = alg)
+            f_det = has_incubation ?
+                    combined_delay(Gamma(α_inc[i], θ_inc[i]),
+                Gamma(α_rep[i], θ_rep[i])) : Gamma(α_rep[i], θ_rep[i])
+            μ_exports = expected_exports_delay(r[i], pu[i], q, Th, f_det;
+                alg = alg)
         end
         exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
         if has_lab
