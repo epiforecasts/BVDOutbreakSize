@@ -42,3 +42,30 @@ end
     @test all(0 .< p_drc .< 1)
     @test all(0 .< p_uganda .< 1)
 end
+
+@testitem "bvd_joint defaults to pooled ascertainment" tags=[:slow] begin
+    using BVDOutbreakSize: bvd_joint, load_observations
+    using Turing: sample, Prior, @varname
+    import FlexiChains
+
+    obs = load_observations()
+    rep = obs.reported_case_history
+    dh = obs.death_history
+    n_dh = length(dh.values)
+    n_rep = length(rep.values)
+    m = bvd_joint(missing,
+        fill(missing, n_dh), fill(missing, n_rep);
+        reported_offsets = rep.offsets,
+        death_offsets = dh.offsets)
+    chn = sample(m, Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ## The composer default is the non-centred two-group pooled
+    ## hierarchy, so the shared hyperparameters `μ_logit` and the
+    ## pooling SD `τ_logit` are sampled parameters of the joint model.
+    params = FlexiChains.parameters(chn)
+    @test @varname(τ_logit) in params
+    @test @varname(μ_logit) in params
+    @test all(vec(Array(chn[:τ_logit])) .>= 0)
+    @test all(0 .< vec(Array(chn[:p_drc])) .< 1)
+    @test all(0 .< vec(Array(chn[:p_uganda])) .< 1)
+end

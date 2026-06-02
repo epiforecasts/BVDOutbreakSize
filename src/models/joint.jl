@@ -19,7 +19,7 @@ case-equivalent of the latent infections, and is drawn from its prior.
         exported_cases::Union{Missing, Integer};
         growth = exponential_growth_model(),
         exports = exports_model,
-        ascertainment = independent_ascertainment_model(),
+        ascertainment = pooled_ascertainment_model(),
         incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     asc_state ~ to_submodel(ascertainment, false)
@@ -77,7 +77,7 @@ reported-cases likelihood. See [`reported_cases_model`](@ref).
         growth = exponential_growth_model(),
         reported_cases_submodel = reported_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = independent_ascertainment_model(),
+        ascertainment = pooled_ascertainment_model(),
         incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
@@ -115,7 +115,7 @@ likelihood. See [`confirmed_cases_model`](@ref).
         growth = exponential_growth_model(),
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = independent_ascertainment_model(),
+        ascertainment = pooled_ascertainment_model(),
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
@@ -161,7 +161,7 @@ on the dated export-deaths likelihood. See
         window = detection_window_model(),
         traveller = traveller_volume_model(),
         exports_deaths_model = exports_deaths_model,
-        ascertainment = independent_ascertainment_model(),
+        ascertainment = pooled_ascertainment_model(),
         incubation = incubation_model(),
         source_population::Real = ITURI_POPULATION,
         pre_start_deaths::Union{Missing, Integer} = 0)
@@ -209,8 +209,8 @@ the McCabe et al. Method 2 configuration. Pass a vector of `missing`
 entries (with matching offsets) to drop a stream while keeping the model
 usable as a prior- and posterior-predictive generator.
 
-DRC ascertainment is a single fixed fraction `p_drc` (the scalar from
-[`independent_ascertainment_model`](@ref)) applied to every reported and
+DRC ascertainment is a single fixed fraction `p_drc` (the pooled scalar
+from [`pooled_ascertainment_model`](@ref)) applied to every reported and
 confirmed vintage bin, shared between the two streams.
 
 `tests_analysed` is a single cumulative testing-volume count observed at
@@ -244,7 +244,7 @@ disable the factor entirely.
         exports_deaths_model = exports_deaths_model,
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = independent_ascertainment_model(),
+        ascertainment = pooled_ascertainment_model(),
         deaths_ascertainment = deaths_ascertainment_model(),
         p_deaths_fixed::Union{Nothing, Real} = nothing,
         test_positivity = test_positivity_model(),
@@ -358,7 +358,7 @@ and `cumulative_infections` and `cumulative_cases` coincide. This keeps
         exports = exports_model,
         deaths = deaths_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = independent_ascertainment_model())
+        ascertainment = pooled_ascertainment_model())
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
