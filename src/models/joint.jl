@@ -120,6 +120,7 @@ likelihood. See [`confirmed_cases_model`](@ref).
         report_delay = report_delay_model(),
         lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
+        test_priority = test_priority_model(),
         incubation = incubation_model(),
         report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
@@ -150,6 +151,8 @@ likelihood. See [`confirmed_cases_model`](@ref).
             [asc_state.p_drc], bg, τ_test, f_rep, [T], T;
             lab_delay = lab_delay,
             test_sensitivity = test_sensitivity,
+            test_priority = test_priority,
+            report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
     onset_fraction := os
@@ -293,6 +296,7 @@ with `Δλ = 0`, the constant background.
         lab_delay = lab_delay_model(),
         lab_capacity = lab_capacity_model(),
         test_sensitivity = test_sensitivity_model(),
+        test_priority = test_priority_model(),
         incubation = incubation_model(),
         genetic = nothing,
         source_population::Real = ITURI_POPULATION,
@@ -383,6 +387,8 @@ with `Δλ = 0`, the constant background.
                 confirmed_edges, tests_edge;
                 lab_delay = lab_delay,
                 test_sensitivity = test_sensitivity,
+                test_priority = test_priority,
+                report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
     end
 

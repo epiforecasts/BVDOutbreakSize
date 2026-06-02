@@ -160,6 +160,45 @@ low-viral-load specimens and field handling. Used by
 end
 
 """
+Priority (triage) testing strength prior. The laboratory does not analyse
+the suspect pool in arrival order; it triages, testing the
+highest-pre-test-probability (most-likely-BVD) samples first. The
+cumulative BVD samples *tested* therefore saturate toward the BVD
+available in the pool as the analysed count grows, while later batches
+drain a low-yield background backlog. This produces the observed
+saturating confirmed positives (101, 105, 106, 121) against a near-
+doubling analysed volume (211, 295, 295, 403) and the falling per-vintage
+positivity (0.48 → 0.30) that a constant or ramped background cannot.
+
+Parameterised by a single front-loading strength `κ ≥ 1` (see
+[`priority_bvd_tested`](@ref)): with `B` BVD available, `N` the total
+available pool and `A` analysed, the cumulative BVD tested is
+`B · (1 − (1 − A/N)^κ)`. `κ = 1` is proportional (no-priority) sampling,
+`bvd_tested = B·A/N`, which makes the per-test positivity the available
+BVD share `s·B/N` — exactly the old constant-background model, so
+`Δκ = 0` (the `priority_off` flag) is the backward-compatible reduction.
+Larger `κ` front-loads BVD more strongly; `κ → ∞` creams all BVD into the
+first analysed samples (positivity → `s` early), which over-predicts the
+observed early 0.48, so the prior keeps `κ` soft. `κ = 1 + Δκ` with the
+default `Δκ ~ Normal+(0, 2)` (κ median ≈ 2.3, 95% ≈ 1–5): with only four
+lab vintages the strength is weakly identified, so the prior is
+deliberately informative and the BVD pool is tied to the trajectory (not
+a free pool-size parameter). Pass `delta_kappa_prior` to override.
+"""
+@model function test_priority_model(;
+        delta_kappa_prior = truncated(Normal(0.0, 2.0); lower = 0),
+        priority_off::Bool = false)
+    if priority_off
+        Δκ = 0.0
+        κ_priority = 1.0
+    else
+        Δκ ~ delta_kappa_prior
+        κ_priority = 1.0 + Δκ
+    end
+    return (; Δκ, κ_priority)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Underlies the suspected/confirmed contrast.
