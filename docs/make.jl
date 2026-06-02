@@ -78,7 +78,11 @@ makedocs(;
     format = DocumenterVitepress.MarkdownVitepress(;
         repo = "github.com/epiforecasts/BVDOutbreakSize",
         devbranch = "main",
-        devurl = "dev"
+        devurl = "dev",
+        # Keep a docs version per minor release (v1.2, v1.3, …) in the
+        # version dropdown rather than only the major alias (v1), which
+        # is DocumenterVitepress's `:breaking` default.
+        keep = :minor
     )
 )
 
