@@ -72,6 +72,30 @@
     @test issorted(dh.offsets; rev = true)
     @test obs.sources.death_history isa String
     @test !isempty(obs.sources.death_history)
+
+    ## confirmed-case history runs to the 28 May cut-off; its final
+    ## vintage equals the cut-off `confirmed_cases` total.
+    @test obs.confirmed_case_history.values ==
+          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
+    @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
+
+    ## confirmed deaths: recorded, flat at 17 over the fitted window.
+    @test obs.confirmed_deaths isa Integer
+    @test obs.confirmed_death_history isa NamedTuple
+    @test obs.confirmed_death_history.values == [17, 17, 17]
+    @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
+    @test obs.sources.confirmed_death_history isa String
+
+    ## laboratory throughput histories (cumulative national, 23-28 May);
+    ## the analysed series ends at the cut-off `cumulative_tests_analysed`.
+    @test obs.tests_received_history.values ==
+          [418, 431, 431, 662, 774, 883]
+    @test obs.tests_analysed_history.values ==
+          [211, 295, 295, 403, 648, 755]
+    @test obs.tests_analysed_history.values[end] ==
+          obs.cumulative_tests_analysed
+    @test obs.sources.tests_received_history isa String
+    @test obs.sources.tests_analysed_history isa String
 end
 
 @testitem "export_deaths_daily is a daily series to the cut-off" begin

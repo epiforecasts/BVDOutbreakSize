@@ -28,6 +28,12 @@ Fields returned:
 - `confirmed_case_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC laboratory-confirmed counts. Drives the daily
   confirmed-cases likelihood. `missing` when absent.
+- `confirmed_deaths::Union{Int, Missing}` — DRC cumulative confirmed
+  deaths at the cut-off (front-page `Cumul décès parmi les confirmés`).
+  Recorded for completeness; not currently fitted. `missing` when absent.
+- `confirmed_death_history::Union{NamedTuple, Missing}` — same layout for
+  cumulative DRC confirmed deaths. Recorded for completeness; the model
+  does not currently fit a confirmed-death stream. `missing` when absent.
 - `death_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC suspected deaths. Drives the daily deaths likelihood.
   `missing` when absent.
@@ -37,6 +43,13 @@ Fields returned:
   observation; right-truncation is handled inside the model by the lab
   delay CDF. `missing` when no `cumulative_tests_analysed` block is
   present.
+- `tests_received_history::Union{NamedTuple, Missing}` — same layout as
+  the case histories for cumulative specimens received. Recorded for the
+  laboratory-pipeline view; not currently fitted. `missing` when absent.
+- `tests_analysed_history::Union{NamedTuple, Missing}` — same layout for
+  cumulative specimens analysed. Recorded for the laboratory-pipeline
+  view; the model uses only the cut-off `cumulative_tests_analysed`
+  total. `missing` when absent.
 - `daily_outbound_travellers::Real`
 - `daily_outbound_travellers_sd::Real`
 - `source_population::Int`
@@ -102,12 +115,17 @@ function load_observations(
         reported_cases = Int(_val("reported_cases")),
         confirmed_cases = haskey(raw, "confirmed_cases") ?
                           Int(_val("confirmed_cases")) : missing,
+        confirmed_deaths = haskey(raw, "confirmed_deaths") ?
+                           Int(_val("confirmed_deaths")) : missing,
         reported_case_history = _history("reported_case_history"),
         confirmed_case_history = _history("confirmed_case_history"),
+        confirmed_death_history = _history("confirmed_death_history"),
         death_history = _history("death_history"),
         cumulative_tests_analysed = haskey(raw, "cumulative_tests_analysed") ?
                                     Int(_val("cumulative_tests_analysed")) :
                                     missing,
+        tests_received_history = _history("tests_received_history"),
+        tests_analysed_history = _history("tests_analysed_history"),
         daily_outbound_travellers = float(
             _val("daily_outbound_travellers")),
         daily_outbound_travellers_sd = float(
@@ -132,12 +150,17 @@ function load_observations(
             reported_cases = _src("reported_cases"),
             confirmed_cases = haskey(raw, "confirmed_cases") ?
                               _src("confirmed_cases") : missing,
+            confirmed_deaths = haskey(raw, "confirmed_deaths") ?
+                               _src("confirmed_deaths") : missing,
             reported_case_history = haskey(raw, "reported_case_history") ?
                                     String(raw["reported_case_history"]["source"]) :
                                     missing,
             confirmed_case_history = haskey(raw, "confirmed_case_history") ?
                                      String(raw["confirmed_case_history"]["source"]) :
                                      missing,
+            confirmed_death_history = haskey(raw, "confirmed_death_history") ?
+                                      String(raw["confirmed_death_history"]["source"]) :
+                                      missing,
             death_history = haskey(raw, "death_history") ?
                             String(raw["death_history"]["source"]) :
                             missing,
@@ -145,6 +168,12 @@ function load_observations(
                 "cumulative_tests_analysed") ?
                                         _src("cumulative_tests_analysed") :
                                         missing,
+            tests_received_history = haskey(raw, "tests_received_history") ?
+                                     String(raw["tests_received_history"]["source"]) :
+                                     missing,
+            tests_analysed_history = haskey(raw, "tests_analysed_history") ?
+                                     String(raw["tests_analysed_history"]["source"]) :
+                                     missing,
             daily_outbound_travellers = _src("daily_outbound_travellers"),
             daily_outbound_travellers_sd = _src("daily_outbound_travellers_sd"),
             source_population = _src("source_population"),
