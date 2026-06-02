@@ -20,7 +20,6 @@ using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
                      NegativeBinomial, Normal, LogNormal, Beta,
                      truncated, censored
 using StatsFuns: logit, logistic
-using Integrals: IntegralProblem, GaussLegendre, solve
 import FastGaussQuadrature
 import CairoMakie
 import AlgebraOfGraphics as AoG
