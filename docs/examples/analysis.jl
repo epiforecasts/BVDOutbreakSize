@@ -221,6 +221,10 @@
 #   is that it relies on the source classification of each case as an
 #   importation: with only three counts, reclassifying any one case
 #   shifts the implied outbreak size and ascertainment.
+# - *Exports assume one-way travel.* An infected traveller is counted as a
+#   Ugandan importation once they cross the border, with no return leg, so
+#   anyone who travels to Uganda and back before being detected is counted
+#   in error.
 # - *Selection bias in deaths-among-exports.* The deaths-among-
 #   exports likelihood assumes Uganda's surveillance retains detected
 #   exports through to any subsequent death. If the system loses
