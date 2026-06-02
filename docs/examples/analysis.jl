@@ -231,11 +231,18 @@
 #   cases that progress to death, the observed count is biased
 #   downward and the constraint it places on $T$ is overstated.
 # - *Deaths-among-exports is an approximate construction.* The expected
-#   count weights the exported at-risk person-time by the onset-to-death
-#   CDF $F_d(T-s)$ rather than convolving the death delay against the
+#   count weights the exported at-risk person-time by the death CDF
+#   $F_d(T-s)$ rather than convolving the death delay against the
 #   exported-case incidence; this treats the cohort present at time $s$
 #   as if infected at $s$. A more direct construction would convolve the
-#   onset-to-death delay against the exported-case incidence trajectory.
+#   death delay against the exported-case incidence trajectory. The death
+#   timing is now keyed to infection: $F_d$ is the infection→death delay
+#   (incubation $\oplus$ onset-to-death), the same infection clock as the
+#   detection survival and $C(s)$, so deaths are not timed one incubation
+#   period too early. Because detection and death share the same onset,
+#   incubation enters both the detection and death delays, a slight
+#   double-count of the shared incubation period; this is accepted as
+#   better than omitting incubation on the death timing entirely.
 # - *Ascertainment partially pooled, not separately identified.*
 #   Uganda's exported-case ascertainment $p_{\text{Uganda}}$ and DRC's
 #   reported-case ascertainment $p_{\text{DRC}}$ share a logit-scale
@@ -1495,6 +1502,14 @@ cfr_prior_fig #hide
 # gamma CDF shape-parameter derivative). The detection window $w$ and
 # daily traveller volume are shared with the exports likelihood so the
 # two Uganda-side observations use the same person-time.
+#
+# Equation (19) is the McCabe-window form, kept for the comparison. In
+# the default delay mechanism the top-hat window is replaced by the
+# infection→detection survival $\overline{F}_{\text{det}}(T-s)$, and the
+# death CDF $F_d$ is the infection→death delay (incubation $\oplus$
+# onset-to-death), so both clocks run from infection in step with $C(s)$.
+# Detection and death share the same onset, so incubation enters both
+# delays — a slight accepted double-count of the shared incubation period.
 #
 # Uganda's export deaths are point-of-entry / hospital-detected, so
 # their dates are recorded directly and carry information beyond the

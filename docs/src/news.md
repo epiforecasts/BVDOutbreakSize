@@ -109,6 +109,15 @@ each push to `main` also republishes the rendered analysis and the
   McCabe window is kept available via the swappable
   `detection_window_model` / `exports_model` path and in
   `imperial_only_model` for comparison.
+- Timed the export-death stream from infection: the death delay is the
+  infection→death delay (incubation ⊕ onset-to-death, moment-matched via
+  `combined_delay`), the same infection clock as the detection survival
+  and the latent trajectory. The previous export-death integrand used the
+  bare onset-to-death delay, omitting incubation and timing export deaths
+  ~one incubation period (~6 days) too early. Detection and death share
+  the same onset, so incubation now enters both delays, a slight accepted
+  double-count of the shared incubation period (better than omitting it
+  on death).
 
 ### Documentation
 
