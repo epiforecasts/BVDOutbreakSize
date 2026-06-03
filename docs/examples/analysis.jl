@@ -201,6 +201,20 @@
 #   refits the joint model under the faster early-epidemic rate to show
 #   how much the timing, growth-rate and outbreak-size estimates are
 #   impacted.
+# - *Exports fit at their Uganda report dates, stopped at the last
+#   import.* Rather than a single cumulative count at the cut-off, the
+#   three imports enter as a dated daily series at their Uganda report
+#   dates (11, 16 and 23 May), fit through the same infection→detection
+#   delay as a per-day Poisson process; the pre-detection survival term
+#   carries the earliest-detection timing bound that McCabe et al. add
+#   separately. Both travel-gated streams (exports and deaths-among-
+#   exports) are run only up to the most recent reported import (23 May),
+#   not the 26 May cut-off: the streams assume a constant per-capita
+#   travel rate, but cross-border movement patterns likely shift over the
+#   outbreak and the most recent days are right-truncated by reporting
+#   lag, so the trailing days carry no informative zero. Import #3's
+#   23 May date is a public announcement rather than a detection date, so
+#   it carries reporting-pipeline lag.
 # - *Export detection delay reuses the DRC reporting delay.* The default
 #   model replaces McCabe et al.'s lumped detection window with an
 #   infection→detection delay convolution. Exports are travel-gated, so
@@ -224,7 +238,16 @@
 # - *Exports assume one-way travel.* An infected traveller is counted as a
 #   Ugandan importation once they cross the border, with no return leg, so
 #   anyone who travels to Uganda and back before being detected is counted
-#   in error.
+#   in error. The travel input is a one-directional points-of-entry flow
+#   (McCabe et al. Table 3), and IOM DTM flow monitoring on the same
+#   border shows movement is roughly balanced bidirectional and dominated
+#   by routine economic round trips, so the at-risk crossings are
+#   over-counted. Only the product of the Uganda ascertainment and the
+#   travel rate is identified, so a roughly constant round-trip fraction
+#   is absorbed into the fitted ascertainment; what it cannot absorb is a
+#   systematic shift in movement over the outbreak, which is why both
+#   travel-gated streams are stopped at the last reported import rather
+#   than extrapolated to the cut-off.
 # - *Selection bias in deaths-among-exports.* The deaths-among-
 #   exports likelihood assumes Uganda's surveillance retains detected
 #   exports through to any subsequent death. If the system loses
@@ -1832,11 +1855,27 @@ function joint_obs(o; observe = true)
     conf_off = have_conf ?
                (Union{Missing, Int}[observe ? conf_total : missing], [0]) :
                (Union{Missing, Int}[], Int[])
-    edaily = observe ? o.export_deaths_daily :
-             fill(missing, length(o.export_deaths_daily))
+    ## Travel-gated export streams stop at the most recent reported import
+    ## to Uganda. Cross-border movement patterns likely shift over the
+    ## outbreak and the days after the last import are right-truncated by
+    ## reporting lag, so the trailing zeros are dropped from both the
+    ## export-case and deaths-among-exports series and each stream is run
+    ## only up to that date (see `exports_daily_delay_model`).
+    ec_full = o.exported_cases_daily
+    last_import = isempty(ec_full) ? nothing : findlast(!=(0), ec_full)
+    export_last_offset = last_import === nothing ? 0 :
+                         length(ec_full) - last_import
+    _truncate(v) = v[1:max(length(v) - export_last_offset, 0)]
+    ecases = isempty(ec_full) ? ec_full :
+             (observe ? _truncate(ec_full) :
+              fill(missing, length(_truncate(ec_full))))
+    ed_trunc = _truncate(o.export_deaths_daily)
+    edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
+            exported_cases_daily = ecases,
+            export_last_offset = export_last_offset,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
@@ -2408,7 +2447,10 @@ pp_joint = predict(
         first_export_detection_delta = obs.first_export_detection_delta,
         genetic = genetic_seeding),
     chn_joint);
-pp_exports = vec(Array(pp_joint[:exported_cases]));
+## Exports are now a dated per-day series (to the last reported import),
+## so sum each draw's days for the cumulative-total posterior predictive,
+## matching the observed total.
+pp_exports = vec(sum.(pp_joint[@varname(exported_cases_daily)]));
 ## The DRC deaths and reported streams are per-vintage increment vectors
 ## and confirmed is a single cumulative total; sum each draw's bins for
 ## the cumulative-total posterior predictive. Export deaths are a per-day
