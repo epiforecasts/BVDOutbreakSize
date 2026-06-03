@@ -28,6 +28,41 @@
     @test calls[] >= 20
 end
 
+@testitem "nuts_sample warmup=true streams adaptation steps" tags=[:slow] begin
+    using Distributions: Normal
+    using Turing: @model
+    import Turing
+    using BVDOutbreakSize: nuts_sample
+
+    @model function _wu_model()
+        x ~ Normal(0.0, 1.0)
+    end
+
+    ## Collect the step size the callback sees on each kept draw, pulled
+    ## through the same `ParamsWithStats` interface the callbacks use.
+    function step_sizes(; warmup)
+        sizes = Float64[]
+        lk = ReentrantLock()
+        cb = function (rng, model, sampler, transition, state, iteration;
+                kwargs...)
+            pws = Turing.AbstractMCMC.ParamsWithStats(
+                model, sampler, transition, state; stats = true)
+            ss = get(pws.stats, :step_size, missing)
+            ss isa Real && Base.@lock lk push!(sizes, ss)
+            return nothing
+        end
+        nuts_sample(_wu_model(); samples = 100, chains = 1,
+            callback = cb, warmup = warmup)
+        return sizes
+    end
+
+    ## Adaptation retunes the step size every warmup step, so streaming
+    ## warmup exposes many distinct step sizes; the post-warmup phase alone
+    ## keeps it frozen (bar the single boundary draw as adaptation ends).
+    @test length(unique(step_sizes(; warmup = true))) > 10
+    @test length(unique(step_sizes(; warmup = false))) <= 3
+end
+
 @testitem "progress_callback records real log-density" tags=[:slow] begin
     using Distributions: Normal
     using Turing: @model

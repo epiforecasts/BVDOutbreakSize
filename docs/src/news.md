@@ -113,7 +113,10 @@ each push to `main` also republishes the rendered analysis and the
   `diagnostics/` tags, with per-draw scalar traces plus running histograms
   (HISTOGRAMS / DISTRIBUTIONS dashboards) on by default. It needs the
   optional `TensorBoardLogger` dependency (`using TensorBoardLogger`),
-  exposed via a package extension like the Enzyme backend.
+  exposed via a package extension like the Enzyme backend. Pass
+  `nuts_sample(...; warmup = true)` to also stream the NUTS adaptation
+  phase (step-size tuning, early divergences), which is otherwise
+  discarded and silent.
 - Added optional Enzyme reverse-mode AD, selected with `enzyme_adtype()`,
   alongside the default Mooncake backend. Gradients match Mooncake across
   every model including the full joint and fitting runs at the same speed,

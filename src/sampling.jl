@@ -140,6 +140,15 @@ or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
 `using TensorBoardLogger`). The callback is forwarded to `sample` only
 when non-`nothing`. Any additional `kwargs` are passed through to
 `sample`.
+
+A callback fires only on the samples that are kept, and NUTS discards
+its adaptation phase by default, so warmup is silent. Set
+`warmup = true` to keep the adaptation steps (`discard_adapt = false`),
+which streams them to the callback so step-size adaptation and early
+divergences are visible live. Those warmup draws are then also retained
+in the returned chain, so the first `min(1000, samples ÷ 2)` draws are
+adaptation steps rather than posterior samples; raise `samples`
+accordingly or drop them before summarising.
 """
 function nuts_sample(model;
         samples::Integer = 1_000,
@@ -150,9 +159,11 @@ function nuts_sample(model;
         adtype = default_adtype(),
         init = InitFromPrior(),
         callback = nothing,
+        warmup::Bool = false,
         kwargs...)
     rng = MersenneTwister(seed)
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
+    warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
     return sample(
         rng,
         model,
@@ -162,6 +173,7 @@ function nuts_sample(model;
         initial_params = fill(init, chains),
         progress = progress,
         cb_kwargs...,
+        warmup_kwargs...,
         kwargs...
     )
 end
