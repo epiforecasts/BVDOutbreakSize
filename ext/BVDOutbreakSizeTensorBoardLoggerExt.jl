@@ -1,60 +1,52 @@
 module BVDOutbreakSizeTensorBoardLoggerExt
 
 import BVDOutbreakSize
-using TensorBoardLogger: TBLogger, log_value
+import AbstractMCMC
+using TensorBoardLogger: TBLogger, log_value, log_histogram
 
 # Real method for the `tensorboard_callback` stub in `src/sampling.jl`.
-# Loading TensorBoardLogger (`using TensorBoardLogger`) activates this
-# method, so `nuts_sample(model; callback = tensorboard_callback(dir))`
-# streams per-step NUTS diagnostics to the TensorBoard event files under
-# `logdir`. View the run with `tensorboard --logdir <logdir>`.
+# Loading TensorBoardLogger (`using TensorBoardLogger`) activates it.
 #
-# The returned closure matches the AbstractMCMC callback signature
-# `callback(rng, model, sampler, transition, state, iteration; kwargs...)`
-# and, every `every` steps on each chain, logs scalar summaries: the
-# transition log-density (`transition.lp`), a divergence flag and running
-# divergence count (`transition.stat.numerical_error`), and step size /
-# tree depth when the sampler exposes them (`transition.stat.step_size`,
-# `transition.stat.tree_depth`).
+# Parameters and step statistics are pulled through the sampler-agnostic
+# `AbstractMCMC.ParamsWithStats(model, sampler, transition, state; params,
+# stats)` interface (so the callback tracks Turing's transition format rather
+# than a fixed field layout), then logged to the `TBLogger` at `logdir` under
+# two grouped tag prefixes so the TensorBoard dashboard stays navigable:
 #
-# A single `TBLogger` is shared across the threads spawned by
-# `MCMCThreads()`; writes are guarded by a `ReentrantLock`. Field access
-# is wrapped in `try`/`catch` so a transition missing any field logs what
-# it can rather than aborting the fit. `kwargs` are forwarded to
-# `TBLogger`.
+#   * `params/<name>`      — every sampled parameter
+#   * `diagnostics/<name>` — log-density (`logjoint`), divergence flag
+#                            (`numerical_error`), step size, tree depth, ...
+#
+# Each scalar is logged every step as a `.../value` time series via
+# `log_value` (with an explicit per-chain `step`, so parallel chains do not
+# fight over a shared step counter). When `histograms = true` (the default) a
+# running histogram of the draws so far is also logged every `every` steps as
+# `.../distribution` via `log_histogram`, populating the TensorBoard HISTOGRAMS
+# / DISTRIBUTIONS dashboards. The returned closure matches the AbstractMCMC
+# callback signature and is passed straight to
+# `nuts_sample(model; callback = ...)`. A single `TBLogger` is shared across
+# the threads `MCMCThreads()` spawns; writes are guarded by a `ReentrantLock`
+# and the whole body is wrapped in `try`/`catch` so a fit is never aborted by
+# the callback. View the run with `tensorboard --logdir <logdir>`.
 function BVDOutbreakSize.tensorboard_callback(
-        logdir::AbstractString; every::Integer = 1, kwargs...)
-    logger = TBLogger(logdir; kwargs...)
-    lock = ReentrantLock()
-    ndivergent = Ref(0)
+        logdir::AbstractString;
+        every::Integer = 20,
+        histograms::Bool = true,
+        params_prefix::AbstractString = "params/",
+        diagnostics_prefix::AbstractString = "diagnostics/")
+    logger = TBLogger(logdir)
+    lk = ReentrantLock()
+    history = Dict{String, Vector{Float64}}()
     return function (rng, model, sampler, transition, state, iteration;
-            cbkwargs...)
+            kwargs...)
         try
-            divergent = false
-            try
-                divergent = transition.stat.numerical_error === true
-            catch
-                divergent = false
-            end
-            if divergent
-                Base.@lock lock (ndivergent[] += 1)
-            end
-            if iteration % every == 0
-                Base.@lock lock begin
-                    _log_scalar(logger, "lp", _field(transition, :lp),
-                        iteration)
-                    log_value(logger, "divergent", divergent;
-                        step = iteration)
-                    log_value(logger, "divergences", ndivergent[];
-                        step = iteration)
-                    stat = _field(transition, :stat)
-                    if stat !== missing
-                        _log_scalar(logger, "step_size",
-                            _field(stat, :step_size), iteration)
-                        _log_scalar(logger, "tree_depth",
-                            _field(stat, :tree_depth), iteration)
-                    end
-                end
+            pws = AbstractMCMC.ParamsWithStats(
+                model, sampler, transition, state; params = true, stats = true)
+            Base.@lock lk begin
+                _emit!(logger, history, params_prefix, pairs(pws.params),
+                    iteration, every, histograms)
+                _emit!(logger, history, diagnostics_prefix, pairs(pws.stats),
+                    iteration, every, histograms)
             end
         catch
             # A streaming callback must never abort a fit.
@@ -63,19 +55,23 @@ function BVDOutbreakSize.tensorboard_callback(
     end
 end
 
-# Read field `name` from `x`, returning `missing` if it is absent.
-function _field(x, name::Symbol)
-    return try
-        getproperty(x, name)
-    catch
-        missing
-    end
-end
-
-# Log `value` as a scalar only when it is a present, finite real.
-function _log_scalar(logger, name, value, step)
-    if value !== missing && value isa Real && isfinite(value)
-        log_value(logger, name, float(value); step = step)
+# Log each real-valued entry of `nt_pairs` as a `<prefix><name>/value` scalar
+# every step, and, when `histograms`, a `<prefix><name>/distribution` histogram
+# of the accumulated draws every `every` steps.
+function _emit!(logger, history, prefix, nt_pairs, iteration, every, histograms)
+    for (name, value) in nt_pairs
+        (value isa Real && isfinite(value)) || continue
+        v = Float64(value)
+        tag = string(prefix, name)
+        log_value(logger, string(tag, "/value"), v; step = iteration)
+        if histograms
+            draws = get!(() -> Float64[], history, tag)
+            push!(draws, v)
+            if iteration % every == 0 && length(draws) > 1
+                log_histogram(logger, string(tag, "/distribution"), draws;
+                    step = iteration)
+            end
+        end
     end
     return nothing
 end

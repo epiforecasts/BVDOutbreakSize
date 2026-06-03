@@ -107,11 +107,13 @@ each push to `main` also republishes the rendered analysis and the
 - Added streaming progress to `nuts_sample` via an optional `callback`
   (forwarded to `sample`, with arbitrary `kwargs...` passthrough).
   `progress_callback(; path, every)` is a dependency-free file streamer
-  (tail it live with `tail -f`); `tensorboard_callback("logs/run")`
-  logs per-step log-density, divergences and step size to TensorBoard
-  and needs the optional `TensorBoardLogger` dependency
-  (`using TensorBoardLogger`), exposed via a package extension like
-  the Enzyme backend.
+  (tail it live with `tail -f`) that reads step statistics through the
+  `AbstractMCMC.ParamsWithStats` interface; `tensorboard_callback("logs/run")`
+  streams the same statistics to TensorBoard under grouped `params/` and
+  `diagnostics/` tags, with per-draw scalar traces plus running histograms
+  (HISTOGRAMS / DISTRIBUTIONS dashboards) on by default. It needs the
+  optional `TensorBoardLogger` dependency (`using TensorBoardLogger`),
+  exposed via a package extension like the Enzyme backend.
 - Added optional Enzyme reverse-mode AD, selected with `enzyme_adtype()`,
   alongside the default Mooncake backend. Gradients match Mooncake across
   every model including the full joint and fitting runs at the same speed,

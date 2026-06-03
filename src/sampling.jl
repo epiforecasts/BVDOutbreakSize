@@ -21,12 +21,22 @@ function enzyme_adtype end
 
 """
 TensorBoard streaming callback for `nuts_sample`, mirroring the
-optional Enzyme backend. `tensorboard_callback(logdir; every = 1,
-kwargs...)` returns an AbstractMCMC callback closure that opens a
-`TensorBoardLogger.TBLogger(logdir; kwargs...)` and, every `every`
-steps on each chain, logs scalar diagnostics (log-density, a
-divergence flag and running divergence count, and step size / tree
-depth when available) to the TensorBoard event files under `logdir`.
+optional Enzyme backend. `tensorboard_callback(logdir; every = 20,
+histograms = true)` opens a `TensorBoardLogger.TBLogger(logdir)` and, on
+every kept post-warmup draw, logs through the sampler-agnostic
+`AbstractMCMC.ParamsWithStats` interface to two grouped tag prefixes so
+the dashboard stays navigable:
+
+  * `params/<name>` — every sampled parameter
+  * `diagnostics/<name>` — log-density (`logjoint`), divergence flag
+    (`numerical_error`), step size, tree depth, acceptance rate, ...
+
+Each scalar streams every step as a `.../value` time series. With
+`histograms = true` (the default) a running histogram of the draws so
+far is also logged every `every` steps as `.../distribution`,
+populating the TensorBoard HISTOGRAMS and DISTRIBUTIONS dashboards. Set
+`histograms = false` for scalar traces only, or widen `every` to log
+histograms less often.
 
 `tensorboard_callback` is a stub; loading TensorBoardLogger
 (`using TensorBoardLogger`) activates the method via
@@ -40,7 +50,8 @@ using TensorBoardLogger
 nuts_sample(model; callback = tensorboard_callback("logs/run"))
 ```
 
-then view the run with `tensorboard --logdir logs/run`.
+then view the run with `tensorboard --logdir logs/run`. Use `chains = 1`
+for clean live traces; parallel chains share one logger and interleave.
 
 See also: [`progress_callback`](@ref), [`nuts_sample`](@ref).
 """
@@ -61,21 +72,25 @@ callback(rng, model, sampler, transition, state, iteration; kwargs...)
 ```
 
 which, every `every` iterations on each chain, appends one line to
-the file at `path` recording the iteration number, the transition
-log-density, and a running count of divergent transitions.
+the file at `path` recording the iteration number, the log joint
+density, and a running count of divergent transitions.
 
 The same closure is invoked from every thread `MCMCThreads()` spawns,
 so the divergence tally and file writes are shared across chains and
 guarded by a `ReentrantLock`. Tail the file live during a fit with
 `tail -f <path>`.
 
-Field access is defensive. The log-density is read from
-`transition.lp` and the divergence flag from
-`transition.stat.numerical_error`; both are wrapped in `try`/`catch`,
-so a transition that does not expose these fields yields `missing`
-log-density / no divergence increment rather than crashing the fit.
-The running divergence count is a single total over all chains, reset
-implicitly each time a fresh callback is constructed.
+Step-level statistics are read through the sampler-agnostic
+`AbstractMCMC.ParamsWithStats(model, sampler, transition, state;
+stats = true)` interface rather than by reaching into transition
+fields, so the callback tracks Turing's transition format instead of a
+fixed field layout. The log density is taken from the `logjoint`
+statistic and the divergence flag from `numerical_error`. The whole
+body is wrapped in `try`/`catch`, so a transition that does not expose
+these statistics yields `missing` log-density / no divergence increment
+rather than crashing the fit. The running divergence count is a single
+total over all chains, reset implicitly each time a fresh callback is
+constructed.
 
 See also: [`tensorboard_callback`](@ref), [`nuts_sample`](@ref).
 """
@@ -85,21 +100,17 @@ function progress_callback(; path::AbstractString, every::Integer = 10)
     return function (rng, model, sampler, transition, state, iteration;
             kwargs...)
         try
-            divergent = false
-            try
-                divergent = transition.stat.numerical_error === true
+            stats = try
+                AbstractMCMC.ParamsWithStats(
+                    model, sampler, transition, state; stats = true).stats
             catch
-                divergent = false
+                (;)
             end
-            if divergent
+            if get(stats, :numerical_error, false) === true
                 Base.@lock lock (ndivergent[] += 1)
             end
             if iteration % every == 0
-                lp = try
-                    transition.lp
-                catch
-                    missing
-                end
+                lp = get(stats, :logjoint, missing)
                 Base.@lock lock begin
                     open(path, "a") do io
                         println(io,

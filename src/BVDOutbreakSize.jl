@@ -13,6 +13,7 @@ using SpecialFunctions: digamma, loggamma
 import SpecialFunctions
 using Turing: @model, MCMCThreads, NUTS, sample, to_submodel, filldist
 using Turing.DynamicPPL: InitFromPrior
+import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
