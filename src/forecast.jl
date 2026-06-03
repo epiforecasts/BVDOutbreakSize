@@ -101,7 +101,9 @@ queue of [`confirmed_cases_model`](@ref): the received backlog
 cut-off capacity `κ` over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`,
 and the new positives are `ΔA` times the severe-first positivity, added to
 the observed cumulative confirmed. Exports use `p_uganda · q` with
-`q = daily_travellers / source_population`. Assumes growth continues
+`q = daily_travellers / source_population`; pass `forecast_exports = false`
+to drop the export columns (e.g. when cross-border travel is disrupted so
+the forward travel rate no longer holds). Assumes growth continues
 unchanged over the horizon (no interventions, no saturation).
 
 `report_onset_offset` sets the severe-first testing-onset clock
@@ -115,10 +117,11 @@ function forecast_reported(chn;
         source_population::Real,
         obs_cases::Real,
         obs_deaths::Real,
-        obs_exports::Real,
+        obs_exports::Union{Real, Missing} = missing,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_tests::Union{Real, Missing} = missing,
         obs_analysed::Union{Real, Missing} = missing,
+        forecast_exports::Bool = true,
         seed::Integer = 20260520,
         report_onset_offset::Union{Nothing, Real} = nothing,
         alg = DEATH_INTEGRAL_ALG)
@@ -165,7 +168,7 @@ function forecast_reported(chn;
     q = daily_travellers / source_population
     cases_cum = Vector{Int}(undef, n)
     deaths_cum = Vector{Int}(undef, n)
-    exports_cum = Vector{Int}(undef, n)
+    exports_cum = forecast_exports ? Vector{Int}(undef, n) : nothing
     confirmed_cum = has_lab ? Vector{Int}(undef, n) : nothing
     tests_cum = has_tests ? Vector{Int}(undef, n) : nothing
 
@@ -187,10 +190,15 @@ function forecast_reported(chn;
         ## Uganda exports: p_uganda · q · ∫_{T+h−w}^{T+h} C(s) ds (closed
         ## form for exponential growth). Exports see infections directly —
         ## the detection window absorbs the infection-to-detection delay —
-        ## so they are not rescaled by the incubation period.
-        lo = max(Th - w[i], zero(Th))
-        μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
-        exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
+        ## so they are not rescaled by the incubation period. Skipped when
+        ## `forecast_exports = false` (e.g. cross-border travel disrupted, so
+        ## the forward travel rate no longer holds).
+        if forecast_exports
+            lo = max(Th - w[i], zero(Th))
+            μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
+            exports_cum[i] = rand(rng,
+                Poisson(max(μ_exports, eps(μ_exports))))
+        end
         if has_lab
             ## Received backlog (receipt-delayed) and the capacity-limited
             ## analysed increment over the horizon; new confirmed positives
@@ -215,11 +223,13 @@ function forecast_reported(chn;
     df = DataFrame(
         cases_cum = cases_cum,
         deaths_cum = deaths_cum,
-        exports_cum = exports_cum,
         cases_new = _new(cases_cum, obs_cases),
-        deaths_new = _new(deaths_cum, obs_deaths),
-        exports_new = _new(exports_cum, obs_exports)
+        deaths_new = _new(deaths_cum, obs_deaths)
     )
+    if forecast_exports
+        df.exports_cum = exports_cum
+        df.exports_new = _new(exports_cum, obs_exports)
+    end
     if has_lab
         df.confirmed_cum = confirmed_cum
         df.confirmed_new = _new(confirmed_cum, obs_confirmed)
@@ -263,8 +273,9 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
     rows = NamedTuple[]
     streams = [
         ("DRC reported cases", :cases_cum, :cases_new),
-        ("DRC deaths", :deaths_cum, :deaths_new),
-        ("Uganda exports", :exports_cum, :exports_new)]
+        ("DRC deaths", :deaths_cum, :deaths_new)]
+    :exports_cum in propertynames(fc) &&
+        push!(streams, ("Uganda exports", :exports_cum, :exports_new))
     :tests_cum in propertynames(fc) &&
         push!(streams, ("DRC tests analysed", :tests_cum, :tests_new))
     :confirmed_cum in propertynames(fc) &&

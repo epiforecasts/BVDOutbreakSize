@@ -493,10 +493,10 @@ function plot_forecast(fc::DataFrame)
     (
         :cases_new, "New reported cases (DRC)", :steelblue),
     (
-        :deaths_new, "New deaths (DRC)", :firebrick),
-    (
-        :exports_new, "New exports (Uganda)", :seagreen)
+        :deaths_new, "New deaths (DRC)", :firebrick)
 ]
+    :exports_new in propertynames(fc) && push!(cols,
+        (:exports_new, "New exports (Uganda)", :seagreen))
     :tests_new in propertynames(fc) && push!(cols,
         (:tests_new, "New tests analysed (DRC)", :teal))
     :confirmed_new in propertynames(fc) && push!(cols,

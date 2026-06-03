@@ -81,6 +81,26 @@ end
     @test !(:confirmed_cum in propertynames(fc))
 end
 
+@testitem "forecast_reported drops exports when forecast_exports=false" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_reported, forecast_table, plot_forecast
+
+    chn=_forecast_chain(200)
+    fc=forecast_reported(chn;
+        horizon = 7, daily_travellers = 1871,
+        source_population = 4_392_200,
+        obs_cases = 514, obs_deaths = 136,
+        forecast_exports = false)
+
+    @test !(:exports_cum in propertynames(fc))
+    @test !(:exports_new in propertynames(fc))
+    @test :cases_cum in propertynames(fc)
+    ## The table and plot must not assume the export columns.
+    tbl = forecast_table(fc)
+    @test !any(occursin.("Uganda", string.(tbl[!, 1])))
+    @test plot_forecast(fc) !== nothing
+end
+
 @testitem "forecast_reported adds confirmed columns when lab delay sampled" tags=[:slow] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame
     using BVDOutbreakSize: forecast_reported

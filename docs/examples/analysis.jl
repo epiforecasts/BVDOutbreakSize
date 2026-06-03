@@ -2175,6 +2175,40 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
+# Against the laboratory-confirmed cases recorded by the cut-off (121),
+# the estimated infections give the under-ascertainment multiplier
+# (infections per confirmed case); we report it alongside the case
+# fatality ratio as headline quantities.
+
+#md # ```@raw html
+#md # <details><summary>Headline multiplier and CFR summary table</summary>
+#md # ```
+
+headline_summary = let
+    mult = posterior_C_infections_joint ./ obs.confirmed_cases
+    cfr = vec(Array(chn_joint[:CFR]))
+    df = DataFrame(quantity = String[],
+        lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
+        upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[])
+    for (name, xs) in ["Infections per confirmed case" => mult,
+        "Case fatality ratio" => cfr]
+        s = posterior_summary(xs)
+        push!(df,
+            (name, round(s.lo90; digits = 2), round(s.lo60; digits = 2),
+                round(s.lo30; digits = 2), round(s.hi30; digits = 2),
+                round(s.hi60; digits = 2), round(s.hi90; digits = 2)))
+    end
+    rename(df,
+        ["Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
+            "Upper 30%", "Upper 60%", "Upper 90%"])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+headline_summary #hide
+
 #md # ```@raw html
 #md # <details><summary>Cumulative infection and case count densities</summary>
 #md # ```
@@ -2478,7 +2512,9 @@ no_onward_fig #hide
 # ### One-week-ahead forecast
 #
 # The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$.
+# per stream by $T + 7$. Exports are dropped from this projection:
+# cross-border travel is unlikely to be continuing at its baseline rate,
+# so the forward travel rate the export forecast relies on no longer holds.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -2490,10 +2526,10 @@ forecast = forecast_reported(chn_joint;
     source_population = ITURI_POPULATION,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
-    obs_exports = EXPORTED_CASES,
     obs_confirmed = obs.confirmed_cases,
     obs_tests = obs.samples_received_history.values[end],
     obs_analysed = obs.cumulative_tests_analysed,
+    forecast_exports = false,
     report_onset_offset = report_onset_offset(obs.as_of_date));
 forecast_summary = forecast_table(forecast);
 
