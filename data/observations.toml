@@ -22,13 +22,29 @@
 # per-zone table, we take the auditable zone-table sum: the 23 May report
 # (SitRep 009) prints 119 cumulative suspected deaths in its headline,
 # but its per-zone rows sum to 220, the value used here. Figures are
-# keyed by the report's `date de rapportage`. The 26 May cut-off is the
-# latest available report (SitRep 012). The 18-22 May points predate the
-# national cumulative-headline format and retain the WHO AFRO /
-# early-report baseline (18 May = 516 cases, 131 deaths, matching the WHO
-# AFRO joint sitrep 01). The model uses suspected counts.
+# keyed by the report's `date de rapportage`. The 18-22 May points
+# predate the national cumulative-headline format and retain the WHO AFRO
+# / early-report baseline (18 May = 516 cases, 131 deaths, matching the
+# WHO AFRO joint sitrep 01).
+#
+# Cut-off: 28 May 2026 (SitRep 014). This is the last vintage with a
+# coherent national laboratory total, which the confirmed-case stream is
+# anchored to (confirmed cases paired with cumulative tests analysed for
+# the per-test positivity). From SitRep 013 (27 May) INSP began revising
+# the suspected counts downward as suspects were investigated, and from
+# the confirmed-based format (SitReps 016-017, 30-31 May) it stopped
+# publishing national cumulative suspected and laboratory totals. So:
+#  - the suspected streams (reported_cases, total_deaths and their
+#    histories) are FROZEN at their last stable vintage, 26 May, two days
+#    before the cut-off, and are missing thereafter;
+#  - the confirmed-case and laboratory streams run to the 28 May cut-off;
+#  - confirmed deaths and the 29-31 May confirmed-case figures (263, 282,
+#    321) are recorded in data/insp_sitrep_scanned.csv as data beyond the
+#    cut-off, but are not fitted, because the model anchors confirmed
+#    cases through the laboratory positivity and national testing totals
+#    stop after 28 May.
 
-as_of_date = "2026-05-26"
+as_of_date = "2026-05-28"
 
 [exported_cases]
 value  = 3
@@ -36,7 +52,7 @@ source = "WHO DON 2026-DON602, 2026-DON603, and WHO Director-General Ministerial
 
 [exports_deaths]
 value  = 1
-source = "WHO DON 2026-DON602 — one death (import #1, died 14 May 2026). No deaths reported among imports #2 or #3 as of the 23 May 2026 cut-off."
+source = "WHO DON 2026-DON602 — one death (import #1, died 14 May 2026). No deaths reported among imports #2 or #3 as of the 28 May 2026 cut-off. The exports count is the cumulative detected by the cut-off: a 4th Uganda travel-linked case appears in 2-June reporting but is detected after 28 May, so it is not counted here."
 
 [first_export_detection_date]
 value  = "2026-05-11"
@@ -48,11 +64,11 @@ source = "WHO DON 2026-DON602 — the fatal Uganda export (import #1) was hospit
 
 [total_deaths]
 value  = 246
-source = "INSP SitRep 012 revised re-issue (SitRep_MVE_012-2026_v2, data as of 26 May 2026), front-page `Cumul Décès suspects`, read from the situation-report PDF. National cumulative suspected deaths; the revised re-issue corrects the original SitRep 012 headline (238) to 246. Recorded in data/insp_sitrep_scanned.csv."
+source = "INSP SitRep 012 revised re-issue (SitRep_MVE_012-2026_v2, data as of 26 May 2026), front-page `Cumul Décès suspects`, read from the situation-report PDF. National cumulative suspected deaths; the revised re-issue corrects the original SitRep 012 headline (238) to 246. Frozen at this 26 May value, two days before the 28 May cut-off: INSP stopped publishing a national suspected-death total from 28 May. Recorded in data/insp_sitrep_scanned.csv."
 
 [reported_cases]
 value  = 1077
-source = "INSP SitRep 012 (data as of 26 May 2026), front-page `Cumul cas suspects`, read from the situation-report PDF. National cumulative suspected cases; recorded in data/insp_sitrep_scanned.csv. This report carries no per-zone case table, so the headline could not be cross-checked against a zone-row sum."
+source = "INSP SitRep 012 (data as of 26 May 2026), front-page `Cumul cas suspects`, read from the situation-report PDF. National cumulative suspected cases; recorded in data/insp_sitrep_scanned.csv. This report carries no per-zone case table, so the headline could not be cross-checked against a zone-row sum. Frozen at this 26 May value, two days before the 28 May cut-off: INSP began revising the suspected count downward from 27 May (906, then 349) as suspects were reclassified."
 
 # Cumulative national suspected-case totals across INSP situation-report
 # vintages. We trust each vintage's cumulative-at-date count but not the
@@ -62,7 +78,10 @@ source = "INSP SitRep 012 (data as of 26 May 2026), front-page `Cumul cas suspec
 # values are the INSP report headline totals (SitReps 009-012); the
 # 18-22 May values predate that headline format and retain the WHO AFRO
 # / early-report baseline (18 May = 516 matches WHO joint sitrep 01).
-# The cut-off (26 May) matches `reported_cases`.
+# FROZEN at 26 May (matches `reported_cases`), two days before the 28 May
+# cut-off: from SitRep 013 (27 May) INSP revised the suspected count
+# downward (906 then 349) as suspects were reclassified, so the series is
+# not extended past its last stable vintage and is missing thereafter.
 [reported_case_history]
 dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
@@ -70,35 +89,76 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
 values = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
 source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://github.com/INRB-UMIE/Ebola_DRC_2026, data/insp_sitrep/raw; recorded in data/insp_sitrep_scanned.csv). National cumulative suspected cases from each report's headline; the 18-22 May points use the WHO AFRO / early-report baseline."
 
-[confirmed_cases]
-value  = 121
-source = "INSP SitRep 012 (data as of 26 May 2026) section IV.3 LABORATOIRE — `Cumul positifs` (equal to the front-page `Cumul cas confirmés`), read from the situation-report PDF. National cumulative laboratory-confirmed cases, including positives not yet linked to a reporting zone (`échantillons sans fiche`). Pairs with [cumulative_tests_analysed] for the per-test positivity (121/403 ≈ 30%); the cut-off matches the end of [confirmed_case_history]."
+# The confirmed-case and laboratory streams are held as time series
+# only; the cut-off scalars the model uses (`confirmed_cases`,
+# `cumulative_tests_analysed`) are derived from the final vintage of the
+# corresponding history at load time, so the series are the single
+# source of truth.
 
-[cumulative_tests_analysed]
-value  = 403
-source = "INSP SitRep 012 (data as of 26 May 2026) section IV.3 LABORATOIRE — `Cumul échantillons analysés`, read from the situation-report PDF. Cumulative number of suspected-case specimens that the Bunia/INRB pipeline has completed processing by the cut-off. Of 662 specimens received, 403 have been analysed, leaving a 259-specimen backlog; this gives a natural right-truncation handle on the per-test positivity rate (121/403 ≈ 30%). Testing in Ituri stalled mid-period (SitRep 011, 25 May: `Aucun échantillon n'a été analysé en Ituri`)."
+# Cumulative national laboratory throughput across INSP situation-report
+# vintages (section IV.3 LABORATOIRE Tableau IV): specimens received and
+# specimens whose analysis has completed. The 23-26 May points are
+# SitReps 009-012; 27-28 May are SitReps 013-014. The 28 May cut-off is
+# received 883, analysed 755. The model uses the final `tests_analysed`
+# value (755) as the cut-off tests total, paired with the confirmed
+# count for the per-test positivity (210/755 ≈ 28%) and the
+# right-truncation handle. From 29 May the lab section reports Bunia-only
+# or 24h figures, not a national cumulative, so these series end at the
+# cut-off.
+[tests_received_history]
+dates  = ["2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26",
+          "2026-05-27", "2026-05-28"]
+values = [418, 431, 431, 662, 774, 883]
+source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 LABORATOIRE Tableau IV `Échantillons reçus` (cumul), read from the PDFs; recorded in data/insp_sitrep_scanned.csv."
+
+[tests_analysed_history]
+dates  = ["2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26",
+          "2026-05-27", "2026-05-28"]
+values = [211, 295, 295, 403, 648, 755]
+source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 LABORATOIRE Tableau IV `Nbre d'échantillons analysés` (cumul), read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Analysis stalled 24-25 May (flat at 295; SitRep 011: `Aucun échantillon n'a été analysé en Ituri`)."
 
 # Cumulative national confirmed-case totals across INSP situation-report
 # vintages (the lab-section `Cumul positifs`, equal to the front-page
 # `Cumul cas confirmés`). Same caveats as `reported_case_history`: the
-# daily likelihood fits the between-vintage increments. The 23-26 May
-# values are the report totals (which include positives not yet linked
-# to a zone); 18-22 May use the early-report baseline. Dates match the
-# suspected history so the streams share day boundaries. The cut-off
-# (26 May, 121) matches `confirmed_cases`.
+# daily likelihood fits the between-vintage increments. The 23-28 May
+# values are the report totals; 18-22 May use the early-report baseline.
+# The final vintage (28 May, 210) is the cut-off confirmed total the
+# model uses (derived at load time), paired with `tests_analysed_history`
+# for the per-test positivity (210/755 ≈ 28%). The series runs to the
+# cut-off; the confirmed-based format from 29 May (263, 282, 321 on
+# 29-31 May) is recorded in data/insp_sitrep_scanned.csv but not added
+# here, since national testing stops after 28 May and the model anchors
+# confirmed cases through the laboratory positivity.
 [confirmed_case_history]
 dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
-          "2026-05-26"]
-values = [33, 51, 57, 79, 83, 101, 105, 106, 121]
-source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs`); the 18-22 May points use the early-report baseline."
+          "2026-05-26", "2026-05-27", "2026-05-28"]
+values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
+source = "INSP situation reports 18-28 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline."
+
+# Cumulative national confirmed-death totals (front-page `Cumul décès
+# parmi les confirmés`). First published in the SitRep 012 revised
+# re-issue (26 May); 17 on 26-28 May. INSP flags these as
+# under-estimated because diagnostic confirmation is delayed. The series
+# is flat over the fitted window (the jump to 42 on 29 May and 48 on
+# 31 May reflects late confirmation and is recorded in
+# data/insp_sitrep_scanned.csv as data beyond the cut-off). Recorded for
+# completeness as a time series; the cut-off `confirmed_deaths` scalar
+# (17) is derived from the final vintage at load time. The model does not
+# currently fit a confirmed-death stream (the deaths likelihood uses
+# suspected deaths).
+[confirmed_death_history]
+dates  = ["2026-05-26", "2026-05-27", "2026-05-28"]
+values = [17, 17, 17]
+source = "INSP situation reports 26-28 May 2026 (SitReps 012_v2-014), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 over the fitted window; later vintages report 42 (29-30 May) and 48 (31 May)."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
 # likelihood fits the between-vintage increments. The 23-26 May values
 # are the report totals (SitReps 009-012); 18-22 May use the WHO AFRO /
-# early-report baseline (18 May = 131 matches WHO joint sitrep 01). The
-# 26 May cut-off (246) matches `total_deaths`.
+# early-report baseline (18 May = 131 matches WHO joint sitrep 01).
+# FROZEN at 26 May (246, matches `total_deaths`), two days before the
+# 28 May cut-off, and missing thereafter.
 # Note: the 23 May report (SitRep 009) prints 119 cumulative suspected
 # deaths in its headline and Tableau IV total, but its per-zone rows
 # sum to 220 (Mongbalu 88, Rwampara 69, Bunia 48, ...), so the printed
@@ -107,8 +167,8 @@ source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in
 # Note: the 26 May value (246) is from the revised re-issue
 # SitRep_MVE_012-2026_v2; the original SitRep 012 headline was 238.
 # INSP stopped publishing a suspected-death headline from SitRep 014
-# (28 May), so this series cannot be extended past the cut-off on its
-# current basis (see project issue on the reporting-format change).
+# (28 May), so this series is not extended past 26 May on its current
+# basis (see project issue on the reporting-format change).
 [death_history]
 dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",

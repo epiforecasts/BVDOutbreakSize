@@ -309,8 +309,6 @@ observations_table = DataFrame(
         "exports_deaths",
         "total_deaths",
         "reported_cases",
-        "confirmed_cases",
-        "cumulative_tests_analysed",
         "daily_outbound_travellers",
         "daily_outbound_travellers_sd",
         "source_population"
@@ -320,8 +318,6 @@ observations_table = DataFrame(
         obs.exports_deaths,
         obs.total_deaths,
         obs.reported_cases,
-        obs.confirmed_cases,
-        obs.cumulative_tests_analysed,
         obs.daily_outbound_travellers,
         obs.daily_outbound_travellers_sd,
         obs.source_population
@@ -331,8 +327,6 @@ observations_table = DataFrame(
         obs.sources.exports_deaths,
         obs.sources.total_deaths,
         obs.sources.reported_cases,
-        obs.sources.confirmed_cases,
-        obs.sources.cumulative_tests_analysed,
         obs.sources.daily_outbound_travellers,
         obs.sources.daily_outbound_travellers_sd,
         obs.sources.source_population
@@ -350,11 +344,14 @@ const EXPORTS_DEATHS = obs.exports_deaths
 
 observations_table #hide
 
-# The per-vintage cumulative history of the three DRC sitrep streams,
-# the national totals at each INSP situation-report date. The joint
-# model fits the between-vintage increments of these series (a single
-# vintage reduces to the cut-off total). The 23-26 May points are the
-# report totals; 18-22 May use the WHO AFRO / early-report baseline.
+# The per-vintage cumulative history of the DRC sitrep streams, the
+# national totals at each INSP situation-report date. The joint model
+# fits the between-vintage increments of these series (a single vintage
+# reduces to the cut-off total). The suspected streams are frozen at
+# 26 May and the confirmed streams run to the 28 May cut-off, so the
+# table is aligned on the confirmed-case dates and the frozen suspected
+# columns are blank (`missing`) for 27-28 May. The 23-26 May points are
+# the report totals; 18-22 May use the WHO AFRO / early-report baseline.
 # See `data/observations.toml` and `data/insp_sitrep_scanned.csv` for
 # the per-stream sources.
 
@@ -362,11 +359,21 @@ observations_table #hide
 #md # <details><summary>Building the per-vintage time-series table</summary>
 #md # ```
 
+## Align every stream on the confirmed-case dates (the longest history,
+## running to the cut-off) and pad with `missing` where a frozen
+## suspected stream has no vintage for that date.
+_align(h, dates) = map(
+    d -> begin
+        i = findfirst(==(d), h.dates)
+        i === nothing ? missing : h.values[i]
+    end, dates)
+vintage_dates = obs.confirmed_case_history.dates
 vintage_table = DataFrame(
-    sitrep_date = obs.reported_case_history.dates,
-    suspected_cases = obs.reported_case_history.values,
+    sitrep_date = vintage_dates,
+    suspected_cases = _align(obs.reported_case_history, vintage_dates),
     confirmed_cases = obs.confirmed_case_history.values,
-    suspected_deaths = obs.death_history.values
+    suspected_deaths = _align(obs.death_history, vintage_dates),
+    confirmed_deaths = _align(obs.confirmed_death_history, vintage_dates)
 );
 
 #md # ```@raw html
