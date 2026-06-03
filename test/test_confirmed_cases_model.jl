@@ -32,7 +32,7 @@
                 rep.λ_bg, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
                 tests_received_history =
-                    (; days = [20, 40], counts = [6, 11])),
+                (; days = [20, 40], counts = [6, 11])),
             false)
         return st
     end
