@@ -171,10 +171,12 @@
 #   began revising the suspected-case line list downward as suspects were
 #   investigated and either confirmed or ruled out, and from SitRep 014
 #   (28 May) it stopped publishing a suspected-death headline. The cut-off
-#   here (26 May, SitRep 012 revised re-issue) predates this, but the same
-#   reclassification may already be acting within the fitted window, so
-#   there may be more uncertainty in the reported counts than the model
-#   cut-off on its current basis.
+#   is 28 May (SitRep 014); the confirmed and laboratory streams run to it,
+#   but the suspected case and death streams are frozen at their last clean
+#   value (26 May, SitRep 012 revised re-issue). The same reclassification
+#   may already be acting within the fitted window, so there may be more
+#   uncertainty in the reported counts than the model cut-off on its
+#   current basis.
 # - *Onset-to-death delay anchored on Isiro 2012.* A single-
 #   outbreak fit; the delay distribution reporting here follows
 #   [charniga2024](@cite) but cross-outbreak heterogeneity is
@@ -329,8 +331,6 @@ observations_table = DataFrame(
         "exports_deaths",
         "total_deaths",
         "reported_cases",
-        "confirmed_cases",
-        "cumulative_tests_analysed",
         "daily_outbound_travellers",
         "daily_outbound_travellers_sd",
         "source_population"
@@ -340,8 +340,6 @@ observations_table = DataFrame(
         obs.exports_deaths,
         obs.total_deaths,
         obs.reported_cases,
-        obs.confirmed_cases,
-        obs.cumulative_tests_analysed,
         obs.daily_outbound_travellers,
         obs.daily_outbound_travellers_sd,
         obs.source_population
@@ -351,8 +349,6 @@ observations_table = DataFrame(
         obs.sources.exports_deaths,
         obs.sources.total_deaths,
         obs.sources.reported_cases,
-        obs.sources.confirmed_cases,
-        obs.sources.cumulative_tests_analysed,
         obs.sources.daily_outbound_travellers,
         obs.sources.daily_outbound_travellers_sd,
         obs.sources.source_population
@@ -370,11 +366,14 @@ const EXPORTS_DEATHS = obs.exports_deaths
 
 observations_table #hide
 
-# The per-vintage cumulative history of the three DRC sitrep streams,
-# the national totals at each INSP situation-report date. The joint
-# model fits the between-vintage increments of these series (a single
-# vintage reduces to the cut-off total). The 23-26 May points are the
-# report totals; 18-22 May use the WHO AFRO / early-report baseline.
+# The per-vintage cumulative history of the DRC sitrep streams, the
+# national totals at each INSP situation-report date. The joint model
+# fits the between-vintage increments of these series (a single vintage
+# reduces to the cut-off total). The suspected streams are frozen at
+# 26 May and the confirmed streams run to the 28 May cut-off, so the
+# table is aligned on the confirmed-case dates and the frozen suspected
+# columns are blank (`missing`) for 27-28 May. The 23-26 May points are
+# the report totals; 18-22 May use the WHO AFRO / early-report baseline.
 # See `data/observations.toml` and `data/insp_sitrep_scanned.csv` for
 # the per-stream sources.
 
@@ -382,11 +381,21 @@ observations_table #hide
 #md # <details><summary>Building the per-vintage time-series table</summary>
 #md # ```
 
+## Align every stream on the confirmed-case dates (the longest history,
+## running to the cut-off) and pad with `missing` where a frozen
+## suspected stream has no vintage for that date.
+_align(h, dates) = map(
+    d -> begin
+        i = findfirst(==(d), h.dates)
+        i === nothing ? missing : h.values[i]
+    end, dates)
+vintage_dates = obs.confirmed_case_history.dates
 vintage_table = DataFrame(
-    sitrep_date = obs.reported_case_history.dates,
-    suspected_cases = obs.reported_case_history.values,
+    sitrep_date = vintage_dates,
+    suspected_cases = _align(obs.reported_case_history, vintage_dates),
     confirmed_cases = obs.confirmed_case_history.values,
-    suspected_deaths = obs.death_history.values
+    suspected_deaths = _align(obs.death_history, vintage_dates),
+    confirmed_deaths = _align(obs.confirmed_death_history, vintage_dates)
 );
 
 #md # ```@raw html
@@ -1722,8 +1731,8 @@ function joint_obs(o; observe = true)
     rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
     dth, dth_off = _stream(o.death_history, o.total_deaths)
     ## Confirmed cases enter PER VINTAGE over the lab vintages that carry an
-    ## analysed denominator (`samples_analysed_history`, the 23-26 May
-    ## sitreps with denominators 211/295/295/403). Each vintage's cumulative
+    ## analysed denominator (`tests_analysed_history`, the 23-28 May
+    ## sitreps with denominators 211/295/295/403/648/755). Each cumulative
     ## confirmed count is observed as a Binomial on its analysed count, so
     ## the joint conditions on the per-vintage positivity trajectory
     ## (exhaustion + modelled specificity in `confirmed_cases_model`) rather
@@ -1734,9 +1743,9 @@ function joint_obs(o; observe = true)
                 o.confirmed_cases !== missing
     have_pervintage = have_conf &&
                       o.confirmed_case_history !== missing &&
-                      o.samples_analysed_history !== missing
+                      o.tests_analysed_history !== missing
     if have_pervintage
-        sa = o.samples_analysed_history
+        sa = o.tests_analysed_history
         ch = o.confirmed_case_history
         idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
         any(isnothing, idx) &&
@@ -1754,11 +1763,11 @@ function joint_obs(o; observe = true)
         conf = observe ? Union{Missing, Int}[_increments(ccum)...] :
                fill(missing, length(ccum))
         conf_off = aoff
-        ## Samples-received increments (`Cumul échantillons reçus`), aligned
+        ## Tests-received increments (`Cumul échantillons reçus`), aligned
         ## to the kept offsets, condition τ_forward via the received-count
         ## NegBinomial.
-        if o.samples_received_history !== missing
-            sr = o.samples_received_history
+        if o.tests_received_history !== missing
+            sr = o.tests_received_history
             ridx = [findfirst(==(off), sr.offsets) for off in aoff]
             received = any(isnothing, ridx) ? Union{Missing, Int}[] :
                        (observe ?
@@ -1877,7 +1886,7 @@ chn_cases = nuts_sample(
     trace_kw("cases")...);
 chn_confirmed = nuts_sample(
     confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed,
-        obs.samples_received_history.values[end]; growth = growth_now);
+        obs.tests_received_history.values[end]; growth = growth_now);
     trace_kw("confirmed")...);
 chn_exports_deaths = nuts_sample(
     exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now);
@@ -2175,7 +2184,7 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
-# Against the laboratory-confirmed cases recorded by the cut-off (121),
+# Against the laboratory-confirmed cases recorded by the cut-off (210),
 # the estimated infections give the under-ascertainment multiplier
 # (infections per confirmed case); we report it alongside the case
 # fatality ratio as headline quantities.
@@ -2410,7 +2419,7 @@ joint_ppc_fig = plot_posterior_predictive(
     pp_exports_deaths = pp_exports_deaths,
     obs_exports_deaths = obs.exports_deaths,
     pp_tests = pp_tests,
-    obs_tests = obs.samples_received_history.values[end],
+    obs_tests = obs.tests_received_history.values[end],
     pp_confirmed = pp_confirmed,
     obs_confirmed = obs.confirmed_cases);
 
@@ -2443,18 +2452,18 @@ joint_ppc_fig #hide
 ## Confirmed cases span the merged lab vintages (the 25 May stall folded
 ## into 26 May); align the observed cumulative to the kept offsets.
 conf_keep = [i == 1 ||
-             obs.samples_analysed_history.values[i] >
-             obs.samples_analysed_history.values[i - 1]
-             for i in eachindex(obs.samples_analysed_history.values)]
+             obs.tests_analysed_history.values[i] >
+             obs.tests_analysed_history.values[i - 1]
+             for i in eachindex(obs.tests_analysed_history.values)]
 conf_cidx = [findfirst(==(off), obs.confirmed_case_history.offsets)
-             for off in obs.samples_analysed_history.offsets]
+             for off in obs.tests_analysed_history.offsets]
 vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
         observed = obs.reported_case_history.values, colour = :steelblue),
     (; title = "Confirmed cases",
-        dates = obs.samples_analysed_history.dates[conf_keep],
+        dates = obs.tests_analysed_history.dates[conf_keep],
         replicates = collect(pp_joint[@varname(confirmed_cases)]),
         observed = [obs.confirmed_case_history.values[i]
                     for i in conf_cidx][conf_keep], colour = :seagreen),
@@ -2527,7 +2536,7 @@ forecast = forecast_reported(chn_joint;
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
     obs_confirmed = obs.confirmed_cases,
-    obs_tests = obs.samples_received_history.values[end],
+    obs_tests = obs.tests_received_history.values[end],
     obs_analysed = obs.cumulative_tests_analysed,
     forecast_exports = false,
     report_onset_offset = report_onset_offset(obs.as_of_date));
@@ -2983,7 +2992,7 @@ ppc_grid_fig = plot_posterior_predictive_grid(;
         exports_deaths = obs.exports_deaths,
         deaths = obs.total_deaths,
         cases = obs.reported_cases,
-        tests = obs.samples_received_history.values[end],
+        tests = obs.tests_received_history.values[end],
         confirmed = obs.confirmed_cases)
 );
 

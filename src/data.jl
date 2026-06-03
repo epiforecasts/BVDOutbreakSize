@@ -16,9 +16,11 @@ Fields returned:
 - `total_deaths::Int`
 - `reported_cases::Int` — DRC suspected cumulative case count.
 - `confirmed_cases::Union{Int, Missing}` — DRC laboratory-confirmed
-  cumulative case count, the truth-anchor on the latent
+  cumulative case count at the cut-off, the truth-anchor on the latent
   eventually-confirmable pool ``C(T)`` (reported counts are an inflated
-  view); `missing` when no `confirmed_cases` block is present.
+  view). Derived from the final vintage of `confirmed_case_history` (or
+  an explicit `confirmed_cases` scalar block if one is present);
+  `missing` when neither is present.
 - `reported_case_history::Union{NamedTuple, Missing}` — vintage-by-vintage
   cumulative DRC suspected counts, with fields `dates`, `offsets` (days
   before `as_of_date`, sorted ascending) and `values` (cumulative count
@@ -28,13 +30,14 @@ Fields returned:
 - `confirmed_case_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC laboratory-confirmed counts. Drives the daily
   confirmed-cases likelihood. `missing` when absent.
-- `samples_received_history::Union{NamedTuple, Missing}` — same layout for
-  the cumulative lab samples received (`Cumul échantillons reçus`). Ready
-  for the batching follow-up; `missing` when absent.
-- `samples_analysed_history::Union{NamedTuple, Missing}` — same layout for
-  the cumulative lab samples analysed (`Cumul échantillons analysés`).
-  Supplies the per-vintage denominator for the confirmed-case binomial
-  likelihood. `missing` when absent.
+- `confirmed_deaths::Union{Int, Missing}` — DRC cumulative confirmed
+  deaths at the cut-off (front-page `Cumul décès parmi les confirmés`).
+  Derived from the final vintage of `confirmed_death_history` (or an
+  explicit scalar block if present). Recorded for completeness; not
+  currently fitted. `missing` when neither is present.
+- `confirmed_death_history::Union{NamedTuple, Missing}` — same layout for
+  cumulative DRC confirmed deaths. Recorded for completeness; the model
+  does not currently fit a confirmed-death stream. `missing` when absent.
 - `death_history::Union{NamedTuple, Missing}` — same layout for
   cumulative DRC suspected deaths. Drives the daily deaths likelihood.
   `missing` when absent.
@@ -42,8 +45,16 @@ Fields returned:
   of suspected-case specimens whose lab processing has completed by the
   cut-off. Paired with `confirmed_cases` it gives a per-test positivity
   observation; right-truncation is handled inside the model by the lab
-  delay CDF. `missing` when no `cumulative_tests_analysed` block is
+  delay CDF. Derived from the final vintage of `tests_analysed_history`
+  (or an explicit scalar block if present); `missing` when neither is
   present.
+- `tests_received_history::Union{NamedTuple, Missing}` — same layout as
+  the case histories for cumulative specimens received. Recorded for the
+  laboratory-pipeline view; not currently fitted. `missing` when absent.
+- `tests_analysed_history::Union{NamedTuple, Missing}` — same layout for
+  cumulative specimens analysed. Recorded for the laboratory-pipeline
+  view; the model uses only the cut-off `cumulative_tests_analysed`
+  total. `missing` when absent.
 - `daily_outbound_travellers::Real`
 - `daily_outbound_travellers_sd::Real`
 - `source_population::Int`
@@ -100,6 +111,20 @@ function load_observations(
         ord = sortperm(offs; rev = true)
         return (; dates = ds[ord], offsets = offs[ord], values = vs[ord])
     end
+    ## Vintage histories are the single source of truth for the confirmed
+    ## and laboratory streams: the cut-off scalar each stream needs is the
+    ## final (most recent) vintage value. A bare scalar in the TOML still
+    ## takes precedence if one is present, for backward compatibility.
+    reported_hist = _history("reported_case_history")
+    confirmed_hist = _history("confirmed_case_history")
+    confirmed_death_hist = _history("confirmed_death_history")
+    death_hist = _history("death_history")
+    tests_received_hist = _history("tests_received_history")
+    tests_analysed_hist = _history("tests_analysed_history")
+    _hist_end(h) = h === missing ? missing : h.values[end]
+    _scalar(k, h) = haskey(raw, k) ? Int(_val(k)) : _hist_end(h)
+    _scalar_src(k, hk) = haskey(raw, k) ? _src(k) :
+                         (haskey(raw, hk) ? String(raw[hk]["source"]) : missing)
     has_gen = haskey(raw, "genetic_tmrca")
     return (;
         as_of_date = as_of,
@@ -107,16 +132,16 @@ function load_observations(
         exports_deaths = Int(_val("exports_deaths")),
         total_deaths = Int(_val("total_deaths")),
         reported_cases = Int(_val("reported_cases")),
-        confirmed_cases = haskey(raw, "confirmed_cases") ?
-                          Int(_val("confirmed_cases")) : missing,
-        reported_case_history = _history("reported_case_history"),
-        confirmed_case_history = _history("confirmed_case_history"),
-        samples_received_history = _history("samples_received_history"),
-        samples_analysed_history = _history("samples_analysed_history"),
-        death_history = _history("death_history"),
-        cumulative_tests_analysed = haskey(raw, "cumulative_tests_analysed") ?
-                                    Int(_val("cumulative_tests_analysed")) :
-                                    missing,
+        confirmed_cases = _scalar("confirmed_cases", confirmed_hist),
+        confirmed_deaths = _scalar("confirmed_deaths", confirmed_death_hist),
+        reported_case_history = reported_hist,
+        confirmed_case_history = confirmed_hist,
+        confirmed_death_history = confirmed_death_hist,
+        death_history = death_hist,
+        cumulative_tests_analysed = _scalar("cumulative_tests_analysed",
+            tests_analysed_hist),
+        tests_received_history = tests_received_hist,
+        tests_analysed_history = tests_analysed_hist,
         daily_outbound_travellers = float(
             _val("daily_outbound_travellers")),
         daily_outbound_travellers_sd = float(
@@ -139,29 +164,30 @@ function load_observations(
             exports_deaths = _src("exports_deaths"),
             total_deaths = _src("total_deaths"),
             reported_cases = _src("reported_cases"),
-            confirmed_cases = haskey(raw, "confirmed_cases") ?
-                              _src("confirmed_cases") : missing,
+            confirmed_cases = _scalar_src("confirmed_cases",
+                "confirmed_case_history"),
+            confirmed_deaths = _scalar_src("confirmed_deaths",
+                "confirmed_death_history"),
             reported_case_history = haskey(raw, "reported_case_history") ?
                                     String(raw["reported_case_history"]["source"]) :
                                     missing,
             confirmed_case_history = haskey(raw, "confirmed_case_history") ?
                                      String(raw["confirmed_case_history"]["source"]) :
                                      missing,
-            samples_received_history = haskey(raw,
-                "samples_received_history") ?
-                                       String(raw["samples_received_history"]["source"]) :
-                                       missing,
-            samples_analysed_history = haskey(raw,
-                "samples_analysed_history") ?
-                                       String(raw["samples_analysed_history"]["source"]) :
-                                       missing,
+            confirmed_death_history = haskey(raw, "confirmed_death_history") ?
+                                      String(raw["confirmed_death_history"]["source"]) :
+                                      missing,
             death_history = haskey(raw, "death_history") ?
                             String(raw["death_history"]["source"]) :
                             missing,
-            cumulative_tests_analysed = haskey(raw,
-                "cumulative_tests_analysed") ?
-                                        _src("cumulative_tests_analysed") :
-                                        missing,
+            cumulative_tests_analysed = _scalar_src(
+                "cumulative_tests_analysed", "tests_analysed_history"),
+            tests_received_history = haskey(raw, "tests_received_history") ?
+                                     String(raw["tests_received_history"]["source"]) :
+                                     missing,
+            tests_analysed_history = haskey(raw, "tests_analysed_history") ?
+                                     String(raw["tests_analysed_history"]["source"]) :
+                                     missing,
             daily_outbound_travellers = _src("daily_outbound_travellers"),
             daily_outbound_travellers_sd = _src("daily_outbound_travellers_sd"),
             source_population = _src("source_population"),

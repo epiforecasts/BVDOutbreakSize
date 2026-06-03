@@ -72,44 +72,70 @@
     @test issorted(dh.offsets; rev = true)
     @test obs.sources.death_history isa String
     @test !isempty(obs.sources.death_history)
+
+    ## confirmed-case history runs to the 28 May cut-off; its final
+    ## vintage equals the cut-off `confirmed_cases` total.
+    @test obs.confirmed_case_history.values ==
+          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
+    @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
+
+    ## confirmed deaths: recorded, flat at 17 over the fitted window.
+    @test obs.confirmed_deaths isa Integer
+    @test obs.confirmed_death_history isa NamedTuple
+    @test obs.confirmed_death_history.values == [17, 17, 17]
+    @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
+    @test obs.sources.confirmed_death_history isa String
+
+    ## laboratory throughput histories (cumulative national, 23-28 May);
+    ## the analysed series ends at the cut-off `cumulative_tests_analysed`.
+    @test obs.tests_received_history.values ==
+          [418, 431, 431, 662, 774, 883]
+    @test obs.tests_analysed_history.values ==
+          [211, 295, 295, 403, 648, 755]
+    @test obs.tests_analysed_history.values[end] ==
+          obs.cumulative_tests_analysed
+    @test obs.sources.tests_received_history isa String
+    @test obs.sources.tests_analysed_history isa String
 end
 
 @testitem "load_observations returns the lab-throughput histories" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()
 
-    ## samples received / analysed span the four 23-26 May vintages whose
+    ## tests received / analysed span the six 23-28 May vintages whose
     ## lab Tableau IV is present, aligned with the tail of the confirmed
     ## history so the binomial denominator and numerator share dates.
-    for h in (obs.samples_received_history, obs.samples_analysed_history)
+    for h in (obs.tests_received_history, obs.tests_analysed_history)
         @test h isa NamedTuple
         @test hasproperty(h, :dates)
         @test hasproperty(h, :offsets)
         @test hasproperty(h, :values)
         @test h.values isa AbstractVector{<:Integer}
-        @test length(h.values) == 4
+        @test length(h.values) == 6
         ## Oldest first, so edges = T - offset are ascending.
         @test issorted(h.offsets; rev = true)
     end
 
-    @test obs.samples_received_history.values == [418, 431, 431, 662]
-    @test obs.samples_analysed_history.values == [211, 295, 295, 403]
+    @test obs.tests_received_history.values ==
+          [418, 431, 431, 662, 774, 883]
+    @test obs.tests_analysed_history.values ==
+          [211, 295, 295, 403, 648, 755]
     ## Analysed never exceeds received; both align with the lab cut-off.
-    @test all(obs.samples_analysed_history.values .<=
-              obs.samples_received_history.values)
-    @test obs.samples_analysed_history.values[end] ==
+    @test all(obs.tests_analysed_history.values .<=
+              obs.tests_received_history.values)
+    @test obs.tests_analysed_history.values[end] ==
           obs.cumulative_tests_analysed
-    @test obs.samples_received_history.dates ==
-          obs.samples_analysed_history.dates
-    ## Per-vintage confirmed positives never exceed samples analysed (the
-    ## binomial denominator), checked on the shared 23-26 May tail.
+    @test obs.tests_received_history.dates ==
+          obs.tests_analysed_history.dates
+    ## Per-vintage confirmed positives never exceed tests analysed (the
+    ## binomial denominator), checked on the shared 23-28 May tail.
     ch = obs.confirmed_case_history
-    tail = ch.values[(end - 3):end]
-    @test all(tail .<= obs.samples_analysed_history.values)
+    tail = ch.values[(end - 5):end]
+    @test all(tail .<= obs.tests_analysed_history.values)
 
-    @test obs.sources.samples_received_history isa String
-    @test obs.sources.samples_analysed_history isa String
-    @test !isempty(obs.sources.samples_analysed_history)
+    @test obs.sources.tests_received_history isa String
+    @test obs.sources.tests_analysed_history isa String
+    @test !isempty(obs.sources.tests_analysed_history)
 end
 
 @testitem "export_deaths_daily is a daily series to the cut-off" begin
