@@ -37,7 +37,7 @@ Daily probability mass function for the continuous delay `dist` over
 lags `0, 1, …, nmax`, discretised by double interval censoring (uniform
 primary event over a one-day window, then unit-interval censoring of the
 secondary event) via
-[`CensoredDistributions.double_interval_censored`](@ref). This is the
+`CensoredDistributions.double_interval_censored`. This is the
 discrete analogue of the continuous onset-to-event densities used by the
 integral model, and is the discretisation route the renewal convolutions
 rely on. For a LogNormal primary the CDF differentiates cleanly under
