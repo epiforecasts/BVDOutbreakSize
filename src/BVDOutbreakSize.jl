@@ -18,8 +18,8 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Binomial, Normal, LogNormal, Beta,
-                     truncated, censored
+                     NegativeBinomial, Binomial, BetaBinomial, Normal,
+                     LogNormal, Beta, truncated, censored
 using StatsFuns: logit, logistic
 import FastGaussQuadrature
 import CairoMakie
@@ -55,6 +55,7 @@ export REPORT_SCENARIOS,
        exponential_growth_model, genetic_seeding_model, delay_model,
        report_delay_model, test_sensitivity_model,
        test_positivity_model, test_specificity_model, test_selection_model,
+       confirmed_overdispersion_model, confirmed_q_re_model,
        lab_receipt_delay_model, lab_capacity_model,
        incubation_model,
        cfr_model, detection_window_model, traveller_volume_model,

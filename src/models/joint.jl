@@ -287,6 +287,7 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         exports_deaths_model = exports_deaths_model,
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
+        reported_dispersion = nothing,
         ascertainment = pooled_ascertainment_model(),
         deaths_ascertainment = deaths_ascertainment_model(),
         p_deaths_fixed::Union{Nothing, Real} = nothing,
@@ -295,6 +296,10 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
         test_selection = test_selection_model(),
+        confirmed_overdispersion = nothing,
+        confirmed_q_random_effect = nothing,
+        confirmed_selection_clock::Symbol = :time,
+        confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
         genetic = nothing,
         source_population::Real = ITURI_POPULATION,
@@ -340,9 +345,20 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
     n_conf = length(confirmed_offsets)
     p_drc_per_bin = fill(asc_state.p_drc, max(n_rep, n_conf))
 
+    ## Optional separate dispersion for the suspected (reported) stream, so
+    ## the reported likelihood can be loosened (down-weighted) without
+    ## touching the deaths / received dispersion `k`. When `nothing` the
+    ## reported stream shares `k` (the original behaviour).
+    if reported_dispersion === nothing
+        k_rep = k
+    else
+        reported_dispersion_state ~ to_submodel(reported_dispersion, false)
+        k_rep = reported_dispersion_state.k
+    end
+
     reported_edges = [T - δ for δ in reported_offsets]
     reported_state ~ to_submodel(
-        reported_cases_submodel(reported_cases, growth_state, k,
+        reported_cases_submodel(reported_cases, growth_state, k_rep,
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
             test_positivity = test_positivity,
@@ -375,6 +391,10 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
                 test_sensitivity = test_sensitivity,
                 test_specificity = test_specificity,
                 test_selection = test_selection,
+                overdispersion = confirmed_overdispersion,
+                q_random_effect = confirmed_q_random_effect,
+                selection_clock = confirmed_selection_clock,
+                volume_scale = confirmed_volume_scale,
                 report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
     end

@@ -225,6 +225,54 @@ for a sensitivity analysis). Used by [`confirmed_cases_model`](@ref).
 end
 
 """
+Beta-Binomial overdispersion prior for the per-vintage confirmed
+likelihood. The cumulative-to-vintage analysed denominators carry
+laboratory reporting noise (backfill, batching, lab stalls) that a plain
+Binomial cannot absorb, so the per-window positivity is wildly
+non-monotone (0.48, 0.05, 0.15, 0.02, 0.79 on the 28 May data). A
+Beta-Binomial with concentration `φ` lets each window's positive count
+disperse around its mean `ΔA_v · p_pos,v` while keeping the same expected
+positivity, so the smooth positivity curve no longer has to thread every
+noisy window exactly. The Binomial is recovered as `φ → ∞`.
+
+The prior is on `φ` directly (samples per concentration); the default
+`Gamma(2, 25)` (mean 50, mass on 5–150) admits both near-Binomial
+(`φ` large) and strongly-overdispersed (`φ` small) windows. Pass
+`concentration_prior` to override. Used by [`confirmed_cases_model`](@ref)
+when `overdispersed = true`.
+"""
+@model function confirmed_overdispersion_model(;
+        concentration_prior = Gamma(2.0, 25.0))
+    φ_conf ~ concentration_prior
+    return (; φ_conf)
+end
+
+"""
+Per-vintage tested-BVD-share random effect for the confirmed stream. The
+per-window positivity on the 28 May data is non-monotone (0.48, 0.05,
+0.15, 0.02, 0.79): a monotone severe-first / volume q-curve cannot match
+both the early high batch and the late 28 May surge. This submodel adds a
+partially-pooled logit-scale offset to the smooth baseline share, so each
+vintage's tested BVD fraction `q_v = logistic(logit(q_base,v) + σ_q·z_v)`
+can fit its own positivity while sharing strength through the pooling
+scale `σ_q`.
+
+The sensitivity `s` stays fixed (an assay property); the positivity wobble
+is absorbed entirely by the mixture share `q` (the fraction of the batch
+that is truly BVD), honouring the principle that positivity moves through
+who is tested, not through `s`. `n` IID standard-normal offsets `z_q` and
+the pooling SD `σ_q ~ truncated(Normal(0, 1); lower = 0)` (logit-scale)
+are sampled; `σ_q → 0` recovers the smooth baseline curve. Used by
+[`confirmed_cases_model`](@ref) when `q_random_effect = true`.
+"""
+@model function confirmed_q_re_model(n::Integer;
+        sigma_prior = truncated(Normal(0.0, 1.0); lower = 0))
+    σ_q ~ sigma_prior
+    z_q ~ filldist(Normal(0, 1), n)
+    return (; σ_q, z_q)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Underlies the suspected/confirmed contrast; the
@@ -350,6 +398,26 @@ following the Stan prior-choice recommendations.
     inv_sqrt_k ~ inv_sqrt_k_prior
     k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
     return (; k, inv_sqrt_k)
+end
+
+"""
+Separate negative-binomial dispersion for the suspected (reported) stream
+only, so that stream can be down-weighted (loosened) without changing the
+deaths / received dispersion `k`. Identical structure to
+[`surveillance_dispersion_model`](@ref) but with distinctly-named sampled
+and deterministic variables (`inv_sqrt_k_rep`, `k_rep`), so the two
+dispersions can coexist in the joint composer without a `:=` name clash.
+A wider default prior (`truncated(Normal(1.2, 0.4); lower = 0)`, smaller
+`k`, heavier-tailed NegBinomial) down-weights the suspected counts so the
+confirmed stream drives the shared parameters; pass `inv_sqrt_k_prior` to
+override. Used by [`bvd_joint`](@ref) via its `reported_dispersion`
+keyword.
+"""
+@model function reported_dispersion_model(;
+        inv_sqrt_k_prior = truncated(Normal(1.2, 0.4); lower = 0))
+    inv_sqrt_k_rep ~ inv_sqrt_k_prior
+    k_rep := 1.0 / (inv_sqrt_k_rep^2 + eps(typeof(inv_sqrt_k_rep)))
+    return (; k = k_rep, inv_sqrt_k = inv_sqrt_k_rep)
 end
 
 """

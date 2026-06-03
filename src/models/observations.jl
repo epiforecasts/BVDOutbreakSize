@@ -305,11 +305,30 @@ cumulative confirmed Binomial.
         capacity_model = lab_capacity_model,
         capacity_centre::Real = 150.0,
         report_onset_offset::Union{Nothing, Real} = nothing,
+        overdispersion = nothing,
+        q_random_effect = nothing,
+        selection_clock::Symbol = :time,
+        volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
     selection_state ~ to_submodel(test_selection, false)
     receipt_state ~ to_submodel(receipt_delay, false)
+    if overdispersion !== nothing
+        overdispersion_state ~ to_submodel(overdispersion, false)
+        φ_conf = overdispersion_state.φ_conf
+    else
+        φ_conf = nothing
+    end
+    n_edges_re = length(t_edges)
+    if q_random_effect !== nothing
+        q_re_state ~ to_submodel(q_random_effect(n_edges_re), false)
+        σ_q = q_re_state.σ_q
+        z_q = q_re_state.z_q
+    else
+        σ_q = nothing
+        z_q = nothing
+    end
     n_edges = length(t_edges)
     capacity_state ~ to_submodel(
         capacity_model(n_edges; capacity_centre = capacity_centre), false)
@@ -374,6 +393,17 @@ cumulative confirmed Binomial.
     ## (no floor); the plateau s·qinf + (1−spec)(1−qinf) holds the late
     ## positivity. The binomial conditions on the observed analysed
     ## denominator.
+    ## Cumulative analysed volume at each edge, for the volume-indexed
+    ## clock. The severe-first share then relaxes with how many samples have
+    ## been processed rather than calendar time, so a lab stall (no new
+    ## analysed) does not advance the curve.
+    analysed_cum_at = Vector{Tt}(undef, n)
+    acc_a = zero(Tt)
+    for i in 1:n
+        acc_a += samples_analysed[i] === missing ? zero(Tt) :
+                 convert(Tt, samples_analysed[i])
+        analysed_cum_at[i] = acc_a
+    end
     for i in 1:n
         s_i = oftype(T, t_edges[i])
         μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
@@ -385,9 +415,25 @@ cumulative confirmed Binomial.
         qinf_count_at[i] = denom > zero(Tt) ?
                            clamp(μ_bvd / denom, zero(Tt), one(Tt)) :
                            zero(Tt)
-        ## Elapsed time since testing onset for this vintage.
-        c_i = max(s_i - oftype(s_i, t_report), zero(s_i))
-        q = severe_first_share(q0, qinf_c, c_i, decay_scale)
+        ## Clock for the severe-first share: elapsed time since testing
+        ## onset (`:time`) or cumulative analysed volume in units of
+        ## `volume_scale` samples (`:volume`).
+        c_i = selection_clock === :volume ?
+              analysed_cum_at[i] / convert(Tt, volume_scale) :
+              max(s_i - oftype(s_i, t_report), zero(s_i))
+        q_base = severe_first_share(q0, qinf_c, c_i, decay_scale)
+        ## Optional partially-pooled per-window offset on the tested BVD
+        ## share, logit-scale, so each vintage's positivity can fit the
+        ## non-monotone wobble while `s` stays fixed. `σ_q → 0` recovers the
+        ## smooth baseline curve.
+        if z_q === nothing
+            q = q_base
+        else
+            qb = clamp(q_base, eps(Tt), one(Tt) - eps(Tt))
+            q = clamp(
+                logistic(logit(qb) + convert(Tt, σ_q) * convert(Tt, z_q[i])),
+                zero(Tt), one(Tt))
+        end
         q_at[i] = q
         p_raw = s_test * q + (one(Tt) - spec_test) * (one(Tt) - q)
         p_pos[i] = isfinite(p_raw) ?
@@ -408,7 +454,16 @@ cumulative confirmed Binomial.
         A_i = samples_analysed[i] === missing ?
               (tests_analysed === missing ? 0 : tests_analysed) :
               samples_analysed[i]
-        confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
+        if φ_conf === nothing
+            confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
+        else
+            ## Beta-Binomial: positives disperse around ΔA·p with
+            ## concentration φ (α = φ·p, β = φ·(1−p)), absorbing the
+            ## laboratory reporting noise the plain Binomial cannot.
+            α_bb = max(φ_conf * p_pos[i], eps(Tt))
+            β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
+            confirmed_cases[i] ~ BetaBinomial(Int(A_i), α_bb, β_bb)
+        end
     end
 
     ## Received queue: the suspect backlog reaches the lab after a transport
