@@ -102,39 +102,41 @@ end
 
 """
 Confirmed-deaths-only composer (laboratory-confirmed deaths in
-isolation). Samples the growth, ascertainment, report-delay and
-background machinery the confirmed-case stream uses to derive the BVD
-composition `q = μ_BVD/N_susp` at the cut-off, then conditions a single
-cumulative confirmed-death total (`Cumul décès parmi les confirmés`) on
-the observed suspected-death total through the Binomial thinning
-`Binomial(D_susp, clamp(m_death·q, 0, 1))` (see
-[`confirmed_deaths_model`](@ref)). The thinning probability is an input
-from the case composition; only the tight enrichment scalar `m_death` is
-free. `confirmed_deaths` defaults to `missing` (posterior-predictive
-generator); pass an integer to condition.
+isolation). Samples the growth, CFR, onset-to-death delay and incubation
+machinery the deaths stream uses to build the modelled BVD-death
+trajectory, plus the shared PCR sensitivity, then conditions a single
+cumulative confirmed-death total (`Cumul décès parmi les confirmés`) by
+thinning the modelled BVD-death increment by `coverage_death · s` (see
+[`confirmed_deaths_model`](@ref)). `coverage_death` is the free death-
+specimen submission rate; `s` is the shared confirmed-case sensitivity.
+`confirmed_deaths` defaults to `missing` (posterior-predictive generator);
+pass an integer to condition. `susp_deaths` is retained for the public
+signature but no longer feeds the likelihood (the modelled trajectory is
+thinned, not the observed suspected count).
 """
 @model function confirmed_deaths_only_model(
         susp_deaths::Integer,
         confirmed_deaths::Union{Missing, Integer} = missing;
         growth = exponential_growth_model(),
         confirmed_deaths_submodel = confirmed_deaths_model,
-        ascertainment = pooled_ascertainment_model(),
-        test_positivity = test_positivity_model(),
-        report_delay = report_delay_model(),
+        delay = delay_model(),
+        cfr = cfr_model(),
+        dispersion = surveillance_dispersion_model(),
+        test_sensitivity = test_sensitivity_model(),
         incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
-    asc_state ~ to_submodel(ascertainment, false)
-    report_state ~ to_submodel(report_delay, false)
-    test_positivity_state ~ to_submodel(test_positivity, false)
+    delay_state ~ to_submodel(delay, false)
+    cfr_state ~ to_submodel(cfr, false)
+    dispersion_state ~ to_submodel(dispersion, false)
+    sensitivity_state ~ to_submodel(test_sensitivity, false)
     incubation_state ~ to_submodel(incubation, false)
     os = onset_rescale(incubation_state.dist, growth_state.r)
-    q_edges = bvd_count_composition(growth_state.r, asc_state.p_drc,
-        test_positivity_state.λ_bg, report_state.dist, [growth_state.T];
-        onset_fraction = os)
+    death_mu_edges = bvd_death_trajectory(growth_state.r, cfr_state.CFR,
+        delay_state.dist, [growth_state.T]; onset_fraction = os)
     confirmed_vec = Union{Missing, Int}[confirmed_deaths]
     confirmed_deaths_state ~ to_submodel(
-        confirmed_deaths_submodel(confirmed_vec, [susp_deaths],
-            q_edges), false)
+        confirmed_deaths_submodel(confirmed_vec, death_mu_edges,
+            sensitivity_state.s_test, dispersion_state.k), false)
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
@@ -296,12 +298,13 @@ received-versus-suspected; left empty it drops the received likelihood.
 `confirmed_deaths` is an optional per-vintage laboratory-confirmed-death
 increment vector (the sitrep front-page `Cumul décès parmi les
 confirmés`, deaths that got confirmed) aligned with
-`confirmed_death_offsets` (default `death_offsets`). Each increment is a
-Binomial thinning of the matching observed suspected-death increment
-supplied in `confirmed_death_susp_increments`, with a per-suspected-death
-confirmation probability `p_death_conf` (see
-[`confirmed_deaths_model`](@ref)). Left empty (the default) the stream is
-off and existing callers are unchanged.
+`confirmed_death_offsets` (default `death_offsets`). Each increment thins
+the modelled BVD-death trajectory (at the confirmed-death edges, sharing
+the deaths CFR / delay / growth) by `coverage_death · s`, with `s` the
+shared confirmed-case sensitivity and `coverage_death` the death-specimen
+submission rate (see [`confirmed_deaths_model`](@ref)). It requires the
+confirmed-case stream for `s`. Left empty (the default) the stream is off
+and existing callers are unchanged.
 
 `confirmed_q_random_effect` is the per-vintage tested-BVD-share random
 effect for the confirmed positivity (see [`confirmed_q_re_model`](@ref)),
@@ -331,7 +334,6 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         confirmed_cases::AbstractVector = Union{Missing, Int}[],
         confirmed_offsets::AbstractVector = reported_offsets,
         confirmed_deaths::AbstractVector = Union{Missing, Int}[],
-        confirmed_death_susp_increments::AbstractVector = Union{Missing, Int}[],
         confirmed_death_offsets::AbstractVector = death_offsets,
         samples_analysed::AbstractVector = Union{Missing, Int}[],
         samples_received::AbstractVector = Union{Missing, Int}[],
@@ -460,22 +462,22 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
 
     if !isempty(confirmed_deaths)
         ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
-        ## deaths get tested because they occurred, so the increment is a
-        ## Binomial thinning of the suspected-death increment. There is no
-        ## death-specific lab denominator, so the thinning probability is
-        ## an INPUT: the confirmed-case BVD composition `μ_BVD/N_susp`
-        ## evaluated at the death edges from the shared report delay,
-        ## ascertainment and background, times the tight enrichment scalar
-        ## `m_death`. The suspected-death denominator is supplied as data;
-        ## offsets default to the suspected-death offsets.
+        ## a confirmed death is a true BVD death whose post-mortem swab was
+        ## submitted and tested positive. Thin the MODELLED BVD-death
+        ## trajectory (CFR-weighted convolution at the confirmed-death edges,
+        ## sharing the deaths CFR / delay / growth / drift) by the death
+        ## testing-coverage times the SHARED case sensitivity `s`. The
+        ## specimen is BVD (`q = 1`), so its positivity is `s`, not `s·q`.
+        isempty(confirmed_cases) &&
+            error("confirmed_deaths requires confirmed_cases for the " *
+                  "shared sensitivity `s`")
         cdeath_edges = [T - δ for δ in confirmed_death_offsets]
-        q_death_edges = bvd_count_composition(growth_state.r,
-            asc_state.p_drc, reported_state.λ_bg,
-            reported_state.report_delay_dist, cdeath_edges;
-            onset_fraction = os)
+        death_mu_edges = bvd_death_trajectory(growth_state.r,
+            deaths_state.CFR, deaths_state.delay_dist, cdeath_edges;
+            p_deaths = p_deaths, onset_fraction = os)
         confirmed_deaths_state ~ to_submodel(
-            confirmed_deaths_submodel(confirmed_deaths,
-                confirmed_death_susp_increments, q_death_edges), false)
+            confirmed_deaths_submodel(confirmed_deaths, death_mu_edges,
+                confirmed_state.s_test, k), false)
     end
 
     exports_deaths_state ~ to_submodel(

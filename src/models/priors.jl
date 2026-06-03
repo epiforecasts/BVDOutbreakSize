@@ -363,24 +363,22 @@ matching the CDC summary for past BVD outbreaks. Used by
 end
 
 """
-BVD-enrichment multiplier for confirmed deaths. There is no death-
-specific laboratory denominator (no analysed/tested count for deaths), so
-the per-suspected-death confirmation probability cannot be identified as a
-free parameter. Instead it is derived from the confirmed-case BVD
-composition `q = μ_BVD / N_susp` (the count-implied BVD share among
-suspects the confirmed-cases stream already estimates) times this single
-scalar `m_death`: `p_death_conf = clamp(m_death · q, 0, 1)`. The
-multiplier captures that deaths are likelier true BVD than the general
-suspect pool (and tested at different coverage). Its default prior
-`LogNormal(0, 0.25)` is tight and centred on 1 (no enrichment), 95%
-interval ≈ 0.61-1.63, the most the single informative point (17/246) can
-support; set the SD to zero to tie deaths directly to the case
-composition. Used by [`confirmed_deaths_model`](@ref).
+Lab-confirmation coverage for BVD deaths: the fraction of true BVD deaths
+whose specimen reaches the laboratory and is tested. The confirmed-death
+increment thins the *modelled* BVD-death trajectory by `coverage_death · s`,
+where `s` is the shared confirmed-case PCR sensitivity
+([`test_sensitivity_model`](@ref)). A death specimen is BVD (`q = 1`), so
+its positivity is `s`, not `s · q`; `coverage_death` carries the
+death-specimen submission rate. It is identified by the single point (17
+confirmed against the modelled BVD-death total ≈ 246 suspected deaths)
+given `s` from the cases, so no degeneracy. Default `Beta(2, 5)` is
+weakly-informative favouring low coverage (mean 0.29, 95% interval ≈
+0.04-0.64). Used by [`confirmed_deaths_model`](@ref).
 """
-@model function confirmed_death_enrichment_model(;
-        enrichment_prior = LogNormal(0.0, 0.25))
-    m_death ~ enrichment_prior
-    return (; m_death)
+@model function death_coverage_model(;
+        coverage_prior = Beta(2.0, 5.0))
+    coverage_death ~ coverage_prior
+    return (; coverage_death)
 end
 
 """
