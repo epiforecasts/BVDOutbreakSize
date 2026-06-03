@@ -409,7 +409,12 @@ function export_at_risk(traj::ExportRiskTrajectory,
             δ <= zero(δ) && continue
             removed += traj.w_growth[j] * _gamma_cdf(α, θ, δ)
         end
-        out[k] = _exp_cumulative_integral(r, zero(tk), tk) - removed
+        ## Clamp to finite non-negative: at an extreme `r` proposal both
+        ## the growth integral and `removed` overflow to `Inf`, so their
+        ## difference is `NaN`; left unclamped it would reach `Poisson` and
+        ## throw under AD (the prior path clamped the same way).
+        val = _exp_cumulative_integral(r, zero(tk), tk) - removed
+        out[k] = isfinite(val) ? max(val, zero(Tt)) : zero(Tt)
     end
     return out
 end
@@ -438,7 +443,9 @@ function export_death_at_risk(traj::ExportRiskTrajectory,
                    (one(δ) - _gamma_cdf(αd, θd, δ)) *
                    _gamma_cdf(αx, θx, δ)
         end
-        out[k] = acc
+        ## Clamp to finite non-negative against `Inf`/`NaN` from extreme
+        ## `r` proposals (see `export_at_risk`).
+        out[k] = isfinite(acc) ? max(acc, zero(Tt)) : zero(Tt)
     end
     return out
 end

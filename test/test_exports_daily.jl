@@ -88,6 +88,27 @@ end
     end
 end
 
+@testitem "export at-risk engines stay finite at extreme growth" begin
+    using Distributions: Gamma
+    using BVDOutbreakSize: ExportRiskTrajectory, export_at_risk,
+                           export_death_at_risk
+
+    f_det = Gamma(4.3, 2.6)
+    f_death = Gamma(4.3, 2.6)
+    edges = [30.0, 60.0, 90.0]
+    ## A NUTS proposal can drive `r` high enough that exp(r·t) overflows;
+    ## the growth integral and the removed convolution both go to Inf, so
+    ## their difference is NaN. The engines must clamp, or the NaN reaches
+    ## Poisson and throws under AD.
+    for r in (0.5, 1.0, 2.0)
+        traj = ExportRiskTrajectory(90.0, r)
+        a = export_at_risk(traj, edges, f_det)
+        d = export_death_at_risk(traj, edges, f_det, f_death)
+        @test all(isfinite, a) && all(>=(0.0), a)
+        @test all(isfinite, d) && all(>=(0.0), d)
+    end
+end
+
 @testitem "export_at_risk is reverse-mode differentiable" tags=[:ad] begin
     using Distributions: Gamma
     using Mooncake: Mooncake
