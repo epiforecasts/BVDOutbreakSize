@@ -2890,9 +2890,9 @@ pp_confirmed_only_chn = predict(
     confirmed_only_model(missing, obs.cumulative_tests_analysed),
     chn_confirmed);
 pp_confirmed_only = vec([v[end]
-    for v in pp_confirmed_only_chn[@varname(confirmed_cases)]]);
+                         for v in pp_confirmed_only_chn[@varname(confirmed_cases)]]);
 pp_tests_only = vec([v[end]
-    for v in pp_confirmed_only_chn[@varname(samples_received)]]);
+                     for v in pp_confirmed_only_chn[@varname(samples_received)]]);
 
 ppc_grid_fig = plot_posterior_predictive_grid(;
     individual = (; exports = pp_exports_only,
