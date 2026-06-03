@@ -156,23 +156,27 @@ on that day (`t_last = T - last_offset`) instead of the cut-off.
     ## zero. The at-risk clock and the per-day grid anchor on this date.
     t_last = T - last_offset
 
-    Λ(t) = expected_exports_delay(r, p_uganda, q, t, f_det)
+    ## One at-risk trajectory over [0, t_last], reused across every edge
+    ## (the pre-detection edge at i = 0 plus the n daily edges), the
+    ## travel-gated analogue of the DRC `DailyBVDTrajectory` convolution.
+    traj = ExportRiskTrajectory(t_last, r)
+    edges = [t_last - n + i for i in 0:n]
+    Λ = p_uganda .* q .* export_at_risk(traj, edges, f_det)
 
     ## Pre-detection zero stretch as one Poisson observed at 0; `missing`
     ## generates it for predictive checks. This is the first-detection
     ## timing bound: no export expected before the earliest detection.
-    pre = t_last - n > zero(T) ? Λ(t_last - n) : zero(T)
-    pre_detection_exports ~ Poisson(max(pre, zero(pre)))
+    pre = max(Λ[1], zero(eltype(Λ)))
+    pre_detection_exports ~ Poisson(pre)
 
     ## Per-day means via the shared between-edge differencing, starting
     ## from the pre-detection survival weight `pre`.
-    Λ_at_edges = [Λ(t_last - n + i) for i in 1:n]
-    μ_day = daily_increment_kernel(Λ_at_edges, pre)
+    μ_day = daily_increment_kernel(Λ[2:end], pre)
     for i in 1:n
         exported_cases_daily[i] ~ Poisson(μ_day[i])
     end
 
-    expected_exports_T := Λ(t_last)
+    expected_exports_T := max(Λ[end], eps(eltype(Λ)))
     return (; f_det, daily_travellers, p_uganda,
         expected_exports = expected_exports_T)
 end
@@ -596,7 +600,7 @@ right-truncated by reporting lag.
         f_det,
         daily_travellers::Real,
         source_population::Real = ITURI_POPULATION)
-    cumulative = growth_state.cumulative
+    r = growth_state.r
     T = growth_state.T
     q = daily_travellers / source_population
     n = length(export_deaths_daily)   # earliest death to last series day
@@ -609,21 +613,23 @@ right-truncated by reporting lag.
     ## this date.
     t_last = T - last_offset
 
-    ## Per-edge intensity is the infection-keyed delay-survival
-    ## expectation: the infection→death CDF weighted by the
-    ## infection→detection survival, which is 1 at age 0.
-    Λ(t) = expected_exports_deaths_delay(
-        cumulative, f_det, delay_dist, CFR, p_uganda, q, t)
+    ## One at-risk trajectory over [0, t_last] shared across every edge,
+    ## the same engine as the export-case stream. The per-edge intensity
+    ## is the infection-keyed delay-survival weight: the infection→death
+    ## CDF weighted by the infection→detection survival (1 at age 0).
+    traj = ExportRiskTrajectory(t_last, r)
+    edges = [t_last - n + i for i in 0:n]
+    Λ = (CFR * p_uganda * q) .*
+        export_death_at_risk(traj, edges, f_det, delay_dist)
 
     ## Pre-death zero stretch as one Poisson observed at 0; `missing`
     ## generates it for predictive checks.
-    pre = t_last - n > zero(T) ? Λ(t_last - n) : zero(T)
-    pre_start_deaths ~ Poisson(max(pre, zero(pre)))
+    pre = max(Λ[1], zero(eltype(Λ)))
+    pre_start_deaths ~ Poisson(pre)
 
     ## Per-day means via the shared between-edge differencing, starting
     ## from the pre-death survival weight `pre`.
-    Λ_at_edges = [Λ(t_last - n + i) for i in 1:n]
-    μ_day = daily_increment_kernel(Λ_at_edges, pre)
+    μ_day = daily_increment_kernel(Λ[2:end], pre)
     for i in 1:n
         export_deaths_daily[i] ~ Poisson(μ_day[i])
     end

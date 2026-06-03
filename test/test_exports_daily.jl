@@ -52,6 +52,58 @@
     end
 end
 
+@testitem "export_at_risk matches expected_exports_delay" begin
+    using Distributions: Gamma
+    using BVDOutbreakSize: ExportRiskTrajectory, export_at_risk,
+                           expected_exports_delay
+
+    r = 0.05
+    f_det = Gamma(4.3, 2.6)
+    edges = [20.0, 45.0, 70.0, 90.0]
+    traj = ExportRiskTrajectory(maximum(edges), r)
+    got = export_at_risk(traj, edges, f_det)
+    ## p = q = 1 so the wrapper returns the bare at-risk person-time.
+    for (i, t) in enumerate(edges)
+        want = expected_exports_delay(r, 1.0, 1.0, t, f_det)
+        @test got[i] ≈ want rtol = 1e-3
+    end
+end
+
+@testitem "export_death_at_risk matches expected_exports_deaths_delay" begin
+    using Distributions: Gamma
+    using BVDOutbreakSize: ExportRiskTrajectory, export_death_at_risk,
+                           expected_exports_deaths_delay
+
+    r = 0.05
+    cumulative = s -> exp(r * s)
+    f_det = Gamma(4.3, 2.6)
+    f_death = Gamma(4.3, 2.6)
+    edges = [30.0, 60.0, 90.0]
+    traj = ExportRiskTrajectory(maximum(edges), r)
+    got = export_death_at_risk(traj, edges, f_det, f_death)
+    for (i, t) in enumerate(edges)
+        want = expected_exports_deaths_delay(cumulative, f_det, f_death,
+            1.0, 1.0, 1.0, t)
+        @test got[i] ≈ want rtol = 1e-2
+    end
+end
+
+@testitem "export_at_risk is reverse-mode differentiable" tags=[:ad] begin
+    using Distributions: Gamma
+    using Mooncake: Mooncake
+    using BVDOutbreakSize: ExportRiskTrajectory, export_at_risk
+
+    edges = [20.0, 45.0, 70.0, 90.0]
+    f(r) = begin
+        traj = ExportRiskTrajectory(90.0, r)
+        sum(export_at_risk(traj, edges, Gamma(4.3, 2.6)))
+    end
+    cache = Mooncake.prepare_gradient_cache(f, 0.05)
+    g = Mooncake.value_and_gradient!!(cache, f, 0.05)[2][2]
+    @test isfinite(g)
+    @test g > 0   # more growth ⇒ more at-risk person-time
+end
+
 @testitem "exports daily means partition the cumulative expectation" begin
     using Distributions: Gamma
     using BVDOutbreakSize: expected_exports_delay, daily_increment_kernel
@@ -116,19 +168,23 @@ end
 
 @testitem "exports_daily_delay_model last_offset stops the model early" tags=[:slow] setup=[ExportsDailyFixtures] begin
     using Turing: sample, Prior
-    using Statistics: mean
+    using Random: MersenneTwister
     import FlexiChains
 
     ## The same detection series fit to the cut-off vs stopped three days
     ## early (last reported import). Stopping early evaluates the expected
     ## exports at the earlier date, so the per-draw expectation is lower.
+    ## Same seed pairs the parameter draws, so the only difference is the
+    ## anchor date and the comparison is exact per draw (the expectation is
+    ## heavy-tailed, so unpaired means are too noisy to compare).
     daily=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]
-    chn0=sample(_xc_only(daily; last_offset = 0), Prior(), 300;
-        chain_type = FlexiChains.VNChain, progress = false)
-    chn3=sample(_xc_only(daily; last_offset = 3), Prior(), 300;
-        chain_type = FlexiChains.VNChain, progress = false)
-    @test mean(vec(Array(chn3[:expected_exports_T]))) <
-          mean(vec(Array(chn0[:expected_exports_T])))
+    chn0=sample(MersenneTwister(1), _xc_only(daily; last_offset = 0),
+        Prior(), 200; chain_type = FlexiChains.VNChain, progress = false)
+    chn3=sample(MersenneTwister(1), _xc_only(daily; last_offset = 3),
+        Prior(), 200; chain_type = FlexiChains.VNChain, progress = false)
+    e0=vec(Array(chn0[:expected_exports_T]))
+    e3=vec(Array(chn3[:expected_exports_T]))
+    @test all(e3 .< e0)
 end
 
 @testitem "bvd_joint uses the dated export series when provided" tags=[:slow] begin
