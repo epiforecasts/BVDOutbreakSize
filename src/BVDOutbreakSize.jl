@@ -11,6 +11,7 @@ using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
 using Turing: @model, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior
+import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
@@ -33,6 +34,7 @@ export REPORT_SCENARIOS,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        nuts_sample, default_adtype, enzyme_adtype,
+       progress_callback, tensorboard_callback,
        plot_cumulative_cases, plot_density_overlay, plot_prior_predictive,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,

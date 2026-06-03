@@ -19,12 +19,18 @@ cut-off) using the cut-off (`as_of_date`) and a seeding day placed
 `seeding_lead` days before the genetic TMRCA date.
 
 Returns the grid length `n`, the `cutoff` and `seeding` dates, the
-per-stream cumulative totals at the cut-off, the optional
-`tests_analysed` scalar, the per-vintage histories as `(; days, counts)`
-with `days` the grid day-indices, the genetic TMRCA bound `tmrca_days`
-(days before the cut-off), and `who_first_sitrep_days` (days from the
-first situation report, the earliest reported-case vintage, to the
-cut-off). The intervention breakpoint grid day is `n - who_first_sitrep_days`.
+per-stream cumulative totals at the cut-off (`reported_cases`,
+`total_deaths`, `confirmed_cases`, `confirmed_deaths`, `tests_analysed`,
+`exported_cases`, `exports_deaths`), the per-vintage histories as
+`(; days, counts)` with `days` the grid day-indices (`reported_history`,
+`confirmed_history`, `confirmed_deaths_history`, `deaths_history`,
+`lab_history` from the analysed-specimen series, `tests_received_history`),
+the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
+`who_first_sitrep_days` (days from the first situation report, the
+earliest reported-case vintage, to the cut-off). The intervention
+breakpoint grid day is `n - who_first_sitrep_days`. A cut-off scalar with
+no explicit TOML block is derived from the final vintage of the matching
+history.
 """
 function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
@@ -53,6 +59,17 @@ function load_observations(
     end
 
     reported_history = history("reported_case_history")
+    confirmed_history = history("confirmed_case_history")
+    confirmed_deaths_history = history("confirmed_death_history")
+    deaths_history = history("death_history")
+    ## The analysed-specimen series is the laboratory denominator; the
+    ## received series is recorded for the pipeline view but not fitted.
+    lab_history = history("tests_analysed_history")
+    tests_received_history = history("tests_received_history")
+    ## Cut-off scalar from an explicit TOML block, else the final
+    ## (most recent) vintage of the matching history.
+    _hist_end(h) = isempty(h.counts) ? missing : h.counts[end]
+    _scalar(k, h) = haskey(raw, k) ? Int(_val(k)) : _hist_end(h)
     ## The first WHO joint situation report is the earliest reported-case
     ## vintage; days from it to the cut-off set the intervention breakpoint.
     who_first_sitrep_days = isempty(reported_history.days) ? n :
@@ -63,14 +80,16 @@ function load_observations(
         exports_deaths = Int(_val("exports_deaths")),
         total_deaths = Int(_val("total_deaths")),
         reported_cases = Int(_val("reported_cases")),
-        confirmed_cases = haskey(raw, "confirmed_cases") ?
-                          Int(_val("confirmed_cases")) : missing,
-        tests_analysed = haskey(raw, "cumulative_tests_analysed") ?
-                         Int(_val("cumulative_tests_analysed")) : missing,
+        confirmed_cases = _scalar("confirmed_cases", confirmed_history),
+        confirmed_deaths = _scalar("confirmed_deaths",
+            confirmed_deaths_history),
+        tests_analysed = _scalar("cumulative_tests_analysed", lab_history),
         reported_history = reported_history,
-        confirmed_history = history("confirmed_case_history"),
-        deaths_history = history("death_history"),
-        lab_history = history("lab_history"),
+        confirmed_history = confirmed_history,
+        confirmed_deaths_history = confirmed_deaths_history,
+        deaths_history = deaths_history,
+        lab_history = lab_history,
+        tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end

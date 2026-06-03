@@ -113,6 +113,22 @@ each push to `main` also republishes the rendered analysis and the
   matches Mooncake on the single-stream exports composer; differentiating
   the full renewal joint under Enzyme is still work in progress, so
   Mooncake remains the default.
+- Added streaming progress to `nuts_sample` via an optional `callback`
+  (forwarded to `sample`, with arbitrary `kwargs...` passthrough).
+  `progress_callback(; path, every)` is a dependency-free file streamer
+  (tail it live with `tail -f`) that reads step statistics through the
+  `AbstractMCMC.ParamsWithStats` interface; `tensorboard_callback("logs/run")`
+  streams the same statistics to TensorBoard under grouped `params/` and
+  `diagnostics/` tags, with per-draw scalar traces plus running histograms
+  (HISTOGRAMS / DISTRIBUTIONS dashboards) on by default. It needs the
+  optional `TensorBoardLogger` dependency (`using TensorBoardLogger`),
+  exposed via a package extension like the Enzyme backend. Pass
+  `nuts_sample(...; warmup = true)` to also stream the NUTS adaptation
+  phase (step-size tuning, early divergences), which is otherwise
+  discarded and silent.
+- Fixed a posterior-predictive grid regression under AlgebraOfGraphics
+  0.12 and widened the AoG compat bound to include 0.12; bumped the
+  `softprops/action-gh-release` Action to v3.
 
 ## v1.2.0
 
