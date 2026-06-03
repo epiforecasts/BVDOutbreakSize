@@ -36,7 +36,8 @@
         return (; p_uganda)
     end
 
-    @model function _xc_only(exported_cases_daily::AbstractVector)
+    @model function _xc_only(exported_cases_daily::AbstractVector;
+            last_offset = 0)
         growth_state ~ to_submodel(_xc_growth(), false)
         asc_state ~ to_submodel(_xc_pooled(), false)
         incubation_state ~ to_submodel(incubation_model(), false)
@@ -45,7 +46,7 @@
 
         exports_state ~ to_submodel(
             exports_daily_delay_model(exported_cases_daily, growth_state,
-                asc_state.p_uganda, f_det), false)
+                asc_state.p_uganda, f_det; last_offset = last_offset), false)
 
         cumulative_cases := growth_state.C_T
     end
@@ -71,6 +72,16 @@ end
     ## plus the per-day increments recover the cumulative expectation at
     ## the cut-off, the quantity the scalar single-total likelihood uses.
     @test pre + sum(μ_day) ≈ Λ(T) rtol = 1e-10
+
+    ## With a last_offset the series ends at t_last = T - last_offset, so
+    ## the conserved total is the cumulative expectation at t_last, not T.
+    last_offset = 3.0
+    t_last = T - last_offset
+    pre_l = Λ(t_last - n)
+    edges_l = [Λ(t_last - n + i) for i in 1:n]
+    μ_l = daily_increment_kernel(edges_l, pre_l)
+    @test pre_l + sum(μ_l) ≈ Λ(t_last) rtol = 1e-10
+    @test Λ(t_last) < Λ(T)
     @test all(μ_day .> 0)
     @test pre > 0
 end
@@ -101,6 +112,23 @@ end
     @test length(C) == 200
     @test all(isfinite, C)
     @test all(C .> 0)
+end
+
+@testitem "exports_daily_delay_model last_offset stops the model early" tags=[:slow] setup=[ExportsDailyFixtures] begin
+    using Turing: sample, Prior
+    using Statistics: mean
+    import FlexiChains
+
+    ## The same detection series fit to the cut-off vs stopped three days
+    ## early (last reported import). Stopping early evaluates the expected
+    ## exports at the earlier date, so the per-draw expectation is lower.
+    daily=[1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1]
+    chn0=sample(_xc_only(daily; last_offset = 0), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    chn3=sample(_xc_only(daily; last_offset = 3), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    @test mean(vec(Array(chn3[:expected_exports_T]))) <
+          mean(vec(Array(chn0[:expected_exports_T])))
 end
 
 @testitem "bvd_joint uses the dated export series when provided" tags=[:slow] begin

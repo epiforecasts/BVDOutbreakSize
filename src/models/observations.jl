@@ -123,11 +123,20 @@ infection; `f_det` (the incubation ⊕ onset-to-report delay, see
 delay and per-day per-capita travel rate, exactly as in
 [`exports_delay_model`](@ref). Exposes `f_det` and `daily_travellers` for
 the export-deaths delay submodel.
+
+`last_offset` (default 0) places the last series day `last_offset` days
+before the cut-off rather than at the cut-off. Because the export stream
+is travel-gated and cross-border movement patterns likely shift over the
+outbreak (and the most recent days are right-truncated by reporting lag),
+the stream is run only up to the most recent reported import to Uganda;
+the at-risk clock, per-day grid and reported `expected_exports` all anchor
+on that day (`t_last = T - last_offset`) instead of the cut-off.
 """
 @model function exports_daily_delay_model(
         exported_cases_daily::AbstractVector,
         growth_state, p_uganda::Real, f_det;
         pre_detection_exports::Union{Missing, Integer} = 0,
+        last_offset::Real = 0,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model())
     r = growth_state.r
@@ -137,25 +146,33 @@ the export-deaths delay submodel.
     daily_travellers = travel_state.daily_travellers
 
     q = daily_travellers / source_population
-    n = length(exported_cases_daily)   # earliest detection day to cut-off
+    n = length(exported_cases_daily)   # earliest detection to last series day
+
+    ## The series ends `last_offset` days before the cut-off (the date of
+    ## the most recent reported import to Uganda). The travel-gated export
+    ## stream is only run up to that day: cross-border movement patterns
+    ## likely shift over the outbreak and the days after the last import
+    ## are right-truncated by reporting lag, so they carry no informative
+    ## zero. The at-risk clock and the per-day grid anchor on this date.
+    t_last = T - last_offset
 
     Λ(t) = expected_exports_delay(r, p_uganda, q, t, f_det)
 
     ## Pre-detection zero stretch as one Poisson observed at 0; `missing`
     ## generates it for predictive checks. This is the first-detection
     ## timing bound: no export expected before the earliest detection.
-    pre = T - n > zero(T) ? Λ(T - n) : zero(T)
+    pre = t_last - n > zero(T) ? Λ(t_last - n) : zero(T)
     pre_detection_exports ~ Poisson(max(pre, zero(pre)))
 
     ## Per-day means via the shared between-edge differencing, starting
     ## from the pre-detection survival weight `pre`.
-    Λ_at_edges = [Λ(T - n + i) for i in 1:n]
+    Λ_at_edges = [Λ(t_last - n + i) for i in 1:n]
     μ_day = daily_increment_kernel(Λ_at_edges, pre)
     for i in 1:n
         exported_cases_daily[i] ~ Poisson(μ_day[i])
     end
 
-    expected_exports_T := Λ(T)
+    expected_exports_T := Λ(t_last)
     return (; f_det, daily_travellers, p_uganda,
         expected_exports = expected_exports_T)
 end
@@ -564,18 +581,33 @@ unchanged. `f_det` (the incubation ⊕ onset-to-report delay) and
 two Uganda-side likelihoods share person-time. Incubation enters both
 `f_det` and `delay_dist`, a slight accepted double-count of the shared
 incubation period (better than omitting it on death entirely).
+
+`last_offset` (default 0) anchors the last series day `last_offset` days
+before the cut-off, matching [`exports_daily_delay_model`](@ref): both
+travel-gated streams are run only up to the most recent reported import to
+Uganda, since movement patterns likely shift and the most recent days are
+right-truncated by reporting lag.
 """
 @model function exports_deaths_delay_model(
         export_deaths_daily::AbstractVector,
         growth_state, CFR::Real, delay_dist, p_uganda::Real;
         pre_start_deaths::Union{Missing, Integer} = 0,
+        last_offset::Real = 0,
         f_det,
         daily_travellers::Real,
         source_population::Real = ITURI_POPULATION)
     cumulative = growth_state.cumulative
     T = growth_state.T
     q = daily_travellers / source_population
-    n = length(export_deaths_daily)   # days from earliest death to cut-off
+    n = length(export_deaths_daily)   # earliest death to last series day
+
+    ## The series ends `last_offset` days before the cut-off (the date of
+    ## the most recent reported import to Uganda). Like the export-case
+    ## stream, this travel-gated death stream is only run up to that day:
+    ## movement patterns likely shift and the days after the last import
+    ## are right-truncated by reporting lag. The at-risk clock anchors on
+    ## this date.
+    t_last = T - last_offset
 
     ## Per-edge intensity is the infection-keyed delay-survival
     ## expectation: the infection→death CDF weighted by the
@@ -585,12 +617,12 @@ incubation period (better than omitting it on death entirely).
 
     ## Pre-death zero stretch as one Poisson observed at 0; `missing`
     ## generates it for predictive checks.
-    pre = T - n > zero(T) ? Λ(T - n) : zero(T)
+    pre = t_last - n > zero(T) ? Λ(t_last - n) : zero(T)
     pre_start_deaths ~ Poisson(max(pre, zero(pre)))
 
     ## Per-day means via the shared between-edge differencing, starting
     ## from the pre-death survival weight `pre`.
-    Λ_at_edges = [Λ(T - n + i) for i in 1:n]
+    Λ_at_edges = [Λ(t_last - n + i) for i in 1:n]
     μ_day = daily_increment_kernel(Λ_at_edges, pre)
     for i in 1:n
         export_deaths_daily[i] ~ Poisson(μ_day[i])

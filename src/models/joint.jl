@@ -278,7 +278,12 @@ one-sided timing bound `first_export_detection_delta`. Passing a non-empty
 [`exports_daily_delay_model`](@ref), which fits each import at its Uganda
 report date. Its pre-detection survival term already carries the
 first-detection timing bound, so the separate timing term is then disabled
-to avoid double-counting the earliest detection.
+to avoid double-counting the earliest detection. `export_last_offset`
+(default 0) stops both travel-gated streams (exports and deaths-among-
+exports) `export_last_offset` days before the cut-off — the date of the
+most recent reported import to Uganda — since movement patterns likely
+shift over the outbreak and the most recent days are right-truncated by
+reporting lag.
 
 The McCabe et al. rectangular detection-window configuration is provided
 as a separate comparison by
@@ -301,6 +306,7 @@ export infection→detection delay rather than learning it.
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         exported_cases_daily::AbstractVector = Union{Missing, Int}[],
+        export_last_offset::Real = 0,
         growth = exponential_growth_model(),
         exports = exports_delay_model,
         exports_daily = exports_daily_delay_model,
@@ -401,7 +407,7 @@ export infection→detection delay rather than learning it.
     else
         exports_state ~ to_submodel(
             exports_daily(exported_cases_daily, growth_state, p_uganda,
-                f_det), false)
+                f_det; last_offset = export_last_offset), false)
         detection_timing_delta = missing
     end
 
@@ -417,6 +423,7 @@ export infection→detection delay rather than learning it.
         exports_deaths_model(export_deaths_daily, growth_state,
             deaths_state.CFR, f_death, p_uganda;
             pre_start_deaths = pre_start_deaths,
+            last_offset = export_last_offset,
             f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,
             source_population = source_population),
