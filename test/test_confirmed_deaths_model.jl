@@ -19,6 +19,13 @@
     ## A zero-time edge has no backlog, so composition is zero there.
     q0 = bvd_count_composition(0.05, 0.3, 0.5, f_rep, [0.0])
     @test q0[1] == 0
+    ## Extreme growth overflows the BVD backlog to Inf; the guarded ratio
+    ## must still return a finite share (Inf/Inf would otherwise be NaN and
+    ## propagate into a NaN Binomial gradient downstream).
+    qbig = bvd_count_composition(5.0, 0.3, 0.5, f_rep, [200.0];
+        onset_fraction = 1.0)
+    @test all(isfinite, qbig)
+    @test all(0 .<= qbig .<= 1)
 end
 
 @testitem "confirmed_deaths_only_model: prior draws finite, bounded" tags=[:slow] begin
@@ -137,4 +144,58 @@ end
     pp = predict(model_pp, chn_on)
     cd = reduce(vcat, vec(Array(pp[:confirmed_deaths])))
     @test all(0 .<= cd .<= susp_cum)
+end
+
+@testitem "bvd_joint: confirmed-deaths stream NUTS-fits (AD init)" tags=[:slow] begin
+    ## Regression for the joint AD-init NaN: with the confirmed-deaths
+    ## stream on, an extreme prior growth draw can overflow the
+    ## count-composition `q`, giving a NaN `p_death_conf` whose Binomial
+    ## reverse-mode gradient is NaN and kills NUTS initialisation. The
+    ## guarded composition and the eps-clamped probability must let a
+    ## gradient-based fit run and give finite cumulative cases.
+    using BVDOutbreakSize: bvd_joint, load_observations, nuts_sample
+    obs = load_observations()
+    rh = obs.reported_case_history
+    dh = obs.death_history
+    ch = obs.confirmed_case_history
+    sa = obs.tests_analysed_history
+    sr = obs.tests_received_history
+    function _inc(values)
+        out = similar(values, Int)
+        prev = 0
+        for i in eachindex(values)
+            out[i] = values[i] - prev
+            prev = values[i]
+        end
+        return out
+    end
+    ## Per-vintage confirmed / analysed / received on the lab vintages, so
+    ## the received NegBinomial is observed (not a discrete latent NUTS
+    ## rejects) and the confirmed-deaths stream is conditioned alongside.
+    idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
+    keep = [i == 1 || sa.values[i] > sa.values[i - 1]
+            for i in eachindex(sa.values)]
+    aoff = collect(sa.offsets)[keep]
+    analysed = Union{Missing, Int}[_inc(sa.values[keep])...]
+    conf = Union{Missing, Int}[_inc([ch.values[i] for i in idx][keep])...]
+    ridx = [findfirst(==(off), sr.offsets) for off in aoff]
+    received = Union{Missing, Int}[_inc([sr.values[i] for i in ridx])...]
+    model = bvd_joint(obs.exported_cases, _inc(dh.values),
+        _inc(rh.values), obs.export_deaths_daily;
+        reported_offsets = rh.offsets, death_offsets = dh.offsets,
+        confirmed_cases = conf, confirmed_offsets = aoff,
+        samples_analysed = analysed, samples_received = received,
+        tests_analysed = obs.cumulative_tests_analysed,
+        confirmed_deaths = Union{Missing, Int}[
+        obs.confirmed_death_history.values[end]],
+        confirmed_death_susp_increments = Union{Missing, Int}[dh.values[end]],
+        confirmed_death_offsets = [0],
+        first_export_detection_delta = obs.first_export_detection_delta)
+    chn = nuts_sample(model; samples = 5, chains = 1, seed = 1,
+        progress = false)
+    C = vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+    p = vec(Array(chn[:p_death_conf_cutoff]))
+    @test all(0 .< p .< 1)
 end

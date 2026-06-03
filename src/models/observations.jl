@@ -573,8 +573,12 @@ function bvd_count_composition(r, p_drc, λ_bg, f_rep,
                 delay_convolution(one(r), r, s_i, f_rep)
         μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
         denom = μ_bvd + μ_bg
-        q[i] = denom > zero(Tt) ?
-               clamp(μ_bvd / denom, zero(Tt), one(Tt)) : zero(Tt)
+        ## Guard the ratio: at extreme growth `μ_bvd` can overflow to Inf,
+        ## giving Inf/Inf = NaN that would propagate (via `m_death·q`) into
+        ## a NaN Binomial gradient in the confirmed-death stream and break
+        ## the joint AD init. Fall back to zero share when non-finite.
+        ratio = denom > zero(Tt) ? μ_bvd / denom : zero(Tt)
+        q[i] = isfinite(ratio) ? clamp(ratio, zero(Tt), one(Tt)) : zero(Tt)
     end
     return q
 end
@@ -635,9 +639,14 @@ entries for posterior-predictive generation.
     Tt = typeof(float(m_death) * float(first(q_at_edges)))
     p_death_conf = Vector{Tt}(undef, n)
     for i in 1:n
+        ## Keep the confirmation probability strictly inside (0, 1): at the
+        ## saturated boundary the Binomial logpdf for the partial 17/246
+        ## point is log(0) and its reverse-mode gradient is NaN, which
+        ## breaks the joint AD init. The eps margins leave the composition
+        ## link unchanged away from saturation.
         p_death_conf[i] = clamp(convert(Tt, m_death) *
                                 convert(Tt, q_at_edges[i]),
-            zero(Tt), one(Tt))
+            eps(Tt), one(Tt) - eps(Tt))
     end
 
     for i in 1:n
