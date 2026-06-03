@@ -272,6 +272,19 @@ CairoMakie.activate!(type = "png", px_per_unit = 3)
 
 Random.seed!(20260518)
 
+## Opt-in TensorBoard tracing of the model fits: set the `BVD_TRACE_DIR`
+## environment variable to a directory and every fit below streams its
+## draws (warmup included) to a per-fit run under it. Off by default, so
+## normal builds are unchanged. Inspect with `tensorboard --logdir <dir>`.
+## Loading TensorBoardLogger activates the package's tracing extension.
+haskey(ENV, "BVD_TRACE_DIR") && @eval using TensorBoardLogger
+function trace_kw(label)
+    haskey(ENV, "BVD_TRACE_DIR") ?
+    (; callback = tensorboard_callback(
+            joinpath(ENV["BVD_TRACE_DIR"], label)),
+        warmup = true) : NamedTuple()
+end
+
 #md # ```@raw html
 #md # </details>
 #md # ```
@@ -1847,23 +1860,28 @@ growth_now = growth_for(obs)
 fit_args = joint_obs(obs)
 chn_joint = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
-    fit_args.export_deaths; fit_args.kw...,
-    growth = growth_now,
-    first_export_detection_delta = obs.first_export_detection_delta,
-    report_onset_offset = report_onset_offset(obs.as_of_date),
-    genetic = genetic_seeding));
+        fit_args.export_deaths; fit_args.kw...,
+        growth = growth_now,
+        first_export_detection_delta = obs.first_export_detection_delta,
+        report_onset_offset = report_onset_offset(obs.as_of_date),
+        genetic = genetic_seeding); trace_kw("joint")...);
 
 chn_exports = nuts_sample(
-    exports_only_model(obs.exported_cases; growth = growth_now));
+    exports_only_model(obs.exported_cases; growth = growth_now);
+    trace_kw("exports")...);
 chn_deaths = nuts_sample(
-    deaths_only_model(obs.total_deaths; growth = growth_now));
+    deaths_only_model(obs.total_deaths; growth = growth_now);
+    trace_kw("deaths")...);
 chn_cases = nuts_sample(
-    cases_only_model(obs.reported_cases; growth = growth_now));
+    cases_only_model(obs.reported_cases; growth = growth_now);
+    trace_kw("cases")...);
 chn_confirmed = nuts_sample(
     confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed,
-    obs.samples_received_history.values[end]; growth = growth_now));
+        obs.samples_received_history.values[end]; growth = growth_now);
+    trace_kw("confirmed")...);
 chn_exports_deaths = nuts_sample(
-    exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now));
+    exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now);
+    trace_kw("exports_deaths")...);
 
 posterior_C_joint = vec(Array(chn_joint[:cumulative_cases]));
 posterior_C_infections_joint = vec(Array(chn_joint[:cumulative_infections]));
