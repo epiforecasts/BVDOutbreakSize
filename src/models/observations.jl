@@ -491,6 +491,112 @@ cumulative confirmed Binomial.
 end
 
 """
+Count-implied BVD composition among suspects at each elapsed-time edge:
+`q(s) = μ_BVD(s) / N_susp(s)`, with `μ_BVD = p_drc · onset_fraction ·
+∫₀^s e^{r u} f_rep(s−u) du` the cumulative BVD-suspect backlog and
+`N_susp = μ_BVD + λ_bg·s` adding the constant-rate non-BVD background. The
+same `q_baseline_count` quantity [`confirmed_cases_model`](@ref) exposes;
+factored out so the confirmed-death stream can evaluate it at the
+suspected-death edges from the shared report delay, ascertainment,
+background and growth state. Returns a vector aligned with `t_edges`.
+"""
+function bvd_count_composition(r, p_drc, λ_bg, f_rep,
+        t_edges::AbstractVector; onset_fraction::Real = 1.0)
+    Tt = typeof(float(r) * float(λ_bg) * float(p_drc) * onset_fraction)
+    q = Vector{Tt}(undef, length(t_edges))
+    for i in eachindex(t_edges)
+        s_i = convert(Tt, t_edges[i])
+        μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
+                convert(Tt, p_drc) * onset_fraction *
+                delay_convolution(one(r), r, s_i, f_rep)
+        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
+        denom = μ_bvd + μ_bg
+        q[i] = denom > zero(Tt) ?
+               clamp(μ_bvd / denom, zero(Tt), one(Tt)) : zero(Tt)
+    end
+    return q
+end
+
+"""
+Laboratory-confirmed-deaths likelihood. The DRC sitrep front page reports
+`Cumul décès parmi les confirmés`, the cumulative deaths that have been
+laboratory-confirmed (17 at the 28 May cut-off). In a filovirus outbreak
+deaths are tested aggressively (post-mortem / safe-burial swabs), so a
+death is confirmed *because* it occurred; the natural denominator is the
+suspected-death pool, not the confirmed-case cohort. The confirmed-death
+increment is a Binomial thinning of the suspected-death increment:
+
+```math
+\\Delta D_{conf,v} \\sim
+    \\mathrm{Binomial}(\\Delta D_{susp,v},\\ p_{death,conf}),
+```
+
+with `ΔD_susp,v` the between-vintage suspected-death increment (the
+`death_history` increments [`deaths_model`](@ref) consumes) aligned with
+`t_edges`.
+
+There is no death-specific laboratory denominator (no analysed/tested
+count for deaths), so `p_death_conf` cannot be identified as a free
+parameter. It is *derived* from the confirmed-case BVD composition
+`q_at_edges = μ_BVD / N_susp` (the count-implied BVD share among suspects
+the confirmed-cases stream estimates from the shared lab machinery) times
+a single tight-prior enrichment scalar `m_death` from
+[`confirmed_death_enrichment_model`](@ref):
+
+```math
+p_{death,conf}(v) = \\mathrm{clamp}(m_{death} \\cdot q(v),\\ 0,\\ 1).
+```
+
+The stream is therefore almost entirely an *input* from the confirmed-case
+model: it adds at most the one scalar `m_death` (centred on 1, no
+enrichment), the most the single informative point (17/246) supports. Set
+the enrichment prior SD to zero to tie deaths directly to the case
+composition with no free parameter. `confirmed_deaths` accepts `missing`
+entries for posterior-predictive generation.
+"""
+@model function confirmed_deaths_model(
+        confirmed_deaths::AbstractVector,
+        susp_death_increments::AbstractVector,
+        q_at_edges::AbstractVector;
+        confirmed_death_enrichment = confirmed_death_enrichment_model())
+    n = length(q_at_edges)
+    n == length(confirmed_deaths) ||
+        error("confirmed_deaths length must match q_at_edges (got " *
+              "$(length(confirmed_deaths)) vs $n)")
+    n == length(susp_death_increments) ||
+        error("susp_death_increments length must match q_at_edges " *
+              "(got $(length(susp_death_increments)) vs $n)")
+
+    enrich_state ~ to_submodel(confirmed_death_enrichment, false)
+    m_death = enrich_state.m_death
+
+    Tt = typeof(float(m_death) * float(first(q_at_edges)))
+    p_death_conf = Vector{Tt}(undef, n)
+    for i in 1:n
+        p_death_conf[i] = clamp(convert(Tt, m_death) *
+                                convert(Tt, q_at_edges[i]),
+            zero(Tt), one(Tt))
+    end
+
+    for i in 1:n
+        ΔD = susp_death_increments[i] === missing ? 0 :
+             Int(susp_death_increments[i])
+        confirmed_deaths[i] ~ Binomial(ΔD, p_death_conf[i])
+    end
+
+    p_death_conf_cutoff := p_death_conf[end]
+    expected_confirmed_deaths_total := sum(p_death_conf[i] *
+                                           (susp_death_increments[i] ===
+                                            missing ? zero(Tt) :
+                                            convert(Tt,
+                                               susp_death_increments[i]))
+    for i in 1:n)
+
+    return (; m_death, p_death_conf, p_death_conf_cutoff,
+        expected_confirmed_deaths_total)
+end
+
+"""
 Bin-mean kernel for the per-bin count likelihoods. For `n`
 cumulative-intensity values ``\\Lambda(t_k)`` at the bin edges, returns
 the `n` between-edge increments `[Λ(t_1) - Λ_0, Λ(t_2)-Λ(t_1), ...]`
