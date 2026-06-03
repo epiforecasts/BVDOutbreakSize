@@ -255,6 +255,13 @@ data and needs no lower floor; the plateau positivity
 `s·qinf + (1−spec)(1−qinf)` holds the late vintages. `q0`, `qinf` and the
 decay timescale are sampled by [`test_selection_model`](@ref).
 
+`q_random_effect` adds a per-vintage partially-pooled logit-scale offset
+to this baseline share (`q_v = logistic(logit(q_base,v) + σ_q·z_v)`, see
+[`confirmed_q_re_model`](@ref)) so each window's positivity can fit the
+non-monotone wobble while `s` stays fixed. It is on by default because the
+observed positivity is non-monotone; pass `nothing` to recover the smooth
+severe-first baseline.
+
 The cumulative suspect backlog at each edge is split BVD / background:
 `μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
 (the onset→report Gamma closed form, the same quantity the reported stream
@@ -306,7 +313,7 @@ cumulative confirmed Binomial.
         capacity_centre::Real = 150.0,
         report_onset_offset::Union{Nothing, Real} = nothing,
         overdispersion = nothing,
-        q_random_effect = nothing,
+        q_random_effect = confirmed_q_re_model,
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)

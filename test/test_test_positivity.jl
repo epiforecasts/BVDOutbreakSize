@@ -269,3 +269,84 @@ end
     @test all(cap .> 0)
     @test mean(cap) < 150          # throughput pulls capacity below the prior
 end
+
+@testitem "confirmed_q_re_model: prior draws are valid" tags=[:slow] begin
+    ## The per-vintage q random effect samples a non-negative pooling SD
+    ## `σ_q` and `n` standard-normal offsets `z_q`. Prior draws of both
+    ## must be finite, with `σ_q ≥ 0`.
+    using Turing: sample, Prior, @model, to_submodel
+    import FlexiChains
+    using BVDOutbreakSize: confirmed_q_re_model
+
+    @model function _qre_harness(n)
+        state ~ to_submodel(confirmed_q_re_model(n), false)
+        sigma_q := state.σ_q
+        z_mean := sum(state.z_q) / n
+        return (; σ_q = state.σ_q, z_q = state.z_q)
+    end
+
+    chn = sample(_qre_harness(5), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    σ = vec(Array(chn[:sigma_q]))
+    @test length(σ) == 300
+    @test all(isfinite, σ)
+    @test all(σ .>= 0)
+    zm = vec(Array(chn[:z_mean]))
+    @test all(isfinite, zm)
+end
+
+@testitem "q random effect on by default; nothing recovers baseline" tags=[:slow] begin
+    ## With the q-RE on (the default) each vintage's tested BVD share can
+    ## depart from the smooth severe-first baseline, so the confirmed
+    ## stream fits the non-monotone positivity. The model must fit under
+    ## Prior and keep per-vintage positivity and the cut-off share in
+    ## (0, 1); predictive confirmed draws stay bounded by the analysed
+    ## denominator. Passing `q_random_effect = nothing` recovers the
+    ## smooth baseline and must still fit.
+    using Turing: sample, Prior, predict, @model, to_submodel
+    import FlexiChains
+    using BVDOutbreakSize: confirmed_cases_model, confirmed_q_re_model,
+                           exponential_growth_model, report_delay_model,
+                           surveillance_dispersion_model
+
+    A = [211, 84, 108, 60, 95]    # non-monotone positivity windows
+    R = [418, 13, 231, 40, 180]
+    C = [101, 4, 16, 4, 85]       # 28 May per-vintage confirmed
+    edges = [123.0, 124.0, 126.0, 127.0, 128.0]
+
+    @model function _qre_conf(confirmed, analysed, received; q_re,
+            growth = exponential_growth_model(),
+            dispersion = surveillance_dispersion_model(),
+            report_delay = report_delay_model())
+        growth_state ~ to_submodel(growth, false)
+        disp_state ~ to_submodel(dispersion, false)
+        rep_state ~ to_submodel(report_delay, false)
+        confirmed_state ~ to_submodel(
+            confirmed_cases_model(confirmed, analysed, received, 211,
+                growth_state, disp_state.k, fill(0.3, length(confirmed)),
+                0.6, 0.7, rep_state.dist, edges, 128.0;
+                q_random_effect = q_re), false)
+    end
+
+    chn = sample(_qre_conf(C, A, R; q_re = confirmed_q_re_model),
+        Prior(), 300; chain_type = FlexiChains.VNChain, progress = false)
+    pos = vec(Array(chn[:p_positive]))
+    @test all(0 .< pos .< 1)
+    qc = vec(Array(chn[:q_cutoff]))
+    @test all(0 .<= qc .<= 1)
+
+    pp = predict(
+        _qre_conf(fill(missing, 5), A, fill(missing, 5);
+            q_re = confirmed_q_re_model), chn)
+    cc = reduce(hcat, vec(Array(pp[:confirmed_cases])))
+    for v in 1:5
+        @test all(cc[v, :] .<= A[v])
+        @test all(cc[v, :] .>= 0)
+    end
+
+    ## q-RE off recovers the smooth severe-first baseline and still fits.
+    chn0 = sample(_qre_conf(C, A, R; q_re = nothing),
+        Prior(), 200; chain_type = FlexiChains.VNChain, progress = false)
+    pos0 = vec(Array(chn0[:p_positive]))
+    @test all(0 .< pos0 .< 1)
+end

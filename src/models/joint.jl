@@ -303,6 +303,12 @@ confirmation probability `p_death_conf` (see
 [`confirmed_deaths_model`](@ref)). Left empty (the default) the stream is
 off and existing callers are unchanged.
 
+`confirmed_q_random_effect` is the per-vintage tested-BVD-share random
+effect for the confirmed positivity (see [`confirmed_q_re_model`](@ref)),
+on by default because the observed per-window positivity is non-monotone
+and a monotone severe-first q-curve cannot match it. Pass `nothing` to
+recover the smooth severe-first baseline.
+
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
@@ -350,7 +356,7 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         test_specificity = test_specificity_model(),
         test_selection = test_selection_model(),
         confirmed_overdispersion = nothing,
-        confirmed_q_random_effect = nothing,
+        confirmed_q_random_effect = confirmed_q_re_model,
         confirmed_selection_clock::Symbol = :time,
         confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
