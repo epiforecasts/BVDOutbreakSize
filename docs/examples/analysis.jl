@@ -1314,11 +1314,10 @@ cfr_prior_fig #hide
 #
 # with $c$ the time since surveillance onset. $q_0$ (near 1) is the early
 # severe-cluster BVD fraction, $q_\infty$ the broad-pool baseline, and
-# $\text{decay}$ the timescale over which the share relaxes. With
-# $q_0 \approx 1$ the first vintage reads positivity $\approx s$, so the
-# sensitivity is identified directly from the early data; the plateau
-# positivity $s\, q_\infty + (1 - \text{spec})(1 - q_\infty)$ holds the
-# later vintages.
+# $\text{decay}$ the timescale over which the share relaxes. The early
+# vintages, where the BVD share is high, inform the sensitivity, and the
+# plateau positivity $s\, q_\infty + (1 - \text{spec})(1 - q_\infty)$ holds
+# the later vintages.
 #
 # The samples-received series conditions the fraction of suspects
 # forwarded to the lab. The cumulative suspect backlog at each vintage is
