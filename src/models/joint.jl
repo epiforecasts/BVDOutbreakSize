@@ -166,6 +166,49 @@ is drawn from the posterior rather than conditioned on.
 end
 
 """
+Confirmed-deaths-only composer (laboratory-confirmed deaths in isolation,
+unconditioned generator). Samples growth, dispersion, pooled
+ascertainment, the background prior and the report delay, then routes the
+suspected-death increment through [`confirmed_deaths_model`](@ref): the
+confirmed-death increment is the suspected-death increment thinned by the
+count-implied BVD composition among suspects. The single suspected-death
+total at the cut-off is wrapped into the length-1 per-vintage form, so it
+reduces to the cumulative Binomial. `confirmed_deaths` defaults to
+`missing` (generator); pass an integer to condition once data exist.
+"""
+@model function confirmed_deaths_only_model(
+        susp_deaths::Integer,
+        confirmed_deaths::Union{Missing, Integer} = missing;
+        growth = exponential_growth_model(),
+        confirmed_deaths_submodel = confirmed_deaths_model,
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model(),
+        test_positivity = test_positivity_model(),
+        report_delay = report_delay_model(),
+        incubation = incubation_model())
+    growth_state ~ to_submodel(growth, false)
+    dispersion_state ~ to_submodel(dispersion, false)
+    asc_state ~ to_submodel(ascertainment, false)
+    report_state ~ to_submodel(report_delay, false)
+    test_positivity_state ~ to_submodel(test_positivity, false)
+    incubation_state ~ to_submodel(incubation, false)
+    λ_bg = test_positivity_state.λ_bg
+    f_rep = report_state.dist
+    T = growth_state.T
+    os = onset_rescale(incubation_state.dist, growth_state.r)
+
+    confirmed_vec = Union{Missing, Int}[confirmed_deaths]
+    confirmed_deaths_state ~ to_submodel(
+        confirmed_deaths_submodel(confirmed_vec, [susp_deaths],
+            growth_state, [asc_state.p_drc], λ_bg, f_rep, [T];
+            onset_fraction = os), false)
+
+    onset_fraction := os
+    cumulative_infections := growth_state.C_T
+    cumulative_cases := growth_state.C_T * os
+end
+
+"""
 Deaths-among-exports-only composer. Samples growth, delay, CFR,
 detection window, traveller volume and ascertainment, then conditions
 on the dated export-deaths likelihood. See
@@ -254,6 +297,16 @@ background) the confirmed model already uses for the positivity baseline
 (see [`confirmed_cases_model`](@ref)). This pins `τ_forward` directly from
 received-versus-suspected; left empty it drops the received likelihood.
 
+`confirmed_deaths` is an optional per-vintage laboratory-confirmed-death
+increment vector aligned with `confirmed_death_offsets` (default
+`death_offsets`). It is wired in as an unconditioned posterior-predictive
+generator (there is no confirmed-deaths data yet): each increment is the
+suspected-death increment (`total_deaths`) thinned by the count-implied
+BVD composition among suspects `μ_BVD / N_susp`, reusing the already-
+sampled background, report-delay and ascertainment state (see
+[`confirmed_deaths_model`](@ref)). Left empty (the default) the stream is
+off and existing callers are unchanged.
+
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
@@ -275,6 +328,8 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         death_offsets::AbstractVector = reported_offsets,
         confirmed_cases::AbstractVector = Union{Missing, Int}[],
         confirmed_offsets::AbstractVector = reported_offsets,
+        confirmed_deaths::AbstractVector = Union{Missing, Int}[],
+        confirmed_death_offsets::AbstractVector = death_offsets,
         samples_analysed::AbstractVector = Union{Missing, Int}[],
         samples_received::AbstractVector = Union{Missing, Int}[],
         tests_analysed::Union{Missing, Integer} = missing,
@@ -284,6 +339,7 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         deaths = deaths_model,
         reported_cases_submodel = reported_cases_model,
         confirmed = confirmed_cases_model,
+        confirmed_deaths_submodel = confirmed_deaths_model,
         exports_deaths_model = exports_deaths_model,
         exports_detection_timing = exports_detection_timing_model,
         dispersion = surveillance_dispersion_model(),
@@ -377,6 +433,25 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
                 test_selection = test_selection,
                 report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
+    end
+
+    if !isempty(confirmed_deaths)
+        ## Laboratory-confirmed deaths (unconditioned generator): the
+        ## suspected-death increment thinned by the count-implied BVD
+        ## composition among suspects, reusing the already-sampled
+        ## background `λ_bg`, report delay and ascertainment (no extra
+        ## priors). Denominator is the suspected-death increment series
+        ## `total_deaths`. Offsets default to `death_offsets` so the two
+        ## death streams share bin edges.
+        n_cdeath = length(confirmed_death_offsets)
+        cdeath_edges = [T - δ for δ in confirmed_death_offsets]
+        susp_death_incr = confirmed_death_offsets == death_offsets ?
+                          total_deaths : total_deaths[1:n_cdeath]
+        confirmed_deaths_state ~ to_submodel(
+            confirmed_deaths_submodel(confirmed_deaths, susp_death_incr,
+                growth_state, p_drc_per_bin[1:n_cdeath],
+                reported_state.λ_bg, reported_state.report_delay_dist,
+                cdeath_edges; onset_fraction = os), false)
     end
 
     exports_deaths_state ~ to_submodel(

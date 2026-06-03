@@ -27,6 +27,15 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Modelling
 
+- Added a laboratory-confirmed-deaths stream
+  (`confirmed_deaths_model`, `confirmed_deaths_only_model`) as an
+  unconditioned posterior-predictive generator: the suspected-death
+  increment thinned by `ΔD_conf,v ~ Binomial(ΔD_susp,v, p_bvd)`, with
+  `p_bvd` the count-implied BVD composition among suspects
+  `μ_BVD / N_susp` (the `q_baseline_count` quantity) reused from the
+  confirmed-cases positivity machinery. Wired into `bvd_joint` as an
+  optional stream (`confirmed_deaths` / `confirmed_death_offsets`), off
+  by default; no confirmed-deaths data exists yet.
 - Reparameterised growth to sample the growth rate `r` directly
   (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
   with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still

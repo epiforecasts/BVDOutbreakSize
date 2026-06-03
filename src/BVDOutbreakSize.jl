@@ -64,11 +64,12 @@ export REPORT_SCENARIOS,
 # observation models
        exports_model, deaths_model,
        reported_cases_model, confirmed_cases_model,
+       confirmed_deaths_model,
        exports_deaths_model,
        exports_detection_timing_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
-       confirmed_only_model,
+       confirmed_only_model, confirmed_deaths_only_model,
        exports_deaths_only_model, bvd_joint,
        imperial_only_model
 
