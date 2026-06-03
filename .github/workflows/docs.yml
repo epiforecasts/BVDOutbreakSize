@@ -36,6 +36,10 @@ jobs:
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The analysis literate fits four NUTS chains via MCMCThreads;
+          # two Julia threads run them two-at-a-time, roughly halving the
+          # dominant sampling cost of the docs build.
+          JULIA_NUM_THREADS: '2'
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
