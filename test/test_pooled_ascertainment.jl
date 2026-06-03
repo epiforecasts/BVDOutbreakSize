@@ -63,12 +63,14 @@ end
     chn = sample(m, Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false)
     ## The composer default is the non-centred two-group pooled
-    ## hierarchy, so the shared hyperparameters `μ_logit` and the
-    ## pooling SD `τ_logit` are sampled parameters of the joint model.
+    ## hierarchy, attached under the `asc_state` submodel prefix, so the
+    ## shared hyperparameters `μ_logit` and the pooling SD `τ_logit` are
+    ## sampled as `asc_state.μ_logit` / `asc_state.τ_logit`.
     params = FlexiChains.parameters(chn)
-    @test @varname(τ_logit) in params
-    @test @varname(μ_logit) in params
-    @test all(vec(Array(chn[:τ_logit])) .>= 0)
+    @test @varname(asc_state.τ_logit) in params
+    @test @varname(asc_state.μ_logit) in params
+    τ_key = FlexiChains.Parameter(@varname(asc_state.τ_logit))
+    @test all(vec(Array(chn[τ_key])) .>= 0)
     @test all(0 .< vec(Array(chn[:p_drc])) .< 1)
     @test all(0 .< vec(Array(chn[:p_uganda])) .< 1)
 end

@@ -15,6 +15,7 @@
     ## sampled discrete latent.
     chn = nuts_sample(
         bvd_joint(n, 2, 18, 905, 0, 27, 50;
+            confirmed_deaths = 5,
             deaths_history = dh,
             reported_history = rh,
             confirmed_history = ch,
@@ -37,30 +38,36 @@ end
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
     rh = (; days = [13, 18, 40], counts = [340, 516, 905])
     ch = (; days = [13, 18, 40], counts = [9, 17, 27])
+    lh = (; days = [18, 40], counts = [30, 50])
     fitted = bvd_joint(n, 2, 18, 905, 0, 27;
+        confirmed_deaths = 5,
         deaths_history = dh, reported_history = rh, confirmed_history = ch,
-        breakpoint = 30)
+        lab_history = lh, breakpoint = 30)
     chn = nuts_sample(fitted; samples = 12, chains = 1, progress = false)
 
-    ## Keep each stream's vintage day grid but drop the counts, so the
-    ## increments are resampled by `predict` rather than held fixed.
+    ## Keep the reported and death vintage day grids but drop their counts,
+    ## so their increments are resampled by `predict`. The confirmed
+    ## positives are a Binomial of the observed analysed windows, so their
+    ## denominators (both histories' counts) stay fixed and only the
+    ## positives resample when `confirmed_cases` is `missing`.
     _days_only(h) = (; days = h.days, counts = Int[])
     gen = bvd_joint(n, missing, missing, missing, missing, missing;
         deaths_history = _days_only(dh),
         reported_history = _days_only(rh),
-        confirmed_history = _days_only(ch),
+        confirmed_history = ch,
+        lab_history = lh,
         breakpoint = 30)
     pp = predict(gen, chn)
 
-    ## `predict` replicates each DRC stream's per-vintage increments as one
-    ## vector-valued variable under the stream's prefixed submodel name.
-    ## Each draw is the full increment vector; every replicated increment
-    ## must be non-negative and finite.
+    ## `predict` replicates the reported and death per-vintage increments
+    ## and the confirmed per-window positives as vector-valued variables
+    ## under each stream's prefixed submodel name. Each draw is the full
+    ## vector; every replicated count must be non-negative and finite.
     keys = (
         FlexiChains.Parameter(@varname(cases_state.reported_increments.increments)),
-        FlexiChains.Parameter(@varname(confirmed_state.confirmed_increments.increments)),
+        FlexiChains.Parameter(@varname(confirmed_state.confirmed_positives.positives)),
         FlexiChains.Parameter(@varname(deaths_state.death_increments.increments)))
-    lens = (length(rh.days), length(ch.days), length(dh.days))
+    lens = (length(rh.days), length(lh.days), length(dh.days))
     for (key, m) in zip(keys, lens)
         draws = vec(pp[key])
         @test !isempty(draws)

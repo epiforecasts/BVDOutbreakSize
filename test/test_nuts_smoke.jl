@@ -141,9 +141,10 @@ end
     using BVDOutbreakSize: bvd_joint, nuts_sample
 
     ## Streams are positional: n, exported_cases, total_deaths,
-    ## reported_cases, exports_deaths, confirmed_cases.
+    ## reported_cases, exports_deaths, confirmed_cases. Confirmed deaths
+    ## are a keyword count; pass one so the joint has no sampled discrete.
     chn = nuts_sample(
-        bvd_joint(40, 2, 18, 905, 0, 27);
+        bvd_joint(40, 2, 18, 905, 0, 27; confirmed_deaths = 5);
         samples = 12, chains = 1, progress = false
     )
     for name in [:C_T, :R_T, :CFR, :k, :p_drc, :p_uganda]
@@ -165,6 +166,7 @@ end
 
     chn = nuts_sample(
         bvd_joint(n, 2, 18, 905, 0, 27;
+            confirmed_deaths = 5,
             deaths_history = dh,
             reported_history = rh,
             confirmed_history = ch,
