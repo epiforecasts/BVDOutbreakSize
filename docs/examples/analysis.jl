@@ -1852,8 +1852,8 @@ chn_deaths = nuts_sample(
 chn_cases = nuts_sample(
     cases_only_model(obs.reported_cases; growth = growth_now));
 chn_confirmed = nuts_sample(
-    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed;
-    growth = growth_now));
+    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed,
+    obs.samples_received_history.values[end]; growth = growth_now));
 chn_exports_deaths = nuts_sample(
     exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now));
 

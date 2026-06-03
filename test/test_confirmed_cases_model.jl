@@ -199,6 +199,20 @@ end
     @test all(rr .>= 0)
 end
 
+@testitem "confirmed_only_model NUTS-fits with received observed" tags=[:slow] begin
+    ## Regression test: supplying `tests_received` conditions the
+    ## received-count NegBinomial as an observation. Without it the
+    ## received count is a sampled discrete latent, which fails the NUTS
+    ## model check ("sampled from a discrete distribution"). The
+    ## gradient-based fit must run and give finite, positive C(T).
+    using BVDOutbreakSize: confirmed_only_model, nuts_sample
+    chn = nuts_sample(confirmed_only_model(121, 403, 662);
+        samples = 5, chains = 1, seed = 1, progress = false)
+    C = vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+end
+
 @testitem "bvd_joint initialises with tested + confirmed observations" tags=[:slow] begin
     ## Regression test for the Binomial init failure: the full
     ## per-vintage `bvd_joint` path (deaths + reported + confirmed

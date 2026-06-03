@@ -108,10 +108,19 @@ on the laboratory pipeline alone. The single cumulative confirmed count
 (and optional `tests_analysed`) is wrapped into the length-1 per-vintage
 form at the cut-off, so it reduces to the cumulative laboratory
 likelihood. See [`confirmed_cases_model`](@ref).
+
+`tests_received` (cumulative `Cumul échantillons reçus` at the cut-off)
+conditions the forwarded fraction `τ_forward` via the received-count
+NegBinomial. Pass it when fitting: leaving it `missing` turns the
+received count into a sampled discrete latent, which HMC / NUTS cannot
+handle (the gradient-based sampler rejects discrete unknowns). The
+`missing` default is for predictive generation, where the received count
+is drawn from the posterior rather than conditioned on.
 """
 @model function confirmed_only_model(
         confirmed_cases::Union{Missing, Integer},
-        tests_analysed::Union{Missing, Integer} = missing;
+        tests_analysed::Union{Missing, Integer} = missing,
+        tests_received::Union{Missing, Integer} = missing;
         growth = exponential_growth_model(),
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
@@ -139,7 +148,7 @@ likelihood. See [`confirmed_cases_model`](@ref).
     ## Single-vintage analysed denominator for the confirmed Binomial: the
     ## cumulative tests-analysed count at the cut-off.
     analysed_vec = Union{Missing, Int}[tests_analysed]
-    received_vec = Union{Missing, Int}[missing]
+    received_vec = Union{Missing, Int}[tests_received]
     confirmed_state ~ to_submodel(
         confirmed(confirmed_vec, analysed_vec, received_vec, tests_analysed,
             growth_state, k,
