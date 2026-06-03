@@ -270,6 +270,16 @@ infection: its death delay is incubation ⊕ onset-to-death (again via
 [`combined_delay`](@ref)), so deaths are not timed one incubation period
 too early. Incubation therefore enters both the detection and death
 delays, a slight accepted double-count of the shared incubation period.
+By default the exports are a single cumulative count `exported_cases` at
+the cut-off, with the earliest Uganda detection entering separately as the
+one-sided timing bound `first_export_detection_delta`. Passing a non-empty
+`exported_cases_daily` (earliest detection day to the cut-off, see
+[`load_observations`](@ref)) switches to the time-resolved
+[`exports_daily_delay_model`](@ref), which fits each import at its Uganda
+report date. Its pre-detection survival term already carries the
+first-detection timing bound, so the separate timing term is then disabled
+to avoid double-counting the earliest detection.
+
 The McCabe et al. rectangular detection-window configuration is provided
 as a separate comparison by
 [`imperial_only_model`](@ref) (exports and deaths, window-based); the
@@ -290,8 +300,10 @@ export infection→detection delay rather than learning it.
         confirmed_offsets::AbstractVector = reported_offsets,
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
+        exported_cases_daily::AbstractVector = Union{Missing, Int}[],
         growth = exponential_growth_model(),
         exports = exports_delay_model,
+        exports_daily = exports_daily_delay_model,
         deaths = deaths_model,
         reported_cases_submodel = reported_cases_model,
         confirmed = confirmed_cases_model,
@@ -375,8 +387,23 @@ export infection→detection delay rather than learning it.
     ## one Gamma. No separate incubation rescale (it lives in `f_det`).
     f_det = combined_delay(
         incubation_state.dist, reported_state.report_delay_dist)
-    exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, p_uganda, f_det), false)
+    ## Two export configurations. With a dated detection series the
+    ## time-resolved likelihood uses each import's Uganda report date and
+    ## its pre-detection survival term already carries the
+    ## first-detection timing bound, so the separate timing submodel is
+    ## made a no-op (`delta = missing`) to avoid double-counting the
+    ## earliest detection. Otherwise the scalar single-total count is fit
+    ## at the cut-off with the timing bound as a separate term.
+    if isempty(exported_cases_daily)
+        exports_state ~ to_submodel(
+            exports(exported_cases, growth_state, p_uganda, f_det), false)
+        detection_timing_delta = first_export_detection_delta
+    else
+        exports_state ~ to_submodel(
+            exports_daily(exported_cases_daily, growth_state, p_uganda,
+                f_det), false)
+        detection_timing_delta = missing
+    end
 
     ## Export deaths are also timed from infection: the death delay is
     ## incubation ⊕ onset-to-death, moment-matched to one Gamma, so the
@@ -396,7 +423,7 @@ export infection→detection delay rather than learning it.
         false)
     detection_timing_state ~ to_submodel(
         exports_detection_timing(growth_state, p_uganda;
-            delta = first_export_detection_delta,
+            delta = detection_timing_delta,
             pre_detection_exports = pre_detection_exports,
             f_det = exports_state.f_det,
             daily_travellers = exports_state.daily_travellers,

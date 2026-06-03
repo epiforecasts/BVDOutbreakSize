@@ -102,3 +102,30 @@ end
     @test all(isfinite, C)
     @test all(C .> 0)
 end
+
+@testitem "bvd_joint uses the dated export series when provided" tags=[:slow] begin
+    using Turing: sample, Prior
+    using BVDOutbreakSize: bvd_joint
+    import FlexiChains
+
+    ## With a dated detection series the joint switches to the
+    ## time-resolved export likelihood. Pass a non-empty daily series (the
+    ## scalar count is then ignored) and a first-detection delta: the
+    ## dated likelihood's pre-detection term carries the timing bound, so
+    ## the separate timing term must be a no-op and not double-count it.
+    model=bvd_joint(missing, [120], [500], [0, 0, 1];
+        exported_cases_daily = [1, 0, 0, 1],
+        reported_offsets = [0],
+        death_offsets = [0],
+        first_export_detection_delta = 3)
+
+    chn=sample(model, Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    expected=vec(Array(chn[:expected_exports_T]))
+    @test length(expected) == 50
+    @test all(isfinite, expected)
+    @test all(expected .> 0)
+    cases=vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, cases) && all(>(0), cases)
+end
