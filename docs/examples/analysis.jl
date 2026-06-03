@@ -1725,24 +1725,32 @@ function joint_obs(o; observe = true)
     if have_pervintage
         sa = o.samples_analysed_history
         ch = o.confirmed_case_history
-        ## Cumulative confirmed at each analysed-vintage offset.
         idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
         any(isnothing, idx) &&
             error("confirmed history missing an analysed-vintage offset")
-        conf_vals = [ch.values[i] for i in idx]
-        conf = observe ? Union{Missing, Int}[conf_vals...] :
-               fill(missing, length(conf_vals))
-        conf_off = collect(sa.offsets)
-        analysed = Union{Missing, Int}[sa.values...]
-        ## Per-vintage cumulative samples received (`Cumul échantillons
-        ## reçus`), aligned to the analysed offsets, condition the forwarded
-        ## fraction τ_forward via `R_v ~ NegBinomial(τ_forward·N_susp,v, k)`.
+        ## Merge any vintage that analysed no new samples (ΔA = 0, e.g. the
+        ## 25 May stall) into the next, so every window has a positive
+        ## denominator. Keep the first vintage and any with more cumulative
+        ## analysed than the previous kept one, then difference to the
+        ## between-vintage increments the confirmed model conditions on.
+        keep = [i == 1 || sa.values[i] > sa.values[i - 1]
+                for i in eachindex(sa.values)]
+        aoff = collect(sa.offsets)[keep]
+        analysed = Union{Missing, Int}[_increments(sa.values[keep])...]
+        ccum = [ch.values[i] for i in idx][keep]
+        conf = observe ? Union{Missing, Int}[_increments(ccum)...] :
+               fill(missing, length(ccum))
+        conf_off = aoff
+        ## Samples-received increments (`Cumul échantillons reçus`), aligned
+        ## to the kept offsets, condition τ_forward via the received-count
+        ## NegBinomial.
         if o.samples_received_history !== missing
             sr = o.samples_received_history
-            ridx = [findfirst(==(off), sr.offsets) for off in sa.offsets]
+            ridx = [findfirst(==(off), sr.offsets) for off in aoff]
             received = any(isnothing, ridx) ? Union{Missing, Int}[] :
                        (observe ?
-                        Union{Missing, Int}[sr.values[i] for i in ridx] :
+                        Union{Missing, Int}[_increments([sr.values[i]
+                                                                             for i in ridx])...] :
                         fill(missing, length(ridx)))
         else
             received = Union{Missing, Int}[]
@@ -2332,18 +2340,14 @@ pp_joint = predict(
         genetic = genetic_seeding),
     chn_joint);
 pp_exports = vec(Array(pp_joint[:exported_cases]));
-## The DRC deaths and reported streams are per-vintage increment vectors;
-## sum each draw's bins for the cumulative-total posterior predictive.
-## Confirmed is a per-vintage *cumulative* vector (Binomial on the analysed
-## denominator), so the cut-off total is the last vintage, not the sum.
-## Export deaths are a per-day series summed the same way as the increments.
+## All DRC streams are now per-vintage increment vectors (deaths, reported,
+## confirmed positives, samples received); sum each draw's bins for the
+## cumulative-total posterior predictive. Export deaths are a per-day series
+## summed the same way.
 pp_deaths = vec(sum.(pp_joint[@varname(total_deaths)]));
 pp_cases = vec(sum.(pp_joint[@varname(reported_cases)]));
-pp_confirmed = vec([v[end] for v in pp_joint[@varname(confirmed_cases)]]);
-## The tested-volume stream is now the per-vintage cumulative samples
-## *received* (`R_v ~ NegBinomial(τ_forward · N_susp,v, k)`), not a single
-## tests-analysed total; take the last vintage's cumulative for the panel.
-pp_tests = vec([v[end] for v in pp_joint[@varname(samples_received)]]);
+pp_confirmed = vec(sum.(pp_joint[@varname(confirmed_cases)]));
+pp_tests = vec(sum.(pp_joint[@varname(samples_received)]));
 pp_exports_deaths = vec(sum.(pp_joint[@varname(export_deaths_daily)]));
 
 joint_ppc_fig = plot_posterior_predictive(
@@ -2384,11 +2388,24 @@ joint_ppc_fig #hide
 #md # <details><summary>Per-vintage conditional one-step-ahead predictive</summary>
 #md # ```
 
+## Confirmed cases span the merged lab vintages (the 25 May stall folded
+## into 26 May); align the observed cumulative to the kept offsets.
+conf_keep = [i == 1 ||
+             obs.samples_analysed_history.values[i] >
+             obs.samples_analysed_history.values[i - 1]
+             for i in eachindex(obs.samples_analysed_history.values)]
+conf_cidx = [findfirst(==(off), obs.confirmed_case_history.offsets)
+             for off in obs.samples_analysed_history.offsets]
 vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
         observed = obs.reported_case_history.values, colour = :steelblue),
+    (; title = "Confirmed cases",
+        dates = obs.samples_analysed_history.dates[conf_keep],
+        replicates = collect(pp_joint[@varname(confirmed_cases)]),
+        observed = [obs.confirmed_case_history.values[i]
+                    for i in conf_cidx][conf_keep], colour = :seagreen),
     (; title = "Suspected deaths",
         dates = obs.death_history.dates,
         replicates = collect(pp_joint[@varname(total_deaths)]),
@@ -2458,6 +2475,7 @@ forecast = forecast_reported(chn_joint;
     obs_exports = EXPORTED_CASES,
     obs_confirmed = obs.confirmed_cases,
     obs_tests = obs.samples_received_history.values[end],
+    obs_analysed = obs.cumulative_tests_analysed,
     report_onset_offset = report_onset_offset(obs.as_of_date));
 forecast_summary = forecast_table(forecast);
 
@@ -2889,10 +2907,10 @@ pp_exports_deaths_only = vec(sum.(predict(
 pp_confirmed_only_chn = predict(
     confirmed_only_model(missing, obs.cumulative_tests_analysed),
     chn_confirmed);
-pp_confirmed_only = vec([v[end]
-                         for v in pp_confirmed_only_chn[@varname(confirmed_cases)]]);
-pp_tests_only = vec([v[end]
-                     for v in pp_confirmed_only_chn[@varname(samples_received)]]);
+pp_confirmed_only = vec(sum.(
+    pp_confirmed_only_chn[@varname(confirmed_cases)]));
+pp_tests_only = vec(sum.(
+    pp_confirmed_only_chn[@varname(samples_received)]));
 
 ppc_grid_fig = plot_posterior_predictive_grid(;
     individual = (; exports = pp_exports_only,

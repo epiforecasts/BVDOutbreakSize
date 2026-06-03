@@ -36,6 +36,11 @@
             qinf ~ Beta(6.0, 6.0)
             decay_scale ~ truncated(Normal(0.0, 10.0); lower = 0)
             τ_forward ~ Beta(5.0, 2.0)
+            ## Receipt-delay Gamma and the cut-off analysis capacity the
+            ## capacity-limited confirmed forecast reads.
+            α_recv ~ truncated(Normal(2.0, 1.0); lower = 0.1)
+            θ_recv ~ truncated(Normal(1.5, 0.75); lower = 0.1)
+            capacity_cutoff ~ truncated(Normal(150.0, 30.0); lower = 1.0)
         end
         return nothing
     end
@@ -85,7 +90,7 @@ end
         horizon = 7, daily_travellers = 1871,
         source_population = 4_392_200,
         obs_cases = 514, obs_deaths = 136, obs_exports = 2,
-        obs_confirmed = 33)
+        obs_confirmed = 33, obs_analysed = 211)
 
     @test :confirmed_cum in propertynames(fc)
     @test :confirmed_new in propertynames(fc)
@@ -172,17 +177,18 @@ end
     d0 = B._forecast_deaths_mean(r, Th, α, θ, CFR)
     @test d1 ≈ os * d0
 
-    ## Analysed volume (τ_forward · N_susp) and confirmed positives are both
-    ## positive and finite; the analysed forecast is the τ_forward share of
-    ## the suspect backlog.
-    a1 = B._forecast_tests_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg,
-        τ_forward; onset_fraction = os)
-    c1 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg,
-        s_test, spec_test, q0, qinf, decay_scale, τ_forward, t_report;
-        onset_fraction = os)
-    @test a1 > 0 && isfinite(a1)
-    @test c1 > 0 && isfinite(c1)
-    @test c1 < a1          # positives are a fraction of analysed
+    ## Received backlog (receipt-delayed), positivity and the
+    ## capacity-limited analysed increment are positive and finite; the
+    ## lab analyses at most the available backlog.
+    f_receipt = Gamma(2.0, 1.5)
+    recv = B._forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+        f_receipt; onset_fraction = os)
+    p_pos = B._forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
+        decay_scale)
+    Δa = B._forecast_analysed_increment(recv, 40.0, 50.0, 7.0)
+    @test recv > 0 && isfinite(recv)
+    @test 0 < p_pos < 1
+    @test 0 < Δa <= recv
 
     ## Reported cases scale only the BVD part; the constant background
     ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.

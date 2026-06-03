@@ -217,25 +217,24 @@ end
 Laboratory pipeline likelihood. Models the lab-confirmed cases over time
 and, where available, the testing volume that gates them.
 
-`confirmed_cases` (`Cumul positifs`) is a per-vintage *cumulative* vector
-aligned with `t_edges`. Each vintage's cumulative confirmed count is
-observed conditional on its cumulative analysed denominator through a
-Binomial (equations (23)-(24) of the walkthrough):
+`confirmed_cases` is a per-vintage vector of confirmed-case *increments*
+(between-vintage differences of `Cumul positifs`) aligned with `t_edges`.
+Each window's new positives are observed on the samples newly analysed in
+that window, the same increment construction as the reported and deaths
+streams (equations (23)-(24)):
 
 ```math
-C_v \\sim \\mathrm{Binomial}(A_v,\\ p_{pos,v}),
+\\Delta C_v \\sim \\mathrm{Binomial}(\\Delta A_v,\\ p_{pos,v}),
 \\qquad
 p_{pos,v} = s_{test}\\, q_v + (1 - \\text{spec})\\,(1 - q_v),
-\\qquad
-q_v = \\frac{\\text{BVD}_{tested}(A_v)}{A_v},
 ```
 
-where `A_v` is the cumulative analysed count to edge `v`
-(`samples_analysed`, a *known* denominator, not modelled), `q_v` the BVD
-share of the analysed batch, `s_test` the PCR sensitivity (true positives
-on the BVD share) and `1 − spec` the false-positive rate (false positives
-on the non-BVD share; see [`test_specificity_model`](@ref)). Modelling
-specificity lets the observed positivity exceed `s·q`.
+where `ΔA_v` is the analysed count newly added in window `v`
+(`samples_analysed`, a known denominator), `q_v` the BVD share of that
+slice, `s_test` the PCR sensitivity and `1 − spec` the false-positive rate
+(see [`test_specificity_model`](@ref)). Conditioning on the slice rather
+than the cumulative total avoids re-using the early analysed samples in
+every later denominator.
 
 `q_v` is the **severe-first** tested BVD share: the lab tests the
 most-likely-BVD (severest / most obvious) suspects first, so `q` starts at
@@ -259,33 +258,37 @@ decay timescale are sampled by [`test_selection_model`](@ref).
 The cumulative suspect backlog at each edge is split BVD / background:
 `μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
 (the onset→report Gamma closed form, the same quantity the reported stream
-produces — no report-to-lab delay, the lab selects from the accumulated
-received queue) and `μ_bg(s_v) = λ_bg · s_v` (constant-rate non-BVD). Their
-sum `N_susp,v` is the backlog the received-count likelihood conditions on;
-their ratio `μ_BVD / N_susp` is the count-implied BVD composition, exposed
-as a diagnostic (`q_baseline_count`).
+produces) and `μ_bg(s_v) = λ_bg · s_v` (constant-rate non-BVD). Their sum
+`N_susp,v` is the report-level backlog; their ratio `μ_BVD / N_susp` is the
+count-implied BVD composition, exposed as a diagnostic
+(`q_baseline_count`).
 
-`samples_received` is the per-vintage cumulative received-count vector
-(`Cumul échantillons reçus`). When supplied each vintage is observed as
-`R_v ~ NegBinomial(τ_forward · N_susp,v, k)`, pinning the forwarded
-fraction `τ_forward` directly from received-versus-suspected. A vector of
-`missing` entries drops the received likelihood (and is generated for
-predictive checks).
+Specimens reach the lab after a transport delay, so the cumulative
+*received* backlog is `N_susp` convolved with the receipt-delay kernel
+`f_receipt` (see [`lab_receipt_delay_model`](@ref)).
 
-`samples_analysed` is the per-vintage analysed denominator vector aligned
-with `t_edges`. Pass a vector of `missing` entries (with a non-missing
-fallback `tests_analysed` for the denominators) to generate
-posterior-predictive confirmed draws.
+`samples_received` is the per-vintage received-count *increment* vector
+(differenced `Cumul échantillons reçus`). When supplied each window is
+observed as `ΔR_v ~ NegBinomial(τ_forward · ΔN_recv,v, k)`, pinning the
+forwarded fraction `τ_forward`. A vector of `missing` entries drops the
+received likelihood (and is generated for predictive checks).
 
-`tests_analysed` (`Cumul échantillons analysés`) is a single cumulative
-count used only as the fallback binomial denominator for any `missing`
+`samples_analysed` is the per-vintage analysed-increment denominator
+vector (`ΔA_v`) aligned with `t_edges`. It both denominates the confirmed
+Binomial and conditions the analysis-capacity random walk (see
+[`lab_capacity_model`](@ref)): for windows 2..n the lab processes
+`μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog))` of the available received
+backlog, observed as `ΔA_v ~ Poisson(μ_A)`. Window 1's cumulative is the
+initial condition. Pass `missing` entries (with a non-missing
+`tests_analysed` fallback) to generate predictive draws.
+
+`tests_analysed` is the fallback Binomial denominator for any `missing`
 `samples_analysed` entry under predictive generation. The per-test
-positivity `p_pos`, the tested BVD share `q_cutoff` and the baseline
-`q_baseline` are exposed as derived quantities for comparison with the
-sitrep figure.
+positivity `p_pos`, tested BVD share `q_cutoff` and baseline `q_baseline`
+are exposed as derived quantities.
 
-A single confirmed observation (`length 1`, `t_edges = [T]`, single
-`samples_analysed`) reduces to the cumulative confirmed Binomial.
+A single observation (`length 1`, `t_edges = [T]`) reduces to the
+cumulative confirmed Binomial.
 """
 @model function confirmed_cases_model(
         confirmed_cases::AbstractVector,
@@ -298,16 +301,25 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
         test_selection = test_selection_model(),
+        receipt_delay = lab_receipt_delay_model(),
+        capacity_model = lab_capacity_model,
+        capacity_centre::Real = 150.0,
         report_onset_offset::Union{Nothing, Real} = nothing,
         onset_fraction::Real = 1.0)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
     selection_state ~ to_submodel(test_selection, false)
+    receipt_state ~ to_submodel(receipt_delay, false)
+    n_edges = length(t_edges)
+    capacity_state ~ to_submodel(
+        capacity_model(n_edges; capacity_centre = capacity_centre), false)
     s_test = sensitivity_state.s_test
     spec_test = specificity_state.spec_test
     q0 = selection_state.q0
     decay_scale = selection_state.decay_scale
     qinf = selection_state.qinf
+    f_receipt = receipt_state.dist
+    κ = capacity_state.capacity
     r = growth_state.r
     T = growth_state.T
 
@@ -380,18 +392,18 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         p_raw = s_test * q + (one(Tt) - spec_test) * (one(Tt) - q)
         p_pos[i] = isfinite(p_raw) ?
                    clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
-        ## Expected cumulative confirmed: analysed denominator × positivity,
-        ## a derived diagnostic.
+        ## Expected confirmed increment: newly-analysed slice ΔA_v times its
+        ## positivity (a diagnostic).
         Λ_at_edges[i] = p_pos[i] *
                         (samples_analysed[i] === missing ? zero(Tt) :
                          convert(Tt, samples_analysed[i]))
     end
 
-    ## Confirmed counts observed conditional on the analysed denominator
-    ## via a Binomial. `A_v` is data, not modelled, which removes the
-    ## multiplicative ridge of the NegBinomial-increment form. A `missing`
-    ## denominator falls back to the cumulative `tests_analysed` so
-    ## predictive draws still have an integer denominator.
+    ## New positives observed on the newly-analysed slice ΔA_v via a
+    ## Binomial, the same between-vintage increment form as the reported and
+    ## deaths streams (first window's increment is the cumulative, so a
+    ## single vintage reduces to the cumulative Binomial). A `missing`
+    ## denominator falls back to `tests_analysed` for predictive draws.
     for i in 1:n
         A_i = samples_analysed[i] === missing ?
               (tests_analysed === missing ? 0 : tests_analysed) :
@@ -399,20 +411,58 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
         confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
     end
 
-    ## Samples received conditional on the suspect backlog. The lab forwards
-    ## a fraction `τ_forward` of the cumulative suspected backlog
-    ## `N_susp,v = μ_BVD,v + μ_bg,v` (the same BVD-suspected + background
-    ## quantities the positivity uses), so the expected cumulative received
-    ## is `τ_forward · N_susp,v`, observed through a NegBinomial sharing the
-    ## surveillance dispersion `k`. This pins `τ_forward` directly from
-    ## received-versus-suspected rather than leaning on a single tested-
-    ## volume total. A `missing` received entry is generated for predictive
-    ## checks. `τ_forward` is held constant across vintages for parsimony.
+    ## Received queue: the suspect backlog reaches the lab after a transport
+    ## delay, so the cumulative received is the suspect backlog convolved with
+    ## the receipt-delay kernel f_receipt. Confirmed uses a pooled (constant)
+    ## p_drc, so a single representative value drives the continuous backlog.
+    p_drc_c = convert(Tt, p_drc_per_bin[1])
+    N_susp_fn = let r = r, f_rep = f_rep, p_drc_c = p_drc_c,
+        onset_fraction = onset_fraction, λ_bg = λ_bg
+
+        u -> u <= zero(u) ? zero(Tt) :
+             p_drc_c * onset_fraction *
+             delay_convolution(one(r), r, u, f_rep) +
+             max(convert(Tt, λ_bg) * u, zero(Tt))
+    end
+    N_recv_at = Vector{Tt}(undef, n)
+    for i in 1:n
+        s_i = oftype(T, t_edges[i])
+        raw = s_i <= zero(s_i) ? zero(Tt) :
+              convert(Tt, delay_convolution(N_susp_fn, s_i, f_receipt))
+        N_recv_at[i] = max(raw, zero(Tt))
+    end
+
+    ## Received increments: the lab forwards a fraction τ_forward of the
+    ## received backlog, so the per-window mean is τ_forward·ΔN_recv, observed
+    ## through a NegBinomial sharing `k`. A `missing` entry is generated for
+    ## predictive checks.
+    ΔN_recv = daily_increment_kernel(N_recv_at)
     recv_means = Vector{Tt}(undef, n)
     for i in 1:n
-        raw = convert(Tt, τ_forward) * Nsusp_at[i]
+        raw = convert(Tt, τ_forward) * ΔN_recv[i]
         recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
         samples_received[i] ~ safe_nbinomial(k, recv_means[i])
+    end
+
+    ## Analysis throughput: the lab processes a fraction of the available
+    ## received backlog set by its daily capacity κ_v over the window length
+    ## Δt_v: μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog)) — capacity-limited when
+    ## the backlog is large, the whole backlog when capacity is ample. Window
+    ## 1's cumulative analysed is the initial condition (it accumulated over an
+    ## unknown pre-window period); windows 2..n condition the capacity random
+    ## walk on the genuine between-sitrep gaps. A `missing` entry is generated.
+    analysed_cum = (n >= 1 && samples_analysed[1] !== missing) ?
+                   convert(Tt, samples_analysed[1]) : zero(Tt)
+    for i in 2:n
+        Δt = max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]), zero(T))
+        recv_cum = convert(Tt, τ_forward) * N_recv_at[i]
+        backlog = max(recv_cum - analysed_cum, eps(Tt))
+        cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
+        μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
+        μ_A = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
+        samples_analysed[i] ~ Poisson(μ_A)
+        analysed_cum += samples_analysed[i] === missing ? μ_A :
+                        convert(Tt, samples_analysed[i])
     end
 
     ## Per-test positivity at the lab cut-off (last edge ≤ tests_edge):
@@ -426,14 +476,18 @@ A single confirmed observation (`length 1`, `t_edges = [T]`, single
     q_baseline := qinf
     q_baseline_count := qinf_count_at[te_idx]
     τ_forward_out := τ_forward
+    ## Daily analysis capacity at the cut-off vintage (samples/day).
+    capacity_cutoff := κ[te_idx]
 
-    expected_confirmed_total := Λ_at_edges[end]
-    expected_received_total := recv_means[end]
+    ## Cumulative expected totals at the cut-off: sum the per-window
+    ## increment means (confirmed positives, received samples).
+    expected_confirmed_total := sum(Λ_at_edges)
+    expected_received_total := sum(recv_means)
 
     return (; p_positive, p_pos, q_at, qinf, qinf_count_at, Nsusp_at,
-        recv_means, s_test, spec_test, q0, decay_scale, τ_forward,
-        p_drc_per_bin, expected_confirmed_total, expected_received_total,
-        Λ_at_edges)
+        N_recv_at, recv_means, capacity = κ, s_test, spec_test, q0,
+        decay_scale, τ_forward, p_drc_per_bin, expected_confirmed_total,
+        expected_received_total, Λ_at_edges)
 end
 
 """

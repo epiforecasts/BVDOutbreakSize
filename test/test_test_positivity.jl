@@ -127,19 +127,20 @@ end
 end
 
 @testitem "confirmed binomial conditions on observed analysed" tags=[:slow] begin
-    ## Confirmed counts are observed as `C_v ~ Binomial(A_v, p_pos_v)` with
-    ## the analysed count `A_v` a known denominator (data). A confirmed draw
-    ## must never exceed its analysed denominator, and the per-vintage
-    ## positivity must stay in (0, 1).
+    ## Confirmed increments are observed as `ΔC_v ~ Binomial(ΔA_v, p_pos_v)`
+    ## with the newly-analysed count `ΔA_v` a known denominator (data). A
+    ## confirmed draw must never exceed its denominator, and the per-vintage
+    ## positivity must stay in (0, 1). Inputs are merged-vintage increments
+    ## (the 25 May stall folded into 26 May).
     using Turing: sample, Prior, predict, @model, to_submodel
     import FlexiChains
     using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
                            report_delay_model, surveillance_dispersion_model
 
-    A = [211, 295, 295, 403]                 # cumulative analysed
-    R = [418, 431, 431, 662]                  # cumulative received
-    C = [101, 105, 106, 121]                  # cumulative confirmed
-    edges = [123.0, 124.0, 125.0, 126.0]      # vintage elapsed times
+    A = [211, 84, 108]                        # newly-analysed per window
+    R = [418, 13, 231]                        # received increments
+    C = [101, 4, 16]                          # confirmed increments
+    edges = [123.0, 124.0, 126.0]             # vintage elapsed times
 
     @model function _binom_harness(confirmed, analysed, received;
             growth = exponential_growth_model(),
@@ -164,10 +165,10 @@ end
     @test all(0 .<= qc .<= 1)
 
     ## Posterior-predictive confirmed and received draws.
-    pp = predict(_binom_harness(fill(missing, 4), A, fill(missing, 4)), chn)
+    pp = predict(_binom_harness(fill(missing, 3), A, fill(missing, 3)), chn)
     draws = vec(Array(pp[:confirmed_cases]))
-    cc = reduce(hcat, draws)            # 4 vintages × draws
-    for v in 1:4
+    cc = reduce(hcat, draws)            # 3 vintages × draws
+    for v in 1:3
         @test all(cc[v, :] .<= A[v])
         @test all(cc[v, :] .>= 0)
     end
@@ -206,9 +207,9 @@ end
     using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
                            report_delay_model, surveillance_dispersion_model
 
-    A = [211, 295, 295, 403]
-    C = [101, 105, 106, 121]
-    edges = [123.0, 124.0, 125.0, 126.0]
+    A = [211, 84, 108]
+    C = [101, 4, 16]
+    edges = [123.0, 124.0, 126.0]
 
     @model function _recv_harness(confirmed, analysed, received;
             growth = exponential_growth_model(),
@@ -225,9 +226,46 @@ end
 
     ## Sanity: with received supplied the model samples without error and
     ## the expected received total is positive and finite.
-    chn = sample(_recv_harness(C, A, [418, 431, 431, 662]), Prior(), 300;
+    chn = sample(_recv_harness(C, A, [418, 13, 231]), Prior(), 300;
         chain_type = FlexiChains.VNChain, progress = false)
     er = vec(Array(chn[:expected_received_total]))
     @test all(isfinite, er)
     @test all(er .> 0)
+end
+
+@testitem "analysis capacity is pulled below the prior by throughput" tags=[:slow] begin
+    ## The capacity random walk is centred on 150 samples/day. Conditioning
+    ## on the observed analysed throughput (84/day then 54/day across the
+    ## merged windows) under NUTS must pull the cut-off capacity posterior
+    ## well below the 150 prior centre, and keep it finite and positive.
+    using Turing: @model, to_submodel
+    using Statistics: mean
+    using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
+                           report_delay_model, surveillance_dispersion_model,
+                           nuts_sample
+
+    A = [211, 84, 108];
+    R = [418, 13, 231];
+    C = [101, 4, 16]
+    edges = [123.0, 124.0, 126.0]
+
+    @model function _cap_harness(confirmed, analysed, received;
+            growth = exponential_growth_model(),
+            dispersion = surveillance_dispersion_model(),
+            report_delay = report_delay_model())
+        growth_state ~ to_submodel(growth, false)
+        disp_state ~ to_submodel(dispersion, false)
+        rep_state ~ to_submodel(report_delay, false)
+        confirmed_state ~ to_submodel(
+            confirmed_cases_model(confirmed, analysed, received, 211,
+                growth_state, disp_state.k, fill(0.3, length(confirmed)),
+                0.6, 0.7, rep_state.dist, edges, 126.0), false)
+    end
+
+    chn = nuts_sample(_cap_harness(C, A, R);
+        samples = 60, chains = 1, seed = 3, progress = false)
+    cap = vec(Array(chn[:capacity_cutoff]))
+    @test all(isfinite, cap)
+    @test all(cap .> 0)
+    @test mean(cap) < 150          # throughput pulls capacity below the prior
 end

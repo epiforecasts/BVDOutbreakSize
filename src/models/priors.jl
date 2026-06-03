@@ -264,6 +264,47 @@ BVD share are exposed inside [`confirmed_cases_model`](@ref). Pass
 end
 
 """
+Report-to-lab-receipt delay prior. Samples a Gamma shape `α` and scale
+`θ` for the time from a suspected-case report to specimen receipt at the
+Bunia/INRB laboratory (transport and intake), centred near 3 days. The
+confirmed model convolves the suspect backlog with this delay to get the
+received queue. Prior needs human sign-off against the sitrep turnaround.
+Used by [`confirmed_cases_model`](@ref).
+"""
+@model function lab_receipt_delay_model(;
+        alpha_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
+        theta_prior = truncated(Normal(1.5, 0.75); lower = 0.1))
+    α_recv ~ alpha_prior
+    θ_recv ~ theta_prior
+    return (; α = α_recv, θ = θ_recv, dist = Gamma(α_recv, θ_recv))
+end
+
+"""
+Laboratory analysis-capacity prior over the `n` confirmed vintages. The
+per-window daily capacity follows a log random walk centred on
+`capacity_centre` samples analysed per day (external DRC sitrep / NYT
+figure, ~150): `log κ_1 ~ Normal(log centre, level_sd)` and
+`log κ_v = log κ_{v−1} + rw_sd·z_v` with non-centred innovations `z`. The
+throughput likelihood in [`confirmed_cases_model`](@ref) scales the
+available received backlog by `1 − exp(−κ_v·Δt_v / backlog)`, so capacity
+limits analysis when the backlog is large and the whole backlog is
+processed when capacity is ample. Returns the length-`n` `capacity`.
+"""
+@model function lab_capacity_model(n::Integer;
+        capacity_centre::Real = 150.0,
+        level_sd::Real = 0.5,
+        rw_sd_prior = truncated(Normal(0.0, 0.5); lower = 0))
+    z_cap ~ filldist(Normal(0, 1), n)
+    rw_sd ~ rw_sd_prior
+    ## Non-centred log random walk: window 1 at the centred level, later
+    ## windows accumulate rw_sd-scaled innovations.
+    steps = cumsum(vcat(zero(eltype(z_cap)), z_cap[2:end]))
+    logκ = log(capacity_centre) .+ level_sd * z_cap[1] .+ rw_sd .* steps
+    capacity := exp.(logκ)
+    return (; capacity, rw_sd)
+end
+
+"""
 Case-fatality ratio prior. Default `Beta(6.6, 13.4)` has mean ≈ 0.33,
 matching the CDC summary for past BVD outbreaks. Used by
 [`deaths_model`](@ref) and [`exports_deaths_model`](@ref).

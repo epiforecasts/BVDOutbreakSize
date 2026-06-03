@@ -29,42 +29,44 @@ function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
     return onset_fraction * p_drc * conv + max(λ_bg * Th, zero(λ_bg))
 end
 
-# BVD-suspected and total suspect backlog at horizon `Th` for the
-# severe-first confirmed/received forecast. The eligible pool is the
-# undelayed cumulative suspected backlog (no report-to-lab delay):
-# `μ_BVD = p_drc · onset_fraction · ∫₀^{Th} exp(r·s) f_rep(Th−s) ds` and
-# `μ_bg = λ_bg · Th`; `N_susp = μ_BVD + μ_bg`.
-function _forecast_suspect_backlog(r, Th, α_rep, θ_rep, p_drc, λ_bg;
-        onset_fraction = 1.0)
-    μ_bvd = onset_fraction * p_drc *
-            delay_convolution(one(p_drc), r, Th, Gamma(α_rep, θ_rep))
-    μ_bg = max(λ_bg * Th, zero(λ_bg))
-    return μ_bvd, μ_bvd + μ_bg
+# Cumulative samples received at horizon `Th`: the forwarded fraction
+# `τ_forward` of the suspect backlog `N_susp = μ_BVD + μ_bg` convolved with
+# the receipt-delay kernel `f_receipt` (specimens reach the lab after a
+# transport delay), matching the received stream of `confirmed_cases_model`.
+function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+        f_receipt; onset_fraction = 1.0)
+    f_rep = Gamma(α_rep, θ_rep)
+    N_susp = let r = r, f_rep = f_rep, p_drc = p_drc, onset_fraction = onset_fraction,
+        λ_bg = λ_bg
+
+        u -> u <= zero(u) ? zero(u) :
+             onset_fraction * p_drc *
+             delay_convolution(one(p_drc), r, u, f_rep) +
+             max(λ_bg * u, zero(λ_bg))
+    end
+    N_recv = delay_convolution(N_susp, Th, f_receipt)
+    return τ_forward * max(N_recv, zero(N_recv))
 end
 
-# Cumulative confirmed positives at horizon `Th`: the analysed-volume
-# forecast `τ_forward · N_susp` times the severe-first positivity
+# Severe-first per-test positivity at horizon `Th`:
 # `p_pos = s·q + (1−spec)·(1−q)`, with `q = qinf + (q0−qinf)·exp(−c/scale)`
 # the tested BVD share at elapsed testing time `c = max(Th − t_report, 0)`.
-function _forecast_confirmed_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg, s_test,
-        spec_test, q0, qinf, decay_scale, τ_forward, t_report;
-        onset_fraction = 1.0)
-    _, N = _forecast_suspect_backlog(r, Th, α_rep, θ_rep, p_drc, λ_bg;
-        onset_fraction)
+function _forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
+        decay_scale)
     c = max(Th - t_report, zero(Th))
     q = severe_first_share(q0, qinf, c, decay_scale)
-    p_pos = clamp(s_test * q + (one(q) - spec_test) * (one(q) - q),
+    return clamp(s_test * q + (one(q) - spec_test) * (one(q) - q),
         zero(q), one(q))
-    return τ_forward * N * p_pos
 end
 
-# Cumulative samples analysed at horizon `Th`: the forwarded fraction of
-# the suspect backlog, `τ_forward · N_susp`.
-function _forecast_tests_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward;
-        onset_fraction = 1.0)
-    _, N = _forecast_suspect_backlog(r, Th, α_rep, θ_rep, p_drc, λ_bg;
-        onset_fraction)
-    return τ_forward * N
+# Capacity-limited analysed throughput over the horizon: the lab processes
+# a fraction `1 − exp(−κ·h/backlog)` of the received backlog not yet
+# analysed (`backlog = received − analysed_cutoff`), with daily capacity `κ`
+# held at its cut-off value over the `h`-day horizon.
+function _forecast_analysed_increment(received, analysed_cutoff, κ, horizon)
+    backlog = max(received - analysed_cutoff, eps(typeof(received)))
+    cap = max(κ * horizon, zero(received))
+    return backlog * (one(received) - exp(-cap / backlog))
 end
 
 function _nb_rand(rng, k, μ)
@@ -86,17 +88,19 @@ per draw and columns:
   floored at zero).
 - `:confirmed_cum`, `:confirmed_new` — laboratory-confirmed counterparts
   when the chain carries the severe-first confirmed-stream parameters
-  (`:s_test`, `:spec_test`, `:q0`, `:qinf`, `:decay_scale`, `:τ_forward`)
-  and `obs_confirmed` is supplied. Otherwise these columns are absent.
+  (`:s_test`, `:spec_test`, `:q0`, `:qinf`, `:decay_scale`, `:τ_forward`,
+  `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
+  `obs_analysed` are supplied. Otherwise these columns are absent.
 
 DRC reported cases follow the additive expectation
 `p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg·(T+h)`, with
 `f_rep = Gamma(α_rep, θ_rep)` for the BVD-driven contribution and the
-constant-rate non-BVD background. Laboratory-confirmed cases follow the
-forwarded analysed volume `τ_forward · N_susp(T+h)` times the severe-first
-positivity `s·q + (1−spec)(1−q)`, with `q` the severe-first tested BVD
-share at the forecast horizon (see [`confirmed_cases_model`](@ref)).
-Exports use `p_uganda · q` with
+constant-rate non-BVD background. Laboratory-confirmed cases continue the
+queue of [`confirmed_cases_model`](@ref): the received backlog
+(`τ_forward · N_susp` convolved with the receipt delay) is analysed at the
+cut-off capacity `κ` over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`,
+and the new positives are `ΔA` times the severe-first positivity, added to
+the observed cumulative confirmed. Exports use `p_uganda · q` with
 `q = daily_travellers / source_population`. Assumes growth continues
 unchanged over the horizon (no interventions, no saturation).
 
@@ -114,6 +118,7 @@ function forecast_reported(chn;
         obs_exports::Real,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_tests::Union{Real, Missing} = missing,
+        obs_analysed::Union{Real, Missing} = missing,
         seed::Integer = 20260520,
         report_onset_offset::Union{Nothing, Real} = nothing,
         alg = DEATH_INTEGRAL_ALG)
@@ -141,14 +146,18 @@ function forecast_reported(chn;
     ## the q-curve shape) live on the joint chain only; their absence drops
     ## the confirmed-cases columns.
     has_lab = all(haskey_chain(chn, n)
-    for n in (:s_test, :spec_test, :q0, :qinf, :decay_scale,
-        :τ_forward)) && obs_confirmed !== missing
+              for n in (:s_test, :spec_test, :q0, :qinf, :decay_scale,
+                  :τ_forward, :α_recv, :θ_recv, :capacity_cutoff)) &&
+              obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
     spec_test = has_lab ? _draws(chn, :spec_test) : nothing
     q0 = has_lab ? _draws(chn, :q0) : nothing
     qinf = has_lab ? _draws(chn, :qinf) : nothing
     decay_scale = has_lab ? _draws(chn, :decay_scale) : nothing
     τ_forward = has_lab ? _draws(chn, :τ_forward) : nothing
+    α_recv = has_lab ? _draws(chn, :α_recv) : nothing
+    θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
+    capacity = has_lab ? _draws(chn, :capacity_cutoff) : nothing
 
     has_tests = has_lab && obs_tests !== missing
     rng = MersenneTwister(seed)
@@ -183,16 +192,21 @@ function forecast_reported(chn;
         μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
         exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
         if has_lab
-            μ_confirmed = _forecast_confirmed_mean(r[i], Th,
-                α_rep[i], θ_rep[i], pr[i], λ_bg[i], s_test[i],
-                spec_test[i], q0[i], qinf[i], decay_scale[i],
-                τ_forward[i], t_report_i; onset_fraction = os)
-            confirmed_cum[i] = _nb_rand(rng, k[i], μ_confirmed)
+            ## Received backlog (receipt-delayed) and the capacity-limited
+            ## analysed increment over the horizon; new confirmed positives
+            ## are the horizon positivity times that increment, added to the
+            ## observed cumulative confirmed at the cut-off.
+            f_receipt = Gamma(α_recv[i], θ_recv[i])
+            received = _forecast_received(r[i], Th, α_rep[i], θ_rep[i],
+                pr[i], λ_bg[i], τ_forward[i], f_receipt; onset_fraction = os)
+            Δanalysed = _forecast_analysed_increment(received, obs_analysed,
+                capacity[i], horizon)
+            p_pos = _forecast_positivity(Th, t_report_i, s_test[i],
+                spec_test[i], q0[i], qinf[i], decay_scale[i])
+            confirmed_cum[i] = round(Int, obs_confirmed) +
+                               _nb_rand(rng, k[i], p_pos * Δanalysed)
             if has_tests
-                μ_tests = _forecast_tests_mean(r[i], Th,
-                    α_rep[i], θ_rep[i], pr[i], λ_bg[i], τ_forward[i];
-                    onset_fraction = os)
-                tests_cum[i] = _nb_rand(rng, k[i], μ_tests)
+                tests_cum[i] = _nb_rand(rng, k[i], received)
             end
         end
     end
