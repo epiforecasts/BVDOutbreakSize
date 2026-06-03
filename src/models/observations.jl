@@ -212,36 +212,117 @@ sitrep.
 end
 
 """
-Laboratory pipeline likelihood, per-vintage time series. Two coupled
-streams driven by the shared renewal onsets:
+Per-window confirmed-positives likelihood, expressed as a vector
+likelihood scored against the observed analysed denominators. Given the
+per-window analysed counts `analysed` and positivities `p_pos`, scores the
+observed `positives` with one `Binomial(analysed[i], p_pos[i])` per window.
+`positives` is the model argument on the LHS of `~`, so a supplied vector
+is observed data DynamicPPL conditions on (mirroring
+[`vintage_increments_model`](@ref)) and a `missing` argument is sampled,
+making the submodel a predictive generator. Under a prefixed submodel
+attachment the predict keys are `<prefix>.positives[i]`. Returns the
+observed (or sampled) positives.
+"""
+@model function confirmed_positives_model(
+        positives::Union{Missing, AbstractVector{<:Integer}},
+        analysed::AbstractVector{<:Integer}, p_pos::AbstractVector)
+    nv = length(analysed)
+    if ismissing(positives)
+        positives = Vector{Union{Missing, Int}}(missing, nv)
+    end
+    for i in 1:nv
+        positives[i] ~ Binomial(analysed[i], p_pos[i])
+    end
+    return (; positives)
+end
 
-- Confirmed cases. The BVD onset-to-report daily series (the unit
-  ascertainment `bvd_reports_daily` shared from
-  [`reported_cases_model`](@ref)) is convolved with the sampled
-  report-to-confirmation (lab-turnaround) delay, then scaled by the DRC
-  ascertainment `p_drc`, the PCR sensitivity `s_test` and the testing
-  fraction `τ_test`. The modelled cumulative confirmed cases are read off
-  at each `confirmed_history` vintage day and the increments fitted as
-  observed `~` data with a NegativeBinomial sharing `k`. The confirmed
-  history ends at the cut-off, so the cut-off total is the final increment
-  and is not scored separately.
-- Tests analysed. The tested daily volume is `τ_test` times the sum of the
-  `p_drc`-scaled BVD lab series and the non-BVD background `λ_bg` carried
-  through the same lab delay. Its cumulative is read off at the
-  `lab_history` vintage days (so a lab stream that lags the case cut-off is
-  right-truncated by reading the running cumulative at its own days) and
-  the increments fitted with a NegativeBinomial sharing `k`. When the
-  dated `lab_history` is absent, the cut-off `tests_analysed` total is
-  scored as a single vintage point at day `n`. Confirmed
-  counts are not re-observed conditional on the tested volume, so the two
-  lab streams are not double-counted.
+"""
+Align the confirmed-case counts onto the laboratory analysed-specimen
+vintage windows so the confirmed positives can be scored as a `Binomial`
+of the observed denominator. Walks the analysed (`lab_history`) vintages
+oldest-first, taking each window's analysed increment as the binomial
+denominator and the matching confirmed-count increment (read from
+`confirmed_history`, whose vintages are a superset of the laboratory
+dates) as the positives. A window with a zero analysed increment (e.g. the
+24-25 May analysis stall, when the cumulative analysed total is flat) or
+one whose positives would exceed its denominator is merged forward into
+the next window, so every returned window has `analysed > 0` and
+`0 ≤ positives ≤ analysed`. Returns `(; days, positives, analysed)` of
+grid day-indices and the per-window observed positives and analysed
+denominators; empty when either history is absent. Pure integer
+bookkeeping on the observed data, so it carries no gradient.
+"""
+function confirmed_positivity_windows(confirmed_history, lab_history)
+    if isempty(lab_history.counts) || isempty(confirmed_history.counts)
+        return (; days = Int[], positives = Int[], analysed = Int[])
+    end
+    cdays = confirmed_history.days
+    ccounts = confirmed_history.counts
+    ## Cumulative confirmed at (or most recently before) a grid day.
+    function confirmed_at(day)
+        i = searchsortedlast(cdays, day)
+        return i == 0 ? 0 : Int(ccounts[i])
+    end
+    days = Int[]
+    positives = Int[]
+    analysed = Int[]
+    a_acc = 0
+    prev_conf = 0
+    c_acc = 0
+    for (j, d) in enumerate(lab_history.days)
+        a_inc = Int(lab_history.counts[j]) -
+                (j == 1 ? 0 : Int(lab_history.counts[j - 1]))
+        conf_here = confirmed_at(d)
+        a_acc += a_inc
+        c_acc += conf_here - prev_conf
+        prev_conf = conf_here
+        if a_acc > 0 && c_acc <= a_acc
+            push!(days, d)
+            push!(positives, max(c_acc, 0))
+            push!(analysed, a_acc)
+            a_acc = 0
+            c_acc = 0
+        end
+    end
+    ## Trailing remainder from a stalled tail: emit it capped, or fold it
+    ## into the last window when there is no fresh denominator.
+    if a_acc > 0
+        push!(days, lab_history.days[end])
+        push!(positives, clamp(c_acc, 0, a_acc))
+        push!(analysed, a_acc)
+    elseif c_acc > 0 && !isempty(analysed)
+        positives[end] = clamp(positives[end] + c_acc, 0, analysed[end])
+    end
+    return (; days, positives, analysed)
+end
 
-Samples the lab-turnaround delay and the PCR sensitivity via injected
-submodels; the testing fraction `τ_test` and background rate `λ_bg` come
-from [`reported_cases_model`](@ref) so the suspected and laboratory
-streams share them. Exposes the per-test positivity
-`s_test · BVD_tested / tested` and the expected confirmed and tested
-totals at the cut-off as derived quantities.
+"""
+Laboratory pipeline likelihood. Two streams driven by the shared renewal
+onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
+
+- Specimens received. The suspected daily pipeline (`p_drc`-scaled BVD
+  onset-to-report signal plus the non-BVD background `λ_bg`) is carried
+  through a sampled report-to-laboratory receipt delay and thinned by the
+  tested fraction `τ_test`, giving the expected daily received-specimen
+  volume. Its between-vintage increments are fitted against
+  `tests_received_history` as observed `~` data with a NegativeBinomial
+  sharing the surveillance dispersion `k`, identifying `τ_test` and the
+  receipt delay.
+- Confirmed positives. The confirmed counts are scored as a `Binomial` of
+  the observed specimens-*analysed* denominator in each laboratory window
+  ([`confirmed_positivity_windows`](@ref)), with a partially-pooled
+  per-window positivity ([`confirmed_positivity_model`](@ref)).
+  Conditioning the positives on the observed analysed denominator (rather
+  than a modelled count scaled by `p_drc · s_test · τ_test`) removes the
+  multiplicative ascertainment ridge that basin-split the joint, so the
+  outbreak size is pinned by the deaths and exports streams while the
+  laboratory positivity is free to track the noisy per-vintage data.
+
+The tested fraction `τ_test` and background rate `λ_bg` come from
+[`reported_cases_model`](@ref) so the suspected and laboratory streams
+share them. Exposes the per-window positivity, the expected received and
+confirmed totals at the cut-off, and the cut-off positivity as derived
+quantities.
 """
 @model function confirmed_cases_model(
         confirmed_history,
@@ -249,44 +330,47 @@ totals at the cut-off as derived quantities.
         onsets::AbstractVector, k::Real, p_drc::Real,
         λ_bg::Real, τ_test::Real, bvd_reports_daily::AbstractVector;
         lab_history = (; days = Int[], counts = Int[]),
-        tests_analysed::Union{Missing, Integer} = missing,
-        sensitivity = test_sensitivity_model(),
-        report_to_confirm = lab_delay_model())
-    sens_state ~ to_submodel(sensitivity)
-    lab_state ~ to_submodel(report_to_confirm)
-    s_test = sens_state.s_test
-    lab_pmf = lab_state.pmf
+        tests_received_history = (; days = Int[], counts = Int[]),
+        tests_received::Union{Missing, Integer} = missing,
+        receipt = lab_delay_model(),
+        positivity = confirmed_positivity_model)
+    n = length(onsets)
 
-    ## BVD report signal carried through the lab-turnaround delay (unit
-    ## ascertainment), and the non-BVD background carried likewise.
-    bvd_lab_daily = convolve_delay(bvd_reports_daily, lab_pmf)
-    bg_lab_daily = convolve_delay(fill(λ_bg, length(onsets)), lab_pmf)
+    ## Received-specimen volume: the suspected pipeline carried through the
+    ## receipt delay and thinned by the tested fraction, fit as a count.
+    receipt_state ~ to_submodel(receipt)
+    suspected_daily = p_drc .* bvd_reports_daily .+ λ_bg
+    received_daily = τ_test .* convolve_delay(suspected_daily,
+        receipt_state.pmf)
+    rvobs = vintage_obs(tests_received_history, tests_received, n)
+    received_inc = bin_increments(received_daily, rvobs.days)
+    received_increments ~ to_submodel(
+        vintage_increments_model(received_inc, rvobs.obs_increments, k))
 
-    confirmed_daily = (p_drc * s_test * τ_test) .* bvd_lab_daily
-    tested_daily = τ_test .* (p_drc .* bvd_lab_daily .+ bg_lab_daily)
+    ## Confirmed positives as a Binomial of the observed analysed
+    ## denominator, with a partially-pooled per-window positivity.
+    windows = confirmed_positivity_windows(confirmed_history, lab_history)
+    nv = length(windows.analysed)
+    pos_state ~ to_submodel(positivity(nv))
+    p_pos = pos_state.p_pos
+    observe = !ismissing(confirmed_cases) && nv > 0
+    obs_positives = observe ? collect(windows.positives) : missing
+    confirmed_positives ~ to_submodel(
+        confirmed_positives_model(obs_positives, windows.analysed, p_pos))
 
-    n = length(confirmed_daily)
-    cvobs = vintage_obs(confirmed_history, confirmed_cases, n)
-    confirmed_inc = bin_increments(confirmed_daily, cvobs.days)
-    confirmed_increments ~ to_submodel(
-        vintage_increments_model(confirmed_inc, cvobs.obs_increments, k))
+    expected_received := safe_rate(sum(received_daily))
+    ## Expected confirmed positives implied by the positivity and the
+    ## observed analysed denominators, and the overall cut-off positivity.
+    analysed_total = float(sum(windows.analysed))
+    expected_positives = nv > 0 ?
+                         sum(p_pos .* windows.analysed) : zero(eltype(p_pos))
+    expected_confirmed := safe_rate(expected_positives)
+    p_positive := nv > 0 ?
+                  safe_rate(expected_positives) / safe_rate(analysed_total) :
+                  zero(eltype(p_pos))
 
-    tvobs = vintage_obs(lab_history, tests_analysed, n)
-    tested_inc = bin_increments(tested_daily, tvobs.days)
-    tested_increments ~ to_submodel(
-        vintage_increments_model(tested_inc, tvobs.obs_increments, k))
-
-    expected_confirmed := safe_rate(sum(confirmed_daily))
-    expected_tested := safe_rate(sum(tested_daily))
-
-    ## Per-test positivity: PCR sensitivity times the BVD share of the
-    ## tested pool, for comparison with the sitrep positivity rate.
-    bvd_tested = p_drc * sum(bvd_lab_daily)
-    p_positive := s_test * safe_rate(bvd_tested) /
-                  safe_rate(p_drc * sum(bvd_lab_daily) + sum(bg_lab_daily))
-
-    return (; s_test, τ_test, λ_bg, lab_pmf, confirmed_daily, tested_daily,
-        expected_confirmed, expected_tested, p_positive)
+    return (; τ_test, λ_bg, p_pos, windows, received_daily,
+        expected_received, expected_confirmed, p_positive)
 end
 
 """
@@ -345,4 +429,53 @@ expected cumulative export deaths by the cut-off, fitted with Poisson.
     exports_deaths ~ Poisson(expected_exports_deaths_T)
 
     return (; expected_exports_deaths_T, series)
+end
+
+"""
+Laboratory-confirmed-deaths likelihood. Confirmed deaths are a thinning of
+the observed suspected deaths: the cut-off confirmed-death count is scored
+as a `Binomial` of the suspected-death total `total_deaths`, with a
+confirmation probability linked to the suspected-case BVD composition
+`q_susp` (the BVD share of the expected suspected total, from the
+[`reported_cases_model`](@ref) pipeline) and enriched on the odds scale by
+the sampled `m_death` ([`confirmed_death_enrichment_model`](@ref)):
+
+```math
+p = \\operatorname{logistic}(\\operatorname{logit}(q_\\text{susp}) +
+    \\log m_\\text{death}).
+```
+
+The odds-scale enrichment keeps `p` in `(0, 1)` without a hard clamp, and
+ties the death-confirmation rate to the same composition that drives the
+case streams, so a confirmed-death observation informs the background
+`λ_bg` and ascertainment `p_drc` rather than introducing a free rate. The
+confirmed-death series is flat over the fitted window, so a single cut-off
+binomial captures its information; the suspected-death total is the
+denominator. Returns the enrichment, the composition, the confirmation
+probability and the expected confirmed-death count.
+"""
+@model function confirmed_deaths_model(
+        confirmed_deaths::Union{Missing, Integer},
+        total_deaths::Union{Missing, Integer},
+        expected_deaths::Real,
+        bvd_reports_daily::AbstractVector, p_drc::Real, λ_bg::Real;
+        enrichment = confirmed_death_enrichment_model())
+    enr_state ~ to_submodel(enrichment)
+    m_death = enr_state.m_death
+
+    n = length(bvd_reports_daily)
+    bvd_total = p_drc * sum(bvd_reports_daily)
+    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + λ_bg * n)
+    qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
+    p_death_conf := logistic(logit(qc) + log(m_death))
+
+    ## Suspected-death denominator: the observed total when conditioned, or
+    ## the expected suspected deaths on the predictive-generator path.
+    n_deaths = ismissing(total_deaths) ?
+               max(round(Int, safe_rate(expected_deaths)), 0) :
+               Int(total_deaths)
+    confirmed_deaths ~ Binomial(n_deaths, p_death_conf)
+    expected_confirmed_deaths := p_death_conf * n_deaths
+
+    return (; m_death, q_susp, p_death_conf, expected_confirmed_deaths)
 end

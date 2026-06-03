@@ -34,8 +34,8 @@ end
 
     m = confirmed_only_model(40, 27;
         confirmed_history = (; days = [18, 40], counts = [17, 27]),
-        lab_history = (; days = [18, 40], counts = [12, 27]),
-        tests_analysed = 27)
+        lab_history = (; days = [18, 40], counts = [12, 28]),
+        tests_received_history = (; days = [18, 40], counts = [15, 33]))
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
 end
@@ -49,18 +49,23 @@ end
         obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
         deaths_history = obs.deaths_history,
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
         breakpoint = obs.n - obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days)
     chn = nuts_sample(m; samples = 25, chains = 1, progress = false)
-    for key in (:expected_confirmed_T, :expected_tested_T, :s_test,
-        :tau_test, :lambda_bg, :suspected_positivity, :test_positivity)
+    for key in (:expected_confirmed_T, :expected_received_T,
+        :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
+        :m_death, :death_composition, :death_confirmation,
+        :expected_confirmed_deaths_T)
         v = vec(Array(chn[key]))
         @test all(isfinite, v)
     end
-    @test all(0 .<= vec(Array(chn[:s_test])) .<= 1)
     @test all(0 .<= vec(Array(chn[:test_positivity])) .<= 1)
+    @test all(0 .<= vec(Array(chn[:death_confirmation])) .<= 1)
 end

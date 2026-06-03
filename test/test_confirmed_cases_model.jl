@@ -30,8 +30,9 @@
             confirmed_cases_model(
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.λ_bg, rep.τ_test, rep.bvd_reports_daily;
-                lab_history = (; days = [20, 40], counts = [5, 8]),
-                tests_analysed = 8),
+                lab_history = (; days = [20, 40], counts = [5, 9]),
+                tests_received_history =
+                    (; days = [20, 40], counts = [6, 11])),
             false)
         return st
     end
@@ -39,5 +40,6 @@
     st = returned(m, rand(MersenneTwister(4), m))
     @test 0 <= st.p_positive <= 1
     @test st.expected_confirmed >= 0
-    @test st.expected_tested >= 0
+    @test st.expected_received >= 0
+    @test all(0 .<= st.p_pos .<= 1)
 end

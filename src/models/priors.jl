@@ -280,6 +280,68 @@ prior, matching integral `main`. Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
+Per-vintage laboratory positivity for the confirmed-case stream, in
+partially-pooled non-centred form. The confirmed positives in each
+laboratory window are scored as a `Binomial` of the observed
+specimens-analysed denominator (see [`confirmed_cases_model`](@ref)), so
+the positivity is the probability a tested specimen is confirmed. The
+per-window logit positivity shares a baseline `q_mu` and is perturbed by
+non-centred deviations `z_q` scaled by the pooling SD `σ_q`, so a window
+with little data is shrunk toward the baseline while a window with a
+strong signal can depart from it. `σ_q → 0` recovers a single shared
+positivity. The baseline prior is centred on the cut-off cumulative
+positivity (≈ 0.28, i.e. 210 / 755 on the 28 May data) on the logit
+scale. Conditioning on the observed denominator and giving the positivity
+its own random effect decouples the confirmed counts from the
+multiplicative ascertainment ridge (`p_drc · s_test · τ_test`) that
+basin-split the joint, so the outbreak size is pinned by the deaths and
+exports streams rather than forced through the laboratory positivity.
+Returns `(; p_pos, q_mu, σ_q)` with `p_pos` a length-`nv` vector.
+"""
+@model function confirmed_positivity_model(nv::Integer;
+        baseline_prior = Normal(logit(0.28), 0.7),
+        pooling_prior = truncated(Normal(0.0, 1.0); lower = 0))
+    m = max(nv, 1)
+    q_mu ~ baseline_prior
+    σ_q ~ pooling_prior
+    z_q ~ product_distribution(fill(Normal(0, 1), m))
+    logit_p = q_mu .+ σ_q .* z_q[1:nv]
+    p_pos := logistic.(logit_p)
+    return (; p_pos, q_mu, σ_q)
+end
+
+"""
+Confirmed-death enrichment scalar `m_death` for the confirmed-death
+stream ([`confirmed_deaths_model`](@ref)). Confirmed deaths are a thinning
+of the suspected deaths whose per-window confirmation probability is the
+suspected-case BVD composition `q_susp` enriched on the odds scale by
+`m_death`:
+
+```math
+p = \\operatorname{logistic}(\\operatorname{logit}(q_\\text{susp}) +
+    \\log m_\\text{death}),
+```
+
+a multiplicative effect on the confirmation odds that stays in `(0, 1)`
+without a hard clamp. `m_death > 1` means a suspected death is more likely
+to be laboratory-confirmed BVD than a suspected case; `m_death < 1` means
+it is less likely, as when deaths are under-swabbed relative to living
+suspected cases (post-mortem confirmation is rarer). `m_death = 1` ties
+the death-confirmation rate to the case composition. The default
+`LogNormal(0, 1.0)` is weakly informative and centred on no enrichment, so
+the single informative confirmed-death total (17 of 246 suspected deaths
+on the 28 May data) determines the differential rather than the prior:
+with a suspected-case BVD composition near 0.4, that count needs
+`m_death ≈ 0.1`, which a tight prior centred on 1 would fight. Returns
+`(; m_death)`.
+"""
+@model function confirmed_death_enrichment_model(;
+        enrichment_prior = LogNormal(0.0, 1.0))
+    m_death ~ enrichment_prior
+    return (; m_death)
+end
+
+"""
 Shared negative-binomial dispersion `k` for the passive-surveillance
 streams (suspected deaths, reported cases and confirmed cases). Sampled on
 the `1/sqrt(k)` scale with a weakly-informative half-normal prior

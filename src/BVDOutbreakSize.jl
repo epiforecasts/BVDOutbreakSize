@@ -16,7 +16,7 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, Poisson,
-                     NegativeBinomial, Normal, LogNormal, Beta,
+                     NegativeBinomial, Binomial, Normal, LogNormal, Beta,
                      truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
@@ -54,14 +54,16 @@ export REPORT_SCENARIOS,
        genetic_seeding_model,
        cfr_model, traveller_volume_model, test_positivity_model,
        test_sensitivity_model, lab_delay_model,
+       confirmed_positivity_model, confirmed_death_enrichment_model,
        surveillance_dispersion_model,
        independent_ascertainment_model, pooled_ascertainment_model,
 # observation models
        deaths_model, reported_cases_model, confirmed_cases_model,
+       confirmed_positivity_windows, confirmed_deaths_model,
        exports_model, exports_deaths_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
-       confirmed_only_model,
+       confirmed_only_model, confirmed_deaths_only_model,
        exports_deaths_only_model, bvd_joint
 
 include("docstrings.jl")

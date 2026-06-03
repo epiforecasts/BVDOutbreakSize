@@ -95,14 +95,15 @@ the infection process and onset staging, samples dispersion and pooled
 ascertainment, then runs the suspected-case stream (in predictive mode,
 to draw the shared background rate, testing fraction and onset-to-report
 kernel) and conditions on the laboratory pipeline alone: the confirmed
-cases and, when present, the tests-analysed stream. See
+positives (a Binomial of the observed analysed denominator in
+`lab_history`) and, when present, the received-specimen stream. See
 [`confirmed_cases_model`](@ref) and [`reported_cases_model`](@ref).
 """
 @model function confirmed_only_model(
         n::Integer, confirmed_cases::Union{Missing, Integer};
         confirmed_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
-        tests_analysed::Union{Missing, Integer} = missing,
+        tests_received_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -123,7 +124,44 @@ cases and, when present, the tests-analysed stream. See
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.λ_bg, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_analysed))
+        lab_history, tests_received_history))
+    C_T := latent.infection_state.C_T
+end
+
+"""
+Confirmed-deaths-only composer. Runs the infection process and onset
+staging, samples dispersion and pooled ascertainment, runs the suspected
+deaths and reported-cases streams (the latter in predictive mode for the
+shared background rate and onset-to-report kernel), then conditions on the
+confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
+"""
+@model function confirmed_deaths_only_model(
+        n::Integer, confirmed_deaths::Union{Missing, Integer},
+        total_deaths::Union{Missing, Integer} = missing;
+        deaths_history = (; days = Int[], counts = Int[]),
+        breakpoint::Union{Missing, Real} = missing,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        deaths = deaths_model,
+        cases = reported_cases_model,
+        confirmed_deaths_stream = confirmed_deaths_model,
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model())
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    dispersion_state ~ to_submodel(dispersion)
+    asc_state ~ to_submodel(ascertainment)
+    k = dispersion_state.k
+    p_drc = asc_state.p_drc
+    deaths_state ~ to_submodel(
+        deaths(deaths_history, total_deaths, latent.onsets, k))
+    cases_state ~ to_submodel(
+        cases((; days = Int[], counts = Int[]), missing, latent.onsets,
+        k, p_drc))
+    confirmed_deaths_state ~ to_submodel(
+        confirmed_deaths_stream(confirmed_deaths, total_deaths,
+        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
+        p_drc, cases_state.λ_bg))
     C_T := latent.infection_state.C_T
 end
 
@@ -163,20 +201,23 @@ end
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
 stages it to daily onset incidence, then conditions on the DRC suspected
-cases, deaths and the laboratory pipeline (confirmed cases plus the
-tests-analysed volume, each as a per-vintage time series), the Uganda
-exports and deaths-among-exports, and the optional genetic seeding bound
-on the outbreak age. Each stream argument may be `missing` to drop it, so
-the model doubles as a prior- and posterior-predictive generator.
+cases, deaths and the laboratory pipeline (the received-specimen volume as
+a per-vintage time series and the confirmed positives as a Binomial of the
+observed analysed denominator), the confirmed deaths, the Uganda exports
+and deaths-among-exports, and the optional genetic seeding bound on the
+outbreak age. Each stream argument may be `missing` to drop it, so the
+model doubles as a prior- and posterior-predictive generator.
 
-The laboratory pipeline couples the cumulative tests-analysed and
-confirmed-case streams to the latent incidence through a testing fraction,
-PCR sensitivity and a report-to-confirmation (lab-turnaround) delay; the
-suspected-case stream carries an additive non-BVD background rate and
-shares the testing fraction and onset-to-report kernel with the laboratory
-pipeline. `tests_analysed` is the cumulative tests-analysed count, with its
-vintage history in `lab_history`; pass `tests_analysed = missing` to drop
-the testing stream.
+The laboratory pipeline shares the testing fraction, background rate and
+onset-to-report kernel with the suspected-case stream. The received
+specimens are fit through a receipt delay and the tested fraction; the
+confirmed positives are scored as a Binomial of the observed
+specimens-analysed denominator (`lab_history`) with a partially-pooled
+per-window positivity, so the confirmed counts no longer pass through the
+multiplicative ascertainment ridge. The confirmed deaths are a thinning of
+the suspected deaths whose confirmation probability is the suspected-case
+BVD composition enriched on the odds scale (`confirmed_deaths`,
+`total_deaths` the denominator).
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
@@ -184,9 +225,11 @@ seeding submodel when `tmrca_days` is given. Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), `r` and `doubling_time`
 (current growth), `r0` (implied initial growth), `T` (outbreak age),
 `R_T` (current reproduction number), the per-stream expected counts, the
-PCR sensitivity `s_test`, the testing fraction `tau_test`, the background
-rate `lambda_bg`, and the implied per-suspected (`suspected_positivity`)
-and per-test (`test_positivity`) positivities.
+testing fraction `tau_test`, the background rate `lambda_bg`, the
+confirmed-death enrichment `m_death`, the implied per-suspected
+(`suspected_positivity`) and per-test (`test_positivity`) positivities,
+and the suspected BVD composition (`death_composition`) and
+death-confirmation probability (`death_confirmation`).
 """
 @model function bvd_joint(
         n::Integer,
@@ -196,10 +239,13 @@ and per-test (`test_positivity`) positivities.
         exports_deaths::Union{Missing, Integer} = missing,
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
+        confirmed_deaths::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),
         reported_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
+        tests_received_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
@@ -208,6 +254,7 @@ and per-test (`test_positivity`) positivities.
         deaths = deaths_model,
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
+        confirmed_deaths_stream = confirmed_deaths_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         genetic = nothing,
@@ -232,7 +279,11 @@ and per-test (`test_positivity`) positivities.
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.λ_bg, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_analysed))
+        lab_history, tests_received_history))
+    confirmed_deaths_state ~ to_submodel(
+        confirmed_deaths_stream(confirmed_deaths, total_deaths,
+        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
+        p_drc, cases_state.λ_bg))
     exports_state ~ to_submodel(
         exports(exported_cases, onsets, p_uganda; source_population))
     exports_deaths_state ~ to_submodel(
@@ -257,12 +308,16 @@ and per-test (`test_positivity`) positivities.
     expected_deaths_T := deaths_state.expected_deaths_T
     expected_reports_T := cases_state.expected_reports
     expected_confirmed_T := confirmed_state.expected_confirmed
-    expected_tested_T := confirmed_state.expected_tested
+    expected_received_T := confirmed_state.expected_received
+    _ecd = confirmed_deaths_state.expected_confirmed_deaths
+    expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
-    s_test := confirmed_state.s_test
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
+    m_death := confirmed_deaths_state.m_death
     suspected_positivity := cases_state.positivity
     test_positivity := confirmed_state.p_positive
+    death_composition := confirmed_deaths_state.q_susp
+    death_confirmation := confirmed_deaths_state.p_death_conf
 end

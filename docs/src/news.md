@@ -6,6 +6,44 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+### Data
+
+- Reconciled the 28 May cut-off data into the renewal model: the
+  analysed-specimen series (`tests_analysed_history`) is the laboratory
+  denominator, with `tests_received_history`, `confirmed_death_history`
+  and the `confirmed_deaths` cut-off scalar (17) added. Cut-off scalars
+  with no explicit TOML block are derived from the final vintage of the
+  matching history.
+
+### Modelling
+
+- Reformulated the laboratory-confirmed-case stream to remove the
+  multiplicative ascertainment ridge (`p_drc · s_test · τ_test`) that
+  basin-split the joint. The confirmed positives are now scored as a
+  Binomial of the *observed* specimens-analysed denominator in each
+  laboratory window, with a partially-pooled per-window positivity random
+  effect (`confirmed_positivity_model`); analysed windows with a zero
+  denominator (the 24-25 May analysis stall) are merged forward
+  (`confirmed_positivity_windows`). The received-specimen volume is fit as
+  the laboratory count through a receipt delay and the tested fraction.
+  Conditioning the positives on the observed denominator decouples the
+  confirmed counts from the outbreak size, which the deaths and exports
+  pin instead; the joint fit recovers the cut-off positivity (≈ 0.28) and
+  converges with R-hat ≈ 1.01 and negligible divergences.
+- Added a laboratory-confirmed-deaths stream (`confirmed_deaths_model`):
+  the confirmed-death count is a Binomial thinning of the suspected deaths
+  whose confirmation probability is the suspected-case BVD composition
+  enriched on the odds scale by `m_death` (no hard clamp), so a
+  confirmed-death observation informs the background rate and
+  ascertainment. The weakly-informative `m_death` prior lets the single
+  informative confirmed-death total set the death-versus-case confirmation
+  differential.
+- Added the `confirmed_deaths_only_model` single-stream composer and
+  exposed `m_death`, `death_composition`, `death_confirmation`,
+  `expected_confirmed_deaths_T` and `expected_received_T` from the joint.
+
 ## v1.3.0
 
 ### Data

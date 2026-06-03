@@ -271,26 +271,31 @@ vintage_table #hide
 # the per-stream and joint fits.
 #
 # The table below shows which parameters feed each observation submodel.
-# The *tests* column is the cumulative tests-analysed volume, the
-# laboratory stream paired with the confirmed (PCR-positive) cases:
+# The *received* column is the received-specimen volume, the laboratory
+# stream fitted as a count; the *confirmed* positives are scored as a
+# Binomial of the observed analysed denominator with a free per-window
+# positivity, so they are deliberately decoupled from the infection
+# process (the outbreak size is pinned by the deaths and exports). The
+# *conf. deaths* column thins the suspected deaths by the case composition:
 #
-# | Parameter | Exports | Deaths | Cases | Confirmed | Tests | Export deaths |
-# |---|:---:|:---:|:---:|:---:|:---:|:---:|
-# | Reproduction number $R_t$ | ● | ● | ● | ● | ● | ● |
-# | Generation interval | ● | ● | ● | ● | ● | ● |
-# | Incubation period | ● | ● | ● | ● | ● | ● |
-# | Seed $I_0$ | ● | ● | ● | ● | ● | ● |
-# | Onset-to-death delay |  | ● |  |  |  | ● |
-# | Case-fatality ratio |  | ● |  |  |  | ● |
-# | Onset-to-report delay |  |  | ● | ● | ● |  |
-# | Onset-to-confirmation delay |  |  |  | ● | ● |  |
-# | Onset-to-detection delay | ● |  |  |  |  |  |
-# | PCR sensitivity $s_{\text{test}}$ |  |  |  | ● |  |  |
-# | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● |  |
-# | Background rate $\lambda_{\text{bg}}$ |  |  | ● |  | ● |  |
-# | Surveillance dispersion |  | ● | ● | ● | ● |  |
-# | Ascertainment | ● |  | ● | ● | ● | ● |
-# | Traveller volume | ● |  |  |  |  | ● |
+# | Parameter | Exports | Deaths | Cases | Received | Confirmed | Conf. deaths | Export deaths |
+# |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+# | Reproduction number $R_t$ | ● | ● | ● | ● |  | ● | ● |
+# | Generation interval | ● | ● | ● | ● |  | ● | ● |
+# | Incubation period | ● | ● | ● | ● |  | ● | ● |
+# | Seed $I_0$ | ● | ● | ● | ● |  | ● | ● |
+# | Onset-to-death delay |  | ● |  |  |  |  | ● |
+# | Case-fatality ratio |  | ● |  |  |  |  | ● |
+# | Onset-to-report delay |  |  | ● | ● |  | ● |  |
+# | Receipt delay |  |  |  | ● |  |  |  |
+# | Onset-to-detection delay | ● |  |  |  |  |  |  |
+# | Laboratory positivity (per-window RE) |  |  |  |  | ● |  |  |
+# | Confirmed-death enrichment $m_{\text{death}}$ |  |  |  |  |  | ● |  |
+# | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● |  |  |  |
+# | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  | ● |  |
+# | Surveillance dispersion |  | ● | ● | ● |  |  |  |
+# | Ascertainment | ● |  | ● | ● |  | ● | ● |
+# | Traveller volume | ● |  |  |  |  |  | ● |
 
 #md # ```@setup main
 #md # using BVDOutbreakSize, CodeTracking, Revise
@@ -669,27 +674,31 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Laboratory priors — testing fraction, background rate and sensitivity
+# ##### Laboratory priors — testing fraction, background, positivity and enrichment
 #
-# The laboratory pipeline adds three building-block priors shared by the
-# suspected-case, confirmed-case and tests-analysed streams. The testing
-# fraction $\tau_{\text{test}}$ is the share of suspected cases routed to
-# the lab, with a $\mathrm{Beta}(5, 2)$ prior (mean $\approx 0.71$); the
-# non-BVD background rate $\lambda_{\text{bg}}$ is the expected non-BVD
-# suspected reports per day, with a wide half-normal prior identified from
-# the suspected/confirmed contrast and the testing-volume gate; the PCR
-# sensitivity $s_{\text{test}}$ has a $\mathrm{Beta}(30, 2)$ prior (mean
-# $0.94$, $95\%$ interval $0.84$-$0.99$), sitting just below the field
-# whole-blood clinical sensitivity for the GeneXpert Ebola assay. The
-# report-to-confirmation (lab-turnaround) delay is centred on a short
-# turnaround with a heavy right tail for specimen shipment, with no
-# per-sample outbreak anchor.
+# The laboratory pipeline adds building-block priors. The testing fraction
+# $\tau_{\text{test}}$ is the share of suspected cases routed to the lab,
+# with a $\mathrm{Beta}(5, 2)$ prior (mean $\approx 0.71$); the non-BVD
+# background rate $\lambda_{\text{bg}}$ is the expected non-BVD suspected
+# reports per day, with an informative half-normal prior identified from
+# the suspected/confirmed contrast (a diffuse prior lets the background
+# absorb the whole suspected stream). The per-window laboratory positivity
+# is a partially-pooled logit-normal random effect with baseline
+# $q_\mu$ centred on the cut-off cumulative positivity ($210 / 755
+# \approx 0.28$) and pooling SD $\sigma_q$. The confirmed-death enrichment
+# $m_{\text{death}}$ scales the case composition on the odds scale. The
+# report-to-laboratory receipt delay is centred on a short turnaround with
+# a heavy right tail for specimen shipment, with no per-sample anchor.
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# \lambda_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 10)\ \text{per day},
-# \qquad
-# s_{\text{test}} \sim \mathrm{Beta}(30,\ 2). \tag{16}
+# \lambda_{\text{bg}} \sim \mathrm{Normal}^{+}(0,\ 1)\ \text{per day},
+# ```
+#
+# ```math
+# q_\mu \sim \mathrm{Normal}(\operatorname{logit}(0.28),\ 0.7), \qquad
+# \sigma_q \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
+# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{16}
 # ```
 
 #md # ```@raw html
@@ -707,13 +716,13 @@ cfr_prior_fig #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: test_sensitivity_model</summary>
+#md # <details><summary>Submodel: confirmed_positivity_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.test_sensitivity_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.confirmed_positivity_model(5)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -721,7 +730,22 @@ cfr_prior_fig #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: lab_delay_model</summary>
+#md # <details><summary>Submodel: confirmed_death_enrichment_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.confirmed_death_enrichment_model()),
+#md #     "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: lab_delay_model (receipt delay)</summary>
 #md # ```
 
 #md # ```@eval
@@ -849,28 +873,32 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Confirmed and tested cases
+# ##### Laboratory pipeline: received specimens and confirmed cases
 #
-# The laboratory pipeline couples two streams. The BVD onset-to-report
-# series is carried through the report-to-confirmation (lab-turnaround)
-# delay, then scaled by $p_{\text{DRC}}$, the testing fraction
-# $\tau_{\text{test}}$ and the PCR sensitivity $s_{\text{test}}$ for the
-# confirmed cases. The tested volume is $\tau_{\text{test}}$ times the
-# $p_{\text{DRC}}$-scaled BVD lab series plus the non-BVD background
-# carried through the same delay. Both are scored per vintage with the
+# The laboratory pipeline fits two streams. The received-specimen volume
+# is the suspected daily pipeline ($p_{\text{DRC}}$-scaled BVD
+# onset-to-report signal plus the non-BVD background $\lambda_{\text{bg}}$)
+# carried through a receipt delay $f_{\text{rec}}$ and thinned by the
+# testing fraction $\tau_{\text{test}}$, scored per vintage with the
 # shared $k$:
 #
 # ```math
-# Y_{\text{confirmed}} \sim \mathrm{NegBinomial}\!\bigl(
-#     p_{\text{DRC}}\, s_{\text{test}}\, \tau_{\text{test}}
-#     \cdot \mathrm{conv}(\mathrm{onsets},\,
-#         f_{\text{rep}} * f_{\text{lab}})[n],\ k\bigr), \tag{20}
+# Y_{\text{received}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}
+#     \cdot \mathrm{conv}(p_{\text{DRC}}\, \mathrm{BVD}_{\text{rep}}
+#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{20}
 # ```
 #
+# The confirmed positives are scored as a Binomial of the *observed*
+# specimens-analysed denominator $A_v$ in each laboratory window, with a
+# partially-pooled per-window positivity $p_{\text{pos},v} =
+# \operatorname{logistic}(q_\mu + \sigma_q z_v)$. Conditioning on the
+# observed denominator rather than passing the confirmed count through the
+# multiplicative ascertainment ridge $p_{\text{DRC}}\, s_{\text{test}}\,
+# \tau_{\text{test}}$ decouples the confirmed counts from the outbreak
+# size, which the deaths and exports streams pin instead:
+#
 # ```math
-# Y_{\text{tested}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}
-#     (p_{\text{DRC}}\, \mathrm{BVD}_{\text{lab}}
-#     + \lambda_{\text{bg}})[n],\ k\bigr). \tag{21}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
 # ```
 
 #md # ```@raw html
@@ -889,6 +917,37 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ##### Confirmed deaths
+#
+# Confirmed deaths are a thinning of the observed suspected deaths. The
+# confirmation probability is the suspected-case BVD composition
+# $q_{\text{susp}} = p_{\text{DRC}}\,\mathrm{BVD} /
+# (p_{\text{DRC}}\,\mathrm{BVD} + \lambda_{\text{bg}})$ enriched on the
+# odds scale by $m_{\text{death}}$, so it stays in $(0, 1)$ without a hard
+# clamp and a confirmed-death observation informs the background and
+# ascertainment:
+#
+# ```math
+# Y_{\text{conf-deaths}} \sim \mathrm{Binomial}\bigl(D_{\text{susp}},\
+#     \operatorname{logistic}(\operatorname{logit}(q_{\text{susp}})
+#     + \log m_{\text{death}})\bigr). \tag{22}
+# ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: confirmed_deaths_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.confirmed_deaths_model(
+#md #         missing, missing, 1.0, Float64[], 1.0, 0.25)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Deaths among exports
 #
 # The expected deaths among detected exports reuse the export-onset
@@ -898,7 +957,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{exp-deaths}} \sim \mathrm{Poisson}(\mathrm{CFR}
-#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{22}
+#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{23}
 # ```
 
 #md # ```@raw html
@@ -1086,8 +1145,13 @@ chn_joint = nuts_sample(
     obs.n, obs.exported_cases, obs.total_deaths,
     obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
     obs.tests_analysed;
+    confirmed_deaths = obs.confirmed_deaths,
     deaths_history = obs.deaths_history,
     reported_history = obs.reported_history,
+    confirmed_history = obs.confirmed_history,
+    confirmed_deaths_history = obs.confirmed_deaths_history,
+    lab_history = obs.lab_history,
+    tests_received_history = obs.tests_received_history,
     breakpoint = _BREAKPOINT,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days));
@@ -1108,6 +1172,15 @@ chn_cases = nuts_sample(
 
 chn_confirmed = nuts_sample(
     confirmed_only_model(obs.n, obs.confirmed_cases;
+    confirmed_history = obs.confirmed_history,
+    lab_history = obs.lab_history,
+    tests_received_history = obs.tests_received_history,
+    breakpoint = _BREAKPOINT));
+
+chn_confirmed_deaths = nuts_sample(
+    confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
+    obs.total_deaths;
+    deaths_history = obs.deaths_history,
     breakpoint = _BREAKPOINT));
 
 ## This composer keeps the deaths and exports submodels only for their
@@ -1123,6 +1196,7 @@ posterior_C_exports = vec(Array(chn_exports[:C_T]));
 posterior_C_deaths = vec(Array(chn_deaths[:C_T]));
 posterior_C_cases = vec(Array(chn_cases[:C_T]));
 posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
+posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
 posterior_C_exports_deaths = vec(Array(chn_exports_deaths[:C_T]));
 
 #md # ```@raw html
@@ -1145,7 +1219,8 @@ diagnostics_table( #hide
     "exports (deaths)" => chn_exports_deaths, #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
-    "confirmed (DRC)" => chn_confirmed) #hide
+    "confirmed (DRC)" => chn_confirmed, #hide
+    "confirmed deaths (DRC)" => chn_confirmed_deaths) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -1297,20 +1372,25 @@ joint_summary = summary_table(chn_joint,
 
 joint_summary #hide
 
-# The laboratory pipeline couples the confirmed-case and tests-analysed
-# streams to the latent incidence through the testing fraction
-# `tau_test`, the PCR sensitivity `s_test` and the report-to-confirmation
-# (lab-turnaround) delay. The implied per-suspected and per-test
-# positivity and the non-BVD background rate `lambda_bg` are surfaced for
-# comparison with the sitrep figures.
+# The laboratory pipeline fits the received-specimen volume through the
+# testing fraction `tau_test` and a receipt delay, and scores the confirmed
+# positives as a Binomial of the observed specimens-analysed denominator
+# with a partially-pooled per-window positivity. The implied per-suspected
+# and per-test positivity and the non-BVD background rate `lambda_bg` are
+# surfaced for comparison with the sitrep figures. The confirmed deaths are
+# a thinning of the suspected deaths: the BVD composition among suspected
+# (`death_composition`) enriched on the odds scale by `m_death` gives the
+# death-confirmation probability (`death_confirmation`).
 
 #md # ```@raw html
 #md # <details><summary>Laboratory-pipeline posterior summary table</summary>
 #md # ```
 
 lab_summary = summary_table(chn_joint,
-    [:s_test, :tau_test, :lambda_bg, :suspected_positivity,
-        :test_positivity, :expected_confirmed_T, :expected_tested_T];
+    [:tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
+        :expected_confirmed_T, :expected_received_T,
+        :m_death, :death_composition, :death_confirmation,
+        :expected_confirmed_deaths_T];
     digits = 3);
 
 #md # ```@raw html
@@ -1327,7 +1407,7 @@ lab_summary #hide
 #md # ```
 
 lab_pair_fig = plot_pair(chn_joint,
-    [:s_test, :tau_test, :lambda_bg, :test_positivity]);
+    [:tau_test, :lambda_bg, :test_positivity, :death_confirmation]);
 
 #md # ```@raw html
 #md # </details>
@@ -1406,11 +1486,12 @@ deaths_panel = (;
         pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
 
-## Confirmed cases are fitted as a single cumulative total, not a sitrep
-## series, so they are not in this per-vintage check (the lab-processing
-## delays behind the confirmed counts change over time in ways that are
-## difficult to model). The suspected-case and death streams remain
-## per-vintage.
+## Confirmed cases are scored as a Binomial of the observed analysed
+## denominator in each laboratory window, so their fit is a per-window
+## positivity rather than a cumulative sitrep series; it is summarised by
+## the expected confirmed total and the per-test positivity in the
+## laboratory-pipeline table rather than this cumulative per-vintage check.
+## The suspected-case and death streams remain per-vintage.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, deaths_panel]);
 

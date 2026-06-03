@@ -48,14 +48,18 @@ end
     import FlexiChains
 
     obs = load_observations()
-    rep = obs.reported_case_history
-    dh = obs.death_history
-    n_dh = length(dh.values)
-    n_rep = length(rep.values)
-    m = bvd_joint(missing,
-        fill(missing, n_dh), fill(missing, n_rep);
-        reported_offsets = rep.offsets,
-        death_offsets = dh.offsets)
+    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        breakpoint = obs.n - obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
     chn = sample(m, Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false)
     ## The composer default is the non-centred two-group pooled
