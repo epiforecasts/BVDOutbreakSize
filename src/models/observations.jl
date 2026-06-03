@@ -96,6 +96,71 @@ delay submodels. Couples to `C(T)` through a Poisson likelihood.
 end
 
 """
+Dated exports likelihood with an explicit infection→detection delay. The
+time-resolved counterpart of [`exports_delay_model`](@ref): instead of a
+single cumulative count at the cut-off, the observed Uganda exports are a
+daily series `exported_cases_daily` (index 1 = earliest detection day,
+last index = the cut-off day), modelled as an inhomogeneous Poisson
+process. The cumulative export expectation
+[`expected_exports_delay`](@ref) is placed onto the daily grid through the
+shared between-edge differencing [`daily_increment_kernel`](@ref), the
+same construction as [`exports_deaths_delay_model`](@ref): a continuous
+survival weight over the pre-detection stretch followed by per-day Poisson
+counts.
+
+The pre-detection survival term `pre_detection_exports ~ Poisson(Λ(T-n))`
+observed at zero subsumes the first-export-detection timing bound of
+[`exports_detection_timing_delay_model`](@ref): it asserts that no export
+was expected before the earliest observed detection. The total expected
+(pre-detection weight ⊕ daily increments) equals the cumulative
+expectation `Λ(T)` the scalar single-total likelihood uses, so the daily
+model conditions on the same total while also using the detection timing.
+A single-day series (`length 1`) reduces to that cumulative split.
+
+The exports stream is travel-gated, so the at-risk clock starts at
+infection; `f_det` (the incubation ⊕ onset-to-report delay, see
+[`combined_delay`](@ref)) and the traveller volume submodel carry the
+delay and per-day per-capita travel rate, exactly as in
+[`exports_delay_model`](@ref). Exposes `f_det` and `daily_travellers` for
+the export-deaths delay submodel.
+"""
+@model function exports_daily_delay_model(
+        exported_cases_daily::AbstractVector,
+        growth_state, p_uganda::Real, f_det;
+        pre_detection_exports::Union{Missing, Integer} = 0,
+        source_population::Real = ITURI_POPULATION,
+        traveller = traveller_volume_model())
+    r = growth_state.r
+    T = growth_state.T
+
+    travel_state ~ to_submodel(traveller, false)
+    daily_travellers = travel_state.daily_travellers
+
+    q = daily_travellers / source_population
+    n = length(exported_cases_daily)   # earliest detection day to cut-off
+
+    Λ(t) = expected_exports_delay(r, p_uganda, q, t, f_det)
+
+    ## Pre-detection zero stretch as one Poisson observed at 0; `missing`
+    ## generates it for predictive checks. This is the first-detection
+    ## timing bound: no export expected before the earliest detection.
+    pre = T - n > zero(T) ? Λ(T - n) : zero(T)
+    pre_detection_exports ~ Poisson(max(pre, zero(pre)))
+
+    ## Per-day means via the shared between-edge differencing, starting
+    ## from the pre-detection survival weight `pre`.
+    Λ_at_edges = [Λ(T - n + i) for i in 1:n]
+    μ_day = daily_increment_kernel(Λ_at_edges, pre)
+    for i in 1:n
+        exported_cases_daily[i] ~ Poisson(μ_day[i])
+    end
+
+    expected_exports_T := Λ(T)
+    return (; f_det, daily_travellers, p_uganda,
+        expected_exports = expected_exports_T)
+end
+
+"""
 Deaths likelihood (Method 2, back-calculation from deaths). Couples the
 observed DRC suspected deaths to `C(T)` through the CFR-weighted gamma
 convolution. The observation is a per-vintage vector `total_deaths`
