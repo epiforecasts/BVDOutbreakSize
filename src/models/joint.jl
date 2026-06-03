@@ -260,12 +260,16 @@ traveller moves during incubation, pre-symptomatic): the delay is the
 incubation period (`incubation`) convolved with the DRC onset-to-report
 delay `f_rep` (`report_delay`, the same draws the incubation and
 reported-cases streams use), moment-matched to one Gamma via
-[`combined_delay`](@ref). Entering surveillance is taken to be the same
-process abroad as in the DRC, the export count is a single datum that
-cannot identify its own delay, and sharing the exact draws lets the
-incubation and reported-cases streams pin it. Because the incubation
-period sits inside that delay the export likelihoods carry no separate
-incubation rescale. The export-death timing is likewise keyed to
+[`combined_delay`](@ref). The dated cases are anchored on their Uganda
+admittance/detection dates, so this onset-to-report delay is reinterpreted
+as the onset-to-admittance (care-seeking) delay abroad: the export count
+is a single datum that cannot identify its own delay, and sharing the
+exact DRC draws lets the incubation and reported-cases streams pin it.
+This is a limitation — the imports were active care-seekers, so their true
+onset-to-admittance delay is plausibly shorter than the DRC
+onset-to-report delay (see the analysis limitations). Because the
+incubation period sits inside that delay the export likelihoods carry no
+separate incubation rescale. The export-death timing is likewise keyed to
 infection: its death delay is incubation ⊕ onset-to-death (again via
 [`combined_delay`](@ref)), so deaths are not timed one incubation period
 too early. Incubation therefore enters both the detection and death

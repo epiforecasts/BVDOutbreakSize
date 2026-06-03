@@ -201,11 +201,12 @@
 #   refits the joint model under the faster early-epidemic rate to show
 #   how much the timing, growth-rate and outbreak-size estimates are
 #   impacted.
-# - *Exports fit at their Uganda report dates, stopped at the last
+# - *Exports fit at their Uganda detection dates, stopped at the last
 #   import.* Rather than a single cumulative count at the cut-off, the
-#   three imports enter as a dated daily series at their Uganda report
-#   dates (11, 16 and 23 May), fit through the same infection→detection
-#   delay as a per-day Poisson process; the pre-detection survival term
+#   three imports enter as a dated daily series at their Uganda detection
+#   dates (import #1 hospital-admitted 11 May, #2 confirmed 16 May, #3
+#   announced 23 May), fit through the same infection→detection delay as a
+#   per-day Poisson process; the pre-detection survival term
 #   carries the earliest-detection timing bound that McCabe et al. add
 #   separately. Both travel-gated streams (exports and deaths-among-
 #   exports) are run only up to the most recent reported import (23 May),
@@ -215,17 +216,27 @@
 #   lag, so the trailing days carry no informative zero. Import #3's
 #   23 May date is a public announcement rather than a detection date, so
 #   it carries reporting-pipeline lag.
-# - *Export detection delay reuses the DRC reporting delay.* The default
-#   model replaces McCabe et al.'s lumped detection window with an
-#   infection→detection delay convolution. Exports are travel-gated, so
-#   the at-risk clock runs from infection (capturing pre-symptomatic
-#   travel): the delay is the incubation period convolved with the DRC
-#   onset-to-report delay, moment-matched to one Gamma. We assume the
-#   onset-to-detection step abroad equals the DRC onset-to-report delay,
-#   so the incubation and suspected-case streams pin it; the single
-#   export count cannot identify a separate delay. The export timing
-#   therefore rests on this assumption rather than an independent Uganda
-#   estimate, and on the Gamma moment-match. McCabe et al.'s rectangular
+# - *Export delay is an infection-to-admittance delay proxied by the DRC
+#   reporting delay.* The default model replaces McCabe et al.'s lumped
+#   detection window with an infection→detection delay convolution.
+#   Exports are travel-gated, so the at-risk clock runs from infection
+#   (capturing pre-symptomatic travel): the delay is the incubation period
+#   convolved with an onset-to-detection delay, moment-matched to one
+#   Gamma. Because the dated cases are anchored on their Uganda
+#   admittance/detection dates (import #1 was hospital-admitted 11 May),
+#   the relevant step abroad is onset-to-admittance — a care-seeking
+#   delay, not an administrative reporting lag. We have no Uganda
+#   onset-to-admittance data and the handful of exports cannot identify
+#   their own delay, so we **assume it equals the DRC onset-to-report
+#   delay** (pinned by the incubation and suspected-case streams) and
+#   reinterpret that draw as the onset-to-admittance delay. This is a
+#   limitation: the imports were travellers actively seeking hospital care
+#   (import #1 went from admission to death in three days), so their true
+#   onset-to-admittance delay is plausibly *shorter* than the DRC
+#   community-surveillance onset-to-report delay; a longer borrowed delay
+#   pushes the implied infection times earlier and biases the
+#   export-implied outbreak size upward. The timing therefore rests on
+#   this proxy and on the Gamma moment-match. McCabe et al.'s rectangular
 #   window is kept for the comparison.
 # - *Exports treated as DRC importations only.* The exports likelihood
 #   conditions on the three WHO-confirmed travel-related cases in
