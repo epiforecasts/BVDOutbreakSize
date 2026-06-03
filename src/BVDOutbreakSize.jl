@@ -13,6 +13,7 @@ using SpecialFunctions: digamma, loggamma
 import SpecialFunctions
 using Turing: @model, MCMCThreads, NUTS, sample, to_submodel, filldist
 using Turing.DynamicPPL: InitFromPrior
+import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
@@ -35,6 +36,7 @@ export REPORT_SCENARIOS,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        nuts_sample, default_adtype, enzyme_adtype,
+       progress_callback, tensorboard_callback,
        DEATH_INTEGRAL_ALG, CUMULATIVE_INTEGRAL_ALG,
        integrate, delay_convolution, onset_rescale,
        integrate_cumulative, integrate_exports_deaths,
