@@ -1790,11 +1790,33 @@ function joint_obs(o; observe = true)
     end
     edaily = observe ? o.export_deaths_daily :
              fill(missing, length(o.export_deaths_daily))
+    ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
+    ## deaths that got confirmed, thinned from the suspected-death pool.
+    ## Suspected deaths are frozen at 26 May (246) and confirmed deaths
+    ## flat at 17 over 26-28 May, so the informative content is the single
+    ## cut-off point 17/246. Fit it as one cumulative vintage, thinned from
+    ## the cumulative suspected-death total. The thinning probability is an
+    ## input from the confirmed-case BVD composition (see
+    ## `confirmed_deaths_model`); empty when no confirmed-death history.
+    if o.confirmed_death_history !== missing && o.death_history !== missing
+        cdeath = Union{Missing, Int}[observe ?
+                                                         o.confirmed_death_history.values[end] :
+                                                         missing]
+        cdeath_susp = Union{Missing, Int}[o.death_history.values[end]]
+        cdeath_off = [0]
+    else
+        cdeath = Union{Missing, Int}[]
+        cdeath_susp = Union{Missing, Int}[]
+        cdeath_off = Int[]
+    end
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
             samples_analysed = analysed,
             samples_received = received,
+            confirmed_deaths = cdeath,
+            confirmed_death_susp_increments = cdeath_susp,
+            confirmed_death_offsets = cdeath_off,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
@@ -2199,7 +2221,8 @@ headline_summary = let
     df = DataFrame(quantity = String[],
         lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[])
-    for (name, xs) in ["Infections per confirmed case" => mult,
+    for (
+        name, xs) in ["Infections per confirmed case" => mult,
         "Case fatality ratio" => cfr]
         s = posterior_summary(xs)
         push!(df,

@@ -363,6 +363,27 @@ matching the CDC summary for past BVD outbreaks. Used by
 end
 
 """
+BVD-enrichment multiplier for confirmed deaths. There is no death-
+specific laboratory denominator (no analysed/tested count for deaths), so
+the per-suspected-death confirmation probability cannot be identified as a
+free parameter. Instead it is derived from the confirmed-case BVD
+composition `q = μ_BVD / N_susp` (the count-implied BVD share among
+suspects the confirmed-cases stream already estimates) times this single
+scalar `m_death`: `p_death_conf = clamp(m_death · q, 0, 1)`. The
+multiplier captures that deaths are likelier true BVD than the general
+suspect pool (and tested at different coverage). Its default prior
+`LogNormal(0, 0.25)` is tight and centred on 1 (no enrichment), 95%
+interval ≈ 0.61-1.63, the most the single informative point (17/246) can
+support; set the SD to zero to tie deaths directly to the case
+composition. Used by [`confirmed_deaths_model`](@ref).
+"""
+@model function confirmed_death_enrichment_model(;
+        enrichment_prior = LogNormal(0.0, 0.25))
+    m_death ~ enrichment_prior
+    return (; m_death)
+end
+
+"""
 Prior on the detection window `w` — mean days during which a case is
 still infectious and detectable abroad. Default centred on 15 days
 (the McCabe et al. central scenario) with SD 5. Used by
