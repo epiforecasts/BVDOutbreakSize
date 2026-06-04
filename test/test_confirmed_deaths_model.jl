@@ -72,6 +72,25 @@ end
     @test all(0 .< c .< 1)
 end
 
+@testitem "confirmed_deaths_only: PP recentres on 17 (not 38)" tags=[:slow] begin
+    ## The coverage·s thinning must recover the observed 17 confirmed
+    ## deaths. The old composition link (s·q) over-predicted (~38); fitting
+    ## the 28-May point and drawing the posterior predictive must centre the
+    ## replicate confirmed-death total near 17, well below 38.
+    using Turing: predict
+    using Statistics: median
+    using BVDOutbreakSize: confirmed_deaths_only_model, nuts_sample
+    chn = nuts_sample(confirmed_deaths_only_model(246, 17);
+        samples = 200, chains = 2, seed = 1, progress = false)
+    pp = predict(confirmed_deaths_only_model(246, missing), chn)
+    cd = reduce(vcat, vec(Array(pp[:confirmed_deaths])))
+    m = median(cd)
+    @test all(cd .>= 0)
+    ## Centred on the observed point, far from the composition-link 38.
+    @test 8 <= m <= 30
+    @test m < 38
+end
+
 @testitem "bvd_joint: confirmed-deaths stream on vs off" tags=[:slow] begin
     ## Enabling the stream conditioned on the real 28-May confirmed-death
     ## point must keep finite generated quantities, and leave the model
