@@ -1956,9 +1956,10 @@ function joint_obs(o; observe = true)
     ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
     ## deaths that got confirmed. Confirmed deaths are flat at 17 over
     ## 26-28 May, so the informative content is the single cut-off point.
-    ## Fit it as one cumulative vintage, thinning the MODELLED BVD-death
-    ## trajectory by `coverage_death · s` (see `confirmed_deaths_model`);
-    ## empty when no confirmed-death history.
+    ## Fit it as one cumulative vintage through the lab/positivity process
+    ## of `confirmed_deaths_model` (forwarded fraction `τ_death` of the
+    ## suspect-death backlog, BVD share sets the death-specimen positivity
+    ## from the shared `s`/`spec`); empty when no confirmed-death history.
     if o.confirmed_death_history !== missing
         cdeath = Union{Missing, Int}[observe ?
                                                          o.confirmed_death_history.values[end] :
