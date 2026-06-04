@@ -41,16 +41,28 @@
 #   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
 #   $\tau$, case fatality ratio (CFR), onset-to-death shape and scale,
-#   detection window $w$,
 #   daily traveller volume and surveillance dispersion all have
 #   priors and are sampled jointly. McCabe et al.
 #   [mccabe2026](@cite) fix each and
 #   sweep.
-# - *Exact cumulative integral for exports* —
-#   $q\cdot\int_{T-w}^{T} C(s)\,ds$ with travel rate $q$ — rather than
-#   the small-$rw$ simplification $q\cdot w\cdot C(T)$ used by McCabe et
-#   al. (and by [imai2020](@cite) before them). The two forms agree
-#   as $r \to 0$.
+# - *Explicit infection→detection delay for exports.* Exports are
+#   travel-gated: a person is at risk of being exported from infection
+#   (they travel during incubation, before symptoms), and are detected
+#   abroad only after the full infection→detection delay. The exports
+#   therefore follow a delay convolution of the infection trajectory with
+#   an infection→detection delay, rather than McCabe et al.'s fixed
+#   detection window $w$. That delay is the incubation period convolved
+#   with the DRC onset-to-report delay, moment-matched to a single Gamma,
+#   so the incubation and suspected-case streams inform it rather than a
+#   standalone prior; its mean is the incubation mean ($\approx 6.3$ days)
+#   plus the onset-to-report mean ($\approx 11.25$ days), $\approx 17.5$
+#   days, restoring McCabe's infection→detection window meaning (and
+#   capturing pre-symptomatic travel) rather than an onset-only window.
+#   The rectangular-window form $q\cdot\int_{T-w}^{T} C(s)\,ds$ is kept
+#   for the McCabe et al. comparison, where we still use this exact
+#   integral rather than the small-$rw$ simplification $q\cdot w\cdot C(T)$
+#   of McCabe et al. (and [imai2020](@cite) before them); the two forms
+#   agree as $r \to 0$.
 # - *Exact (not large-$T$ approximate) deaths convolution.* For a
 #   gamma delay the convolution integral has an exact closed form
 #   that carries a $\gamma(\alpha, (\beta + r)T)/\Gamma(\alpha)$
@@ -193,12 +205,43 @@
 #   refits the joint model under the faster early-epidemic rate to show
 #   how much the timing, growth-rate and outbreak-size estimates are
 #   impacted.
-# - *Detection window is weakly motivated.* $w$ lumps incubation and
-#   onset-to-detection together — both poorly characterised for BVD —
-#   so the quantity itself is loosely defined. Its prior is even less
-#   grounded: it simply spans the 10–20 day windows McCabe et al. sweep,
-#   with no independent estimate behind it, so the exports stream leans
-#   on an assumption rather than data.
+# - *Exports fit at their Uganda detection dates, stopped at the last
+#   import.* Rather than a single cumulative count at the cut-off, the
+#   three imports enter as a dated daily series at their Uganda detection
+#   dates (import #1 hospital-admitted 11 May, #2 confirmed 16 May, #3
+#   announced 23 May), fit through the same infection→detection delay as a
+#   per-day Poisson process; the pre-detection survival term
+#   carries the earliest-detection timing bound that McCabe et al. add
+#   separately. Both travel-gated streams (exports and deaths-among-
+#   exports) are run only up to the most recent reported import (23 May),
+#   not the 26 May cut-off: the streams assume a constant per-capita
+#   travel rate, but cross-border movement patterns likely shift over the
+#   outbreak and the most recent days are right-truncated by reporting
+#   lag, so the trailing days carry no informative zero. Import #3's
+#   23 May date is a public announcement rather than a detection date, so
+#   it carries reporting-pipeline lag.
+# - *Export delay is an infection-to-admittance delay proxied by the DRC
+#   reporting delay.* The default model replaces McCabe et al.'s lumped
+#   detection window with an infection→detection delay convolution.
+#   Exports are travel-gated, so the at-risk clock runs from infection
+#   (capturing pre-symptomatic travel): the delay is the incubation period
+#   convolved with an onset-to-detection delay, moment-matched to one
+#   Gamma. Because the dated cases are anchored on their Uganda
+#   admittance/detection dates (import #1 was hospital-admitted 11 May),
+#   the relevant step abroad is onset-to-admittance — a care-seeking
+#   delay, not an administrative reporting lag. We have no Uganda
+#   onset-to-admittance data and the handful of exports cannot identify
+#   their own delay, so we **assume it equals the DRC onset-to-report
+#   delay** (pinned by the incubation and suspected-case streams) and
+#   reinterpret that draw as the onset-to-admittance delay. This is a
+#   limitation: the imports were travellers actively seeking hospital care
+#   (import #1 went from admission to death in three days), so their true
+#   onset-to-admittance delay is plausibly *shorter* than the DRC
+#   community-surveillance onset-to-report delay; a longer borrowed delay
+#   pushes the implied infection times earlier and biases the
+#   export-implied outbreak size upward. The timing therefore rests on
+#   this proxy and on the Gamma moment-match. McCabe et al.'s rectangular
+#   window is kept for the comparison.
 # - *Exports treated as DRC importations only.* The exports likelihood
 #   conditions on the three WHO-confirmed travel-related cases in
 #   Uganda and excludes the two domestic contacts (a driver and a
@@ -207,17 +250,37 @@
 #   is that it relies on the source classification of each case as an
 #   importation: with only three counts, reclassifying any one case
 #   shifts the implied outbreak size and ascertainment.
+# - *Exports assume one-way travel.* An infected traveller is counted as a
+#   Ugandan importation once they cross the border, with no return leg, so
+#   anyone who travels to Uganda and back before being detected is counted
+#   in error. The travel input is a one-directional points-of-entry flow
+#   (McCabe et al. Table 3), and IOM DTM flow monitoring on the same
+#   border shows movement is roughly balanced bidirectional and dominated
+#   by routine economic round trips, so the at-risk crossings are
+#   over-counted. Only the product of the Uganda ascertainment and the
+#   travel rate is identified, so a roughly constant round-trip fraction
+#   is absorbed into the fitted ascertainment; what it cannot absorb is a
+#   systematic shift in movement over the outbreak, which is why both
+#   travel-gated streams are stopped at the last reported import rather
+#   than extrapolated to the cut-off.
 # - *Selection bias in deaths-among-exports.* The deaths-among-
 #   exports likelihood assumes Uganda's surveillance retains detected
 #   exports through to any subsequent death. If the system loses
 #   cases that progress to death, the observed count is biased
 #   downward and the constraint it places on $T$ is overstated.
 # - *Deaths-among-exports is an approximate construction.* The expected
-#   count weights the exported at-risk person-time by the onset-to-death
-#   CDF $F_d(T-s)$ rather than convolving the death delay against the
+#   count weights the exported at-risk person-time by the death CDF
+#   $F_d(T-s)$ rather than convolving the death delay against the
 #   exported-case incidence; this treats the cohort present at time $s$
 #   as if infected at $s$. A more direct construction would convolve the
-#   onset-to-death delay against the exported-case incidence trajectory.
+#   death delay against the exported-case incidence trajectory. The death
+#   timing is now keyed to infection: $F_d$ is the infection→death delay
+#   (incubation $\oplus$ onset-to-death), the same infection clock as the
+#   detection survival and $C(s)$, so deaths are not timed one incubation
+#   period too early. Because detection and death share the same onset,
+#   incubation enters both the detection and death delays, a slight
+#   double-count of the shared incubation period; this is accepted as
+#   better than omitting incubation on the death timing entirely.
 # - *Ascertainment partially pooled, not separately identified.*
 #   Uganda's exported-case ascertainment $p_{\text{Uganda}}$ and DRC's
 #   reported-case ascertainment $p_{\text{DRC}}$ share a logit-scale
@@ -259,7 +322,7 @@ using Turing
 using Turing: to_submodel, @varname
 using Distributions
 using StatsFuns: logit, logistic
-using DataFrames: DataFrame
+using DataFrames: DataFrame, rename
 import CSV
 using Random
 using Markdown
@@ -443,16 +506,16 @@ vintage_table #hide
 # | Parameter | Exports | Deaths | Cases | Confirmed & received | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Growth $C(s) = e^{rs}$ | ● | ● | ● | ● | ● | ● | ● |
-# | Incubation period |  | ● | ● | ● | ● |  |  |
+# | Incubation period | ● | ● | ● | ● | ● | ● |  |
 # | Onset-to-death delay |  | ● |  |  | ● |  |  |
 # | Case-fatality ratio |  | ● |  |  | ● |  |  |
-# | Onset-to-report delay |  |  | ● | ● |  |  |  |
+# | Onset-to-report delay | ● |  | ● | ● | ● | ● |  |
+# | Report-to-lab delay |  |  |  | ● |  |  |  |
 # | PCR sensitivity $s$ |  |  |  | ● |  |  |  |
 # | PCR specificity |  |  |  | ● |  |  |  |
 # | Severe-first share $q_0, q_\infty, \text{decay}$ |  |  |  | ● |  |  |  |
 # | Forwarded fraction $\tau_{\text{forward}}$ |  |  |  | ● |  |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  |  |  |
-# | Detection window | ● |  |  |  | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● | ● |  |
 # | Traveller volume | ● |  |  |  | ● | ● |  |
@@ -824,9 +887,12 @@ cfr_prior_fig #hide
 # ##### Detection window
 #
 # $w$ is the mean time during which a case is still infectious and
-# detectable abroad (incubation + onset-to-detection). The prior is
+# detectable abroad (incubation + onset-to-detection). This rectangular
+# window is the McCabe et al. mechanism, kept for the comparison through
+# `imperial_only_model`; the default export model instead uses the
+# onset-to-detection delay convolution described next. The prior is
 # based on the detection windows McCabe et al. sweep in their Method 1
-# scenarios (10, 15 and 20 days): it is centred on their central 15-day
+# scenarios (10, 15 and 20 days). It is centred on their central 15-day
 # value with an SD wide enough to cover the 10–20 day range.
 #
 # ```math
@@ -846,6 +912,39 @@ cfr_prior_fig #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
+
+# ##### Infection→detection delay
+#
+# The default export model replaces McCabe's fixed detection window with
+# an explicit infection→detection delay convolution.
+# Exports are travel-gated, so the at-risk clock starts at infection: a
+# person travels during incubation, before symptoms, and is detected
+# abroad only after the full infection→detection delay has elapsed.
+# The at-risk prevalence is therefore the difference between cumulative
+# infections and the infections that have already completed
+# infection→detection, and integrating this prevalence over the per-day
+# per-capita travel rate gives the expected detected exports.
+# The window form is recovered exactly as the infection→detection delay
+# collapses to a point mass, so this generalises rather than replaces the
+# McCabe assumption.
+# The infection→detection delay is the incubation period (the
+# infection→onset step) convolved with the DRC onset-to-report delay
+# $f_{\text{rep}}$ (`report_delay_model`), moment-matched to a single
+# Gamma via `combined_delay`: entering surveillance as a suspected case
+# is taken to be the same process abroad as in the DRC, and the export
+# count is a single datum that cannot identify its own delay, so the
+# incubation and reported-cases streams pin it.
+# Because the incubation period sits inside this delay, the export
+# likelihoods carry no separate incubation rescale; the survival is 1 at
+# infection (a just-infected traveller is certainly not yet detected),
+# unlike a flat onset rescale.
+# Its mean is the incubation mean ($\approx 6.3$ days) plus the
+# onset-to-report mean ($\approx 11.25$ days), $\approx 17.5$ days.
+# The moment-match is an approximation: the sum of two Gammas is not
+# Gamma, but matching the first two moments is accurate for the convex
+# survival integrals here.
+# The `imperial_only_model` composer keeps the rectangular detection
+# window for comparison.
 
 # ##### Daily traveller volume
 #
@@ -1077,6 +1176,20 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_model(1, nothing, 0.25)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_delay_model(1, nothing, 0.25, BVDOutbreakSize.Gamma(2.5, 4.5))), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1452,6 +1565,14 @@ cfr_prior_fig #hide
 # daily traveller volume are shared with the exports likelihood so the
 # two Uganda-side observations use the same person-time.
 #
+# Equation (19) is the McCabe-window form, kept for the comparison. In
+# the default delay mechanism the top-hat window is replaced by the
+# infection→detection survival $\overline{F}_{\text{det}}(T-s)$, and the
+# death CDF $F_d$ is the infection→death delay (incubation $\oplus$
+# onset-to-death), so both clocks run from infection in step with $C(s)$.
+# Detection and death share the same onset, so incubation enters both
+# delays — a slight accepted double-count of the shared incubation period.
+#
 # Uganda's export deaths are point-of-entry / hospital-detected, so
 # their dates are recorded directly and carry information beyond the
 # total count: a death seen early bounds how old the outbreak can be. We
@@ -1508,6 +1629,20 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_deaths_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_deaths_delay_model( Int[], nothing, 0.33, nothing, 0.25; f_det = BVDOutbreakSize.Gamma(2.0, 4.5), daily_travellers = 1871.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### First export detection — timing survival term
 #
 # The same logic applies to the *first detected export case* (Uganda's
@@ -1533,6 +1668,20 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_detection_timing_model( nothing, 0.25; delta = missing, window = 15.0, daily_travellers = 1871.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: exports_detection_timing_delay_model (default)</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.exports_detection_timing_delay_model( nothing, 0.25; delta = missing, f_det = BVDOutbreakSize.Gamma(2.0, 4.5), daily_travellers = 1871.0)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1788,8 +1937,22 @@ function joint_obs(o; observe = true)
         analysed = Union{Missing, Int}[]
         received = Union{Missing, Int}[]
     end
-    edaily = observe ? o.export_deaths_daily :
-             fill(missing, length(o.export_deaths_daily))
+    ## Travel-gated export streams stop at the most recent reported import
+    ## to Uganda. Cross-border movement patterns likely shift over the
+    ## outbreak and the days after the last import are right-truncated by
+    ## reporting lag, so the trailing zeros are dropped from both the
+    ## export-case and deaths-among-exports series and each stream is run
+    ## only up to that date (see `exports_daily_delay_model`).
+    ec_full = o.exported_cases_daily
+    last_import = isempty(ec_full) ? nothing : findlast(!=(0), ec_full)
+    export_last_offset = last_import === nothing ? 0 :
+                         length(ec_full) - last_import
+    _truncate(v) = v[1:max(length(v) - export_last_offset, 0)]
+    ecases = isempty(ec_full) ? ec_full :
+             (observe ? _truncate(ec_full) :
+              fill(missing, length(_truncate(ec_full))))
+    ed_trunc = _truncate(o.export_deaths_daily)
+    edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
     ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
     ## deaths that got confirmed. Confirmed deaths are flat at 17 over
     ## 26-28 May, so the informative content is the single cut-off point.
@@ -1812,6 +1975,8 @@ function joint_obs(o; observe = true)
             samples_received = received,
             confirmed_deaths = cdeath,
             confirmed_death_offsets = cdeath_off,
+            exported_cases_daily = ecases,
+            export_last_offset = export_last_offset,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
@@ -1844,7 +2009,7 @@ prior_C_table #hide
 #md # ```
 
 prior_pair_fig = plot_pair(prior_chn,
-    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
         :λ_bg, :τ_forward, :s_test, :spec_test,
         :q0, :qinf, :decay_scale,
@@ -2335,7 +2500,7 @@ joint_summary #hide
 #md # ```
 
 posterior_pair_fig = plot_pair(chn_joint,
-    [:r, :τ, :m, :cumulative_cases, :CFR, :w, :inv_sqrt_k, :k,
+    [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit];
     prior = prior_chn);
 
@@ -2426,7 +2591,10 @@ pp_joint = predict(
         confirmed_q_random_effect = confirmed_q_re_model,
         genetic = genetic_seeding),
     chn_joint);
-pp_exports = vec(Array(pp_joint[:exported_cases]));
+## Exports are now a dated per-day series (to the last reported import),
+## so sum each draw's days for the cumulative-total posterior predictive,
+## matching the observed total.
+pp_exports = vec(sum.(pp_joint[@varname(exported_cases_daily)]));
 ## All DRC streams are now per-vintage increment vectors (deaths, reported,
 ## confirmed positives, samples received); sum each draw's bins for the
 ## cumulative-total posterior predictive. Export deaths are a per-day series

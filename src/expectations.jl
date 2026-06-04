@@ -137,6 +137,72 @@ end
 _exp_cumulative_integral(r, a, b) = exp(r * a) * expm1(r * (b - a)) / r
 
 """
+Moment-matched Gamma approximation to the sum of two independent Gamma
+delays `a` and `b`. The convolution `a ⊕ b` is not Gamma in general, so
+its mean ``\\mu = \\mu_a + \\mu_b`` and variance ``v = v_a + v_b`` are
+matched to a single `Gamma(μ²/v, v/μ)`. Used to build the Uganda-export
+infection→detection delay as incubation ⊕ onset-to-report, so the
+at-risk export window runs from infection (capturing pre-symptomatic
+travel) through to detection abroad. Plain arithmetic on the gamma
+moments keeps the result differentiable under AD.
+"""
+function combined_delay(a::Gamma, b::Gamma)
+    m = mean(a) + mean(b)
+    v = std(a)^2 + std(b)^2
+    return Gamma(m^2 / v, v / m)
+end
+
+"""
+Expected cumulative detected exports by elapsed time `t` under an
+explicit infection→detection delay, clamped to be strictly positive and
+finite. The delay-survival generalisation of [`expected_exports`](@ref):
+instead of a rectangular detection window of fixed width `w`, a case
+stays at risk of being exported and detected abroad only until the
+infection→detection delay `f_det` has elapsed. The exports stream is
+travel-gated, so the at-risk clock starts at infection (the traveller
+moves during incubation, pre-symptomatic); `f_det` is therefore the full
+infection→detection delay (incubation ⊕ onset-to-report, see
+[`combined_delay`](@ref)), not an onset-to-report delay rescaled by the
+incubation moment. Writing the cumulative infections as ``C(s) = e^{r s}``
+and the infections that have already completed infection→detection by `s`
+as the convolution
+``\\text{detected}(s) = \\int_0^s e^{r u}\\, f_{det}(s-u)\\,du``, the
+at-risk prevalence is the difference
+
+```math
+\\text{prevalence}(s) = e^{r s} - \\text{detected}(s),
+```
+
+and the expected detected exports accumulate the per-day per-capita
+travel rate `q` over the at-risk person-time
+
+```math
+\\mathbb{E}[\\text{exports}(t)] = p\\, q
+    \\int_0^t \\text{prevalence}(s)\\, ds
+  = p\\, q
+    \\left(\\int_0^t e^{r s}\\, ds - \\int_0^t \\text{detected}(s)\\, ds\\right).
+```
+
+`r` is the exponential growth rate, `p` the detection probability and
+`q` the per-day per-capita travel rate (so the result is in cases). The
+``\\int_0^t e^{r s}\\, ds`` term is the exact closed form
+`_exp_cumulative_integral`; the inner convolution uses the Gamma
+closed form of [`delay_convolution`](@ref), so only the outer
+``\\int_0^t \\text{detected}(s)\\, ds`` is quadrature and the path stays
+AD-friendly. As the infection→detection delay collapses to a point mass
+at `w` the survival becomes the top-hat ``1\\{t-s<w\\}`` and this reduces
+exactly to the McCabe window form [`expected_exports`](@ref).
+"""
+function expected_exports_delay(r, p, q, t, f_det;
+        alg = CUMULATIVE_INTEGRAL_ALG)
+    cum_integral = _exp_cumulative_integral(r, zero(t), t)
+    removed = integrate(s -> delay_convolution(one(t), r, s, f_det),
+        zero(t), t; alg)
+    raw = p * q * (cum_integral - removed)
+    return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
+end
+
+"""
 Expected cumulative deaths among detected exports by elapsed time `t`,
 clamped to be strictly positive and finite:
 
@@ -157,6 +223,55 @@ function expected_exports_deaths(cumulative, delay_dist, CFR, p, q,
     window_start = max(t - window, zero(t))
     integral = integrate_exports_deaths(
         cumulative, delay_dist, window_start, t, t; alg)
+    raw = CFR * p * q * integral
+    return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
+end
+
+"""
+Expected cumulative deaths among detected exports by elapsed time `t`
+under an explicit infection→detection delay, clamped to be strictly
+positive and finite. The delay-survival generalisation of
+[`expected_exports_deaths`](@ref): McCabe et al. integrate the
+onset-to-death CDF over the top-hat detection window `[t-w, t]`, i.e. a
+top-hat detection survival ``S(t-s) = 1\\{t-s<w\\}``. Here the indicator
+is replaced by the infection→detection survival
+``\\overline{F}_{det}(t-s)``, so
+
+```math
+\\mathbb{E}[D_{\\text{uganda}}(t)] = \\mathrm{CFR}\\, p\\, q\\,
+    \\int_0^t C(s)\\, \\overline{F}_{det}(t-s)\\, F_{death}(t-s)\\, ds,
+```
+
+with `cumulative` the infection trajectory ``C(s) = e^{r s}``, `f_det`
+the infection→detection Gamma delay (incubation ⊕ onset-to-report, see
+[`combined_delay`](@ref); survival ``\\overline{F}_{det}``), `f_death`
+the infection→death Gamma delay (incubation ⊕ onset-to-death, CDF
+``F_{death}``), `CFR` the case-fatality ratio, `p` the detection
+probability and `q` the per-day per-capita travel rate (so the result is
+in cases). Both delays are keyed to infection, the same clock as `C(s)`:
+the detection survival is 1 at age 0 (a just-infected traveller is
+certainly not yet detected) and the death CDF is 0 at age 0 (no time has
+elapsed for death). The survival and the death CDF are both evaluated
+through the Gamma closed form [`_gamma_cdf`](@ref), which carries the
+reverse-mode rule for the shape derivative, so the integrand is
+closed-form and only the outer integral is quadrature (clustered near `t`
+where the integrand has mass). As both delays collapse to point masses
+this reduces exactly to [`expected_exports_deaths`](@ref). Uses
+[`DEATH_INTEGRAL_ALG`](@ref).
+"""
+function expected_exports_deaths_delay(cumulative, f_det::Gamma,
+        f_death::Gamma, CFR, p, q, t; alg = DEATH_INTEGRAL_ALG)
+    scale = _delay_scale(f_det) + _delay_scale(f_death)
+    g = let cumulative = cumulative, t = t, f_det = f_det, f_death = f_death
+        s -> begin
+            a = t - s
+            a <= zero(a) ? zero(a) :
+            cumulative(s) *
+            (one(a) - _gamma_cdf(f_det.α, f_det.θ, a)) *
+            _gamma_cdf(f_death.α, f_death.θ, a)
+        end
+    end
+    integral = integrate(g, zero(t), t, scale; alg)
     raw = CFR * p * q * integral
     return isfinite(raw) ? max(raw, eps(typeof(raw))) : eps(typeof(raw))
 end

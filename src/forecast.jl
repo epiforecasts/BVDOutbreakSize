@@ -130,7 +130,13 @@ function forecast_reported(chn;
     CFR = _draws(chn, :CFR)
     α = _draws(chn, :α)
     θ = _draws(chn, :θ)
-    w = _draws(chn, :w)
+    ## Uganda exports use either the McCabe rectangular detection window
+    ## `w` or the explicit onset-to-detection delay convolution. The delay
+    ## reuses the DRC onset-to-report delay `Gamma(α_rep, θ_rep)`, so there
+    ## is no separate export-delay parameter; the chain is identified as
+    ## window- vs delay-fitted by the presence of `w`.
+    has_window = haskey_chain(chn, :w)
+    w = has_window ? _draws(chn, :w) : nothing
     pr = _draws(chn, :p_drc)
     pu = _draws(chn, :p_uganda)
     k = _draws(chn, :k)
@@ -187,15 +193,26 @@ function forecast_reported(chn;
         μ_deaths = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
             onset_fraction = os, alg)
         deaths_cum[i] = _nb_rand(rng, k[i], μ_deaths)
-        ## Uganda exports: p_uganda · q · ∫_{T+h−w}^{T+h} C(s) ds (closed
-        ## form for exponential growth). Exports see infections directly —
-        ## the detection window absorbs the infection-to-detection delay —
-        ## so they are not rescaled by the incubation period. Skipped when
-        ## `forecast_exports = false` (e.g. cross-border travel disrupted, so
-        ## the forward travel rate no longer holds).
+        ## Uganda exports. With the McCabe window: p_uganda · q ·
+        ## ∫_{T+h−w}^{T+h} C(s) ds (closed form). With the delay
+        ## mechanism: the at-risk export window runs from infection, so
+        ## the detection delay is incubation ⊕ onset-to-report (combined
+        ## to one Gamma); the incubation period lives in the delay, so the
+        ## person-time integral is not separately rescaled by `os`. Skipped
+        ## when `forecast_exports = false` (e.g. cross-border travel
+        ## disrupted, so the forward travel rate no longer holds).
         if forecast_exports
-            lo = max(Th - w[i], zero(Th))
-            μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
+            if has_window
+                lo = max(Th - w[i], zero(Th))
+                μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) /
+                            r[i]
+            else
+                f_det = has_incubation ?
+                        combined_delay(Gamma(α_inc[i], θ_inc[i]),
+                    Gamma(α_rep[i], θ_rep[i])) : Gamma(α_rep[i], θ_rep[i])
+                μ_exports = expected_exports_delay(r[i], pu[i], q, Th, f_det;
+                    alg = alg)
+            end
             exports_cum[i] = rand(rng,
                 Poisson(max(μ_exports, eps(μ_exports))))
         end

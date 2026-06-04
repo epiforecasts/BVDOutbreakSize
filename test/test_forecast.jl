@@ -12,13 +12,23 @@
     ## `forecast_reported` reads. `include_lab = true` adds the
     ## lab-turnaround delay and PCR sensitivity draws so the
     ## confirmed-cases columns are populated.
-    @model function _forecast_test(; include_lab::Bool = false)
+    @model function _forecast_test(; include_lab::Bool = false,
+            delay::Bool = false)
         r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
         T ~ truncated(Normal(100.0, 10.0); lower = 1.0)
         CFR ~ Beta(6.0, 14.0)
         α ~ truncated(Normal(4.3, 0.5); lower = 0.5)
         θ ~ truncated(Normal(2.6, 0.3); lower = 0.2)
-        w ~ truncated(Normal(15.0, 2.0); lower = 1.0)
+        ## Window-mechanism chains carry `w`; delay-mechanism chains do
+        ## not. Delay-mechanism export forecasts build the
+        ## infection→detection delay from the incubation (α_inc / θ_inc)
+        ## and DRC report (α_rep / θ_rep) draws.
+        if delay
+            α_inc ~ truncated(Normal(1.1, 0.3); lower = 0.3)
+            θ_inc ~ truncated(Normal(5.7, 1.0); lower = 0.5)
+        else
+            w ~ truncated(Normal(15.0, 2.0); lower = 1.0)
+        end
         p_drc ~ Beta(2.0, 6.0)
         p_uganda ~ Beta(2.0, 6.0)
         inv_sqrt_k ~ truncated(Normal(0.0, 1.0); lower = 1e-3)
@@ -46,7 +56,8 @@
     end
 
     _forecast_chain(n;
-        include_lab::Bool = false) = sample(_forecast_test(; include_lab), Prior(), n;
+        include_lab::Bool = false, delay::Bool = false) = sample(
+        _forecast_test(; include_lab, delay), Prior(), n;
         chain_type = FlexiChains.VNChain, progress = false)
 end
 
@@ -99,6 +110,28 @@ end
     tbl=forecast_table(fc)
     @test !any(occursin.("Uganda", string.(tbl[!, 1])))
     @test plot_forecast(fc) !== nothing
+end
+
+@testitem "forecast_reported works on the onset-to-detection delay chain" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_reported
+
+    ## Delay-mechanism chain carries no `w` (exports reuse the DRC report
+    ## delay), so this exercises the non-window branch of
+    ## `forecast_reported` that the window fixture never reaches.
+    chn=_forecast_chain(50; delay = true)
+
+    fc=forecast_reported(chn;
+        horizon = 7,
+        daily_travellers = 1871,
+        source_population = 4_392_200,
+        obs_cases = 514,
+        obs_deaths = 136,
+        obs_exports = 2)
+
+    @test fc isa DataFrame
+    @test :exports_cum in propertynames(fc)
+    @test all(fc.exports_cum .>= 0)
 end
 
 @testitem "forecast_reported adds confirmed columns when lab delay sampled" tags=[:slow] setup=[ForecastFixtures] begin

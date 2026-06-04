@@ -195,3 +195,57 @@ end
         @test load_observations(path).export_deaths_daily == Int[]
     end
 end
+
+@testitem "exported_cases_daily is a daily series to the cut-off" begin
+    using BVDOutbreakSize: load_observations
+
+    function _write_obs(io; as_of, case_dates = nothing)
+        write(io, "as_of_date = \"$as_of\"\n")
+        case_dates === nothing || begin
+            quoted = join(("\"$d\"" for d in case_dates), ", ")
+            write(io, "[export_case_dates]\nvalue = [$quoted]\n",
+                "source = \"x\"\n")
+        end
+        for k in ("exported_cases", "exports_deaths", "total_deaths",
+            "reported_cases", "daily_outbound_travellers",
+            "daily_outbound_travellers_sd", "source_population")
+            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
+        end
+    end
+
+    mktempdir() do dir
+        path = joinpath(dir, "obs.toml")
+        open(
+            io -> _write_obs(io; as_of = "2026-05-26",
+                case_dates = ["2026-05-11", "2026-05-16", "2026-05-23"]),
+            path, "w")
+        daily = load_observations(path).exported_cases_daily
+        ## Offsets 15 (11 May), 10 (16 May), 3 (23 May); earliest = 15, so
+        ## the series spans offsets 15..0 (length 16), with detections at
+        ## index 1 (offset 15), index 6 (offset 10) and index 13 (offset 3).
+        @test length(daily) == 16
+        @test sum(daily) == 3
+        @test daily[1] == 1
+        @test daily[6] == 1
+        @test daily[13] == 1
+    end
+end
+
+@testitem "exported_cases_daily is empty when no dates are present" begin
+    using BVDOutbreakSize: load_observations
+
+    function _write_obs(io; as_of)
+        write(io, "as_of_date = \"$as_of\"\n")
+        for k in ("exported_cases", "exports_deaths", "total_deaths",
+            "reported_cases", "daily_outbound_travellers",
+            "daily_outbound_travellers_sd", "source_population")
+            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
+        end
+    end
+
+    mktempdir() do dir
+        path = joinpath(dir, "obs.toml")
+        open(io -> _write_obs(io; as_of = "2026-05-26"), path, "w")
+        @test load_observations(path).exported_cases_daily == Int[]
+    end
+end
