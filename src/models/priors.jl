@@ -273,6 +273,47 @@ are sampled; `σ_q → 0` recovers the smooth baseline curve. Used by
 end
 
 """
+Imputed analysed-denominator latent for confirmed vintages with no
+observed analysed count (the 18-22 May early and 29-31 May late lab
+windows, where the national `Nbre d'échantillons analysés` is missing).
+The denominator is imputed as a TIGHT log-scale latent anchored to the
+observed analysed increments, so it is a smooth extrapolation of the
+known 23-28 May series rather than a free dimension.
+
+For `n` missing vintages the latent log increments are a log-random-walk
+anchored at `log_anchor` (the log geometric-mean of the observed analysed
+increments), `log ΔA_j = log_anchor + σ_A · cumsum(z_A)_j`, with `n` IID
+standard-normal steps `z_A` and a small walk SD `σ_A` (default
+`truncated(Normal(0, 0.3); lower = 0)`). The walk keeps the imputed
+denominators close to the observed scale. `σ_A → 0` pins every imputed
+denominator at the anchor. Used by [`confirmed_cases_model`](@ref) when
+`analysed_impute` is set and some `samples_analysed` entries are missing.
+
+NEGATIVE RESULT — DEFAULT OFF. Imputing the no-denominator confirmed
+vintages this way still funnels: a four-chain joint fit over the early
+18-22 May extension does not converge (R-hat ≈ 2.1, bulk ESS ≈ 1, every
+NUTS transition saturates the maximum tree depth with zero divergences),
+and tightening the pooling from `σ_A = 0.3` to `0.05` does not help. The
+ridge is the per-vintage `q` random effect times the imputed `ΔA`: each
+no-denominator vintage carries both a free positivity offset and a latent
+denominator, and `ΔC ≈ ΔA · p_pos(q)` leaves them jointly unidentified.
+The free analysis-capacity (`μ_A`) imputation funnels the same way. The
+confirmed stream is therefore fitted only over the 23-28 May vintages
+that carry an observed analysed denominator; this submodel is retained as
+an opt-in experiment, off by default.
+"""
+@model function analysed_impute_model(n::Integer, log_anchor::Real;
+        sigma_prior = truncated(Normal(0.0, 0.3); lower = 0))
+    σ_A ~ sigma_prior
+    z_A ~ filldist(Normal(0, 1), n)
+    ## Log-random-walk around the observed-increment anchor; the cumulative
+    ## sum gives a smooth drift while the tight σ_A keeps the imputed
+    ## denominators on the observed scale.
+    log_ΔA = log_anchor .+ σ_A .* cumsum(z_A)
+    return (; σ_A, z_A, log_ΔA)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Underlies the suspected/confirmed contrast; the

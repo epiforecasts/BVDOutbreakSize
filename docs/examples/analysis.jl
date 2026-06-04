@@ -1807,7 +1807,8 @@ end
 prior_args = joint_obs(obs; observe = false)
 prior_chn = sample(
     bvd_joint(missing, prior_args.deaths, prior_args.reported,
-        prior_args.export_deaths; prior_args.kw...),
+        prior_args.export_deaths; prior_args.kw...,
+        confirmed_q_random_effect = confirmed_q_re_model),
     Prior(), 2_000; progress = false);
 
 prior_C_table = summary_table(prior_chn, [:cumulative_cases]; digits = 0);
@@ -1866,6 +1867,11 @@ function growth_for(o)
 end
 growth_now = growth_for(obs)
 
+## Per-vintage tested-BVD-share random effect for the confirmed stream:
+## the 28 May per-window positivity (0.48, 0.05, 0.15, 0.02, 0.79) is
+## non-monotone, so a partially-pooled logit-scale offset lets each
+## confirmed vintage fit its own positivity while the assay sensitivity
+## stays fixed (see `confirmed_q_re_model`).
 fit_args = joint_obs(obs)
 chn_joint = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
@@ -1873,6 +1879,7 @@ chn_joint = nuts_sample(
         growth = growth_now,
         first_export_detection_delta = obs.first_export_detection_delta,
         report_onset_offset = report_onset_offset(obs.as_of_date),
+        confirmed_q_random_effect = confirmed_q_re_model,
         genetic = genetic_seeding); trace_kw("joint")...);
 
 chn_exports = nuts_sample(
@@ -2199,7 +2206,8 @@ headline_summary = let
     df = DataFrame(quantity = String[],
         lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[])
-    for (name, xs) in ["Infections per confirmed case" => mult,
+    for (
+        name, xs) in ["Infections per confirmed case" => mult,
         "Case fatality ratio" => cfr]
         s = posterior_summary(xs)
         push!(df,
@@ -2398,6 +2406,7 @@ pp_joint = predict(
         pre_detection_exports = missing,
         first_export_detection_delta = obs.first_export_detection_delta,
         report_onset_offset = report_onset_offset(obs.as_of_date),
+        confirmed_q_random_effect = confirmed_q_re_model,
         genetic = genetic_seeding),
     chn_joint);
 pp_exports = vec(Array(pp_joint[:exported_cases]));

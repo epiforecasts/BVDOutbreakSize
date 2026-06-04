@@ -246,6 +246,15 @@ supplies the binomial denominator for any `missing` `samples_analysed`
 entry. Per-test positivity is exposed as a derived quantity. Pass
 `tests_analysed = missing` to drop the tested-volume NegBinomial.
 
+`confirmed_analysed_impute` toggles the imputed-denominator experiment:
+when set to the [`analysed_impute_model`](@ref) submodel, confirmed
+vintages whose analysed count is `missing` (the early 18-22 May and late
+29-31 May lab windows, where no national analysed total was published)
+get a TIGHT partially-pooled log-random-walk denominator anchored to the
+observed 23-28 May increments. This funnels and does not converge (see
+[`analysed_impute_model`](@ref)), so it is off by default; the default
+`nothing` keeps the model on the 23-28 May observed-denominator vintages.
+
 `samples_received` is the per-vintage cumulative received-count vector
 (`Cumul échantillons reçus`). When supplied it conditions the forwarded
 fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
@@ -298,6 +307,7 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
         test_selection = test_selection_model(),
         confirmed_overdispersion = nothing,
         confirmed_q_random_effect = nothing,
+        confirmed_analysed_impute = nothing,
         confirmed_selection_clock::Symbol = :time,
         confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
@@ -393,6 +403,7 @@ the default `nothing` anchors the clock at seeding (`t_report = 0`).
                 test_selection = test_selection,
                 overdispersion = confirmed_overdispersion,
                 q_random_effect = confirmed_q_random_effect,
+                analysed_impute = confirmed_analysed_impute,
                 selection_clock = confirmed_selection_clock,
                 volume_scale = confirmed_volume_scale,
                 report_onset_offset = report_onset_offset,

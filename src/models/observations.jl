@@ -287,6 +287,18 @@ initial condition. Pass `missing` entries (with a non-missing
 positivity `p_pos`, tested BVD share `q_cutoff` and baseline `q_baseline`
 are exposed as derived quantities.
 
+`analysed_impute` (default `nothing`) toggles the imputed-denominator
+experiment: a function `(n_missing, log_anchor) -> submodel` (typically
+[`analysed_impute_model`](@ref)) that supplies a TIGHT log-random-walk
+denominator for the `missing` `samples_analysed` entries, anchored to the
+geometric mean of the observed analysed increments. When set, those
+vintages enter the likelihood (`ΔC_v ~ Binomial(round(ΔA_v), p_pos_v)`,
+floored at the observed positives) and the free capacity Poisson is
+skipped for them. This is the no-denominator extension intended to fit
+the early 18-22 May and late 29-31 May confirmed windows, but it FUNNELS
+and does not converge (see [`analysed_impute_model`](@ref)); the default
+`nothing` keeps the fit on the 23-28 May observed-denominator vintages.
+
 A single observation (`length 1`, `t_edges = [T]`) reduces to the
 cumulative confirmed Binomial.
 """
@@ -307,6 +319,7 @@ cumulative confirmed Binomial.
         report_onset_offset::Union{Nothing, Real} = nothing,
         overdispersion = nothing,
         q_random_effect = nothing,
+        analysed_impute = nothing,
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)
@@ -328,6 +341,27 @@ cumulative confirmed Binomial.
     else
         σ_q = nothing
         z_q = nothing
+    end
+    ## Imputed analysed denominators for vintages whose national analysed
+    ## count is missing (early 18-22 May, late 29-31 May lab windows). The
+    ## latent is a TIGHT log-random-walk anchored to the geometric mean of
+    ## the OBSERVED analysed increments, so the imputed denominators are a
+    ## smooth extrapolation of the known series rather than a free
+    ## dimension (a free per-vintage denominator funnels against p_pos).
+    n_missing = analysed_impute === nothing ? 0 :
+                count(x -> x === missing, samples_analysed)
+    if n_missing > 0
+        obs_inc = [convert(Float64, samples_analysed[i])
+                   for i in eachindex(samples_analysed)
+                   if samples_analysed[i] !== missing &&
+                      samples_analysed[i] > 0]
+        log_anchor = isempty(obs_inc) ? 0.0 :
+                     sum(log, obs_inc) / length(obs_inc)
+        impute_state ~ to_submodel(
+            analysed_impute(n_missing, log_anchor), false)
+        log_ΔA_imp = impute_state.log_ΔA
+    else
+        log_ΔA_imp = nothing
     end
     n_edges = length(t_edges)
     capacity_state ~ to_submodel(
@@ -370,8 +404,29 @@ cumulative confirmed Binomial.
     t_report = report_onset_offset === nothing ? zero(T) :
                max(T - report_onset_offset, zero(T))
 
+    imp_seed = log_ΔA_imp === nothing ? one(float(r)) :
+               float(exp(first(log_ΔA_imp)))
     Tt = typeof(float(r) * float(λ_bg) * onset_fraction * float(q0) *
-                float(decay_scale) * float(qinf))
+                float(decay_scale) * float(qinf) * imp_seed)
+    ## Per-edge analysed denominator: observed where present, else the tight
+    ## imputed log-RW latent `exp(log ΔA)`. Both the volume clock and the
+    ## confirmed Binomial use this, so imputed vintages condition on a
+    ## denominator anchored to the observed series.
+    A_imp = Vector{Tt}(undef, n)
+    let mi = 0
+        for i in 1:n
+            if samples_analysed[i] === missing
+                if log_ΔA_imp === nothing
+                    A_imp[i] = zero(Tt)
+                else
+                    mi += 1
+                    A_imp[i] = convert(Tt, exp(log_ΔA_imp[mi]))
+                end
+            else
+                A_imp[i] = convert(Tt, samples_analysed[i])
+            end
+        end
+    end
     p_pos = Vector{Tt}(undef, n)
     q_at = Vector{Tt}(undef, n)
     qinf_count_at = Vector{Tt}(undef, n)
@@ -400,8 +455,7 @@ cumulative confirmed Binomial.
     analysed_cum_at = Vector{Tt}(undef, n)
     acc_a = zero(Tt)
     for i in 1:n
-        acc_a += samples_analysed[i] === missing ? zero(Tt) :
-                 convert(Tt, samples_analysed[i])
+        acc_a += A_imp[i]
         analysed_cum_at[i] = acc_a
     end
     for i in 1:n
@@ -439,21 +493,31 @@ cumulative confirmed Binomial.
         p_pos[i] = isfinite(p_raw) ?
                    clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
         ## Expected confirmed increment: newly-analysed slice ΔA_v times its
-        ## positivity (a diagnostic).
-        Λ_at_edges[i] = p_pos[i] *
-                        (samples_analysed[i] === missing ? zero(Tt) :
-                         convert(Tt, samples_analysed[i]))
+        ## positivity (a diagnostic). Uses the imputed denominator where the
+        ## analysed count is missing.
+        Λ_at_edges[i] = p_pos[i] * A_imp[i]
     end
 
     ## New positives observed on the newly-analysed slice ΔA_v via a
     ## Binomial, the same between-vintage increment form as the reported and
     ## deaths streams (first window's increment is the cumulative, so a
     ## single vintage reduces to the cumulative Binomial). A `missing`
-    ## denominator falls back to `tests_analysed` for predictive draws.
+    ## denominator uses the imputed log-RW latent when `analysed_impute` is
+    ## set, otherwise falls back to `tests_analysed` for predictive draws.
+    ## The imputed denominator is floored at the observed positives so the
+    ## Binomial stays well defined (ΔA ≥ ΔC).
     for i in 1:n
-        A_i = samples_analysed[i] === missing ?
-              (tests_analysed === missing ? 0 : tests_analysed) :
-              samples_analysed[i]
+        if samples_analysed[i] === missing
+            if log_ΔA_imp === nothing
+                A_i = tests_analysed === missing ? 0 : tests_analysed
+            else
+                obs_c = confirmed_cases[i] === missing ? 0 :
+                        Int(confirmed_cases[i])
+                A_i = max(round(Int, A_imp[i]), obs_c)
+            end
+        else
+            A_i = samples_analysed[i]
+        end
         if φ_conf === nothing
             confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
         else
@@ -489,13 +553,16 @@ cumulative confirmed Binomial.
 
     ## Received increments: the lab forwards a fraction τ_forward of the
     ## received backlog, so the per-window mean is τ_forward·ΔN_recv, observed
-    ## through a NegBinomial sharing `k`. A `missing` entry is generated for
-    ## predictive checks.
+    ## through a NegBinomial sharing `k`. Vintages without a received count
+    ## (the imputed early / late windows) are skipped rather than imputed:
+    ## the received series only runs over the observed 23-28 May lab window.
     ΔN_recv = daily_increment_kernel(N_recv_at)
     recv_means = Vector{Tt}(undef, n)
     for i in 1:n
         raw = convert(Tt, τ_forward) * ΔN_recv[i]
         recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
+        (analysed_impute !== nothing && samples_received[i] === missing) &&
+            continue
         samples_received[i] ~ safe_nbinomial(k, recv_means[i])
     end
 
@@ -505,10 +572,19 @@ cumulative confirmed Binomial.
     ## the backlog is large, the whole backlog when capacity is ample. Window
     ## 1's cumulative analysed is the initial condition (it accumulated over an
     ## unknown pre-window period); windows 2..n condition the capacity random
-    ## walk on the genuine between-sitrep gaps. A `missing` entry is generated.
+    ## walk on the genuine between-sitrep gaps. A `missing` entry is
+    ## generated. When `analysed_impute` is set the missing analysed counts
+    ## are supplied by the tight log-RW latent instead, so the free capacity
+    ## Poisson is skipped for them (it is the free-denominator funnel this
+    ## extension avoids) and their imputed value enters the backlog.
     analysed_cum = (n >= 1 && samples_analysed[1] !== missing) ?
-                   convert(Tt, samples_analysed[1]) : zero(Tt)
+                   convert(Tt, samples_analysed[1]) :
+                   (log_ΔA_imp === nothing ? zero(Tt) : A_imp[1])
     for i in 2:n
+        if log_ΔA_imp !== nothing && samples_analysed[i] === missing
+            analysed_cum += A_imp[i]
+            continue
+        end
         Δt = max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]), zero(T))
         recv_cum = convert(Tt, τ_forward) * N_recv_at[i]
         backlog = max(recv_cum - analysed_cum, eps(Tt))
