@@ -133,7 +133,7 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         total_deaths::Union{Missing, Integer},
         onsets::AbstractVector, k::Real;
         cfr = cfr_model(),
-        onset_to_death = censored_delay_model(60;
+        onset_to_death = censored_delay_model(40;
             mean_prior = truncated(Normal(11.2, 2.0); lower = 1),
             sd_prior = truncated(Normal(5.4, 1.5); lower = 1)))
     cfr_state ~ to_submodel(cfr)

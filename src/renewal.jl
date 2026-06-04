@@ -156,6 +156,13 @@ over lags `d` that stay in range. This is the discrete convolution that
 replaces the continuous onset-to-event integrals of the integral model,
 and maps infections to onsets, onsets to deaths, onsets to reports and
 onsets to detected exports. Type-stable and AD-transparent.
+
+The scalar double loop is deliberate: a vectorised lag-AXPY rewrite
+(`scripts/bench_convolve.jl`) was no faster under Mooncake (≈0.95x — the
+reverse pass over the scalar loop is already efficient), so the simpler
+form stays. The per-gradient cost the joint actually pays sits in the delay
+discretisation (the censored-distribution CDF evaluations), which the delay
+`nmax` trims target instead.
 """
 function convolve_delay(x::AbstractVector, delay::AbstractVector)
     n = length(x)

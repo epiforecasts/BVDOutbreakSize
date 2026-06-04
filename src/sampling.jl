@@ -138,6 +138,16 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
+`target_accept` defaults to 0.90. The earlier integral model needed 0.95
+to keep the multimodal small-outbreak geometry from diverging, but the
+renewal joint conditions the confirmed counts on the observed analysed
+denominator (removing the multiplicative ascertainment ridge) and samples
+the random-walk and ascertainment blocks in non-centred form, so the
+posterior geometry is benign (the sanity fit converges with ≈1 divergence).
+A lower target acceptance shortens the average NUTS trajectory, cutting
+leapfrog steps (and so gradient evaluations) per iteration; raise it back
+toward 0.95–0.99 if a model variant reintroduces divergences.
+
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
 feeds nothing downstream. The per-vintage DRC streams are now scored as
@@ -168,7 +178,7 @@ accordingly or drop them before summarising.
 function nuts_sample(model;
         samples::Integer = 1_000,
         chains::Integer = 4,
-        target_accept::Real = 0.95,
+        target_accept::Real = 0.90,
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
