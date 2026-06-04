@@ -44,8 +44,8 @@
 #   have appeared and been recorded. The cumulative case count McCabe et
 #   al. estimate is recovered from the infections for comparison. The
 #   incubation period is sampled from a prior like every other delay. It
-#   cannot be fitted from the BDBV line list (no exposure dates), so we
-#   take the Bundibugyo estimate the line-list reanalysis recommends
+#   cannot be fitted from the BDBV line list, which has no exposure dates,
+#   so we take the Bundibugyo estimate the line-list reanalysis recommends
 #   [bdbv_linelist_analysis_2026](@cite), a mean of 6.3 days from the
 #   2007 Uganda outbreak [macneil2010](@cite).
 # - *Joint posterior, not 15 scenario estimates.* The doubling time
@@ -60,11 +60,11 @@
 #   before symptoms, so they follow a convolution of the infection
 #   trajectory with an infection→detection delay rather than McCabe et
 #   al.'s fixed detection window. That delay is the incubation period
-#   convolved with the DRC onset-to-report delay (mean $\approx 17.5$
-#   days), informed by the incubation and suspected-case streams. The
-#   rectangular window is kept for the comparison, using the exact
-#   integral rather than the small-$rw$ simplification of McCabe et al.
-#   (and [imai2020](@cite) before them). The Methods section gives the
+#   convolved with the DRC onset-to-report delay, with a mean of
+#   $\approx 17.5$ days, informed by the incubation and suspected-case
+#   streams. The rectangular window is kept for the comparison, using the
+#   exact integral rather than the small-$rw$ simplification of McCabe et
+#   al. (and [imai2020](@cite) before them). The Methods section gives the
 #   forms.
 # - *Exact deaths convolution.* We evaluate the gamma onset-to-death
 #   convolution in exact closed form, via the regularized incomplete gamma
@@ -91,8 +91,8 @@
 # - *Ascertainment extension.* A logit-scale hyperprior on the reporting
 #   fraction, applied to the latent $C(T)$, gives a joint posterior over
 #   the reported suspected-case count alongside deaths and exports.
-# - *Suspected, confirmed and samples-received streams* (not in McCabe et
-#   al.). Reported suspected counts are the BVD onset-to-report
+# - *Suspected, confirmed and samples-received streams,* absent from
+#   McCabe et al. Reported suspected counts are the BVD onset-to-report
 #   convolution plus a non-BVD background. Testing selects from the
 #   accumulated backlog, so the confirmed series reads from that backlog
 #   with no extra delay: each vintage's confirmed count is a Binomial on
@@ -139,11 +139,12 @@
 #
 # - *Fitted only to aggregate reported counts.* The data are a handful of
 #   summary figures from press and situation reports: total suspected
-#   cases and deaths in the DRC, and cases (with one death) detected in
+#   cases and deaths in the DRC, and cases, with one death, detected in
 #   Uganda. There is no line list and no temporal information, so no onset
 #   dates, epidemic curve or per-case data. The model also has no
-#   knowledge of conditions on the ground (case definitions, testing
-#   capacity, affected areas, interventions, reporting completeness).
+#   knowledge of conditions on the ground such as case definitions,
+#   testing capacity, affected areas, interventions or reporting
+#   completeness.
 #   Every estimate is a model-based extrapolation from sparse summary
 #   statistics under strong assumptions, not a measurement.
 # - *Prior-driven inference where data is scarce.* A dozen suspected
@@ -160,13 +161,13 @@
 #   not absorb. The most recent increment is also not corrected for
 #   right-truncation, so it is exposed as is, with the same caveat as the
 #   latest cumulative total.
-# - *The reporting format has changed.* From SitRep 013 (27 May) INSP
+# - *The reporting format has changed.* From SitRep 013 on 27 May, INSP
 #   began revising the suspected-case line list downward as suspects were
-#   confirmed or ruled out, and from SitRep 014 (28 May) it stopped
-#   publishing a suspected-death headline. The cut-off is 28 May (SitRep
-#   014); the confirmed and laboratory streams run to it, but the
+#   confirmed or ruled out, and from SitRep 014 on 28 May it stopped
+#   publishing a suspected-death headline. The cut-off is 28 May, SitRep
+#   014; the confirmed and laboratory streams run to it, but the
 #   suspected case and death streams are frozen at their last clean value
-#   (26 May, SitRep 012 revised re-issue). The same reclassification may
+#   on 26 May, the SitRep 012 revised re-issue. The same reclassification may
 #   already be acting within the fitted window, so the reported counts may
 #   carry more uncertainty than the cut-off implies.
 # - *Confirmed-cases stream rests on weak priors.* The non-BVD background
@@ -185,18 +186,18 @@
 #
 # - *Inherits McCabe et al.'s epidemiological assumptions and core
 #   structures.* Exponential growth from a single zoonotic seed; a case
-#   trajectory treated as a deterministic function of the latent state
-#   (only the observation counts carry sampling noise, via Poisson or
-#   NegBinomial) rather than a stochastic incidence process; the
+#   trajectory treated as a deterministic function of the latent state,
+#   where only the observation counts carry sampling noise via Poisson or
+#   NegBinomial, rather than a stochastic incidence process; the
 #   cumulative-case and deaths convolution structure for Method 2; the
 #   geographic-spread and detection-window structure for Method 1; and no
 #   spatial structure beyond the Ituri and Nord Kivu split.
 # - *Constant growth rate assumed to hold throughout.* A single
 #   exponential rate $r$ governs the whole trajectory, including the
 #   per-vintage fit and the one-week-ahead forecast. The first WHO and
-#   Africa CDC reports almost certainly triggered a response (case
-#   finding, isolation, safe burials) that would bend the real curve away
-#   from constant growth, but the model has no compartment for depletion
+#   Africa CDC reports almost certainly triggered a response such as case
+#   finding, isolation and safe burials, which would bend the real curve
+#   away from constant growth, but the model has no compartment for depletion
 #   of susceptibles or intervention effects, so an early-window growth
 #   rate is projected forward unchanged. Estimates should be read as "if
 #   early growth continues", not as a prediction net of the response.
@@ -205,9 +206,9 @@
 #   heterogeneity is unmodelled. The baseline uses the full Rosello
 #   onset-to-death distribution, as in McCabe et al. The
 #   [delay sensitivity](#Delay-sensitivity) section refits the joint model
-#   with the community-only delay (the $n = 5$ cases who died without
-#   admission, weak evidence of a shorter delay) to show how much the
-#   outbreak-size estimate leans on this assumption.
+#   with the community-only delay, covering the $n = 5$ cases who died
+#   without admission as weak evidence of a shorter delay, to show how much
+#   the outbreak-size estimate leans on this assumption.
 # - *Genetic seeding bound depends on a fixed clock rate.* The time to the
 #   most recent common ancestor (TMRCA) is dated under an external Ebola
 #   clock rate, and the sampled tree is almost entirely from Bunia. The
@@ -218,24 +219,24 @@
 #   replaces McCabe et al.'s lumped detection window with an
 #   infection→detection delay convolution, with the at-risk clock running
 #   from infection to capture pre-symptomatic travel. Because the imports
-#   are dated by their Uganda admittance dates (import #1 was admitted
-#   11 May), the relevant step abroad is onset-to-admittance, a
+#   are dated by their Uganda admittance dates, with import #1 admitted
+#   11 May, the relevant step abroad is onset-to-admittance, a
 #   care-seeking delay rather than an administrative reporting lag. We have
 #   no Uganda onset-to-admittance data and the few exports cannot identify
 #   their own delay, so we **assume it equals the DRC onset-to-report
 #   delay** and reinterpret that draw accordingly. The imports were
-#   travellers actively seeking care (import #1 went from admission to
-#   death in three days), so their true onset-to-admittance delay is
+#   travellers actively seeking care, and import #1 went from admission to
+#   death in three days, so their true onset-to-admittance delay is
 #   plausibly *shorter*; a longer borrowed delay pushes implied infection
 #   times earlier and biases the export-implied outbreak size upward.
 # - *Exports fit at their Uganda detection dates, stopped at the last
 #   import.* The three imports enter as a dated daily series at their
-#   detection dates (import #1 admitted 11 May, #2 confirmed 16 May, #3
-#   announced 23 May), fit through the infection→detection delay as a
+#   detection dates, with import #1 admitted 11 May, #2 confirmed 16 May
+#   and #3 announced 23 May, fit through the infection→detection delay as a
 #   per-day Poisson process, with the pre-detection survival term carrying
 #   the earliest-detection timing bound that McCabe et al. add separately.
-#   Both travel-gated streams (exports and deaths-among-exports) run only
-#   to the most recent import (23 May), not the 28 May cut-off, because
+#   Both travel-gated streams, exports and deaths-among-exports, run only
+#   to the most recent import on 23 May, not the 28 May cut-off, because
 #   they assume a constant per-capita travel rate while cross-border
 #   movement likely shifts over the outbreak and the most recent days are
 #   right-truncated, so the trailing days carry no informative zero.
@@ -243,8 +244,8 @@
 #   it carries reporting-pipeline lag.
 # - *Exports treated as DRC importations only.* The exports likelihood
 #   conditions on the three WHO-confirmed travel-related cases in Uganda
-#   and excludes the two domestic contacts (a driver and a healthcare
-#   worker linked to the first import), so it no longer conflates onward
+#   and excludes the two domestic contacts, a driver and a healthcare
+#   worker linked to the first import, so it no longer conflates onward
 #   transmission with importation. It still relies on the source
 #   classification of each case; with only three counts, reclassifying any
 #   one shifts the implied outbreak size and ascertainment.
@@ -252,7 +253,7 @@
 #   Ugandan importation once they cross the border, with no return leg, so
 #   anyone who travels to Uganda and back before detection is counted in
 #   error. The travel input is a one-directional points-of-entry flow
-#   (McCabe et al. Table 3), while IOM DTM flow monitoring on the same
+#   from McCabe et al. Table 3, while IOM DTM flow monitoring on the same
 #   border shows roughly balanced movement dominated by routine economic
 #   round trips, so the at-risk crossings are over-counted. Only the
 #   product of Uganda ascertainment and travel rate is identified, so a
@@ -268,7 +269,7 @@
 # - *Observation streams share one case pool.* The four streams are
 #   modelled as conditionally independent given the latent cumulative
 #   incidence, but they observe overlapping individuals: exported cases
-#   are a subset of all cases (and may also be DRC-reported), and expected
+#   are a subset of all cases and may also be DRC-reported, and expected
 #   DRC deaths are computed over all incidence including those who
 #   travelled. Ignoring this overlap can double-count evidence and
 #   understate uncertainty. The effect is small here because the Uganda
@@ -279,11 +280,11 @@
 #   exported-case incidence, treating the cohort present at time $s$ as if
 #   infected at $s$. A more direct construction would convolve the death
 #   delay against the exported-case incidence. The death timing is keyed
-#   to infection ($F_d$ is the
-#   incubation $\oplus$ onset-to-death delay, the same clock as the
-#   detection survival and $C(s)$), so deaths are not timed one incubation
-#   period too early. Detection and death then share the same onset, so
-#   incubation enters both delays, a slight double-count of the shared
+#   to infection, with $F_d$ the incubation $\oplus$ onset-to-death delay,
+#   the same clock as the detection survival and $C(s)$, so deaths are not
+#   timed one incubation period too early. Detection and death then share
+#   the same onset, so incubation enters both delays, a slight
+#   double-count of the shared
 #   incubation period accepted as better than omitting it from the death
 #   timing.
 # - *Selection bias in deaths-among-exports.* The likelihood assumes
