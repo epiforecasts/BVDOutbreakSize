@@ -314,6 +314,112 @@ an opt-in experiment, off by default.
 end
 
 """
+Low-degree-of-freedom parametric extrapolation of the cumulative
+analysed-sample curve. Replaces the free per-vintage denominator latent
+of [`analysed_impute_model`](@ref) (which funnels against the positivity
+`q` random effect, R-hat ≈ 2, and breaks NUTS initialisation) with a
+SMOOTH MONOTONE log-linear curve fitted DETERMINISTICALLY to the observed
+cumulative anchors, so the missing analysed denominators add ZERO sampled
+degrees of freedom. The missing increments are a fixed function of the
+observed series (and the latent edge times), which removes both the
+funnel and the initialisation failure by construction.
+
+`t_edges` are the per-vintage elapsed times (increasing) and
+`observed_cum` is the published CUMULATIVE analysed total at each edge
+(`Nbre d'échantillons analysés`, cumul) or `missing` where no national
+total was reported (the early 18-22 May and late 29-31 May windows).
+The cumulative analysed curve is the log-linear law
+
+``\\log A(t) = a + b\\,(t - t_{ref})``
+
+with `t_ref` the mean observed-anchor edge time. `a` and `b` are obtained
+by ORDINARY LEAST SQUARES through the observed `(t_v, \\log A_v)` anchors
+in closed form, not sampled. Because `t - t_{ref}` is invariant to the
+latent seeding-to-cut-off time `T` (both `t_v = T - δ_v` and `t_{ref}`
+shift by `T`), the fitted `a`, `b` depend only on the fixed offsets and
+the published anchors, so the extrapolation is a deterministic constant.
+The slope is floored at zero so the cumulative is monotone, hence the
+per-edge increments ``\\Delta A_v = A(t_v) - A(t_{v-1})`` are
+non-negative.
+
+Returns the per-edge cumulative `A_cum`, the per-edge increments `ΔA`
+(`A_cum` differenced, first edge from zero), the log increments `log_ΔA`
+over the MISSING edges (in edge order, the quantity
+[`confirmed_cases_model`](@ref) consumes), and the OLS coefficients
+`a`, `b`. The `form` and prior keywords are accepted for interface
+compatibility but ignored by the deterministic fit; pass
+`bayesian = true` to instead sample `a`, `b` around the OLS fit with a
+tight Gaussian anchor likelihood (kept for experimentation, off by
+default because the extra two dimensions can re-introduce init
+fragility).
+
+Used by [`confirmed_cases_model`](@ref) when `analysed_curve` is set.
+"""
+@model function analysed_curve_model(
+        t_edges::AbstractVector, observed_cum::AbstractVector;
+        form::Symbol = :loglinear,
+        bayesian::Bool = false,
+        slope_sd::Real = 0.05,
+        intercept_sd::Real = 0.3,
+        sigma_obs::Real = 0.1)
+    n = length(t_edges)
+    ## Observed anchors on the log scale, with the latent edge times.
+    obs_idx = [i for i in 1:n if observed_cum[i] !== missing]
+    obs_t = [convert(Float64, t_edges[i]) for i in obs_idx]
+    obs_y = [log(max(convert(Float64, observed_cum[i]), 1.0))
+             for i in obs_idx]
+    t_ref = isempty(obs_t) ? zero(Float64) : sum(obs_t) / length(obs_t)
+    ## Closed-form OLS of log-cumulative on centred edge time. With one or
+    ## zero anchors the slope is zero (a flat extrapolation at the mean).
+    a_ols, b_ols = let m = length(obs_t)
+        if m == 0
+            (log(300.0), 0.0)
+        elseif m == 1
+            (obs_y[1], 0.0)
+        else
+            x = obs_t .- t_ref
+            sxx = sum(abs2, x)
+            ybar = sum(obs_y) / m
+            slope = sxx <= 0 ? 0.0 : sum(x .* (obs_y .- ybar)) / sxx
+            (ybar, max(slope, 0.0))
+        end
+    end
+    if bayesian
+        ## Optional: sample the coefficients around the OLS fit and pin
+        ## them to the anchors with a tight Gaussian. Off by default.
+        a ~ Normal(a_ols, intercept_sd)
+        b ~ truncated(Normal(b_ols, slope_sd); lower = 0)
+        for k in eachindex(obs_t)
+            μ = a + b * (obs_t[k] - t_ref)
+            @addlogprob! logpdf(Normal(μ, sigma_obs), obs_y[k])
+        end
+    else
+        a = a_ols
+        b = b_ols
+    end
+    Tt = typeof(float(a) * float(b))
+    ## Deterministic (or sampled) log-linear cumulative at every edge.
+    log_A = Vector{Tt}(undef, n)
+    for i in 1:n
+        Δt = convert(Tt, t_edges[i]) - convert(Tt, t_ref)
+        log_A[i] = convert(Tt, a) + convert(Tt, b) * Δt
+    end
+    A_cum = exp.(log_A)
+    ## Per-edge increments are differences of the monotone log-linear
+    ## cumulative; non-negative by the floored slope.
+    ΔA = Vector{Tt}(undef, n)
+    prev = zero(Tt)
+    for i in 1:n
+        ΔA[i] = max(A_cum[i] - prev, eps(Tt))
+        prev = A_cum[i]
+    end
+    ## Log increments over the MISSING edges only, in edge order — the
+    ## quantity the confirmed model consumes for its imputed denominators.
+    log_ΔA = [log(ΔA[i]) for i in 1:n if observed_cum[i] === missing]
+    return (; a, b, A_cum, ΔA, log_ΔA, t_ref)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Underlies the suspected/confirmed contrast; the

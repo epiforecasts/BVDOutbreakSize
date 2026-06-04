@@ -11,14 +11,16 @@ using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore, NoTangent
 using SpecialFunctions: digamma, loggamma
 import SpecialFunctions
-using Turing: @model, MCMCThreads, NUTS, sample, to_submodel, filldist
+using Turing: @model, MCMCThreads, NUTS, sample, to_submodel, filldist,
+              @addlogprob!
 using Turing.DynamicPPL: InitFromPrior
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
-using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Binomial, BetaBinomial, Normal,
+using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, logpdf,
+                     Poisson, NegativeBinomial, Binomial, BetaBinomial,
+                     Normal,
                      LogNormal, Beta, truncated, censored
 using StatsFuns: logit, logistic
 import FastGaussQuadrature
@@ -59,7 +61,7 @@ export REPORT_SCENARIOS,
        report_delay_model, test_sensitivity_model,
        test_positivity_model, test_specificity_model, test_selection_model,
        confirmed_overdispersion_model, confirmed_q_re_model,
-       analysed_impute_model,
+       analysed_impute_model, analysed_curve_model,
        reported_dispersion_model,
        lab_receipt_delay_model, lab_capacity_model,
        incubation_model,

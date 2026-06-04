@@ -1,0 +1,30 @@
+Low-DOF analysed-denominator extrapolation — results
+========================================================
+confirmed vintages = 14  (missing denom = 8, observed = 6)
+
+Convergence:
+  max R-hat            = 1.005
+  min bulk ESS         = 361.8
+  min tail ESS         = 4.2
+  divergent transitions= 13
+
+Posterior cumulative cases C(T):
+  median = 3603.2  90% = [2068.1, 6935.8]
+
+Extrapolated cumulative analysed vs observed anchors:
+  off=10  cum_analysed=56.4  (extrapolated)
+  off=9  cum_analysed=73.0  (extrapolated)
+  off=8  cum_analysed=94.6  (extrapolated)
+  off=7  cum_analysed=122.5  (extrapolated)
+  off=6  cum_analysed=158.6  (extrapolated)
+  off=5  cum_analysed=205.3  observed=211
+  off=4  cum_analysed=265.9  observed=295
+  off=3  cum_analysed=344.3  observed=295
+  off=2  cum_analysed=445.9  observed=403
+  off=1  cum_analysed=577.4  observed=648
+  off=0  cum_analysed=747.8  observed=755
+  off=-1  cum_analysed=968.3  (extrapolated)
+  off=-2  cum_analysed=1254.0  (extrapolated)
+  off=-3  cum_analysed=1623.9  (extrapolated)
+
+Verdict: R-HAT CONVERGED (max R-hat 1.005) with 13 residual divergences from the joint's small-outbreak multimodality, not the denominator submodel

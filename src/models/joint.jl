@@ -280,6 +280,17 @@ observed 23-28 May increments. This funnels and does not converge (see
 [`analysed_impute_model`](@ref)), so it is off by default; the default
 `nothing` keeps the model on the 23-28 May observed-denominator vintages.
 
+`confirmed_analysed_curve` is the low-degree-of-freedom alternative:
+passing the [`analysed_curve_model`](@ref) submodel fits a two/three-
+parameter monotone cumulative-analysed curve through the published
+cumulative anchors `confirmed_analysed_cum` (a per-vintage cumulative
+analysed vector with `missing` where unpublished) and supplies the
+missing 18-22 May and 29-31 May denominators as deterministic differences
+of that curve. This removes the per-vintage funnel of the free impute
+latent while still extrapolating from the observed lab data, letting all
+confirmed vintages enter the fit. It takes precedence over
+`confirmed_analysed_impute` when both are set; both default to `nothing`.
+
 `samples_received` is the per-vintage cumulative received-count vector
 (`Cumul échantillons reçus`). When supplied it conditions the forwarded
 fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
@@ -384,6 +395,8 @@ export infection→detection delay rather than learning it.
         confirmed_overdispersion = nothing,
         confirmed_q_random_effect = nothing,
         confirmed_analysed_impute = nothing,
+        confirmed_analysed_curve = nothing,
+        confirmed_analysed_cum::AbstractVector = Union{Missing, Float64}[],
         confirmed_selection_clock::Symbol = :time,
         confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
@@ -479,6 +492,8 @@ export infection→detection delay rather than learning it.
                 overdispersion = confirmed_overdispersion,
                 q_random_effect = confirmed_q_random_effect,
                 analysed_impute = confirmed_analysed_impute,
+                analysed_curve = confirmed_analysed_curve,
+                analysed_cum = confirmed_analysed_cum,
                 selection_clock = confirmed_selection_clock,
                 volume_scale = confirmed_volume_scale,
                 report_onset_offset = report_onset_offset,

@@ -429,6 +429,19 @@ the early 18-22 May and late 29-31 May confirmed windows, but it FUNNELS
 and does not converge (see [`analysed_impute_model`](@ref)); the default
 `nothing` keeps the fit on the 23-28 May observed-denominator vintages.
 
+`analysed_curve` (default `nothing`) is the low-DOF alternative: a
+function `(t_edges, observed_cum) -> submodel` (typically
+[`analysed_curve_model`](@ref)) that fits a two/three-parameter monotone
+cumulative-analysed curve through the published cumulative anchors and
+returns the missing increments as deterministic differences of that
+curve. It removes the free per-vintage denominator (and its funnel
+against positivity) while still extrapolating from the observed lab data.
+`analysed_cum` supplies the per-edge cumulative analysed anchors
+(`Union{Missing, Real}`, missing where unpublished) the curve is pinned
+to; when empty the running cumulative of the observed increments is used.
+`analysed_curve` takes precedence over `analysed_impute` when both are
+set.
+
 A single observation (`length 1`, `t_edges = [T]`) reduces to the
 cumulative confirmed Binomial.
 """
@@ -450,6 +463,8 @@ cumulative confirmed Binomial.
         overdispersion = nothing,
         q_random_effect = nothing,
         analysed_impute = nothing,
+        analysed_curve = nothing,
+        analysed_cum::AbstractVector = Union{Missing, Float64}[],
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)
@@ -473,14 +488,39 @@ cumulative confirmed Binomial.
         z_q = nothing
     end
     ## Imputed analysed denominators for vintages whose national analysed
-    ## count is missing (early 18-22 May, late 29-31 May lab windows). The
-    ## latent is a TIGHT log-random-walk anchored to the geometric mean of
-    ## the OBSERVED analysed increments, so the imputed denominators are a
-    ## smooth extrapolation of the known series rather than a free
-    ## dimension (a free per-vintage denominator funnels against p_pos).
-    n_missing = analysed_impute === nothing ? 0 :
+    ## count is missing (early 18-22 May, late 29-31 May lab windows), so
+    ## those confirmed vintages can enter the Binomial likelihood.
+    ## Two mutually-exclusive ways to supply the missing denominators. The
+    ## curve method (`analysed_curve`) is the low-DOF extrapolation: it fits
+    ## a two/three-parameter monotone cumulative-analysed curve through the
+    ## published cumulative anchors `analysed_cum` and returns the missing
+    ## increments as deterministic differences, removing the per-vintage
+    ## funnel of the free `analysed_impute` latent.
+    use_curve = analysed_curve !== nothing &&
+                count(x -> x === missing, samples_analysed) > 0
+    n_missing = (analysed_impute === nothing || use_curve) ? 0 :
                 count(x -> x === missing, samples_analysed)
-    if n_missing > 0
+    if use_curve
+        ## Cumulative anchors aligned with the edges; fall back to the
+        ## running cumulative of the observed increments when no explicit
+        ## `analysed_cum` is supplied.
+        if isempty(analysed_cum)
+            obs_cum = Vector{Union{Missing, Float64}}(
+                missing, length(samples_analysed))
+            acc = 0.0
+            for i in eachindex(samples_analysed)
+                if samples_analysed[i] !== missing
+                    acc += convert(Float64, samples_analysed[i])
+                    obs_cum[i] = acc
+                end
+            end
+        else
+            obs_cum = analysed_cum
+        end
+        curve_state ~ to_submodel(
+            analysed_curve(t_edges, obs_cum), false)
+        log_ΔA_imp = curve_state.log_ΔA
+    elseif n_missing > 0
         obs_inc = [convert(Float64, samples_analysed[i])
                    for i in eachindex(samples_analysed)
                    if samples_analysed[i] !== missing &&
@@ -691,8 +731,8 @@ cumulative confirmed Binomial.
     for i in 1:n
         raw = convert(Tt, τ_forward) * ΔN_recv[i]
         recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-        (analysed_impute !== nothing && samples_received[i] === missing) &&
-            continue
+        ((analysed_impute !== nothing || analysed_curve !== nothing) &&
+         samples_received[i] === missing) && continue
         samples_received[i] ~ safe_nbinomial(k, recv_means[i])
     end
 

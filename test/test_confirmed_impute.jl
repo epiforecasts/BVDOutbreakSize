@@ -6,8 +6,8 @@
 
 @testsnippet ImputeFixtures begin
     using BVDOutbreakSize: bvd_joint, load_observations, nuts_sample,
-                           analysed_impute_model, confirmed_q_re_model,
-                           fit_diagnostics
+                           analysed_impute_model, analysed_curve_model,
+                           confirmed_q_re_model, fit_diagnostics
     using Turing: sample, Prior
     import FlexiChains
 
@@ -52,6 +52,36 @@
         end
         return (offsets = offs, confirmed = _inc(ccum),
             analysed = a_vals, received = r_vals)
+    end
+
+    ## Full-window confirmed vectors: the early 18-22 May AND late
+    ## 29-31 May vintages carry a missing analysed denominator, with the
+    ## observed 23-28 May block in between carrying the published
+    ## cumulative analysed anchors. Used by the low-DOF curve method.
+    function full_window(obs)
+        ch = obs.confirmed_case_history
+        sa = obs.tests_analysed_history
+        late_off = [-1, -2, -3]
+        late_cum = [263, 282, 321]
+        offs = vcat(collect(ch.offsets), late_off)
+        ccum = vcat(collect(ch.values), late_cum)
+        confirmed = _inc(ccum)
+        analysed_cum = Vector{Union{Missing, Float64}}(
+            missing, length(offs))
+        analysed = Vector{Union{Missing, Int}}(missing, length(offs))
+        prev = 0.0
+        for (k, off) in enumerate(sa.offsets)
+            j = findfirst(==(off), offs)
+            j === nothing && continue
+            analysed_cum[j] = Float64(sa.values[k])
+            ## Floor the analysed increment at the confirmed increment so the
+            ## 24-25 May lab stall (ΔA = 0 with ΔC > 0) stays a valid
+            ## Binomial denominator.
+            analysed[j] = max(Int(sa.values[k] - prev), confirmed[j])
+            prev = Float64(sa.values[k])
+        end
+        return (offsets = offs, confirmed = confirmed,
+            analysed = analysed, analysed_cum = analysed_cum)
     end
 end
 
@@ -118,4 +148,67 @@ end
     C=vec(Array(chn[:cumulative_cases]))
     @test all(isfinite, C)
     @test all(C .> 0)
+end
+
+@testitem "curve method: all confirmed vintages enter the fit" tags=[:slow] setup=[ImputeFixtures] begin
+    ## Low-DOF parametric extrapolation: the cumulative-analysed curve
+    ## (two shared parameters) supplies the missing 18-22 May and
+    ## 29-31 May denominators as deterministic differences, so ALL
+    ## confirmed vintages enter the gradient fit with finite, positive
+    ## C(T) — without the per-vintage funnel of the free impute latent.
+    obs=load_observations()
+    c=full_window(obs)
+    rep=obs.reported_case_history
+    dh=obs.death_history
+    ## Every confirmed vintage is present; only the early/late denominators
+    ## are missing (supplied by the curve).
+    n_missing=count(ismissing, c.analysed)
+    @test n_missing == 8
+    @test length(c.confirmed) == length(c.offsets) == 14
+    chn=nuts_sample(
+        bvd_joint(obs.exported_cases, _inc(dh.values), _inc(rep.values),
+            obs.export_deaths_daily;
+            reported_offsets = rep.offsets,
+            death_offsets = dh.offsets,
+            confirmed_cases = c.confirmed,
+            confirmed_offsets = c.offsets,
+            samples_analysed = c.analysed,
+            tests_analysed = obs.cumulative_tests_analysed,
+            tests_offset = 0,
+            first_export_detection_delta =
+            obs.first_export_detection_delta,
+            report_onset_offset = 8,
+            confirmed_q_random_effect = confirmed_q_re_model,
+            confirmed_analysed_curve = analysed_curve_model,
+            confirmed_analysed_cum = c.analysed_cum,
+            confirmed_selection_clock = :volume);
+        samples = 5, chains = 1, seed = 1, progress = false)
+    C=vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+end
+
+@testitem "analysed_curve_model: OLS extrapolation is monotone" tags=[:slow] setup=[ImputeFixtures] begin
+    using BVDOutbreakSize: analysed_curve_model
+    ## Six observed cumulative anchors (23-28 May), missing early (5) and
+    ## late (3). The deterministic OLS fit must return a monotone
+    ## cumulative passing near the anchors and extrapolating both ways.
+    t=Float64.(0:13)
+    oc=Vector{Union{Missing, Float64}}(missing, 14)
+    oc[6:11]=[211.0, 295.0, 295.0, 403.0, 648.0, 755.0]
+    chn=sample(analysed_curve_model(collect(t), oc), Prior(), 1;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ## Reconstruct deterministically (T-invariant). Anchors fitted by OLS.
+    obs_t=t[6:11]
+    obs_y=log.(oc[6:11])
+    tref=sum(obs_t)/length(obs_t)
+    xc=obs_t .- tref
+    ybar=sum(obs_y)/length(obs_y)
+    b=sum(xc .* (obs_y .- ybar))/sum(abs2, xc)
+    a=ybar
+    A=[exp(a+b*(ti-tref)) for ti in t]
+    @test issorted(A)                      # monotone cumulative
+    @test b > 0                            # increasing
+    @test A[1] < 211                       # backward extrapolation < first
+    @test A[end] > 755                     # forward extrapolation > last
 end
