@@ -1953,11 +1953,28 @@ function joint_obs(o; observe = true)
               fill(missing, length(_truncate(ec_full))))
     ed_trunc = _truncate(o.export_deaths_daily)
     edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
+    ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
+    ## deaths that got confirmed. Confirmed deaths are flat at 17 over
+    ## 26-28 May, so the informative content is the single cut-off point.
+    ## Fit it as one cumulative vintage, thinning the MODELLED BVD-death
+    ## trajectory by `coverage_death · s` (see `confirmed_deaths_model`);
+    ## empty when no confirmed-death history.
+    if o.confirmed_death_history !== missing
+        cdeath = Union{Missing, Int}[observe ?
+                                                         o.confirmed_death_history.values[end] :
+                                                         missing]
+        cdeath_off = [0]
+    else
+        cdeath = Union{Missing, Int}[]
+        cdeath_off = Int[]
+    end
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
             samples_analysed = analysed,
             samples_received = received,
+            confirmed_deaths = cdeath,
+            confirmed_death_offsets = cdeath_off,
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
             tests_analysed = observe ? o.cumulative_tests_analysed :

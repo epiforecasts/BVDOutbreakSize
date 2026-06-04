@@ -385,6 +385,13 @@ data and needs no lower floor; the plateau positivity
 `s·qinf + (1−spec)(1−qinf)` holds the late vintages. `q0`, `qinf` and the
 decay timescale are sampled by [`test_selection_model`](@ref).
 
+`q_random_effect` adds a per-vintage partially-pooled logit-scale offset
+to this baseline share (`q_v = logistic(logit(q_base,v) + σ_q·z_v)`, see
+[`confirmed_q_re_model`](@ref)) so each window's positivity can fit the
+non-monotone wobble while `s` stays fixed. It is on by default because the
+observed positivity is non-monotone; pass `nothing` to recover the smooth
+severe-first baseline.
+
 The cumulative suspect backlog at each edge is split BVD / background:
 `μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
 (the onset→report Gamma closed form, the same quantity the reported stream
@@ -448,7 +455,7 @@ cumulative confirmed Binomial.
         capacity_centre::Real = 150.0,
         report_onset_offset::Union{Nothing, Real} = nothing,
         overdispersion = nothing,
-        q_random_effect = nothing,
+        q_random_effect = confirmed_q_re_model,
         analysed_impute = nothing,
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
@@ -749,6 +756,112 @@ cumulative confirmed Binomial.
         N_recv_at, recv_means, capacity = κ, s_test, spec_test, q0,
         decay_scale, τ_forward, p_drc_per_bin, expected_confirmed_total,
         expected_received_total, Λ_at_edges)
+end
+
+"""
+Count-implied BVD composition among suspects at each elapsed-time edge:
+`q(s) = μ_BVD(s) / N_susp(s)`, with `μ_BVD = p_drc · onset_fraction ·
+∫₀^s e^{r u} f_rep(s−u) du` the cumulative BVD-suspect backlog and
+`N_susp = μ_BVD + λ_bg·s` adding the constant-rate non-BVD background. The
+same `q_baseline_count` quantity [`confirmed_cases_model`](@ref) exposes;
+factored out so the confirmed-death stream can evaluate it at the
+suspected-death edges from the shared report delay, ascertainment,
+background and growth state. Returns a vector aligned with `t_edges`.
+"""
+function bvd_count_composition(r, p_drc, λ_bg, f_rep,
+        t_edges::AbstractVector; onset_fraction::Real = 1.0)
+    Tt = typeof(float(r) * float(λ_bg) * float(p_drc) * onset_fraction)
+    q = Vector{Tt}(undef, length(t_edges))
+    for i in eachindex(t_edges)
+        s_i = convert(Tt, t_edges[i])
+        μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
+                convert(Tt, p_drc) * onset_fraction *
+                delay_convolution(one(r), r, s_i, f_rep)
+        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
+        denom = μ_bvd + μ_bg
+        ## Guard the ratio: at extreme growth `μ_bvd` can overflow to Inf,
+        ## giving Inf/Inf = NaN. Fall back to zero share when non-finite.
+        ratio = denom > zero(Tt) ? μ_bvd / denom : zero(Tt)
+        q[i] = isfinite(ratio) ? clamp(ratio, zero(Tt), one(Tt)) : zero(Tt)
+    end
+    return q
+end
+
+"""
+Modelled cumulative BVD-death trajectory at each elapsed-time edge:
+`μ_death(s) = CFR · p_deaths · onset_fraction · ∫₀^s e^{r u} f_death(s−u) du`,
+the same CFR-weighted convolution [`deaths_model`](@ref) integrates for the
+suspected-death expectation. Factored out so the confirmed-death stream can
+evaluate the modelled BVD-death expectation at the confirmed-death edges
+from the shared growth, CFR and onset-to-death delay. Returns a vector
+aligned with `t_edges`.
+"""
+function bvd_death_trajectory(r, CFR, f_death, t_edges::AbstractVector;
+        p_deaths::Real = 1.0, onset_fraction::Real = 1.0)
+    return [s <= zero(s) ? zero(float(r) * float(CFR)) :
+            p_deaths * onset_fraction *
+            delay_convolution(CFR, r, s, f_death)
+            for s in t_edges]
+end
+
+"""
+Laboratory-confirmed-deaths likelihood. The DRC sitrep front page reports
+`Cumul décès parmi les confirmés`, the cumulative deaths that have been
+laboratory-confirmed (17 at the 28 May cut-off). A confirmed death is a
+*true* BVD death (`q = 1` for its specimen) whose post-mortem swab was
+submitted and tested positive. The increment thins the **modelled** BVD-
+death trajectory (not the observed suspected-death count) by a death
+testing-coverage times the shared PCR sensitivity:
+
+```math
+\\Delta D_{conf,v} \\sim
+    \\mathrm{NegBinomial}(
+        \\mathrm{coverage}_{death}\\cdot s\\cdot\\Delta\\mu_{death,BVD,v},\\ k),
+```
+
+with `Δμ_death,BVD,v` the between-edge increment of `death_mu_at_edges`
+(the modelled cumulative BVD deaths [`bvd_death_trajectory`](@ref) supplies
+at the confirmed-death edges) and `k` the shared count dispersion. Because
+the specimen is BVD its positivity is `s` alone, **not** `s · q_case`: that
+composition link over-predicted in the joint (`q_case` at the death edge
+exceeds what 17/246 needs). `s` is the confirmed-case sensitivity from
+[`test_sensitivity_model`](@ref), passed in *shared* (not re-sampled).
+`coverage_death` is the new death-specimen submission rate from
+[`death_coverage_model`](@ref); it is identified by the single point (17
+confirmed against the modelled BVD-death total) given `s`. `confirmed_deaths`
+accepts `missing` entries for posterior-predictive generation.
+"""
+@model function confirmed_deaths_model(
+        confirmed_deaths::AbstractVector,
+        death_mu_at_edges::AbstractVector,
+        s::Real, k::Real;
+        death_coverage = death_coverage_model())
+    n = length(death_mu_at_edges)
+    n == length(confirmed_deaths) ||
+        error("confirmed_deaths length must match death_mu_at_edges " *
+              "(got $(length(confirmed_deaths)) vs $n)")
+
+    coverage_state ~ to_submodel(death_coverage, false)
+    coverage_death = coverage_state.coverage_death
+
+    ## Per-edge increment of the modelled BVD-death expectation, thinned by
+    ## the death testing-coverage times the shared PCR sensitivity. Both are
+    ## in (0, 1), so the thinned mean stays a positive expectation the
+    ## shared-`k` NegBinomial consumes (clamped positive inside
+    ## `safe_nbinomial`).
+    Δμ = daily_increment_kernel(death_mu_at_edges)
+    thin = convert(eltype(Δμ), coverage_death * s)
+    conf_means = thin .* Δμ
+
+    for i in 1:n
+        confirmed_deaths[i] ~ safe_nbinomial(k, conf_means[i])
+    end
+
+    coverage_death_out := coverage_death
+    expected_confirmed_deaths_total := sum(conf_means)
+
+    return (; coverage_death, s, conf_means,
+        expected_confirmed_deaths_total)
 end
 
 """

@@ -404,6 +404,27 @@ matching the CDC summary for past BVD outbreaks. Used by
 end
 
 """
+Lab-confirmation coverage for BVD deaths: the fraction of true BVD deaths
+whose specimen reaches the laboratory and is tested. The confirmed-death
+increment thins the *modelled* BVD-death trajectory by `coverage_death · s`,
+where `s` is the shared confirmed-case PCR sensitivity
+([`test_sensitivity_model`](@ref)). A death specimen is BVD (`q = 1`), so
+its positivity is `s`, not `s · q`; `coverage_death` carries the
+death-specimen submission rate. It is identified by the single point (17
+confirmed against the modelled BVD-death total ≈ 246 suspected deaths)
+given `s` from the cases, so no degeneracy. Default `Beta(2, 18)` is
+weakly-informative favouring low coverage (mean 0.10, 95% interval ≈
+0.01-0.26), reflecting that post-mortem specimen submission is sparse;
+the data-implied `coverage · s ≈ 17/246` pins it near this centre rather
+than the prior dominating. Used by [`confirmed_deaths_model`](@ref).
+"""
+@model function death_coverage_model(;
+        coverage_prior = Beta(2.0, 18.0))
+    coverage_death ~ coverage_prior
+    return (; coverage_death)
+end
+
+"""
 Prior on the detection window `w` — mean days during which a case is
 still infectious and detectable abroad. Default centred on 15 days
 (the McCabe et al. central scenario) with SD 5. Used by
