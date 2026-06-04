@@ -132,8 +132,12 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     @test all(isfinite, vec(Array(chn[:C_T])))
     @test all(0 .<= vec(Array(chn[:test_positivity])) .<= 1)
-    @test all(vec(Array(chn[:δ0])) .>= 0)
     @test all(vec(Array(chn[:lambda_bg])) .>= 0)
+    ## The severity enrichment δ0 is exposed as a sampled parameter of the
+    ## confirmed submodel; look it up by its prefixed varname so the symbol
+    ## resolution is unambiguous.
+    δ0_key = first(k for k in keys(chn) if occursin("δ0", string(k)))
+    @test all(vec(Array(chn[δ0_key])) .>= 0)
 
     ## A few NUTS steps: composition mode must initialise and stay finite.
     chn2 = nuts_sample(model; samples = 5, chains = 1, seed = 1,
