@@ -1106,6 +1106,7 @@ prior_chn = let
         reported_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
         breakpoint = breakpoint,
+        background_re = true,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
     sample(m, Prior(), 2_000; progress = false)
@@ -1476,7 +1477,8 @@ pp_joint = predict(
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
-        breakpoint = _BREAKPOINT),
+        breakpoint = _BREAKPOINT,
+        background_re = true),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one
@@ -1506,15 +1508,24 @@ deaths_panel = (;
     replicates = _vintage_replicates(
         pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
+## Specimens received is also a per-vintage time series (the receipt-delay
+## and tested-fraction throughput), so it gets the same cumulative
+## conditional check as the suspected streams.
+tests_received_panel = (;
+    title = "Specimens received",
+    dates = _vintage_dates(obs.tests_received_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "confirmed_state.received_increments"),
+    observed = obs.tests_received_history.counts, colour = :seagreen);
 
 ## Confirmed cases are scored as a Binomial of the observed analysed
 ## denominator in each laboratory window, so their fit is a per-window
 ## positivity rather than a cumulative sitrep series; it is summarised by
 ## the expected confirmed total and the per-test positivity in the
 ## laboratory-pipeline table rather than this cumulative per-vintage check.
-## The suspected-case and death streams remain per-vintage.
+## The suspected-case, death and specimens-received streams are per-vintage.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, deaths_panel]);
+    [reported_panel, deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
 #md # </details>
