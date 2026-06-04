@@ -64,13 +64,24 @@ that a response (case finding, isolation, vaccination) takes weeks to bite
 rather than switching at a single date; pass `ramp` to widen or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
+
+The initial reproduction number prior is centred on `R0 ≈ 1.5`, the
+Bundibugyo / Ebola virus disease range (the 2007 Uganda BDBV outbreak
+≈ 1.3–1.5; WHO Ebola Response Team 2014 ≈ 1.5–2.0), so the seeding growth
+is literature-anchored rather than arbitrary. The random-walk step SD
+prior is tightened to a half-normal SD 0.1 (from 0.2): with ≈13 weekly
+knots the wider prior let the log-`R_t` walk drift far enough to reach a
+terminal `R_T ≈ 3.5`, inflating the latent outbreak size `C_T` through a
+large pool of recent, not-yet-observed infections. A tighter walk keeps
+`R_t` near the seeding value and routes any genuine post-response decline
+through the intervention ramp rather than an unconstrained terminal drift.
 """
 @model function rt_walk_model(n::Integer;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         ramp::Real = 14.0,
-        log_r0_prior = Normal(log(1.3), 0.4),
-        sigma_prior = truncated(Normal(0, 0.2); lower = 0),
+        log_r0_prior = Normal(log(1.5), 0.25),
+        sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         effect_prior = Normal(0, 0.5))
     days = knot_days(n; week)
     nb = length(days)

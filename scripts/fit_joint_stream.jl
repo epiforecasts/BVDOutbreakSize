@@ -14,6 +14,16 @@ using Serialization: serialize
 
 const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
+const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
+
+## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
+## Its weak-dep extension registers only once `Enzyme` is loaded.
+adtype = if AD == "enzyme"
+    @eval using Enzyme
+    BVDOutbreakSize.enzyme_adtype()
+else
+    BVDOutbreakSize.default_adtype()
+end
 
 const obs = load_observations()
 const BREAKPOINT = obs.n - obs.who_first_sitrep_days
@@ -38,9 +48,9 @@ isdir("logs") || mkdir("logs")
 cb = progress_callback(; path = "logs/joint_fit.log", every = 25)
 
 println("Fitting joint ($(SAMPLES)x$(CHAINS), n=$(obs.n), background_re=true, ",
-    "ascertainment≈75%). Tail logs/joint_fit.log for live progress.\n")
+    "ascertainment≈75%, AD=$(AD)). Tail logs/joint_fit.log for live progress.\n")
 chn = nuts_sample(model; samples = SAMPLES, chains = CHAINS,
-    callback = cb, progress = false)
+    adtype = adtype, callback = cb, progress = false)
 
 serialize("logs/joint_chain.jls", chn)
 
