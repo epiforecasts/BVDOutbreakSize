@@ -96,7 +96,7 @@ end
     @test !(:exports_new in propertynames(fc))
     @test :cases_cum in propertynames(fc)
     ## The table and plot must not assume the export columns.
-    tbl = forecast_table(fc)
+    tbl=forecast_table(fc)
     @test !any(occursin.("Uganda", string.(tbl[!, 1])))
     @test plot_forecast(fc) !== nothing
 end
