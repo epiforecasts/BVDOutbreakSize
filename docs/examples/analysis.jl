@@ -240,13 +240,9 @@
 #   exported-case incidence, treating the cohort present at time $s$ as if
 #   infected at $s$. A more direct construction would convolve the death
 #   delay against the exported-case incidence. The death timing is keyed
-#   to infection, with $F_d$ the incubation $\oplus$ onset-to-death delay,
-#   the same clock as the detection survival and $C(s)$, so deaths are not
-#   timed one incubation period too early. Detection and death then share
-#   the same onset, so incubation enters both delays, a slight
-#   double-count of the shared
-#   incubation period accepted as better than omitting it from the death
-#   timing.
+#   to infection, so deaths are not timed one incubation period too early,
+#   at the cost of a slight double-count of the incubation period shared
+#   between the detection and death delays.
 # - *Selection bias in deaths-among-exports.* The likelihood assumes
 #   Uganda's surveillance retains detected exports through to any
 #   subsequent death. If the system loses cases that progress to death,
@@ -447,12 +443,9 @@ vintage_table #hide
 # ascertainment parameters across the streams that depend on them.
 #
 # In implementation terms, the model is assembled from small reusable
-# Turing [ge2018turing](@cite) submodels. Each
-# *building-block submodel* owns the maths and priors for one epidemic
-# parameter family. The *observation submodels* assemble those blocks,
-# introduce the forward integrals and the likelihoods, and tie one data
-# stream to the latent state. The *composers* combine the observation
-# submodels into the per-stream fits and the joint fit.
+# Turing [ge2018turing](@cite) submodels of three kinds, defined in the
+# order they appear below: building-block submodels, observation submodels
+# and composers.
 #
 # The table below shows which building-block parameters feed each
 # observation submodel. The *confirmed & received* column covers the
@@ -478,15 +471,10 @@ vintage_table #hide
 #
 # The model components, in the order they appear below:
 #
-# 1. **Building-block submodels** — one per parameter family
-#    (growth, incubation period, onset-to-death delay, CFR,
-#    onset-to-report delay, PCR sensitivity, PCR specificity, the
-#    severe-first share curve, the forwarded fraction and background
-#    rate, detection window, daily
-#    traveller volume, surveillance dispersion, ascertainment). Each
-#    samples its own
-#    priors and returns a small NamedTuple of values. These sections
-#    introduce only the maths for their own parameters.
+# 1. **Building-block submodels** — one per parameter family, listed in
+#    the table above. Each samples its own priors and returns a small
+#    NamedTuple of values, introducing only the maths for its own
+#    parameters.
 # 2. **Observation submodels** — exports, deaths, cases, the
 #    laboratory pipeline (confirmed cases and samples received),
 #    deaths-among-exports (time-resolved), and the first
