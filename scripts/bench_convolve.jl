@@ -74,7 +74,8 @@ end
 function bench_convolution()
     n = 93
     klens = (30, 40, 30, 30, 30)
-    kernels = [(w = abs.(sin.(1.0:l)) .+ 0.1; w ./ sum(w)) for l in klens]
+    kernels = [(w = abs.(sin.(1.0:l)) .+ 0.1; w ./ sum(w))
+               for l in klens]
     x = abs.(cos.(1.0:n)) .* 10 .+ 1
     f_old = make_conv_objective(conv_old, kernels)
     f_new = make_conv_objective(conv_new, kernels)
