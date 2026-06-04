@@ -57,31 +57,25 @@
 #
 # - *Explicit infection→detection delay for exports.* Exports are
 #   travel-gated from infection, since people travel during incubation
-#   before symptoms, and are detected abroad only after the full
-#   infection→detection delay. The exports follow a convolution of the
-#   infection trajectory with that delay rather than McCabe et al.'s fixed
-#   detection window $w$. The delay is the incubation period convolved
-#   with the DRC onset-to-report delay, moment-matched to one Gamma, so
-#   the incubation and suspected-case streams inform it; its mean is the
-#   incubation mean ($\approx 6.3$ days) plus the onset-to-report mean
-#   ($\approx 11.25$ days), $\approx 17.5$ days. The rectangular-window
-#   form $q\cdot\int_{T-w}^{T} C(s)\,ds$ is kept for the comparison, where
-#   we use this exact integral rather than the small-$rw$ simplification
-#   $q\cdot w\cdot C(T)$ of McCabe et al. (and [imai2020](@cite) before
-#   them); the two agree as $r \to 0$.
-# - *Exact deaths convolution.* For a gamma delay the convolution integral
-#   has an exact closed form carrying a
-#   $\gamma(\alpha, (\beta + r)T)/\Gamma(\alpha)$ factor from the finite
-#   upper limit $T$. McCabe et al. use the large-$T$ simplification
-#   $D(T) \approx \mathrm{CFR}\cdot C(T)\cdot(1 + r/\beta)^{-\alpha}$,
-#   which drops that factor. We evaluate the gamma case via the
-#   regularized incomplete gamma function and fall back to quadrature for
-#   other onset-to-death families.
+#   before symptoms, so they follow a convolution of the infection
+#   trajectory with an infection→detection delay rather than McCabe et
+#   al.'s fixed detection window. That delay is the incubation period
+#   convolved with the DRC onset-to-report delay (mean $\approx 17.5$
+#   days), informed by the incubation and suspected-case streams. The
+#   rectangular window is kept for the comparison, using the exact
+#   integral rather than the small-$rw$ simplification of McCabe et al.
+#   (and [imai2020](@cite) before them). The Methods section gives the
+#   forms.
+# - *Exact deaths convolution.* We evaluate the gamma onset-to-death
+#   convolution in exact closed form, via the regularized incomplete gamma
+#   function with a quadrature fallback for other delay families, where
+#   McCabe et al. use a large-$T$ approximation that drops a finite-horizon
+#   factor.
 # - *Closed-form CDF under AD.* The Gamma CDF uses a hand-written
 #   reverse-mode derivative rule; the shape-parameter derivative of the
 #   regularized incomplete gamma function uses a Kummer series following
 #   the Stan Math Library [carpenter2015stanmath](@cite).
-# - *Onset-to-death prior anchored on the Bayesian reanalysis* of the
+# - *Onset-to-death prior built from the Bayesian reanalysis* of the
 #   same Isiro 2012 line list McCabe et al. cite for their point estimates
 #   [bdbv_linelist_analysis_2026](@cite), so the priors carry the
 #   published 95% credible intervals on $\alpha$ and $\theta$ rather than
@@ -178,7 +172,7 @@
 # - *Confirmed-cases stream rests on weak priors.* The non-BVD background
 #   rate is identified from the suspected/confirmed contrast rather than
 #   external surveillance data, the severe-first share curve has no
-#   per-sample anchor for this outbreak, and PCR sensitivity is taken from
+#   per-sample data for this outbreak, and PCR sensitivity is taken from
 #   earlier validation studies.
 # - *Data conflict not explored in detail.* We combine four data streams
 #   jointly but have not systematically checked whether they conflict, for
@@ -206,7 +200,7 @@
 #   of susceptibles or intervention effects, so an early-window growth
 #   rate is projected forward unchanged. Estimates should be read as "if
 #   early growth continues", not as a prediction net of the response.
-# - *Onset-to-death delay anchored on Isiro 2012.* A single-outbreak fit;
+# - *Onset-to-death delay based on Isiro 2012.* A single-outbreak fit;
 #   the delay reporting follows [charniga2024](@cite) but cross-outbreak
 #   heterogeneity is unmodelled. The baseline uses the full Rosello
 #   onset-to-death distribution, as in McCabe et al. The
@@ -224,7 +218,7 @@
 #   replaces McCabe et al.'s lumped detection window with an
 #   infection→detection delay convolution, with the at-risk clock running
 #   from infection to capture pre-symptomatic travel. Because the imports
-#   are anchored on their Uganda admittance dates (import #1 was admitted
+#   are dated by their Uganda admittance dates (import #1 was admitted
 #   11 May), the relevant step abroad is onset-to-admittance, a
 #   care-seeking delay rather than an administrative reporting lag. We have
 #   no Uganda onset-to-admittance data and the few exports cannot identify
@@ -1307,7 +1301,7 @@ cfr_prior_fig #hide
 # $p_{\text{DRC}}\,\Delta\mu_{\text{BVD}} + \lambda_{\text{bg}}\,\Delta t$,
 # so a diffuse prior lets the background absorb arbitrarily many
 # suspected cases and resolve at the high end where the deaths and
-# exports streams anchor $C(T)$.
+# exports streams pin $C(T)$.
 # A background-noise process must not be able to explain more suspected
 # cases than were ever reported, so the SD of $1$ is chosen from the
 # observed suspected total $1077$ at the $26$ May cut-off over the
@@ -1508,7 +1502,7 @@ cfr_prior_fig #hide
 # 0.93$); $q_\infty$ is centred (mean $0.5$) near the cut-off
 # positivity-implied share; the decay prior (median $\approx 6.7$ days)
 # spans the lab window. The forwarded fraction and the share curve carry
-# no outbreak-specific anchor beyond the received and confirmed series,
+# no outbreak-specific data beyond the received and confirmed series,
 # so they are weakly informative.
 
 #md # ```@raw html
@@ -1602,7 +1596,7 @@ cfr_prior_fig #hide
 # so there is no per-day vector of zeros, while the recent window is
 # resolved per day.
 # It is used here because the exact export-death dates are known; the
-# DRC streams have no such anchored zero stretch and are differenced
+# DRC streams have no such fixed zero stretch and are differenced
 # only across the reported sitrep dates.
 # The number of daily bins is fixed by the earliest death's date, so
 # the likelihood is well defined even though $T$ is latent; with one
@@ -2142,9 +2136,9 @@ diagnostics_table( #hide
 # #### Delay sensitivity
 #
 # The deaths back-calculation (equation (16)) depends on the onset-to-
-# death delay. The baseline fit anchors the gamma shape $\alpha$ and
+# death delay. The baseline fit builds the gamma shape $\alpha$ and
 # scale
-# $\theta$ on the all-deaths Isiro mixture (equation (5)). The companion
+# $\theta$ from the all-deaths Isiro mixture (equation (5)). The companion
 # reanalysis [bdbv_linelist_analysis_2026](@cite) also reports a
 # *community-only* pathway — the
 # $n = 5$ cases who died without hospital admission — with a shorter
@@ -2155,7 +2149,7 @@ diagnostics_table( #hide
 # $C(T)$.
 #
 # We refit the joint model once with the onset-to-death delay priors
-# re-anchored on the community-only pathway, building truncated-Normal
+# rebuilt from the community-only pathway, building truncated-Normal
 # priors from those credible intervals exactly as the baseline delay
 # priors (equation (5)) are constructed:
 #
@@ -2616,7 +2610,7 @@ joint_ppc_fig #hide
 # the new between-vintage increment, $\hat{y}_v = y_{v-1} + \Delta_v$
 # with $y_0 = 0$, defined in the [observation model](@ref "Per-sitrep
 # conditional predictive"). Each step carries the full posterior
-# uncertainty of the new increment while anchoring on the observed
+# uncertainty of the new increment while conditioning on the observed
 # previous cumulative, so the diagnostic isolates the model's per-step
 # increment prediction and its errors do not compound across the series.
 # The observed cumulative counts are overlaid as points; if the fit is
@@ -2862,7 +2856,7 @@ forecast_trajectory_table #hide
 # ### Delay sensitivity
 #
 # Refit under the community-only onset-to-death delay: the baseline and
-# re-anchored $C(T)$ posteriors side by side.
+# refitted $C(T)$ posteriors side by side.
 
 #md # ```@raw html
 #md # <details><summary>Refit the joint model with the community-only delay</summary>
