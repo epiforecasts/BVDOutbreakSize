@@ -259,7 +259,7 @@ using Turing
 using Turing: to_submodel, @varname
 using Distributions
 using StatsFuns: logit, logistic
-using DataFrames: DataFrame
+using DataFrames: DataFrame, rename
 import CSV
 using Random
 using Markdown
