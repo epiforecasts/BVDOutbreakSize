@@ -6,15 +6,30 @@
 ## specimen submission rate (no `s · q` composition: the specimen is BVD).
 ## Fast `Prior()` + small `predict` runs, no NUTS where avoidable.
 
-@testitem "death_coverage_model: prior bounded in (0, 1)" tags=[:slow] begin
+@testitem "death_coverage_model: Beta(2,18) prior, mean ≈ 0.10" tags=[:slow] begin
+    ## Post-mortem death-specimen coverage carries a weakly-informative
+    ## Beta(2, 18) prior favouring low coverage (mean 0.10, support (0, 1)).
+    ## A fixed RNG keeps the prior-mean check deterministic and non-flaky.
     using Turing: sample, Prior
+    using Random: MersenneTwister
     import FlexiChains
+    using Statistics: mean
+    using Distributions: Beta
     using BVDOutbreakSize: death_coverage_model
-    chn = sample(death_coverage_model(), Prior(), 300;
-        chain_type = FlexiChains.VNChain, progress = false)
+    chn = sample(MersenneTwister(20260603), death_coverage_model(),
+        Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
     c = vec(Array(chn[:coverage_death]))
-    @test length(c) == 300
+    @test length(c) == 20_000
     @test all(0 .< c .< 1)
+    ## Beta(2, 18) mean = 2 / 20 = 0.10; loose tolerance avoids flakiness.
+    @test isapprox(mean(c), 0.10; atol = 0.01)
+
+    ## The prior is overridable via the `coverage_prior` keyword.
+    chn2 = sample(MersenneTwister(20260603),
+        death_coverage_model(; coverage_prior = Beta(8.0, 2.0)),
+        Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
+    c2 = vec(Array(chn2[:coverage_death]))
+    @test mean(c2) > mean(c)                          # override took effect
 end
 
 @testitem "bvd_death_trajectory: monotone non-negative" tags=[:slow] begin
@@ -31,6 +46,93 @@ end
     ## A zero-time edge has no backlog, so the trajectory is zero there.
     μ0 = bvd_death_trajectory(0.05, 0.4, f_death, [0.0])
     @test μ0[1] == 0
+end
+
+@testitem "confirmed_deaths_model: thins modelled BVD-death trajectory" tags=[:slow] begin
+    ## The confirmed-death submodel thins the per-edge increment of the
+    ## modelled cumulative BVD-death trajectory by `coverage_death · s`,
+    ## observing each edge with a shared-`k` NegBinomial. Drive it through a
+    ## `to_submodel` harness with a representative monotone trajectory and
+    ## the shared sensitivity / dispersion passed in, matching how the joint
+    ## wires the stream. A fixed RNG keeps the predictive draws deterministic.
+    using Turing: sample, Prior, predict, @model, to_submodel
+    using Random: MersenneTwister
+    import FlexiChains
+    using BVDOutbreakSize: confirmed_deaths_model
+
+    ## Cumulative modelled BVD-death expectation at three confirmed-death
+    ## edges; increments are 40, 60, 50 deaths.
+    death_mu = [40.0, 100.0, 150.0]
+    s = 0.75                                   # shared PCR sensitivity
+    k = 5.0                                    # shared count dispersion
+    cd_obs = Union{Missing, Int}[10, 12, 8]    # observed confirmed deaths
+
+    @model function _cdeath_harness(confirmed_deaths, death_mu, s, k)
+        cd_state ~ to_submodel(
+            confirmed_deaths_model(confirmed_deaths, death_mu, s, k), false)
+    end
+
+    ## Conditioned fit: coverage stays a genuine probability and the tracked
+    ## expected confirmed-death total is positive and finite.
+    chn = sample(MersenneTwister(20260603),
+        _cdeath_harness(cd_obs, death_mu, s, k), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    cov = vec(Array(chn[:coverage_death_out]))
+    @test all(0 .< cov .< 1)
+    et = vec(Array(chn[:expected_confirmed_deaths_total]))
+    @test all(isfinite, et)
+    @test all(et .> 0)
+
+    ## Posterior-predictive confirmed deaths: one count per edge, all
+    ## non-negative integers.
+    pp = predict(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), death_mu, s, k), chn)
+    cc = reduce(hcat, vec(Array(pp[:confirmed_deaths])))   # 3 edges × draws
+    @test size(cc, 1) == 3
+    @test all(cc .>= 0)
+    @test all(cc .== round.(Int, cc))                     # integer counts
+end
+
+@testitem "confirmed_deaths_model: near-zero trajectory ⇒ ~zero deaths" tags=[:slow] begin
+    ## With essentially no modelled BVD deaths the thinned NegBinomial mean
+    ## collapses, so predictive confirmed deaths must sit at (or beside)
+    ## zero regardless of coverage·s. A non-trivial trajectory by contrast
+    ## produces a strictly larger expected confirmed-death total, confirming
+    ## the count scales with the thinned increment.
+    using Turing: sample, Prior, predict, @model, to_submodel
+    using Random: MersenneTwister
+    import FlexiChains
+    using Statistics: mean, maximum
+    using BVDOutbreakSize: confirmed_deaths_model
+
+    s = 0.75
+    k = 5.0
+
+    @model function _cdeath_harness(confirmed_deaths, death_mu, s, k)
+        cd_state ~ to_submodel(
+            confirmed_deaths_model(confirmed_deaths, death_mu, s, k), false)
+    end
+
+    ## Near-zero modelled BVD-death trajectory: predictive deaths hug zero.
+    tiny = [1e-9, 2e-9, 3e-9]
+    chn0 = sample(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), tiny, s, k), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false)
+    et0 = vec(Array(chn0[:expected_confirmed_deaths_total]))
+    @test all(et0 .< 1e-3)                       # thinned mean ≈ 0
+    pp0 = predict(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), tiny, s, k), chn0)
+    cc0 = reduce(hcat, vec(Array(pp0[:confirmed_deaths])))
+    @test all(cc0 .>= 0)
+    @test maximum(cc0) <= 1                       # essentially no deaths
+
+    ## A substantial trajectory yields a strictly larger expected total.
+    big = [40.0, 100.0, 150.0]
+    chn1 = sample(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), big, s, k), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false)
+    et1 = vec(Array(chn1[:expected_confirmed_deaths_total]))
+    @test mean(et1) > mean(et0)
 end
 
 @testitem "confirmed_deaths_only_model: prior draws finite, bounded" tags=[:slow] begin
