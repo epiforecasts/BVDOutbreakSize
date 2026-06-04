@@ -878,7 +878,7 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Infection→detection delay (default export mechanism)
+# ##### Infection→detection delay
 #
 # The default export model replaces McCabe's fixed detection window with
 # an explicit infection→detection delay convolution.
