@@ -364,12 +364,25 @@ per-suspected positivity `μ_BVD / μ_cases` is exposed inside
 [`reported_cases_model`](@ref); the per-test positivity and the tested
 BVD share are exposed inside [`confirmed_cases_model`](@ref). Pass
 `fraction_forwarded_prior` to override.
+
+Set `sample_forward = false` to fix `τ_forward = 1` without sampling it.
+The queue path (`confirmed_queue = true`) uses this because forwarding is
+governed by `1 − e` from [`epi_exclusion_model`](@ref), leaving
+`τ_forward` a dead dimension that would otherwise clutter the posterior.
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        fraction_forwarded_prior = Beta(5.0, 2.0))
+        fraction_forwarded_prior = Beta(5.0, 2.0),
+        sample_forward::Bool = true)
     λ_bg ~ lambda_prior
-    τ_forward ~ fraction_forwarded_prior
+    if sample_forward
+        τ_forward ~ fraction_forwarded_prior
+    else
+        ## Queue path: forwarding is governed by `1 − e` from the
+        ## exclusion submodel, so `τ_forward` is a fixed constant and is
+        ## not sampled (avoids a dead posterior dimension).
+        τ_forward = one(λ_bg)
+    end
     return (; λ_bg, τ_forward)
 end
 

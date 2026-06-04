@@ -459,12 +459,26 @@ export infection→detection delay rather than learning it.
         k_rep = reported_dispersion_state.k
     end
 
+    ## In the queue path forwarding is governed by `1 − e` from the
+    ## exclusion submodel, so the `τ_forward` dimension is dead. Rebuild
+    ## the test-positivity submodel with `sample_forward = false`,
+    ## preserving any caller-supplied priors, so it is not sampled.
+    test_positivity_eff = if confirmed_queue
+        d = test_positivity.defaults
+        test_positivity_model(;
+            lambda_prior = d.lambda_prior,
+            fraction_forwarded_prior = d.fraction_forwarded_prior,
+            sample_forward = false)
+    else
+        test_positivity
+    end
+
     reported_edges = [T - δ for δ in reported_offsets]
     reported_state ~ to_submodel(
         reported_cases_submodel(reported_cases, growth_state, k_rep,
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
-            test_positivity = test_positivity,
+            test_positivity = test_positivity_eff,
             report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
