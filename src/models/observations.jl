@@ -429,6 +429,26 @@ the early 18-22 May and late 29-31 May confirmed windows, but it FUNNELS
 and does not converge (see [`analysed_impute_model`](@ref)); the default
 `nothing` keeps the fit on the 23-28 May observed-denominator vintages.
 
+`confirmed_queue` (default `false`) replaces the `analysed_impute` funnel
+with a coherent throughput queue that fits ALL vintages, including the dark
+windows that lack a published analysed count. The capacity-limited drain
+`μ_A_v = backlog·(1 − exp(−κ_v·Δt_v / backlog))` is computed for every
+window (the cumulative analysed advances by the observed increment where
+present, else by `μ_A_v`). Observed-denominator windows condition on the
+real count: `ΔC_v ~ Binomial(ΔA_obs_v, p_pos_v)` and
+`ΔA_obs_v ~ Poisson(μ_A_v)`. Dark windows use the exact marginal of
+`Binomial(Poisson(μ_A_v), p_pos_v)`, namely `ΔC_v ~ Poisson(μ_A_v·p_pos_v)`,
+so the unobserved denominator is integrated out (Poisson thinning) rather
+than carried as a free per-vintage latent. This removes the funnel. The
+predicted dark-window denominators are exposed as `μ_A_pred` /
+`dark_analysed_total`.
+
+`epi_exclusion` (default `nothing`) supplies the queue's forwarded fraction
+`(1 − e)`: with `nothing` the headline fit pins `e = 0` (forward 1); pass
+[`epi_exclusion_model`](@ref) for the opt-in `e ~ Beta(2, 12)` sensitivity.
+In the queue path `τ_forward` is unused (the received asymptote is
+`(1 − e)·N_susp`).
+
 A single observation (`length 1`, `t_edges = [T]`) reduces to the
 cumulative confirmed Binomial.
 """
@@ -450,6 +470,8 @@ cumulative confirmed Binomial.
         overdispersion = nothing,
         q_random_effect = nothing,
         analysed_impute = nothing,
+        confirmed_queue::Bool = false,
+        epi_exclusion = nothing,
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)
@@ -457,6 +479,17 @@ cumulative confirmed Binomial.
     specificity_state ~ to_submodel(test_specificity, false)
     selection_state ~ to_submodel(test_selection, false)
     receipt_state ~ to_submodel(receipt_delay, false)
+    ## Epi-exclusion fraction `e` for the throughput queue: the share of
+    ## suspects ruled out by epi follow-up and never sampled, so the
+    ## received backlog asymptotes to `(1 − e)·N_susp`. Default OFF (e = 0,
+    ## forward = 1) for the headline fit; the opt-in Beta(2, 12) prior is a
+    ## sensitivity arm. Replaces `τ_forward` in the queue path.
+    if confirmed_queue && epi_exclusion !== nothing
+        epi_state ~ to_submodel(epi_exclusion, false)
+        forward_frac = epi_state.forward
+    else
+        forward_frac = nothing
+    end
     if overdispersion !== nothing
         overdispersion_state ~ to_submodel(overdispersion, false)
         φ_conf = overdispersion_state.φ_conf
@@ -628,42 +661,12 @@ cumulative confirmed Binomial.
         Λ_at_edges[i] = p_pos[i] * A_imp[i]
     end
 
-    ## New positives observed on the newly-analysed slice ΔA_v via a
-    ## Binomial, the same between-vintage increment form as the reported and
-    ## deaths streams (first window's increment is the cumulative, so a
-    ## single vintage reduces to the cumulative Binomial). A `missing`
-    ## denominator uses the imputed log-RW latent when `analysed_impute` is
-    ## set, otherwise falls back to `tests_analysed` for predictive draws.
-    ## The imputed denominator is floored at the observed positives so the
-    ## Binomial stays well defined (ΔA ≥ ΔC).
-    for i in 1:n
-        if samples_analysed[i] === missing
-            if log_ΔA_imp === nothing
-                A_i = tests_analysed === missing ? 0 : tests_analysed
-            else
-                obs_c = confirmed_cases[i] === missing ? 0 :
-                        Int(confirmed_cases[i])
-                A_i = max(round(Int, A_imp[i]), obs_c)
-            end
-        else
-            A_i = samples_analysed[i]
-        end
-        if φ_conf === nothing
-            confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
-        else
-            ## Beta-Binomial: positives disperse around ΔA·p with
-            ## concentration φ (α = φ·p, β = φ·(1−p)), absorbing the
-            ## laboratory reporting noise the plain Binomial cannot.
-            α_bb = max(φ_conf * p_pos[i], eps(Tt))
-            β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
-            confirmed_cases[i] ~ BetaBinomial(Int(A_i), α_bb, β_bb)
-        end
-    end
-
     ## Received queue: the suspect backlog reaches the lab after a transport
     ## delay, so the cumulative received is the suspect backlog convolved with
     ## the receipt-delay kernel f_receipt. Confirmed uses a pooled (constant)
     ## p_drc, so a single representative value drives the continuous backlog.
+    ## Built before the confirmed likelihood because the queue path's
+    ## per-window analysed mean μ_A depends on this received backlog.
     p_drc_c = convert(Tt, p_drc_per_bin[1])
     N_susp_fn = let r = r, f_rep = f_rep, p_drc_c = p_drc_c,
         onset_fraction = onset_fraction, λ_bg = λ_bg
@@ -681,49 +684,155 @@ cumulative confirmed Binomial.
         N_recv_at[i] = max(raw, zero(Tt))
     end
 
-    ## Received increments: the lab forwards a fraction τ_forward of the
-    ## received backlog, so the per-window mean is τ_forward·ΔN_recv, observed
-    ## through a NegBinomial sharing `k`. Vintages without a received count
-    ## (the imputed early / late windows) are skipped rather than imputed:
-    ## the received series only runs over the observed 23-28 May lab window.
-    ΔN_recv = daily_increment_kernel(N_recv_at)
-    recv_means = Vector{Tt}(undef, n)
-    for i in 1:n
-        raw = convert(Tt, τ_forward) * ΔN_recv[i]
-        recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-        (analysed_impute !== nothing && samples_received[i] === missing) &&
-            continue
-        samples_received[i] ~ safe_nbinomial(k, recv_means[i])
+    ## Forwarded fraction of the received backlog. The legacy path uses the
+    ## sampled `τ_forward`; the queue path replaces it with `(1 − e)` from
+    ## the epi-exclusion submodel (default `e = 0`, forward = 1).
+    fwd = if confirmed_queue
+        forward_frac === nothing ? one(Tt) : convert(Tt, forward_frac)
+    else
+        convert(Tt, τ_forward)
     end
 
-    ## Analysis throughput: the lab processes a fraction of the available
-    ## received backlog set by its daily capacity κ_v over the window length
-    ## Δt_v: μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog)) — capacity-limited when
-    ## the backlog is large, the whole backlog when capacity is ample. Window
-    ## 1's cumulative analysed is the initial condition (it accumulated over an
-    ## unknown pre-window period); windows 2..n condition the capacity random
-    ## walk on the genuine between-sitrep gaps. A `missing` entry is
-    ## generated. When `analysed_impute` is set the missing analysed counts
-    ## are supplied by the tight log-RW latent instead, so the free capacity
-    ## Poisson is skipped for them (it is the free-denominator funnel this
-    ## extension avoids) and their imputed value enters the backlog.
-    analysed_cum = (n >= 1 && samples_analysed[1] !== missing) ?
-                   convert(Tt, samples_analysed[1]) :
-                   (log_ΔA_imp === nothing ? zero(Tt) : A_imp[1])
-    for i in 2:n
-        if log_ΔA_imp !== nothing && samples_analysed[i] === missing
-            analysed_cum += A_imp[i]
-            continue
+    ## Per-window predicted analysed mean μ_A from the capacity-limited drain
+    ## of the received backlog. Computed for ALL windows (the queue path needs
+    ## μ_A for the dark windows that lack an observed denominator). Window 1's
+    ## cumulative analysed (observed or predicted) is the initial condition.
+    μ_A_at = Vector{Tt}(undef, n)
+    let analysed_cum = zero(Tt)
+        for i in 1:n
+            Δt = i == 1 ?
+                 max(oftype(T, t_edges[1]), zero(T)) :
+                 max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
+                zero(T))
+            recv_cum = fwd * N_recv_at[i]
+            backlog = max(recv_cum - analysed_cum, eps(Tt))
+            cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
+            μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
+            μ_A_at[i] = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
+            ## Advance the analysed cumulative by the observed increment where
+            ## present, else the predicted mean (carries the queue through the
+            ## dark windows).
+            analysed_cum += samples_analysed[i] === missing ? μ_A_at[i] :
+                            convert(Tt, samples_analysed[i])
         end
-        Δt = max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]), zero(T))
-        recv_cum = convert(Tt, τ_forward) * N_recv_at[i]
-        backlog = max(recv_cum - analysed_cum, eps(Tt))
-        cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
-        μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
-        μ_A = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
-        samples_analysed[i] ~ Poisson(μ_A)
-        analysed_cum += samples_analysed[i] === missing ? μ_A :
-                        convert(Tt, samples_analysed[i])
+    end
+
+    if confirmed_queue
+        ## Coherent lab-throughput queue with a Poisson-thinned denominator.
+        ## OBSERVED-denominator windows condition on the real analysed
+        ## increment: confirmed_v ~ Binomial(ΔA_obs, p_pos) AND
+        ## ΔA_obs ~ Poisson(μ_A) (pins positivity and capacity). DARK windows
+        ## (no published analysed) use the exact marginal of
+        ## Binomial(Poisson(μ_A), p_pos), namely
+        ## confirmed_v ~ Poisson(μ_A · p_pos): the denominator is integrated
+        ## out, NOT a free latent, so there is no per-vintage funnel.
+        for i in 1:n
+            if samples_analysed[i] === missing
+                μ_c = isfinite(μ_A_at[i] * p_pos[i]) ?
+                      max(μ_A_at[i] * p_pos[i], eps(Tt)) : eps(Tt)
+                confirmed_cases[i] ~ Poisson(μ_c)
+            else
+                samples_analysed[i] ~ Poisson(μ_A_at[i])
+                A_i = Int(samples_analysed[i])
+                if φ_conf === nothing
+                    confirmed_cases[i] ~ Binomial(A_i, p_pos[i])
+                else
+                    α_bb = max(φ_conf * p_pos[i], eps(Tt))
+                    β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
+                    confirmed_cases[i] ~ BetaBinomial(A_i, α_bb, β_bb)
+                end
+            end
+        end
+
+        ## Received increments observed where present, mean (1 − e)·ΔN_recv.
+        ΔN_recv = daily_increment_kernel(N_recv_at)
+        recv_means = Vector{Tt}(undef, n)
+        for i in 1:n
+            raw = fwd * ΔN_recv[i]
+            recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
+            samples_received[i] === missing && continue
+            samples_received[i] ~ safe_nbinomial(k, recv_means[i])
+        end
+    else
+        ## New positives observed on the newly-analysed slice ΔA_v via a
+        ## Binomial, the same between-vintage increment form as the reported
+        ## and deaths streams (first window's increment is the cumulative, so
+        ## a single vintage reduces to the cumulative Binomial). A `missing`
+        ## denominator uses the imputed log-RW latent when `analysed_impute`
+        ## is set, otherwise falls back to `tests_analysed` for predictive
+        ## draws. The imputed denominator is floored at the observed positives
+        ## so the Binomial stays well defined (ΔA ≥ ΔC).
+        for i in 1:n
+            if samples_analysed[i] === missing
+                if log_ΔA_imp === nothing
+                    A_i = tests_analysed === missing ? 0 : tests_analysed
+                else
+                    obs_c = confirmed_cases[i] === missing ? 0 :
+                            Int(confirmed_cases[i])
+                    A_i = max(round(Int, A_imp[i]), obs_c)
+                end
+            else
+                A_i = samples_analysed[i]
+            end
+            if φ_conf === nothing
+                confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
+            else
+                ## Beta-Binomial: positives disperse around ΔA·p with
+                ## concentration φ (α = φ·p, β = φ·(1−p)), absorbing the
+                ## laboratory reporting noise the plain Binomial cannot.
+                α_bb = max(φ_conf * p_pos[i], eps(Tt))
+                β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
+                confirmed_cases[i] ~ BetaBinomial(Int(A_i), α_bb, β_bb)
+            end
+        end
+
+        ## Received increments: the lab forwards a fraction τ_forward of the
+        ## received backlog, so the per-window mean is τ_forward·ΔN_recv,
+        ## observed through a NegBinomial sharing `k`. Vintages without a
+        ## received count (the imputed early / late windows) are skipped
+        ## rather than imputed: the received series only runs over the
+        ## observed 23-28 May lab window.
+        ΔN_recv = daily_increment_kernel(N_recv_at)
+        recv_means = Vector{Tt}(undef, n)
+        for i in 1:n
+            raw = convert(Tt, τ_forward) * ΔN_recv[i]
+            recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
+            (analysed_impute !== nothing &&
+             samples_received[i] === missing) && continue
+            samples_received[i] ~ safe_nbinomial(k, recv_means[i])
+        end
+
+        ## Analysis throughput: the lab processes a fraction of the available
+        ## received backlog set by its daily capacity κ_v over the window
+        ## length Δt_v: μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog)) —
+        ## capacity-limited when the backlog is large, the whole backlog when
+        ## capacity is ample. Window 1's cumulative analysed is the initial
+        ## condition (it accumulated over an unknown pre-window period);
+        ## windows 2..n condition the capacity random walk on the genuine
+        ## between-sitrep gaps. A `missing` entry is generated. When
+        ## `analysed_impute` is set the missing analysed counts are supplied
+        ## by the tight log-RW latent instead, so the free capacity Poisson is
+        ## skipped for them (it is the free-denominator funnel this extension
+        ## avoids) and their imputed value enters the backlog.
+        analysed_cum = (n >= 1 && samples_analysed[1] !== missing) ?
+                       convert(Tt, samples_analysed[1]) :
+                       (log_ΔA_imp === nothing ? zero(Tt) : A_imp[1])
+        for i in 2:n
+            if log_ΔA_imp !== nothing && samples_analysed[i] === missing
+                analysed_cum += A_imp[i]
+                continue
+            end
+            Δt = max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
+                zero(T))
+            recv_cum = convert(Tt, τ_forward) * N_recv_at[i]
+            backlog = max(recv_cum - analysed_cum, eps(Tt))
+            cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
+            μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
+            μ_A = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
+            samples_analysed[i] ~ Poisson(μ_A)
+            analysed_cum += samples_analysed[i] === missing ? μ_A :
+                            convert(Tt, samples_analysed[i])
+        end
     end
 
     ## Per-test positivity at the lab cut-off (last edge ≤ tests_edge):
@@ -745,10 +854,21 @@ cumulative confirmed Binomial.
     expected_confirmed_total := sum(Λ_at_edges)
     expected_received_total := sum(recv_means)
 
+    ## Queue-path diagnostic: the predicted analysed denominator μ_A summed
+    ## over the dark windows (those without a published analysed count). Lets
+    ## the dark-window denominators be compared against the observed 23-28 May
+    ## anchors.
+    dark_analysed_total := sum(samples_analysed[i] === missing ? μ_A_at[i] :
+                               zero(eltype(μ_A_at)) for i in 1:n)
+    ## Per-window predicted analysed mean and received mean, exposed for the
+    ## dark-window-versus-anchor comparison and the received posterior check.
+    μ_A_pred := copy(μ_A_at)
+    recv_pred := copy(recv_means)
+
     return (; p_positive, p_pos, q_at, qinf, qinf_count_at, Nsusp_at,
-        N_recv_at, recv_means, capacity = κ, s_test, spec_test, q0,
-        decay_scale, τ_forward, p_drc_per_bin, expected_confirmed_total,
-        expected_received_total, Λ_at_edges)
+        N_recv_at, recv_means, μ_A_at, dark_analysed_total, capacity = κ,
+        s_test, spec_test, q0, decay_scale, τ_forward, p_drc_per_bin,
+        expected_confirmed_total, expected_received_total, Λ_at_edges)
 end
 
 """

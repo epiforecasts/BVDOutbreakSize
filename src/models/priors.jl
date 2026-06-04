@@ -314,6 +314,27 @@ an opt-in experiment, off by default.
 end
 
 """
+Epidemiological-exclusion fraction `e` for the laboratory-throughput
+queue (see [`confirmed_cases_model`](@ref), `confirmed_queue = true`).
+`e` is the share of suspected cases ruled out by epidemiological
+follow-up and never sampled, so the cumulative received backlog
+asymptotes to `(1 − e)·N_susp` rather than the whole suspect total. It
+gives the received-count likelihood the correct ceiling.
+
+`e` is NOT identified by the six observed received/analysed points: the
+sitrep `retrait des non-cas` mixes tested-negatives with the
+epidemiologically excluded, so no published figure pins it. It is
+therefore a weakly-informative prior-only scalar. The default
+`Beta(2, 12)` has mean ≈ 0.14 and is used as the sensitivity arm; the
+headline fit pins `e = 0` (forward fraction 1) by passing
+`epi_exclusion = nothing`. Returns `(; e, forward = 1 − e)`.
+"""
+@model function epi_exclusion_model(; e_prior = Beta(2.0, 12.0))
+    e ~ e_prior
+    return (; e, forward = one(e) - e)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
   half-normal scale. Underlies the suspected/confirmed contrast; the

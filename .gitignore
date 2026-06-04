@@ -21,3 +21,9 @@ test/formatter/Manifest.toml
 
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
+
+# TensorBoard streaming logs from the diagnostic fit scripts
+/logs/
+
+# Transient run logs from the diagnostic fit scripts
+/scripts/out/*.log
