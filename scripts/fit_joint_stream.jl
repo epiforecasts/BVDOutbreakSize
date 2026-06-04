@@ -8,7 +8,7 @@
 # Run: JULIA_NUM_THREADS=4 julia --project=. scripts/fit_joint_stream.jl [samples] [chains]
 
 using BVDOutbreakSize
-using Turing: summarystats
+using BVDOutbreakSize: fit_diagnostics
 using Statistics: median, quantile
 using Serialization: serialize
 
@@ -44,27 +44,17 @@ chn = nuts_sample(model; samples = SAMPLES, chains = CHAINS,
 
 serialize("logs/joint_chain.jls", chn)
 
-ndiv = try
-    Int(sum(Array(chn[:numerical_error])))
-catch
-    -1
-end
-nt = summarystats(chn).nt
-finite(x) = filter(isfinite, collect(x))
-maxrhat = hasproperty(nt, :rhat) ? maximum(finite(nt.rhat)) : NaN
-ecol = hasproperty(nt, :ess_bulk) ? nt.ess_bulk :
-       (hasproperty(nt, :ess) ? nt.ess : Float64[])
-miness = isempty(ecol) ? NaN : minimum(finite(ecol))
+d = fit_diagnostics(chn)
 
 function q(sym)
-    v = vec(Array(chn[sym]))
+    v = vec(collect(chn[sym]))
     return (median(v), quantile(v, 0.05), quantile(v, 0.95))
 end
 
 println("\n=== Convergence ===")
-println("  divergences (of $(SAMPLES * CHAINS)) : ", ndiv)
-println("  max R-hat                  : ", round(maxrhat; digits = 4))
-println("  min bulk ESS               : ", round(miness; digits = 1))
+println("  divergences (of $(SAMPLES * CHAINS)) : ", d.n_divergent)
+println("  max R-hat                  : ", round(d.max_rhat; digits = 4))
+println("  min bulk ESS               : ", round(d.min_ess_bulk; digits = 1))
 
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")
 for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
