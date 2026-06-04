@@ -22,128 +22,16 @@
 
 using BVDOutbreakSize
 using Turing: Turing, @varname
-import Turing.AbstractMCMC as AbstractMCMC
 using TensorBoardLogger
-using Distributions: truncated, Normal
 using Statistics: median
-using Printf: @printf, @sprintf
+using Printf: @printf
 
 const REPO = pkgdir(BVDOutbreakSize)
-
-## ------------------------------------------------------------------
-## Minimal fit-arg construction (mirrors docs/examples/analysis.jl
-## `joint_obs`): per-vintage increment streams for deaths, reported and
-## confirmed cases, the lab received/analysed denominators, the single
-## confirmed-death total and the travel-gated export series.
-## ------------------------------------------------------------------
-function _inc(v)
-    d = similar(v, Int)
-    prev = 0
-    for i in eachindex(v)
-        d[i] = v[i] - prev
-        prev = v[i]
-    end
-    return d
-end
-
-function build_fit_args(o)
-    rh = o.reported_case_history
-    dh = o.death_history
-    ch = o.confirmed_case_history
-    sa = o.tests_analysed_history
-    sr = o.tests_received_history
-
-    rep, rep_off = _inc(rh.values), rh.offsets
-    dth, dth_off = _inc(dh.values), dh.offsets
-
-    ## Confirmed per vintage over the analysed-denominator windows, merging
-    ## any zero-increment analysed window into the next.
-    idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
-    keep = [i == 1 || sa.values[i] > sa.values[i - 1]
-            for i in eachindex(sa.values)]
-    aoff = collect(sa.offsets)[keep]
-    analysed = Union{Missing, Int}[_inc(sa.values[keep])...]
-    conf = Union{Missing, Int}[_inc([ch.values[i] for i in idx][keep])...]
-    ridx = [findfirst(==(off), sr.offsets) for off in aoff]
-    received = Union{Missing, Int}[_inc([sr.values[i] for i in ridx])...]
-
-    ## Travel-gated exports truncated at the most recent reported import.
-    ec_full = o.exported_cases_daily
-    last_import = isempty(ec_full) ? nothing : findlast(!=(0), ec_full)
-    export_last_offset = last_import === nothing ? 0 :
-                         length(ec_full) - last_import
-    _trunc(v) = v[1:max(length(v) - export_last_offset, 0)]
-    edaily = _trunc(o.export_deaths_daily)
-    ecases = isempty(ec_full) ? ec_full : _trunc(ec_full)
-
-    cdeath = Union{Missing, Int}[o.confirmed_death_history.values[end]]
-
-    return (deaths = dth, reported = rep, export_deaths = edaily,
-        kw = (; reported_offsets = rep_off, death_offsets = dth_off,
-            confirmed_cases = conf, confirmed_offsets = aoff,
-            samples_analysed = analysed, samples_received = received,
-            confirmed_deaths = cdeath, confirmed_death_offsets = [0],
-            exported_cases_daily = ecases,
-            export_last_offset = export_last_offset,
-            tests_analysed = o.cumulative_tests_analysed, tests_offset = 0))
-end
-
-## ------------------------------------------------------------------
-## Watchdog: abort a fit once divergences run away early.
-## ------------------------------------------------------------------
-struct EarlyKill <: Exception
-    msg::String
-end
-
-"""
-Watchdog callback: tracks the divergent fraction across all chains and
-throws `EarlyKill` once it exceeds `max_div_frac` after at least
-`min_iter` kept draws, so a fit stuck in a bad basin is killed in seconds
-rather than running to completion. Reads the divergence flag through the
-sampler-agnostic `ParamsWithStats` interface, the same as the package
-callbacks.
-"""
-function watchdog_callback(; min_iter::Integer = 60, max_div_frac::Real = 0.4)
-    lk = ReentrantLock()
-    ndiv = Ref(0)
-    niter = Ref(0)
-    return function (rng, model, sampler, transition, state, iteration;
-            kwargs...)
-        stats = try
-            AbstractMCMC.ParamsWithStats(
-                model, sampler, transition, state; stats = true).stats
-        catch
-            (;)
-        end
-        Base.@lock lk begin
-            niter[] += 1
-            if get(stats, :numerical_error, false) === true
-                ndiv[] += 1
-            end
-            if niter[] >= min_iter && ndiv[] / niter[] > max_div_frac
-                throw(EarlyKill(@sprintf(
-                    "watchdog: %d/%d (%.0f%%) divergent — killing fit",
-                    ndiv[], niter[], 100 * ndiv[] / niter[])))
-            end
-        end
-        return nothing
-    end
-end
-
-"""Compose several AbstractMCMC callbacks into one (run in order)."""
-compose_callbacks(cbs...) =
-    (args...; kwargs...) -> begin
-        for cb in cbs
-            cb(args...; kwargs...)
-        end
-        return nothing
-    end
+include(joinpath(@__DIR__, "joint_setup.jl"))
 
 obs = load_observations()
 fit_args = build_fit_args(obs)
-growth_now = exponential_growth_model(
-    m_prior = truncated(Normal(m_prior_centre(obs.as_of_date), 3.0);
-    lower = 0))
+growth_now = growth_for(obs)
 genetic_seeding = T -> genetic_seeding_model(T, obs.genetic_tmrca_days;
     tmrca_days_sd = obs.genetic_tmrca_days_sd)
 
@@ -173,8 +61,7 @@ catch e
 end
 
 let div = sum(vec(Array(chn_canary[:numerical_error]))),
-    τd = vec(Array(chn_canary[:τ_death])),
-    C = vec(Array(chn_canary[:cumulative_cases]))
+    τd = vec(Array(chn_canary[:τ_death])), C = vec(Array(chn_canary[:cumulative_cases]))
 
     @printf("canary: divergences=%d  τ_death median=%.3f  C(T) median=%.0f\n",
         Int(div), median(τd), median(C))
