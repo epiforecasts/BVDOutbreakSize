@@ -12,6 +12,17 @@
 # point and compare elementwise. A single `logdensity_and_gradient` (not
 # NUTS) isolates compile/differentiate viability from trajectory
 # exploration into extreme regions.
+#
+# STATUS as of the renewal merge (`background_re` switch): Enzyme NO
+# LONGER differentiates this joint. The `if background_re ... else ...
+# end` block in `bvd_joint` conditionally binds the `case_bg_re` /
+# `death_bg_re` closures (or `nothing`), which the compiler boxes into a
+# `Base.RefValue`; Enzyme cannot reverse-mode through the boxed captured
+# variable and aborts at the NamedTuple construction in `bvd_joint`
+# (joint.jl:293). `background_re = true` fails with a `TypeError`
+# (RefValue-wrapped closure), `background_re = false` with a `MethodError:
+# getindex(::Nothing)`. Mooncake handles both. This harness now records
+# the failure rather than a match; see PR #201 for the diagnosis.
 
 using Test
 using Enzyme
@@ -39,6 +50,7 @@ function build_joint()
         lab_history = obs.lab_history,
         tests_received_history = obs.tests_received_history,
         breakpoint = breakpoint,
+        background_re = true,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
 end
@@ -104,7 +116,8 @@ if enzyme_ok
     med_mc = ts_mc[13]
     med_en = ts_en[13]
     speedup = med_mc / med_en
-    @info "interleaved median single-gradient" mooncake_s=med_mc enzyme_s=med_en speedup
+    @info "interleaved median single-gradient" mooncake_s=med_mc enzyme_s=med_en
+    @info "  speedup" speedup
 end
 
 @testset "Enzyme differentiates the full joint" begin

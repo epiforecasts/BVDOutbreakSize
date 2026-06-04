@@ -14,6 +14,12 @@
 # completes at all; only if that works, a longer 300x2 fit. Each Enzyme
 # fit is paired with the same Mooncake fit for a wall-clock comparison and
 # a sanity check that the chains are not all-divergent.
+#
+# STATUS as of the renewal merge (`background_re` switch): the Enzyme
+# tiny fit no longer reaches NUTS — it fails at the first gradient with
+# the boxed-closure `TypeError` documented in joint_explore.jl, so the
+# 300x2 fit is skipped. This harness is kept for when the model-side
+# closure box is resolved; until then it records the failure.
 
 using Enzyme    # loads BVDOutbreakSizeEnzymeExt so enzyme_adtype() exists
 using Mooncake  # default backend
@@ -36,6 +42,7 @@ build_joint() = bvd_joint(
     lab_history = obs.lab_history,
     tests_received_history = obs.tests_received_history,
     breakpoint = breakpoint,
+    background_re = true,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days)
 
