@@ -17,7 +17,8 @@
     infection_state ~ to_submodel(infection(n; breakpoint), false)
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false)
-    return (; infection_state, onsets = onset_state.onsets)
+    return (; infection_state, onsets = onset_state.onsets,
+        incubation_pmf = onset_state.incubation_pmf)
 end
 
 """
@@ -37,7 +38,8 @@ exports likelihood only. See [`exports_model`](@ref).
         _latent(n, breakpoint, infection, onset_incidence), false)
     asc_state ~ to_submodel(ascertainment)
     exports_state ~ to_submodel(
-        exports(exported_cases, latent.onsets, asc_state.p_uganda;
+        exports(exported_cases, latent.infection_state.infections,
+        asc_state.p_uganda; incubation_pmf = latent.incubation_pmf,
         source_population))
     C_T := latent.infection_state.C_T
 end
@@ -189,11 +191,13 @@ See [`exports_deaths_model`](@ref).
         deaths((; days = Int[], counts = Int[]), missing, latent.onsets,
         dispersion_state.k))
     exports_state ~ to_submodel(
-        exports(missing, latent.onsets, asc_state.p_uganda;
+        exports(missing, latent.infection_state.infections,
+        asc_state.p_uganda; incubation_pmf = latent.incubation_pmf,
         source_population))
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, exports_state.export_onsets,
-        deaths_state.CFR, deaths_state.od_pmf))
+        exports_deaths_model(exports_deaths,
+        exports_state.export_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf))
     C_T := latent.infection_state.C_T
 end
 
@@ -306,10 +310,12 @@ death-confirmation probability (`death_confirmation`).
         deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily))
     exports_state ~ to_submodel(
-        exports(exported_cases, onsets, p_uganda; source_population))
+        exports(exported_cases, infection_state.infections, p_uganda;
+        incubation_pmf = latent.incubation_pmf, source_population))
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, exports_state.export_onsets,
-        deaths_state.CFR, deaths_state.od_pmf))
+        exports_deaths_model(exports_deaths,
+        exports_state.export_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf))
 
     if genetic !== nothing
         genetic_state ~ to_submodel(

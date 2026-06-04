@@ -180,6 +180,29 @@ function convolve_delay(x::AbstractVector, delay::AbstractVector)
 end
 
 """
+Discrete convolution of two delay PMFs `a` and `b` (both indexed from
+delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
+result has length `length(a) + length(b) - 1`; its mass equals
+`sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
+build the infection→detection delay (incubation ⊕ onset-to-detection) and
+the infection→death delay (incubation ⊕ onset-to-death) for the exports
+streams from their component PMFs. Type-stable and AD-transparent.
+"""
+function convolve_pmf(a::AbstractVector, b::AbstractVector)
+    (isempty(a) || isempty(b)) &&
+        return zeros(promote_type(eltype(a), eltype(b)), 0)
+    na = length(a)
+    nb = length(b)
+    Tp = promote_type(eltype(a), eltype(b))
+    y = zeros(Tp, na + nb - 1)
+    @inbounds for i in 1:na, j in 1:nb
+
+        y[i + j - 1] += a[i] * b[j]
+    end
+    return y
+end
+
+"""
 Day indices of the weekly reproduction-number knots over an `n`-day grid.
 Knot 1 sits on day 1 and the last knot on day `n`, with regular knots
 every `week` days, so a knot is always pinned to each end of the grid.
