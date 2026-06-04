@@ -237,25 +237,35 @@ observed (or sampled) positives.
 end
 
 """
-Align the confirmed-case counts onto the laboratory analysed-specimen
-vintage windows so the confirmed positives can be scored as a `Binomial`
-of the observed denominator. Walks the analysed (`lab_history`) vintages
-oldest-first, taking each window's analysed increment as the binomial
-denominator and the matching confirmed-count increment (read from
-`confirmed_history`, whose vintages are a superset of the laboratory
-dates) as the positives. A window with a zero analysed increment (e.g. the
-24-25 May analysis stall, when the cumulative analysed total is flat) or
-one whose positives would exceed its denominator is merged forward into
-the next window, so every returned window has `analysed > 0` and
-`0 ≤ positives ≤ analysed`. Returns `(; days, positives, analysed)` of
-grid day-indices and the per-window observed positives and analysed
-denominators; empty when either history is absent. Pure integer
-bookkeeping on the observed data, so it carries no gradient.
+Align the confirmed-case counts onto the laboratory windows, splitting
+them into two non-overlapping groups so all the confirmed data is used:
+
+- *Observed* windows, where an analysed-specimen increment is available
+  (the laboratory series only differences cleanly from its second vintage
+  onward; the first cumulative value is the baseline). Each window's
+  analysed increment is the `Binomial` denominator and the matching
+  confirmed increment the positives. A zero analysed increment (the
+  24-25 May analysis stall) or a window whose positives exceed its
+  denominator is merged forward, so every observed window has
+  `obs_analysed > 0` and `0 ≤ obs_positives ≤ obs_analysed`.
+- *Early* windows, the confirmed vintages up to and including the first
+  laboratory date (18-23 May), which have no per-vintage analysed
+  denominator. Their confirmed increments are returned so the model can
+  score them against the modelled laboratory volume, with the per-window
+  positivity partially pooled with the observed windows.
+
+The two groups partition the confirmed counts at the first laboratory
+date, so no confirmed case is counted twice. Returns
+`(; obs_days, obs_positives, obs_analysed, early_days, early_increments)`
+of grid day-indices and per-window counts; the observed group is empty
+when no laboratory history is present and every confirmed vintage becomes
+an early window. Pure integer bookkeeping on the observed data, so it
+carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history)
-    if isempty(lab_history.counts) || isempty(confirmed_history.counts)
-        return (; days = Int[], positives = Int[], analysed = Int[])
-    end
+    empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
+        early_days = Int[], early_increments = Int[])
+    isempty(confirmed_history.counts) && return empty
     cdays = confirmed_history.days
     ccounts = confirmed_history.counts
     ## Cumulative confirmed at (or most recently before) a grid day.
@@ -263,37 +273,62 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         i = searchsortedlast(cdays, day)
         return i == 0 ? 0 : Int(ccounts[i])
     end
-    days = Int[]
-    positives = Int[]
-    analysed = Int[]
+
+    ## No laboratory denominators: every confirmed vintage is an early
+    ## window scored through the modelled laboratory volume.
+    if isempty(lab_history.counts)
+        inc = diff(vcat(zero(eltype(ccounts)), collect(Int.(ccounts))))
+        return (; obs_days = Int[], obs_positives = Int[],
+            obs_analysed = Int[], early_days = collect(Int.(cdays)),
+            early_increments = Int.(inc))
+    end
+
+    first_lab_day = Int(lab_history.days[1])
+    ## Early windows: confirmed vintages up to the first laboratory date.
+    early_days = Int[]
+    early_increments = Int[]
+    prev = 0
+    for (i, d) in enumerate(cdays)
+        Int(d) > first_lab_day && break
+        push!(early_days, Int(d))
+        push!(early_increments, Int(ccounts[i]) - prev)
+        prev = Int(ccounts[i])
+    end
+
+    ## Observed windows: analysed increments between laboratory vintages
+    ## (from the second onward) paired with confirmed increments, merging
+    ## zero-denominator stalls forward.
+    obs_days = Int[]
+    obs_positives = Int[]
+    obs_analysed = Int[]
     a_acc = 0
-    prev_conf = 0
     c_acc = 0
-    for (j, d) in enumerate(lab_history.days)
-        a_inc = Int(lab_history.counts[j]) -
-                (j == 1 ? 0 : Int(lab_history.counts[j - 1]))
+    prev_conf = confirmed_at(first_lab_day)
+    for j in 2:length(lab_history.days)
+        d = Int(lab_history.days[j])
+        a_inc = Int(lab_history.counts[j]) - Int(lab_history.counts[j - 1])
         conf_here = confirmed_at(d)
         a_acc += a_inc
         c_acc += conf_here - prev_conf
         prev_conf = conf_here
         if a_acc > 0 && c_acc <= a_acc
-            push!(days, d)
-            push!(positives, max(c_acc, 0))
-            push!(analysed, a_acc)
+            push!(obs_days, d)
+            push!(obs_positives, max(c_acc, 0))
+            push!(obs_analysed, a_acc)
             a_acc = 0
             c_acc = 0
         end
     end
-    ## Trailing remainder from a stalled tail: emit it capped, or fold it
-    ## into the last window when there is no fresh denominator.
     if a_acc > 0
-        push!(days, lab_history.days[end])
-        push!(positives, clamp(c_acc, 0, a_acc))
-        push!(analysed, a_acc)
-    elseif c_acc > 0 && !isempty(analysed)
-        positives[end] = clamp(positives[end] + c_acc, 0, analysed[end])
+        push!(obs_days, Int(lab_history.days[end]))
+        push!(obs_positives, clamp(c_acc, 0, a_acc))
+        push!(obs_analysed, a_acc)
+    elseif c_acc > 0 && !isempty(obs_analysed)
+        obs_positives[end] = clamp(obs_positives[end] + c_acc, 0,
+            obs_analysed[end])
     end
-    return (; days, positives, analysed)
+    return (; obs_days, obs_positives, obs_analysed, early_days,
+        early_increments)
 end
 
 """
@@ -316,7 +351,11 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   than a modelled count scaled by `p_drc · s_test · τ_test`) removes the
   multiplicative ascertainment ridge that basin-split the joint, so the
   outbreak size is pinned by the deaths and exports streams while the
-  laboratory positivity is free to track the noisy per-vintage data.
+  laboratory positivity is free to track the noisy per-vintage data. The
+  early confirmed vintages with no per-vintage analysed denominator
+  (18-23 May) are scored as NegativeBinomial counts against the modelled
+  laboratory volume with the same pooled positivity, so all the confirmed
+  data is used and the early per-vintage shape informs the fit.
 
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
@@ -347,27 +386,44 @@ quantities.
     received_increments ~ to_submodel(
         vintage_increments_model(received_inc, rvobs.obs_increments, k))
 
-    ## Confirmed positives as a Binomial of the observed analysed
-    ## denominator, with a partially-pooled per-window positivity.
+    ## Confirmed positives in two groups sharing one partially-pooled
+    ## positivity: early windows (no observed analysed) scored as counts
+    ## against the modelled laboratory volume, observed windows scored as a
+    ## Binomial of the observed analysed denominator.
     windows = confirmed_positivity_windows(confirmed_history, lab_history)
-    nv = length(windows.analysed)
+    n_early = length(windows.early_days)
+    n_obs = length(windows.obs_analysed)
+    nv = n_early + n_obs
     pos_state ~ to_submodel(positivity(nv))
     p_pos = pos_state.p_pos
-    observe = !ismissing(confirmed_cases) && nv > 0
-    obs_positives = observe ? collect(windows.positives) : missing
+    have_data = !ismissing(confirmed_cases)
+
+    ## Early windows: confirmed increment ~ NegBinomial(positivity ×
+    ## modelled analysed volume), the volume binned from the received
+    ## series so the early counts inform the fit through partial pooling.
+    early_p = p_pos[1:n_early]
+    early_volume = bin_increments(received_daily, windows.early_days)
+    early_mean = early_p .* early_volume
+    early_obs = (have_data && n_early > 0) ? windows.early_increments : missing
+    early_increments ~ to_submodel(
+        vintage_increments_model(early_mean, early_obs, k))
+
+    ## Observed windows: Binomial of the observed analysed denominator.
+    obs_p = p_pos[(n_early + 1):nv]
+    obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
+                    missing
     confirmed_positives ~ to_submodel(
-        confirmed_positives_model(obs_positives, windows.analysed, p_pos))
+        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
 
     expected_received := safe_rate(sum(received_daily))
-    ## Expected confirmed positives implied by the positivity and the
-    ## observed analysed denominators, and the overall cut-off positivity.
-    analysed_total = float(sum(windows.analysed))
-    expected_positives = nv > 0 ?
-                         sum(p_pos .* windows.analysed) : zero(eltype(p_pos))
+    ## Expected confirmed at the cut-off and the overall positivity, over
+    ## both the modelled early volume and the observed analysed windows.
+    denom = sum(early_volume) + float(sum(windows.obs_analysed))
+    expected_positives = sum(early_mean) +
+                         (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) :
+                          zero(eltype(p_pos)))
     expected_confirmed := safe_rate(expected_positives)
-    p_positive := nv > 0 ?
-                  safe_rate(expected_positives) / safe_rate(analysed_total) :
-                  zero(eltype(p_pos))
+    p_positive := safe_rate(expected_positives) / safe_rate(denom)
 
     return (; τ_test, λ_bg, p_pos, windows, received_daily,
         expected_received, expected_confirmed, p_positive)

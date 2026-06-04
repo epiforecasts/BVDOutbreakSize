@@ -900,6 +900,17 @@ cfr_prior_fig #hide
 # ```math
 # C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
 # ```
+#
+# The early confirmed vintages (18-23 May) have no per-vintage analysed
+# denominator, so they are scored as NegativeBinomial counts against the
+# modelled laboratory volume $V_v$ with the same partially-pooled
+# positivity, extending the use of the confirmed data to where no
+# laboratory denominator is observed:
+#
+# ```math
+# C_v^{\text{early}} \sim \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k).
+# \tag{21b}
+# ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: confirmed_cases_model</summary>

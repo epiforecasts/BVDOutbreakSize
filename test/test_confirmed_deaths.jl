@@ -1,31 +1,42 @@
 ## Tests for the confirmed-case window alignment, the per-window
 ## positivity random effect and the confirmed-death thinning stream.
 
-@testitem "confirmed_positivity_windows merges stalled/inconsistent windows" begin
+@testitem "confirmed_positivity_windows splits early and observed windows" begin
     using BVDOutbreakSize: confirmed_positivity_windows
 
-    ## The 28 May data: analysed cumulative stalls 24-25 May (flat at 295)
-    ## and the confirmed series is a superset of the analysed dates. Walking
-    ## the analysed vintages and merging the zero-denominator window
-    ## reproduces the per-window positives [101, 4, 16, 4, 85].
+    ## The 28 May data: analysed cumulative stalls 24-25 May (flat at 295).
+    ## Confirmed vintages up to the first lab date (18-23 May) become early
+    ## windows scored against the modelled volume; the observed windows
+    ## (24-28 May) merge the zero-denominator stall to positives
+    ## [4, 16, 4, 85] of analysed [84, 108, 245, 107].
     confirmed = (; days = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
         counts = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210])
     lab = (; days = [6, 7, 8, 9, 10, 11],
         counts = [211, 295, 295, 403, 648, 755])
     w = confirmed_positivity_windows(confirmed, lab)
-    @test w.positives == [101, 4, 16, 4, 85]
-    @test w.analysed == [211, 84, 108, 245, 107]
-    @test all(0 .<= w.positives .<= w.analysed)
-    @test sum(w.positives) == confirmed.counts[end]
+    @test w.early_days == [1, 2, 3, 4, 5, 6]
+    @test w.early_increments == [33, 18, 6, 22, 4, 18]
+    @test w.obs_positives == [4, 16, 4, 85]
+    @test w.obs_analysed == [84, 108, 245, 107]
+    @test all(0 .<= w.obs_positives .<= w.obs_analysed)
+    ## Early + observed partition the confirmed total, no double-count.
+    @test sum(w.early_increments) + sum(w.obs_positives) ==
+          confirmed.counts[end]
 end
 
-@testitem "confirmed_positivity_windows is empty without both histories" begin
+@testitem "confirmed_positivity_windows handles missing histories" begin
     using BVDOutbreakSize: confirmed_positivity_windows
     empty = (; days = Int[], counts = Int[])
     lab = (; days = [3, 5], counts = [10, 20])
-    @test isempty(confirmed_positivity_windows(empty, lab).analysed)
+    ## No confirmed history: everything empty.
+    w0 = confirmed_positivity_windows(empty, lab)
+    @test isempty(w0.obs_analysed) && isempty(w0.early_increments)
+    ## No lab history: every confirmed vintage is an early window.
     conf = (; days = [3, 5], counts = [2, 6])
-    @test isempty(confirmed_positivity_windows(conf, empty).analysed)
+    w1 = confirmed_positivity_windows(conf, empty)
+    @test isempty(w1.obs_analysed)
+    @test w1.early_days == [3, 5]
+    @test w1.early_increments == [2, 4]
 end
 
 @testitem "confirmed_positivity_model draws per-window probabilities" begin

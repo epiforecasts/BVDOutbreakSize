@@ -31,7 +31,11 @@ each push to `main` also republishes the rendered analysis and the
   Conditioning the positives on the observed denominator decouples the
   confirmed counts from the outbreak size, which the deaths and exports
   pin instead; the joint fit recovers the cut-off positivity (≈ 0.28) and
-  converges with R-hat ≈ 1.01 and negligible divergences.
+  converges with R-hat ≈ 1.01 and negligible divergences. The early
+  confirmed vintages (18-23 May) that have no observed analysed
+  denominator are scored as NegativeBinomial counts against the modelled
+  laboratory volume with the same partially-pooled positivity, so all the
+  confirmed data is used and the early per-vintage shape informs the fit.
 - Added a laboratory-confirmed-deaths stream (`confirmed_deaths_model`):
   the confirmed-death count is a Binomial thinning of the suspected deaths
   whose confirmation probability is the suspected-case BVD composition

@@ -31,7 +31,7 @@ end
 @testitem "predict replicates the per-vintage DRC streams" tags = [
     :slow] begin
     import FlexiChains
-    using BVDOutbreakSize: bvd_joint, nuts_sample
+    using BVDOutbreakSize: bvd_joint, nuts_sample, confirmed_positivity_windows
     using Turing: predict, @varname
 
     n = 40
@@ -46,10 +46,9 @@ end
     chn = nuts_sample(fitted; samples = 12, chains = 1, progress = false)
 
     ## Keep the reported and death vintage day grids but drop their counts,
-    ## so their increments are resampled by `predict`. The confirmed
-    ## positives are a Binomial of the observed analysed windows, so their
-    ## denominators (both histories' counts) stay fixed and only the
-    ## positives resample when `confirmed_cases` is `missing`.
+    ## so their increments are resampled by `predict`. The confirmed early
+    ## counts and observed positives resample when `confirmed_cases` is
+    ## `missing`; their denominators (both histories' counts) stay fixed.
     _days_only(h) = (; days = h.days, counts = Int[])
     gen = bvd_joint(n, missing, missing, missing, missing, missing;
         deaths_history = _days_only(dh),
@@ -59,15 +58,18 @@ end
         breakpoint = 30)
     pp = predict(gen, chn)
 
-    ## `predict` replicates the reported and death per-vintage increments
-    ## and the confirmed per-window positives as vector-valued variables
-    ## under each stream's prefixed submodel name. Each draw is the full
-    ## vector; every replicated count must be non-negative and finite.
+    ## `predict` replicates each stream's per-vintage variable under its
+    ## prefixed submodel name. The confirmed stream splits into early
+    ## counts and observed-window positives. Each draw is the full vector;
+    ## every replicated count must be non-negative and finite.
+    w = confirmed_positivity_windows(ch, lh)
     keys = (
         FlexiChains.Parameter(@varname(cases_state.reported_increments.increments)),
+        FlexiChains.Parameter(@varname(confirmed_state.early_increments.increments)),
         FlexiChains.Parameter(@varname(confirmed_state.confirmed_positives.positives)),
         FlexiChains.Parameter(@varname(deaths_state.death_increments.increments)))
-    lens = (length(rh.days), length(lh.days), length(dh.days))
+    lens = (length(rh.days), length(w.early_days), length(w.obs_analysed),
+        length(dh.days))
     for (key, m) in zip(keys, lens)
         draws = vec(pp[key])
         @test !isempty(draws)
