@@ -27,6 +27,23 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Modelling
 
+- Added a laboratory-confirmed-deaths stream
+  (`confirmed_deaths_model`, `confirmed_deaths_only_model`,
+  `death_coverage_model`) fitting the sitrep front-page `Cumul décès
+  parmi les confirmés` (deaths that got laboratory-confirmed, 17 at the
+  28 May cut-off). A confirmed death is a true BVD death whose
+  post-mortem swab was submitted and tested positive, so the increment
+  thins the *modelled* BVD-death trajectory rather than the observed
+  suspected count: `ΔD_conf,v ~ NegBinomial(coverage_death · s ·
+  Δμ_death,v, k)`. The specimen is BVD, so its positivity is the shared
+  confirmed-case PCR sensitivity `s` alone, **not** `s · q_case`;
+  `coverage_death ~ Beta(2, 5)` is a free death-specimen submission rate
+  identified by the single 28-May point. This supersedes the earlier
+  composition link (`s · q` on the suspected count), which over-predicted
+  in the joint (posterior-predictive ~38 against the observed 17); the
+  coverage·s thinning recentres the predictive on 17. Wired into
+  `bvd_joint` as an optional stream (`confirmed_deaths` /
+  `confirmed_death_offsets`), off by default.
 - Reparameterised growth to sample the growth rate `r` directly
   (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
   with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still
