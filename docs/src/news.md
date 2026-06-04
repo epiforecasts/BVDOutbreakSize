@@ -27,6 +27,26 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Modelling
 
+- Added a laboratory-confirmed-deaths stream
+  (`confirmed_deaths_model`, `confirmed_deaths_only_model`,
+  `death_background_model`, `death_forward_model`) fitting the sitrep
+  front-page `Cumul décès parmi les confirmés` (deaths that got
+  laboratory-confirmed, 17 at the 28 May cut-off) as a genuine
+  lab/positivity process rather than a thinning of the modelled BVD-death
+  trajectory (issue #193). The suspected deaths gain a constant-rate
+  non-BVD background `λ_bg_death` (`death_background_model`, the death
+  analogue of the case `λ_bg`), so suspected deaths are BVD signal plus
+  background. Confirmed deaths are positives among the death specimens
+  forwarded at fraction `τ_death`: `ΔD_conf,v ~ NegBinomial(τ_death ·
+  p_pos_death,v · ΔN_death,v, k)` with `p_pos_death = s·q_death +
+  (1−spec)(1−q_death)`, `q_death = μ_BVD_death / N_death_susp` the BVD
+  share of the suspect-death pool, and the PCR sensitivity `s` /
+  specificity `spec` imported *shared* from the confirmed-case lab
+  pipeline. This replaces the earlier `coverage_death · s` thinning, whose
+  slack sat in `coverage_death` at its boundary with no observation or
+  background process. A time-varying background is a follow-up (issue
+  #194). Wired into `bvd_joint` as an optional stream (`confirmed_deaths`
+  / `confirmed_death_offsets`), off by default.
 - Reparameterised growth to sample the growth rate `r` directly
   (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
   with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still

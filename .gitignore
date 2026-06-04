@@ -24,6 +24,7 @@ test/formatter/Manifest.toml
 
 # TensorBoard streaming logs from the diagnostic fit scripts
 /logs/
+logs/
 
 # Transient run logs and result dumps from the diagnostic fit scripts
 /scripts/out/*.log

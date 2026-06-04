@@ -200,6 +200,44 @@ Pass `q0_prior` / `decay_prior` / `qinf_prior` to override.
 end
 
 """
+Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
+(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
+that mode the tested BVD share is not a free severe-first curve; it is the
+suspect-pool composition `φ = μ_BVD / (μ_BVD + μ_bg)` UPSAMPLED by a
+severity-enrichment that decays as testing widens:
+
+```math
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_0\\, e^{-c_v / \\text{decay}},
+```
+
+so the lab over-tests BVD early (severe cases are triaged first and are
+more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero as
+testing widens, at which point the tested share equals the pool composition.
+This ties positivity to `μ_bg`, so the confirmed/positivity data identify
+the non-BVD background `λ_bg` rather than it being absorbed by a free
+selection curve.
+
+`δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
+because severity triage upsamples BVD, never down. The default
+`truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
+bounded: even severity-triaged testing cannot be near-pure BVD (other
+haemorrhagic / severe febrile illness is also triaged), so for a pool
+composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
+1.5) ≈ 0.75`, not the near-1 of the radical free-`q0` prior. `decay_scale`
+is the relaxation timescale (shared structure with
+[`test_selection_model`](@ref)). Pass `logodds_prior` / `decay_prior` to
+override. Used by [`confirmed_cases_model`](@ref) in composition mode.
+"""
+@model function severity_enrichment_model(;
+        logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
+        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0))
+    δ0 ~ logodds_prior
+    decay_scale ~ decay_prior
+    return (; δ0, decay_scale)
+end
+
+"""
 PCR specificity prior. The per-test positivity of the confirmed stream is
 `p_pos = s·q + (1−spec)·(1−q)`, where `q` is the BVD share of the
 analysed batch (see [`confirmed_cases_model`](@ref)): true positives at
@@ -435,6 +473,72 @@ matching the CDC summary for past BVD outbreaks. Used by
 @model function cfr_model(; cfr_prior = Beta(6.6, 13.4))
     CFR ~ cfr_prior
     return (; CFR)
+end
+
+"""
+Non-BVD background rate for the suspected-death stream. The DRC sitrep
+suspected deaths are a noisy passive-surveillance count: some are true
+BVD deaths, some are non-BVD deaths swept in by the broad suspect case
+definition. This submodel samples the per-day non-BVD background death
+rate `λ_bg_death`, the death analogue of the case background `λ_bg`
+([`test_positivity_model`](@ref)): the cumulative background is the
+constant-rate `μ_bg_death(t) = λ_bg_death · t`, added to the BVD-driven
+CFR-weighted expectation inside [`deaths_model`](@ref).
+
+The default prior is a half-normal `truncated(Normal(0, 0.25); lower = 0)`.
+Its total contribution to the expected suspected-death count over the
+window is `λ_bg_death · T` (`T` ≈ 132 days on current data). The prior is
+deliberately informative, mirroring `λ_bg` for cases: a diffuse background
+is degenerate with outbreak size (the per-bin suspected-death mean is
+`Δμ_BVD_death + λ_bg_death · Δt`), so the prior keeps the background a
+modest minority of the suspected-death total. With SD 0.25 the median
+background is ≈ 0.17/day (≈ 22 deaths, ≈ 9% of the 246 suspected deaths at
+the 28 May cut-off) and the 95% prior bound is ≈ 0.49/day (≈ 65 deaths),
+admitting a genuine non-BVD signal while leaving the bulk to BVD. A
+time-varying background is a wanted follow-up (issue #194); this
+constant-rate version is identifiable and is the death analogue of the
+case `λ_bg`. Pass `lambda_prior` to override. Used by
+[`deaths_model`](@ref) and [`confirmed_deaths_model`](@ref).
+"""
+@model function death_background_model(;
+        lambda_prior = truncated(Normal(0.0, 0.25); lower = 0))
+    λ_bg_death ~ lambda_prior
+    return (; λ_bg_death)
+end
+
+"""
+Death-specimen forwarding fraction `τ_death`: the fraction of the
+suspect-death backlog whose post-mortem specimen reaches the laboratory
+and is analysed. It is the death analogue of the case forwarding fraction
+`τ_forward` ([`test_positivity_model`](@ref)). The confirmed-death
+increment is a genuine lab/positivity process on those analysed death
+specimens (see [`confirmed_deaths_model`](@ref)):
+
+```math
+\\Delta D_{conf,v} \\sim
+    \\mathrm{NegBinomial}(
+        \\tau_{death}\\cdot p_{pos,death,v}\\cdot\\Delta N_{death,v},\\ k),
+\\qquad
+p_{pos,death,v} = s\\, q_{death,v} + (1 - \\text{spec})(1 - q_{death,v}),
+```
+
+with `ΔN_death,v` the suspect-death backlog increment (BVD plus
+background), `q_death,v = μ_BVD_death / N_death_susp` the BVD share of that
+pool, and `s`, `spec` the PCR sensitivity / specificity *shared* with the
+confirmed-case lab pipeline. `τ_death` carries the forwarding rate; the
+BVD-share signal lives in the positivity, not in `τ_death`, so it is not
+forced to a boundary the way the old `coverage_death` thinning was.
+
+Default `Beta(2, 8)` is weakly-informative favouring low forwarding (mean
+0.20, 95% interval ≈ 0.03-0.48): post-mortem specimen submission is
+sparse. It is identified by the 17 confirmed deaths against the
+positivity-weighted suspect-death backlog. Pass `fraction_prior` to
+override. Used by [`confirmed_deaths_model`](@ref).
+"""
+@model function death_forward_model(;
+        fraction_prior = Beta(2.0, 8.0))
+    τ_death ~ fraction_prior
+    return (; τ_death)
 end
 
 """
