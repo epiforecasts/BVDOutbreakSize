@@ -1251,14 +1251,18 @@ summary_ranges = let
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
-    f_lo = round(sC.lo90 / obs.reported_cases; digits = 1)
-    f_hi = round(sC.hi90 / obs.reported_cases; digits = 1)
+    f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
+    f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
+    ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
     Markdown.parse("""
-    - **Current cumulative case load:** the posterior is $(ints_i(sC)) cases,
-      combining all five data streams (reported and as-yet-unreported).
-    - That is roughly $(f_lo)–$(f_hi)× the $(obs.reported_cases) cases
-      reported to date, so most infections are not yet reported.
+    - **Cumulative infections \$C_T\$:** the posterior is $(ints_i(sC))
+      infections, the latent pool behind every stream.
+    - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
+      cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
+      confirmed cases capture only a small share of the outbreak.
+    - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
+      cases by the cut-off, against $(obs.confirmed_cases) observed.
     - **Time since seeding:** the posterior is $(ints_i(sT)) days, placing
       the start of sustained transmission at $(ints_d(sT)).
     - **Growth rate and doubling time:** the current growth rate is
