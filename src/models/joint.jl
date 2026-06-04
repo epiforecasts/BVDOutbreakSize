@@ -372,6 +372,16 @@ on by default because the observed per-window positivity is non-monotone
 and a monotone severe-first q-curve cannot match it. Pass `nothing` to
 recover the smooth severe-first baseline.
 
+`confirmed_positivity_link` chooses how the tested BVD share is set.
+`:free` (default) samples the severe-first selection curve (`q0 → qinf`),
+a free description of the tested share. `:composition` instead ties the
+tested share to the suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)`
+upsampled by the decaying severity enrichment
+`confirmed_severity_enrichment` (see [`severity_enrichment_model`](@ref)
+and [`confirmed_cases_model`](@ref)), so the confirmed/positivity data
+identify the non-BVD background `λ_bg` rather than it being absorbed by a
+free curve.
+
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
@@ -471,6 +481,8 @@ export infection→detection delay rather than learning it.
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
         test_selection = test_selection_model(),
+        confirmed_severity_enrichment = severity_enrichment_model(),
+        confirmed_positivity_link::Symbol = :free,
         confirmed_overdispersion = nothing,
         confirmed_q_random_effect = confirmed_q_re_model,
         confirmed_analysed_impute = nothing,
@@ -577,6 +589,8 @@ export infection→detection delay rather than learning it.
                 test_sensitivity = test_sensitivity,
                 test_specificity = test_specificity,
                 test_selection = test_selection,
+                severity_enrichment = confirmed_severity_enrichment,
+                positivity_link = confirmed_positivity_link,
                 overdispersion = confirmed_overdispersion,
                 q_random_effect = confirmed_q_random_effect,
                 analysed_impute = confirmed_analysed_impute,

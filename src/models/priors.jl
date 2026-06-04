@@ -200,6 +200,44 @@ Pass `q0_prior` / `decay_prior` / `qinf_prior` to override.
 end
 
 """
+Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
+(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
+that mode the tested BVD share is not a free severe-first curve; it is the
+suspect-pool composition `φ = μ_BVD / (μ_BVD + μ_bg)` UPSAMPLED by a
+severity-enrichment that decays as testing widens:
+
+```math
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_0\\, e^{-c_v / \\text{decay}},
+```
+
+so the lab over-tests BVD early (severe cases are triaged first and are
+more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero as
+testing widens, at which point the tested share equals the pool composition.
+This ties positivity to `μ_bg`, so the confirmed/positivity data identify
+the non-BVD background `λ_bg` rather than it being absorbed by a free
+selection curve.
+
+`δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
+because severity triage upsamples BVD, never down. The default
+`truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
+bounded: even severity-triaged testing cannot be near-pure BVD (other
+haemorrhagic / severe febrile illness is also triaged), so for a pool
+composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
+1.5) ≈ 0.75`, not the near-1 of the radical free-`q0` prior. `decay_scale`
+is the relaxation timescale (shared structure with
+[`test_selection_model`](@ref)). Pass `logodds_prior` / `decay_prior` to
+override. Used by [`confirmed_cases_model`](@ref) in composition mode.
+"""
+@model function severity_enrichment_model(;
+        logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
+        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0))
+    δ0 ~ logodds_prior
+    decay_scale ~ decay_prior
+    return (; δ0, decay_scale)
+end
+
+"""
 PCR specificity prior. The per-test positivity of the confirmed stream is
 `p_pos = s·q + (1−spec)·(1−q)`, where `q` is the BVD share of the
 analysed batch (see [`confirmed_cases_model`](@ref)): true positives at

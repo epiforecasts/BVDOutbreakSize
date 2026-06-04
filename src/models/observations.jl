@@ -473,6 +473,8 @@ cumulative confirmed Binomial.
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
         test_selection = test_selection_model(),
+        severity_enrichment = severity_enrichment_model(),
+        positivity_link::Symbol = :free,
         receipt_delay = lab_receipt_delay_model(),
         capacity_model = lab_capacity_model,
         capacity_centre::Real = 150.0,
@@ -485,7 +487,25 @@ cumulative confirmed Binomial.
         onset_fraction::Real = 1.0)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
-    selection_state ~ to_submodel(test_selection, false)
+    ## Positivity link. `:free` (default) samples the severe-first selection
+    ## curve (q0 → qinf), a free description of the tested BVD share.
+    ## `:composition` instead ties the tested share to the suspect-pool
+    ## composition `φ = μ_BVD/(μ_BVD+μ_bg)` upsampled by a decaying severity
+    ## enrichment `δ0` (see [`severity_enrichment_model`](@ref)), so the
+    ## positivity data identify the background `λ_bg` rather than a free curve.
+    if positivity_link === :composition
+        enrich_state ~ to_submodel(severity_enrichment, false)
+        δ0 = enrich_state.δ0
+        decay_scale = enrich_state.decay_scale
+        q0 = zero(δ0)
+        qinf = zero(δ0)
+    else
+        selection_state ~ to_submodel(test_selection, false)
+        q0 = selection_state.q0
+        decay_scale = selection_state.decay_scale
+        qinf = selection_state.qinf
+        δ0 = zero(q0)
+    end
     receipt_state ~ to_submodel(receipt_delay, false)
     if overdispersion !== nothing
         overdispersion_state ~ to_submodel(overdispersion, false)
@@ -528,9 +548,9 @@ cumulative confirmed Binomial.
         capacity_model(n_edges; capacity_centre = capacity_centre), false)
     s_test = sensitivity_state.s_test
     spec_test = specificity_state.spec_test
-    q0 = selection_state.q0
-    decay_scale = selection_state.decay_scale
-    qinf = selection_state.qinf
+    ## `q0`, `qinf`, `decay_scale`, `δ0` are set above by the positivity-link
+    ## branch (`:free` from `test_selection`, `:composition` from
+    ## `severity_enrichment`).
     f_receipt = receipt_state.dist
     κ = capacity_state.capacity
     r = growth_state.r
@@ -635,7 +655,18 @@ cumulative confirmed Binomial.
         c_i = selection_clock === :volume ?
               analysed_cum_at[i] / convert(Tt, volume_scale) :
               max(s_i - oftype(s_i, t_report), zero(s_i))
-        q_base = severe_first_share(q0, qinf_c, c_i, decay_scale)
+        ## `:free` — severe-first curve from q0 to qinf. `:composition` —
+        ## the suspect-pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a
+        ## decaying severity log-odds enrichment δ0·exp(−c/decay): the lab
+        ## over-tests BVD early, relaxing to the pool composition as testing
+        ## widens, so positivity is tied to the background μ_bg.
+        if positivity_link === :composition
+            φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
+            δ_i = convert(Tt, δ0) * exp(-c_i / convert(Tt, decay_scale))
+            q_base = logistic(logit(φ) + δ_i)
+        else
+            q_base = severe_first_share(q0, qinf_c, c_i, decay_scale)
+        end
         ## Optional partially-pooled per-window offset on the tested BVD
         ## share, logit-scale, so each vintage's positivity can fit the
         ## non-monotone wobble while `s` stays fixed. `σ_q → 0` recovers the
@@ -764,7 +795,11 @@ cumulative confirmed Binomial.
             1:n), n)
     p_positive := p_pos[te_idx]
     q_cutoff := q_at[te_idx]
-    q_baseline := qinf
+    ## Plateau tested share: `qinf` in `:free` mode; in `:composition` mode
+    ## the enrichment relaxes to the pool composition, so the plateau is the
+    ## count-implied composition itself.
+    q_baseline := positivity_link === :composition ?
+                  qinf_count_at[te_idx] : qinf
     q_baseline_count := qinf_count_at[te_idx]
     τ_forward_out := τ_forward
     ## Daily analysis capacity at the cut-off vintage (samples/day).
