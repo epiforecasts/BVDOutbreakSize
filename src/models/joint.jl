@@ -278,11 +278,11 @@ death-confirmation probability (`death_confirmation`).
     ## and the death stream has no background. The death background uses a
     ## tighter baseline prior (deaths are far fewer than suspected cases).
     case_bg_re = background_re ?
-        (nv -> background_re_model(nv)) : nothing
+                 (nv -> background_re_model(nv)) : nothing
     death_bg_re = background_re ?
-        (nv -> background_re_model(nv;
-            baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))) :
-        nothing
+                  (nv -> background_re_model(nv;
+        baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))) :
+                  nothing
 
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k;

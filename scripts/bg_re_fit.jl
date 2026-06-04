@@ -6,8 +6,8 @@
 
 using BVDOutbreakSize
 using BVDOutbreakSize: bvd_joint, background_re_model,
-    test_positivity_model, deaths_model, reported_cases_model,
-    confirmed_deaths_model
+                       test_positivity_model, deaths_model, reported_cases_model,
+                       confirmed_deaths_model
 using Turing: summarize
 using FlexiChains: FlexiChain
 using Statistics: mean, median, quantile
@@ -36,14 +36,14 @@ model = bvd_joint(
     tmrca_days = obs.tmrca_days,
     background_re = USE_RE)
 
-@info "Fitting" use_re = USE_RE samples = SAMPLES chains = CHAINS
+@info "Fitting" use_re=USE_RE samples=SAMPLES chains=CHAINS
 
 chn = nuts_sample(model; samples = SAMPLES, chains = CHAINS,
     progress = false)
 
 ## Diagnostics across all sampled parameters.
 diag = fit_diagnostics(chn)
-@info "diagnostics" max_rhat = diag.max_rhat min_ess = diag.min_ess_bulk
+@info "diagnostics" max_rhat=diag.max_rhat min_ess=diag.min_ess_bulk
 ndiv = diag.n_divergent
 
 function q(sym)

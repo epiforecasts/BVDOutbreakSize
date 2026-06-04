@@ -29,7 +29,7 @@ model = bvd_joint(
     genetic = nothing,
     tmrca_days = obs.tmrca_days)
 
-@info "Fitting baseline" samples = SAMPLES chains = CHAINS
+@info "Fitting baseline" samples=SAMPLES chains=CHAINS
 chn = nuts_sample(model; samples = SAMPLES, chains = CHAINS,
     progress = false)
 

@@ -34,8 +34,10 @@ end
         background_re_model(nv;
             pooling_prior = truncated(Normal(0, 1e-8); lower = 0)),
         Prior(), 2_000; progress = false)
-    λ = Array(chn[:λ])  # draws × nv
-    spreads = [std(λ[i, :]) for i in axes(λ, 1)]
+    ## `chn[:λ]` is a matrix (iter × chain) of length-`nv` vectors; each
+    ## per-draw vector should be flat (zero across-window spread).
+    draws = vec(Array(chn[:λ]))
+    spreads = [std(d) for d in draws]
     @test maximum(spreads) < 1e-5
 end
 
@@ -51,7 +53,7 @@ end
     nv = 8
     chn = sample(MersenneTwister(20260604), background_re_model(nv),
         Prior(), 4_000; progress = false)
-    λ = vec(Array(chn[:λ]))
+    λ = reduce(vcat, vec(Array(chn[:λ])))
     @test all(>(0), λ)
     σ = vec(Array(chn[:σ_bg]))
     ## The default pooling prior is half-normal SD 0.3, so the typical
@@ -73,7 +75,7 @@ end
         background_re_model(4;
             baseline_prior = truncated(Normal(0.0, 0.05); lower = 0)),
         Prior(), 4_000; progress = false)
-    λ = vec(Array(chn[:λ]))
+    λ = reduce(vcat, vec(Array(chn[:λ])))
     @test mean(λ) < 0.15
 end
 
