@@ -26,7 +26,7 @@ import Turing.AbstractMCMC as AbstractMCMC
 using TensorBoardLogger
 using Distributions: truncated, Normal
 using Statistics: median
-using Printf: @printf
+using Printf: @printf, @sprintf
 
 const REPO = pkgdir(BVDOutbreakSize)
 
