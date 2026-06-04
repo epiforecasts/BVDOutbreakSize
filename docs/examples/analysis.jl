@@ -1164,6 +1164,7 @@ chn_joint = nuts_sample(
     lab_history = obs.lab_history,
     tests_received_history = obs.tests_received_history,
     breakpoint = _BREAKPOINT,
+    background_re = true,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days));
 

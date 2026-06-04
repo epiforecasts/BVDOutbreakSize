@@ -209,6 +209,32 @@ truncated at zero. Sets the per-capita travel rate for the exports stream.
 end
 
 """
+Non-BVD background rate for the suspected-death stream
+([`deaths_model`](@ref)), the death analogue of the suspected-case
+background `λ_bg` ([`test_positivity_model`](@ref)). The DRC sitrep
+suspected-death definition is symptomatic-then-deceased, so a death need
+not be a true BVD death; this submodel samples the per-day non-BVD
+background death rate `λ_bg_death`. Its cumulative contribution over the
+grid is `λ_bg_death · n`.
+
+The default `truncated(Normal(0, 0.25); lower = 0)` is deliberately
+informative, mirroring the case background: deaths are far fewer than
+suspected cases (≈ 246 suspected deaths at the cut-off vs ≈ 1077
+suspected cases), so the background rate is scaled down accordingly. With
+SD 0.25 the median background is ≈ 0.17/day (≈ 22 deaths over a ≈ 132-day
+grid, a modest minority of the suspected-death total) while still
+admitting a genuine non-BVD signal. The background is degenerate with
+outbreak size, so a diffuse prior would let it absorb arbitrarily many
+suspected deaths. Pass `lambda_prior` to override. Returns
+`(; λ_bg_death)`.
+"""
+@model function death_background_model(;
+        lambda_prior = truncated(Normal(0.0, 0.25); lower = 0))
+    λ_bg_death ~ lambda_prior
+    return (; λ_bg_death)
+end
+
+"""
 Test-positivity machinery shared by the suspected- and confirmed-case
 streams. Samples
 
@@ -246,6 +272,65 @@ The derived per-suspected positivity is exposed inside
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
     return (; λ_bg, τ_test)
+end
+
+"""
+Per-vintage non-BVD background rate as a partially-pooled, non-centred
+random effect, the time-varying generalisation of the scalar `λ_bg` /
+`λ_bg_death`. Used by the suspected-case ([`reported_cases_model`](@ref))
+and suspected-death ([`deaths_model`](@ref)) streams when their
+`background_re` switch is on. The same non-BVD reporting environment
+plausibly drives both streams, so the two backgrounds can share this
+submodel's hyperparameters.
+
+The baseline `λ_mu` is the scalar background rate on its natural
+half-normal scale, with the same informative default as the scalar
+`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases; pass a tighter
+`baseline_prior` for deaths). The per-vintage rate is a multiplicative
+log-normal deviation from this baseline,
+
+```math
+\\lambda_v = \\lambda_\\mu \\,
+    \\exp(\\sigma_{bg}\\, z_v), \\qquad z_v \\sim \\mathcal N(0, 1),
+```
+
+with `σ_bg` the pooling SD, passed in rather than sampled here so the
+suspected-case and suspected-death streams can SHARE one pooling SD (the
+same non-BVD reporting environment drives both); see
+[`background_pooling_model`](@ref), which samples it once at the composer
+level. The deviation is multiplicative so the per-vintage rate stays
+positive without a clamp and `σ_bg → 0` recovers the scalar baseline
+exactly (every `λ_v = λ_mu`). Each stream still samples its own baseline
+`λ_mu` and per-vintage deviations `z`. `nv` is the number of vintage
+windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
+per-vintage rates.
+"""
+@model function background_re_model(nv::Integer, σ_bg::Real;
+        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
+    m = max(nv, 1)
+    λ_mu ~ baseline_prior
+    z ~ product_distribution(fill(Normal(0, 1), m))
+    λ := λ_mu .* exp.(σ_bg .* z[1:nv])
+    return (; λ, λ_mu, σ_bg, z = z[1:nv])
+end
+
+"""
+Shared pooling SD `σ_bg` for the per-vintage background random effect
+([`background_re_model`](@ref)). Sampled once at the composer level and
+passed to both the suspected-case and suspected-death backgrounds, so the
+two streams share one time-variation scale rather than each estimating its
+own from few vintages. The prior is a tight half-normal
+`truncated(Normal(0, 0.3); lower = 0)`, deliberately small: the background
+is degenerate with outbreak size, so a wide random effect would let
+individual windows absorb arbitrary suspected counts and re-open the
+second posterior mode in which the background explains the majority of
+suspected cases. Regularising `σ_bg` toward zero keeps the time variation
+a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
+"""
+@model function background_pooling_model(;
+        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
+    σ_bg ~ pooling_prior
+    return (; σ_bg)
 end
 
 """
@@ -365,14 +450,14 @@ with no shared parameter. An alternative to the composer-default
 not share strength between the two systems.
 
 Both fractions default to a logit-Normal prior centred on a reporting
-fraction of 0.25 with SD 0.6 (95% support roughly 0.09–0.51), weakly
-informative about the low-ascertainment regime typical of passive BVD /
-Ebola surveillance in rural Ituri. Pass `drc_prior` / `uganda_prior` to
-set the two systems' priors separately.
+fraction of 0.75 with SD 0.6 (95% support roughly 0.48–0.91), reflecting
+the active case-finding and contact tracing of a declared Ebola response
+rather than baseline passive surveillance. Pass `drc_prior` /
+`uganda_prior` to set the two systems' priors separately.
 """
 @model function independent_ascertainment_model(;
-        drc_prior = Normal(logit(0.25), 0.6),
-        uganda_prior = Normal(logit(0.25), 0.6))
+        drc_prior = Normal(logit(0.75), 0.6),
+        uganda_prior = Normal(logit(0.75), 0.6))
     logit_p_drc ~ drc_prior
     logit_p_uganda ~ uganda_prior
     p_drc := logistic(logit_p_drc)
@@ -386,10 +471,13 @@ surveillance systems, sampled in non-centred form to avoid the funnel
 geometry. Both logit-scale fractions share a hyperprior with mean `μ`
 and pooling strength `τ`. Used by [`reported_cases_model`](@ref),
 [`exports_model`](@ref) and [`exports_deaths_model`](@ref); this is the
-composer default.
+composer default. The shared mean defaults to a reporting fraction of
+0.75 (logit scale), reflecting the active case-finding of a declared
+Ebola response; a lower ascertainment inflates the inferred infections
+(and so the outbreak size `C_T`) for the same observed counts.
 """
 @model function pooled_ascertainment_model(;
-        mu_prior = Normal(logit(0.25), 1.0),
+        mu_prior = Normal(logit(0.75), 1.0),
         tau_prior = truncated(Normal(0, 0.5); lower = 1e-4))
     μ_logit ~ mu_prior
     τ_logit ~ tau_prior

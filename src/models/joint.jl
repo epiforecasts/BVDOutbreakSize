@@ -122,7 +122,7 @@ positives (a Binomial of the observed analysed denominator in
         k, p_drc))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
-        p_drc, cases_state.λ_bg, cases_state.τ_test,
+        p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, tests_received_history))
     C_T := latent.infection_state.C_T
@@ -161,7 +161,7 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.λ_bg))
+        p_drc, cases_state.bg_daily))
     C_T := latent.infection_state.C_T
 end
 
@@ -257,6 +257,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_stream = confirmed_deaths_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
+        background_re::Bool = false,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
@@ -271,19 +272,39 @@ death-confirmation probability (`death_confirmation`).
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
+    ## Per-vintage background random effect, with ONE pooling SD `σ_bg`
+    ## shared between the suspected-case and suspected-death streams (the
+    ## same non-BVD reporting environment drives both). With `background_re
+    ## = false` (the renewal default) the case stream keeps its scalar
+    ## `λ_bg` and the death stream has no background. Each stream still
+    ## samples its own baseline; the death baseline prior is tighter (deaths
+    ## are far fewer than suspected cases).
+    if background_re
+        bg_pool ~ to_submodel(background_pooling_model())
+        σ_bg_shared = bg_pool.σ_bg
+        case_bg_re = nv -> background_re_model(nv, σ_bg_shared)
+        death_bg_re = nv -> background_re_model(nv, σ_bg_shared;
+            baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
+    else
+        case_bg_re = nothing
+        death_bg_re = nothing
+    end
+
     deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, onsets, k))
+        deaths(deaths_history, total_deaths, onsets, k;
+        background_re = death_bg_re))
     cases_state ~ to_submodel(
-        cases(reported_history, reported_cases, onsets, k, p_drc))
+        cases(reported_history, reported_cases, onsets, k, p_drc;
+        background_re = case_bg_re))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
-        cases_state.λ_bg, cases_state.τ_test,
+        cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, tests_received_history))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.λ_bg))
+        p_drc, cases_state.bg_daily))
     exports_state ~ to_submodel(
         exports(exported_cases, onsets, p_uganda; source_population))
     exports_deaths_state ~ to_submodel(
@@ -315,6 +336,11 @@ death-confirmation probability (`death_confirmation`).
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
+    bg_sigma := cases_state.bg_sigma
+    background_total := cases_state.bg_total
+    lambda_bg_death := deaths_state.λ_bg_death
+    bg_death_sigma := deaths_state.bg_death_sigma
+    background_death_total := deaths_state.bg_death_total
     m_death := confirmed_deaths_state.m_death
     suspected_positivity := cases_state.positivity
     test_positivity := confirmed_state.p_positive
