@@ -531,23 +531,45 @@ quantities.
 end
 
 """
-Uganda exports likelihood (geographic spread). Builds the export onset
-incidence `p_uganda · q · onsets` (with `q = daily_travellers /
-source_population` the per-capita travel rate) and convolves it with the
-sampled onset-to-detection delay, replacing the integral model's
-detection-window survival term with a convolved set of delays. Sums to the
-expected detected exports by the cut-off, fitted with Poisson (Uganda's
-stream is small). Samples the traveller volume and the onset-to-detection
-delay via injected submodels. The onset-to-detection prior is centred on
-the Ebola onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola
-Response Team 2014, NEJM), used here as the delay from symptom onset to
-detection at a point of entry abroad. Returns the expected count, the
-detection-timed series and the export onsets for reuse by
-[`exports_deaths_model`](@ref).
+Uganda exports likelihood (geographic spread). The exports stream is
+travel-gated, so the at-risk clock starts at infection: a traveller
+moves and is exported during incubation (pre-symptomatic) and stays at
+risk of being exported and detected abroad only until the
+infection→detection delay has elapsed. The expected detected exports by
+the cut-off therefore accumulate the per-capita travel rate `q =
+daily_travellers / source_population` over the at-risk PERSON-TIME, not
+over single-day onset events:
+
+```math
+\\mathbb{E}[\\text{exports}(T)] = p_\\text{uganda}\\, q
+    \\sum_{s=1}^{T} \\text{prevalence}(s),
+\\qquad
+\\text{prevalence}(s) = C(s) - \\text{detected}(s),
+```
+
+with `C(s)` the cumulative infections and `detected(s)` the cumulative
+infections that have already completed the infection→detection delay by
+day `s`. The infection→detection delay is the sampled onset-to-detection
+delay convolved with the shared incubation PMF (so incubation sits inside
+it, keyed to infection like `C(s)`); `detected` is the running sum of
+`convolve_delay(infections, f_det)`. Summing the daily at-risk
+prevalence is the discrete person-time integral, the discrete analogue of
+the integral model's at-risk person-time export integral; the earlier
+onset-incidence form summed `q · onsets`, charging each case only a
+single day of travel risk and so under-counting exports by roughly the
+mean at-risk dwell time. Fitted with Poisson (Uganda's stream is small).
+Samples the traveller volume and the onset-to-detection delay via
+injected submodels. The onset-to-detection prior is centred on the Ebola
+onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola Response
+Team 2014, NEJM), the delay from symptom onset to detection at a point of
+entry abroad. Returns the expected count, the per-capita travel rate,
+the daily at-risk prevalence and the daily expected export incidence for
+reuse by [`exports_deaths_model`](@ref).
 """
 @model function exports_model(
         exported_cases::Union{Missing, Integer},
-        onsets::AbstractVector, p_uganda::Real;
+        infections::AbstractVector, p_uganda::Real;
+        incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model(),
         onset_to_detection = censored_delay_model(30;
@@ -557,35 +579,57 @@ detection-timed series and the export onsets for reuse by
     daily_travellers = travel_state.daily_travellers
     q = daily_travellers / source_population
 
-    export_onsets = p_uganda .* q .* onsets
     detect_state ~ to_submodel(onset_to_detection)
-    detect_daily = convolve_delay(export_onsets, detect_state.pmf)
+    ## Infection→detection delay: onset→detection convolved with the shared
+    ## incubation PMF, so the survival clock runs from infection.
+    f_det = convolve_pmf(incubation_pmf, detect_state.pmf)
+    detected_daily = convolve_delay(infections, f_det)
+    ## At-risk prevalence (person-days): infected but not yet detected.
+    prevalence = cumsum(infections) .- cumsum(detected_daily)
+    export_prevalence = p_uganda .* q .* prevalence
 
-    raw_exports = sum(detect_daily)
+    raw_exports = sum(export_prevalence)
     expected_exports_T := safe_rate(raw_exports)
     exported_cases ~ Poisson(expected_exports_T)
 
-    return (; p_uganda, daily_travellers, export_onsets,
+    return (; p_uganda, daily_travellers, q, prevalence,
+        export_prevalence,
         expected_exports = expected_exports_T)
 end
 
 """
-Deaths-among-detected-exports likelihood. Convolves the export onsets
-(timed from onset, the same staging as detection) with the onset-to-death
-PMF shared from [`deaths_model`](@ref), scales by the CFR, and sums to the
-expected cumulative export deaths by the cut-off, fitted with Poisson.
+Deaths-among-detected-exports likelihood. Deaths accrue among the at-risk
+export person-time of [`exports_model`](@ref): each day's at-risk
+prevalence is weighted by the infection→death CDF at its remaining age to
+the cut-off and summed, scaled by the CFR, the discrete analogue of the
+integral model's `∫ C(s)·S_det(T−s)·F_death(T−s) ds`. The onset-to-death
+PMF shared from [`deaths_model`](@ref) is convolved with the incubation
+PMF to give the infection→death distribution, keyed to infection like the
+prevalence. Fitted with Poisson.
 """
 @model function exports_deaths_model(
         exports_deaths::Union{Missing, Integer},
-        export_onsets::AbstractVector, CFR::Real,
-        od_pmf::AbstractVector)
-    series = CFR .* convolve_delay(export_onsets, od_pmf)
+        export_prevalence::AbstractVector, CFR::Real,
+        od_pmf::AbstractVector, incubation_pmf::AbstractVector)
+    n = length(export_prevalence)
+    ## Infection→death CDF by age (age 0 = same day).
+    fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
+    death_cdf = cumsum(fd_pmf)
+    ## Weight each day's at-risk prevalence by the death CDF at its
+    ## remaining age to the cut-off (day n).
+    acc = zero(eltype(export_prevalence))
+    @inbounds for s in 1:n
+        age = n - s
+        w = age + 1 <= length(death_cdf) ? death_cdf[age + 1] :
+            (isempty(death_cdf) ? zero(eltype(death_cdf)) : death_cdf[end])
+        acc += export_prevalence[s] * w
+    end
+    raw = CFR * acc
 
-    raw = sum(series)
     expected_exports_deaths_T := safe_rate(raw)
     exports_deaths ~ Poisson(expected_exports_deaths_T)
 
-    return (; expected_exports_deaths_T, series)
+    return (; expected_exports_deaths_T)
 end
 
 """
