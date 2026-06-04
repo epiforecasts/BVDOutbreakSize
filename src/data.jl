@@ -94,6 +94,15 @@ function load_observations(
     else
         Int[]
     end
+    ## Daily Uganda export-case series, earliest detection (index 1) to
+    ## the cut-off day (offset 0, kept); empty when no dates are present.
+    exported_cases_daily = if haskey(raw, "export_case_dates")
+        offs = Int[_gap(d) for d in _val("export_case_dates")]
+        isempty(offs) ? Int[] :
+        Int[count(==(δ), offs) for δ in maximum(offs):-1:0]
+    else
+        Int[]
+    end
     ## Cumulative DRC counts at each sitrep vintage: parsed dates,
     ## the elapsed-time offset before the cut-off (days since the
     ## vintage's date, in ascending elapsed-time order) and the
@@ -148,6 +157,7 @@ function load_observations(
             _val("daily_outbound_travellers_sd")),
         source_population = Int(_val("source_population")),
         export_deaths_daily = export_deaths_daily,
+        exported_cases_daily = exported_cases_daily,
         first_export_detection_delta = _delta("first_export_detection_date"),
         genetic_tmrca_days = has_gen ?
                              _gap(raw["genetic_tmrca"]["date"]) : missing,
@@ -161,6 +171,8 @@ function load_observations(
         float(raw["genetic_tmrca"]["alt_days_sd"]) : missing,
         sources = (;
             exported_cases = _src("exported_cases"),
+            exported_cases_daily = haskey(raw, "export_case_dates") ?
+                                   _src("export_case_dates") : missing,
             exports_deaths = _src("exports_deaths"),
             total_deaths = _src("total_deaths"),
             reported_cases = _src("reported_cases"),

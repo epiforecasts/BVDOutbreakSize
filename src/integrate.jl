@@ -329,3 +329,123 @@ function delay_convolution(d::DailyBVDTrajectory, t_edges::AbstractVector,
     end
     return out
 end
+
+"""
+Precomputed at-risk export trajectory: the growth curve ``e^{r u}`` on a
+fixed Gauss-Legendre node set over ``[0, t_{last}]``, built once per draw
+and reused across every export bin edge. The export streams are the
+travel-gated analogue of the DRC convolutions: the expected detected
+exports by `t` is a convolution of the epidemic with the detection
+survival,
+
+```math
+\\int_0^t e^{r u}\\, S_{det}(t - u)\\, du,
+    \\qquad S_{det}(x) = 1 - F_{det}(x),
+```
+
+and the deaths-among-exports weight that integrand further by the
+infection→death CDF ``F_{death}``. Mirrors [`DailyBVDTrajectory`](@ref):
+the per-incidence-time piece (here just the weighted growth) is evaluated
+once at the shared nodes, and each bin edge reuses it, multiplying by the
+edge-specific survival kernel and skipping nodes past the edge. The travel
+rate `q`, ascertainment `p` and `CFR` are applied by the caller, so the
+trajectory carries person-time, not counts.
+"""
+struct ExportRiskTrajectory{T}
+    nodes::Vector{T}      # incidence-time samples u_j ∈ [0, t_last]
+    w_growth::Vector{T}   # weights[j] · e^{r·u_j}, edge-independent
+    r::T                  # growth rate, for the exact growth integral
+    t_last::T
+end
+
+"""
+Build an [`ExportRiskTrajectory`](@ref) over `[0, t_last]` for growth rate
+`r`. Lays down `npts` Gauss-Legendre nodes scaled to the interval and
+precomputes the weighted growth ``w_j\\, e^{r u_j}`` at each, the
+edge-independent piece reused across every export edge. `npts` defaults to
+the [`DEATH_INTEGRAL_ALG`](@ref) node count so the at-risk integral is
+resolved at the same fidelity as the other convolution streams.
+"""
+function ExportRiskTrajectory(t_last::Real, r::Real; npts::Integer = 64)
+    Tt = promote_type(typeof(float(t_last)), typeof(r))
+    raw_nodes, raw_weights = FastGaussQuadrature.gausslegendre(npts)
+    half = t_last / 2
+    nodes = Tt[half * (u + one(u)) for u in raw_nodes]
+    w_growth = Tt[half * w * exp(r * s)
+                  for (w, s) in zip(raw_weights, nodes)]
+    return ExportRiskTrajectory{Tt}(nodes, w_growth, convert(Tt, r),
+        convert(Tt, t_last))
+end
+
+# Cumulative at-risk export person-time ∫₀^{t_k} e^{r u} S_det(t_k − u) du
+# at each bin edge. Written as the exact growth integral minus the
+# growth⊛F_det convolution: S_det = 1 − F_det does *not* vanish at lag 0
+# (survival is 1 there), so convolving it directly and truncating the
+# fixed grid at each edge would put a discontinuity at an interior node
+# and the uniform rule would resolve it poorly. F_det *does* vanish at
+# lag 0, so the convolved integrand is continuous and the shared grid is
+# accurate; the e^{r u} part is integrated in closed form.
+"""
+At-risk export person-time ``\\int_0^{t_k} e^{r u}\\, S_{det}(t_k - u)\\,
+du`` at each edge in `t_edges`, over an [`ExportRiskTrajectory`](@ref)
+`traj` with a `Gamma` infection→detection delay `f_det`. Evaluated as the
+closed-form growth integral minus the ``e^{r u} \\otimes F_{det}``
+convolution. The delay-convolution form of
+[`expected_exports_delay`](@ref); multiply by `p · q` for the expected
+detected exports.
+"""
+function export_at_risk(traj::ExportRiskTrajectory,
+        t_edges::AbstractVector, f_det::Gamma)
+    α, θ = f_det.α, f_det.θ
+    r = traj.r
+    Tt = eltype(traj.w_growth)
+    out = Vector{Tt}(undef, length(t_edges))
+    @inbounds for k in eachindex(t_edges)
+        tk = t_edges[k]
+        tk <= zero(tk) && (out[k] = zero(Tt); continue)
+        removed = zero(Tt)
+        for j in eachindex(traj.nodes)
+            δ = tk - traj.nodes[j]
+            δ <= zero(δ) && continue
+            removed += traj.w_growth[j] * _gamma_cdf(α, θ, δ)
+        end
+        ## Clamp to finite non-negative: at an extreme `r` proposal both
+        ## the growth integral and `removed` overflow to `Inf`, so their
+        ## difference is `NaN`; left unclamped it would reach `Poisson` and
+        ## throw under AD (the prior path clamped the same way).
+        val = _exp_cumulative_integral(r, zero(tk), tk) - removed
+        out[k] = isfinite(val) ? max(val, zero(Tt)) : zero(Tt)
+    end
+    return out
+end
+
+"""
+At-risk deaths-among-exports weight ``\\int_0^{t_k} e^{r u}\\,
+S_{det}(t_k - u)\\, F_{death}(t_k - u)\\, du`` at each edge in `t_edges`,
+over an [`ExportRiskTrajectory`](@ref) `traj` with `Gamma`
+infection→detection (`f_det`) and infection→death (`f_death`) delays. The
+delay-convolution form of [`expected_exports_deaths_delay`](@ref);
+multiply by `CFR · p · q` for the expected export deaths.
+"""
+function export_death_at_risk(traj::ExportRiskTrajectory,
+        t_edges::AbstractVector, f_det::Gamma, f_death::Gamma)
+    αd, θd = f_det.α, f_det.θ
+    αx, θx = f_death.α, f_death.θ
+    Tt = eltype(traj.w_growth)
+    out = Vector{Tt}(undef, length(t_edges))
+    @inbounds for k in eachindex(t_edges)
+        tk = t_edges[k]
+        acc = zero(Tt)
+        for j in eachindex(traj.nodes)
+            δ = tk - traj.nodes[j]
+            δ <= zero(δ) && continue
+            acc += traj.w_growth[j] *
+                   (one(δ) - _gamma_cdf(αd, θd, δ)) *
+                   _gamma_cdf(αx, θx, δ)
+        end
+        ## Clamp to finite non-negative against `Inf`/`NaN` from extreme
+        ## `r` proposals (see `export_at_risk`).
+        out[k] = isfinite(acc) ? max(acc, zero(Tt)) : zero(Tt)
+    end
+    return out
+end

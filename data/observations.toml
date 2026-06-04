@@ -58,6 +58,10 @@ source = "WHO DON 2026-DON602 — one death (import #1, died 14 May 2026). No de
 value  = "2026-05-11"
 source = "WHO DON 2026-DON602 — import #1 hospital-admitted 11 May 2026 (point-of-entry/hospital detection date). Used as a one-sided timing bound on T. Detection dates for imports #2 (confirmed 16 May) and #3 (announced 23 May; underlying detection date not published) are not used by the model: only the earliest detection enters the timing term."
 
+[export_case_dates]
+value  = ["2026-05-11", "2026-05-16", "2026-05-23"]
+source = "WHO DON 2026-DON602, 2026-DON603, and WHO Director-General Ministerial Briefing 25 May 2026 — Uganda report dates of the three travel-related imports: #1 hospital-admitted Kampala 11 May 2026; #2 confirmed Kampala 16 May 2026; #3 (Arua-Entebbe-Kampala traveller) announced 23 May 2026. Loaded as a daily detection series and fitted with the dated export-case likelihood (per-day Poisson). #1 and #2 are detection/confirmation dates; #3 is the public announcement date (the underlying detection date was not published), so it carries report-pipeline lag. Matches the count in [exported_cases]."
+
 [export_death_dates]
 value  = ["2026-05-14"]
 source = "WHO DON 2026-DON602 — the fatal Uganda export (import #1) was hospital-admitted 11 May 2026 and died 14 May 2026 (hospital-recorded death date). A list of dated export deaths; loaded as a daily series and fitted with a binned-Poisson likelihood that bounds T."
