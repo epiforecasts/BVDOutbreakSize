@@ -40,6 +40,36 @@ function _gamma_cdf_integral(α, θ, x)
 end
 
 """
+Severe-first BVD share of the tested pool: a high→baseline exponential
+relaxation. The laboratory tests the most-likely-BVD (severest / most
+obvious) suspects first, so the BVD fraction `q` of the analysed batch
+starts at the early severe-cluster share `q0` and decays toward the
+broad-pool baseline `q∞` as testing widens:
+
+```math
+q(c) = q_\\infty + (q_0 - q_\\infty)\\, e^{-c / \\text{scale}},
+```
+
+with `c ≥ 0` the elapsed time since testing (reporting) onset and `scale`
+the relaxation timescale (days). At `c = 0` (the first vintage) `q = q0`
+(near 1 — the obvious-BVD cluster, so positivity `≈ s` identifies the
+sensitivity); as `c → ∞` `q → q∞` and STAYS there (it does not overshoot
+to zero, unlike a saturating coverage curve). The baseline `q∞` is tied to
+the count-implied BVD composition of the suspect pool in
+[`confirmed_cases_model`](@ref), pinning the plateau positivity to the
+outbreak size; `q0` and `scale` are the [`test_selection_model`](@ref)
+shape parameters. AD-safe: smooth in `q0`, `q∞`, `c`, `scale`.
+"""
+function severe_first_share(q0, q∞, c, scale)
+    R = float(promote_type(typeof(q0), typeof(q∞), typeof(c), typeof(scale)))
+    cc = max(convert(R, c), zero(R))
+    sc = max(convert(R, scale), eps(R))
+    w = exp(-cc / sc)
+    q = convert(R, q∞) + (convert(R, q0) - convert(R, q∞)) * w
+    return clamp(q, zero(R), one(R))
+end
+
+"""
 Series sum of term derivatives for `∂_α P(α, z)`, using the
 absolutely-convergent Kummer expansion
 

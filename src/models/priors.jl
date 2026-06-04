@@ -92,20 +92,6 @@ loosened to allow for 2026-specific deviations. Used by
 end
 
 """
-Report-to-lab-confirmation delay prior. Samples a gamma shape `α_lab`
-and scale `θ_lab` from truncated-normal priors with a heavy right tail
-to allow for sample shipment to a confirmatory lab. No per-sample
-outbreak data anchors this prior. Used by [`confirmed_cases_model`](@ref).
-"""
-@model function lab_delay_model(;
-        alpha_prior = truncated(Normal(1.5, 1.0); lower = 0.1),
-        theta_prior = truncated(Normal(3.0, 2.0); lower = 0.1))
-    α_lab ~ alpha_prior
-    θ_lab ~ theta_prior
-    return (; α = α_lab, θ = θ_lab, dist = Gamma(α_lab, θ_lab))
-end
-
-"""
 Incubation-period prior, the infection-to-symptom-onset delay that sits
 at the head of the generative process. Samples the mean and coefficient
 of variation, recovers the gamma shape `α_inc = 1/CV²` and scale
@@ -144,27 +130,199 @@ growth the convolution is the exact constant rescale `mgf(incubation,
 end
 
 """
-PCR sensitivity prior for the GeneXpert Ebola assay. Beta(30, 2): mean
-0.94, 95% interval 0.84-0.99. Sits just below the 100% (95% CI
-84.6-100%, n = 22) clinical sensitivity on field whole blood reported
-in the Sierra Leone Zaire-ebolavirus field evaluation, leaving room for
-early-infection low-viral-load specimens, field handling, and the lack
-of Bundibugyo-specific validations. Used by
+PCR sensitivity prior. `Beta(6, 2)` (mean 0.75, 95% interval 0.39-0.97),
+untruncated. Confirmation runs on the altona RealStar
+Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11-67 RNA
+copies per reaction; the rapid Cepheid GeneXpert Ebola assay is
+Zaire-ebolavirus-specific and does not reliably detect Bundibugyo. The
+Beta keeps good analytical sensitivity plausible while carrying downside
+mass for early low-viral-load specimens and field handling.
+
+The Beta keeps good analytical sensitivity plausible while carrying
+downside mass for early low-viral-load specimens. Under the severe-first
+backlog model the first vintage's analysed batch is near-pure BVD
+(`q ≈ 1` when selection is strong), so the v1 positivity ≈ `s` identifies
+the sensitivity directly from the early data; no lower truncation is
+imposed. Pass `sensitivity_prior` to override. Used by
 [`confirmed_cases_model`](@ref).
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(30.0, 2.0))
+        sensitivity_prior = Beta(6.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
 end
 
 """
+Severe-first testing-selection prior for the laboratory confirmed stream.
+The lab tests the most-likely-BVD (severest / most obvious) suspects
+first, so the BVD share of the tested pool starts high and decays to a
+broad-pool baseline as testing widens (see [`confirmed_cases_model`](@ref)
+and [`severe_first_share`](@ref)):
+
+```math
+q_v = q_\\infty + (q_0 - q_\\infty)\\, e^{-c_v / \\text{scale}},
+```
+
+with `c_v` the elapsed time since testing (reporting) onset. This submodel
+samples the two shape parameters of that curve:
+
+- `q0` — the early severe-cluster BVD fraction (the share of the
+  first-tested obvious cases that are true BVD). Its prior is near 1
+  (`Beta(20, 1.5)`, mean ≈ 0.93, most mass above 0.85): the first batch
+  the lab runs is the obvious-BVD cluster. With `q0 ≈ 1` the first-vintage
+  positivity is `≈ s` (true positives on a near-pure-BVD batch), so the
+  sensitivity `s` is identified directly from the early data and needs no
+  lower floor.
+- `decay_scale` — the timescale (days) over which the tested BVD share
+  relaxes from `q0` toward the baseline `q∞`. Identified by how fast the
+  observed positivity falls across the four vintages; a half-normal
+  `Normal+(0, 10)` (median ≈ 6.7 days) spans the lab window.
+- `qinf` — the baseline BVD fraction the broad suspect pool settles at once
+  the severe cluster is exhausted. Its prior `Beta(6, 6)` (mean 0.5,
+  central) sits near the cut-off test-positivity-implied share: with the
+  late positivity ≈ 0.30 and `s ≈ 0.48`, `qinf ≈ 0.6`. The plateau
+  positivity is `s·qinf + (1−spec)(1−qinf)`. Outbreak size stays pinned by
+  the deaths / exports streams and by the received-count likelihood (the
+  forwarded fraction of the suspect backlog), not by `qinf`. The
+  count-implied composition `μ_BVD / (μ_BVD + μ_bg)` is still exposed as a
+  diagnostic inside [`confirmed_cases_model`](@ref).
+
+Pass `q0_prior` / `decay_prior` / `qinf_prior` to override.
+"""
+@model function test_selection_model(;
+        q0_prior = Beta(20.0, 1.5),
+        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0),
+        qinf_prior = Beta(6.0, 6.0))
+    q0 ~ q0_prior
+    decay_scale ~ decay_prior
+    qinf ~ qinf_prior
+    return (; q0, decay_scale, qinf)
+end
+
+"""
+PCR specificity prior. The per-test positivity of the confirmed stream is
+`p_pos = s·q + (1−spec)·(1−q)`, where `q` is the BVD share of the
+analysed batch (see [`confirmed_cases_model`](@ref)): true positives at
+sensitivity `s` plus false positives at false-positive rate `1−spec` on
+the non-BVD share. Modelling specificity lets the observed positivity
+exceed `s·q` (it can include false positives), so the observed peak no
+longer pins a hard lower bound on the sensitivity, replacing the earlier
+`s`-floor.
+
+The default `Beta(50, 1.5)` is informative and high — mean ≈ 0.97, with
+most mass above 0.95 and a modest lower tail — reflecting the altona
+RealStar RT-PCR confirmation assay's strong analytical specificity. The
+prior is deliberately tight: a loose specificity prior lets the
+false-positive term absorb the positivity signal and reintroduces the
+low-sensitivity / small-outbreak multimodality (issue #151) the `s`-floor
+had suppressed. Pass `specificity_prior` to override (e.g. a looser Beta
+for a sensitivity analysis). Used by [`confirmed_cases_model`](@ref).
+"""
+@model function test_specificity_model(;
+        specificity_prior = Beta(50.0, 1.5))
+    spec_test ~ specificity_prior
+    return (; spec_test)
+end
+
+"""
+Beta-Binomial overdispersion prior for the per-vintage confirmed
+likelihood. The cumulative-to-vintage analysed denominators carry
+laboratory reporting noise (backfill, batching, lab stalls) that a plain
+Binomial cannot absorb, so the per-window positivity is wildly
+non-monotone (0.48, 0.05, 0.15, 0.02, 0.79 on the 28 May data). A
+Beta-Binomial with concentration `φ` lets each window's positive count
+disperse around its mean `ΔA_v · p_pos,v` while keeping the same expected
+positivity, so the smooth positivity curve no longer has to thread every
+noisy window exactly. The Binomial is recovered as `φ → ∞`.
+
+The prior is on `φ` directly (samples per concentration); the default
+`Gamma(2, 25)` (mean 50, mass on 5–150) admits both near-Binomial
+(`φ` large) and strongly-overdispersed (`φ` small) windows. Pass
+`concentration_prior` to override. Used by [`confirmed_cases_model`](@ref)
+when `overdispersed = true`.
+"""
+@model function confirmed_overdispersion_model(;
+        concentration_prior = Gamma(2.0, 25.0))
+    φ_conf ~ concentration_prior
+    return (; φ_conf)
+end
+
+"""
+Per-vintage tested-BVD-share random effect for the confirmed stream. The
+per-window positivity on the 28 May data is non-monotone (0.48, 0.05,
+0.15, 0.02, 0.79): a monotone severe-first / volume q-curve cannot match
+both the early high batch and the late 28 May surge. This submodel adds a
+partially-pooled logit-scale offset to the smooth baseline share, so each
+vintage's tested BVD fraction `q_v = logistic(logit(q_base,v) + σ_q·z_v)`
+can fit its own positivity while sharing strength through the pooling
+scale `σ_q`.
+
+The sensitivity `s` stays fixed (an assay property); the positivity wobble
+is absorbed entirely by the mixture share `q` (the fraction of the batch
+that is truly BVD), honouring the principle that positivity moves through
+who is tested, not through `s`. `n` IID standard-normal offsets `z_q` and
+the pooling SD `σ_q ~ truncated(Normal(0, 1); lower = 0)` (logit-scale)
+are sampled; `σ_q → 0` recovers the smooth baseline curve. Used by
+[`confirmed_cases_model`](@ref) when `q_random_effect = true`.
+"""
+@model function confirmed_q_re_model(n::Integer;
+        sigma_prior = truncated(Normal(0.0, 1.0); lower = 0))
+    σ_q ~ sigma_prior
+    z_q ~ filldist(Normal(0, 1), n)
+    return (; σ_q, z_q)
+end
+
+"""
+Imputed analysed-denominator latent for confirmed vintages with no
+observed analysed count (the 18-22 May early and 29-31 May late lab
+windows, where the national `Nbre d'échantillons analysés` is missing).
+The denominator is imputed as a TIGHT log-scale latent anchored to the
+observed analysed increments, so it is a smooth extrapolation of the
+known 23-28 May series rather than a free dimension.
+
+For `n` missing vintages the latent log increments are a log-random-walk
+anchored at `log_anchor` (the log geometric-mean of the observed analysed
+increments), `log ΔA_j = log_anchor + σ_A · cumsum(z_A)_j`, with `n` IID
+standard-normal steps `z_A` and a small walk SD `σ_A` (default
+`truncated(Normal(0, 0.3); lower = 0)`). The walk keeps the imputed
+denominators close to the observed scale. `σ_A → 0` pins every imputed
+denominator at the anchor. Used by [`confirmed_cases_model`](@ref) when
+`analysed_impute` is set and some `samples_analysed` entries are missing.
+
+NEGATIVE RESULT — DEFAULT OFF. Imputing the no-denominator confirmed
+vintages this way still funnels: a four-chain joint fit over the early
+18-22 May extension does not converge (R-hat ≈ 2.1, bulk ESS ≈ 1, every
+NUTS transition saturates the maximum tree depth with zero divergences),
+and tightening the pooling from `σ_A = 0.3` to `0.05` does not help. The
+ridge is the per-vintage `q` random effect times the imputed `ΔA`: each
+no-denominator vintage carries both a free positivity offset and a latent
+denominator, and `ΔC ≈ ΔA · p_pos(q)` leaves them jointly unidentified.
+The free analysis-capacity (`μ_A`) imputation funnels the same way. The
+confirmed stream is therefore fitted only over the 23-28 May vintages
+that carry an observed analysed denominator; this submodel is retained as
+an opt-in experiment, off by default.
+"""
+@model function analysed_impute_model(n::Integer, log_anchor::Real;
+        sigma_prior = truncated(Normal(0.0, 0.3); lower = 0))
+    σ_A ~ sigma_prior
+    z_A ~ filldist(Normal(0, 1), n)
+    ## Log-random-walk around the observed-increment anchor; the cumulative
+    ## sum gives a smooth drift while the tight σ_A keeps the imputed
+    ## denominators on the observed scale.
+    log_ΔA = log_anchor .+ σ_A .* cumsum(z_A)
+    return (; σ_A, z_A, log_ΔA)
+end
+
+"""
 Test-positivity machinery. Samples
 - `λ_bg` — the per-day non-BVD background suspected-case rate, on a
-  half-normal scale. Underlies the suspected/confirmed contrast.
-- `τ` — the fraction of suspected cases that get sampled and routed
-  to the laboratory pipeline; together with the lab-delay CDF this
-  handles right-truncation of the per-test positivity observation.
+  half-normal scale. Underlies the suspected/confirmed contrast; the
+  cumulative background is the constant-rate `μ_bg(t) = λ_bg · t`.
+- `τ_forward` — the fraction of suspected cases forwarded to the
+  laboratory. It scales the cumulative suspect backlog into the expected
+  received count (`received_v ~ NegBinomial(τ_forward · N_susp,v, k)`, see
+  [`confirmed_cases_model`](@ref)), so the received-count stream pins it
+  directly from received-versus-suspected.
 
 The default `λ_bg` prior is a half-normal
 `truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
@@ -174,29 +332,65 @@ The prior is deliberately informative because `λ_bg` is degenerate
 with outbreak size (the per-bin reported mean is
 `p_drc · ΔμBVD0 + λ_bg · Δt`), so a diffuse prior lets the background
 absorb arbitrarily many suspected cases and resolve at the high end
-where the deaths and exports streams anchor `C_T`. A background-noise
-process must not be able to explain more suspected cases than were
-ever reported. With SD 1.0 the median background is ≈ 0.67/day (≈ 89
-cases, ≈ 8% of the 1077 observed at the 26 May cut-off) and the 95%
-prior bound is ≈ 2.0/day (≈ 259 cases, ≈ 24% of observed), keeping the
-background a modest minority of the suspected total while still
-admitting a genuine non-BVD signal. A wider SD (≈ 1.5) was tried but
-left a second posterior mode in which `λ_bg` runs to ≈ 8/day and the
-background explains the majority of suspected cases; SD 1.0 keeps the
-fit in the regime where the BVD trajectory, not the background, drives
-the suspected total. Pass `lambda_prior` to override.
+where the deaths and exports streams anchor `C_T`. With SD 1.0 the median
+background is ≈ 0.67/day (≈ 89 cases, ≈ 8% of the 1077 observed at the
+26 May cut-off) and the 95% prior bound is ≈ 2.0/day (≈ 259 cases),
+keeping the background a modest minority of the suspected total while
+still admitting a genuine non-BVD signal. Pass `lambda_prior` to override.
 
-The derived per-suspected positivity `μ_BVD / μ_cases` is exposed
-inside [`reported_cases_model`](@ref); the per-test positivity
-`s · BVD_tested / (BVD_tested + bg_tested)` is exposed inside
-[`confirmed_cases_model`](@ref).
+`τ_forward` has a `Beta(5, 2)` default (mean ≈ 0.71). The derived
+per-suspected positivity `μ_BVD / μ_cases` is exposed inside
+[`reported_cases_model`](@ref); the per-test positivity and the tested
+BVD share are exposed inside [`confirmed_cases_model`](@ref). Pass
+`fraction_forwarded_prior` to override.
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        fraction_tested_prior = Beta(5.0, 2.0))
+        fraction_forwarded_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
-    τ_test ~ fraction_tested_prior
-    return (; λ_bg, τ_test)
+    τ_forward ~ fraction_forwarded_prior
+    return (; λ_bg, τ_forward)
+end
+
+"""
+Report-to-lab-receipt delay prior. Samples a Gamma shape `α` and scale
+`θ` for the time from a suspected-case report to specimen receipt at the
+Bunia/INRB laboratory (transport and intake), centred near 3 days. The
+confirmed model convolves the suspect backlog with this delay to get the
+received queue. Prior needs human sign-off against the sitrep turnaround.
+Used by [`confirmed_cases_model`](@ref).
+"""
+@model function lab_receipt_delay_model(;
+        alpha_prior = truncated(Normal(2.0, 1.0); lower = 0.1),
+        theta_prior = truncated(Normal(1.5, 0.75); lower = 0.1))
+    α_recv ~ alpha_prior
+    θ_recv ~ theta_prior
+    return (; α = α_recv, θ = θ_recv, dist = Gamma(α_recv, θ_recv))
+end
+
+"""
+Laboratory analysis-capacity prior over the `n` confirmed vintages. The
+per-window daily capacity follows a log random walk centred on
+`capacity_centre` samples analysed per day (external DRC sitrep / NYT
+figure, ~150): `log κ_1 ~ Normal(log centre, level_sd)` and
+`log κ_v = log κ_{v−1} + rw_sd·z_v` with non-centred innovations `z`. The
+throughput likelihood in [`confirmed_cases_model`](@ref) scales the
+available received backlog by `1 − exp(−κ_v·Δt_v / backlog)`, so capacity
+limits analysis when the backlog is large and the whole backlog is
+processed when capacity is ample. Returns the length-`n` `capacity`.
+"""
+@model function lab_capacity_model(n::Integer;
+        capacity_centre::Real = 150.0,
+        level_sd::Real = 0.5,
+        rw_sd_prior = truncated(Normal(0.0, 0.5); lower = 0))
+    z_cap ~ filldist(Normal(0, 1), n)
+    rw_sd ~ rw_sd_prior
+    ## Non-centred log random walk: window 1 at the centred level, later
+    ## windows accumulate rw_sd-scaled innovations.
+    steps = cumsum(vcat(zero(eltype(z_cap)), z_cap[2:end]))
+    logκ = log(capacity_centre) .+ level_sd * z_cap[1] .+ rw_sd .* steps
+    capacity := exp.(logκ)
+    return (; capacity, rw_sd)
 end
 
 """
@@ -245,6 +439,26 @@ following the Stan prior-choice recommendations.
     inv_sqrt_k ~ inv_sqrt_k_prior
     k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
     return (; k, inv_sqrt_k)
+end
+
+"""
+Separate negative-binomial dispersion for the suspected (reported) stream
+only, so that stream can be down-weighted (loosened) without changing the
+deaths / received dispersion `k`. Identical structure to
+[`surveillance_dispersion_model`](@ref) but with distinctly-named sampled
+and deterministic variables (`inv_sqrt_k_rep`, `k_rep`), so the two
+dispersions can coexist in the joint composer without a `:=` name clash.
+A wider default prior (`truncated(Normal(1.2, 0.4); lower = 0)`, smaller
+`k`, heavier-tailed NegBinomial) down-weights the suspected counts so the
+confirmed stream drives the shared parameters; pass `inv_sqrt_k_prior` to
+override. Used by [`bvd_joint`](@ref) via its `reported_dispersion`
+keyword.
+"""
+@model function reported_dispersion_model(;
+        inv_sqrt_k_prior = truncated(Normal(1.2, 0.4); lower = 0))
+    inv_sqrt_k_rep ~ inv_sqrt_k_prior
+    k_rep := 1.0 / (inv_sqrt_k_rep^2 + eps(typeof(inv_sqrt_k_rep)))
+    return (; k = k_rep, inv_sqrt_k = inv_sqrt_k_rep)
 end
 
 """

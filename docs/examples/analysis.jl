@@ -94,15 +94,16 @@
 #   hyperprior on the reporting fraction, applied to the latent
 #   $C(T)$, gives a joint posterior over the reported suspected-case
 #   count alongside deaths and exports.
-# - *Suspected, tested and laboratory-confirmed streams* (not in McCabe
+# - *Suspected, confirmed and samples-received streams* (not in McCabe
 #   et al.). Reported (suspected) counts are the BVD-driven
-#   onset-to-report convolution plus a non-BVD background. The lab
-#   pipeline takes a fraction $\tau$ of suspected through an
-#   onset-to-confirmation delay; per-test positivity falls out as a
-#   Binomial likelihood on the confirmed/tested pair. The lab-delay CDF
-#   handles right-truncation of the tested observation. PCR sensitivity
-#   and testing fraction are separately identified given both
-#   observations.
+#   onset-to-report convolution plus a non-BVD background. Testing is
+#   selection from the accumulated backlog: every received sample stays
+#   eligible and the lab draws which to run, so the confirmed series
+#   reads from the same backlog with no extra delay. Each vintage's
+#   confirmed count is a Binomial on its observed analysed denominator,
+#   with per-test positivity set by PCR sensitivity, specificity and the
+#   BVD share of the analysed batch. The samples-received series pins the
+#   forwarded fraction of the suspect backlog.
 # - *Per-vintage fit of the DRC suspected streams*. The suspected-case
 #   and suspected-death likelihoods model the new cases and deaths
 #   reported in each sitrep, conditioning on the between-vintage
@@ -110,9 +111,10 @@
 #   likelihoods, sharpening the growth rate $r$ and the surveillance
 #   dispersion $k$. A stream with a single vintage reduces to the
 #   cumulative single-total likelihood, recovering the McCabe et al.
-#   configuration. The confirmed counts are small and the lab-processing
-#   delays behind them change over time in ways that are difficult to
-#   model, so confirmed cases enter only as a cumulative total. The case
+#   configuration. The confirmed series is fitted per vintage as a
+#   Binomial on each vintage's analysed denominator, so the joint
+#   conditions on the positivity trajectory across the lab vintages
+#   rather than on a single cumulative total. The case
 #   streams use a single DRC ascertainment fraction $p_{\text{DRC}}$.
 # - *No-onward-transmission counterfactual*.
 #   Projects the future expected deaths from cases already infected
@@ -181,10 +183,12 @@
 #   began revising the suspected-case line list downward as suspects were
 #   investigated and either confirmed or ruled out, and from SitRep 014
 #   (28 May) it stopped publishing a suspected-death headline. The cut-off
-#   here (26 May, SitRep 012 revised re-issue) predates this, but the same
-#   reclassification may already be acting within the fitted window, so
-#   there may be more uncertainty in the reported counts than the model
-#   cut-off on its current basis.
+#   is 28 May (SitRep 014); the confirmed and laboratory streams run to it,
+#   but the suspected case and death streams are frozen at their last clean
+#   value (26 May, SitRep 012 revised re-issue). The same reclassification
+#   may already be acting within the fitted window, so there may be more
+#   uncertainty in the reported counts than the model cut-off on its
+#   current basis.
 # - *Onset-to-death delay anchored on Isiro 2012.* A single-
 #   outbreak fit; the delay distribution reporting here follows
 #   [charniga2024](@cite) but cross-outbreak heterogeneity is
@@ -294,9 +298,14 @@
 #   Uganda counts are small.
 # - *Confirmed-cases stream rests on weak priors.* The non-BVD
 #   background rate is identified from the suspected/confirmed contrast
-#   rather than external surveillance data; the report-to-confirmation
-#   delay has no per-sample anchor for this outbreak; PCR sensitivity
-#   is taken from earlier validation studies.
+#   rather than external surveillance data; the severe-first share curve
+#   has no per-sample anchor for this outbreak; PCR sensitivity is taken
+#   from earlier validation studies.
+# - *Constant forwarded fraction.* A single $\tau_{\text{forward}}$
+#   under-fits the late jump in samples received. A time-varying
+#   forwarded fraction is a natural extension.
+# - *First-vintage positivity peak.* The model slightly under-shoots the
+#   first vintage's positivity peak.
 # - *Data conflict not explored in detail.* We combine four data
 #   streams jointly but have not systematically checked whether they
 #   conflict — whether, say, the exports and the deaths streams imply
@@ -313,7 +322,7 @@ using Turing
 using Turing: to_submodel, @varname
 using Distributions
 using StatsFuns: logit, logistic
-using DataFrames: DataFrame
+using DataFrames: DataFrame, rename
 import CSV
 using Random
 using Markdown
@@ -327,6 +336,19 @@ import CairoMakie
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
 Random.seed!(20260518)
+
+## Opt-in TensorBoard tracing of the model fits: set the `BVD_TRACE_DIR`
+## environment variable to a directory and every fit below streams its
+## draws (warmup included) to a per-fit run under it. Off by default, so
+## normal builds are unchanged. Inspect with `tensorboard --logdir <dir>`.
+## Loading TensorBoardLogger activates the package's tracing extension.
+haskey(ENV, "BVD_TRACE_DIR") && @eval using TensorBoardLogger
+function trace_kw(label)
+    haskey(ENV, "BVD_TRACE_DIR") ?
+    (; callback = tensorboard_callback(
+            joinpath(ENV["BVD_TRACE_DIR"], label)),
+        warmup = true) : NamedTuple()
+end
 
 #md # ```@raw html
 #md # </details>
@@ -477,11 +499,11 @@ vintage_table #hide
 # submodels into the per-stream fits and the joint fit.
 #
 # The table below shows which building-block parameters feed each
-# observation submodel. The *confirmed & tested* column covers the
-# laboratory pipeline, which observes the cumulative tests analysed and
-# the confirmed (PCR-positive) cases:
+# observation submodel. The *confirmed & received* column covers the
+# laboratory pipeline, which observes the confirmed (PCR-positive) cases
+# and the samples received from the suspect pool:
 #
-# | Parameter | Exports | Deaths | Cases | Confirmed & tested | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
+# | Parameter | Exports | Deaths | Cases | Confirmed & received | Export deaths (time-resolved) | First export-detection timing | Genetic seeding |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Growth $C(s) = e^{rs}$ | ● | ● | ● | ● | ● | ● | ● |
 # | Incubation period | ● | ● | ● | ● | ● | ● |  |
@@ -490,7 +512,9 @@ vintage_table #hide
 # | Onset-to-report delay | ● |  | ● | ● | ● | ● |  |
 # | Report-to-lab delay |  |  |  | ● |  |  |  |
 # | PCR sensitivity $s$ |  |  |  | ● |  |  |  |
-# | Testing fraction $\tau$ |  |  |  | ● |  |  |  |
+# | PCR specificity |  |  |  | ● |  |  |  |
+# | Severe-first share $q_0, q_\infty, \text{decay}$ |  |  |  | ● |  |  |  |
+# | Forwarded fraction $\tau_{\text{forward}}$ |  |  |  | ● |  |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  |  |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● | ● |  |
@@ -500,15 +524,16 @@ vintage_table #hide
 #
 # 1. **Building-block submodels** — one per parameter family
 #    (growth, incubation period, onset-to-death delay, CFR,
-#    onset-to-report delay, report-to-lab delay, PCR sensitivity, testing
-#    fraction and background rate, detection window, daily
+#    onset-to-report delay, PCR sensitivity, PCR specificity, the
+#    severe-first share curve, the forwarded fraction and background
+#    rate, detection window, daily
 #    traveller volume, surveillance dispersion, ascertainment). Each
 #    samples its own
 #    priors and returns a small NamedTuple of values. These sections
 #    introduce only the maths for their own parameters.
 # 2. **Observation submodels** — exports, deaths, cases, the
-#    laboratory pipeline (cumulative tests analysed and confirmed
-#    cases), deaths-among-exports (time-resolved), and the first
+#    laboratory pipeline (confirmed cases and samples received),
+#    deaths-among-exports (time-resolved), and the first
 #    export-detection timing. Each takes the growth state as input,
 #    introduces the
 #    forward integral it needs and the likelihood, and ties one data
@@ -751,42 +776,31 @@ vintage_table #hide
 #md # </details>
 #md # ```
 
-# ##### Surveillance delays
+# ##### Onset-to-report delay
 #
 # Suspected and laboratory-confirmed counts see the growth curve
-# through two delays: an onset-to-report delay $f_{\text{rep}}$
-# (symptom onset to the case appearing on the suspected line list),
-# and a report-to-confirmation delay $f_{\text{lab}}$ (lab
-# turnaround).
+# through one delay: an onset-to-report delay $f_{\text{rep}}$ from
+# symptom onset to the case appearing on the suspected line list. The
+# laboratory pipeline reads from the same reported backlog rather than
+# adding a second delay; the lab simply selects which received samples
+# to run (see the confirmed-case likelihood below).
 #
-# Both delays are Gamma-distributed, with shape and scale given
+# The delay is Gamma-distributed, with shape and scale given
 # truncated-Normal priors in the same way as the onset-to-death delay
-# above. The onset-to-report prior is taken from the companion BDBV
-# linelist reanalysis of the 2012 Isiro outbreak
-# [bdbv_linelist_analysis_2026](@cite), whose Gamma-family posterior on
-# the onset-to-notification delay has median around $11$ days, loosened
-# slightly to allow for 2026-specific deviations:
+# above. The prior is taken from the companion BDBV linelist reanalysis
+# of the 2012 Isiro outbreak [bdbv_linelist_analysis_2026](@cite), whose
+# Gamma-family posterior on the onset-to-notification delay has median
+# around $11$ days, loosened slightly to allow for 2026-specific
+# deviations:
 #
 # ```math
 # \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(2.5,\ 1.0), \qquad
 # \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(4.5,\ 1.5), \tag{5a}
 # ```
 #
-# a prior mean onset-to-report delay of about $11$ days.
-#
-# No per-sample lab turnaround is published for this outbreak that we
-# are aware of. We use a Gamma prior centred around $4$-$5$ days with
-# a heavy right tail to allow for sample shipment to a confirmatory
-# lab:
-#
-# ```math
-# \alpha_{\text{lab}} \sim \mathrm{Normal}^{+}(1.5,\ 1.0), \qquad
-# \theta_{\text{lab}} \sim \mathrm{Normal}^{+}(3.0,\ 2.0). \tag{5b}
-# ```
-#
-# Both shape/scale pairs are truncated at $0.1$ to keep the Gamma
-# well-defined under the sampler, and can be tightened if per-sample
-# timing data become available.
+# a prior mean onset-to-report delay of about $11$ days. The shape and
+# scale are truncated at $0.1$ to keep the Gamma well-defined under the
+# sampler.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: report_delay_model</summary>
@@ -803,13 +817,27 @@ vintage_table #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: lab_delay_model</summary>
+#md # <details><summary>Submodel: test_selection_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.lab_delay_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.test_selection_model()), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: test_specificity_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.test_specificity_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1293,8 +1321,8 @@ cfr_prior_fig #hide
 # explains the majority of suspected cases; SD $1$ keeps the fit in the
 # regime where the BVD trajectory drives the suspected total.
 # $\lambda_{\text{bg}}$ is identified from the suspected/confirmed
-# contrast — and, once the tests-analysed observation is included, from
-# the testing-volume gate on the BVD and background streams.
+# contrast and from the samples-received series, which conditions on the
+# combined BVD and background backlog.
 # Ideally it would also be informed by a known background rate of
 # non-BVD presentations from routine surveillance or other data
 # sources. The dispersion $k$ (equation (9)) is shared with the deaths
@@ -1385,109 +1413,102 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Tested-volume and confirmed cases
+# ##### Confirmed cases and samples received
 #
-# The laboratory pipeline gives us two coupled observations. A fraction
-# $\tau$ of suspected cases gets routed to the lab; among samples
-# whose processing has completed by $T$, BVD-positive ones return a
-# positive PCR with sensitivity $s$. Non-BVD samples are assumed never
-# to test positive (perfect specificity).
+# The laboratory pipeline observes two per-vintage series: the confirmed
+# (PCR-positive) cases and the samples received from the suspected pool.
+# Testing is selection from an accumulated backlog. Every suspected
+# sample received stays eligible, and the lab draws which to run, so
+# there is no report-to-lab delay; the confirmed series reads from the
+# same reported backlog as the suspected stream.
 #
-# The cumulative number of BVD samples that have completed processing
-# by $T$ is the BVD-suspected trajectory of equation (18) convolved
-# against the lab-turnaround kernel, gated by $\tau$:
-#
-# ```math
-# \mu_{\text{BVD,test}} =
-#     \tau \int_0^T \mu_{\text{BVD}}(s')\, f_{\text{lab}}(T - s')\, ds'. \tag{21}
-# ```
-#
-# Non-BVD samples arrive at the suspected pool at constant rate
-# $\lambda_{\text{bg}}$ per day; the fraction that has completed lab
-# processing by $T$ is the integral of the lab-delay CDF $F_{\text{lab}}$
-# rather than its density, so right-truncation is absorbed by the
-# integration limits — only samples whose pipeline has finished by $T$
-# are counted:
+# Each vintage's confirmed count is a Binomial draw on its observed
+# number of samples analysed, with the analysed count $A_v$ a known
+# denominator from the sitrep rather than a modelled quantity:
 #
 # ```math
-# \mu_{\text{bg,test}} =
-#     \tau\,\lambda_{\text{bg}} \int_0^T F_{\text{lab}}(T - u)\, du. \tag{22}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
 # ```
 #
-# Cumulative tests analysed follow a negative binomial; positive tests
-# conditional on the analysed denominator follow a binomial:
+# Per-test positivity mixes true and false positives. With PCR
+# sensitivity $s$, specificity $\text{spec}$ and $q_v$ the BVD share of
+# the analysed batch at vintage $v$,
 #
 # ```math
-# Y_{\text{test}} \sim \mathrm{NegBinomial}(\mu_{\text{BVD,test}}
-#     + \mu_{\text{bg,test}},\ k), \tag{23}
+# p_{\text{pos},v} = s\, q_v + (1 - \text{spec})\,(1 - q_v). \tag{22}
+# ```
+#
+# The lab tests the most-likely-BVD cases first, the obvious severe
+# cluster, so the BVD share of the tested pool starts high and relaxes
+# to a baseline as testing widens to the broad suspect pool:
+#
+# ```math
+# q(c) = q_\infty + (q_0 - q_\infty)\, e^{-c / \text{decay}},
+# \qquad c = \max(t - t_{\text{report}},\ 0), \tag{23}
+# ```
+#
+# with $c$ the time since surveillance onset. $q_0$ (near 1) is the early
+# severe-cluster BVD fraction, $q_\infty$ the broad-pool baseline, and
+# $\text{decay}$ the timescale over which the share relaxes. The early
+# vintages, where the BVD share is high, inform the sensitivity, and the
+# plateau positivity $s\, q_\infty + (1 - \text{spec})(1 - q_\infty)$ holds
+# the later vintages.
+#
+# The samples-received series conditions the fraction of suspects
+# forwarded to the lab. The cumulative suspect backlog at each vintage is
+# the BVD-suspected term of equation (18) plus the non-BVD background,
+# $N_{\text{susp},v} = \mu_{\text{BVD}}(t_v) + \lambda_{\text{bg}}\,t_v$.
+# The received count is a fraction $\tau_{\text{forward}}$ of that
+# backlog,
+#
+# ```math
+# R_v \sim \mathrm{NegBinomial}(\tau_{\text{forward}}\,
+#     N_{\text{susp},v},\ k), \tag{24}
+# ```
+#
+# which pins $\tau_{\text{forward}}$ directly from received-versus-
+# suspected.
+#
+# The priors are a Beta on the PCR sensitivity, a high Beta on the
+# specificity, a near-1 Beta on $q_0$, weakly-informative priors on
+# $q_\infty$ and the decay timescale, and a Beta on the forwarded
+# fraction:
+#
+# ```math
+# s \sim \mathrm{Beta}(6,\ 2), \qquad
+# \text{spec} \sim \mathrm{Beta}(50,\ 1.5), \qquad
+# \tau_{\text{forward}} \sim \mathrm{Beta}(5,\ 2), \tag{25}
 # ```
 #
 # ```math
-# Y_{\text{conf}} \mid Y_{\text{test}} \sim
-#     \mathrm{Binomial}\big(Y_{\text{test}},\
-#     p_{\text{pos}}\big), \qquad
-# p_{\text{pos}} = \frac{s\,\mu_{\text{BVD,test}}}{\mu_{\text{BVD,test}}
-#     + \mu_{\text{bg,test}}}. \tag{24}
+# q_0 \sim \mathrm{Beta}(20,\ 1.5), \qquad
+# q_\infty \sim \mathrm{Beta}(6,\ 6), \qquad
+# \text{decay} \sim \mathrm{Normal}^{+}(0,\ 10)\ \text{days}. \tag{25a}
 # ```
 #
-# The testing fraction $\tau$ and sensitivity $s$ are separately
-# identified once both $Y_{\text{test}}$ and $Y_{\text{conf}}$ are
-# observed: the absolute scale of $Y_{\text{test}}$ pins $\tau$ (given
-# the BVD trajectory inferred jointly with the other streams), and the
-# $Y_{\text{conf}} / Y_{\text{test}}$ ratio pins $s$ times the BVD share
-# of the tested pool. Without the tests-analysed observation the two
-# would be multiplicatively confounded.
+# Confirmation runs on the altona RealStar Filovirus Screen RT-PCR at
+# INRB; the rapid Cepheid GeneXpert Ebola assay is Zaire-ebolavirus-specific
+# and does not reliably detect Bundibugyo virus
+# [cepheid_xpert_ebola_ifu](@cite). The RealStar kit detects Bundibugyo
+# virus at $11$-$67$ RNA copies per reaction in laboratory and field
+# evaluation [rieger2016](@cite) but has no published field sensitivity for
+# this variant, and early low-viral-load specimens and field handling lower
+# real-world detection. The $\mathrm{Beta}(6, 2)$ prior (mean $0.75$, $95\%$
+# interval $\sim 0.39$-$0.97$) keeps good analytical sensitivity plausible
+# while carrying substantial downside mass for those field losses. The
+# specificity prior is tight and high (mean $\approx 0.97$), reflecting the
+# assay's strong analytical specificity and keeping the false-positive term
+# from absorbing the positivity signal.
 #
-# Beta prior on the PCR sensitivity, and a Beta prior on the fraction
-# of suspected cases that get routed to the lab:
-#
-# ```math
-# s \sim \mathrm{Beta}(30,\ 2), \qquad
-# \tau \sim \mathrm{Beta}(5,\ 2). \tag{25}
-# ```
-#
-# The sensitivity prior has mean $0.94$ and $95\%$ interval
-# $0.84$-$0.99$. The Cepheid GeneXpert Ebola assay reported $100\%$
-# ($95\%$ CI $84.6$-$100\%$, $n = 22$) clinical sensitivity on field
-# whole blood in the Sierra Leone Zaire ebolavirus field evaluation
-# [semper2016](@cite); analytical performance studies place the limit
-# of detection in the tens of copies per mL on whole blood
-# [pinsky2015](@cite). The prior sits just below the field point
-# estimate to leave room for early-infection low-viral-load specimens,
-# field handling, and the lack of Bundibugyo-specific validations.
-#
-# The testing fraction $\tau$ has a $\mathrm{Beta}(5, 2)$ prior (mean
-# $0.71$, $95\%$ interval $\sim 0.40$-$0.95$). As with the background
-# rate and the lab-delay above, no outbreak-specific data anchor it, so
-# this is a weakly informative prior that expresses only that a majority
-# — but not all — of suspected cases are sampled. It is identified from
-# the absolute scale of the tests-analysed count against the suspected
-# total and the lab-delay integrals above, so the data can pull $\tau$
-# well below the prior mean if that is what they imply.
-#
-# The confirmed cases enter as a single cumulative total at the
-# laboratory stream's cut-off, replacing the unit-ascertainment suspected
-# cumulative with the lab-convolved
-# $I_{\text{lab},0}(T) = \int_0^T \mu_{\text{BVD},0}(s')\,
-#     f_{\text{lab}}(T - s')\,ds'$ and gating by the testing fraction
-# $\tau$ and sensitivity $s$:
-#
-# ```math
-# \mu^{\text{conf}}
-#   = p_{\text{DRC}}\, s\, \tau\, I_{\text{lab},0}(T),
-# \quad
-# Y^{\text{conf}} \sim
-#     \mathrm{NegBinomial}(\mu^{\text{conf}}, k). \tag{25a}
-# ```
-#
-# The confirmed counts are small and the lab-processing delays behind
-# them change over time in ways that are difficult to model, so we
-# currently use only the cumulative confirmed total at the cut-off rather
-# than the per-sitrep vintages.
-#
-# The tested-volume and per-test positivity terms (equations (23)-(24))
-# are observed once, at the laboratory stream's own cut-off, which need
-# not be the case cut-off if lab reporting lags behind.
+# The forwarded fraction $\tau_{\text{forward}}$ has a $\mathrm{Beta}(5, 2)$
+# prior (mean $0.71$), expressing that a majority but not all of the
+# suspected backlog is forwarded; the samples-received series pulls it to
+# the value the data imply. The $q_0$ prior sits near 1 (mean $\approx
+# 0.93$); $q_\infty$ is centred (mean $0.5$) near the cut-off
+# positivity-implied share; the decay prior (median $\approx 6.7$ days)
+# spans the lab window. The forwarded fraction and the share curve carry
+# no outbreak-specific anchor beyond the received and confirmed series,
+# so they are weakly informative.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
@@ -1511,8 +1532,8 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
-#md #         Int[], missing, nothing, 1.0, Float64[], 1.0, 1.0,
-#md #         nothing, Float64[], 1.0)), "\n```"))
+#md #         Int[], Int[], Union{Missing, Int}[], missing, nothing, 1.0,
+#md #         Float64[], 0.0, 0.7, nothing, Float64[], 1.0)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1858,21 +1879,64 @@ function joint_obs(o; observe = true)
               fill(missing, length(h.values)), h.offsets)
     rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
     dth, dth_off = _stream(o.death_history, o.total_deaths)
-    ## Confirmed cases enter as a single cumulative total at the cut-off
-    ## (offset 0), like the tests-analysed count. The per-sitrep confirmed
-    ## counts are small and the lab-processing delays behind them change
-    ## over time in ways that are difficult to model, so we currently use
-    ## only the cumulative total. With the tests-analysed total this gives
-    ## the per-test positivity.
+    ## Confirmed cases enter PER VINTAGE over the lab vintages that carry an
+    ## analysed denominator (`tests_analysed_history`, the 23-28 May
+    ## sitreps with denominators 211/295/295/403/648/755). Each cumulative
+    ## confirmed count is observed as a Binomial on its analysed count, so
+    ## the joint conditions on the per-vintage positivity trajectory
+    ## (exhaustion + modelled specificity in `confirmed_cases_model`) rather
+    ## than a single cumulative total. Confirmed counts are aligned to the
+    ## analysed offsets. When no per-vintage analysed history is available,
+    ## fall back to the single cumulative total at the cut-off.
     have_conf = o.confirmed_case_history !== missing ||
                 o.confirmed_cases !== missing
-    conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
-                 o.confirmed_case_history === missing ? missing :
-                 o.confirmed_case_history.values[end]
-    conf,
-    conf_off = have_conf ?
-               (Union{Missing, Int}[observe ? conf_total : missing], [0]) :
-               (Union{Missing, Int}[], Int[])
+    have_pervintage = have_conf &&
+                      o.confirmed_case_history !== missing &&
+                      o.tests_analysed_history !== missing
+    if have_pervintage
+        sa = o.tests_analysed_history
+        ch = o.confirmed_case_history
+        idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
+        any(isnothing, idx) &&
+            error("confirmed history missing an analysed-vintage offset")
+        ## Merge any vintage that analysed no new samples (ΔA = 0, e.g. the
+        ## 25 May stall) into the next, so every window has a positive
+        ## denominator. Keep the first vintage and any with more cumulative
+        ## analysed than the previous kept one, then difference to the
+        ## between-vintage increments the confirmed model conditions on.
+        keep = [i == 1 || sa.values[i] > sa.values[i - 1]
+                for i in eachindex(sa.values)]
+        aoff = collect(sa.offsets)[keep]
+        analysed = Union{Missing, Int}[_increments(sa.values[keep])...]
+        ccum = [ch.values[i] for i in idx][keep]
+        conf = observe ? Union{Missing, Int}[_increments(ccum)...] :
+               fill(missing, length(ccum))
+        conf_off = aoff
+        ## Tests-received increments (`Cumul échantillons reçus`), aligned
+        ## to the kept offsets, condition τ_forward via the received-count
+        ## NegBinomial.
+        if o.tests_received_history !== missing
+            sr = o.tests_received_history
+            ridx = [findfirst(==(off), sr.offsets) for off in aoff]
+            received = any(isnothing, ridx) ? Union{Missing, Int}[] :
+                       (observe ?
+                        Union{Missing, Int}[_increments([sr.values[i]
+                                                                             for i in ridx])...] :
+                        fill(missing, length(ridx)))
+        else
+            received = Union{Missing, Int}[]
+        end
+    else
+        conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
+                     o.confirmed_case_history === missing ? missing :
+                     o.confirmed_case_history.values[end]
+        conf,
+        conf_off = have_conf ?
+                   (Union{Missing, Int}[observe ? conf_total : missing],
+            [0]) : (Union{Missing, Int}[], Int[])
+        analysed = Union{Missing, Int}[]
+        received = Union{Missing, Int}[]
+    end
     ## Travel-gated export streams stop at the most recent reported import
     ## to Uganda. Cross-border movement patterns likely shift over the
     ## outbreak and the days after the last import are right-truncated by
@@ -1892,6 +1956,8 @@ function joint_obs(o; observe = true)
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
             confirmed_cases = conf, confirmed_offsets = conf_off,
+            samples_analysed = analysed,
+            samples_received = received,
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
             tests_analysed = observe ? o.cumulative_tests_analysed :
@@ -1899,14 +1965,15 @@ function joint_obs(o; observe = true)
 end
 
 ## Dummy non-missing confirmed/tested counts instantiate the laboratory
-## submodel so its priors (α_lab, θ_lab, s, plus the derived per-test
-## positivity) appear in the prior chain for the lab-pipeline pair plot.
-## Under `Prior()` the likelihood is discarded, so the placeholder values
-## do not influence the sampled priors.
+## submodel so its priors (s, spec, the severe-first selection q0/qinf/
+## decay_scale, plus the derived per-test positivity) appear in the prior
+## chain for the lab-pipeline pair plot. Under `Prior()` the likelihood is
+## discarded, so the placeholder values do not influence the sampled priors.
 prior_args = joint_obs(obs; observe = false)
 prior_chn = sample(
     bvd_joint(missing, prior_args.deaths, prior_args.reported,
-        prior_args.export_deaths; prior_args.kw...),
+        prior_args.export_deaths; prior_args.kw...,
+        confirmed_q_random_effect = confirmed_q_re_model),
     Prior(), 2_000; progress = false);
 
 prior_C_table = summary_table(prior_chn, [:cumulative_cases]; digits = 0);
@@ -1927,7 +1994,9 @@ prior_C_table #hide
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
-        :λ_bg, :τ_test, :s_test, :positivity, :p_positive]);
+        :λ_bg, :τ_forward, :s_test, :spec_test,
+        :q0, :qinf, :decay_scale,
+        :positivity, :p_positive]);
 
 #md # ```@raw html
 #md # </details>
@@ -1963,25 +2032,37 @@ function growth_for(o)
 end
 growth_now = growth_for(obs)
 
+## Per-vintage tested-BVD-share random effect for the confirmed stream:
+## the 28 May per-window positivity (0.48, 0.05, 0.15, 0.02, 0.79) is
+## non-monotone, so a partially-pooled logit-scale offset lets each
+## confirmed vintage fit its own positivity while the assay sensitivity
+## stays fixed (see `confirmed_q_re_model`).
 fit_args = joint_obs(obs)
 chn_joint = nuts_sample(
     bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
-    fit_args.export_deaths; fit_args.kw...,
-    growth = growth_now,
-    first_export_detection_delta = obs.first_export_detection_delta,
-    genetic = genetic_seeding));
+        fit_args.export_deaths; fit_args.kw...,
+        growth = growth_now,
+        first_export_detection_delta = obs.first_export_detection_delta,
+        report_onset_offset = report_onset_offset(obs.as_of_date),
+        confirmed_q_random_effect = confirmed_q_re_model,
+        genetic = genetic_seeding); trace_kw("joint")...);
 
 chn_exports = nuts_sample(
-    exports_only_model(obs.exported_cases; growth = growth_now));
+    exports_only_model(obs.exported_cases; growth = growth_now);
+    trace_kw("exports")...);
 chn_deaths = nuts_sample(
-    deaths_only_model(obs.total_deaths; growth = growth_now));
+    deaths_only_model(obs.total_deaths; growth = growth_now);
+    trace_kw("deaths")...);
 chn_cases = nuts_sample(
-    cases_only_model(obs.reported_cases; growth = growth_now));
+    cases_only_model(obs.reported_cases; growth = growth_now);
+    trace_kw("cases")...);
 chn_confirmed = nuts_sample(
-    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed;
-    growth = growth_now));
+    confirmed_only_model(obs.confirmed_cases, obs.cumulative_tests_analysed,
+        obs.tests_received_history.values[end]; growth = growth_now);
+    trace_kw("confirmed")...);
 chn_exports_deaths = nuts_sample(
-    exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now));
+    exports_deaths_only_model(obs.export_deaths_daily; growth = growth_now);
+    trace_kw("exports_deaths")...);
 
 posterior_C_joint = vec(Array(chn_joint[:cumulative_cases]));
 posterior_C_infections_joint = vec(Array(chn_joint[:cumulative_infections]));
@@ -2275,6 +2356,41 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
+# Against the laboratory-confirmed cases recorded by the cut-off (210),
+# the estimated infections give the under-ascertainment multiplier
+# (infections per confirmed case); we report it alongside the case
+# fatality ratio as headline quantities.
+
+#md # ```@raw html
+#md # <details><summary>Headline multiplier and CFR summary table</summary>
+#md # ```
+
+headline_summary = let
+    mult = posterior_C_infections_joint ./ obs.confirmed_cases
+    cfr = vec(Array(chn_joint[:CFR]))
+    df = DataFrame(quantity = String[],
+        lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
+        upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[])
+    for (
+        name, xs) in ["Infections per confirmed case" => mult,
+        "Case fatality ratio" => cfr]
+        s = posterior_summary(xs)
+        push!(df,
+            (name, round(s.lo90; digits = 2), round(s.lo60; digits = 2),
+                round(s.lo30; digits = 2), round(s.hi30; digits = 2),
+                round(s.hi60; digits = 2), round(s.hi90; digits = 2)))
+    end
+    rename(df,
+        ["Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
+            "Upper 30%", "Upper 60%", "Upper 90%"])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+headline_summary #hide
+
 #md # ```@raw html
 #md # <details><summary>Cumulative infection and case count densities</summary>
 #md # ```
@@ -2334,9 +2450,10 @@ start_date_fig #hide
 # pooling SD $\tau_{\text{logit}}$, the surveillance dispersion on both
 # the sampled $1/\sqrt{k}$ scale and the more familiar $k$ scale, the
 # laboratory-pipeline parameters — onset-to-report delay shape and scale
-# $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, report-to-lab delay
-# $\alpha_{\text{lab}}$, $\theta_{\text{lab}}$, PCR sensitivity $s$,
-# testing fraction $\tau$, the non-BVD background rate
+# $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, PCR sensitivity $s$,
+# specificity $\text{spec}$, the forwarded fraction
+# $\tau_{\text{forward}}$, the severe-first share parameters $q_0$,
+# $q_\infty$ and $\text{decay}$, the non-BVD background rate
 # $\lambda_{\text{bg}}$, the per-suspected positivity $\pi$ and the
 # per-test positivity $p_{\text{pos}}$ — and cumulative cases $C(T)$.
 
@@ -2346,9 +2463,10 @@ start_date_fig #hide
 
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
-        :inv_sqrt_k, :k, :α_rep, :θ_rep, :α_lab, :θ_lab,
-        :s_test, :τ_test, :λ_bg, :positivity, :p_positive,
-        :cumulative_cases]; digits = 2);
+        :inv_sqrt_k, :k, :α_rep, :θ_rep,
+        :s_test, :spec_test, :τ_forward, :λ_bg, :q0, :qinf, :decay_scale,
+        :positivity, :p_positive, :q_cutoff, :q_baseline,
+        :cumulative_infections, :cumulative_cases]; digits = 2);
 
 #md # ```@raw html
 #md # </details>
@@ -2379,34 +2497,35 @@ posterior_pair_fig #hide
 #
 # The streams above all observe the same latent infections: infections
 # become onsets after the incubation period, onsets enter the suspected
-# line list after the onset-to-report delay, and a sampled fraction are
-# laboratory-confirmed after the report-to-lab delay. The observed
+# line list after the onset-to-report delay, and the lab selects which of
+# the received samples to confirm. The observed
 # suspected count mixes an *accepted* (BVD-attributable) part
 # $\mu_{\text{BVD}}$ and a non-BVD background $\mu_{\text{bg}}$
 # (equation (18)). Only the total is observed; the accepted share is the
 # per-suspected positivity $\pi = \mu_{\text{BVD}} / \mu_{\text{cases}}$ in
 # the summary table, so $\pi$ times the suspected total recovers the
 # unobserved accepted-BVD count (distinct again from the lab-confirmed
-# count, since only a fraction $\tau$ are tested).
+# count, since only the tested samples enter the confirmed series).
 #
 # A pair plot covers the laboratory-pipeline parameters that the
-# confirmed and tests-analysed streams add: the onset-to-report delay
-# shape and scale $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, the
-# report-to-lab delay $\alpha_{\text{lab}}$, $\theta_{\text{lab}}$, PCR
-# sensitivity $s$, the testing fraction $\tau$ and the non-BVD background
-# rate $\lambda_{\text{bg}}$, against cumulative cases $C(T)$. The prior
+# confirmed and samples-received streams add: the onset-to-report delay
+# shape and scale $\alpha_{\text{rep}}$, $\theta_{\text{rep}}$, PCR
+# sensitivity $s$, specificity $\text{spec}$, the forwarded fraction
+# $\tau_{\text{forward}}$, the severe-first share parameters $q_0$,
+# $q_\infty$ and $\text{decay}$, and the non-BVD background rate
+# $\lambda_{\text{bg}}$, against cumulative cases $C(T)$. The prior
 # is overlaid so the contribution of the lab observations to each
 # marginal is visible — the delay and sensitivity priors are only weakly
-# updated, while $\tau$ and $\lambda_{\text{bg}}$ are informed by the
-# testing-volume gate.
+# updated, while $\tau_{\text{forward}}$ and $\lambda_{\text{bg}}$ are
+# informed by the received and confirmed series.
 
 #md # ```@raw html
 #md # <details><summary>Laboratory-pipeline pair plot (prior overlaid)</summary>
 #md # ```
 
 lab_pair_fig = plot_pair(chn_joint,
-    [:α_rep, :θ_rep, :α_lab, :θ_lab, :s_test, :τ_test,
-        :λ_bg, :cumulative_cases];
+    [:α_rep, :θ_rep, :s_test, :spec_test, :τ_forward,
+        :λ_bg, :q0, :qinf, :decay_scale, :cumulative_cases];
     prior = prior_chn);
 
 #md # ```@raw html
@@ -2424,26 +2543,14 @@ lab_pair_fig #hide
 # above shows its posterior against the prior, so how far below one the
 # fraction sits is what sets that scaling.
 #
-# The confirmed-case stream enters the joint fit as a single cumulative
-# total, not the per-sitrep series. The per-vintage confirmed model is
-# kept in the code but breaks joint convergence: the increments are tiny
-# and non-monotone (33, 18, 6, 22, 4, 18, 4, 1, 15), and each bin mean is
-# $p_{\text{DRC}}\,s\,\tau\,\Delta I_{\text{lab}}$ (equation (25a)) with
-# the leading factors shared across bins and only weakly identified, so
-# splitting the total opens a multiplicative ridge between the
-# report-to-lab delay and those factors rather than adding information.
-# With the tests-analysed total, the single confirmed count still pins the
-# per-test positivity. Recovering the temporal signal cleanly is follow-up
-# work.
-#
-# The report-to-lab delay is a single Gamma convolved against the
-# cumulative suspected trajectory, assuming a roughly fixed turnaround. In
-# practice the lab cleared a backlog (403 of 662 specimens analysed by the
-# cut-off, testing in Ituri stalled mid-period), so some early
-# confirmations correspond to much older reports than a short delay
-# allows; a heavier-tailed or batch-aware delay would fit better. The
-# background enters testing the same way, so it inherits the same
-# assumption.
+# The confirmed-case stream enters the joint fit per vintage, each
+# vintage a Binomial on its observed analysed denominator (equation
+# (21)). The joint therefore conditions on the positivity trajectory
+# across the lab vintages, with the severe-first share carrying the fall
+# in positivity from the early severe cluster to the broad-pool baseline
+# (equation (23)). The samples-received series sets the forwarded
+# fraction $\tau_{\text{forward}}$, and the per-vintage positivity sets
+# the sensitivity and the share curve.
 #
 # A posterior predictive check draws replicated observations from the
 # fitted joint model and compares them to the observed counts. If the
@@ -2463,20 +2570,22 @@ pp_joint = predict(
         pre_start_deaths = missing,
         pre_detection_exports = missing,
         first_export_detection_delta = obs.first_export_detection_delta,
+        report_onset_offset = report_onset_offset(obs.as_of_date),
+        confirmed_q_random_effect = confirmed_q_re_model,
         genetic = genetic_seeding),
     chn_joint);
 ## Exports are now a dated per-day series (to the last reported import),
 ## so sum each draw's days for the cumulative-total posterior predictive,
 ## matching the observed total.
 pp_exports = vec(sum.(pp_joint[@varname(exported_cases_daily)]));
-## The DRC deaths and reported streams are per-vintage increment vectors
-## and confirmed is a single cumulative total; sum each draw's bins for
-## the cumulative-total posterior predictive. Export deaths are a per-day
-## series held the same way.
+## All DRC streams are now per-vintage increment vectors (deaths, reported,
+## confirmed positives, samples received); sum each draw's bins for the
+## cumulative-total posterior predictive. Export deaths are a per-day series
+## summed the same way.
 pp_deaths = vec(sum.(pp_joint[@varname(total_deaths)]));
 pp_cases = vec(sum.(pp_joint[@varname(reported_cases)]));
 pp_confirmed = vec(sum.(pp_joint[@varname(confirmed_cases)]));
-pp_tests = vec(Array(pp_joint[:tests_analysed]));
+pp_tests = vec(sum.(pp_joint[@varname(samples_received)]));
 pp_exports_deaths = vec(sum.(pp_joint[@varname(export_deaths_daily)]));
 
 joint_ppc_fig = plot_posterior_predictive(
@@ -2487,7 +2596,7 @@ joint_ppc_fig = plot_posterior_predictive(
     pp_exports_deaths = pp_exports_deaths,
     obs_exports_deaths = obs.exports_deaths,
     pp_tests = pp_tests,
-    obs_tests = obs.cumulative_tests_analysed,
+    obs_tests = obs.tests_received_history.values[end],
     pp_confirmed = pp_confirmed,
     obs_confirmed = obs.confirmed_cases);
 
@@ -2517,11 +2626,24 @@ joint_ppc_fig #hide
 #md # <details><summary>Per-vintage conditional one-step-ahead predictive</summary>
 #md # ```
 
+## Confirmed cases span the merged lab vintages (the 25 May stall folded
+## into 26 May); align the observed cumulative to the kept offsets.
+conf_keep = [i == 1 ||
+             obs.tests_analysed_history.values[i] >
+             obs.tests_analysed_history.values[i - 1]
+             for i in eachindex(obs.tests_analysed_history.values)]
+conf_cidx = [findfirst(==(off), obs.confirmed_case_history.offsets)
+             for off in obs.tests_analysed_history.offsets]
 vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
         observed = obs.reported_case_history.values, colour = :steelblue),
+    (; title = "Confirmed cases",
+        dates = obs.tests_analysed_history.dates[conf_keep],
+        replicates = collect(pp_joint[@varname(confirmed_cases)]),
+        observed = [obs.confirmed_case_history.values[i]
+                    for i in conf_cidx][conf_keep], colour = :seagreen),
     (; title = "Suspected deaths",
         dates = obs.death_history.dates,
         replicates = collect(pp_joint[@varname(total_deaths)]),
@@ -2576,7 +2698,9 @@ no_onward_fig #hide
 # ### One-week-ahead forecast
 #
 # The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$.
+# per stream by $T + 7$. Exports are dropped from this projection:
+# cross-border travel is unlikely to be continuing at its baseline rate,
+# so the forward travel rate the export forecast relies on no longer holds.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -2588,9 +2712,11 @@ forecast = forecast_reported(chn_joint;
     source_population = ITURI_POPULATION,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
-    obs_exports = EXPORTED_CASES,
     obs_confirmed = obs.confirmed_cases,
-    obs_tests = obs.cumulative_tests_analysed);
+    obs_tests = obs.tests_received_history.values[end],
+    obs_analysed = obs.cumulative_tests_analysed,
+    forecast_exports = false,
+    report_onset_offset = report_onset_offset(obs.as_of_date));
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
@@ -2680,7 +2806,7 @@ forecast_validation_table #hide
 # the new counts over the horizon, mirroring the one-week-ahead forecast.
 # Each panel shades the 90% predictive interval and draws the
 # later-observed count as a dashed rule, so coverage can be read off
-# directly. The confirmed and tests-analysed streams are absent here:
+# directly. The confirmed and samples-received streams are absent here:
 # the validation refits the original report snapshot, which predates any
 # laboratory data, so that fit carries no lab parameters to project
 # forward.
@@ -2971,7 +3097,7 @@ clock_sensitivity_r_fig #hide
 # five single-stream fits and the joint — to show what each stream buys
 # on its own and what the joint combination adds.
 # The single-stream fits cover the four count-based streams and the
-# laboratory pipeline (confirmed and tests-analysed fit together); the
+# laboratory pipeline (confirmed and samples-received fit together); the
 # joint additionally conditions on the export-detection-timing and
 # genetic seeding terms, which constrain $T$ rather than the size and
 # so are not fit in isolation.
@@ -2998,7 +3124,7 @@ streams_C_table #hide
 # top row and the joint fit on the bottom row, comparable column-wise
 # so it is easy to see what each per-stream fit constrains and how the
 # joint combination shifts the predictives. The confirmed and
-# tests-analysed columns come from the laboratory-pipeline fit, which
+# samples-received columns come from the laboratory-pipeline fit, which
 # conditions on both lab observations together.
 
 #md # ```@raw html
@@ -3015,12 +3141,16 @@ pp_exports_deaths_only = vec(sum.(predict(
     exports_deaths_only_model(fill(missing, length(obs.export_deaths_daily));
         pre_start_deaths = missing),
     chn_exports_deaths)[@varname(export_deaths_daily)]));
-## Laboratory-pipeline fit: predict both lab observations from the
-## confirmed-only posterior for the individual row of the grid.
+## Laboratory-pipeline fit: predict the confirmed Binomial and the
+## received-count NegBinomial from the confirmed-only posterior for the
+## individual row of the grid. Both are single-vintage vectors here.
 pp_confirmed_only_chn = predict(
-    confirmed_only_model(missing, missing), chn_confirmed);
-pp_confirmed_only = vec(Array(pp_confirmed_only_chn[:confirmed_cases]));
-pp_tests_only = vec(Array(pp_confirmed_only_chn[:tests_analysed]));
+    confirmed_only_model(missing, obs.cumulative_tests_analysed),
+    chn_confirmed);
+pp_confirmed_only = vec(sum.(
+    pp_confirmed_only_chn[@varname(confirmed_cases)]));
+pp_tests_only = vec(sum.(
+    pp_confirmed_only_chn[@varname(samples_received)]));
 
 ppc_grid_fig = plot_posterior_predictive_grid(;
     individual = (; exports = pp_exports_only,
@@ -3039,7 +3169,7 @@ ppc_grid_fig = plot_posterior_predictive_grid(;
         exports_deaths = obs.exports_deaths,
         deaths = obs.total_deaths,
         cases = obs.reported_cases,
-        tests = obs.cumulative_tests_analysed,
+        tests = obs.tests_received_history.values[end],
         confirmed = obs.confirmed_cases)
 );
 

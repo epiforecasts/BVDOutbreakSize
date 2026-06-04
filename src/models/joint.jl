@@ -121,19 +121,30 @@ on the laboratory pipeline alone. The single cumulative confirmed count
 (and optional `tests_analysed`) is wrapped into the length-1 per-vintage
 form at the cut-off, so it reduces to the cumulative laboratory
 likelihood. See [`confirmed_cases_model`](@ref).
+
+`tests_received` (cumulative `Cumul échantillons reçus` at the cut-off)
+conditions the forwarded fraction `τ_forward` via the received-count
+NegBinomial. Pass it when fitting: leaving it `missing` turns the
+received count into a sampled discrete latent, which HMC / NUTS cannot
+handle (the gradient-based sampler rejects discrete unknowns). The
+`missing` default is for predictive generation, where the received count
+is drawn from the posterior rather than conditioned on.
 """
 @model function confirmed_only_model(
         confirmed_cases::Union{Missing, Integer},
-        tests_analysed::Union{Missing, Integer} = missing;
+        tests_analysed::Union{Missing, Integer} = missing,
+        tests_received::Union{Missing, Integer} = missing;
         growth = exponential_growth_model(),
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
-        lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
-        incubation = incubation_model())
+        test_specificity = test_specificity_model(),
+        test_selection = test_selection_model(),
+        incubation = incubation_model(),
+        report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
     dispersion_state ~ to_submodel(dispersion, false)
     asc_state ~ to_submodel(ascertainment, false)
@@ -142,17 +153,24 @@ likelihood. See [`confirmed_cases_model`](@ref).
     incubation_state ~ to_submodel(incubation, false)
     k = dispersion_state.k
     λ_bg = test_positivity_state.λ_bg
-    τ_test = test_positivity_state.τ_test
     f_rep = report_state.dist
     T = growth_state.T
     os = onset_rescale(incubation_state.dist, growth_state.r)
 
     confirmed_vec = Union{Missing, Int}[confirmed_cases]
+    ## Single-vintage analysed denominator for the confirmed Binomial: the
+    ## cumulative tests-analysed count at the cut-off.
+    analysed_vec = Union{Missing, Int}[tests_analysed]
+    received_vec = Union{Missing, Int}[tests_received]
     confirmed_state ~ to_submodel(
-        confirmed(confirmed_vec, tests_analysed, growth_state, k,
-            [asc_state.p_drc], λ_bg, τ_test, f_rep, [T], T;
-            lab_delay = lab_delay,
+        confirmed(confirmed_vec, analysed_vec, received_vec, tests_analysed,
+            growth_state, k,
+            [asc_state.p_drc], λ_bg, test_positivity_state.τ_forward,
+            f_rep, [T], T;
             test_sensitivity = test_sensitivity,
+            test_specificity = test_specificity,
+            test_selection = test_selection,
+            report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
     onset_fraction := os
@@ -238,17 +256,49 @@ DRC ascertainment is a single fixed fraction `p_drc` (the pooled scalar
 from [`pooled_ascertainment_model`](@ref)) applied to every reported and
 confirmed vintage bin, shared between the two streams.
 
+`samples_analysed` is the per-vintage analysed-count vector aligned with
+`confirmed_offsets`; each confirmed vintage is observed as
+`C_v ~ Binomial(A_v, p_pos_v)` conditional on its analysed denominator
+`A_v` (data, not modelled), which removes the multiplicative ridge of the
+old NegBinomial-increment confirmed likelihood (#163). When left empty it
+defaults to the cumulative `tests_analysed` for every vintage, recovering
+the single-total denominator.
+
 `tests_analysed` is a single cumulative testing-volume count observed at
 its own elapsed time `tests_offset` before the cut-off, so it stays
-robust if lab reporting lags or stops before the case cut-off. Per-test
-positivity is exposed as a derived quantity rather than re-observing the
-confirmed counts conditional on tests. Pass `tests_analysed = missing`
-to drop it.
+robust if lab reporting lags or stops before the case cut-off. It also
+supplies the binomial denominator for any `missing` `samples_analysed`
+entry. Per-test positivity is exposed as a derived quantity. Pass
+`tests_analysed = missing` to drop the tested-volume NegBinomial.
+
+`confirmed_analysed_impute` toggles the imputed-denominator experiment:
+when set to the [`analysed_impute_model`](@ref) submodel, confirmed
+vintages whose analysed count is `missing` (the early 18-22 May and late
+29-31 May lab windows, where no national analysed total was published)
+get a TIGHT partially-pooled log-random-walk denominator anchored to the
+observed 23-28 May increments. This funnels and does not converge (see
+[`analysed_impute_model`](@ref)), so it is off by default; the default
+`nothing` keeps the model on the 23-28 May observed-denominator vintages.
+
+`samples_received` is the per-vintage cumulative received-count vector
+(`Cumul échantillons reçus`). When supplied it conditions the forwarded
+fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
+with `N_susp,v` the cumulative suspect backlog (BVD-suspected plus
+background) the confirmed model already uses for the positivity baseline
+(see [`confirmed_cases_model`](@ref)). This pins `τ_forward` directly from
+received-versus-suspected; left empty it drops the received likelihood.
 
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
 [`deaths_ascertainment_model`](@ref)); pass `p_deaths_fixed = 1.0` to
 disable the factor entirely.
+
+`report_onset_offset` sets the testing-onset clock for the severe-first
+BVD-share decay: the tested BVD fraction relaxes from `q0` toward the
+count-implied baseline over elapsed time since `t_report = T − offset`
+(see [`confirmed_cases_model`](@ref) and [`report_onset_offset`](@ref)).
+Pass `report_onset_offset(as_of_date)` (8 days for the 26 May cut-off);
+the default `nothing` anchors the clock at seeding (`t_report = 0`).
 
 The Uganda exports streams default to the explicit infection→detection
 delay mechanism ([`exports_delay_model`](@ref),
@@ -307,6 +357,8 @@ export infection→detection delay rather than learning it.
         death_offsets::AbstractVector = reported_offsets,
         confirmed_cases::AbstractVector = Union{Missing, Int}[],
         confirmed_offsets::AbstractVector = reported_offsets,
+        samples_analysed::AbstractVector = Union{Missing, Int}[],
+        samples_received::AbstractVector = Union{Missing, Int}[],
         tests_analysed::Union{Missing, Integer} = missing,
         tests_offset::Real = 0,
         exported_cases_daily::AbstractVector = Union{Missing, Int}[],
@@ -320,19 +372,27 @@ export infection→detection delay rather than learning it.
         exports_deaths_model = exports_deaths_delay_model,
         exports_detection_timing = exports_detection_timing_delay_model,
         dispersion = surveillance_dispersion_model(),
+        reported_dispersion = nothing,
         ascertainment = pooled_ascertainment_model(),
         deaths_ascertainment = deaths_ascertainment_model(),
         p_deaths_fixed::Union{Nothing, Real} = nothing,
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
-        lab_delay = lab_delay_model(),
         test_sensitivity = test_sensitivity_model(),
+        test_specificity = test_specificity_model(),
+        test_selection = test_selection_model(),
+        confirmed_overdispersion = nothing,
+        confirmed_q_random_effect = nothing,
+        confirmed_analysed_impute = nothing,
+        confirmed_selection_clock::Symbol = :time,
+        confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
         genetic = nothing,
         source_population::Real = ITURI_POPULATION,
         pre_start_deaths::Union{Missing, Integer} = 0,
         pre_detection_exports::Union{Missing, Integer} = 0,
-        first_export_detection_delta::Union{Missing, Real} = missing)
+        first_export_detection_delta::Union{Missing, Real} = missing,
+        report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
     if genetic !== nothing
         genetic_state ~ to_submodel(genetic(growth_state.T), false)
@@ -370,24 +430,58 @@ export infection→detection delay rather than learning it.
     n_conf = length(confirmed_offsets)
     p_drc_per_bin = fill(asc_state.p_drc, max(n_rep, n_conf))
 
+    ## Optional separate dispersion for the suspected (reported) stream, so
+    ## the reported likelihood can be loosened (down-weighted) without
+    ## touching the deaths / received dispersion `k`. When `nothing` the
+    ## reported stream shares `k` (the original behaviour).
+    if reported_dispersion === nothing
+        k_rep = k
+    else
+        reported_dispersion_state ~ to_submodel(reported_dispersion, false)
+        k_rep = reported_dispersion_state.k
+    end
+
     reported_edges = [T - δ for δ in reported_offsets]
     reported_state ~ to_submodel(
-        reported_cases_submodel(reported_cases, growth_state, k,
+        reported_cases_submodel(reported_cases, growth_state, k_rep,
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
             test_positivity = test_positivity,
+            report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
     if !isempty(confirmed_cases)
         confirmed_edges = [T - δ for δ in confirmed_offsets]
         tests_edge = T - tests_offset
+        ## Per-vintage analysed denominators for the confirmed Binomial.
+        ## Default to the cumulative `tests_analysed` for every vintage
+        ## when no per-vintage denominators are supplied, so a single
+        ## confirmed total still conditions on its analysed count.
+        analysed_vec = isempty(samples_analysed) ?
+                       fill(tests_analysed, n_conf) :
+                       samples_analysed
+        ## Per-vintage received counts (cumulative `Cumul échantillons
+        ## reçus`). When supplied they condition the forwarded fraction
+        ## `τ_forward` via a NegBinomial on the suspect backlog; an empty
+        ## vector drops the received likelihood.
+        received_vec = isempty(samples_received) ?
+                       fill(missing, n_conf) : samples_received
         confirmed_state ~ to_submodel(
-            confirmed(confirmed_cases, tests_analysed, growth_state, k,
+            confirmed(confirmed_cases, analysed_vec, received_vec,
+                tests_analysed, growth_state, k,
                 p_drc_per_bin[1:n_conf], reported_state.λ_bg,
-                reported_state.τ_test, reported_state.report_delay_dist,
+                reported_state.τ_forward,
+                reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;
-                lab_delay = lab_delay,
                 test_sensitivity = test_sensitivity,
+                test_specificity = test_specificity,
+                test_selection = test_selection,
+                overdispersion = confirmed_overdispersion,
+                q_random_effect = confirmed_q_random_effect,
+                analysed_impute = confirmed_analysed_impute,
+                selection_clock = confirmed_selection_clock,
+                volume_scale = confirmed_volume_scale,
+                report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
     end
 

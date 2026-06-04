@@ -37,9 +37,20 @@
         θ_rep ~ truncated(Normal(3.0, 0.3); lower = 0.2)
         λ_bg ~ truncated(Normal(0.0, 10.0); lower = 0)
         if include_lab
-            α_lab ~ truncated(Normal(2.0, 0.5); lower = 0.5)
-            θ_lab ~ truncated(Normal(1.5, 0.3); lower = 0.2)
+            ## Severe-first confirmed-stream draws the forecast reads:
+            ## sensitivity, specificity, the q-curve shape (q0, qinf,
+            ## decay) and the forwarded fraction.
             s_test ~ Beta(15.0, 2.0)
+            spec_test ~ Beta(50.0, 1.5)
+            q0 ~ Beta(20.0, 1.5)
+            qinf ~ Beta(6.0, 6.0)
+            decay_scale ~ truncated(Normal(0.0, 10.0); lower = 0)
+            τ_forward ~ Beta(5.0, 2.0)
+            ## Receipt-delay Gamma and the cut-off analysis capacity the
+            ## capacity-limited confirmed forecast reads.
+            α_recv ~ truncated(Normal(2.0, 1.0); lower = 0.1)
+            θ_recv ~ truncated(Normal(1.5, 0.75); lower = 0.1)
+            capacity_cutoff ~ truncated(Normal(150.0, 30.0); lower = 1.0)
         end
         return nothing
     end
@@ -81,6 +92,26 @@ end
     @test !(:confirmed_cum in propertynames(fc))
 end
 
+@testitem "forecast_reported drops exports when forecast_exports=false" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_reported, forecast_table, plot_forecast
+
+    chn=_forecast_chain(200)
+    fc=forecast_reported(chn;
+        horizon = 7, daily_travellers = 1871,
+        source_population = 4_392_200,
+        obs_cases = 514, obs_deaths = 136,
+        forecast_exports = false)
+
+    @test !(:exports_cum in propertynames(fc))
+    @test !(:exports_new in propertynames(fc))
+    @test :cases_cum in propertynames(fc)
+    ## The table and plot must not assume the export columns.
+    tbl=forecast_table(fc)
+    @test !any(occursin.("Uganda", string.(tbl[!, 1])))
+    @test plot_forecast(fc) !== nothing
+end
+
 @testitem "forecast_reported works on the onset-to-detection delay chain" tags=[:slow] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame
     using BVDOutbreakSize: forecast_reported
@@ -112,7 +143,7 @@ end
         horizon = 7, daily_travellers = 1871,
         source_population = 4_392_200,
         obs_cases = 514, obs_deaths = 136, obs_exports = 2,
-        obs_confirmed = 33)
+        obs_confirmed = 33, obs_analysed = 211)
 
     @test :confirmed_cum in propertynames(fc)
     @test :confirmed_new in propertynames(fc)
@@ -188,28 +219,38 @@ end
     Th = 107.0
     α, θ, CFR = 4.3, 2.6, 0.3
     α_rep, θ_rep, p_drc, λ_bg = 4.0, 3.0, 0.2, 1.5
-    α_lab, θ_lab, s_test, τ_test = 2.0, 1.5, 0.9, 0.6
+    s_test, spec_test = 0.9, 0.97
+    q0, qinf, decay_scale, τ_forward = 0.95, 0.4, 5.0, 0.6
+    t_report = Th - 8.0
     os = onset_rescale(Gamma(3.0, 2.1), r)
 
-    ## Deaths and confirmed are purely BVD-driven, so the whole mean
-    ## scales by onset_fraction.
+    ## Deaths are purely BVD-driven, so the whole mean scales by
+    ## onset_fraction.
     d1 = B._forecast_deaths_mean(r, Th, α, θ, CFR; onset_fraction = os)
     d0 = B._forecast_deaths_mean(r, Th, α, θ, CFR)
     @test d1 ≈ os * d0
 
-    c1 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test; onset_fraction = os)
-    c0 = B._forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test)
-    @test c1 ≈ os * c0
+    ## Received backlog (receipt-delayed), positivity and the
+    ## capacity-limited analysed increment are positive and finite; the
+    ## lab analyses at most the available backlog.
+    f_receipt = Gamma(2.0, 1.5)
+    recv = B._forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+        f_receipt; onset_fraction = os)
+    p_pos = B._forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
+        decay_scale)
+    Δa = B._forecast_analysed_increment(recv, 40.0, 50.0, 7.0)
+    @test recv > 0 && isfinite(recv)
+    @test 0 < p_pos < 1
+    @test 0 < Δa <= recv
 
-    ## Reported cases scale only the BVD part; the non-BVD background
+    ## Reported cases scale only the BVD part; the constant background
     ## λ_bg·Th is unscaled, so the scaled mean is strictly above os·mean.
     rc1 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
         onset_fraction = os)
     rc0 = B._forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg)
-    bvd0 = rc0 - λ_bg * Th
-    @test rc1 ≈ os * bvd0 + λ_bg * Th
+    bg_cum = λ_bg * Th
+    bvd0 = rc0 - bg_cum
+    @test rc1 ≈ os * bvd0 + bg_cum
     @test rc1 > os * rc0
 
     ## Default onset_fraction = 1 recovers the pre-infection-layer mean.

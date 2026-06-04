@@ -55,10 +55,15 @@ each push to `main` also republishes the rendered analysis and the
   to the cumulative likelihood, recovering the McCabe et al.
   configuration. Each stream carries its own vintage offsets so a lagging
   stream is not assumed to run to the cut-off.
-- Fit the laboratory-confirmed cases as a single cumulative total with
-  per-test positivity a derived quantity: the confirmed counts are small
-  and the lab-processing delays behind them change over time in ways that
-  are difficult to model, so only the cut-off total is used.
+- Fit the laboratory-confirmed cases as a per-vintage queue, like the
+  reported and deaths streams. New positives in each window are a Binomial
+  on the samples newly analysed (`ΔC_v ~ Binomial(ΔA_v, p_pos)`), with the
+  25 May testing stall merged into the next window. Specimens enter the
+  received queue after a report-to-receipt delay (`lab_receipt_delay_model`,
+  a prior), and the analysed throughput is capacity-limited: a per-window
+  log random walk on daily capacity (`lab_capacity_model`, centred on the
+  external ~150/day figure) processes `1 − exp(−κ·Δt/backlog)` of the
+  available received backlog.
 - Added `confirmed_only_model`, a single-stream composer that fits the
   laboratory pipeline in isolation for the per-stream comparison.
 - Added `forecast_vs_truth_trajectory`: scores the retrospective forecast

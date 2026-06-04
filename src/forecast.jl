@@ -16,52 +16,57 @@ function _forecast_deaths_mean(r, Th, α, θ, CFR;
 end
 
 # Reported (suspected) cases at horizon `Th`: the truth-anchored BVD
-# contribution plus the non-BVD background. The BVD contribution reuses
-# `delay_convolution` as a delay-convolved cumulative integrator at unit
-# ascertainment to compute `∫₀^{Th} exp(r·s) · f_rep(Th-s) ds`, scaled by
-# `onset_fraction` (the incubation mgf) since the latent trajectory is
-# infections; the background contribution `λ_bg · Th` is non-BVD and
-# unscaled.
+# contribution plus the constant-rate non-BVD background. The BVD
+# contribution reuses `delay_convolution` as a delay-convolved cumulative
+# integrator at unit ascertainment to compute
+# `∫₀^{Th} exp(r·s) · f_rep(Th-s) ds`, scaled by `onset_fraction` (the
+# incubation mgf) since the latent trajectory is infections; the background
+# contribution is the constant cumulative `μ_bg(Th) = λ_bg · Th`, non-BVD
+# and unscaled.
 function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
         onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     conv = delay_convolution(one(p_drc), r, Th, Gamma(α_rep, θ_rep); alg)
-    return onset_fraction * p_drc * conv + λ_bg * Th
+    return onset_fraction * p_drc * conv + max(λ_bg * Th, zero(λ_bg))
 end
 
-function _forecast_confirmed_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, s_test, τ_test; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
-    d_rep = Gamma(α_rep, θ_rep)
-    d_lab = Gamma(α_lab, θ_lab)
-    ## Inner BVD-reported trajectory in closed form; only the outer lab
-    ## convolution is a quadrature. Omitting `alg` selects the Gamma
-    ## analytic `delay_convolution` method.
-    bvd_reported_at = let r = r, p_drc = p_drc, d_rep = d_rep
-        u -> p_drc * delay_convolution(one(p_drc), r, u, d_rep)
+# Cumulative samples received at horizon `Th`: the forwarded fraction
+# `τ_forward` of the suspect backlog `N_susp = μ_BVD + μ_bg` convolved with
+# the receipt-delay kernel `f_receipt` (specimens reach the lab after a
+# transport delay), matching the received stream of `confirmed_cases_model`.
+function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+        f_receipt; onset_fraction = 1.0)
+    f_rep = Gamma(α_rep, θ_rep)
+    N_susp = let r = r, f_rep = f_rep, p_drc = p_drc, onset_fraction = onset_fraction,
+        λ_bg = λ_bg
+
+        u -> u <= zero(u) ? zero(u) :
+             onset_fraction * p_drc *
+             delay_convolution(one(p_drc), r, u, f_rep) +
+             max(λ_bg * u, zero(λ_bg))
     end
-    return onset_fraction * s_test * τ_test *
-           delay_convolution(bvd_reported_at, Th, d_lab; alg)
+    N_recv = delay_convolution(N_susp, Th, f_receipt)
+    return τ_forward * max(N_recv, zero(N_recv))
 end
 
-# Cumulative tests analysed at horizon `Th`: τ_test gates both the BVD
-# contribution (lab-completed BVD samples, scaled by `onset_fraction`) and
-# the non-BVD background (constant arrival rate λ_bg convolved against
-# F_lab, unscaled).
-function _forecast_tests_mean(r, Th, α_rep, θ_rep, α_lab, θ_lab,
-        p_drc, λ_bg, τ_test; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
-    d_rep = Gamma(α_rep, θ_rep)
-    d_lab = Gamma(α_lab, θ_lab)
-    ## Inner BVD-reported trajectory in closed form; only the outer lab
-    ## convolution is a quadrature. Omitting `alg` selects the Gamma
-    ## analytic `delay_convolution` method.
-    bvd_reported_at = let r = r, p_drc = p_drc, d_rep = d_rep
-        u -> p_drc * delay_convolution(one(p_drc), r, u, d_rep)
-    end
-    bvd_tested = onset_fraction *
-                 delay_convolution(bvd_reported_at, Th, d_lab; alg)
-    ## Background tested volume at `Th`: ∫₀^Th F_lab(Th - u) du =
-    ## ∫₀^Th F_lab(v) dv, the closed form `_gamma_cdf_integral`.
-    bg_tested = λ_bg * _gamma_cdf_integral(α_lab, θ_lab, Th)
-    return τ_test * (bvd_tested + bg_tested)
+# Severe-first per-test positivity at horizon `Th`:
+# `p_pos = s·q + (1−spec)·(1−q)`, with `q = qinf + (q0−qinf)·exp(−c/scale)`
+# the tested BVD share at elapsed testing time `c = max(Th − t_report, 0)`.
+function _forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
+        decay_scale)
+    c = max(Th - t_report, zero(Th))
+    q = severe_first_share(q0, qinf, c, decay_scale)
+    return clamp(s_test * q + (one(q) - spec_test) * (one(q) - q),
+        zero(q), one(q))
+end
+
+# Capacity-limited analysed throughput over the horizon: the lab processes
+# a fraction `1 − exp(−κ·h/backlog)` of the received backlog not yet
+# analysed (`backlog = received − analysed_cutoff`), with daily capacity `κ`
+# held at its cut-off value over the `h`-day horizon.
+function _forecast_analysed_increment(received, analysed_cutoff, κ, horizon)
+    backlog = max(received - analysed_cutoff, eps(typeof(received)))
+    cap = max(κ * horizon, zero(received))
+    return backlog * (one(received) - exp(-cap / backlog))
 end
 
 function _nb_rand(rng, k, μ)
@@ -82,18 +87,29 @@ per draw and columns:
   coming week (`*_cum` minus the corresponding observed count at `T`,
   floored at zero).
 - `:confirmed_cum`, `:confirmed_new` — laboratory-confirmed counterparts
-  when the chain carries the lab-turnaround delay (`:α_lab`, `:θ_lab`)
-  and `obs_confirmed` is supplied. Otherwise these columns are absent.
+  when the chain carries the severe-first confirmed-stream parameters
+  (`:s_test`, `:spec_test`, `:q0`, `:qinf`, `:decay_scale`, `:τ_forward`,
+  `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
+  `obs_analysed` are supplied. Otherwise these columns are absent.
 
 DRC reported cases follow the additive expectation
-`p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg · (T+h)`, with
-`f_rep = Gamma(α_rep, θ_rep)` for the BVD-driven contribution and
-`λ_bg` the per-day non-BVD background. Laboratory-confirmed cases
-follow `s_test · p_drc · ∫₀^{T+h} exp(r·s) · f_conf(T+h-s) ds`, with
-`f_conf` the moment-matched Gamma of `f_rep ∗ f_lab` and `s_test` the
-PCR sensitivity. Exports use `p_uganda · q` with
-`q = daily_travellers / source_population`. Assumes growth continues
+`p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg·(T+h)`, with
+`f_rep = Gamma(α_rep, θ_rep)` for the BVD-driven contribution and the
+constant-rate non-BVD background. Laboratory-confirmed cases continue the
+queue of [`confirmed_cases_model`](@ref): the received backlog
+(`τ_forward · N_susp` convolved with the receipt delay) is analysed at the
+cut-off capacity `κ` over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`,
+and the new positives are `ΔA` times the severe-first positivity, added to
+the observed cumulative confirmed. Exports use `p_uganda · q` with
+`q = daily_travellers / source_population`; pass `forecast_exports = false`
+to drop the export columns (e.g. when cross-border travel is disrupted so
+the forward travel rate no longer holds). Assumes growth continues
 unchanged over the horizon (no interventions, no saturation).
+
+`report_onset_offset` sets the severe-first testing-onset clock
+(`t_report = T − report_onset_offset`), matching the fit; pass the same
+value used in [`bvd_joint`](@ref) (see [`report_onset_offset`](@ref)).
+The default `nothing` keeps the seeding-anchored clock (`t_report = 0`).
 """
 function forecast_reported(chn;
         horizon::Real = 7,
@@ -101,10 +117,13 @@ function forecast_reported(chn;
         source_population::Real,
         obs_cases::Real,
         obs_deaths::Real,
-        obs_exports::Real,
+        obs_exports::Union{Real, Missing} = missing,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_tests::Union{Real, Missing} = missing,
+        obs_analysed::Union{Real, Missing} = missing,
+        forecast_exports::Bool = true,
         seed::Integer = 20260520,
+        report_onset_offset::Union{Nothing, Real} = nothing,
         alg = DEATH_INTEGRAL_ALG)
     r = _draws(chn, :r)
     T = _draws(chn, :T)
@@ -123,6 +142,7 @@ function forecast_reported(chn;
     k = _draws(chn, :k)
     α_rep = _draws(chn, :α_rep)
     θ_rep = _draws(chn, :θ_rep)
+    ## Constant non-BVD background rate.
     λ_bg = _draws(chn, :λ_bg)
     ## Incubation draws map the latent infection trajectory onto onsets
     ## (the `onset_fraction = mgf(incubation, −r)` of the observation
@@ -131,20 +151,22 @@ function forecast_reported(chn;
     has_incubation = all(haskey_chain(chn, n) for n in (:α_inc, :θ_inc))
     α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
     θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
-    ## Lab-turnaround and PCR sensitivity draws live on the joint chain
-    ## only; their absence drops the confirmed-cases columns.
-    has_lab = all(haskey_chain(chn, n) for n in (:α_lab, :θ_lab, :s_test)) &&
-              obs_confirmed !== missing
-    α_lab = has_lab ? _draws(chn, :α_lab) : nothing
-    θ_lab = has_lab ? _draws(chn, :θ_lab) : nothing
+    ## Severe-first confirmed-stream draws (PCR sensitivity / specificity and
+    ## the q-curve shape) live on the joint chain only; their absence drops
+    ## the confirmed-cases columns.
+    has_lab = all(haskey_chain(chn, n)
+              for n in (:s_test, :spec_test, :q0, :qinf, :decay_scale,
+                  :τ_forward, :α_recv, :θ_recv, :capacity_cutoff)) &&
+              obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
-    ## τ_test is optional on the chain: when absent (older fits or
-    ## synthetic chains predating the testing-rate extension) fall back
-    ## to τ = 1, matching the previous "all suspected get tested"
-    ## assumption.
-    τ_test_draws = (has_lab && haskey_chain(chn, :τ_test)) ?
-                   _draws(chn, :τ_test) :
-                   (has_lab ? ones(length(r)) : nothing)
+    spec_test = has_lab ? _draws(chn, :spec_test) : nothing
+    q0 = has_lab ? _draws(chn, :q0) : nothing
+    qinf = has_lab ? _draws(chn, :qinf) : nothing
+    decay_scale = has_lab ? _draws(chn, :decay_scale) : nothing
+    τ_forward = has_lab ? _draws(chn, :τ_forward) : nothing
+    α_recv = has_lab ? _draws(chn, :α_recv) : nothing
+    θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
+    capacity = has_lab ? _draws(chn, :capacity_cutoff) : nothing
 
     has_tests = has_lab && obs_tests !== missing
     rng = MersenneTwister(seed)
@@ -152,7 +174,7 @@ function forecast_reported(chn;
     q = daily_travellers / source_population
     cases_cum = Vector{Int}(undef, n)
     deaths_cum = Vector{Int}(undef, n)
-    exports_cum = Vector{Int}(undef, n)
+    exports_cum = forecast_exports ? Vector{Int}(undef, n) : nothing
     confirmed_cum = has_lab ? Vector{Int}(undef, n) : nothing
     tests_cum = has_tests ? Vector{Int}(undef, n) : nothing
 
@@ -161,7 +183,9 @@ function forecast_reported(chn;
         os = has_incubation ?
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
         ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
-        ## f_rep(T+h-s) ds + λ_bg · (T+h).
+        ## f_rep(T+h-s) ds + λ_bg·(T+h) (constant-rate background).
+        t_report_i = report_onset_offset === nothing ? zero(T[i]) :
+                     max(T[i] - report_onset_offset, zero(T[i]))
         μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
             pr[i], λ_bg[i]; onset_fraction = os, alg)
         cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
@@ -174,28 +198,40 @@ function forecast_reported(chn;
         ## mechanism: the at-risk export window runs from infection, so
         ## the detection delay is incubation ⊕ onset-to-report (combined
         ## to one Gamma); the incubation period lives in the delay, so the
-        ## person-time integral is not separately rescaled by `os`.
-        if has_window
-            lo = max(Th - w[i], zero(Th))
-            μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) / r[i]
-        else
-            f_det = has_incubation ?
-                    combined_delay(Gamma(α_inc[i], θ_inc[i]),
-                Gamma(α_rep[i], θ_rep[i])) : Gamma(α_rep[i], θ_rep[i])
-            μ_exports = expected_exports_delay(r[i], pu[i], q, Th, f_det;
-                alg = alg)
+        ## person-time integral is not separately rescaled by `os`. Skipped
+        ## when `forecast_exports = false` (e.g. cross-border travel
+        ## disrupted, so the forward travel rate no longer holds).
+        if forecast_exports
+            if has_window
+                lo = max(Th - w[i], zero(Th))
+                μ_exports = pu[i] * q * (exp(r[i] * Th) - exp(r[i] * lo)) /
+                            r[i]
+            else
+                f_det = has_incubation ?
+                        combined_delay(Gamma(α_inc[i], θ_inc[i]),
+                    Gamma(α_rep[i], θ_rep[i])) : Gamma(α_rep[i], θ_rep[i])
+                μ_exports = expected_exports_delay(r[i], pu[i], q, Th, f_det;
+                    alg = alg)
+            end
+            exports_cum[i] = rand(rng,
+                Poisson(max(μ_exports, eps(μ_exports))))
         end
-        exports_cum[i] = rand(rng, Poisson(max(μ_exports, eps(μ_exports))))
         if has_lab
-            μ_confirmed = _forecast_confirmed_mean(r[i], Th,
-                α_rep[i], θ_rep[i], α_lab[i], θ_lab[i], pr[i],
-                s_test[i], τ_test_draws[i]; onset_fraction = os, alg)
-            confirmed_cum[i] = _nb_rand(rng, k[i], μ_confirmed)
+            ## Received backlog (receipt-delayed) and the capacity-limited
+            ## analysed increment over the horizon; new confirmed positives
+            ## are the horizon positivity times that increment, added to the
+            ## observed cumulative confirmed at the cut-off.
+            f_receipt = Gamma(α_recv[i], θ_recv[i])
+            received = _forecast_received(r[i], Th, α_rep[i], θ_rep[i],
+                pr[i], λ_bg[i], τ_forward[i], f_receipt; onset_fraction = os)
+            Δanalysed = _forecast_analysed_increment(received, obs_analysed,
+                capacity[i], horizon)
+            p_pos = _forecast_positivity(Th, t_report_i, s_test[i],
+                spec_test[i], q0[i], qinf[i], decay_scale[i])
+            confirmed_cum[i] = round(Int, obs_confirmed) +
+                               _nb_rand(rng, k[i], p_pos * Δanalysed)
             if has_tests
-                μ_tests = _forecast_tests_mean(r[i], Th,
-                    α_rep[i], θ_rep[i], α_lab[i], θ_lab[i],
-                    pr[i], λ_bg[i], τ_test_draws[i]; onset_fraction = os, alg)
-                tests_cum[i] = _nb_rand(rng, k[i], μ_tests)
+                tests_cum[i] = _nb_rand(rng, k[i], received)
             end
         end
     end
@@ -204,11 +240,13 @@ function forecast_reported(chn;
     df = DataFrame(
         cases_cum = cases_cum,
         deaths_cum = deaths_cum,
-        exports_cum = exports_cum,
         cases_new = _new(cases_cum, obs_cases),
-        deaths_new = _new(deaths_cum, obs_deaths),
-        exports_new = _new(exports_cum, obs_exports)
+        deaths_new = _new(deaths_cum, obs_deaths)
     )
+    if forecast_exports
+        df.exports_cum = exports_cum
+        df.exports_new = _new(exports_cum, obs_exports)
+    end
     if has_lab
         df.confirmed_cum = confirmed_cum
         df.confirmed_new = _new(confirmed_cum, obs_confirmed)
@@ -252,8 +290,9 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
     rows = NamedTuple[]
     streams = [
         ("DRC reported cases", :cases_cum, :cases_new),
-        ("DRC deaths", :deaths_cum, :deaths_new),
-        ("Uganda exports", :exports_cum, :exports_new)]
+        ("DRC deaths", :deaths_cum, :deaths_new)]
+    :exports_cum in propertynames(fc) &&
+        push!(streams, ("Uganda exports", :exports_cum, :exports_new))
     :tests_cum in propertynames(fc) &&
         push!(streams, ("DRC tests analysed", :tests_cum, :tests_new))
     :confirmed_cum in propertynames(fc) &&
@@ -340,6 +379,7 @@ function forecast_vs_truth_trajectory(chn;
         baseline_cases::Real = 0,
         baseline_deaths::Real = 0,
         seed::Integer = 20260520,
+        report_onset_offset::Union{Nothing, Real} = nothing,
         digits::Integer = 0,
         alg = DEATH_INTEGRAL_ALG)
     length(dates) == length(cases) == length(deaths) ||
@@ -354,7 +394,7 @@ function forecast_vs_truth_trajectory(chn;
         fc = forecast_reported(chn; horizon = h,
             daily_travellers, source_population,
             obs_cases = baseline_cases, obs_deaths = baseline_deaths,
-            obs_exports = 0, seed, alg)
+            obs_exports = 0, seed, report_onset_offset, alg)
         for (label,
             col,
             obs) in (

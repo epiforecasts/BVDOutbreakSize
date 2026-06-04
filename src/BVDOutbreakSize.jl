@@ -18,8 +18,8 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Normal, LogNormal, Beta,
-                     truncated, censored
+                     NegativeBinomial, Binomial, BetaBinomial, Normal,
+                     LogNormal, Beta, truncated, censored
 using StatsFuns: logit, logistic
 import FastGaussQuadrature
 import CairoMakie
@@ -31,7 +31,7 @@ using CairoMakie: Figure, Axis, hist!, density!, vlines!, vspan!,
 export REPORT_SCENARIOS,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD,
-       load_observations, m_prior_centre,
+       load_observations, m_prior_centre, report_onset_offset,
        summary_table, posterior_summary,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
@@ -56,8 +56,12 @@ export REPORT_SCENARIOS,
        plot_forecast_vs_truth,
 # prior submodels
        exponential_growth_model, genetic_seeding_model, delay_model,
-       report_delay_model, lab_delay_model, test_sensitivity_model,
-       test_positivity_model,
+       report_delay_model, test_sensitivity_model,
+       test_positivity_model, test_specificity_model, test_selection_model,
+       confirmed_overdispersion_model, confirmed_q_re_model,
+       analysed_impute_model,
+       reported_dispersion_model,
+       lab_receipt_delay_model, lab_capacity_model,
        incubation_model,
        cfr_model, detection_window_model, traveller_volume_model,
        surveillance_dispersion_model, pooled_ascertainment_model,
