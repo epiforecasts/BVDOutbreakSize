@@ -280,6 +280,20 @@ observed 23-28 May increments. This funnels and does not converge (see
 [`analysed_impute_model`](@ref)), so it is off by default; the default
 `nothing` keeps the model on the 23-28 May observed-denominator vintages.
 
+`confirmed_capacity_impute` is the alternative, MECHANISTIC imputation for
+the same missing windows. Rather than a free latent per vintage, the
+missing analysed denominator is the capacity-times-backlog throughput the
+confirmed model already runs for the observed windows,
+`ΔA_v = backlog·(1 − exp(−κ_v·Δt_v/backlog))`, with `backlog =
+τ_forward·N_recv,v − analysed_cum`. The analysis-capacity random walk `κ`
+(see [`lab_capacity_model`](@ref)) is fitted to the OBSERVED 23-28 May
+analysed Poisson and then extrapolated forward / backward to predict the
+unpublished denominators, with the received queue `N_recv` driven by the
+suspect-case trajectory. The denominator therefore introduces no new
+sampled dimension and is pinned by the lab process and the suspect stream,
+not a coordinate that can trade against the positivity `q`. Off by default;
+set `true` to fit all confirmed vintages.
+
 `samples_received` is the per-vintage cumulative received-count vector
 (`Cumul échantillons reçus`). When supplied it conditions the forwarded
 fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
@@ -384,6 +398,7 @@ export infection→detection delay rather than learning it.
         confirmed_overdispersion = nothing,
         confirmed_q_random_effect = nothing,
         confirmed_analysed_impute = nothing,
+        confirmed_capacity_impute::Bool = false,
         confirmed_selection_clock::Symbol = :time,
         confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
@@ -479,6 +494,7 @@ export infection→detection delay rather than learning it.
                 overdispersion = confirmed_overdispersion,
                 q_random_effect = confirmed_q_random_effect,
                 analysed_impute = confirmed_analysed_impute,
+                capacity_impute = confirmed_capacity_impute,
                 selection_clock = confirmed_selection_clock,
                 volume_scale = confirmed_volume_scale,
                 report_onset_offset = report_onset_offset,

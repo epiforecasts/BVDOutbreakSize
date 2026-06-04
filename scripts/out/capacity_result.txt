@@ -1,0 +1,42 @@
+Capacity-driven analysed-denominator imputation
+==================================================
+samples=250 chains=3 seed=20260518
+confirmed vintages fitted = 11 (missing-denominator = 5)
+
+Diagnostics
+  max R-hat      = 2.125
+  min ESS (bulk) = 1.9
+  divergences    = 15
+
+cumulative_cases C(T)
+  median   = 14801.5
+  90% CrI  = [6674.6, 31014.2]
+
+Observed analysed increments (23-28 May):
+  offsets [5, 4, 3, 2, 1, 0] ΔA = [211, 84, 0, 108, 245, 107]
+
+Missing-denominator vintages (offsets): [10, 9, 8, 7, 6]
+
+Imputed/observed analysed denominator ΔA (median, 90% CrI) per vintage:
+  offset 10  imputed   median 143.7  [139.7, 221.2]
+  offset 9  imputed   median 142.4  [138.3, 217.7]
+  offset 8  imputed   median 140.8  [136.6, 213.1]
+  offset 7  imputed   median 138.8  [134.5, 206.9]
+  offset 6  imputed   median 136.3  [132.0, 198.1]
+  offset 5  observed=211  median 211.0  [211.0, 211.0]
+  offset 4  observed=84  median 84.0  [84.0, 84.0]
+  offset 3  observed=0  median 0.0  [0.0, 0.0]
+  offset 2  observed=108  median 108.0  [108.0, 108.0]
+  offset 1  observed=245  median 245.0  [245.0, 245.0]
+  offset 0  observed=107  median 107.0  [107.0, 107.0]
+
+Received PP mean ΔR vs observed (offsets with data):
+  offset 5  observed ΔR=418  PP median 51.7  [45.1, 57.7]
+  offset 4  observed ΔR=13  PP median 53.6  [47.0, 60.8]
+  offset 3  observed ΔR=0  PP median 55.6  [49.0, 64.0]
+  offset 2  observed ΔR=231  PP median 57.7  [51.1, 67.5]
+  offset 1  observed ΔR=112  PP median 59.8  [53.3, 71.1]
+  offset 0  observed ΔR=109  PP median 62.0  [55.5, 75.0]
+
+capacity at cut-off (samples/day): median 167.9 90% [137.3, 175.4]
+τ_forward: median 0.772 90% [0.65, 0.789]
