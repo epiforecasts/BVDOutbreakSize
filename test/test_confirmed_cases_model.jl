@@ -29,7 +29,7 @@
         st ~ to_submodel(
             confirmed_cases_model(
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
-                rep.λ_bg, rep.τ_test, rep.bvd_reports_daily;
+                rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
                 tests_received_history =
                 (; days = [20, 40], counts = [6, 11])),

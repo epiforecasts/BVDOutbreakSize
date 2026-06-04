@@ -58,7 +58,10 @@ end
     ## from a flat unit BVD report series and a small background, and the
     ## confirmation probability is the odds-enriched composition.
     bvd = fill(1.0, 40)
-    m = confirmed_deaths_model(17, 246, 250.0, bvd, 0.3, 0.5)
+    ## Per-day non-BVD background series (was a scalar λ_bg); sum is the
+    ## background total entering the composition q_susp.
+    bg_daily = fill(0.5, 40)
+    m = confirmed_deaths_model(17, 246, 250.0, bvd, 0.3, bg_daily)
     st = returned(m, rand(MersenneTwister(2), m))
     @test 0 < st.q_susp < 1
     @test 0 < st.p_death_conf < 1
