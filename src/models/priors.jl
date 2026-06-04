@@ -209,6 +209,32 @@ truncated at zero. Sets the per-capita travel rate for the exports stream.
 end
 
 """
+Non-BVD background rate for the suspected-death stream
+([`deaths_model`](@ref)), the death analogue of the suspected-case
+background `λ_bg` ([`test_positivity_model`](@ref)). The DRC sitrep
+suspected-death definition is symptomatic-then-deceased, so a death need
+not be a true BVD death; this submodel samples the per-day non-BVD
+background death rate `λ_bg_death`. Its cumulative contribution over the
+grid is `λ_bg_death · n`.
+
+The default `truncated(Normal(0, 0.25); lower = 0)` is deliberately
+informative, mirroring the case background: deaths are far fewer than
+suspected cases (≈ 246 suspected deaths at the cut-off vs ≈ 1077
+suspected cases), so the background rate is scaled down accordingly. With
+SD 0.25 the median background is ≈ 0.17/day (≈ 22 deaths over a ≈ 132-day
+grid, a modest minority of the suspected-death total) while still
+admitting a genuine non-BVD signal. The background is degenerate with
+outbreak size, so a diffuse prior would let it absorb arbitrarily many
+suspected deaths. Pass `lambda_prior` to override. Returns
+`(; λ_bg_death)`.
+"""
+@model function death_background_model(;
+        lambda_prior = truncated(Normal(0.0, 0.25); lower = 0))
+    λ_bg_death ~ lambda_prior
+    return (; λ_bg_death)
+end
+
+"""
 Test-positivity machinery shared by the suspected- and confirmed-case
 streams. Samples
 
@@ -246,6 +272,50 @@ The derived per-suspected positivity is exposed inside
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
     return (; λ_bg, τ_test)
+end
+
+"""
+Per-vintage non-BVD background rate as a partially-pooled, non-centred
+random effect, the time-varying generalisation of the scalar `λ_bg` /
+`λ_bg_death`. Used by the suspected-case ([`reported_cases_model`](@ref))
+and suspected-death ([`deaths_model`](@ref)) streams when their
+`background_re` switch is on. The same non-BVD reporting environment
+plausibly drives both streams, so the two backgrounds can share this
+submodel's hyperparameters.
+
+The baseline `λ_mu` is the scalar background rate on its natural
+half-normal scale, with the same informative default as the scalar
+`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases; pass a tighter
+`baseline_prior` for deaths). The per-vintage rate is a multiplicative
+log-normal deviation from this baseline,
+
+```math
+\\lambda_v = \\lambda_\\mu \\,
+    \\exp(\\sigma_{bg}\\, z_v), \\qquad z_v \\sim \\mathcal N(0, 1),
+```
+
+with `σ_bg` the pooling SD. The deviation is multiplicative so the
+per-vintage rate stays positive without a clamp and `σ_bg → 0` recovers
+the scalar baseline exactly (every `λ_v = λ_mu`). The pooling prior is a
+tight half-normal `truncated(Normal(0, 0.3); lower = 0)`, deliberately
+small: the background is degenerate with outbreak size, so a wide
+per-vintage random effect would let individual windows absorb arbitrary
+suspected counts and re-open the second posterior mode in which the
+background explains the majority of suspected cases. Regularising `σ_bg`
+toward zero keeps the time variation a perturbation of the informative
+scalar rather than a free per-window rate. `nv` is the number of vintage
+windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
+per-vintage rates.
+"""
+@model function background_re_model(nv::Integer;
+        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0),
+        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
+    m = max(nv, 1)
+    λ_mu ~ baseline_prior
+    σ_bg ~ pooling_prior
+    z ~ product_distribution(fill(Normal(0, 1), m))
+    λ := λ_mu .* exp.(σ_bg .* z[1:nv])
+    return (; λ, λ_mu, σ_bg, z = z[1:nv])
 end
 
 """
