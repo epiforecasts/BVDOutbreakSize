@@ -1458,14 +1458,23 @@ posterior_pair_fig #hide
 
 ## Drop the increment counts but keep each stream's vintage day grid, so
 ## `predict` resamples the per-vintage increments rather than holding them
-## at the observed values.
+## at the observed values. The confirmed-case windows and the per-window
+## positivity random effect are defined by the confirmed and laboratory
+## histories, so those are passed with their counts intact (only the
+## cut-off scalars are set to `missing`) to keep the generator's latent
+## dimensions identical to the fitted chain.
 _days_only(h) = (; days = h.days, counts = Int[]);
 
 pp_joint = predict(
     bvd_joint(
         obs.n, missing, missing, missing, missing, missing, missing;
+        confirmed_deaths = missing,
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = _BREAKPOINT),
     chn_joint);
 

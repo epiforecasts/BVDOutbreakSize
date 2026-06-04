@@ -43,10 +43,12 @@ end
     # check fails there even at tmax = 60 s. It passes on Linux and Windows
     # and locally, so this is a runner-environment issue, not package code.
     # Keep the real check on the other platforms; raise tmax for the heavy
-    # AD/plotting load.
+    # AD/plotting load (the precompile-and-load step occasionally exceeds
+    # 60 s on a loaded Linux runner, a flaky timeout rather than a real
+    # persistent task).
     if Sys.isapple()
         @test_skip "persistent_tasks: macOS CI runner leaves a graphics task"
     else
-        Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 60)
+        Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 120)
     end
 end
