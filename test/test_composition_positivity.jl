@@ -38,6 +38,7 @@ end
     using Turing: sample, Prior, @model, to_submodel
     using Random: MersenneTwister
     import FlexiChains
+    using Statistics: mean
     using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
                            severity_enrichment_model
     using Distributions: Gamma
