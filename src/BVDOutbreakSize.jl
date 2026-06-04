@@ -57,6 +57,7 @@ export REPORT_SCENARIOS,
        expand_vintage_rate,
        test_sensitivity_model, lab_delay_model,
        confirmed_positivity_model, confirmed_death_enrichment_model,
+       severity_enrichment_model,
        surveillance_dispersion_model,
        independent_ascertainment_model, pooled_ascertainment_model,
 # observation models

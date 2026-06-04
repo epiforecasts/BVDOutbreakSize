@@ -255,6 +255,8 @@ death-confirmation probability (`death_confirmation`).
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        confirmed_positivity_link::Symbol = :free,
+        confirmed_severity_enrichment = severity_enrichment_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
@@ -300,7 +302,9 @@ death-confirmation probability (`death_confirmation`).
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history))
+        lab_history, tests_received_history,
+        positivity_link = confirmed_positivity_link,
+        severity_enrichment = confirmed_severity_enrichment))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
