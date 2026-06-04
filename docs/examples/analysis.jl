@@ -27,111 +27,81 @@
 #
 # ## What we do differently from McCabe et al.
 #
+# - *Discrete-time renewal model.* The whole model runs on a daily grid.
+#   Infections follow the discrete renewal equation $I_t = R_t \sum_{s
+#   \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval
+#   PMF, and every delay is applied as a discrete convolution. McCabe et
+#   al. [mccabe2026](@cite) use continuous-time closed forms.
+# - *Time-varying reproduction number.* $R_t$ follows a weekly Gaussian
+#   random walk on the log scale, interpolated within weeks, with a
+#   logistic intervention ramp at the first WHO situation report. McCabe
+#   et al. use one constant exponential growth rate.
 # - *Joint posterior, not 15 scenario estimates.* The reproduction
-#   number trajectory, case-fatality ratio, all onset-to-event delays,
-#   daily traveller volume and surveillance dispersion all have
-#   priors and are sampled jointly. McCabe et al.
-#   [mccabe2026](@cite) fix each and
-#   sweep.
-# - *Discrete renewal equation with a time-varying reproduction number.*
-#   Daily infection incidence follows $I_t = R_t \sum_{s \ge 1} I_{t-s}
-#   g_s$ where $g$ is the discretised generation-interval PMF. The
-#   reproduction number $R_t$ follows a weekly Gaussian random walk on
-#   the log scale with piecewise-linear within-week interpolation.
-#   A logistic intervention ramp at the first WHO situation report adds a
-#   sampled smooth step change. McCabe et al. use a single constant
-#   exponential growth rate.
-# - *Literature delays sampled from priors and discretised.* Every delay
-#   — generation interval, incubation period, onset-to-death,
-#   onset-to-report, onset-to-confirmation, onset-to-detection-abroad —
-#   is sampled from a prior centred on published Ebola estimates and
-#   discretised with double interval censoring (CensoredDistributions).
-#   No delay is fixed.
-# - *Euler–Lotka seeding.* The seeding window is filled with exponential
-#   growth at the rate implied by the initial reproduction number and
-#   generation interval via the Euler–Lotka relation, anchoring
-#   infections smoothly at day 1 rather than placing a single seed.
-# - *Discrete convolutions replace closed-form integrals.* Infections
-#   are convolved to symptom onsets; every observation stream then
-#   convolves the shared onsets with its own onset-to-event delay PMF.
-#   This is exact (no large-$T$ or small-$rw$ approximation) and is
-#   exact under the same onset incidence for all streams.
+#   number, case-fatality ratio, all delays, traveller volume and
+#   surveillance dispersion have priors and are sampled together. McCabe
+#   et al. fix each and sweep.
+# - *Delays sampled from priors and discretised.* Generation interval,
+#   incubation period, onset-to-death, onset-to-report,
+#   onset-to-confirmation and onset-to-detection-abroad each get a prior
+#   centred on published Ebola estimates, discretised with double
+#   interval censoring. No delay is fixed.
+# - *Euler–Lotka seeding.* The seeding window grows exponentially at the
+#   rate implied by the initial reproduction number and generation
+#   interval, so infections start smoothly rather than from a single
+#   seed.
 # - *Per-vintage time-series fitting.* The DRC streams (suspected cases,
-#   confirmed cases, deaths) are fitted as cumulative time series of
-#   between-vintage increments, conditioning on successive sitrep
-#   updates. This sharpens the time-varying reproduction number. McCabe
-#   et al. condition on a single cumulative total.
-# - *Ascertainment extension* (not in McCabe et al.). The DRC and Uganda
-#   reporting fractions share a logit-scale hyperprior (partial pooling),
-#   giving a joint posterior over ascertainment alongside outbreak size.
-# - *Cumulative quantities as derived outputs.* Cumulative infections
-#   $C_T$ is the running sum of the renewal trajectory. Doubling time
-#   and growth rate are derived from the day-over-day log-ratio at the
-#   cut-off.
-# - *Comparison against published scenarios.* Our joint posterior
-#   $C_T$ is compared against all 15 published McCabe et al. scenario
-#   estimates via a coverage table.
-# - *No-onward-transmission counterfactual* (not in McCabe et al.).
-#   Projects future expected deaths from infections already seeded by the
-#   cut-off.
-# - *Posterior-predictive forecasts* (not in McCabe et al.). A
-#   one-week-ahead projection of each stream from the joint posterior.
+#   confirmed cases, deaths) are fitted as cumulative series of
+#   between-vintage increments across successive sitreps, which sharpens
+#   $R_t$. McCabe et al. condition on a single cumulative total.
+# - *Ascertainment extension.* The DRC and Uganda reporting fractions
+#   share a logit-scale hyperprior, giving a joint posterior over
+#   ascertainment alongside outbreak size. Not in McCabe et al.
+# - *Comparison against published scenarios.* The model's expected
+#   cumulative confirmed cases are compared against all 15 McCabe et al.
+#   scenario estimates with a coverage table, while $C_T$ (the latent
+#   infection count, summed from the renewal trajectory) is reported
+#   separately.
+# - *No-onward-transmission counterfactual and one-week-ahead
+#   forecasts.* Future expected deaths from infections already seeded,
+#   and a posterior-predictive projection of each stream. Neither is in
+#   McCabe et al.
 #
 # ## Limitations
 #
-# - *Fitted only to aggregate reported counts.* The data are a
-#   handful of summary figures — total suspected cases in the DRC,
-#   total suspected deaths in the DRC, and cases (and one death)
-#   detected in Uganda — from press and situation reports. There is no
-#   line list and no temporal information beyond the sitrep trajectory.
-#   The model also has no knowledge of the situation on the ground (case
-#   definitions, testing capacity, affected areas, reporting
-#   completeness). Every estimate is a model-based extrapolation from
-#   sparse summary statistics under strong assumptions rather than a
-#   measurement.
-# - *LLM-driven reimplementation.* The model code, priors,
-#   convolution implementation and analysis were drafted by a
-#   language model from the published McCabe et al.
-#   [mccabe2026](@cite) report and the companion delay reanalysis,
-#   then reviewed and revised. Not independently replicated against the
-#   authors' code.
-# - *Prior-driven inference where data is scarce.* The per-vintage
-#   time-series provide some resolution on the reproduction number, but
-#   a handful of sitrep totals give limited information about delay
-#   parameters, surveillance dispersion, or the reporting fraction
-#   individually. Posteriors for those parameters track their priors
-#   closely.
-# - *Inherits McCabe et al.'s epidemiological assumptions.* A single
-#   zoonotic seed; the underlying case trajectory depends on an assumed
-#   generation interval and epidemic structure; no spatial structure
-#   beyond the Ituri / Nord Kivu split; no depletion of susceptibles.
-# - *Intervention ramp is weakly identified.* The logistic ramp at the
-#   first WHO situation report absorbs a change in transmission, but
-#   with only a few sitreps straddling it, the ramp effect and the
-#   pre-ramp reproduction number are not strongly separated.
+# - *Fitted only to aggregate reported counts.* The data are a handful
+#   of summary figures from press and situation reports: suspected cases
+#   and deaths in the DRC, and cases (with one death) in Uganda. There
+#   is no line list, and no information on case definitions, testing
+#   capacity or reporting completeness. Every estimate is a model-based
+#   extrapolation under strong assumptions, not a measurement.
+# - *Prior-driven where data is scarce.* The sitrep trajectory pins down
+#   $R_t$, but a few totals say little about the delays, surveillance
+#   dispersion or reporting fraction on their own, so those posteriors
+#   track their priors.
 # - *Per-sitrep increments are not clean new incidence.* Later sitreps
-#   almost certainly backfill earlier cases and add newly-reporting
-#   health zones; ascertainment likely rose over the window.
-# - *Onset-to-death delay anchored on Isiro 2012.* Cross-outbreak
-#   heterogeneity is unmodelled.
-# - *Genetic seeding bound depends on a fixed clock rate.* The
-#   molecular-clock TMRCA dates under an external literature rate; clock
-#   uncertainty is not propagated here.
-# - *Ascertainment partially pooled, not separately identified.*
-#   Uganda's exported-case ascertainment $p_{\text{Uganda}}$ and DRC's
-#   reported-case ascertainment $p_{\text{DRC}}$ share a logit-scale
-#   hyperprior. With a handful of suspected exports and one export death
-#   the Uganda fraction is weakly identified and leans on the pooled mean
-#   and the DRC side.
-# - *Observation streams share one case pool.* The streams are
-#   modelled as conditionally independent given latent incidence, but
-#   they observe overlapping individuals. Conditional independence
-#   ignores this overlap, so it can understate uncertainty.
-# - *Selection bias in deaths-among-exports.* If the system loses
-#   cases that progress to death, the observed count is biased downward.
-# - *Data conflict not explored in detail.* We have not systematically
-#   checked whether the streams conflict — whether exports and deaths
-#   streams imply different outbreak sizes.
+#   likely backfill earlier cases and add newly-reporting health zones,
+#   and ascertainment probably rose over the window.
+# - *Inherits McCabe et al.'s epidemiological assumptions.* A single
+#   zoonotic seed, an assumed generation interval, no spatial structure
+#   beyond the Ituri / Nord Kivu split, and no depletion of
+#   susceptibles. The onset-to-death delay is anchored on Isiro 2012 and
+#   the genetic seeding bound on an external clock rate, neither
+#   propagating cross-outbreak or clock uncertainty.
+# - *Intervention ramp is weakly identified.* With only a few sitreps
+#   straddling it, the ramp effect and the pre-ramp reproduction number
+#   are not well separated.
+# - *Ascertainment partially pooled, not separately identified.* The
+#   DRC and Uganda reporting fractions share a hyperprior; with a
+#   handful of exports the Uganda fraction leans on the DRC side.
+# - *Streams share one case pool.* They are fitted as conditionally
+#   independent given latent incidence but observe overlapping people,
+#   which can understate uncertainty. We have not checked whether the
+#   streams imply conflicting outbreak sizes.
+# - *LLM-driven reimplementation.* The model code, priors and analysis
+#   were drafted by a language model from the McCabe et al.
+#   [mccabe2026](@cite) report and the companion delay reanalysis, then
+#   reviewed and revised. Not independently replicated against the
+#   authors' code.
 #
 #md # ```@raw html
 #md # <details><summary>Load packages and seed the RNG</summary>
@@ -844,11 +814,12 @@ cfr_prior_fig #hide
 
 # ##### Reported cases
 #
-# Reported suspected cases are the sum of a BVD-driven component — onsets
-# convolved with the onset-to-report delay (mean 4.5 d, SD 3.6 d) and
-# scaled by the DRC ascertainment $p_{\text{DRC}}$ — and an additive
-# non-BVD background accruing at $\lambda_{\text{bg}}$ per day, so a
-# suspected case need not be a true BVD infection. The increments are
+# Reported suspected cases are the sum of two parts.
+# A BVD-driven component, onsets convolved with the onset-to-report
+# delay (mean 4.5 d, SD 3.6 d) and scaled by the DRC ascertainment
+# $p_{\text{DRC}}$, plus an additive non-BVD background accruing at
+# $\lambda_{\text{bg}}$ per day, so a suspected case need not be a true
+# BVD infection. The increments are
 # scored per vintage with a NegBinomial sharing $k$:
 #
 # ```math
@@ -1243,14 +1214,14 @@ diagnostics_table( #hide
 #
 # ### Summary
 #
-# For the response the question that matters is how many people have
-# already been infected: the reported counts capture only part of the
-# outbreak, and planning for beds, contacts and vaccine needs depends
-# on the true total. The numbers below are our current best estimate of
-# that total, computed from the joint posterior and refreshed on every
-# build. For each headline number we give the equal-tailed 30%, 60%
-# and 90% credible intervals; the same intervals appear in the tables
-# below.
+# The question that matters for the response is how many people have
+# already been infected.
+# The confirmed counts capture only part of the outbreak, and planning
+# for beds, contacts and vaccine needs depends on the true total.
+# The numbers below are our current best estimate of that total, from
+# the joint posterior and refreshed on every build.
+# Each headline number is given as equal-tailed 30%, 60% and 90%
+# credible intervals, the same intervals used in the tables below.
 
 #md # ```@raw html
 #md # <details><summary>Compute the headline ranges</summary>
@@ -1280,14 +1251,18 @@ summary_ranges = let
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
-    f_lo = round(sC.lo90 / obs.reported_cases; digits = 1)
-    f_hi = round(sC.hi90 / obs.reported_cases; digits = 1)
+    f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
+    f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
+    ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
     Markdown.parse("""
-    - **Current cumulative case load:** the posterior is $(ints_i(sC)) cases,
-      combining all five data streams (reported and as-yet-unreported).
-    - That is roughly $(f_lo)–$(f_hi)× the $(obs.reported_cases) cases
-      reported to date, so most infections are not yet reported.
+    - **Cumulative infections \$C_T\$:** the posterior is $(ints_i(sC))
+      infections, the latent pool behind every stream.
+    - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
+      cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
+      confirmed cases capture only a small share of the outbreak.
+    - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
+      cases by the cut-off, against $(obs.confirmed_cases) observed.
     - **Time since seeding:** the posterior is $(ints_i(sT)) days, placing
       the start of sustained transmission at $(ints_d(sT)).
     - **Growth rate and doubling time:** the current growth rate is
@@ -1312,16 +1287,15 @@ summary_ranges #hide
 
 # ### Joint model estimates
 #
-# Our main result is an estimate of the current cumulative case load —
-# both reported and unreported cases — at the report date. It is the
-# joint posterior over the cumulative case count $C_T$, obtained by
-# fitting all five data streams together: the cases exported to Uganda,
-# the suspected deaths in the DRC, the reported cases in the DRC (with
-# an ascertainment component), the laboratory-confirmed cases in the
-# DRC, and the deaths among exported cases in Uganda.
-#
-# We report the cumulative case count first as a credible-interval
-# table and then as a posterior density.
+# Our main result is the current cumulative case load, reported and
+# unreported, at the report date.
+# It is the joint posterior over the cumulative case count $C_T$, fitting
+# all five data streams together: cases exported to Uganda, suspected
+# deaths in the DRC, reported cases in the DRC (with an ascertainment
+# component), laboratory-confirmed cases in the DRC, and deaths among
+# exported cases in Uganda.
+# We show it first as a credible-interval table and then as a posterior
+# density.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative case count summary table</summary>
@@ -1647,9 +1621,9 @@ forecast_fig #hide
 # ### How the data streams compare
 #
 # Each data stream constrains the latent outbreak size differently.
-# The table below puts the posteriors over $C_T$ side by side — the
-# five single-stream fits and the joint — to show what each stream
-# implies on its own and what the joint combination adds.
+# The table below puts the posteriors over $C_T$ side by side, the five
+# single-stream fits and the joint, to show what each stream implies on
+# its own and what the joint adds.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream C_T table</summary>
@@ -1699,14 +1673,12 @@ cumulative_density_fig #hide
 
 # ### Comparison with McCabe et al.
 #
-# The McCabe et al. scenario estimates are cumulative reported *cases*.
-# The renewal $C_T$ is cumulative *infections*, the latent pool before
-# ascertainment, so it is not directly comparable to those figures.
-# We compare like for like against the model's expected cumulative
-# reported cases, the ascertained quantity, while reporting the infection
-# count $C_T$ separately as the latent outbreak size.
-# For each scenario the table records the narrowest joint credible
-# interval that contains it, so coverage can be read off directly.
+# The McCabe et al. scenarios are cumulative reported *cases*, so they
+# are not directly comparable to $C_T$, which counts latent
+# *infections*. We compare like for like against the model's expected
+# cumulative reported cases.
+# For each scenario the table gives the narrowest joint credible
+# interval that contains it, so coverage reads off directly.
 
 #md # ```@raw html
 #md # <details><summary>Joint coverage table</summary>
@@ -1722,7 +1694,7 @@ coverage_table = comparison_table(posterior_reports_joint);
 coverage_table #hide
 
 # The joint expected-reported-cases density with the 15 published
-# scenario point estimates overlaid as faint dashed rules (both are
+# scenario estimates overlaid as faint dashed rules (both are
 # reported-case counts, so the overlay is like for like):
 
 #md # ```@raw html
