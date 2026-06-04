@@ -48,6 +48,46 @@ function bin_increments(daily::AbstractVector,
 end
 
 """
+Expand a per-vintage rate vector `rate` onto a length-`n` daily grid,
+assigning each day the rate of the vintage window it falls in. The
+windows are delimited by the ascending day indices `days` (1-based into
+the grid); day `t ≤ days[1]` takes `rate[1]`, a day in `(days[i-1],
+days[i]]` takes `rate[i]`, and any day beyond the last vintage takes the
+last rate (a flat carry-forward of the final window). When `days` is
+empty the whole grid takes `rate[1]` if present, else zero, so a scalar
+background is recovered. Pure and AD-transparent; the element type
+follows `rate`. Used to turn the per-vintage background random effect
+([`background_re_model`](@ref)) into the additive daily background the
+suspected-case and suspected-death streams consume.
+"""
+function expand_vintage_rate(rate::AbstractVector,
+        days::AbstractVector{<:Integer}, n::Integer)
+    T = eltype(rate)
+    out = Vector{T}(undef, n)
+    if isempty(days) || isempty(rate)
+        fill!(out, isempty(rate) ? zero(T) : rate[1])
+        return out
+    end
+    nv = length(rate)
+    prev = 0
+    @inbounds for (i, d) in enumerate(days)
+        i > nv && break
+        hi = clamp(Int(d), 0, n)
+        for t in (prev + 1):hi
+            out[t] = rate[i]
+        end
+        prev = hi
+    end
+    ## Carry the final window's rate forward over any tail days beyond the
+    ## last vintage edge.
+    last_rate = rate[min(length(days), nv)]
+    @inbounds for t in (prev + 1):n
+        out[t] = last_rate
+    end
+    return out
+end
+
+"""
 Resolve a stream's per-vintage observation into the vintage day indices
 and the observed between-vintage increment vector to score, given the
 dated cumulative `history` `(; days, counts)`, the cut-off total `total`
@@ -133,24 +173,54 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         total_deaths::Union{Missing, Integer},
         onsets::AbstractVector, k::Real;
         cfr = cfr_model(),
-        onset_to_death = censored_delay_model(60;
+        death_background = nothing,
+        background_re = nothing,
+        onset_to_death = censored_delay_model(40;
             mean_prior = truncated(Normal(11.2, 2.0); lower = 1),
             sd_prior = truncated(Normal(5.4, 1.5); lower = 1)))
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
     CFR = cfr_state.CFR
-    deaths_daily = CFR .* convolve_delay(onsets, od_state.pmf)
+    bvd_deaths_daily = CFR .* convolve_delay(onsets, od_state.pmf)
 
-    n = length(deaths_daily)
+    n = length(bvd_deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
+
+    ## Daily non-BVD background deaths. The renewal default has no
+    ## background (`death_background === nothing`), so the deaths stream is
+    ## pure BVD. With a scalar `death_background` the background is constant
+    ## over the grid; with a per-vintage `background_re` it is the
+    ## regularised time-varying random effect expanded to a daily series,
+    ## sharing the suspected-case background's structure.
+    if background_re !== nothing
+        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        λ_bg_death = bg_state.λ_mu
+        bg_death_sigma = bg_state.σ_bg
+        bg_death_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+    elseif death_background !== nothing
+        dbg_state ~ to_submodel(death_background)
+        λ_bg_death = dbg_state.λ_bg_death
+        bg_death_sigma = zero(λ_bg_death)
+        bg_death_daily = fill(λ_bg_death, n)
+    else
+        λ_bg_death = zero(CFR)
+        bg_death_sigma = zero(CFR)
+        bg_death_daily = fill(zero(CFR), n)
+    end
+
+    deaths_daily = bvd_deaths_daily .+ bg_death_daily
+
     modelled_increments = bin_increments(deaths_daily, vobs.days)
     death_increments ~ to_submodel(
         vintage_increments_model(modelled_increments, vobs.obs_increments, k))
 
     raw_total = sum(deaths_daily)
     expected_deaths_T := safe_rate(raw_total)
+    bg_death_total = sum(bg_death_daily)
 
-    return (; CFR, od_pmf = od_state.pmf, deaths_daily, expected_deaths_T)
+    return (; CFR, od_pmf = od_state.pmf, deaths_daily, bvd_deaths_daily,
+        expected_deaths_T, λ_bg_death, bg_death_sigma, bg_death_daily,
+        bg_death_total)
 end
 
 """
@@ -178,6 +248,7 @@ sitrep.
         reported_cases::Union{Missing, Integer},
         onsets::AbstractVector, k::Real, p_drc::Real;
         positivity = test_positivity_model(),
+        background_re = nothing,
         onset_to_report = censored_delay_model(30;
             mean_prior = truncated(Normal(4.5, 1.5); lower = 1),
             sd_prior = truncated(Normal(3.6, 1.2); lower = 1)))
@@ -188,13 +259,34 @@ sitrep.
     report_pmf = report_state.pmf
 
     ## Unit-ascertainment BVD onset-to-report daily series, reused by the
-    ## confirmed stream. Suspected daily cases add the p_drc-scaled BVD
-    ## signal and the constant non-BVD background.
+    ## confirmed stream.
     bvd_reports_daily = convolve_delay(onsets, report_pmf)
-    reports_daily = p_drc .* bvd_reports_daily .+ λ_bg
 
-    n = length(reports_daily)
+    n = length(bvd_reports_daily)
     vobs = vintage_obs(reported_history, reported_cases, n)
+
+    ## Daily non-BVD background. With `background_re === nothing` this is
+    ## the constant scalar `λ_bg` over the grid (the renewal default). When
+    ## a per-vintage random effect is injected, the scalar baseline is
+    ## perturbed window-by-window and expanded to a daily series; the
+    ## baseline `λ_bg` from `positivity` is overridden by the random
+    ## effect's `λ_mu`, and the per-vintage rates are tightly pooled toward
+    ## it so the background stays a regularised minority of suspected cases.
+    if background_re === nothing
+        λ_bg_base = λ_bg
+        bg_sigma = zero(λ_bg)
+        bg_daily = fill(λ_bg, n)
+    else
+        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        λ_bg_base = bg_state.λ_mu
+        bg_sigma = bg_state.σ_bg
+        bg_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+    end
+
+    ## Suspected daily cases add the p_drc-scaled BVD signal and the
+    ## non-BVD background.
+    reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
         vintage_increments_model(modelled_increments, vobs.obs_increments, k))
@@ -207,8 +299,13 @@ sitrep.
     bvd_total = p_drc * sum(bvd_reports_daily)
     positivity := safe_rate(bvd_total) / expected_reports
 
-    return (; p_drc, λ_bg, τ_test, report_pmf, bvd_reports_daily,
-        reports_daily, expected_reports, positivity)
+    ## Cumulative background suspected cases over the grid, exposed for
+    ## comparison with the observed suspected total.
+    bg_total = sum(bg_daily)
+
+    return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf, bvd_reports_daily,
+        reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
+        bg_total)
 end
 
 """
@@ -367,7 +464,8 @@ quantities.
         confirmed_history,
         confirmed_cases::Union{Missing, Integer},
         onsets::AbstractVector, k::Real, p_drc::Real,
-        λ_bg::Real, τ_test::Real, bvd_reports_daily::AbstractVector;
+        bg_daily::AbstractVector, τ_test::Real,
+        bvd_reports_daily::AbstractVector;
         lab_history = (; days = Int[], counts = Int[]),
         tests_received_history = (; days = Int[], counts = Int[]),
         tests_received::Union{Missing, Integer} = missing,
@@ -377,8 +475,11 @@ quantities.
 
     ## Received-specimen volume: the suspected pipeline carried through the
     ## receipt delay and thinned by the tested fraction, fit as a count.
+    ## `bg_daily` is the per-day non-BVD background from the suspected-case
+    ## stream (a constant series when the scalar background is used, the
+    ## per-vintage random effect when it is on).
     receipt_state ~ to_submodel(receipt)
-    suspected_daily = p_drc .* bvd_reports_daily .+ λ_bg
+    suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
     received_daily = τ_test .* convolve_delay(suspected_daily,
         receipt_state.pmf)
     rvobs = vintage_obs(tests_received_history, tests_received, n)
@@ -425,7 +526,7 @@ quantities.
     expected_confirmed := safe_rate(expected_positives)
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
 
-    return (; τ_test, λ_bg, p_pos, windows, received_daily,
+    return (; τ_test, bg_daily, p_pos, windows, received_daily,
         expected_received, expected_confirmed, p_positive)
 end
 
@@ -514,14 +615,14 @@ probability and the expected confirmed-death count.
         confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer},
         expected_deaths::Real,
-        bvd_reports_daily::AbstractVector, p_drc::Real, λ_bg::Real;
+        bvd_reports_daily::AbstractVector, p_drc::Real,
+        bg_daily::AbstractVector;
         enrichment = confirmed_death_enrichment_model())
     enr_state ~ to_submodel(enrichment)
     m_death = enr_state.m_death
 
-    n = length(bvd_reports_daily)
     bvd_total = p_drc * sum(bvd_reports_daily)
-    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + λ_bg * n)
+    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + sum(bg_daily))
     qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
     p_death_conf := logistic(logit(qc) + log(m_death))
 
