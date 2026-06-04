@@ -412,12 +412,14 @@ where `s` is the shared confirmed-case PCR sensitivity
 its positivity is `s`, not `s · q`; `coverage_death` carries the
 death-specimen submission rate. It is identified by the single point (17
 confirmed against the modelled BVD-death total ≈ 246 suspected deaths)
-given `s` from the cases, so no degeneracy. Default `Beta(2, 5)` is
-weakly-informative favouring low coverage (mean 0.29, 95% interval ≈
-0.04-0.64). Used by [`confirmed_deaths_model`](@ref).
+given `s` from the cases, so no degeneracy. Default `Beta(2, 18)` is
+weakly-informative favouring low coverage (mean 0.10, 95% interval ≈
+0.01-0.26), reflecting that post-mortem specimen submission is sparse;
+the data-implied `coverage · s ≈ 17/246` pins it near this centre rather
+than the prior dominating. Used by [`confirmed_deaths_model`](@ref).
 """
 @model function death_coverage_model(;
-        coverage_prior = Beta(2.0, 5.0))
+        coverage_prior = Beta(2.0, 18.0))
     coverage_death ~ coverage_prior
     return (; coverage_death)
 end
