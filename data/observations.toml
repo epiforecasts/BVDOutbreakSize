@@ -155,7 +155,7 @@ source = "INSP situation reports 18-28 May 2026, read from the PDFs (recorded in
 [confirmed_death_history]
 dates  = ["2026-05-26", "2026-05-27", "2026-05-28"]
 values = [17, 17, 17]
-source = "INSP situation reports 26-28 May 2026 (SitReps 012_v2-014), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 over the fitted window; later vintages report 42 (29-30 May) and 48 (31 May)."
+source = "INSP situation reports 26-28 May 2026 (SitReps 012_v2-014), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 over the fitted window; later vintages report 42 (29-30 May), 48 (31 May), 60 (1 June), and 62 (2 June)."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
