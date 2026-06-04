@@ -38,18 +38,20 @@ end
     using Turing: sample, Prior, @model, to_submodel
     using Random: MersenneTwister
     import FlexiChains
-    using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model
-    using BVDOutbreakSize: severity_enrichment_model
+    using BVDOutbreakSize: confirmed_cases_model, exponential_growth_model,
+                           severity_enrichment_model
+    using Distributions: Gamma
 
     ## A single cumulative vintage at the cut-off; the composition φ is set by
-    ## λ_bg against the BVD onset trajectory the growth/r imply.
+    ## λ_bg against the BVD onset trajectory the growth/r imply. `f_rep` is a
+    ## fixed onset-to-report Gamma (the report-delay prior centre).
     @model function _harness(link)
         g ~ to_submodel(exponential_growth_model(), false)
         c ~ to_submodel(
             confirmed_cases_model(
                 Union{Missing, Int}[120], Union{Missing, Int}[400],
                 Union{Missing, Int}[missing], 400, g, 5.0,
-                [0.3], 0.6, 0.7, BVDOutbreakSize.report_delay_model().dist,
+                [0.3], 0.6, 0.7, Gamma(2.5, 4.5),
                 [g.T], g.T;
                 positivity_link = link,
                 severity_enrichment = severity_enrichment_model(),
