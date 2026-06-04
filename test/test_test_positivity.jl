@@ -233,6 +233,60 @@ end
     @test all(er .> 0)
 end
 
+@testitem "lab_receipt_delay_model: gamma delay centred near 3 days" tags=[:slow] begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: mean
+    using Distributions: Gamma, truncated, Normal
+    using BVDOutbreakSize: lab_receipt_delay_model
+
+    ## Report-to-lab-receipt delay: α ~ N₊(2, 1), θ ~ N₊(1.5, 0.75), so
+    ## the mean delay E[α]·E[θ] ≈ 2 · 1.5 = 3 days.
+    chn = sample(MersenneTwister(20260518), lab_receipt_delay_model(),
+        Prior(), 10_000; progress = false)
+    α = vec(Array(chn[:α_recv]))
+    θ = vec(Array(chn[:θ_recv]))
+    @test all(isfinite, α) && all(>(0.1), α)   # truncated at 0.1
+    @test all(isfinite, θ) && all(>(0.1), θ)
+    @test isapprox(mean(α), 2.0; atol = 0.1)
+    @test isapprox(mean(θ), 1.5; atol = 0.1)
+    ## The per-draw gamma mean (α·θ) is centred near the documented 3 days.
+    @test isapprox(mean(α .* θ), 3.0; atol = 0.3)
+
+    ## Override moves the centre and the returned distribution is a Gamma.
+    res = lab_receipt_delay_model()()
+    @test res.dist isa Gamma
+    @test res.dist == Gamma(res.α, res.θ)
+end
+
+@testitem "lab_capacity_model: positive capacities centred near 150" tags=[:slow] begin
+    using Turing: sample, Prior, @model, to_submodel
+    using Random: MersenneTwister
+    using Statistics: mean, std
+    import FlexiChains
+    using BVDOutbreakSize: lab_capacity_model
+
+    @model function _cap_wrap(n)
+        st ~ to_submodel(lab_capacity_model(n), false)
+        return (; st)
+    end
+
+    n = 4
+    chn = sample(MersenneTwister(20260518), _cap_wrap(n), Prior(), 4_000;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    ## The length-n capacity vector is a positive log-random-walk.
+    cap = reduce(hcat, vec(Array(chn[:capacity])))   # n × draws
+    @test size(cap, 1) == n
+    @test all(isfinite, cap) && all(>(0), cap)
+    rw = vec(Array(chn[:rw_sd]))
+    @test all(rw .>= 0)                               # half-normal walk SD
+
+    ## Window 1 sits at the centred level log(150) + 0.5·z₁, so its
+    ## geometric mean (median of the log-normal level) is ≈ 150.
+    @test isapprox(mean(cap[1, :]), 150.0; rtol = 0.2)
+end
+
 @testitem "analysis capacity is pulled below the prior by throughput" tags=[:slow] begin
     ## The capacity random walk is centred on 150 samples/day. Conditioning
     ## on the observed analysed throughput (84/day then 54/day across the
