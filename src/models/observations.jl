@@ -520,15 +520,25 @@ quantities.
         ## Testing clock: cumulative modelled analysed volume at each window.
         vol_window = bin_increments(received_daily, window_days)
         c_window = cumsum(vol_window)
-        ϵ = eps(Tt)
+        lo = convert(Tt, 1e-8)
+        hi = one(Tt) - lo
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
         ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
         dscale = max(convert(Tt, decay_scale), one(Tt))
         p_pos_vec = map(eachindex(window_days)) do i
-            φ = clamp(bvd_window[i] / (bvd_window[i] + bg_window[i] + ϵ),
-                ϵ, one(Tt) - ϵ)
+            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
+            ## window, guarded against a zero/negative denominator.
+            num = bvd_window[i]
+            den = bvd_window[i] + bg_window[i]
+            ratio = num / (den + lo)
+            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
             δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
-            clamp(logistic(logit(φ) + δ_i), ϵ, one(Tt) - ϵ)
+            q = logistic(logit(φ) + δ_i)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the pool composition so the confirmed Binomial always sees
+            ## a valid probability even under an AD perturbation.
+            qf = isfinite(q) ? q : φ
+            clamp(qf, lo, hi)
         end
         p_pos = p_pos_vec
     else
