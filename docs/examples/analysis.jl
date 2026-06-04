@@ -849,7 +849,7 @@ vintage_table #hide
 cfr_prior_fig = plot_cfr_prior(Beta(6.6, 13.4)); #hide
 cfr_prior_fig #hide
 
-# ##### Detection window (McCabe comparison)
+# ##### Detection window
 #
 # $w$ is the mean time during which a case is still infectious and
 # detectable abroad (incubation + onset-to-detection). This rectangular
