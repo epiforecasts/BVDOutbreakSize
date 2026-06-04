@@ -28,8 +28,9 @@
 # ## What we do differently from McCabe et al.
 #
 # We reimplement the McCabe et al. [mccabe2026](@cite) report as a single
-# Bayesian model fitted jointly to every data stream.
-# The main differences from the report are grouped below.
+# Bayesian model fitted jointly to every data stream. The points below
+# summarise how it differs from the report; the Methods section carries
+# the full treatment and the limitations are listed separately.
 #
 #md # ```@raw html
 #md # <details><summary>Expand: differences from the report</summary>
@@ -37,89 +38,48 @@
 #md #
 # **Latent process and parameters**
 #
-# - *Infections as the latent quantity.* The exponential trajectory is
-#   the cumulative *infection* count. Each infection produces symptoms
-#   after an incubation period, so observed onsets are infections delayed
-#   by that period, and reported cases are the infections whose symptoms
-#   have appeared and been recorded. The cumulative case count McCabe et
-#   al. estimate is recovered from the infections for comparison. The
-#   incubation period is sampled from a prior like every other delay. It
-#   cannot be fitted from the BDBV line list, which has no exposure dates,
-#   so we take the Bundibugyo estimate the line-list reanalysis recommends
-#   [bdbv_linelist_analysis_2026](@cite), a mean of 6.3 days from the
-#   2007 Uganda outbreak [macneil2010](@cite).
-# - *Joint posterior, not 15 scenario estimates.* The doubling time
-#   $\tau$, case fatality ratio (CFR), onset-to-death shape and scale,
-#   daily traveller volume and surveillance dispersion all have priors
-#   and are sampled jointly, where McCabe et al. fix each and sweep.
+# - *Infections as the latent quantity.* We model the cumulative infection
+#   count and map it through an incubation period to onsets and reported
+#   cases, recovering the case count McCabe et al. estimate for comparison.
+# - *Joint posterior, not 15 scenario estimates.* The growth rate, case
+#   fatality ratio (CFR), delays, traveller volume and surveillance
+#   dispersion are given priors and sampled jointly, where McCabe et al.
+#   fix each and sweep scenarios.
 #
 # **Delays and convolutions**
 #
-# - *Explicit infection→detection delay for exports.* Exports are
-#   travel-gated from infection, since people travel during incubation
-#   before symptoms, so they follow a convolution of the infection
-#   trajectory with an infection→detection delay rather than McCabe et
-#   al.'s fixed detection window. That delay is the incubation period
-#   convolved with the DRC onset-to-report delay, with a mean of
-#   $\approx 17.5$ days, informed by the incubation and suspected-case
-#   streams. The rectangular window is kept for the comparison, using the
-#   exact integral rather than the small-$rw$ simplification of McCabe et
-#   al. (and [imai2020](@cite) before them). The Methods section gives the
-#   forms.
-# - *Exact deaths convolution.* We evaluate the gamma onset-to-death
-#   convolution in exact closed form, via the regularized incomplete gamma
-#   function with a quadrature fallback for other delay families, where
-#   McCabe et al. use a large-$T$ approximation that drops a finite-horizon
-#   factor.
-# - *Closed-form CDF under AD.* The Gamma CDF uses a hand-written
-#   reverse-mode derivative rule; the shape-parameter derivative of the
-#   regularized incomplete gamma function uses a Kummer series following
-#   the Stan Math Library [carpenter2015stanmath](@cite).
-# - *Onset-to-death prior built from the Bayesian reanalysis* of the
-#   same Isiro 2012 line list McCabe et al. cite for their point estimates
-#   [bdbv_linelist_analysis_2026](@cite), so the priors carry the
-#   published 95% credible intervals on $\alpha$ and $\theta$ rather than
-#   collapsing onto Rosello's point estimate.
+# - *Explicit infection→detection delay for exports.* Exports follow a
+#   delay convolution of the infection trajectory rather than a fixed
+#   detection window, capturing pre-symptomatic travel. The window form is
+#   kept for the comparison.
+# - *Exact deaths convolution.* We evaluate the onset-to-death convolution
+#   in exact closed form, where McCabe et al. use a large-time
+#   approximation.
 #
 # **Likelihoods and data streams**
 #
-# - *NegBinomial likelihood on deaths and reported cases* with a shared
-#   surveillance dispersion $k$ for over-dispersion in the passive counts,
-#   where McCabe et al. use a Poisson likelihood for the Method 2 deaths
-#   and do not model the reported cases. Exports stay Poisson, since two
-#   observations cannot identify a separate dispersion.
-# - *Ascertainment extension.* A logit-scale hyperprior on the reporting
-#   fraction, applied to the latent $C(T)$, gives a joint posterior over
-#   the reported suspected-case count alongside deaths and exports.
-# - *Suspected, confirmed and samples-received streams,* absent from
-#   McCabe et al. Reported suspected counts are the BVD onset-to-report
-#   convolution plus a non-BVD background. Testing selects from the
-#   accumulated backlog, so the confirmed series reads from that backlog
-#   with no extra delay: each vintage's confirmed count is a Binomial on
-#   its observed analysed denominator, with positivity set by PCR
-#   sensitivity, specificity and the BVD share of the batch. The
-#   samples-received series pins the forwarded fraction of the backlog.
-# - *Per-vintage fit of the DRC suspected streams.* The suspected-case and
-#   suspected-death likelihoods model the new cases and deaths in each
-#   sitrep, conditioning on the between-vintage increments against the
-#   same intensities as the cumulative likelihoods, sharpening the growth
-#   rate $r$ and dispersion $k$. A single-vintage stream reduces to the
-#   cumulative single-total likelihood, recovering the McCabe et al.
-#   configuration. The confirmed series is fitted per vintage so the joint
-#   conditions on the positivity trajectory across lab vintages rather
-#   than one cumulative total. The case streams share a single DRC
-#   ascertainment fraction $p_{\text{DRC}}$.
+# - *Over-dispersed likelihoods.* Deaths and reported cases use a
+#   negative-binomial likelihood with a shared surveillance dispersion,
+#   where McCabe et al. use Poisson for the deaths and do not model the
+#   reported cases.
+# - *Ascertainment extension.* A reporting-fraction hyperprior gives a
+#   joint posterior over the reported suspected-case count alongside the
+#   deaths and exports.
+# - *Suspected, confirmed and samples-received streams.* Three streams
+#   absent from McCabe et al., tying the reported counts and the
+#   laboratory pipeline to the same latent outbreak.
+# - *Per-vintage fit of the DRC streams.* The suspected and confirmed
+#   series are fitted across successive situation reports rather than as
+#   single totals, so the growth rate is informed by the reported
+#   trajectory.
 #
 # **Extensions**
 #
-# - *No-onward-transmission counterfactual.* Projects future expected
-#   deaths from cases already infected by $T$, integrating
-#   $i(s)\cdot(1 - F_d(T - s))$ per draw, a lower bound on the eventual
-#   toll if every onward transmission stopped today.
+# - *No-onward-transmission counterfactual.* A lower bound on the eventual
+#   death toll if all onward transmission stopped at the cut-off.
 # - *Posterior-predictive forecasts.* A one-week-ahead projection of each
-#   stream from the joint posterior, plus a retrospective check that
-#   refits the original report's data and projects forward to the cut-off
-#   to compare against the counts observed since.
+#   stream, plus a retrospective refit of the original report's data to
+#   the current cut-off.
 #md #
 #md # ```@raw html
 #md # </details>
@@ -1155,9 +1115,9 @@ cfr_prior_fig #hide
 # ```
 #
 # !!! note "Comparison with McCabe et al. / Imai 2020"
-#     McCabe et al. use the small-$rw$ simplification
-#     $\mu_e \approx q\cdot w\cdot C(T)$, the limit of equation (14)
-#     as $r \to 0$.
+#     McCabe et al. (and [imai2020](@cite) before them) use the
+#     small-$rw$ simplification $\mu_e \approx q\cdot w\cdot C(T)$, the
+#     limit of equation (14) as $r \to 0$.
 #     For BVD's prior range $rw \in 0.33 - 2.0$ the simplification
 #     under-estimates $C(T)$ by roughly $15$-$57\%$. We use a Poisson
 #     likelihood for the detected exports; at the small detection
@@ -1211,8 +1171,11 @@ cfr_prior_fig #hide
 # $D(T) \approx \mathrm{CFR}\cdot C(T)\cdot(1 + r/\beta)^{-\alpha}$
 # (valid for $T \gtrsim 12/(\beta+r)$), which
 # drops that factor. We evaluate equation (16) numerically instead,
-# which is exact. The
-# observed deaths follow the NegBinomial likelihood of equation (8)
+# which is exact. Its Gamma CDF is differentiated under reverse-mode AD
+# by a hand-written rule, with the shape-parameter derivative of the
+# regularized incomplete gamma function from a Kummer series following
+# the Stan Math Library [carpenter2015stanmath](@cite). The observed
+# deaths follow the NegBinomial likelihood of equation (8)
 # with the dispersion $k$ of equation (9), supplied by the composer so
 # it can be shared with the cases likelihood:
 #
