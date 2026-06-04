@@ -521,12 +521,14 @@ quantities.
         vol_window = bin_increments(received_daily, window_days)
         c_window = cumsum(vol_window)
         ϵ = eps(Tt)
+        ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
+        ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        dscale = max(convert(Tt, decay_scale), one(Tt))
         p_pos_vec = map(eachindex(window_days)) do i
             φ = clamp(bvd_window[i] / (bvd_window[i] + bg_window[i] + ϵ),
                 ϵ, one(Tt) - ϵ)
-            δ_i = convert(Tt, δ0) *
-                  exp(-c_window[i] / convert(Tt, decay_scale))
-            logistic(logit(φ) + δ_i)
+            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            clamp(logistic(logit(φ) + δ_i), ϵ, one(Tt) - ϵ)
         end
         p_pos = p_pos_vec
     else
