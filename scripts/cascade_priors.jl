@@ -108,8 +108,7 @@ function summarise(label, chn, secs)
     d = fit_diagnostics(chn)
     C = vec(Array(chn[:cumulative_cases]))
     ess_per_s = d.min_ess_bulk / secs
-    @printf("%-14s %6.1fs  minESS=%-7.1f maxR̂=%-6.3f div=%-4d " *
-            "ESS/s=%-6.2f  C(T)=%.0f [%.0f, %.0f]\n",
+    @printf("%-14s %6.1fs  minESS=%-7.1f maxR=%-6.3f div=%-4d ESS/s=%-6.2f  C(T)=%.0f [%.0f, %.0f]\n",
         label, secs, d.min_ess_bulk, d.max_rhat, d.n_divergent, ess_per_s,
         median(C), posterior_summary(C).lo90, posterior_summary(C).hi90)
     ## Suspected-case background: is the posterior pushing against the
@@ -120,8 +119,7 @@ function summarise(label, chn, secs)
     ## Background cases ≈ λ_bg · T (T the latent seeding-to-cut-off time).
     Tmed = median(vec(Array(chn[:T])))
     bg_cases = median(λ) * Tmed
-    @printf("    λ_bg median=%.3f 90%% CI [%.3f, %.3f]  " *
-            "(prior 97.5%% ≈ 2.24/day; ≈%.0f bg cases, %.0f%% of %d suspected)\n",
+    @printf("    lambda_bg median=%.3f 90%% CI [%.3f, %.3f]  (prior 97.5%% ~ 2.24/day; ~%.0f bg cases, %.0f%% of %d suspected)\n",
         median(λ), s.lo90, s.hi90, bg_cases,
         100 * bg_cases / obs.reported_cases, obs.reported_cases)
     return ess_per_s
