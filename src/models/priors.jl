@@ -339,9 +339,11 @@ plausibly drives both streams, so the two backgrounds can share this
 submodel's hyperparameters.
 
 The baseline `λ_mu` is the scalar background rate on its natural
-half-normal scale (`truncated(Normal(0, 1.0); lower = 0)` for cases;
-pass a tighter `baseline_prior` for deaths). The per-vintage rate is a
-multiplicative log-normal deviation from this baseline,
+half-normal scale, with the same diffuse default as the scalar `λ_bg`
+(`truncated(Normal(0, 5.0); lower = 0)` for cases, identified through the
+composition link; pass a tighter `baseline_prior` for deaths). The
+per-vintage rate is a multiplicative log-normal deviation from this
+baseline,
 
 ```math
 \\lambda_v = \\lambda_\\mu \\,
@@ -360,7 +362,7 @@ windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
 per-vintage rates.
 """
 @model function background_re_model(nv::Integer, σ_bg::Real;
-        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 5.0); lower = 0))
     m = max(nv, 1)
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), m))
