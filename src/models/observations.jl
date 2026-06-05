@@ -307,6 +307,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
     τ_forward = test_positivity_state.τ_forward
+    bg_cumulative = test_positivity_state.bg_cumulative
     f_rep = report_state.dist
     r = growth_state.r
 
@@ -336,9 +337,11 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     μ_bg_prev = zero(Tt)
     for i in 1:n
         s_k = t_edges[i]
-        ## Constant-rate non-BVD background: cumulative μ_bg(s_k) = λ_bg·s_k,
-        ## so the between-edge increment is λ_bg·(s_k − s_{k−1}).
-        μ_bg_k = max(λ_bg * s_k, zero(Tt))
+        ## Non-BVD background increment from the cumulative `bg_cumulative`
+        ## supplied by `test_positivity`: `μ_bg(s_k) − μ_bg(s_{k−1})`. The
+        ## default constant background gives `λ_bg·Δt`; the time-varying
+        ## surveillance ramp gives a closed-form saturating increment.
+        μ_bg_k = max(convert(Tt, bg_cumulative(s_k)), zero(Tt))
         Δμ_bg = max(μ_bg_k - μ_bg_prev, zero(Tt))
         μ_bg_prev = μ_bg_k
         raw = p_drc_per_bin[i] * ΔμBVD0[i] + Δμ_bg
@@ -360,7 +363,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
 
     expected_reports_total := Λ_at_edges[end]
 
-    return (; p_drc_per_bin, λ_bg, τ_forward,
+    return (; p_drc_per_bin, λ_bg, τ_forward, bg_cumulative,
         expected_reports_total, positivity,
         report_delay_dist = f_rep,
         μ_BVD0_at_edges, Λ_at_edges)
@@ -506,7 +509,15 @@ cumulative confirmed Binomial.
         epi_exclusion = nothing,
         selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
+        bg_cumulative = nothing,
         onset_fraction::Real = 1.0)
+    ## Non-BVD background cumulative `μ_bg(s)`. Passed in from the reported
+    ## stream's `test_positivity` submodel so the suspected and confirmed
+    ## streams share one background shape (constant or time-varying ramp).
+    ## Falls back to the constant-rate `λ_bg·s` when not supplied, keeping
+    ## the single-stream `confirmed_only_model` path unchanged.
+    bg_cum = bg_cumulative === nothing ?
+             (s -> max(λ_bg * s, zero(λ_bg * s))) : bg_cumulative
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
     ## Positivity link. `:free` (default) samples the severe-first selection
@@ -676,7 +687,7 @@ cumulative confirmed Binomial.
         μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
                 convert(Tt, p_drc_per_bin[i]) * onset_fraction *
                 delay_convolution(one(r), r, s_i, f_rep)
-        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
+        μ_bg = max(convert(Tt, bg_cum(s_i)), zero(Tt))
         denom = μ_bvd + μ_bg
         Nsusp_at[i] = denom
         qinf_count_at[i] = denom > zero(Tt) ?
@@ -730,12 +741,12 @@ cumulative confirmed Binomial.
     ## per-window analysed mean μ_A depends on this received backlog.
     p_drc_c = convert(Tt, p_drc_per_bin[1])
     N_susp_fn = let r = r, f_rep = f_rep, p_drc_c = p_drc_c,
-        onset_fraction = onset_fraction, λ_bg = λ_bg
+        onset_fraction = onset_fraction, bg_cum = bg_cum
 
         u -> u <= zero(u) ? zero(Tt) :
              p_drc_c * onset_fraction *
              delay_convolution(one(r), r, u, f_rep) +
-             max(convert(Tt, λ_bg) * u, zero(Tt))
+             max(convert(Tt, bg_cum(u)), zero(Tt))
     end
     N_recv_at = Vector{Tt}(undef, n)
     for i in 1:n

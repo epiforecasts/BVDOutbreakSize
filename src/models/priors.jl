@@ -407,12 +407,26 @@ Set `sample_forward = false` to fix `τ_forward = 1` without sampling it.
 The queue path (`confirmed_queue = true`) uses this because forwarding is
 governed by `1 − e` from [`epi_exclusion_model`](@ref), leaving
 `τ_forward` a dead dimension that would otherwise clutter the posterior.
+
+`background` is the non-BVD background submodel. The default
+[`constant_background_model`](@ref) keeps the constant-rate cumulative
+`μ_bg(s) = λ_bg · s` (the headline). Pass
+[`time_varying_background_model`](@ref) to give the background temporal
+flexibility (a surveillance ramp) so the untrusted suspected stream can
+absorb temporal misfit while `C_T` / ascertainment / the confirmed fit
+stay anchored. The submodel returns `(; λ_bg, bg_cumulative)` where
+`bg_cumulative(s)` is the cumulative background at elapsed time `s`; this
+model re-exposes both, so the reported and confirmed streams use the
+cumulative function rather than `λ_bg · s` directly.
 """
 @model function test_positivity_model(;
         lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
         fraction_forwarded_prior = Beta(5.0, 2.0),
-        sample_forward::Bool = true)
-    λ_bg ~ lambda_prior
+        sample_forward::Bool = true,
+        background = constant_background_model)
+    bg_state ~ to_submodel(background(lambda_prior), false)
+    λ_bg = bg_state.λ_bg
+    bg_cumulative = bg_state.bg_cumulative
     if sample_forward
         τ_forward ~ fraction_forwarded_prior
     else
@@ -421,7 +435,78 @@ governed by `1 − e` from [`epi_exclusion_model`](@ref), leaving
         ## not sampled (avoids a dead posterior dimension).
         τ_forward = one(λ_bg)
     end
-    return (; λ_bg, τ_forward)
+    return (; λ_bg, τ_forward, bg_cumulative)
+end
+
+"""
+Constant-rate non-BVD background (the headline). Samples the per-day rate
+`λ_bg` from `lambda_prior` and returns the closed-form cumulative
+`μ_bg(s) = λ_bg · s`. This is the default `background` of
+[`test_positivity_model`](@ref); the suspected and confirmed streams call
+the returned `bg_cumulative` rather than re-deriving `λ_bg · s`, so the
+constant and time-varying backgrounds share one code path. The submodel
+is curried over `lambda_prior` so [`test_positivity_model`](@ref) can pass
+its `λ_bg` prior straight through (`background(lambda_prior)`).
+"""
+@model function constant_background_model(lambda_prior)
+    λ_bg ~ lambda_prior
+    bg_cumulative = let λ_bg = λ_bg
+        s -> max(λ_bg * s, zero(λ_bg * s))
+    end
+    return (; λ_bg, bg_cumulative)
+end
+
+"""
+Time-varying non-BVD background: an opt-in surveillance RAMP for
+[`test_positivity_model`](@ref). The suspected-case stream is the
+untrusted, load-bearing stream; a constant-rate background cannot soak up
+temporal misfit (surveillance ramping up over the outbreak), so this gives
+the background a low-DOF temporal shape WITHOUT removing the constraint
+that pins ascertainment and outbreak size.
+
+The instantaneous background rate saturates from zero to a plateau `λ_bg`
+over a timescale `ramp_scale`,
+
+```math
+\\lambda_{bg}(u) = \\lambda_{bg}\\,(1 - e^{-u / \\text{ramp\\_scale}}),
+```
+
+so the cumulative integrates in closed form,
+
+```math
+\\mu_{bg}(s) = \\int_0^s \\lambda_{bg}(u)\\,du
+    = \\lambda_{bg}\\,\\bigl(s
+        - \\text{ramp\\_scale}\\,(1 - e^{-s / \\text{ramp\\_scale}})\\bigr).
+```
+
+Only two parameters are sampled: the plateau rate `λ_bg` (shared prior
+with the constant background, so the plateau matches the constant-rate
+prior) and the ramp timescale `ramp_scale`. The cumulative is monotone and
+non-negative, starts at rate 0 and approaches the constant-rate line
+`λ_bg · s` once `s ≫ ramp_scale`, so the constant background is recovered
+as `ramp_scale → 0`. Keeping it to two constrained parameters adds
+temporal flexibility without reopening the ascertainment ↔ size
+degeneracy. The default `ramp_scale ~ truncated(Normal(0, 30); lower = 0)`
+(median ≈ 20 days) spans surveillance scale-up over the ≈ 132-day window.
+Pass `ramp_prior` to override. Curried over `lambda_prior` like
+[`constant_background_model`](@ref).
+"""
+@model function time_varying_background_model(lambda_prior;
+        ramp_prior = truncated(Normal(0.0, 30.0); lower = 0))
+    λ_bg ~ lambda_prior
+    ramp_scale ~ ramp_prior
+    bg_cumulative = let λ_bg = λ_bg, ramp_scale = ramp_scale
+        function (s)
+            z = zero(λ_bg * s)
+            s <= zero(s) && return z
+            ## Saturating-exponential ramp: μ_bg(s) = λ_bg·(s − scale·(1 −
+            ## e^{−s/scale})). As scale → 0 this is λ_bg·s (constant rate).
+            sc = ramp_scale
+            sc <= zero(sc) && return max(λ_bg * s, z)
+            return max(λ_bg * (s - sc * (one(sc) - exp(-s / sc))), z)
+        end
+    end
+    return (; λ_bg, ramp_scale, bg_cumulative)
 end
 
 """

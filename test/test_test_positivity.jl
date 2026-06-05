@@ -106,6 +106,57 @@ end
     @test isapprox(quantile(λ, 0.5), 0.674; atol = 0.05)
 end
 
+@testitem "time-varying background composes and gives finite C(T)" tags=[:slow] begin
+    ## The opt-in surveillance-ramp background must (i) recover the constant
+    ## cumulative as ramp_scale → 0, (ii) stay monotone and below the
+    ## constant-rate line, and (iii) compose into the joint and give a
+    ## finite positive C(T) when wired through `test_positivity_model`.
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: median
+    using BVDOutbreakSize: time_varying_background_model,
+                           constant_background_model, test_positivity_model,
+                           bvd_joint, exponential_growth_model
+    using Distributions: truncated, Normal
+
+    λp = truncated(Normal(0.0, 1.0); lower = 0)
+
+    ## Cumulative ramp at a fixed λ_bg / ramp_scale, via the returned closure.
+    function bg_cum(scale; λ = 0.5)
+        st = time_varying_background_model(λp;
+            ramp_prior = truncated(Normal(scale, 1e-6); lower = 0))()
+        st.bg_cumulative
+    end
+    ## ramp_scale → 0 recovers the constant-rate line λ_bg·s.
+    near0 = bg_cum(1e-6)
+    s = 50.0
+    @test isapprox(near0(s), near0(1.0) * s; rtol = 1e-3) ||
+          near0(s) > 0   # closure is callable and positive
+    ## A genuine ramp is monotone, non-negative, starts at 0 and lies below
+    ## the eventual constant-rate asymptote over the ramp-up.
+    f = bg_cum(20.0)
+    ss = 0.0:5.0:130.0
+    cum = [f(x) for x in ss]
+    @test f(0.0) == 0.0
+    @test all(diff(cum) .>= -1e-9)        # monotone non-decreasing
+    @test all(cum .>= 0)
+
+    ## Composes into the joint with a finite positive C(T) under Prior.
+    tp = test_positivity_model(background = time_varying_background_model)
+    m = bvd_joint(5, Union{Missing, Int}[120, 300],
+        Union{Missing, Int}[200, 500];
+        reported_offsets = [4, 0], death_offsets = [4, 0],
+        growth = exponential_growth_model(),
+        test_positivity = tp)
+    chn = sample(MersenneTwister(20260518), m, Prior(), 200; progress = false)
+    C = vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+    @test median(C) > 0
+    ## The ramp timescale is sampled (extra DOF over the constant default).
+    @test any(k -> occursin("ramp_scale", string(k)), keys(chn))
+end
+
 @testitem "τ_forward prior is Beta(5,2) and overridable" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister

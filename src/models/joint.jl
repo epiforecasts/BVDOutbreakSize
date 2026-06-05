@@ -581,6 +581,7 @@ export infection→detection delay rather than learning it.
         test_positivity_model(;
             lambda_prior = d.lambda_prior,
             fraction_forwarded_prior = d.fraction_forwarded_prior,
+            background = d.background,
             sample_forward = false)
     else
         test_positivity
@@ -630,6 +631,7 @@ export infection→detection delay rather than learning it.
                 epi_exclusion = confirmed_epi_exclusion,
                 selection_clock = confirmed_selection_clock,
                 volume_scale = confirmed_volume_scale,
+                bg_cumulative = reported_state.bg_cumulative,
                 report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)
     end
