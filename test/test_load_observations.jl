@@ -110,3 +110,43 @@ end
         @test rh.counts[end] <= obs.reported_cases
     end
 end
+
+@testitem "freeze_observations truncates to a past cut-off" begin
+    using BVDOutbreakSize: load_observations, freeze_observations
+    using Dates: Date
+
+    full = load_observations()
+    frozen = freeze_observations("2026-05-23")
+
+    ## The cut-off moves to the freeze date; the grid shrinks by the
+    ## number of days dropped.
+    @test frozen.cutoff == Date("2026-05-23")
+    @test frozen.n < full.n
+    @test frozen.n == full.n - (Date(full.cutoff) - Date("2026-05-23")).value
+
+    ## Every retained vintage is dated on or before the freeze date, so
+    ## no history extends past the cut-off grid.
+    for key in (:reported_history, :deaths_history, :confirmed_history,
+        :lab_history)
+        h = getproperty(frozen, key)
+        isempty(h.days) && continue
+        @test all(1 .<= h.days .<= frozen.n)
+        @test maximum(h.days) <= frozen.n
+    end
+
+    ## The 23 May suspected streams: six vintages (18-23 May) of the
+    ## nine in the full manifest, ending at the frozen totals.
+    @test frozen.reported_history.counts == [516, 575, 672, 745, 872, 904]
+    @test frozen.deaths_history.counts == [131, 148, 160, 175, 204, 220]
+    @test frozen.reported_cases == 904
+    @test frozen.total_deaths == 220
+
+    ## The cut-off scalars come from the truncated history, not the
+    ## manifest's full-data totals.
+    @test frozen.reported_cases < full.reported_cases
+    @test frozen.total_deaths < full.total_deaths
+    @test frozen.confirmed_cases == frozen.confirmed_history.counts[end]
+
+    ## A Date argument is equivalent to the ISO string.
+    @test freeze_observations(Date("2026-05-23")).n == frozen.n
+end
