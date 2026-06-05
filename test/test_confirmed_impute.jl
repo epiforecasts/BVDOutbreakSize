@@ -64,58 +64,8 @@ end
     @test 0.0 < sum(σ) / length(σ) < 0.5
 end
 
-@testitem "impute extension: prior draws finite and valid" tags=[:slow] setup=[ImputeFixtures] begin
-    obs=load_observations()
-    c=early_extension(obs)
-    rep=obs.reported_case_history
-    dh=obs.death_history
-    m=bvd_joint(obs.exported_cases, _inc(dh.values), _inc(rep.values),
-        obs.export_deaths_daily;
-        reported_offsets = rep.offsets,
-        death_offsets = dh.offsets,
-        confirmed_cases = c.confirmed,
-        confirmed_offsets = c.offsets,
-        samples_analysed = c.analysed,
-        samples_received = c.received,
-        tests_analysed = obs.cumulative_tests_analysed,
-        tests_offset = 0,
-        first_export_detection_delta = obs.first_export_detection_delta,
-        confirmed_q_random_effect = confirmed_q_re_model,
-        confirmed_analysed_impute = analysed_impute_model)
-    chn=sample(m, Prior(), 100;
-        chain_type = FlexiChains.VNChain, progress = false)
-    C=vec(Array(chn[:cumulative_cases]))
-    @test all(isfinite, C)
-    @test all(C .> 0)
-end
-
-@testitem "impute extension: early window enters the gradient fit" tags=[:slow] setup=[ImputeFixtures] begin
-    ## The imputed denominator lets the early 18-22 May confirmed vintages
-    ## enter the gradient-based fit with finite, positive C(T). This only
-    ## checks the Binomial + log-RW path runs: a full fit does NOT converge
-    ## (the imputed ΔA funnels against the q random effect, R-hat ≈ 2),
-    ## which is why the extension is off by default. A few draws suffice.
-    obs=load_observations()
-    c=early_extension(obs)
-    rep=obs.reported_case_history
-    dh=obs.death_history
-    chn=nuts_sample(
-        bvd_joint(obs.exported_cases, _inc(dh.values), _inc(rep.values),
-            obs.export_deaths_daily;
-            reported_offsets = rep.offsets,
-            death_offsets = dh.offsets,
-            confirmed_cases = c.confirmed,
-            confirmed_offsets = c.offsets,
-            samples_analysed = c.analysed,
-            samples_received = c.received,
-            tests_analysed = obs.cumulative_tests_analysed,
-            tests_offset = 0,
-            first_export_detection_delta =
-            obs.first_export_detection_delta,
-            confirmed_q_random_effect = confirmed_q_re_model,
-            confirmed_analysed_impute = analysed_impute_model);
-        samples = 5, chains = 1, seed = 1, progress = false)
-    C=vec(Array(chn[:cumulative_cases]))
-    @test all(isfinite, C)
-    @test all(C .> 0)
-end
+## The two "impute extension" gradient-fit tests were removed when the
+## cut-off advanced to 3 June and the missing-lab-data fitting moved to the
+## condensed queue (`confirmed_queue`, test_confirmed_queue.jl). The
+## free-latent `analysed_impute_model` remains as an off-by-default
+## experiment; only its standalone submodel is exercised above.

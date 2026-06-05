@@ -36,7 +36,7 @@ end
     @test all(0 .< sp .< 1)
 end
 
-@testitem "test_selection_model: q0 near 1, qinf central, decay positive" begin
+@testitem "test_selection_model: q0 weak, qinf central, decay positive" begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: mean
@@ -47,8 +47,8 @@ end
     q0 = vec(Array(chn[:q0]))
     qinf = vec(Array(chn[:qinf]))
     decay = vec(Array(chn[:decay_scale]))
-    @test isapprox(mean(q0), 20 / 21.5; atol = 0.02)    # Beta(20,1.5) mean
-    @test mean(q0) > 0.85                                # severe cluster
+    @test isapprox(mean(q0), 0.5; atol = 0.02)          # Beta(2,2) mean
+    @test 0.4 < mean(q0) < 0.6                           # weak selection
     @test isapprox(mean(qinf), 0.5; atol = 0.02)         # Beta(6,6) central
     @test all(0 .< q0 .< 1)
     @test all(0 .< qinf .< 1)

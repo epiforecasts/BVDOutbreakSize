@@ -73,16 +73,19 @@
     @test obs.sources.death_history isa String
     @test !isempty(obs.sources.death_history)
 
-    ## confirmed-case history runs to the 28 May cut-off; its final
+    ## confirmed-case history runs to the 3 June cut-off; its final
     ## vintage equals the cut-off `confirmed_cases` total.
     @test obs.confirmed_case_history.values ==
-          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
+          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
+        282, 321, 344, 363, 381]
     @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
 
-    ## confirmed deaths: recorded, flat at 17 over the fitted window.
+    ## confirmed deaths: flat at 17 through 28 May, then the late-
+    ## confirmation catch-up to 64 on 3 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_death_history isa NamedTuple
-    @test obs.confirmed_death_history.values == [17, 17, 17]
+    @test obs.confirmed_death_history.values ==
+          [17, 17, 17, 42, 42, 48, 60, 62, 64]
     @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
     @test obs.sources.confirmed_death_history isa String
 
@@ -128,10 +131,12 @@ end
     @test obs.tests_received_history.dates ==
           obs.tests_analysed_history.dates
     ## Per-vintage confirmed positives never exceed tests analysed (the
-    ## binomial denominator), checked on the shared 23-28 May tail.
+    ## binomial denominator), checked on the shared 23-28 May lab dates
+    ## (the confirmed history now runs past them to 3 June).
     ch = obs.confirmed_case_history
-    tail = ch.values[(end - 5):end]
-    @test all(tail .<= obs.tests_analysed_history.values)
+    aidx = [findfirst(==(d), ch.dates)
+            for d in obs.tests_analysed_history.dates]
+    @test all(ch.values[aidx] .<= obs.tests_analysed_history.values)
 
     @test obs.sources.tests_received_history isa String
     @test obs.sources.tests_analysed_history isa String
