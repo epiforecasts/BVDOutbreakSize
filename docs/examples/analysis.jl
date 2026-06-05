@@ -300,7 +300,8 @@ vintage_table #hide
 #
 # Daily $\log R_t$ is the piecewise-linear interpolation between knots.
 # An intervention at the first WHO situation report adds a sampled
-# effect shaped by a logistic ramp over seven days:
+# effect shaped by a logistic ramp over about three weeks, reflecting that
+# a response takes weeks to bite rather than switching at a single date:
 #
 # ```math
 # \log R_t \mathrel{+}= \delta \cdot
@@ -1129,7 +1130,7 @@ prior_C_table #hide
 #md # ```
 
 prior_pair_fig = plot_pair(prior_chn,
-    [:C_T, :R_T, :r, :doubling_time, :T, :CFR, :k,
+    [:C_T, :R_T, :r, :T, :CFR, :k,
         :p_drc, :p_uganda]);
 
 #md # ```@raw html
@@ -1289,11 +1290,11 @@ summary_ranges = let
     ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
     Markdown.parse("""
-    - **Cumulative infections \$C_T\$:** the posterior is $(ints_i(sC))
-      infections, the latent pool behind every stream.
+    - **Cumulative infections** (\$C_T\$): the posterior is $(ints_i(sC))
+      infections.
     - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
       cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
-      confirmed cases capture only a small share of the outbreak.
+      confirmed cases capture only a small share of the estimated outbreak.
     - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
       cases by the cut-off, against $(obs.confirmed_cases) observed.
     - **Time since seeding:** the posterior is $(ints_i(sT)) days, placing
@@ -1401,14 +1402,10 @@ joint_summary #hide
 #
 # The model fits a weekly random-walk reproduction number, so we can show
 # the full daily $R_t$ trajectory rather than only its cut-off value
-# $R_T$. The saved chain stores the sampled random-walk parameters
-# (`rt_state.log_R0`, `rt_state.sigma_rw`, the innovation vector
-# `rt_state.z` and `rt_state.intervention_effect`), so the daily $R_t$ is
-# reconstructed per draw by mirroring the model's `rt_walk_model`. The
-# median and 50%/90% ribbons are shown only over the established-outbreak
-# window, the days on or after each draw's cumulative infections first
-# reach one. The earlier seeding window (shaded) is prior-driven and is
-# not an $R_t$ of an established epidemic, so it is left unplotted. The
+# $R_T$. The median and 50%/90% ribbons are shown only from the genetic
+# bound onward, where the random walk drives $R_t$. The earlier seeding
+# window (shaded) holds $R_t$ at its low introduction level and is not the
+# $R_t$ of an established epidemic, so it is left unplotted. The
 # WHO-response breakpoint (red dashed) and the data cut-off (grey dashed)
 # are marked.
 
@@ -1486,7 +1483,7 @@ lab_summary #hide
 #md # ```
 
 posterior_pair_fig = plot_pair(chn_joint,
-    [:C_T, :R_T, :r, :doubling_time, :T, :CFR, :k,
+    [:C_T, :R_T, :r, :T, :CFR, :k,
         :p_drc, :p_uganda];
     prior = prior_chn);
 
@@ -1747,7 +1744,9 @@ forecast_summary = forecast_table(forecast);
 
 forecast_summary #hide
 
-# New counts expected over the coming week, by stream:
+# The coming week at a glance: new confirmed cases and confirmed deaths,
+# the new latent infections behind them, and the reproduction number
+# carried over the horizon.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead forecast plot</summary>

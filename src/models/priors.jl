@@ -59,9 +59,10 @@ intervention at `breakpoint` (e.g. the first WHO situation report) adds a
 sampled effect `intervention_effect` shaped by a logistic ramp
 ([`sigmoid_ramp`](@ref)), so transmission changes gradually over the ramp
 window rather than instantly; `breakpoint = missing` drops the term. The
-ramp scale `ramp` defaults to 14 days, a fortnight transition reflecting
-that a response (case finding, isolation, vaccination) takes weeks to bite
-rather than switching at a single date; pass `ramp` to widen or narrow it.
+ramp scale `ramp` defaults to 21 days, an about-three-week transition
+reflecting that a response (case finding, isolation, vaccination) takes
+weeks to bite rather than switching at a single date; pass `ramp` to widen
+or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 
@@ -76,6 +77,12 @@ log-SD slightly wider than the genetic spread (≈0.07) to allow for the
 wide per-assumption clock intervals. Sampling on `R0` (with `r0` derived
 through Euler–Lotka) rather than on `r` directly keeps the renewal seeding
 consistent; the implied doubling-time prior tracks the genetic estimate.
+This molecular-clock prior anchors the ESTABLISHED reproduction number (the
+walk base at the genetic bound). The pre-establishment seeding `R_t` is a
+SEPARATE, low and wide prior (`seed_log_r_prior`, default `Normal(log(1),
+0.5)`, centred on no growth with broad support over sub-critical to slow
+growth), so the genetic growth estimate for the established outbreak does
+not act on the introduction phase and push the seeding time earlier.
 
 The random-walk step SD prior is a tight half-normal SD 0.05. The
 observed sitrep window is only the final ≈9 days of a ≈90-day inferred
@@ -102,22 +109,32 @@ fortnight, the response damps `R_t` only partially by the cut-off.
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
-        ramp::Real = 14.0,
+        ramp::Real = 21.0,
         log_r0_prior = Normal(log(1.6), 0.10),
+        seed_log_r_prior = Normal(log(1.0), 0.5),
         sigma_prior = truncated(Normal(0, 0.05); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
+    ## Two distinct reproduction numbers: a LOW seeding `R_t` over the
+    ## pre-establishment window (before the genetic bound, days < rt_start),
+    ## and the established `R0` at the bound that the random walk grows from.
+    ## Keeping them separate stops the molecular-clock growth prior (which
+    ## describes the *established* outbreak) from acting on the introduction
+    ## phase and pushing the seeding time earlier.
     log_R0 ~ log_r0_prior
+    log_R0_seed ~ seed_log_r_prior
     sigma_rw ~ sigma_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
     steps = sigma_rw .* z[1:(nb - 1)]
     log_R = log_R0 .+ vcat(zero(log_R0), cumsum(steps))
-    log_Rt = interpolate_knots(log_R, days, n)
+    log_Rt_walk = interpolate_knots(log_R, days, n)
+    log_Rt = [t < rt_start ? log_R0_seed : log_Rt_walk[t] for t in 1:n]
     log_Rt = log_Rt .+ intervention_effect .* sigmoid_ramp(n, breakpoint; ramp)
     Rt = exp.(log_Rt)
-    return (; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)
+    return (; Rt, log_R, days, sigma_rw, log_R0, log_R0_seed,
+        intervention_effect)
 end
 
 ## --- Seeding and the generating infection process -----------------------
@@ -129,7 +146,7 @@ truncated Normal centred on a single seed; the prior is injectable. The
 seeding window is filled by exponential growth at the implied rate in
 [`infection_model`](@ref).
 """
-@model function seed_model(; i0_prior = truncated(Normal(1.0, 1.0); lower = 0))
+@model function seed_model(; i0_prior = truncated(Normal(0.1, 0.1); lower = 0))
     I0 ~ i0_prior
     return (; I0)
 end
@@ -307,7 +324,7 @@ The derived per-suspected positivity is exposed inside
 [`confirmed_cases_model`](@ref). Returns `(; λ_bg, τ_test)`.
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
+        lambda_prior = truncated(Normal(0.0, 5.0); lower = 0),
         fraction_tested_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
