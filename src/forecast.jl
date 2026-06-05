@@ -59,6 +59,36 @@ function _forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
         zero(q), one(q))
 end
 
+# Cumulative confirmed deaths at horizon `Th`: a fraction `τ_death` of the
+# suspect-death backlog increment over the horizon, weighted by the
+# death-specimen positivity `p_pos_death = s·q_death + (1−spec)(1−q_death)`,
+# with `q_death = μ_BVD_death / N_death_susp` the BVD share of the
+# suspect-death pool. The suspect-death backlog is the modelled BVD-death
+# trajectory (`CFR·p_deaths·os` convolved with the onset-to-death delay)
+# plus the constant-rate `λ_bg_death` background, matching
+# `confirmed_deaths_model` and the joint's `nsusp_death_edges`. Returns the
+# forwarded positive increment over `(T, Th]` to add to the observed
+# cumulative confirmed deaths.
+function _forecast_confirmed_deaths_increment(r, T, Th, α, θ, CFR, p_deaths,
+        λ_bg_death, τ_death, s, spec; onset_fraction = 1.0,
+        alg = DEATH_INTEGRAL_ALG)
+    f_death = Gamma(α, θ)
+    bvd_death(u) = u <= zero(u) ? zero(u) :
+                   onset_fraction * p_deaths *
+                   delay_convolution(CFR, r, u, f_death; alg)
+    nsusp(u) = max(bvd_death(u), zero(u)) +
+               max(λ_bg_death * u, zero(λ_bg_death))
+    ΔN = max(nsusp(Th) - nsusp(T), zero(Th))
+    ## BVD share of the suspect-death pool at the horizon sets positivity.
+    denom = nsusp(Th)
+    q_d = denom > zero(denom) ?
+          clamp(max(bvd_death(Th), zero(Th)) / denom, zero(Th), one(Th)) :
+          zero(Th)
+    p_pos = clamp(s * q_d + (one(q_d) - spec) * (one(q_d) - q_d),
+        zero(q_d), one(q_d))
+    return max(τ_death * p_pos * ΔN, zero(ΔN))
+end
+
 # Capacity-limited analysed throughput over the horizon: the lab processes
 # a fraction `1 − exp(−κ·h/backlog)` of the received backlog not yet
 # analysed (`backlog = received − analysed_cutoff`), with daily capacity `κ`
@@ -91,6 +121,11 @@ per draw and columns:
   (`:s_test`, `:spec_test`, `:q0`, `:qinf`, `:decay_scale`, `:τ_forward`,
   `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
   `obs_analysed` are supplied. Otherwise these columns are absent.
+- `:confirmed_deaths_cum`, `:confirmed_deaths_new` — laboratory-confirmed
+  deaths when the chain additionally carries the confirmed-death
+  parameters (`:τ_death`, `:p_deaths`, `:λ_bg_death`, sharing the case-lab
+  `:s_test` / `:spec_test`) and `obs_confirmed_deaths` is supplied.
+  Otherwise these columns are absent.
 
 DRC reported cases follow the additive expectation
 `p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg·(T+h)`, with
@@ -119,6 +154,7 @@ function forecast_reported(chn;
         obs_deaths::Real,
         obs_exports::Union{Real, Missing} = missing,
         obs_confirmed::Union{Real, Missing} = missing,
+        obs_confirmed_deaths::Union{Real, Missing} = missing,
         obs_tests::Union{Real, Missing} = missing,
         obs_analysed::Union{Real, Missing} = missing,
         forecast_exports::Bool = true,
@@ -168,6 +204,20 @@ function forecast_reported(chn;
     θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
     capacity = has_lab ? _draws(chn, :capacity_cutoff) : nothing
 
+    ## Confirmed-death draws: the death-specimen forwarding fraction
+    ## `τ_death`, the deaths drift `p_deaths` and background `λ_bg_death`,
+    ## sharing the case-lab sensitivity `s_test` / specificity `spec_test`
+    ## and the deaths CFR / onset-to-death delay (`CFR`, `α`, `θ`). Present
+    ## on the joint chain only; their absence (or a missing
+    ## `obs_confirmed_deaths`) drops the confirmed-death columns.
+    has_lab_deaths = has_lab &&
+                     all(haskey_chain(chn, n)
+                     for n in (:τ_death, :p_deaths, :λ_bg_death)) &&
+                     obs_confirmed_deaths !== missing
+    τ_death = has_lab_deaths ? _draws(chn, :τ_death) : nothing
+    p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
+    λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
+
     has_tests = has_lab && obs_tests !== missing
     rng = MersenneTwister(seed)
     n = length(r)
@@ -176,6 +226,7 @@ function forecast_reported(chn;
     deaths_cum = Vector{Int}(undef, n)
     exports_cum = forecast_exports ? Vector{Int}(undef, n) : nothing
     confirmed_cum = has_lab ? Vector{Int}(undef, n) : nothing
+    confirmed_deaths_cum = has_lab_deaths ? Vector{Int}(undef, n) : nothing
     tests_cum = has_tests ? Vector{Int}(undef, n) : nothing
 
     @inbounds for i in 1:n
@@ -234,6 +285,17 @@ function forecast_reported(chn;
                 tests_cum[i] = _nb_rand(rng, k[i], received)
             end
         end
+        if has_lab_deaths
+            ## Forwarded positive increment of the suspect-death backlog
+            ## over the horizon, sharing the case-lab sensitivity /
+            ## specificity, added to the observed cumulative confirmed
+            ## deaths at the cut-off.
+            μ_cdeath = _forecast_confirmed_deaths_increment(r[i], T[i], Th,
+                α[i], θ[i], CFR[i], p_deaths[i], λ_bg_death[i], τ_death[i],
+                s_test[i], spec_test[i]; onset_fraction = os, alg)
+            confirmed_deaths_cum[i] = round(Int, obs_confirmed_deaths) +
+                                      _nb_rand(rng, k[i], μ_cdeath)
+        end
     end
 
     _new(cum, obs) = max.(cum .- round(Int, obs), 0)
@@ -250,6 +312,11 @@ function forecast_reported(chn;
     if has_lab
         df.confirmed_cum = confirmed_cum
         df.confirmed_new = _new(confirmed_cum, obs_confirmed)
+    end
+    if has_lab_deaths
+        df.confirmed_deaths_cum = confirmed_deaths_cum
+        df.confirmed_deaths_new = _new(confirmed_deaths_cum,
+            obs_confirmed_deaths)
     end
     if has_tests
         df.tests_cum = tests_cum
@@ -298,6 +365,9 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
     :confirmed_cum in propertynames(fc) &&
         push!(streams, ("DRC confirmed cases",
             :confirmed_cum, :confirmed_new))
+    :confirmed_deaths_cum in propertynames(fc) &&
+        push!(streams, ("DRC confirmed deaths",
+            :confirmed_deaths_cum, :confirmed_deaths_new))
     for (label, cum, new) in streams
         push!(rows, _row(label, "cumulative by T+7", fc[!, cum]))
         push!(rows, _row(label, "new this week", fc[!, new]))

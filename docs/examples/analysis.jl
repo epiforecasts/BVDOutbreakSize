@@ -438,8 +438,8 @@ vintage_table #hide
 # probability of having died by now.
 #
 # Fitting all four streams together gives the posterior for the latent
-# cumulative case count $C(T)$ at the report date $T$ — the quantity we
-# care about — while sharing the growth, delay, fatality and
+# cumulative infection count $C(T)$ at the report date $T$ — the quantity
+# we care about — while sharing the growth, delay, fatality and
 # ascertainment parameters across the streams that depend on them.
 #
 # In implementation terms, the model is assembled from small reusable
@@ -528,7 +528,7 @@ vintage_table #hide
 # C(s) = \exp(r\,s), \qquad r = \frac{\log 2}{\tau}, \tag{1}
 # ```
 #
-# so that the cumulative case count at the cut-off is $C(T) = 2^m$
+# so that the cumulative infection count at the cut-off is $C(T) = 2^m$
 # with $m = T/\tau$ the number of doublings since seeding. McCabe et al.'s
 # primary assumption is the doubling time, which they vary over a
 # sensitivity sweep of 7 / 14 / 21 days; each choice of doubling time
@@ -2482,7 +2482,7 @@ lab_pair_fig #hide
 # headline counts is instead at the laboratory: a case must be suspected,
 # have a sample taken and analysed, and test positive to be confirmed, so
 # only a small share of infections is ultimately laboratory-confirmed. The
-# cumulative case load is therefore about one over that confirmation
+# cumulative infection burden is therefore about one over that confirmation
 # share times the confirmed total — the multiplier quoted in the
 # [summary](@ref "Summary"). The pair plot above shows $p_{\text{DRC}}$'s
 # posterior against the prior.
@@ -2591,7 +2591,15 @@ vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected deaths",
         dates = obs.death_history.dates,
         replicates = collect(pp_joint[@varname(total_deaths)]),
-        observed = obs.death_history.values, colour = :firebrick)]);
+        observed = obs.death_history.values, colour = :firebrick),
+    ## Confirmed deaths are fit as a single cumulative vintage at the
+    ## cut-off (flat at 17 over 26-28 May), so the replicate vectors are
+    ## length 1; align the panel to the cut-off date / value only.
+    (; title = "Confirmed deaths",
+        dates = [obs.confirmed_death_history.dates[end]],
+        replicates = collect(pp_joint[@varname(confirmed_deaths)]),
+        observed = [obs.confirmed_death_history.values[end]],
+        colour = :darkorange)]);
 
 #md # ```@raw html
 #md # </details>
@@ -2656,6 +2664,7 @@ forecast = forecast_reported(chn_joint;
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
     obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths,
     obs_tests = obs.tests_received_history.values[end],
     obs_analysed = obs.cumulative_tests_analysed,
     forecast_exports = false,

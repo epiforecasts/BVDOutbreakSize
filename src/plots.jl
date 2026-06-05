@@ -501,6 +501,8 @@ function plot_forecast(fc::DataFrame)
         (:tests_new, "New tests analysed (DRC)", :teal))
     :confirmed_new in propertynames(fc) && push!(cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
+    :confirmed_deaths_new in propertynames(fc) && push!(cols,
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange))
     ncols = min(length(cols), 3)
     nrows = cld(length(cols), ncols)
     fig = Figure(; size = (370 * ncols, 360 * nrows))
