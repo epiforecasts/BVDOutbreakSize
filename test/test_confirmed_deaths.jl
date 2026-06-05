@@ -61,7 +61,10 @@ end
     ## Per-day non-BVD background series (was a scalar λ_bg); sum is the
     ## background total entering the composition q_susp.
     bg_daily = fill(0.5, 40)
-    m = confirmed_deaths_model(17, 246, 250.0, bvd, 0.3, bg_daily)
+    ## Modelled suspected-death daily series (was a scalar expected total);
+    ## confirmed deaths thin it per-vintage. k is the dispersion.
+    deaths_daily = fill(6.0, 40)
+    m = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
     st = returned(m, rand(MersenneTwister(2), m))
     @test 0 < st.q_susp < 1
     @test 0 < st.p_death_conf < 1

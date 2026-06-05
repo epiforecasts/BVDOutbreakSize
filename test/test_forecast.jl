@@ -10,14 +10,16 @@
 
     ## Synthetic prior carrying every parameter name that
     ## `forecast_reported` reads: :r, :expected_reports_T,
-    ## :expected_deaths_T, :expected_exports_T, :k.
+    ## :expected_deaths_T, :expected_confirmed_T,
+    ## :expected_confirmed_deaths_T, :k.
     @model function _forecast_test()
         r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
         inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
         k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
         expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
         expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
-        expected_exports_T ~ truncated(Normal(2.0, 0.5); lower = 0.1)
+        expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
+        expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
         return nothing
     end
 
@@ -36,23 +38,27 @@ end
         horizon = 7,
         obs_cases = 905,
         obs_deaths = 18,
-        obs_exports = 2)
+        obs_confirmed = 210,
+        obs_confirmed_deaths = 17)
 
     @test fc isa DataFrame
     @test nrow(fc) == 200
-    cols=[:cases_cum, :deaths_cum, :exports_cum,
-        :cases_new, :deaths_new, :exports_new]
+    cols=[:cases_cum, :deaths_cum, :confirmed_cum, :confirmed_deaths_cum,
+        :cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new]
     @test all(c -> c in propertynames(fc), cols)
     @test all(fc.cases_cum .>= 0)
     @test all(fc.deaths_cum .>= 0)
-    @test all(fc.exports_cum .>= 0)
+    @test all(fc.confirmed_cum .>= 0)
+    @test all(fc.confirmed_deaths_cum .>= 0)
     @test all(fc.cases_new .>= 0)
     @test all(fc.deaths_new .>= 0)
-    @test all(fc.exports_new .>= 0)
     ## New-this-week cannot exceed the cumulative forecast.
     @test all(fc.cases_new .<= fc.cases_cum)
     @test all(fc.deaths_new .<= fc.deaths_cum)
-    @test all(fc.exports_new .<= fc.exports_cum)
+    @test all(fc.confirmed_new .<= fc.confirmed_cum)
+    ## Confirmed deaths are a thinning of suspected deaths, so cannot exceed
+    ## the forecast cumulative suspected deaths.
+    @test all(fc.confirmed_deaths_cum .<= fc.deaths_cum)
 end
 
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin
@@ -64,12 +70,13 @@ end
         horizon = 7,
         obs_cases = 905,
         obs_deaths = 18,
-        obs_exports = 2)
+        obs_confirmed = 210,
+        obs_confirmed_deaths = 17)
 
     tbl=forecast_table(fc)
     @test tbl isa DataFrame
-    ## Three streams x two quantities (cumulative, new this week).
-    @test nrow(tbl) == 6
+    ## Four streams x two quantities (cumulative, new this week).
+    @test nrow(tbl) == 8
     @test names(tbl) ==
           ["Stream", "Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
         "Upper 30%", "Upper 60%", "Upper 90%"]
@@ -86,18 +93,20 @@ end
         horizon = 7,
         obs_cases = 905,
         obs_deaths = 18,
-        obs_exports = 2)
+        obs_confirmed = 210,
+        obs_confirmed_deaths = 17)
 
     tbl=forecast_vs_truth(fc;
-        cases = 1000, deaths = 25, exports = 3)
+        cases = 1000, deaths = 25, confirmed = 260, confirmed_deaths = 20)
 
     @test tbl isa DataFrame
-    @test nrow(tbl) == 3
+    @test nrow(tbl) == 4
     @test names(tbl) ==
           ["Stream", "Observed", "Lower 90%", "Lower 60%", "Lower 30%",
         "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
     @test Set(tbl[!, "Stream"]) ==
-          Set(["DRC reported cases", "DRC deaths", "Uganda exports"])
+          Set(["DRC reported cases", "DRC deaths",
+        "DRC confirmed cases", "DRC confirmed deaths"])
 
     for row in eachrow(tbl)
         covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]

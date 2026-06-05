@@ -180,14 +180,43 @@ function convolve_delay(x::AbstractVector, delay::AbstractVector)
 end
 
 """
-Day indices of the weekly reproduction-number knots over an `n`-day grid.
-Knot 1 sits on day 1 and the last knot on day `n`, with regular knots
-every `week` days, so a knot is always pinned to each end of the grid.
-Returns a sorted vector of unique day indices.
+Discrete convolution of two delay PMFs `a` and `b` (both indexed from
+delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
+result has length `length(a) + length(b) - 1`; its mass equals
+`sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
+build the infection→detection delay (incubation ⊕ onset-to-detection) and
+the infection→death delay (incubation ⊕ onset-to-death) for the exports
+streams from their component PMFs. Type-stable and AD-transparent.
 """
-function knot_days(n::Integer; week::Integer = 7)
+function convolve_pmf(a::AbstractVector, b::AbstractVector)
+    (isempty(a) || isempty(b)) &&
+        return zeros(promote_type(eltype(a), eltype(b)), 0)
+    na = length(a)
+    nb = length(b)
+    Tp = promote_type(eltype(a), eltype(b))
+    y = zeros(Tp, na + nb - 1)
+    @inbounds for i in 1:na, j in 1:nb
+
+        y[i + j - 1] += a[i] * b[j]
+    end
+    return y
+end
+
+"""
+Day indices of the weekly reproduction-number knots over an `n`-day grid.
+The first knot sits on day `start` (default 1) and the last knot on day
+`n`, with regular knots every `week` days, so a knot is pinned to `start`
+and to the end of the grid. With `start > 1` the reproduction number is
+held flat (at the first knot's value) for all days before `start`
+([`interpolate_knots`](@ref) clamps below the first knot), so the random
+walk only varies `R_t` from `start` onward — used to fix `R_t` over the
+pre-establishment seeding window before the genetic TMRCA bound. Returns a
+sorted vector of unique day indices.
+"""
+function knot_days(n::Integer; week::Integer = 7, start::Integer = 1)
     n <= 1 && return [1]
-    days = collect(1:week:n)
+    s = clamp(Int(start), 1, n)
+    days = collect(s:week:n)
     days[end] == n || push!(days, n)
     return days
 end

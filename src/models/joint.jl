@@ -13,11 +13,13 @@
 
 ## Run the generating infection process and onset staging, returning the
 ## infection state and the daily onsets shared by every stream.
-@model function _latent(n::Integer, breakpoint, infection, onset_incidence)
-    infection_state ~ to_submodel(infection(n; breakpoint), false)
+@model function _latent(n::Integer, breakpoint, infection, onset_incidence;
+        rt_start::Integer = 1)
+    infection_state ~ to_submodel(infection(n; breakpoint, rt_start), false)
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false)
-    return (; infection_state, onsets = onset_state.onsets)
+    return (; infection_state, onsets = onset_state.onsets,
+        incubation_pmf = onset_state.incubation_pmf)
 end
 
 """
@@ -37,7 +39,8 @@ exports likelihood only. See [`exports_model`](@ref).
         _latent(n, breakpoint, infection, onset_incidence), false)
     asc_state ~ to_submodel(ascertainment)
     exports_state ~ to_submodel(
-        exports(exported_cases, latent.onsets, asc_state.p_uganda;
+        exports(exported_cases, latent.infection_state.infections,
+        asc_state.p_uganda; incubation_pmf = latent.incubation_pmf,
         source_population))
     C_T := latent.infection_state.C_T
 end
@@ -110,7 +113,8 @@ positives (a Binomial of the observed analysed denominator in
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model(),
+        confirmed_positivity_link::Symbol = :free)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -124,7 +128,8 @@ positives (a Binomial of the observed analysed denominator in
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history))
+        lab_history, tests_received_history,
+        positivity_link = confirmed_positivity_link))
     C_T := latent.infection_state.C_T
 end
 
@@ -139,6 +144,7 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -160,8 +166,9 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
         k, p_drc))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily))
+        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
+        p_drc, cases_state.bg_daily, k;
+        confirmed_deaths_history))
     C_T := latent.infection_state.C_T
 end
 
@@ -189,11 +196,13 @@ See [`exports_deaths_model`](@ref).
         deaths((; days = Int[], counts = Int[]), missing, latent.onsets,
         dispersion_state.k))
     exports_state ~ to_submodel(
-        exports(missing, latent.onsets, asc_state.p_uganda;
+        exports(missing, latent.infection_state.infections,
+        asc_state.p_uganda; incubation_pmf = latent.incubation_pmf,
         source_population))
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, exports_state.export_onsets,
-        deaths_state.CFR, deaths_state.od_pmf))
+        exports_deaths_model(exports_deaths,
+        exports_state.export_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf))
     C_T := latent.infection_state.C_T
 end
 
@@ -258,11 +267,18 @@ death-confirmation probability (`death_confirmation`).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        confirmed_positivity_link::Symbol = :free,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
+    ## Fix R_t at R0 over the pre-establishment seeding window, letting the
+    ## random walk vary R_t only from the conservative genetic TMRCA bound
+    ## (`n - tmrca_days`) onward — before that point the outbreak dynamics
+    ## are unidentified, so a free walk there only adds unsupported drift.
+    rt_start = ismissing(tmrca_days) ? 1 :
+               clamp(n - round(Int, tmrca_days), 1, n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence), false)
+        _latent(n, breakpoint, infection, onset_incidence; rt_start), false)
     infection_state = latent.infection_state
     onsets = latent.onsets
 
@@ -300,16 +316,20 @@ death-confirmation probability (`death_confirmation`).
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history))
+        lab_history, tests_received_history,
+        positivity_link = confirmed_positivity_link))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily))
+        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
+        p_drc, cases_state.bg_daily, k;
+        confirmed_deaths_history))
     exports_state ~ to_submodel(
-        exports(exported_cases, onsets, p_uganda; source_population))
+        exports(exported_cases, infection_state.infections, p_uganda;
+        incubation_pmf = latent.incubation_pmf, source_population))
     exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths, exports_state.export_onsets,
-        deaths_state.CFR, deaths_state.od_pmf))
+        exports_deaths_model(exports_deaths,
+        exports_state.export_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf))
 
     if genetic !== nothing
         genetic_state ~ to_submodel(

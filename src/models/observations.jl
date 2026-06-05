@@ -335,7 +335,7 @@ end
 
 """
 Align the confirmed-case counts onto the laboratory windows, splitting
-them into two non-overlapping groups so all the confirmed data is used:
+them into three non-overlapping groups so all the confirmed data is used:
 
 - *Observed* windows, where an analysed-specimen increment is available
   (the laboratory series only differences cleanly from its second vintage
@@ -350,18 +350,28 @@ them into two non-overlapping groups so all the confirmed data is used:
   denominator. Their confirmed increments are returned so the model can
   score them against the modelled laboratory volume, with the per-window
   positivity partially pooled with the observed windows.
+- *Late* windows, the confirmed vintages strictly after the last
+  laboratory date (29 May-3 June, INSP's confirmed-only format with no
+  national analysed-specimen denominators). Like the early windows, their
+  confirmed increments are scored against the modelled laboratory volume
+  with the pooled positivity. Their day grid carries a `late_start` day
+  (the last laboratory day) so the model bins the modelled volume over
+  each late window's *own* day range, anchored at `late_start`, rather
+  than from day 0 (which would double-count the observed window volume).
 
-The two groups partition the confirmed counts at the first laboratory
-date, so no confirmed case is counted twice. Returns
-`(; obs_days, obs_positives, obs_analysed, early_days, early_increments)`
-of grid day-indices and per-window counts; the observed group is empty
-when no laboratory history is present and every confirmed vintage becomes
-an early window. Pure integer bookkeeping on the observed data, so it
+The three groups partition the confirmed counts at the first and last
+laboratory dates, so no confirmed case is counted twice. Returns
+`(; obs_days, obs_positives, obs_analysed, early_days, early_increments,
+late_days, late_increments, late_start)` of grid day-indices and
+per-window counts; the observed and late groups are empty when no
+laboratory history is present and every confirmed vintage becomes an
+early window. Pure integer bookkeeping on the observed data, so it
 carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history)
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
-        early_days = Int[], early_increments = Int[])
+        early_days = Int[], early_increments = Int[],
+        late_days = Int[], late_increments = Int[], late_start = 0)
     isempty(confirmed_history.counts) && return empty
     cdays = confirmed_history.days
     ccounts = confirmed_history.counts
@@ -377,7 +387,8 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         inc = diff(vcat(zero(eltype(ccounts)), collect(Int.(ccounts))))
         return (; obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = collect(Int.(cdays)),
-            early_increments = Int.(inc))
+            early_increments = Int.(inc),
+            late_days = Int[], late_increments = Int[], late_start = 0)
     end
 
     first_lab_day = Int(lab_history.days[1])
@@ -424,8 +435,28 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         obs_positives[end] = clamp(obs_positives[end] + c_acc, 0,
             obs_analysed[end])
     end
+
+    ## Late windows: confirmed vintages strictly after the last laboratory
+    ## date, which carry no analysed-specimen denominator. Their increments
+    ## are scored against the modelled laboratory volume binned over each
+    ## window's own day range, so the running edge must start at the last
+    ## laboratory day (`late_start`) — the `bin_increments` running `prev`
+    ## starts at 0, so the model anchors it at `late_start` to avoid
+    ## re-counting the observed-window volume already scored above.
+    last_lab_day = Int(lab_history.days[end])
+    late_days = Int[]
+    late_increments = Int[]
+    prev_conf_late = confirmed_at(last_lab_day)
+    for (i, d) in enumerate(cdays)
+        Int(d) <= last_lab_day && continue
+        push!(late_days, Int(d))
+        push!(late_increments, Int(ccounts[i]) - prev_conf_late)
+        prev_conf_late = Int(ccounts[i])
+    end
+
     return (; obs_days, obs_positives, obs_analysed, early_days,
-        early_increments)
+        early_increments, late_days, late_increments,
+        late_start = last_lab_day)
 end
 
 """
@@ -470,7 +501,9 @@ quantities.
         tests_received_history = (; days = Int[], counts = Int[]),
         tests_received::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
-        positivity = confirmed_positivity_model)
+        positivity = confirmed_positivity_model,
+        positivity_link::Symbol = :free,
+        severity_enrichment = severity_enrichment_model())
     n = length(onsets)
 
     ## Received-specimen volume: the suspected pipeline carried through the
@@ -487,17 +520,66 @@ quantities.
     received_increments ~ to_submodel(
         vintage_increments_model(received_inc, rvobs.obs_increments, k))
 
-    ## Confirmed positives in two groups sharing one partially-pooled
-    ## positivity: early windows (no observed analysed) scored as counts
-    ## against the modelled laboratory volume, observed windows scored as a
-    ## Binomial of the observed analysed denominator.
+    ## Confirmed positives in three groups sharing one partially-pooled
+    ## positivity: early windows (before the first lab date, no observed
+    ## analysed) scored as counts against the modelled laboratory volume,
+    ## observed windows scored as a Binomial of the observed analysed
+    ## denominator, and late windows (after the last lab date, INSP's
+    ## confirmed-only format) scored as counts against the modelled volume
+    ## like the early windows.
     windows = confirmed_positivity_windows(confirmed_history, lab_history)
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
-    nv = n_early + n_obs
-    pos_state ~ to_submodel(positivity(nv))
-    p_pos = pos_state.p_pos
+    n_late = length(windows.late_days)
+    nv = n_early + n_obs + n_late
     have_data = !ismissing(confirmed_cases)
+
+    ## Per-window tested BVD share `p_pos`. Two links:
+    ## `:free` (default) — a free partially-pooled per-window random effect
+    ## ([`confirmed_positivity_model`](@ref)), decoupled from `λ_bg`.
+    ## `:composition` — the tested share is the suspect-pool composition
+    ## `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)` over each laboratory
+    ## window, upsampled by a decaying severity enrichment δ0 (see
+    ## [`severity_enrichment_model`](@ref)), so the lab positivity identifies
+    ## the background `λ_bg` rather than absorbing it into a free curve.
+    window_days = vcat(windows.early_days, windows.obs_days,
+        windows.late_days)
+    if positivity_link === :composition
+        enrich_state ~ to_submodel(severity_enrichment, false)
+        δ0 = enrich_state.δ0
+        decay_scale = enrich_state.decay_scale
+        ## Suspect-pool composition over each window from the SAME suspected-
+        ## stream series that drive `reported_cases_model`.
+        bvd_window = bin_increments(p_drc .* bvd_reports_daily, window_days)
+        bg_window = bin_increments(bg_daily, window_days)
+        Tt = eltype(bvd_window)
+        ## Testing clock: cumulative modelled analysed volume at each window.
+        vol_window = bin_increments(received_daily, window_days)
+        c_window = cumsum(vol_window)
+        lo = convert(Tt, 1e-8)
+        hi = one(Tt) - lo
+        ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
+        ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        dscale = max(convert(Tt, decay_scale), one(Tt))
+        p_pos = map(eachindex(window_days)) do i
+            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
+            ## window, guarded against a zero/negative denominator.
+            num = bvd_window[i]
+            den = bvd_window[i] + bg_window[i]
+            ratio = num / (den + lo)
+            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            q = logistic(logit(φ) + δ_i)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the pool composition so the confirmed Binomial always sees
+            ## a valid probability even under an AD perturbation.
+            qf = isfinite(q) ? q : φ
+            clamp(qf, lo, hi)
+        end
+    else
+        pos_state ~ to_submodel(positivity(nv))
+        p_pos = pos_state.p_pos
+    end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
     ## modelled analysed volume), the volume binned from the received
@@ -510,17 +592,38 @@ quantities.
         vintage_increments_model(early_mean, early_obs, k))
 
     ## Observed windows: Binomial of the observed analysed denominator.
-    obs_p = p_pos[(n_early + 1):nv]
+    obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
     obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
                     missing
     confirmed_positives ~ to_submodel(
         confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
 
+    ## Late windows: confirmed increment ~ NegBinomial(positivity × modelled
+    ## analysed volume), like the early windows but for the confirmed-only
+    ## vintages after the last laboratory date. The volume is binned over
+    ## each late window's own day range, with the running edge ANCHORED at
+    ## the last laboratory day (`late_start`): `bin_increments` runs its
+    ## running `prev` from day 0, so prepending `late_start` to the late day
+    ## edges and dropping the synthetic first bin starts the accumulation at
+    ## `late_start`, avoiding double-counting the observed-window volume.
+    late_p = p_pos[(n_early + n_obs + 1):nv]
+    if n_late > 0
+        late_edges = vcat(windows.late_start, windows.late_days)
+        late_volume = bin_increments(received_daily, late_edges)[2:end]
+    else
+        late_volume = similar(received_daily, 0)
+    end
+    late_mean = late_p .* late_volume
+    late_obs = (have_data && n_late > 0) ? windows.late_increments : missing
+    late_increments ~ to_submodel(
+        vintage_increments_model(late_mean, late_obs, k))
+
     expected_received := safe_rate(sum(received_daily))
-    ## Expected confirmed at the cut-off and the overall positivity, over
-    ## both the modelled early volume and the observed analysed windows.
-    denom = sum(early_volume) + float(sum(windows.obs_analysed))
-    expected_positives = sum(early_mean) +
+    ## Expected confirmed at the cut-off and the overall positivity, over the
+    ## modelled early and late volume and the observed analysed windows.
+    denom = sum(early_volume) + float(sum(windows.obs_analysed)) +
+            sum(late_volume)
+    expected_positives = sum(early_mean) + sum(late_mean) +
                          (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) :
                           zero(eltype(p_pos)))
     expected_confirmed := safe_rate(expected_positives)
@@ -531,23 +634,45 @@ quantities.
 end
 
 """
-Uganda exports likelihood (geographic spread). Builds the export onset
-incidence `p_uganda · q · onsets` (with `q = daily_travellers /
-source_population` the per-capita travel rate) and convolves it with the
-sampled onset-to-detection delay, replacing the integral model's
-detection-window survival term with a convolved set of delays. Sums to the
-expected detected exports by the cut-off, fitted with Poisson (Uganda's
-stream is small). Samples the traveller volume and the onset-to-detection
-delay via injected submodels. The onset-to-detection prior is centred on
-the Ebola onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola
-Response Team 2014, NEJM), used here as the delay from symptom onset to
-detection at a point of entry abroad. Returns the expected count, the
-detection-timed series and the export onsets for reuse by
-[`exports_deaths_model`](@ref).
+Uganda exports likelihood (geographic spread). The exports stream is
+travel-gated, so the at-risk clock starts at infection: a traveller
+moves and is exported during incubation (pre-symptomatic) and stays at
+risk of being exported and detected abroad only until the
+infection→detection delay has elapsed. The expected detected exports by
+the cut-off therefore accumulate the per-capita travel rate `q =
+daily_travellers / source_population` over the at-risk PERSON-TIME, not
+over single-day onset events:
+
+```math
+\\mathbb{E}[\\text{exports}(T)] = p_\\text{uganda}\\, q
+    \\sum_{s=1}^{T} \\text{prevalence}(s),
+\\qquad
+\\text{prevalence}(s) = C(s) - \\text{detected}(s),
+```
+
+with `C(s)` the cumulative infections and `detected(s)` the cumulative
+infections that have already completed the infection→detection delay by
+day `s`. The infection→detection delay is the sampled onset-to-detection
+delay convolved with the shared incubation PMF (so incubation sits inside
+it, keyed to infection like `C(s)`); `detected` is the running sum of
+`convolve_delay(infections, f_det)`. Summing the daily at-risk
+prevalence is the discrete person-time integral, the discrete analogue of
+the integral model's at-risk person-time export integral; the earlier
+onset-incidence form summed `q · onsets`, charging each case only a
+single day of travel risk and so under-counting exports by roughly the
+mean at-risk dwell time. Fitted with Poisson (Uganda's stream is small).
+Samples the traveller volume and the onset-to-detection delay via
+injected submodels. The onset-to-detection prior is centred on the Ebola
+onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola Response
+Team 2014, NEJM), the delay from symptom onset to detection at a point of
+entry abroad. Returns the expected count, the per-capita travel rate,
+the daily at-risk prevalence and the daily expected export incidence for
+reuse by [`exports_deaths_model`](@ref).
 """
 @model function exports_model(
         exported_cases::Union{Missing, Integer},
-        onsets::AbstractVector, p_uganda::Real;
+        infections::AbstractVector, p_uganda::Real;
+        incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model(),
         onset_to_detection = censored_delay_model(30;
@@ -557,35 +682,57 @@ detection-timed series and the export onsets for reuse by
     daily_travellers = travel_state.daily_travellers
     q = daily_travellers / source_population
 
-    export_onsets = p_uganda .* q .* onsets
     detect_state ~ to_submodel(onset_to_detection)
-    detect_daily = convolve_delay(export_onsets, detect_state.pmf)
+    ## Infection→detection delay: onset→detection convolved with the shared
+    ## incubation PMF, so the survival clock runs from infection.
+    f_det = convolve_pmf(incubation_pmf, detect_state.pmf)
+    detected_daily = convolve_delay(infections, f_det)
+    ## At-risk prevalence (person-days): infected but not yet detected.
+    prevalence = cumsum(infections) .- cumsum(detected_daily)
+    export_prevalence = p_uganda .* q .* prevalence
 
-    raw_exports = sum(detect_daily)
+    raw_exports = sum(export_prevalence)
     expected_exports_T := safe_rate(raw_exports)
     exported_cases ~ Poisson(expected_exports_T)
 
-    return (; p_uganda, daily_travellers, export_onsets,
+    return (; p_uganda, daily_travellers, q, prevalence,
+        export_prevalence,
         expected_exports = expected_exports_T)
 end
 
 """
-Deaths-among-detected-exports likelihood. Convolves the export onsets
-(timed from onset, the same staging as detection) with the onset-to-death
-PMF shared from [`deaths_model`](@ref), scales by the CFR, and sums to the
-expected cumulative export deaths by the cut-off, fitted with Poisson.
+Deaths-among-detected-exports likelihood. Deaths accrue among the at-risk
+export person-time of [`exports_model`](@ref): each day's at-risk
+prevalence is weighted by the infection→death CDF at its remaining age to
+the cut-off and summed, scaled by the CFR, the discrete analogue of the
+integral model's `∫ C(s)·S_det(T−s)·F_death(T−s) ds`. The onset-to-death
+PMF shared from [`deaths_model`](@ref) is convolved with the incubation
+PMF to give the infection→death distribution, keyed to infection like the
+prevalence. Fitted with Poisson.
 """
 @model function exports_deaths_model(
         exports_deaths::Union{Missing, Integer},
-        export_onsets::AbstractVector, CFR::Real,
-        od_pmf::AbstractVector)
-    series = CFR .* convolve_delay(export_onsets, od_pmf)
+        export_prevalence::AbstractVector, CFR::Real,
+        od_pmf::AbstractVector, incubation_pmf::AbstractVector)
+    n = length(export_prevalence)
+    ## Infection→death CDF by age (age 0 = same day).
+    fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
+    death_cdf = cumsum(fd_pmf)
+    ## Weight each day's at-risk prevalence by the death CDF at its
+    ## remaining age to the cut-off (day n).
+    acc = zero(eltype(export_prevalence))
+    @inbounds for s in 1:n
+        age = n - s
+        w = age + 1 <= length(death_cdf) ? death_cdf[age + 1] :
+            (isempty(death_cdf) ? zero(eltype(death_cdf)) : death_cdf[end])
+        acc += export_prevalence[s] * w
+    end
+    raw = CFR * acc
 
-    raw = sum(series)
     expected_exports_deaths_T := safe_rate(raw)
     exports_deaths ~ Poisson(expected_exports_deaths_T)
 
-    return (; expected_exports_deaths_T, series)
+    return (; expected_exports_deaths_T)
 end
 
 """
@@ -610,13 +757,33 @@ confirmed-death series is flat over the fitted window, so a single cut-off
 binomial captures its information; the suspected-death total is the
 denominator. Returns the enrichment, the composition, the confirmation
 probability and the expected confirmed-death count.
+
+This is the renewal analogue of the integral-lineage forwarded-positivity
+lab model (PR #193), which scores per-vintage confirmed-death increments as
+`NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
+`p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
+sensitivity `s` and specificity `spec` and the death-pool BVD share
+`q_death`. That form is not portable here: the renewal confirmed-case lab
+pipeline ([`confirmed_cases_model`](@ref)) conditions positives directly on
+the observed analysed denominator with an empirical partially-pooled
+positivity `p_pos` and carries no shared `s`/`spec` to import, and the
+death-pool composition `q_death = bvd_deaths / (bvd_deaths + bg_death_daily)`
+collapses to 1 whenever the death background is off (the renewal default),
+which would make a death-side composition link degenerate. The case
+composition `q_susp` is always informative because the case background
+`λ_bg` is always on, so anchoring the enrichment on `q_susp` reproduces
+#193's intent — a composition-driven confirmed-death rate that feeds back
+to `λ_bg` and `p_drc` — under the renewal architecture. The substantive
+half of #193, the constant-rate non-BVD suspected-death background
+`λ_bg_death`, is already carried by [`deaths_model`](@ref).
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer},
-        expected_deaths::Real,
+        deaths_daily::AbstractVector,
         bvd_reports_daily::AbstractVector, p_drc::Real,
-        bg_daily::AbstractVector;
+        bg_daily::AbstractVector, k::Real;
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
         enrichment = confirmed_death_enrichment_model())
     enr_state ~ to_submodel(enrichment)
     m_death = enr_state.m_death
@@ -626,13 +793,20 @@ probability and the expected confirmed-death count.
     qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
     p_death_conf := logistic(logit(qc) + log(m_death))
 
-    ## Suspected-death denominator: the observed total when conditioned, or
-    ## the expected suspected deaths on the predictive-generator path.
-    n_deaths = ismissing(total_deaths) ?
-               max(round(Int, safe_rate(expected_deaths)), 0) :
-               Int(total_deaths)
-    confirmed_deaths ~ Binomial(n_deaths, p_death_conf)
-    expected_confirmed_deaths := p_death_conf * n_deaths
+    ## Confirmed deaths are a thinning of the modelled suspected-death daily
+    ## series by the composition-linked confirmation probability, scored as
+    ## per-vintage between-vintage increments (the confirmed-death series
+    ## grows 17→64 over 26 May-3 June). The suspected-death denominator is
+    ## frozen at 26 May, so the modelled death trajectory carries the timing,
+    ## the same modelled-volume route the post-lab confirmed cases use.
+    confirmed_death_daily = p_death_conf .* deaths_daily
+    n = length(deaths_daily)
+    vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
+    modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
+    cdeath_increments ~ to_submodel(
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
+
+    expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
 
     return (; m_death, q_susp, p_death_conf, expected_confirmed_deaths)
 end

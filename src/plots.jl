@@ -127,6 +127,24 @@ function _panel_exports_deaths!(fig, pos, pp, obs;
     return ax
 end
 
+function _panel_confirmed_deaths!(fig, pos, pp, obs;
+        predictive_label = "Posterior")
+    r, c = _panel_pos(pos)
+    ppf = _pp_floats(pp)
+    upper = max(3, ceil(Int, quantile(ppf, 0.995)))
+    obs === nothing || (upper = max(upper, ceil(Int, 1.1 * obs)))
+    ax = Axis(fig[r, c];
+        xlabel = "Replicated confirmed deaths",
+        ylabel = "$(predictive_label) predictive frequency",
+        title = "Confirmed deaths (DRC)",
+        limits = ((0, upper), nothing)
+    )
+    hist!(ax, ppf; bins = 0:1:upper, color = (:darkorange3, 0.7))
+    obs === nothing || vlines!(ax, _obs_floats(obs);
+        color = :red, linewidth = 2)
+    return ax
+end
+
 function _panel_deaths!(fig, pos, pp, obs; predictive_label = "Posterior")
     r, c = _panel_pos(pos)
     ppf = _pp_floats(pp)
@@ -224,6 +242,8 @@ function plot_posterior_predictive(
         obs_cases::Union{Nothing, Real} = nothing,
         pp_exports_deaths::Union{Nothing, AbstractVector} = nothing,
         obs_exports_deaths::Union{Nothing, Real} = nothing,
+        pp_confirmed_deaths::Union{Nothing, AbstractVector} = nothing,
+        obs_confirmed_deaths::Union{Nothing, Real} = nothing,
         pp_confirmed::Union{Nothing, AbstractVector} = nothing,
         obs_confirmed::Union{Nothing, Real} = nothing,
         pp_tests::Union{Nothing, AbstractVector} = nothing,
@@ -235,6 +255,9 @@ function plot_posterior_predictive(
     pp_exports_deaths === nothing ||
         push!(panels, (:exports_deaths, pp_exports_deaths,
             obs_exports_deaths))
+    pp_confirmed_deaths === nothing ||
+        push!(panels, (:confirmed_deaths, pp_confirmed_deaths,
+            obs_confirmed_deaths))
     pp_deaths === nothing ||
         push!(panels, (:deaths, pp_deaths, obs_deaths))
     pp_cases === nothing ||
@@ -257,6 +280,8 @@ function plot_posterior_predictive(
             _panel_exports!(fig, pos, pp, obs; predictive_label)
         elseif kind === :exports_deaths
             _panel_exports_deaths!(fig, pos, pp, obs; predictive_label)
+        elseif kind === :confirmed_deaths
+            _panel_confirmed_deaths!(fig, pos, pp, obs; predictive_label)
         elseif kind === :deaths
             _panel_deaths!(fig, pos, pp, obs; predictive_label)
         elseif kind === :cases
@@ -459,6 +484,100 @@ function plot_start_date_pair(chn;
 end
 
 """
+Reconstruct the daily reproduction-number trajectory `Rt` per posterior
+draw from the sampled weekly random-walk parameters and plot it over the
+established-outbreak window. The saved chain stores only the cut-off
+`R_T`, so each draw's daily `Rt` is rebuilt by mirroring
+[`rt_walk_model`](@ref): weekly knots ([`knot_days`](@ref)) follow a
+non-centred Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
+`rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
+([`interpolate_knots`](@ref)) and shifted by the sampled
+`rt_state.intervention_effect` along a logistic ramp
+([`sigmoid_ramp`](@ref)) anchored at the WHO-response `breakpoint`.
+
+Each draw's `Rt` is masked to days at or after its own establishment day
+(`n - round(T)`, where cumulative infections cross one), so the median
+and 50/90% ribbons cover only the established epidemic; the
+pre-establishment seeding window is prior-driven and is left unshaded and
+annotated. The cut-off and the intervention breakpoint are marked.
+`seeding` is the calendar date of grid day 1 (so day `d` is
+`seeding + (d - 1)`).
+"""
+function plot_rt(chn; n::Integer, breakpoint::Real,
+        as_of_date::AbstractString, seeding::Date,
+        rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0)
+    log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
+    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
+    effect = _draws(chn, Symbol("rt_state.intervention_effect"))
+    T_draws = _draws(chn, :T)
+    ## `rt_state.z` is vector-valued: one standard-normal innovation vector
+    ## per draw. Pull each draw's full vector from the chain slice.
+    zmat = chn[Symbol("rt_state.z")]
+    zrows = [collect(z) for z in vec(collect(zmat))]
+
+    days = knot_days(n; week, start = rt_start)
+    nb = length(days)
+    ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
+    ndraws = length(log_R0)
+
+    ## Per-draw daily Rt, masked to the draw's own established window
+    ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
+    rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
+    for i in 1:ndraws
+        z = zrows[i]
+        steps = sigma[i] .* z[1:(nb - 1)]
+        log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
+        log_Rt = interpolate_knots(log_R, days, n) .+ effect[i] .* ramp_shape
+        start = max(1, n - round(Int, T_draws[i]) + 1)
+        for d in start:n
+            rt[i, d] = exp(log_Rt[d])
+        end
+    end
+
+    ## Median and ribbons over established draws only (skip masked days).
+    function q(d, pr)
+        col = collect(skipmissing(@view rt[:, d]))
+        isempty(col) ? missing : quantile(col, pr)
+    end
+    med = [q(d, 0.5) for d in 1:n]
+    lo90 = [q(d, 0.05) for d in 1:n]
+    hi90 = [q(d, 0.95) for d in 1:n]
+    lo50 = [q(d, 0.25) for d in 1:n]
+    hi50 = [q(d, 0.75) for d in 1:n]
+    est = findall(!ismissing, med)
+    ## Median establishment day for the unshaded seeding-window annotation.
+    est_start = isempty(est) ? n : minimum(est)
+
+    epoch = date2epochdays(seeding)
+    x = [epoch + (d - 1) for d in 1:n]
+    xe = x[est]
+    fig = Figure(; size = (900, 440))
+    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
+        title = "Estimated Rt over the established outbreak",
+        xticklabelrotation = pi / 6)
+    ## Shade the pre-establishment seeding window (prior-driven).
+    est_start > 1 && vspan!(ax, x[1], x[est_start];
+        color = (:grey, 0.12))
+    band!(ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
+        color = (:purple, 0.15))
+    band!(ax, xe, Float64[lo50[d] for d in est], Float64[hi50[d] for d in est];
+        color = (:purple, 0.30))
+    lines!(ax, xe, Float64[med[d] for d in est];
+        color = :purple, linewidth = 2)
+    hlines!(ax, [1.0]; color = :black, linestyle = :dot)
+    vlines!(ax, [Float64(epoch + breakpoint - 1)];
+        color = :firebrick, linestyle = :dash, linewidth = 2)
+    vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
+        color = :grey, linestyle = :dash)
+    lo = floor(Int, minimum(x))
+    hi = ceil(Int, maximum(x))
+    ax.xticks = collect(lo:14:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    return fig
+end
+
+"""
 Two-panel density of the no-onward-transmission counterfactual from
 [`predict_no_onward_deaths`](@ref). The left panel shows the *still
 expected* deaths (`:delta_deaths`, the future deaths in cases already
@@ -498,14 +617,12 @@ function plot_forecast(fc::DataFrame)
     (
         :cases_new, "New reported cases (DRC)", :steelblue),
     (
-        :deaths_new, "New deaths (DRC)", :firebrick),
-    (
-        :exports_new, "New exports (Uganda)", :seagreen)
+        :deaths_new, "New deaths (DRC)", :firebrick)
 ]
-    :tests_new in propertynames(fc) && push!(cols,
-        (:tests_new, "New tests analysed (DRC)", :teal))
     :confirmed_new in propertynames(fc) && push!(cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
+    :confirmed_deaths_new in propertynames(fc) && push!(cols,
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
     ncols = min(length(cols), 3)
     nrows = cld(length(cols), ncols)
     fig = Figure(; size = (370 * ncols, 360 * nrows))

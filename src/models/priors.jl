@@ -65,10 +65,17 @@ rather than switching at a single date; pass `ramp` to widen or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 
-The initial reproduction number prior is centred on `R0 ≈ 1.5`, the
-Bundibugyo / Ebola virus disease range (the 2007 Uganda BDBV outbreak
-≈ 1.3–1.5; WHO Ebola Response Team 2014 ≈ 1.5–2.0), so the seeding growth
-is literature-anchored rather than arbitrary.
+The initial reproduction number prior is anchored on the molecular-clock
+growth estimate for this outbreak. Cuomo-Dannenburg & Ghafari's
+phylodynamic reanalysis of the first ten BDBV genomes puts the mean
+epidemic doubling time at 15.2–24.5 d (centre 20 d). With the renewal
+generation interval that 20-day doubling implies `R0 ≈ 1.6`, and the
+15.2–24.5 d range maps to `R0 ≈ 1.47–1.84`, so the prior is
+`Normal(log(1.6), 0.10)`: centred on the molecular-clock doubling with a
+log-SD slightly wider than the genetic spread (≈0.07) to allow for the
+wide per-assumption clock intervals. Sampling on `R0` (with `r0` derived
+through Euler–Lotka) rather than on `r` directly keeps the renewal seeding
+consistent; the implied doubling-time prior tracks the genetic estimate.
 
 The random-walk step SD prior is a tight half-normal SD 0.05. The
 observed sitrep window is only the final ≈9 days of a ≈90-day inferred
@@ -94,11 +101,12 @@ fortnight, the response damps `R_t` only partially by the cut-off.
 @model function rt_walk_model(n::Integer;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
         ramp::Real = 14.0,
-        log_r0_prior = Normal(log(1.5), 0.25),
+        log_r0_prior = Normal(log(1.6), 0.10),
         sigma_prior = truncated(Normal(0, 0.05); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
-    days = knot_days(n; week)
+    days = knot_days(n; week, start = rt_start)
     nb = length(days)
     log_R0 ~ log_r0_prior
     sigma_rw ~ sigma_prior
@@ -148,11 +156,12 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
 """
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
         rt = rt_walk_model,
         gi = generation_interval_model,
         seed = seed_model,
         gi_nmax::Integer = 40)
-    rt_state ~ to_submodel(rt(n; breakpoint))
+    rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
     gi_state ~ to_submodel(gi(gi_nmax))
     seed_state ~ to_submodel(seed())
     Rt = rt_state.Rt
@@ -177,15 +186,20 @@ Onset-incidence submodel: convolve the renewal infections with the
 sampled incubation-period PMF to get daily symptom-onset incidence.
 Computed once per draw and reused by every downstream observation stream,
 so the staging infections → onsets → each observed event is explicit. The
-incubation delay submodel is injected, defaulting to a prior centred on
-the Ebola virus disease incubation period (mean 9.7 d, SD 5.4 d; WHO Ebola
-Response Team 2014, NEJM). Returns
+incubation delay submodel is injected. The incubation period cannot be
+fitted from the BDBV line list (no exposure dates), so the line-list
+reanalysis recommends the MacNeil et al. (2010) Bundibugyo estimate from
+the 2007 Uganda outbreak: mean 6.3 d (95% CI 5.2-7.3, n = 24). The mean
+prior `Normal(6.3, 0.54)` reproduces MacNeil's reported 95% CI (SD = CI
+half-width / 1.96); MacNeil give no interval on the spread, so the SD
+prior is a weakly-informative modelling choice centred on the
+CV-implied spread (≈ 3.5 d). Returns
 `(; onsets, incubation_pmf, incubation_mean, incubation_sd)`.
 """
 @model function onset_incidence_model(infections::AbstractVector;
         incubation = (nmax) -> censored_delay_model(nmax;
-            mean_prior = truncated(Normal(9.7, 2.0); lower = 1),
-            sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
+            mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
         incubation_nmax::Integer = 30)
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets = convolve_delay(infections, inc_state.pmf)
@@ -419,6 +433,47 @@ Returns `(; p_pos, q_mu, σ_q)` with `p_pos` a length-`nv` vector.
     logit_p = q_mu .+ σ_q .* z_q[1:nv]
     p_pos := logistic.(logit_p)
     return (; p_pos, q_mu, σ_q)
+end
+
+"""
+Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
+(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
+that mode the per-window tested BVD share is not a free random effect; it
+is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
+λ_bg_v)` over each laboratory window, UPSAMPLED by a severity enrichment
+that decays as testing widens:
+
+```math
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_0\\, e^{-c_v / \\text{decay}},
+```
+
+with `c_v` the cumulative analysed volume at window `v` (the testing
+clock). The lab over-tests BVD early (severe cases are triaged first and
+are more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero
+as testing widens, at which point the tested share equals the pool
+composition. This ties positivity to the background `λ_bg`, so the
+confirmed/positivity data identify the non-BVD background rather than it
+being absorbed by a free per-window random effect, correcting the model's
+treatment of suspected cases as a large overestimate of true BVD.
+
+`δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
+because severity triage upsamples BVD, never down. The default
+`truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
+bounded: even severity-triaged testing cannot be near-pure BVD (other
+haemorrhagic / severe febrile illness is also triaged), so for a pool
+composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
+1.5) ≈ 0.75`. `decay_scale` is the relaxation timescale on the analysed-
+volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
+[`confirmed_cases_model`](@ref) in composition mode. Returns
+`(; δ0, decay_scale)`.
+"""
+@model function severity_enrichment_model(;
+        logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
+        decay_prior = truncated(Normal(0.0, 200.0); lower = 0.0))
+    δ0 ~ logodds_prior
+    decay_scale ~ decay_prior
+    return (; δ0, decay_scale)
 end
 
 """

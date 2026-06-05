@@ -15,6 +15,7 @@ using Serialization: serialize
 const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
+const PLINK = length(ARGS) >= 4 ? Symbol(ARGS[4]) : :free
 
 ## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
 ## Its weak-dep extension registers only once `Enzyme` is loaded.
@@ -41,6 +42,7 @@ model = bvd_joint(
     tests_received_history = obs.tests_received_history,
     breakpoint = BREAKPOINT,
     background_re = true,
+    confirmed_positivity_link = PLINK,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days)
 
@@ -69,6 +71,7 @@ println("  min bulk ESS               : ", round(d.min_ess_bulk; digits = 1))
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")
 for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
     :lambda_bg, :bg_sigma, :lambda_bg_death,
+    :suspected_positivity, :test_positivity,
     :expected_reports_T, :expected_deaths_T, :expected_exports_T,
     :expected_confirmed_T)
     try

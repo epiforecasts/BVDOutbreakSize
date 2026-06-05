@@ -44,7 +44,7 @@
 #   incubation period, onset-to-death, onset-to-report,
 #   onset-to-confirmation and onset-to-detection-abroad each get a prior
 #   centred on published Ebola estimates, discretised with double
-#   interval censoring. No delay is fixed.
+#   interval censoring [charniga2024](@cite). No delay is fixed.
 # - *Euler–Lotka seeding.* The seeding window grows exponentially at the
 #   rate implied by the initial reproduction number and generation
 #   interval, so infections start smoothly rather than from a single
@@ -328,28 +328,35 @@ vintage_table #hide
 # The generation-interval PMF $g$ is sampled from a prior centred on
 # the Ebola virus disease serial interval as a generation-time proxy
 # (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), then
-# discretised with double interval censoring
-# (CensoredDistributions). The lag-0 bin is dropped and the remainder
-# renormalised so an infectee is always strictly later than its
-# infector:
+# discretised with double interval censoring [charniga2024](@cite). The
+# prior is centred on those published moments, with an assumed
+# weakly-informative spread (the SDs on the mean and SD priors are our
+# choice, not from the source). The lag-0 bin is dropped and the
+# remainder renormalised so an infectee is always strictly later than
+# its infector:
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 3.0), \qquad
 # \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 2.0). \tag{5}
 # ```
 #
-# The incubation period is similarly discretised with a prior centred
-# on the Ebola incubation (mean 9.7 d, SD 5.4 d; WHO Ebola Response
-# Team 2014, NEJM):
+# The incubation period is similarly discretised with a prior centred on
+# the Bundibugyo virus incubation estimate from the 2007 Uganda outbreak
+# (mean 6.3 d, 95% CI 5.2-7.3, $n = 24$; [macneil2010](@cite)). The
+# line-list reanalysis cannot fit incubation, as the line list has no
+# exposure dates, so it recommends this estimate instead. The mean prior
+# reproduces MacNeil et al.'s 95% CI; the spread prior is a
+# weakly-informative modelling choice, as they report no interval on the
+# SD:
 #
 # ```math
-# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(9.7,\ 2.0), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{6}
+# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{6}
 # ```
 #
 # All LogNormal parameters are recovered by moment-matching from the
-# sampled mean and SD. Every delay in the model shares the generic
-# double-interval-censored discretisation of `censored_delay_model`; the
+# sampled mean and SD. Every delay in the model shares the same
+# double-interval-censored discretisation [charniga2024](@cite); the
 # generation interval wraps it to drop the lag-0 bin.
 
 #md # ```@raw html
@@ -429,9 +436,8 @@ vintage_table #hide
 #
 # Infections are convolved with the incubation PMF to produce daily
 # symptom-onset incidence, which every downstream stream then consumes.
-# The incubation delay is the injected delay submodel of
-# `onset_incidence_model`, defaulting to the Ebola incubation prior of
-# equation (6).
+# The incubation delay is an injected delay submodel, defaulting to the
+# Bundibugyo incubation prior of equation (6).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -468,10 +474,10 @@ vintage_table #hide
 # companion Bayesian reanalysis of the same Isiro 2012 BDBV line list
 # [bdbv_linelist_analysis_2026](@cite), which re-estimates the delay with
 # uncertainty. The renewal samples the delay by its mean and SD rather
-# than a Gamma shape and scale: the prior means are the reanalysis'
-# posterior mean (11.2 d) and SD (5.4 d), and the SD prior is set so the
-# fit reproduces the reanalysis uncertainty rather than collapsing onto a
-# single point estimate.
+# than a Gamma shape and scale. The prior means are centred on the
+# reanalysis' posterior mean (11.2 d) and SD (5.4 d), with an assumed
+# weakly-informative spread on each so the fit reproduces the reanalysis
+# uncertainty rather than collapsing onto a single point estimate:
 #
 # ```math
 # \mu_d \sim \mathrm{Normal}^{+}(11.2,\ 2.0), \qquad
@@ -479,9 +485,9 @@ vintage_table #hide
 # ```
 #
 # The sampled mean and SD are moment-matched to a LogNormal and
-# discretised with double interval censoring, as for every delay above.
-# The delay estimation in that reanalysis follows the recommendations of
-# [charniga2024](@cite). The submodel source is shown with the deaths
+# discretised with double interval censoring [charniga2024](@cite), as
+# for every delay above. The delay estimation in that reanalysis follows
+# the same recommendations. The submodel source is shown with the deaths
 # observation submodel below, where the delay is injected.
 #
 # ##### Case-fatality ratio
@@ -605,8 +611,8 @@ cfr_prior_fig #hide
 #
 # The prior is sampled in non-centred form to avoid the funnel geometry.
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
-# likelihoods use $p_{\text{Uganda}}$. An independent alternative
-# ([`independent_ascertainment_model`](@ref)) drops the shared hyperprior.
+# likelihoods use $p_{\text{Uganda}}$. An independent alternative drops
+# the shared hyperprior and gives each system its own fraction.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_ascertainment_model</summary>
@@ -625,10 +631,32 @@ cfr_prior_fig #hide
 # ##### Genetic seeding bound
 #
 # A BEAST time tree of the first ten sequenced genomes
-# [virological2026](@cite) places the TMRCA at a mean of
-# 25 March 2026. We treat it as a right-censored, noisy reading of
-# the seeding time, contributing $\Pr[\mathrm{Normal}(T, \sigma) \ge g]$
-# where $g = t_{\text{cut}} - t_{\text{TMRCA}}$ and $\sigma = 15$ d.
+# [virological2026](@cite) places the TMRCA, the age of the oldest
+# internal node of the tree, at a mean of 25 March 2026. The temporal
+# sampling range is too short to estimate the molecular clock, so it is
+# fixed to the $1.2\times10^{-3}$ substitutions/site/year rate of the
+# 2013-2016 West African Ebola epidemic [holmes2016](@cite).
+# The TMRCA is a lower bound on the seeding time $T$. Adding sequences,
+# or more geographically representative ones, can only push it earlier,
+# never later, as the sampled tree is almost entirely from Bunia.
+# Using the genetic TMRCA as a one-sided seeding bound rather than a
+# point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+#
+# We treat the TMRCA as a right-censored, noisy reading of the seeding
+# time. Writing $g = t_{\text{cut}} - t_{\text{TMRCA}}$ for the seeding
+# age implied by the reported TMRCA date, so that $g$ tracks the cut-off
+# rather than a fixed offset, the bound contributes the probability that
+# a $\mathrm{Normal}(T, \sigma)$ reading falls at or beyond $g$,
+#
+# ```math
+# p_\text{gen}(T) = \Pr[\mathrm{Normal}(T, \sigma) \ge g]
+#   = \Phi\!\left(\frac{T - g}{\sigma}\right),
+# \qquad \sigma = 15\ \text{d}. \tag{16}
+# ```
+#
+# The bound is one-sided. It penalises outbreak ages younger than the
+# TMRCA but leaves $T$ free above it, with the clock fixed and no
+# propagation of cross-outbreak or clock uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -668,7 +696,7 @@ cfr_prior_fig #hide
 # ```math
 # q_\mu \sim \mathrm{Normal}(\operatorname{logit}(0.28),\ 0.7), \qquad
 # \sigma_q \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{16}
+# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{17}
 # ```
 
 #md # ```@raw html
@@ -746,16 +774,17 @@ cfr_prior_fig #hide
 # \mu_e = p_{\text{Uganda}} \cdot q
 #         \cdot \sum_{t=1}^{n} \mathrm{onsets}_t \cdot f_{\text{det}}(n - t),
 # \qquad
-# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{16}
+# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{18}
 # ```
 #
 # The onset-to-detection delay is centred on the Ebola
 # onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola
-# Response Team 2014, NEJM):
+# Response Team 2014, NEJM), again with an assumed weakly-informative
+# spread rather than uncertainty taken from the source:
 #
 # ```math
 # \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
-# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{17}
+# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{19}
 # ```
 #
 # The exports stream uses this onset-to-detection delay in place of a
@@ -772,7 +801,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_model(
-#md #         missing, Float64[], 0.25)), "\n```"))
+#md #         missing, Float64[], 0.25; incubation_pmf = Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -793,7 +822,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim
 #     \mathrm{NegBinomial}(\mu_i - \mu_{i-1},\ k),
-#     \qquad \mu_0 = 0. \tag{18}
+#     \qquad \mu_0 = 0. \tag{20}
 # ```
 
 #md # ```@raw html
@@ -825,7 +854,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{cases}} \sim \mathrm{NegBinomial}\!\bigl(p_{\text{DRC}}
 #     \cdot \mathrm{conv}(\mathrm{onsets},\, f_{\text{rep}})[n]
-#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{19}
+#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{21}
 # ```
 
 #md # ```@raw html
@@ -856,7 +885,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{received}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}
 #     \cdot \mathrm{conv}(p_{\text{DRC}}\, \mathrm{BVD}_{\text{rep}}
-#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{20}
+#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{22}
 # ```
 #
 # The confirmed positives are scored as a Binomial of the *observed*
@@ -869,7 +898,7 @@ cfr_prior_fig #hide
 # size, which the deaths and exports streams pin instead:
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{23}
 # ```
 #
 # The early confirmed vintages (18-23 May) have no per-vintage analysed
@@ -880,7 +909,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{early}} \sim \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k).
-# \tag{21b}
+# \tag{23b}
 # ```
 
 #md # ```@raw html
@@ -892,7 +921,7 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
 #md #         (; days = Int[], counts = Int[]), missing, Float64[],
-#md #         1.0, 0.25, 1.0, 0.5, Float64[])), "\n```"))
+#md #         1.0, 0.25, Float64[], 0.5, Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -912,7 +941,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{conf-deaths}} \sim \mathrm{Binomial}\bigl(D_{\text{susp}},\
 #     \operatorname{logistic}(\operatorname{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}})\bigr). \tag{22}
+#     + \log m_{\text{death}})\bigr). \tag{24}
 # ```
 
 #md # ```@raw html
@@ -923,7 +952,8 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_deaths_model(
-#md #         missing, missing, 1.0, Float64[], 1.0, 0.25)), "\n```"))
+#md #         missing, missing, Float64[], Float64[], 1.0, Float64[], 1.0)),
+#md #     "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -939,7 +969,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{exp-deaths}} \sim \mathrm{Poisson}(\mathrm{CFR}
-#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{23}
+#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{25}
 # ```
 
 #md # ```@raw html
@@ -950,7 +980,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_deaths_model(
-#md #         missing, Float64[], 0.33, Float64[])), "\n```"))
+#md #         missing, Float64[], 0.33, Float64[], Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1078,6 +1108,7 @@ prior_chn = let
         confirmed_history = (; days = Int[], counts = Int[]),
         breakpoint = breakpoint,
         background_re = true,
+        confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
     sample(m, Prior(), 2_000; progress = false)
@@ -1137,6 +1168,7 @@ chn_joint = nuts_sample(
     tests_received_history = obs.tests_received_history,
     breakpoint = _BREAKPOINT,
     background_re = true,
+    confirmed_positivity_link = :composition,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days));
 
@@ -1165,6 +1197,7 @@ chn_confirmed_deaths = nuts_sample(
     confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
     obs.total_deaths;
     deaths_history = obs.deaths_history,
+    confirmed_deaths_history = obs.confirmed_deaths_history,
     breakpoint = _BREAKPOINT));
 
 ## This composer keeps the deaths and exports submodels only for their
@@ -1314,8 +1347,13 @@ cumulative_cases_summary #hide
 #md # <details><summary>Cumulative case count density</summary>
 #md # ```
 
+## The joint C_T posterior has a long upper tail (the slow-growth,
+## late-seeding draws), so clip the x-axis to the 97.5th percentile to
+## keep the bulk of the density legible rather than rendering the full
+## heavy tail.
 joint_density_fig = plot_cumulative_cases(
-    "joint" => posterior_C_joint; scenarios = []);
+    "joint" => posterior_C_joint; scenarios = [],
+    xmax = quantile(posterior_C_joint, 0.975));
 
 #md # ```@raw html
 #md # </details>
@@ -1359,6 +1397,59 @@ joint_summary = summary_table(chn_joint,
 
 joint_summary #hide
 
+# ### Reproduction number over time
+#
+# The model fits a weekly random-walk reproduction number, so we can show
+# the full daily $R_t$ trajectory rather than only its cut-off value
+# $R_T$. The saved chain stores the sampled random-walk parameters
+# (`rt_state.log_R0`, `rt_state.sigma_rw`, the innovation vector
+# `rt_state.z` and `rt_state.intervention_effect`), so the daily $R_t$ is
+# reconstructed per draw by mirroring the model's `rt_walk_model`. The
+# median and 50%/90% ribbons are shown only over the established-outbreak
+# window, the days on or after each draw's cumulative infections first
+# reach one. The earlier seeding window (shaded) is prior-driven and is
+# not an $R_t$ of an established epidemic, so it is left unplotted. The
+# WHO-response breakpoint (red dashed) and the data cut-off (grey dashed)
+# are marked.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction-number trajectory</summary>
+#md # ```
+
+rt_fig = plot_rt(chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT,
+    rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
+    as_of_date = string(obs.cutoff), seeding = obs.seeding);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rt_fig #hide
+
+# The WHO response is fitted as a sampled multiplicative shift on $R_t$
+# applied over a logistic ramp at the first situation report. The
+# intervention effect is constrained to be non-positive, so it can only
+# reduce transmission. The table reports its posterior on the
+# multiplicative $\exp(\text{effect})$ scale: a value below one is the
+# factor by which the response lowers $R_t$ once the ramp completes.
+
+#md # ```@raw html
+#md # <details><summary>Intervention-effect summary table</summary>
+#md # ```
+
+intervention_effect = vec(Array(
+    chn_joint[Symbol("rt_state.intervention_effect")]));
+intervention_table = streams_table(
+    "Rt multiplier exp(effect)" => exp.(intervention_effect);
+    digits = 2);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+intervention_table #hide
+
 # The laboratory pipeline fits the received-specimen volume through the
 # testing fraction `tau_test` and a receipt delay, and scores the confirmed
 # positives as a Binomial of the observed specimens-analysed denominator
@@ -1386,22 +1477,6 @@ lab_summary = summary_table(chn_joint,
 
 lab_summary #hide
 
-# A pair plot of the laboratory-pipeline parameters and the derived
-# per-test positivity shows their joint posterior and any trade-offs.
-
-#md # ```@raw html
-#md # <details><summary>Laboratory-pipeline pair plot</summary>
-#md # ```
-
-lab_pair_fig = plot_pair(chn_joint,
-    [:tau_test, :lambda_bg, :test_positivity, :death_confirmation]);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-lab_pair_fig #hide
-
 # The posterior pair plot shows the joint distribution of the key
 # parameters, with the prior overlaid so the data's contribution to
 # each marginal is visible.
@@ -1421,12 +1496,32 @@ posterior_pair_fig = plot_pair(chn_joint,
 
 posterior_pair_fig #hide
 
+# A pair plot of the laboratory-pipeline parameters and the derived
+# per-test positivity shows their joint posterior and any trade-offs, with
+# the prior overlaid so the laboratory observations' contribution to each
+# marginal is visible.
+
+#md # ```@raw html
+#md # <details><summary>Laboratory-pipeline pair plot (prior overlaid)</summary>
+#md # ```
+
+lab_pair_fig = plot_pair(chn_joint,
+    [:tau_test, :lambda_bg, :test_positivity, :death_confirmation];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+lab_pair_fig #hide
+
 # A posterior predictive check draws replicated observations from the
-# fitted joint model and compares them to the observed counts. The three
-# DRC sitrep streams are now real per-vintage observations, so the
-# replicated cumulative trajectory is shown across the situation-report
-# dates with the observed series overlaid. The single-count Uganda export
-# and export-death streams keep their scalar predictive check.
+# fitted joint model and compares them to the observed counts. The five
+# dated DRC streams are real per-vintage observations, so each replicated
+# cumulative trajectory is shown across the situation-report dates with the
+# observed series overlaid: suspected cases, confirmed cases, suspected
+# deaths, confirmed deaths and specimens received. The single-count Uganda
+# export and export-death streams keep their scalar predictive check.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -1448,11 +1543,14 @@ pp_joint = predict(
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
         confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
+        confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = _BREAKPOINT,
-        background_re = true),
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one
@@ -1492,14 +1590,54 @@ tests_received_panel = (;
         pp_joint, "confirmed_state.received_increments"),
     observed = obs.tests_received_history.counts, colour = :seagreen);
 
-## Confirmed cases are scored as a Binomial of the observed analysed
-## denominator in each laboratory window, so their fit is a per-window
-## positivity rather than a cumulative sitrep series; it is summarised by
-## the expected confirmed total and the per-test positivity in the
-## laboratory-pipeline table rather than this cumulative per-vintage check.
-## The suspected-case, death and specimens-received streams are per-vintage.
+## Confirmed cases are scored over two groups of laboratory windows: the
+## early confirmed vintages (no per-vintage analysed denominator, scored
+## as counts against the modelled laboratory volume) and the observed
+## windows (a Binomial of the observed analysed denominator). Both groups
+## produce per-window replicate increments in `predict`, so concatenating
+## them oldest-first gives the per-vintage cumulative confirmed-case
+## trajectory, anchored on the observed cumulative confirmed at each window
+## end-day. The 24-25 May analysis stall merges into 26 May, so the window
+## grid is slightly coarser than the raw confirmed history.
+_conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
+    obs.confirmed_history, obs.lab_history);
+## Oldest-first: early (no denominator) → observed (analysed Binomial) →
+## late (post-28 May, no denominator, modelled volume).
+_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
+    _conf_windows.late_days);
+function _confirmed_at(day)
+    i = searchsortedlast(obs.confirmed_history.days, day)
+    return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
+end;
+_conf_early = _vintage_replicates(
+    pp_joint, "confirmed_state.early_increments");
+_conf_obs = collect(first(pp_joint[k]
+for k in keys(pp_joint)
+if occursin("confirmed_state.confirmed_positives.positives", string(k))));
+_conf_late = _vintage_replicates(
+    pp_joint, "confirmed_state.late_increments");
+confirmed_panel = (;
+    title = "Confirmed cases",
+    dates = _vintage_dates(_conf_window_days),
+    replicates = [vcat(collect(e), collect(p), collect(l))
+                  for (e, p, l) in
+                      zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
+    observed = [_confirmed_at(d) for d in _conf_window_days],
+    colour = :goldenrod);
+
+## Confirmed deaths are now a per-vintage stream (the series grows 17→64
+## over 26 May-3 June), scored as increments of the modelled confirmed-death
+## trajectory, so they get the same cumulative conditional check.
+confirmed_deaths_panel = (;
+    title = "Confirmed deaths",
+    dates = _vintage_dates(obs.confirmed_deaths_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "confirmed_deaths_state.cdeath_increments"),
+    observed = obs.confirmed_deaths_history.counts, colour = :purple);
+
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, deaths_panel, tests_received_panel]);
+    [reported_panel, confirmed_panel, deaths_panel,
+    confirmed_deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -1511,12 +1649,12 @@ joint_vintage_ppc_fig #hide
 # checked as scalar posterior predictives.
 
 #md # ```@raw html
-#md # <details><summary>Export posterior predictive plot</summary>
+#md # <details><summary>Scalar posterior predictive plot</summary>
 #md # ```
 
-## The replicated export counts are nested under their submodel prefix;
-## match the full prefixed varname so the deterministic
-## `expected_exports_deaths_T` is not picked up by a loose substring.
+## The replicated counts are nested under their submodel prefix; match the
+## full prefixed varname so the deterministic `expected_*_T` quantities are
+## not picked up by a loose substring.
 function _scalar_replicates(pp, name)
     key = first(k for k in keys(pp) if occursin(name, string(k)))
     return vec(Array(pp[key]))
@@ -1583,9 +1721,13 @@ no_onward_fig #hide
 # ### One-week-ahead forecast
 #
 # The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$. This continues the current growth rate
-# (no interventions, no saturation) and carries both parameter and
-# observation uncertainty.
+# per stream by $T + 7$, for the four DRC streams (suspected reported
+# cases, suspected deaths, laboratory-confirmed cases and confirmed
+# deaths). This continues the current growth rate (no interventions, no
+# saturation) and carries both parameter and observation uncertainty.
+# Exports are not forecast: cross-border travel is unlikely to be
+# continuing at its baseline rate, so the forward travel rate the export
+# model relies on no longer holds.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -1595,7 +1737,8 @@ forecast = forecast_reported(chn_joint;
     horizon = 7,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
-    obs_exports = obs.exported_cases);
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths);
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
@@ -1673,12 +1816,26 @@ cumulative_density_fig #hide
 
 # ### Comparison with McCabe et al.
 #
-# The McCabe et al. scenarios are cumulative reported *cases*, so they
-# are not directly comparable to $C_T$, which counts latent
-# *infections*. We compare like for like against the model's expected
-# cumulative reported cases.
+# The headline comparison is the model's estimate of the cumulative
+# reported-case count, the ascertained quantity McCabe et al. report,
+# against their 15 published scenario estimates. The McCabe et al.
+# scenarios are cumulative reported *cases*, so they are not directly
+# comparable to $C_T$, which counts latent *infections*; we compare like
+# for like against the model's expected cumulative reported cases.
 # For each scenario the table gives the narrowest joint credible
 # interval that contains it, so coverage reads off directly.
+#
+# This renewal model has diverged from McCabe et al.'s exact
+# construction: it fits a time-varying reproduction number on a renewal
+# process rather than the report's closed-form exponential growth, and
+# scores five jointly-fitted streams rather than their two-source Method 1
+# and Method 2 sweep. So this is not an exact replication of either McCabe
+# et al. method, and the per-scenario coverage below should be read as a
+# like-for-like check on the reported-case count rather than a
+# reproduction of their estimator. The single-stream
+# [per-stream comparison](@ref "How the data streams compare") keeps each
+# stream as close to McCabe et al.'s assumptions as the renewal
+# parameterisation allows, for the most direct stream-by-stream contrast.
 
 #md # ```@raw html
 #md # <details><summary>Joint coverage table</summary>

@@ -23,7 +23,7 @@ using StatsFuns: logit, logistic
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
-using CairoMakie: Figure, Axis, hist!, density!, vlines!, vspan!,
+using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
                   lines!, scatter!, band!
 
 export REPORT_SCENARIOS,
@@ -38,13 +38,14 @@ export REPORT_SCENARIOS,
        plot_cumulative_cases, plot_density_overlay, plot_prior_predictive,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
-       plot_cfr_prior, plot_vintage_conditional_ppc,
+       plot_cfr_prior, plot_vintage_conditional_ppc, plot_rt,
        predict_no_onward_deaths, plot_no_onward_deaths,
        forecast_reported, forecast_table, plot_forecast,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth,
 # renewal helpers
-       renewal_infections, convolve_delay, discretise_censored,
+       renewal_infections, convolve_delay, convolve_pmf,
+       discretise_censored,
        euler_lotka_r, doubling_time, seed_infections, knot_days,
        interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
        safe_rate,
@@ -56,7 +57,8 @@ export REPORT_SCENARIOS,
        death_background_model, background_re_model, background_pooling_model,
        expand_vintage_rate,
        test_sensitivity_model, lab_delay_model,
-       confirmed_positivity_model, confirmed_death_enrichment_model,
+       confirmed_positivity_model, severity_enrichment_model,
+       confirmed_death_enrichment_model,
        surveillance_dispersion_model,
        independent_ascertainment_model, pooled_ascertainment_model,
 # observation models
