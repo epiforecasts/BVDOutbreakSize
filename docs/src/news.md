@@ -10,184 +10,82 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Data
 
-- Added `confirmed_case_history` and `death_history` blocks alongside
-  `reported_case_history` in `data/observations.toml`, per INSP sitrep
-  vintage, consumed by the per-vintage likelihoods.
-- Added the laboratory observations from the sitrep section IV.3
-  LABORATOIRE (`cumulative_tests_analysed`, `confirmed_cases`).
-- Advanced the cut-off to 26 May 2026 and switched the DRC streams to the
-  national cumulative totals read from the INSP situation-report PDFs
-  (SitReps 009-012), rather than the per-zone CSVs whose zone sums drop
-  cases not yet attributed to a zone. Figures were read by a
-  language-model agent and independently re-scanned; recorded in
-  `data/insp_sitrep_scanned.csv`. Cut-off (26 May): 1077 suspected cases,
-  238 suspected deaths, 121 confirmed, 403 samples analysed; the 23 May
-  suspected-death total uses the SitRep 009 zone-row sum (220), the
-  headline (119) being a data-entry error.
+- Advanced the cut-off to 3 June 2026 and switched the DRC streams to the
+  INSP national cumulative totals from the situation-report PDFs
+  (SitReps 009-020), rather than the per-zone CSVs whose zone sums drop
+  cases not yet attributed to a zone.
+- Added per-sitrep-vintage confirmed cases, confirmed deaths and
+  laboratory throughput (samples received and analysed) to
+  `data/observations.toml`, alongside the suspected cases and deaths.
 
 ### Modelling
 
-- Added a laboratory-confirmed-deaths stream
-  (`confirmed_deaths_model`, `confirmed_deaths_only_model`,
-  `death_background_model`, `death_forward_model`) fitting the front-page
-  `Cumul décès parmi les confirmés` as a lab/positivity process: suspected
-  deaths gain a constant-rate non-BVD background `λ_bg_death`, and confirmed
-  deaths are positives among the forwarded death specimens
-  (`τ_death · p_pos_death · ΔN_death`, sharing the case-lab sensitivity and
-  specificity) — replacing the earlier `coverage · s` thinning (issue #193).
-  Off by default.
-- Recentred the growth prior on the molecular clock:
-  `r ~ LogNormal(log(log(2)/20), 0.15)`, the 20-day doubling time from the
-  phylodynamic reanalysis of the first ten BDBV genomes
-  ([cuomodannenburg2026](@cite); 15.2-24.5 days across six substitution-rate
-  assumptions), slower than McCabe et al.'s 14-day scenario.
-- Recentred the doubling-count prior on a base that advances with the
-  cut-off: `m ~ Normal(m_prior_centre(as_of), 3)`, centre
-  `9 + (cut-off − 18 May)/20` doublings, based on McCabe et al.'s
-  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the same
-  20-day molecular-clock doubling time, so it tracks data refreshes.
-- Added an independent DRC and Uganda ascertainment extension: a
-  logit-scale reporting fraction for each surveillance system applied to
-  the latent incidence, fitting the reported suspected-case count
-  alongside the deaths and exports.
-- Added a laboratory pipeline coupling the cumulative tests-analysed and
-  confirmed-case streams to the latent incidence, introducing a testing
-  fraction, PCR sensitivity and a report-to-confirmation (lab-turnaround)
-  delay, with right-truncation of the tested observation handled by the
-  lab-delay CDF.
-- Rewrote the suspected-cases stream as a BVD-driven onset-to-report
-  convolution plus an additive non-BVD background rate, exposing the
-  implied per-suspected positivity as a derived quantity.
-- Fit the DRC suspected-case and suspected-death streams per sitrep
-  vintage: `bvd_joint` conditions on the between-vintage increments rather
-  than a single cut-off total, and a single-vintage stream reduces exactly
-  to the cumulative likelihood, recovering the McCabe et al.
-  configuration. Each stream carries its own vintage offsets so a lagging
-  stream is not assumed to run to the cut-off.
-- Fit the laboratory-confirmed cases as a per-vintage queue, like the
-  reported and deaths streams. New positives in each window are a Binomial
-  on the samples newly analysed (`ΔC_v ~ Binomial(ΔA_v, p_pos)`), with the
-  25 May testing stall merged into the next window. Specimens enter the
-  received queue after a report-to-receipt delay (`lab_receipt_delay_model`,
-  a prior), and the analysed throughput is capacity-limited: a per-window
-  log random walk on daily capacity (`lab_capacity_model`, centred on the
-  external ~150/day figure) processes `1 − exp(−κ·Δt/backlog)` of the
-  available received backlog.
-- Added `confirmed_only_model`, a single-stream composer that fits the
-  laboratory pipeline in isolation for the per-stream comparison.
-- Added `forecast_vs_truth_trajectory`: scores the retrospective forecast
-  against the observed cumulative at every sitrep date across the horizon,
-  not just the endpoint.
-- Cut quadratures from the time-varying convolution: the laboratory
-  background tested-volume integral now uses a closed-form gamma-CDF
-  integral (`_gamma_cdf_integral`) instead of a per-draw quadrature, with
-  an analytic reverse-mode rule, speeding up the lab-pipeline likelihood
-  without changing the model.
-- Extended the confirmed-case fit to the lab vintages with no published
-  analysed denominator (early 18-22 May, late 29-31 May): an opt-in
-  condensed lab-throughput queue (`confirmed_queue`) derives each dark
-  window's expected analysed count from the capacity-limited drain of the
-  received suspect backlog, and fits those windows on the exact
-  Poisson-thinned marginal `ΔC_v ~ Poisson(μ_A,v · p_pos)`, so no free
-  per-vintage denominator is introduced. An optional
-  epidemiological-exclusion fraction `e` (`epi_exclusion_model`) gives the
-  received backlog the `(1 − e)·suspected` asymptote. Off by default; the
-  observed-denominator Binomial still drives the 23-28 May windows.
-- Raised the default ascertainment centre from a 0.25 to a 0.75 reporting
-  fraction (`pooled_ascertainment_model`): under the active case finding
-  most BVD cases reach the suspected-case count, so the under-counting
-  that matters is at laboratory confirmation, not at suspected reporting.
-- Headlined the cumulative-infections estimand in the summary (the natural
-  `2^m` quantity, not the incubation-rescaled case count) and anchored the
-  under-ascertainment multiplier on the laboratory-confirmed cases — most
-  infections are never confirmed — instead of the suspected total.
+- The joint model now fits four DRC streams per sitrep vintage (suspected
+  cases, suspected deaths, laboratory-confirmed cases and
+  laboratory-confirmed deaths) by conditioning on the between-vintage
+  increments, alongside the Uganda exports and export deaths. A
+  single-vintage stream reduces to the cumulative likelihood.
+- Confirmed cases are fitted through a laboratory-throughput queue.
+  Suspects enter a received backlog after a report-to-receipt delay prior,
+  a capacity-limited drain (a log random walk on daily capacity, centred
+  on the external ~150/day figure) sets the samples analysed, and the new
+  positives in each window are a Binomial on the samples newly analysed
+  (`ΔC ~ Binomial(ΔA, p_pos)`). Windows with no published analysed count
+  use the queue's expected throughput and the Poisson-thinned marginal
+  `ΔC ~ Poisson(μ_A · p_pos)`, so no free per-window denominator is
+  introduced.
+- Test positivity is severity-first: early specimens skew toward severe
+  presentations and relax toward the latent case composition as cumulative
+  analysed volume accrues (`severity_enrichment_model`).
+- Suspected cases are a BVD onset-to-report convolution plus an additive
+  non-BVD background rate `λ_bg`.
+- Confirmed deaths are a laboratory process matching the cases: suspected
+  deaths carry a non-BVD background `λ_bg_death`, and confirmed deaths are
+  positives among the forwarded death specimens, sharing the case-lab PCR
+  sensitivity and specificity (issue #193).
+- Ascertainment is split into independent DRC and Uganda reporting
+  fractions, with the DRC centre at 0.75: under active case finding most
+  cases reach the suspected count, so the under-counting that matters is at
+  laboratory confirmation.
+- The growth prior is recentred on the molecular clock,
+  `r ~ LogNormal(log(log(2)/20), 0.15)` (20-day doubling time from the BDBV
+  phylodynamic reanalysis, [cuomodannenburg2026](@cite)), and the
+  doubling-count base advances with the cut-off.
+- Exports and export deaths are timed from infection via an
+  infection→detection delay convolution (incubation ⊕ onset-to-report)
+  rather than a rectangular detection window; both reduce to the McCabe et
+  al. window as the delay collapses to a point mass, which stays available
+  for comparison.
+- The headline estimand is cumulative infections (`2^m`), with the
+  under-ascertainment multiplier anchored on the laboratory-confirmed
+  cases.
 
 ### Outputs
 
-- Posterior summary table and a laboratory-pipeline pair plot covering the
-  report and lab delays, PCR sensitivity, testing fraction, background
-  rate and the per-suspected and per-test positivity.
-- Posterior-predictive panels for the confirmed and tests-analysed
-  streams, included in the per-stream-versus-joint grid and the
-  one-week-ahead forecast; the laboratory streams and the per-vintage
-  time-series table also appear in the data table.
-- `plot_vintage_conditional_ppc`: a conditional one-step-ahead
-  predictive across the sitrep series.
-  Each vintage conditions on the observed previous cumulative and
-  predicts only the new increment, `ŷ_v = y_{v-1} + Δ_v` with `y_0 = 0`,
-  carrying full posterior uncertainty.
-  This replaces the earlier unconditional `plot_vintage_ppc`, whose
-  running sum of modelled increments let errors compound across sitreps.
-- Replaced McCabe et al.'s rectangular Uganda-export detection window
-  with an explicit infection→detection delay convolution
-  (`exports_delay_model`, `exports_deaths_delay_model`,
-  `exports_detection_timing_delay_model`), now the default in `bvd_joint`
-  and `exports_only_model`. Exports are travel-gated, so the at-risk
-  clock starts at infection (the traveller moves during incubation,
-  pre-symptomatic): a person is at risk of being exported and detected
-  abroad until the full infection→detection delay has elapsed, and the
-  expected detected exports integrate this at-risk prevalence over the
-  per-day per-capita travel rate. The form reduces exactly to the McCabe
-  window as the delay collapses to a point mass, so the window assumption
-  is a special case. The infection→detection delay is the incubation
-  period convolved with the DRC onset-to-report delay `f_rep` (the same
-  `incubation_model` / `report_delay_model` draws those streams use),
-  moment-matched to one Gamma via `combined_delay`, so no separate prior
-  is introduced and its mean is ~17.5 days (incubation ~6.3 + report
-  ~11.25). This corrects an earlier version that applied the incubation
-  moment as a flat scaling on an onset-to-report window, which dropped
-  pre-symptomatic travel, roughly halved the export window to ~8 days and
-  made the export-death detection survival wrong at infection age 0. The
-  McCabe window is kept available via the swappable
-  `detection_window_model` / `exports_model` path and in
-  `imperial_only_model` for comparison.
-- Timed the export-death stream from infection: the death delay is the
-  infection→death delay (incubation ⊕ onset-to-death, moment-matched via
-  `combined_delay`), the same infection clock as the detection survival
-  and the latent trajectory. The previous export-death integrand used the
-  bare onset-to-death delay, omitting incubation and timing export deaths
-  ~one incubation period (~6 days) too early. Detection and death share
-  the same onset, so incubation now enters both delays, a slight accepted
-  double-count of the shared incubation period (better than omitting it
-  on death).
+- Posterior summary table and a laboratory-pipeline pair plot over the
+  report and lab delays, PCR sensitivity, positivity and background rate.
+- Posterior-predictive panels for the confirmed-case, confirmed-death and
+  tests-analysed streams, in the per-stream-versus-joint grid and the
+  forecast.
+- `plot_vintage_conditional_ppc`: a conditional one-step-ahead predictive
+  across the sitrep series, each vintage conditioning on the observed
+  previous cumulative and predicting only the new increment, replacing the
+  unconditional version whose running sum compounded errors.
 
 ### Documentation
 
-- Surfaced the onset-to-report and report-to-lab delay priors as
-  equations; the onset-to-death prior means are the BDBV reanalysis
-  estimates (about an 11-day mean) with standard deviations reproducing
-  its 95% credible intervals.
-- Clarified that the latent cumulative count is the true-case pool, not
-  the tested or confirmed count, and framed the testing-fraction prior as
-  weakly informative with no outbreak-specific data.
-- Distributed the per-vintage increment maths into each submodel section.
-- Cited the INSP situation reports and the INRB-UMIE archive.
-- Added limitations on the constant exponential growth-rate assumption
-  holding beyond the report period, and on per-sitrep increments mixing
-  true incidence with backfill and rising ascertainment.
+- Surfaced the delay priors as equations, clarified that the latent pool
+  is the true-case count rather than the tested or confirmed count, and
+  added limitations on the constant-growth assumption and on per-sitrep
+  increments mixing incidence with backfill.
 
 ### Infrastructure
 
-- Added streaming progress to `nuts_sample` via an optional `callback`
-  (forwarded to `sample`, with arbitrary `kwargs...` passthrough).
-  `progress_callback(; path, every)` is a dependency-free file streamer
-  (tail it live with `tail -f`) that reads step statistics through the
-  `AbstractMCMC.ParamsWithStats` interface; `tensorboard_callback("logs/run")`
-  streams the same statistics to TensorBoard under grouped `params/` and
-  `diagnostics/` tags, with per-draw scalar traces plus running histograms
-  (HISTOGRAMS / DISTRIBUTIONS dashboards) on by default. It needs the
-  optional `TensorBoardLogger` dependency (`using TensorBoardLogger`),
-  exposed via a package extension like the Enzyme backend. Pass
-  `nuts_sample(...; warmup = true)` to also stream the NUTS adaptation
-  phase (step-size tuning, early divergences), which is otherwise
-  discarded and silent.
-- Added optional Enzyme reverse-mode AD, selected with `enzyme_adtype()`,
-  alongside the default Mooncake backend. Gradients match Mooncake across
-  every model including the full joint and fitting runs at the same speed,
-  so Mooncake stays the default.
-- Fixed a posterior-predictive grid regression under AlgebraOfGraphics
-  0.12 and widened the AoG compat bound to include 0.12; bumped the
-  `softprops/action-gh-release` Action to v3.
+- Added streaming progress to `nuts_sample` via an optional `callback`:
+  `progress_callback` writes a dependency-free file stream and
+  `tensorboard_callback` streams step statistics to TensorBoard.
+- Added optional Enzyme reverse-mode AD alongside the default Mooncake
+  backend, with matching gradients across every model.
 
 ## v1.2.0
 
