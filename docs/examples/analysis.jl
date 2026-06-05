@@ -296,10 +296,14 @@ Random.seed!(20260518)
 ## Loading TensorBoardLogger activates the package's tracing extension.
 haskey(ENV, "BVD_TRACE_DIR") && @eval using TensorBoardLogger
 function trace_kw(label)
+    ## A high target-acceptance (small step) clears the residual
+    ## divergences in the joint fit's geometry (71 -> ~4 at δ=0.99) while
+    ## keeping R-hat ≈ 1.0; harmless for the simpler single-stream fits.
+    base = (; target_accept = 0.99)
     haskey(ENV, "BVD_TRACE_DIR") ?
-    (; callback = tensorboard_callback(
+    (; base..., callback = tensorboard_callback(
             joinpath(ENV["BVD_TRACE_DIR"], label)),
-        warmup = true) : NamedTuple()
+        warmup = true) : base
 end
 
 #md # ```@raw html
