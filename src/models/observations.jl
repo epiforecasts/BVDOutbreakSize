@@ -459,6 +459,38 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         late_start = last_lab_day)
 end
 
+## Per-window tested BVD share `p_pos` under the `:composition` link,
+## extracted from `confirmed_cases_model` as a plain function so its
+## working variables are function arguments rather than closure captures.
+## Inside the `@model` this same computation lived in a `map(...) do i`
+## closure nested in an `if positivity_link === :composition` branch;
+## because the captured variables were conditionally scoped, the closure
+## was boxed in a `Base.RefValue` and Enzyme's reverse mode could not
+## differentiate through it (Mooncake tolerated the box). As a top-level
+## function the captures become parameters, so no box is created and the
+## result is bit-identical to the in-model `map`.
+function composition_positivity(window_days, bvd_window, bg_window,
+        c_window, δ0, dscale, lo, hi)
+    Tt = eltype(bvd_window)
+    nw = length(window_days)
+    p_pos = Vector{Tt}(undef, nw)
+    ## An explicit indexed loop, not `map(do i …)`: the `do`-block builds an
+    ## anonymous closure struct whose reverse-mode shadow Enzyme cannot
+    ## construct (it tries to `getindex(::Nothing)` on the closure's shadow).
+    ## A plain loop creates no closure, so Enzyme differentiates it directly.
+    @inbounds for i in 1:nw
+        num = bvd_window[i]
+        den = bvd_window[i] + bg_window[i]
+        ratio = num / (den + lo)
+        φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+        δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+        q = logistic(logit(φ) + δ_i)
+        qf = isfinite(q) ? q : φ
+        p_pos[i] = clamp(qf, lo, hi)
+    end
+    return p_pos
+end
+
 """
 Laboratory pipeline likelihood. Two streams driven by the shared renewal
 onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
@@ -559,23 +591,13 @@ quantities.
         lo = convert(Tt, 1e-8)
         hi = one(Tt) - lo
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
-        ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        ## the clock ratio `0/0` (NaN) and break the downstream Binomial. The
+        ## per-window pool composition φ, severity upshift and (0,1) guards
+        ## live in `composition_positivity` (a plain function, so its working
+        ## variables are not boxed closure captures under Enzyme).
         dscale = max(convert(Tt, decay_scale), one(Tt))
-        p_pos = map(eachindex(window_days)) do i
-            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
-            ## window, guarded against a zero/negative denominator.
-            num = bvd_window[i]
-            den = bvd_window[i] + bg_window[i]
-            ratio = num / (den + lo)
-            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
-            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
-            q = logistic(logit(φ) + δ_i)
-            ## Final guard: clamp into (0,1) and replace any non-finite value
-            ## with the pool composition so the confirmed Binomial always sees
-            ## a valid probability even under an AD perturbation.
-            qf = isfinite(q) ? q : φ
-            clamp(qf, lo, hi)
-        end
+        p_pos = composition_positivity(window_days, bvd_window, bg_window,
+            c_window, δ0, dscale, lo, hi)
     else
         pos_state ~ to_submodel(positivity(nv))
         p_pos = pos_state.p_pos

@@ -295,16 +295,31 @@ death-confirmation probability (`death_confirmation`).
     ## `λ_bg` and the death stream has no background. Each stream still
     ## samples its own baseline; the death baseline prior is tighter (deaths
     ## are far fewer than suspected cases).
+    ## The pooling SD is sampled only when the random effect is active (the
+    ## tilde must stay gated), but `σ_bg_shared` is bound unconditionally to
+    ## a plain `Float64` so the closures below capture a non-conditional,
+    ## write-once variable. Conditionally-scoped captures get boxed in a
+    ## `Base.RefValue`, which Enzyme's reverse mode cannot differentiate
+    ## through (Mooncake tolerates it); binding `σ_bg_shared` in both
+    ## branches keeps the capture type-stable and the closures un-boxed.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         σ_bg_shared = bg_pool.σ_bg
-        case_bg_re = nv -> background_re_model(nv, σ_bg_shared)
-        death_bg_re = nv -> background_re_model(nv, σ_bg_shared;
-            baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
     else
-        case_bg_re = nothing
-        death_bg_re = nothing
+        σ_bg_shared = 0.0
     end
+
+    ## Closures are built unconditionally (so each binding has one concrete
+    ## closure type, not closure-or-`Nothing`); `background_re` then selects
+    ## whether the stream receives the closure or the `nothing` sentinel
+    ## that triggers the no-background path downstream. Identical behaviour
+    ## to the gated form: when `background_re = false` the closures are
+    ## never passed, so `σ_bg_shared = 0.0` is unused.
+    make_case_bg = nv -> background_re_model(nv, σ_bg_shared)
+    make_death_bg = nv -> background_re_model(nv, σ_bg_shared;
+        baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
+    case_bg_re = background_re ? make_case_bg : nothing
+    death_bg_re = background_re ? make_death_bg : nothing
 
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k;
