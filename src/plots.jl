@@ -521,6 +521,56 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
+Coverage plot for [`forecast_vs_truth`](@ref): a 2x2 grid scoring the
+confirmed-case and confirmed-death forecast against the later-observed
+counts. The top row shows the predicted cumulative count at the target
+date for each quantity, the bottom row the new count over the forecast
+horizon. Each panel is a histogram of the posterior-predictive draws with
+the 90% predictive interval shaded and the later-observed count drawn as a
+dashed black rule, so coverage can be read off directly.
+
+`fc` is a [`forecast_reported`](@ref) result carrying `:confirmed_new` and
+`:confirmed_deaths_new`. `confirmed` / `confirmed_deaths` are the observed
+cumulative counts at the target date; `baseline_confirmed` /
+`baseline_confirmed_deaths` are the cut-off cumulative counts the forecast
+started from, so the cumulative prediction is `baseline + new` and the
+observed new count is the cumulative truth minus the baseline.
+"""
+function plot_forecast_vs_truth(fc::DataFrame;
+        confirmed::Real, confirmed_deaths::Real,
+        baseline_confirmed::Real, baseline_confirmed_deaths::Real)
+    :confirmed_new in propertynames(fc) &&
+    :confirmed_deaths_new in propertynames(fc) ||
+        error("plot_forecast_vs_truth needs :confirmed_new and " *
+              ":confirmed_deaths_new columns")
+    streams = [
+        (:confirmed_new, "confirmed cases (DRC)", :goldenrod,
+            float(confirmed), float(baseline_confirmed)),
+        (:confirmed_deaths_new, "confirmed deaths (DRC)", :darkorange,
+            float(confirmed_deaths), float(baseline_confirmed_deaths))
+    ]
+    fig = Figure(; size = (370 * length(streams), 680))
+    function panel!(row, col, v, obs, title, colour)
+        upper = max(1.0, quantile(v, 0.995), obs * 1.05)
+        lo = quantile(v, 0.05)
+        hi = quantile(v, 0.95)
+        ax = Axis(fig[row, col];
+            xlabel = title, ylabel = "Predictive frequency",
+            limits = ((0, upper), nothing))
+        vspan!(ax, lo, hi; color = (colour, 0.15))
+        hist!(ax, v; bins = range(0, upper; length = 30),
+            color = (colour, 0.7))
+        vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
+    end
+    for (j, (ncol, name, colour, obs_cum, base)) in enumerate(streams)
+        new = fc[!, ncol]
+        panel!(1, j, new .+ base, obs_cum, "Cumulative $name", colour)
+        panel!(2, j, new, max(obs_cum - base, 0.0), "New $name", colour)
+    end
+    return fig
+end
+
+"""
 Four-panel density of the committed counterfactual totals from
 [`predict_committed`](@ref): the committed infections (the current
 outbreak size `C(T)`, flat under no onward transmission), committed true

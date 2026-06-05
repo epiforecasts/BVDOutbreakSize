@@ -76,8 +76,14 @@ each push to `main` also republishes the rendered analysis and the
   one-week-ahead `forecast_reported` and a counterfactual-year
   `predict_committed` (committed totals under no onward transmission). The
   untrusted suspected cases, suspected deaths and tests-analysed streams are
-  dropped from the forecast, along with the retrospective
-  `forecast_vs_truth` validation that consumed them.
+  dropped from the forecast.
+- Restored the forecast validation as a last-week-vs-now out-of-sample
+  check on the two observable targets: fit the joint to the data through 28
+  May (via the new `load_observations` `as_of_override` truncation),
+  forecast six days, and score the predicted confirmed cases and confirmed
+  deaths against the 3 June counts (`forecast_vs_truth`,
+  `forecast_vs_truth_trajectory`, `plot_forecast_vs_truth`). Latent
+  infections and all-BVD deaths are not directly validatable.
 - The per-stream C(T) overlay fits the exports streams only up to their last
   data (the at-risk integral runs to the last import) while still reporting
   the implied C(T) at the cut-off.

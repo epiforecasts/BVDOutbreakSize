@@ -159,6 +159,79 @@ end
     @test all(isfinite, fc.confirmed_new)
 end
 
+@testitem "forecast_vs_truth scores confirmed cases and deaths" tags=[:slow] setup=[
+    ForecastFixtures, HeadlessMakie] begin
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_reported, forecast_vs_truth,
+                           plot_forecast_vs_truth
+
+    chn=_forecast_chain(200; include_lab = true)
+    fc=forecast_reported(chn;
+        horizon = 6, daily_travellers = 1871,
+        source_population = 4_392_200,
+        obs_confirmed = 210, obs_confirmed_deaths = 17,
+        obs_analysed = 755, forecast_exports = false)
+    @test :confirmed_new in propertynames(fc)
+    @test :confirmed_deaths_new in propertynames(fc)
+
+    tbl=forecast_vs_truth(fc;
+        confirmed = 381, confirmed_deaths = 64,
+        baseline_confirmed = 210, baseline_confirmed_deaths = 17)
+    @test tbl isa DataFrame
+    ## Cumulative and new view for each of confirmed cases and deaths.
+    @test nrow(tbl) == 4
+    @test names(tbl) ==
+          ["Quantity", "Observed", "Lower 90%", "Lower 60%",
+        "Lower 30%", "Upper 30%", "Upper 60%", "Upper 90%",
+        "Within 90% PI"]
+    @test Set(tbl[!, "Quantity"]) == Set([
+        "Confirmed cases (DRC), cumulative", "Confirmed cases (DRC), new",
+        "Confirmed deaths (DRC), cumulative", "Confirmed deaths (DRC), new"])
+
+    ## A truth inside the predicted 90% interval is flagged covered; one
+    ## outside is not. Read the cumulative-cases row's interval and probe
+    ## both sides of it with a re-scored table.
+    row=findfirst(==("Confirmed cases (DRC), cumulative"),
+        tbl[!, "Quantity"])
+    lo=tbl[row, "Lower 90%"]
+    hi=tbl[row, "Upper 90%"]
+    inside=(lo+hi)/2
+    covered=forecast_vs_truth(fc;
+        confirmed = inside, confirmed_deaths = 17,
+        baseline_confirmed = 210, baseline_confirmed_deaths = 17)
+    @test covered[row, "Within 90% PI"] == "yes"
+    missed=forecast_vs_truth(fc;
+        confirmed = hi+1_000, confirmed_deaths = 17,
+        baseline_confirmed = 210, baseline_confirmed_deaths = 17)
+    @test missed[row, "Within 90% PI"] == "no"
+
+    fig=plot_forecast_vs_truth(fc;
+        confirmed = 381, confirmed_deaths = 64,
+        baseline_confirmed = 210, baseline_confirmed_deaths = 17)
+    @test fig !== nothing
+end
+
+@testitem "forecast_vs_truth_trajectory scores each post-cutoff vintage" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_vs_truth_trajectory
+
+    chn=_forecast_chain(100; include_lab = true)
+    traj=forecast_vs_truth_trajectory(chn;
+        dates = ["2026-05-29", "2026-05-31", "2026-06-03"],
+        confirmed = [263, 321, 381],
+        confirmed_deaths = [42, 48, 64],
+        snapshot_date = "2026-05-28",
+        baseline_confirmed = 210, baseline_confirmed_deaths = 17,
+        baseline_analysed = 755)
+    @test traj isa DataFrame
+    ## Two confirmed quantities at each of three post-cut-off vintages.
+    @test "Horizon (days)" in names(traj)
+    @test "Within 90% PI" in names(traj)
+    @test Set(traj[!, "Quantity"]) ==
+          Set(["Confirmed cases (DRC)", "Confirmed deaths (DRC)"])
+    @test all(traj[!, "Horizon (days)"] .> 0)
+end
+
 @testitem "forecast_table and plot_forecast" tags=[:slow] setup=[
     ForecastFixtures, HeadlessMakie] begin
     using DataFrames: DataFrame, nrow

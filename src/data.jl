@@ -72,23 +72,50 @@ Fields returned:
 - `sources::NamedTuple` — citation per loaded field, with the same keys
   as the numeric fields above. Optional fields (`confirmed_cases`,
   `genetic_tmrca`) carry `missing` rather than a citation when absent.
+
+The `as_of_override` keyword re-bases the cut-off to an earlier as-of
+date for out-of-sample validation. Every vintage history is truncated to
+entries on or before the override date, the dated export series keep only
+detections by then, all elapsed-time offsets are recomputed relative to
+the override, and the derived cut-off scalars (`confirmed_cases`,
+`confirmed_deaths`, `cumulative_tests_analysed`, `reported_cases`,
+`total_deaths`, `exported_cases`, `exports_deaths`) are taken from the
+truncated data so they stay internally consistent with what had been
+reported by that date. Pass a `Date` or an ISO `"YYYY-MM-DD"` string;
+`nothing` (the default) loads the file's own `as_of_date` unchanged.
 """
 function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
-        "observations.toml"))
+            "observations.toml");
+        as_of_override::Union{AbstractString, Date, Nothing} = nothing)
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
     _src(k) = String(raw[k]["source"])
-    as_of = String(raw["as_of_date"])
-    _gap(d) = date2epochdays(Date(as_of)) - date2epochdays(Date(String(d)))
+    ## `as_of_override` re-bases the cut-off to an earlier as-of date for
+    ## out-of-sample validation: every vintage history is truncated to
+    ## entries on or before the cut-off, the dated export series keep only
+    ## detections by the cut-off, and the derived cut-off scalars
+    ## (confirmed cases / deaths, samples analysed, suspected cases /
+    ## deaths, exports) are recomputed from the truncated data so they stay
+    ## internally consistent. Dates after the cut-off are dropped, not
+    ## interpolated.
+    as_of = as_of_override === nothing ? String(raw["as_of_date"]) :
+            string(Date(as_of_override))
+    cutoff_epoch = date2epochdays(Date(as_of))
+    truncating = as_of_override !== nothing
+    ## Keep a dated entry only when it falls on or before the cut-off.
+    _by_cutoff(d) = date2epochdays(Date(String(d))) <= cutoff_epoch
+    _gap(d) = cutoff_epoch - date2epochdays(Date(String(d)))
     ## Days between a recorded event date and the cut-off, used as the
     ## elapsed-time offset for the timing terms. A scalar date gives a
-    ## `missing` offset when absent (so its term is a no-op).
-    _delta(k) = haskey(raw, k) ? _gap(_val(k)) : missing
+    ## `missing` offset when absent (so its term is a no-op), and an event
+    ## dated after the cut-off is treated as not-yet-observed (`missing`).
+    _delta(k) = haskey(raw, k) && _by_cutoff(_val(k)) ? _gap(_val(k)) : missing
     ## Daily export-death series, earliest dated death (index 1) to the
     ## cut-off day (offset 0, kept); empty when no dates are present.
     export_deaths_daily = if haskey(raw, "export_death_dates")
-        offs = Int[_gap(d) for d in _val("export_death_dates")]
+        ds = filter(_by_cutoff, _val("export_death_dates"))
+        offs = Int[_gap(d) for d in ds]
         isempty(offs) ? Int[] :
         Int[count(==(δ), offs) for δ in maximum(offs):-1:0]
     else
@@ -97,12 +124,20 @@ function load_observations(
     ## Daily Uganda export-case series, earliest detection (index 1) to
     ## the cut-off day (offset 0, kept); empty when no dates are present.
     exported_cases_daily = if haskey(raw, "export_case_dates")
-        offs = Int[_gap(d) for d in _val("export_case_dates")]
+        ds = filter(_by_cutoff, _val("export_case_dates"))
+        offs = Int[_gap(d) for d in ds]
         isempty(offs) ? Int[] :
         Int[count(==(δ), offs) for δ in maximum(offs):-1:0]
     else
         Int[]
     end
+    ## Cumulative dated-export counts at the cut-off: the number of dated
+    ## detections on or before the cut-off. Used to override the bare
+    ## `exported_cases` / `exports_deaths` scalars when truncating, so the
+    ## export totals match the truncated daily series.
+    _dated_count(k) = haskey(raw, k) ? count(_by_cutoff, _val(k)) : nothing
+    exported_cases_cut = _dated_count("export_case_dates")
+    exports_deaths_cut = _dated_count("export_death_dates")
     ## Cumulative DRC counts at each sitrep vintage: parsed dates,
     ## the elapsed-time offset before the cut-off (days since the
     ## vintage's date, in ascending elapsed-time order) and the
@@ -113,8 +148,16 @@ function load_observations(
         haskey(raw, k) || return missing
         block = raw[k]
         ds = String.(block["dates"])
-        offs = Int[_gap(d) for d in ds]
         vs = Int.(block["values"])
+        ## Drop vintages after the cut-off when truncating, so the history
+        ## reflects only what had been reported by the as-of date.
+        if truncating
+            keep = _by_cutoff.(ds)
+            ds = ds[keep]
+            vs = vs[keep]
+            isempty(ds) && return missing
+        end
+        offs = Int[_gap(d) for d in ds]
         ## Sort by ascending elapsed-time (oldest first), so a `diff`
         ## of `values` matches the natural day-by-day increment.
         ord = sortperm(offs; rev = true)
@@ -131,16 +174,32 @@ function load_observations(
     tests_received_hist = _history("tests_received_history")
     tests_analysed_hist = _history("tests_analysed_history")
     _hist_end(h) = h === missing ? missing : h.values[end]
-    _scalar(k, h) = haskey(raw, k) ? Int(_val(k)) : _hist_end(h)
+    ## When truncating, the truncated history is the single source of
+    ## truth for every cut-off scalar (a bare TOML scalar would carry the
+    ## un-truncated value); otherwise a bare scalar still takes precedence.
+    _scalar(k, h) = truncating ? _hist_end(h) :
+                    (haskey(raw, k) ? Int(_val(k)) : _hist_end(h))
     _scalar_src(k, hk) = haskey(raw, k) ? _src(k) :
                          (haskey(raw, hk) ? String(raw[hk]["source"]) : missing)
     has_gen = haskey(raw, "genetic_tmrca")
+    ## Cut-off scalars for the dated-export and frozen suspected streams.
+    ## When truncating, prefer the truncated-data view (dated-detection
+    ## count for exports, truncated history-end for the frozen suspected
+    ## totals); otherwise the bare TOML scalar.
+    exported_cases_val = truncating && exported_cases_cut !== nothing ?
+                         exported_cases_cut : Int(_val("exported_cases"))
+    exports_deaths_val = truncating && exports_deaths_cut !== nothing ?
+                         exports_deaths_cut : Int(_val("exports_deaths"))
+    total_deaths_val = truncating && death_hist !== missing ?
+                       death_hist.values[end] : Int(_val("total_deaths"))
+    reported_cases_val = truncating && reported_hist !== missing ?
+                         reported_hist.values[end] : Int(_val("reported_cases"))
     return (;
         as_of_date = as_of,
-        exported_cases = Int(_val("exported_cases")),
-        exports_deaths = Int(_val("exports_deaths")),
-        total_deaths = Int(_val("total_deaths")),
-        reported_cases = Int(_val("reported_cases")),
+        exported_cases = exported_cases_val,
+        exports_deaths = exports_deaths_val,
+        total_deaths = total_deaths_val,
+        reported_cases = reported_cases_val,
         confirmed_cases = _scalar("confirmed_cases", confirmed_hist),
         confirmed_deaths = _scalar("confirmed_deaths", confirmed_death_hist),
         reported_case_history = reported_hist,

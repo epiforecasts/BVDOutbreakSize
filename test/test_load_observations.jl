@@ -254,3 +254,47 @@ end
         @test load_observations(path).exported_cases_daily == Int[]
     end
 end
+
+@testitem "as_of_override truncates to the earlier cut-off" begin
+    using BVDOutbreakSize: load_observations
+    using Dates: Date, value
+
+    ## The committed data file's own cut-off (3 June) and a one-week
+    ## earlier as-of (28 May). The 28 May totals are the known
+    ## INSP/WHO values: confirmed cases 210, confirmed deaths 17, samples
+    ## analysed 755; the frozen suspected totals stay at their 26 May
+    ## values (reported cases 1077, suspected deaths 246) and the dated
+    ## exports are 3 cases / 1 death detected by 28 May.
+    full = load_observations()
+    cut = load_observations(; as_of_override = "2026-05-28")
+
+    @test cut.as_of_date == "2026-05-28"
+    @test cut.confirmed_cases == 210
+    @test cut.confirmed_deaths == 17
+    @test cut.cumulative_tests_analysed == 755
+    @test cut.reported_cases == 1077
+    @test cut.total_deaths == 246
+    @test cut.exported_cases == 3
+    @test cut.exports_deaths == 1
+
+    ## Histories are truncated to entries on or before the cut-off.
+    @test cut.confirmed_case_history.dates[end] == "2026-05-28"
+    @test all(Date.(cut.confirmed_case_history.dates) .<= Date("2026-05-28"))
+    @test cut.confirmed_death_history.dates[end] == "2026-05-28"
+    @test cut.confirmed_case_history.values[end] == cut.confirmed_cases
+
+    ## Elapsed-time offsets are recomputed relative to the new cut-off, so
+    ## the genetic floor is one week closer than under the 3 June file.
+    @test cut.genetic_tmrca_days ==
+          full.genetic_tmrca_days -
+          value(Date("2026-06-03") - Date("2026-05-28"))
+
+    ## A `Date` argument is equivalent to the ISO string.
+    @test load_observations(; as_of_override = Date("2026-05-28")).as_of_date ==
+          "2026-05-28"
+
+    ## The default (no override) loads the file's own cut-off unchanged.
+    @test full.as_of_date == "2026-06-03"
+    @test full.confirmed_cases == 381
+    @test full.confirmed_deaths == 64
+end

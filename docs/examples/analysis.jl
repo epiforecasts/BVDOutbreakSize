@@ -2765,6 +2765,138 @@ forecast_fig = plot_forecast(forecast);
 
 forecast_fig #hide
 
+# ### Forecast validation (last week vs now)
+#
+# The one-week-ahead forecast above projects from the current fit, so it
+# cannot yet be checked.
+# We validate the same machinery out of sample: re-fit the joint to the
+# data available one week earlier (truncated to the 28 May cut-off),
+# forecast the six days forward to the current 3 June cut-off, and compare
+# the predicted counts against what was actually observed by then.
+# Only the two directly observable targets can be scored this way:
+# laboratory-confirmed cases and laboratory-confirmed deaths.
+# Latent infections and all-BVD deaths are not observed, so neither can be
+# validated against data.
+#
+# The 28 May data are the same observations truncated to that as-of date:
+# every vintage history is cut to entries on or before 28 May and the
+# cut-off scalars are recomputed from the truncated data (confirmed cases
+# 210, confirmed deaths 17, samples analysed 755).
+# The 3 June truth is confirmed cases 381 and confirmed deaths 64.
+
+#md # ```@raw html
+#md # <details><summary>Fit the joint at the 28 May cut-off and forecast it forward</summary>
+#md # ```
+
+obs_28may = load_observations(; as_of_override = "2026-05-28")
+
+## The 28 May joint is built exactly as the headline fit, with the growth
+## prior, genetic seeding floor and reporting-onset offset all re-keyed to
+## the earlier as-of date.
+genetic_seeding_28may = T -> genetic_seeding_model(T,
+    obs_28may.genetic_tmrca_days;
+    tmrca_days_sd = obs_28may.genetic_tmrca_days_sd)
+fit_args_28may = joint_obs(obs_28may)
+chn_joint_28may = nuts_sample(
+    bvd_joint(obs_28may.exported_cases, fit_args_28may.deaths,
+        fit_args_28may.reported, fit_args_28may.export_deaths;
+        fit_args_28may.kw...,
+        growth = growth_for(obs_28may),
+        first_export_detection_delta =
+        obs_28may.first_export_detection_delta,
+        report_onset_offset = report_onset_offset(obs_28may.as_of_date),
+        confirmed_q_random_effect = confirmed_q_re_model,
+        genetic = genetic_seeding_28may); trace_kw("validation")...);
+
+## Forecast the six days from the 28 May cut-off to the current 3 June
+## cut-off, anchoring the laboratory queue on the 28 May confirmed and
+## analysed counts.
+validation_horizon = value(Date(obs.as_of_date) - Date(obs_28may.as_of_date))
+forecast_validation = forecast_reported(chn_joint_28may;
+    horizon = validation_horizon,
+    daily_travellers = ITURI_DAILY_TRAVEL,
+    source_population = ITURI_POPULATION,
+    obs_confirmed = obs_28may.confirmed_cases,
+    obs_confirmed_deaths = obs_28may.confirmed_deaths,
+    obs_analysed = obs_28may.cumulative_tests_analysed,
+    forecast_exports = false,
+    report_onset_offset = report_onset_offset(obs_28may.as_of_date));
+
+forecast_validation_table = forecast_vs_truth(forecast_validation;
+    confirmed = obs.confirmed_cases,
+    confirmed_deaths = obs.confirmed_deaths,
+    baseline_confirmed = obs_28may.confirmed_cases,
+    baseline_confirmed_deaths = obs_28may.confirmed_deaths);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Each quantity is scored both as the cumulative count at 3 June (28 May
+# baseline plus the forecast new count) and as the new count over the six
+# days, with the 90% predictive interval and whether the 3 June truth
+# falls inside it.
+
+forecast_validation_table #hide
+
+# Coverage plot: the top row is the cumulative count at 3 June, the bottom
+# row the new count over the six days, with the later-observed count drawn
+# as a dashed rule so coverage can be read off directly.
+
+#md # ```@raw html
+#md # <details><summary>Forecast-validation coverage plot</summary>
+#md # ```
+
+forecast_validation_fig = plot_forecast_vs_truth(forecast_validation;
+    confirmed = obs.confirmed_cases,
+    confirmed_deaths = obs.confirmed_deaths,
+    baseline_confirmed = obs_28may.confirmed_cases,
+    baseline_confirmed_deaths = obs_28may.confirmed_deaths);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_validation_fig #hide
+
+# The check above scores only the 3 June endpoint.
+# The confirmed-case and confirmed-death series carry a cumulative count
+# at every sitrep date, so the whole horizon can be scored: project the
+# same 28 May fit forward to each vintage between 28 May and 3 June and
+# compare against the count observed at that date.
+# Each row is one quantity at one date, with the 90% predictive interval
+# and whether the observed cumulative fell inside it.
+
+#md # ```@raw html
+#md # <details><summary>Score the 28 May fit against the observed daily trajectory</summary>
+#md # ```
+
+## The post-cut-off confirmed-case and confirmed-death vintages (29 May
+## onward) come from the current (un-truncated) histories. Both series
+## carry the same dates over this window, so align them on the dates that
+## fall after the 28 May cut-off and score the 28 May fit against each.
+validation_dates = [d
+                    for d in obs.confirmed_case_history.dates
+                    if Date(d) > Date(obs_28may.as_of_date)]
+_at(h, d) = h.values[findfirst(==(d), h.dates)]
+forecast_validation_trajectory = forecast_vs_truth_trajectory(
+    chn_joint_28may;
+    dates = validation_dates,
+    confirmed = [_at(obs.confirmed_case_history, d) for d in validation_dates],
+    confirmed_deaths = [_at(obs.confirmed_death_history, d)
+                        for d in validation_dates],
+    snapshot_date = obs_28may.as_of_date,
+    baseline_confirmed = obs_28may.confirmed_cases,
+    baseline_confirmed_deaths = obs_28may.confirmed_deaths,
+    baseline_analysed = obs_28may.cumulative_tests_analysed,
+    report_onset_offset = report_onset_offset(obs_28may.as_of_date));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_validation_trajectory #hide
+
 # ### Delay sensitivity
 #
 # Refit under the community-only onset-to-death delay: the baseline and

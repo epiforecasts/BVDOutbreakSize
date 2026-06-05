@@ -373,3 +373,140 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
             _row("New confirmed deaths (DRC)", fc[!, :confirmed_deaths_new]))
     return _prettify(DataFrame(rows))
 end
+
+"""
+Validate a [`forecast_reported`](@ref) projection against the counts that
+were later observed, for the two directly observable forecast targets:
+laboratory-confirmed cases and laboratory-confirmed deaths. Fit the joint
+at an earlier cut-off, forecast forward to the current cut-off, and pass
+the now-known truth here to score the prediction.
+
+`fc` is a [`forecast_reported`](@ref) result carrying the per-draw new
+counts over the forecast horizon (`:confirmed_new`, `:confirmed_deaths_new`).
+`baseline_confirmed` / `baseline_confirmed_deaths` are the cut-off
+cumulative counts the forecast started from (the confirmed cases / deaths
+observed by the earlier as-of date); the predicted cumulative at the
+target date is `baseline + new`. `confirmed` / `confirmed_deaths` are the
+cumulative counts actually observed at the target date.
+
+Returns a `DataFrame` with one row per (quantity, horizon-view): the
+cumulative and the new-over-horizon prediction for each of confirmed cases
+and confirmed deaths, giving the observed count, the equal-tailed
+30/60/90% predictive intervals (the same endpoints as the other summary
+tables) and whether the observed count falls inside the 90% interval.
+Latent infections and all-BVD deaths are not scored here: neither is
+directly observed, so neither can be validated against data.
+"""
+function forecast_vs_truth(fc::DataFrame;
+        confirmed::Real, confirmed_deaths::Real,
+        baseline_confirmed::Real, baseline_confirmed_deaths::Real,
+        digits::Integer = 0)
+    _row(label,
+        draws,
+        obs) = begin
+        s = posterior_summary(draws)
+        lo = round(s.lo90; digits)
+        hi = round(s.hi90; digits)
+        (quantity = label, observed = round(obs; digits),
+            lower_90 = lo, lower_60 = round(s.lo60; digits),
+            lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
+            upper_60 = round(s.hi60; digits), upper_90 = hi,
+            within_90 = lo <= obs <= hi ? "yes" : "no")
+    end
+    :confirmed_new in propertynames(fc) ||
+        error("forecast_vs_truth needs a :confirmed_new column; pass a " *
+              "forecast_reported result fitted with the laboratory streams")
+    :confirmed_deaths_new in propertynames(fc) ||
+        error("forecast_vs_truth needs a :confirmed_deaths_new column; " *
+              "pass a forecast_reported result fitted with the death-lab " *
+              "stream")
+    new_cases = fc[!, :confirmed_new]
+    new_deaths = fc[!, :confirmed_deaths_new]
+    cum_cases = new_cases .+ baseline_confirmed
+    cum_deaths = new_deaths .+ baseline_confirmed_deaths
+    rows = NamedTuple[
+    _row("Confirmed cases (DRC), cumulative", cum_cases, confirmed),
+    _row(
+        "Confirmed cases (DRC), new", new_cases,
+        confirmed - baseline_confirmed),
+    _row(
+        "Confirmed deaths (DRC), cumulative", cum_deaths,
+        confirmed_deaths),
+    _row(
+        "Confirmed deaths (DRC), new", new_deaths,
+        confirmed_deaths - baseline_confirmed_deaths)
+]
+    return _prettify(DataFrame(rows))
+end
+
+"""
+Validate a fitted chain's confirmed-stream projection against the full
+observed daily trajectory rather than a single endpoint.
+
+Given the per-vintage observed cumulative confirmed series (`dates`, with
+`confirmed` and `confirmed_deaths` the cumulative confirmed cases /
+deaths at each sitrep date) and the fit's data cut-off `snapshot_date`,
+project the chain forward to every vintage date that falls *after* the
+cut-off and compare the predicted cumulative count against the observed
+one. This scores the whole forecast horizon, not just its endpoint.
+
+`baseline_confirmed` / `baseline_confirmed_deaths` are the fit's cut-off
+cumulative confirmed counts (the forecast origin), and
+`baseline_analysed` the cut-off samples-analysed total that anchors the
+laboratory queue. The remaining keywords match [`forecast_reported`](@ref).
+
+Returns a `DataFrame` with one row per (quantity, date): the horizon in
+days, the observed count, the equal-tailed 30/60/90% predictive intervals
+and whether the observed count falls within the 90% interval.
+"""
+function forecast_vs_truth_trajectory(chn;
+        dates::AbstractVector,
+        confirmed::AbstractVector,
+        confirmed_deaths::AbstractVector,
+        snapshot_date,
+        baseline_confirmed::Real,
+        baseline_confirmed_deaths::Real,
+        baseline_analysed::Real,
+        daily_travellers::Real = 0,
+        source_population::Real = 1,
+        seed::Integer = 20260520,
+        report_onset_offset::Union{Nothing, Real} = nothing,
+        digits::Integer = 0,
+        alg = DEATH_INTEGRAL_ALG)
+    length(dates) == length(confirmed) == length(confirmed_deaths) ||
+        error("dates, confirmed and confirmed_deaths must be equal length " *
+              "(got $(length(dates)), $(length(confirmed)), " *
+              "$(length(confirmed_deaths)))")
+    snap = date2epochdays(Date(snapshot_date))
+    rows = NamedTuple[]
+    for i in eachindex(dates)
+        ## Only vintages strictly after the fit cut-off are a forecast.
+        h = date2epochdays(Date(dates[i])) - snap
+        h > 0 || continue
+        fc = forecast_reported(chn; horizon = h,
+            daily_travellers, source_population,
+            obs_confirmed = baseline_confirmed,
+            obs_confirmed_deaths = baseline_confirmed_deaths,
+            obs_analysed = baseline_analysed,
+            forecast_exports = false, seed, report_onset_offset, alg)
+        for (label, col, base, obs) in (
+            ("Confirmed cases (DRC)", :confirmed_new,
+                baseline_confirmed, confirmed[i]),
+            ("Confirmed deaths (DRC)", :confirmed_deaths_new,
+                baseline_confirmed_deaths, confirmed_deaths[i]))
+            col in propertynames(fc) || continue
+            s = posterior_summary(fc[!, col] .+ base)
+            lo = round(s.lo90; digits)
+            hi = round(s.hi90; digits)
+            push!(rows,
+                (quantity = label, date = string(dates[i]),
+                    horizon_days = h, observed = round(obs; digits),
+                    lower_90 = lo, lower_60 = round(s.lo60; digits),
+                    lower_30 = round(s.lo30; digits),
+                    upper_30 = round(s.hi30; digits),
+                    upper_60 = round(s.hi60; digits), upper_90 = hi,
+                    within_90 = lo <= obs <= hi ? "yes" : "no"))
+        end
+    end
+    return _prettify(DataFrame(rows))
+end
