@@ -952,7 +952,8 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_deaths_model(
-#md #         missing, missing, 1.0, Float64[], 1.0, Float64[])), "\n```"))
+#md #         missing, missing, Float64[], Float64[], 1.0, Float64[], 1.0)),
+#md #     "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1196,6 +1197,7 @@ chn_confirmed_deaths = nuts_sample(
     confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
     obs.total_deaths;
     deaths_history = obs.deaths_history,
+    confirmed_deaths_history = obs.confirmed_deaths_history,
     breakpoint = _BREAKPOINT));
 
 ## This composer keeps the deaths and exports submodels only for their
@@ -1513,13 +1515,12 @@ lab_pair_fig = plot_pair(chn_joint,
 lab_pair_fig #hide
 
 # A posterior predictive check draws replicated observations from the
-# fitted joint model and compares them to the observed counts. The four
+# fitted joint model and compares them to the observed counts. The five
 # dated DRC streams are real per-vintage observations, so each replicated
 # cumulative trajectory is shown across the situation-report dates with the
 # observed series overlaid: suspected cases, confirmed cases, suspected
-# deaths and specimens received. The single-count Uganda export and
-# export-death streams, and the laboratory-confirmed-death total, keep
-# their scalar predictive check.
+# deaths, confirmed deaths and specimens received. The single-count Uganda
+# export and export-death streams keep their scalar predictive check.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -1541,7 +1542,7 @@ pp_joint = predict(
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
         confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
+        confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = _BREAKPOINT,
@@ -1597,7 +1598,10 @@ tests_received_panel = (;
 ## grid is slightly coarser than the raw confirmed history.
 _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
     obs.confirmed_history, obs.lab_history);
-_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days);
+## Oldest-first: early (no denominator) → observed (analysed Binomial) →
+## late (post-28 May, no denominator, modelled volume).
+_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
+    _conf_windows.late_days);
 function _confirmed_at(day)
     i = searchsortedlast(obs.confirmed_history.days, day)
     return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
@@ -1607,16 +1611,30 @@ _conf_early = _vintage_replicates(
 _conf_obs = collect(first(pp_joint[k]
 for k in keys(pp_joint)
 if occursin("confirmed_state.confirmed_positives.positives", string(k))));
+_conf_late = _vintage_replicates(
+    pp_joint, "confirmed_state.late_increments");
 confirmed_panel = (;
     title = "Confirmed cases",
     dates = _vintage_dates(_conf_window_days),
-    replicates = [vcat(collect(e), collect(p))
-                  for (e, p) in zip(vec(_conf_early), vec(_conf_obs))],
+    replicates = [vcat(collect(e), collect(p), collect(l))
+                  for (e, p, l) in
+                      zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
     observed = [_confirmed_at(d) for d in _conf_window_days],
     colour = :goldenrod);
 
+## Confirmed deaths are now a per-vintage stream (the series grows 17→64
+## over 26 May-3 June), scored as increments of the modelled confirmed-death
+## trajectory, so they get the same cumulative conditional check.
+confirmed_deaths_panel = (;
+    title = "Confirmed deaths",
+    dates = _vintage_dates(obs.confirmed_deaths_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "confirmed_deaths_state.cdeath_increments"),
+    observed = obs.confirmed_deaths_history.counts, colour = :purple);
+
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, confirmed_panel, deaths_panel, tests_received_panel]);
+    [reported_panel, confirmed_panel, deaths_panel,
+    confirmed_deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -1625,9 +1643,6 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
 joint_vintage_ppc_fig #hide
 
 # The Uganda export and export-death streams are single cut-off counts,
-# and the laboratory-confirmed deaths are a single Binomial thinning of the
-# suspected-death total (the three confirmed-death vintages are flat at the
-# same count, so there is no per-vintage increment to score). All three are
 # checked as scalar posterior predictives.
 
 #md # ```@raw html
@@ -1645,16 +1660,12 @@ end;
 pp_exports = _scalar_replicates(pp_joint, "exports_state.exported_cases");
 pp_exports_deaths = _scalar_replicates(
     pp_joint, "exports_deaths_state.exports_deaths");
-pp_confirmed_deaths = _scalar_replicates(
-    pp_joint, "confirmed_deaths_state.confirmed_deaths");
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
     obs.exported_cases, nothing;
     pp_exports_deaths = pp_exports_deaths,
-    obs_exports_deaths = obs.exports_deaths,
-    pp_confirmed_deaths = pp_confirmed_deaths,
-    obs_confirmed_deaths = obs.confirmed_deaths);
+    obs_exports_deaths = obs.exports_deaths);
 
 #md # ```@raw html
 #md # </details>
