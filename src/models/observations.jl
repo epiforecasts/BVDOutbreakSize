@@ -79,7 +79,8 @@ delay submodels. Couples to `C(T)` through a Poisson likelihood.
         exported_cases::Union{Missing, Integer},
         growth_state, p_uganda::Real, f_det;
         source_population::Real = ITURI_POPULATION,
-        traveller = traveller_volume_model())
+        traveller = traveller_volume_model(),
+        last_offset::Real = 0)
     r = growth_state.r
     T = growth_state.T
 
@@ -87,7 +88,13 @@ delay submodels. Couples to `C(T)` through a Poisson likelihood.
     daily_travellers = travel_state.daily_travellers
 
     q = daily_travellers / source_population
-    expected_exports_T := expected_exports_delay(r, p_uganda, q, T, f_det)
+    ## The exports stopped accruing `last_offset` days before the cut-off
+    ## (the last import), so the at-risk export integral runs only to
+    ## `t_last = T - last_offset`. The latent size `growth_state.C_T` is
+    ## still reported at the cut-off `T` by the caller.
+    t_last = T - last_offset
+    expected_exports_T := expected_exports_delay(r, p_uganda, q, t_last,
+        f_det)
 
     exported_cases ~ Poisson(expected_exports_T)
 

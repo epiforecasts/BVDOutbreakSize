@@ -30,7 +30,8 @@ prior-predictive case-equivalent of the latent infections.
         exports = exports_delay_model,
         report_delay = report_delay_model(),
         ascertainment = pooled_ascertainment_model(),
-        incubation = incubation_model())
+        incubation = incubation_model(),
+        export_last_offset::Real = 0)
     growth_state ~ to_submodel(growth, false)
     asc_state ~ to_submodel(ascertainment, false)
     report_state ~ to_submodel(report_delay, false)
@@ -40,9 +41,14 @@ prior-predictive case-equivalent of the latent infections.
     ## Exports are travel-gated, so the at-risk clock runs from infection:
     ## the detection delay is incubation ⊕ onset-to-report, moment-matched
     ## to one Gamma. No separate incubation rescale (it lives in `f_det`).
+    ## The exports stopped accruing `export_last_offset` days before the
+    ## cut-off (the last import), so the at-risk integral runs only to
+    ## `T - export_last_offset`; `cumulative_infections` is still reported
+    ## at the cut-off `T`, i.e. the implied size now.
     f_det = combined_delay(incubation_state.dist, report_state.dist)
     exports_state ~ to_submodel(
-        exports(exported_cases, growth_state, asc_state.p_uganda, f_det),
+        exports(exported_cases, growth_state, asc_state.p_uganda, f_det;
+            last_offset = export_last_offset),
         false)
 
     onset_fraction := os

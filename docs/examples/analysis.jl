@@ -2021,7 +2021,8 @@ chn_joint = nuts_sample(
         genetic = genetic_seeding); trace_kw("joint")...);
 
 chn_exports = nuts_sample(
-    exports_only_model(obs.exported_cases; growth = growth_now);
+    exports_only_model(obs.exported_cases; growth = growth_now,
+        export_last_offset = fit_args.kw.export_last_offset);
     trace_kw("exports")...);
 chn_deaths = nuts_sample(
     deaths_only_model(obs.total_deaths; growth = growth_now);
