@@ -59,14 +59,28 @@ each push to `main` also republishes the rendered analysis and the
 - The headline estimand is cumulative infections (`2^m`), with the
   under-ascertainment multiplier anchored on the laboratory-confirmed
   cases.
+- Noted that the fatality ratio is applied per infection: with no
+  asymptomatic fraction and no case-ascertainment on the death denominator
+  it multiplies the latent infection trajectory directly, so it coincides
+  with the infection-fatality ratio (IFR); the conventional CFR label is
+  kept.
 
 ### Outputs
 
 - Posterior summary table and a laboratory-pipeline pair plot over the
   report and lab delays, PCR sensitivity, positivity and background rate.
-- Posterior-predictive panels for the confirmed-case, confirmed-death and
-  tests-analysed streams, in the per-stream-versus-joint grid and the
-  forecast.
+- Posterior-predictive panels for the confirmed-case and confirmed-death
+  streams in the per-stream-versus-joint grid.
+- Recast the forecast around the four trusted quantities (infections, true
+  BVD deaths, confirmed cases, confirmed deaths) over two horizons: a
+  one-week-ahead `forecast_reported` and a counterfactual-year
+  `predict_committed` (committed totals under no onward transmission). The
+  untrusted suspected cases, suspected deaths and tests-analysed streams are
+  dropped from the forecast, along with the retrospective
+  `forecast_vs_truth` validation that consumed them.
+- The per-stream C(T) overlay fits the exports streams only up to their last
+  data (the at-risk integral runs to the last import) while still reporting
+  the implied C(T) at the cut-off.
 - `plot_vintage_conditional_ppc`: a conditional one-step-ahead predictive
   across the sitrep series, each vintage conditioning on the observed
   previous cumulative and predicting only the new increment, replacing the
