@@ -65,10 +65,17 @@ rather than switching at a single date; pass `ramp` to widen or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 
-The initial reproduction number prior is centred on `R0 ≈ 1.5`, the
-Bundibugyo / Ebola virus disease range (the 2007 Uganda BDBV outbreak
-≈ 1.3–1.5; WHO Ebola Response Team 2014 ≈ 1.5–2.0), so the seeding growth
-is literature-anchored rather than arbitrary.
+The initial reproduction number prior is anchored on the molecular-clock
+growth estimate for this outbreak. Cuomo-Dannenburg & Ghafari's
+phylodynamic reanalysis of the first ten BDBV genomes puts the mean
+epidemic doubling time at 15.2–24.5 d (centre 20 d). With the renewal
+generation interval that 20-day doubling implies `R0 ≈ 1.6`, and the
+15.2–24.5 d range maps to `R0 ≈ 1.47–1.84`, so the prior is
+`Normal(log(1.6), 0.10)`: centred on the molecular-clock doubling with a
+log-SD slightly wider than the genetic spread (≈0.07) to allow for the
+wide per-assumption clock intervals. Sampling on `R0` (with `r0` derived
+through Euler–Lotka) rather than on `r` directly keeps the renewal seeding
+consistent; the implied doubling-time prior tracks the genetic estimate.
 
 The random-walk step SD prior is a tight half-normal SD 0.05. The
 observed sitrep window is only the final ≈9 days of a ≈90-day inferred
@@ -96,7 +103,7 @@ fortnight, the response damps `R_t` only partially by the cut-off.
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         ramp::Real = 14.0,
-        log_r0_prior = Normal(log(1.5), 0.25),
+        log_r0_prior = Normal(log(1.6), 0.10),
         sigma_prior = truncated(Normal(0, 0.05); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)
