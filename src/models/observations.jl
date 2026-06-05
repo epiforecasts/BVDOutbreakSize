@@ -335,7 +335,7 @@ end
 
 """
 Align the confirmed-case counts onto the laboratory windows, splitting
-them into two non-overlapping groups so all the confirmed data is used:
+them into three non-overlapping groups so all the confirmed data is used:
 
 - *Observed* windows, where an analysed-specimen increment is available
   (the laboratory series only differences cleanly from its second vintage
@@ -350,18 +350,28 @@ them into two non-overlapping groups so all the confirmed data is used:
   denominator. Their confirmed increments are returned so the model can
   score them against the modelled laboratory volume, with the per-window
   positivity partially pooled with the observed windows.
+- *Late* windows, the confirmed vintages strictly after the last
+  laboratory date (29 May-3 June, INSP's confirmed-only format with no
+  national analysed-specimen denominators). Like the early windows, their
+  confirmed increments are scored against the modelled laboratory volume
+  with the pooled positivity. Their day grid carries a `late_start` day
+  (the last laboratory day) so the model bins the modelled volume over
+  each late window's *own* day range, anchored at `late_start`, rather
+  than from day 0 (which would double-count the observed window volume).
 
-The two groups partition the confirmed counts at the first laboratory
-date, so no confirmed case is counted twice. Returns
-`(; obs_days, obs_positives, obs_analysed, early_days, early_increments)`
-of grid day-indices and per-window counts; the observed group is empty
-when no laboratory history is present and every confirmed vintage becomes
-an early window. Pure integer bookkeeping on the observed data, so it
+The three groups partition the confirmed counts at the first and last
+laboratory dates, so no confirmed case is counted twice. Returns
+`(; obs_days, obs_positives, obs_analysed, early_days, early_increments,
+late_days, late_increments, late_start)` of grid day-indices and
+per-window counts; the observed and late groups are empty when no
+laboratory history is present and every confirmed vintage becomes an
+early window. Pure integer bookkeeping on the observed data, so it
 carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history)
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
-        early_days = Int[], early_increments = Int[])
+        early_days = Int[], early_increments = Int[],
+        late_days = Int[], late_increments = Int[], late_start = 0)
     isempty(confirmed_history.counts) && return empty
     cdays = confirmed_history.days
     ccounts = confirmed_history.counts
@@ -377,7 +387,8 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         inc = diff(vcat(zero(eltype(ccounts)), collect(Int.(ccounts))))
         return (; obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = collect(Int.(cdays)),
-            early_increments = Int.(inc))
+            early_increments = Int.(inc),
+            late_days = Int[], late_increments = Int[], late_start = 0)
     end
 
     first_lab_day = Int(lab_history.days[1])
@@ -424,8 +435,28 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         obs_positives[end] = clamp(obs_positives[end] + c_acc, 0,
             obs_analysed[end])
     end
+
+    ## Late windows: confirmed vintages strictly after the last laboratory
+    ## date, which carry no analysed-specimen denominator. Their increments
+    ## are scored against the modelled laboratory volume binned over each
+    ## window's own day range, so the running edge must start at the last
+    ## laboratory day (`late_start`) — the `bin_increments` running `prev`
+    ## starts at 0, so the model anchors it at `late_start` to avoid
+    ## re-counting the observed-window volume already scored above.
+    last_lab_day = Int(lab_history.days[end])
+    late_days = Int[]
+    late_increments = Int[]
+    prev_conf_late = confirmed_at(last_lab_day)
+    for (i, d) in enumerate(cdays)
+        Int(d) <= last_lab_day && continue
+        push!(late_days, Int(d))
+        push!(late_increments, Int(ccounts[i]) - prev_conf_late)
+        prev_conf_late = Int(ccounts[i])
+    end
+
     return (; obs_days, obs_positives, obs_analysed, early_days,
-        early_increments)
+        early_increments, late_days, late_increments,
+        late_start = last_lab_day)
 end
 
 """
@@ -489,14 +520,18 @@ quantities.
     received_increments ~ to_submodel(
         vintage_increments_model(received_inc, rvobs.obs_increments, k))
 
-    ## Confirmed positives in two groups sharing one partially-pooled
-    ## positivity: early windows (no observed analysed) scored as counts
-    ## against the modelled laboratory volume, observed windows scored as a
-    ## Binomial of the observed analysed denominator.
+    ## Confirmed positives in three groups sharing one partially-pooled
+    ## positivity: early windows (before the first lab date, no observed
+    ## analysed) scored as counts against the modelled laboratory volume,
+    ## observed windows scored as a Binomial of the observed analysed
+    ## denominator, and late windows (after the last lab date, INSP's
+    ## confirmed-only format) scored as counts against the modelled volume
+    ## like the early windows.
     windows = confirmed_positivity_windows(confirmed_history, lab_history)
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
-    nv = n_early + n_obs
+    n_late = length(windows.late_days)
+    nv = n_early + n_obs + n_late
     have_data = !ismissing(confirmed_cases)
 
     ## Per-window tested BVD share `p_pos`. Two links:
@@ -507,7 +542,8 @@ quantities.
     ## window, upsampled by a decaying severity enrichment δ0 (see
     ## [`severity_enrichment_model`](@ref)), so the lab positivity identifies
     ## the background `λ_bg` rather than absorbing it into a free curve.
-    window_days = vcat(windows.early_days, windows.obs_days)
+    window_days = vcat(windows.early_days, windows.obs_days,
+        windows.late_days)
     if positivity_link === :composition
         enrich_state ~ to_submodel(severity_enrichment, false)
         δ0 = enrich_state.δ0
@@ -556,17 +592,38 @@ quantities.
         vintage_increments_model(early_mean, early_obs, k))
 
     ## Observed windows: Binomial of the observed analysed denominator.
-    obs_p = p_pos[(n_early + 1):nv]
+    obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
     obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
                     missing
     confirmed_positives ~ to_submodel(
         confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
 
+    ## Late windows: confirmed increment ~ NegBinomial(positivity × modelled
+    ## analysed volume), like the early windows but for the confirmed-only
+    ## vintages after the last laboratory date. The volume is binned over
+    ## each late window's own day range, with the running edge ANCHORED at
+    ## the last laboratory day (`late_start`): `bin_increments` runs its
+    ## running `prev` from day 0, so prepending `late_start` to the late day
+    ## edges and dropping the synthetic first bin starts the accumulation at
+    ## `late_start`, avoiding double-counting the observed-window volume.
+    late_p = p_pos[(n_early + n_obs + 1):nv]
+    if n_late > 0
+        late_edges = vcat(windows.late_start, windows.late_days)
+        late_volume = bin_increments(received_daily, late_edges)[2:end]
+    else
+        late_volume = similar(received_daily, 0)
+    end
+    late_mean = late_p .* late_volume
+    late_obs = (have_data && n_late > 0) ? windows.late_increments : missing
+    late_increments ~ to_submodel(
+        vintage_increments_model(late_mean, late_obs, k))
+
     expected_received := safe_rate(sum(received_daily))
-    ## Expected confirmed at the cut-off and the overall positivity, over
-    ## both the modelled early volume and the observed analysed windows.
-    denom = sum(early_volume) + float(sum(windows.obs_analysed))
-    expected_positives = sum(early_mean) +
+    ## Expected confirmed at the cut-off and the overall positivity, over the
+    ## modelled early and late volume and the observed analysed windows.
+    denom = sum(early_volume) + float(sum(windows.obs_analysed)) +
+            sum(late_volume)
+    expected_positives = sum(early_mean) + sum(late_mean) +
                          (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) :
                           zero(eltype(p_pos)))
     expected_confirmed := safe_rate(expected_positives)
