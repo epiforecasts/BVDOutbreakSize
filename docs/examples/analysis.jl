@@ -340,14 +340,18 @@ vintage_table #hide
 # \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 2.0). \tag{5}
 # ```
 #
-# The incubation period is similarly discretised with a prior centred
-# on the Ebola incubation period (mean 9.7 d, SD 5.4 d; WHO Ebola
-# Response Team 2014, NEJM), again with an assumed weakly-informative
-# spread rather than uncertainty taken from the source:
+# The incubation period is similarly discretised with a prior centred on
+# the Bundibugyo virus incubation estimate from the 2007 Uganda outbreak
+# (mean 6.3 d, 95% CI 5.2-7.3, $n = 24$; [macneil2010](@cite)). The
+# line-list reanalysis cannot fit incubation, as the line list has no
+# exposure dates, so it recommends this estimate instead. The mean prior
+# reproduces MacNeil et al.'s 95% CI; the spread prior is a
+# weakly-informative modelling choice, as they report no interval on the
+# SD:
 #
 # ```math
-# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(9.7,\ 2.0), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{6}
+# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{6}
 # ```
 #
 # All LogNormal parameters are recovered by moment-matching from the
@@ -433,7 +437,7 @@ vintage_table #hide
 # Infections are convolved with the incubation PMF to produce daily
 # symptom-onset incidence, which every downstream stream then consumes.
 # The incubation delay is an injected delay submodel, defaulting to the
-# Ebola incubation prior of equation (6).
+# Bundibugyo incubation prior of equation (6).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
