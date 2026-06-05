@@ -44,7 +44,7 @@
 #   incubation period, onset-to-death, onset-to-report,
 #   onset-to-confirmation and onset-to-detection-abroad each get a prior
 #   centred on published Ebola estimates, discretised with double
-#   interval censoring. No delay is fixed.
+#   interval censoring [charniga2024](@cite). No delay is fixed.
 # - *Euler–Lotka seeding.* The seeding window grows exponentially at the
 #   rate implied by the initial reproduction number and generation
 #   interval, so infections start smoothly rather than from a single
@@ -328,10 +328,12 @@ vintage_table #hide
 # The generation-interval PMF $g$ is sampled from a prior centred on
 # the Ebola virus disease serial interval as a generation-time proxy
 # (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), then
-# discretised with double interval censoring
-# (CensoredDistributions). The lag-0 bin is dropped and the remainder
-# renormalised so an infectee is always strictly later than its
-# infector:
+# discretised with double interval censoring [charniga2024](@cite). The
+# prior is centred on those published moments, with an assumed
+# weakly-informative spread (the SDs on the mean and SD priors are our
+# choice, not from the source). The lag-0 bin is dropped and the
+# remainder renormalised so an infectee is always strictly later than
+# its infector:
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 3.0), \qquad
@@ -339,8 +341,9 @@ vintage_table #hide
 # ```
 #
 # The incubation period is similarly discretised with a prior centred
-# on the Ebola incubation (mean 9.7 d, SD 5.4 d; WHO Ebola Response
-# Team 2014, NEJM):
+# on the Ebola incubation period (mean 9.7 d, SD 5.4 d; WHO Ebola
+# Response Team 2014, NEJM), again with an assumed weakly-informative
+# spread rather than uncertainty taken from the source:
 #
 # ```math
 # \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(9.7,\ 2.0), \qquad
@@ -348,8 +351,8 @@ vintage_table #hide
 # ```
 #
 # All LogNormal parameters are recovered by moment-matching from the
-# sampled mean and SD. Every delay in the model shares the generic
-# double-interval-censored discretisation of `censored_delay_model`; the
+# sampled mean and SD. Every delay in the model shares the same
+# double-interval-censored discretisation [charniga2024](@cite); the
 # generation interval wraps it to drop the lag-0 bin.
 
 #md # ```@raw html
@@ -429,9 +432,8 @@ vintage_table #hide
 #
 # Infections are convolved with the incubation PMF to produce daily
 # symptom-onset incidence, which every downstream stream then consumes.
-# The incubation delay is the injected delay submodel of
-# `onset_incidence_model`, defaulting to the Ebola incubation prior of
-# equation (6).
+# The incubation delay is an injected delay submodel, defaulting to the
+# Ebola incubation prior of equation (6).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -468,10 +470,10 @@ vintage_table #hide
 # companion Bayesian reanalysis of the same Isiro 2012 BDBV line list
 # [bdbv_linelist_analysis_2026](@cite), which re-estimates the delay with
 # uncertainty. The renewal samples the delay by its mean and SD rather
-# than a Gamma shape and scale: the prior means are the reanalysis'
-# posterior mean (11.2 d) and SD (5.4 d), and the SD prior is set so the
-# fit reproduces the reanalysis uncertainty rather than collapsing onto a
-# single point estimate.
+# than a Gamma shape and scale. The prior means are centred on the
+# reanalysis' posterior mean (11.2 d) and SD (5.4 d), with an assumed
+# weakly-informative spread on each so the fit reproduces the reanalysis
+# uncertainty rather than collapsing onto a single point estimate:
 #
 # ```math
 # \mu_d \sim \mathrm{Normal}^{+}(11.2,\ 2.0), \qquad
@@ -479,9 +481,9 @@ vintage_table #hide
 # ```
 #
 # The sampled mean and SD are moment-matched to a LogNormal and
-# discretised with double interval censoring, as for every delay above.
-# The delay estimation in that reanalysis follows the recommendations of
-# [charniga2024](@cite). The submodel source is shown with the deaths
+# discretised with double interval censoring [charniga2024](@cite), as
+# for every delay above. The delay estimation in that reanalysis follows
+# the same recommendations. The submodel source is shown with the deaths
 # observation submodel below, where the delay is injected.
 #
 # ##### Case-fatality ratio
@@ -605,8 +607,8 @@ cfr_prior_fig #hide
 #
 # The prior is sampled in non-centred form to avoid the funnel geometry.
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
-# likelihoods use $p_{\text{Uganda}}$. An independent alternative
-# ([`independent_ascertainment_model`](@ref)) drops the shared hyperprior.
+# likelihoods use $p_{\text{Uganda}}$. An independent alternative drops
+# the shared hyperprior and gives each system its own fraction.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_ascertainment_model</summary>
@@ -773,7 +775,8 @@ cfr_prior_fig #hide
 #
 # The onset-to-detection delay is centred on the Ebola
 # onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola
-# Response Team 2014, NEJM):
+# Response Team 2014, NEJM), again with an assumed weakly-informative
+# spread rather than uncertainty taken from the source:
 #
 # ```math
 # \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
