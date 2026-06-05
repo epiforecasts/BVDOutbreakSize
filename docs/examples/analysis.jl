@@ -1894,6 +1894,13 @@ imperial_density_fig #hide
 # renewal infers latent infections through a time-varying reproduction
 # number and a convolved reporting delay, while McCabe et al. report
 # ascertained cases under fixed growth and window assumptions.
+#
+# The freeze truncates the dated histories the model fits, so the
+# suspected-case, suspected-death, confirmed-case and laboratory streams
+# are exactly what was available at the cut-off. The export count and the
+# genetic TMRCA bound are scalars rather than dated series, so they keep
+# their current values; their effect on the frozen fit is small relative
+# to the suspected-case streams that drive the outbreak-size estimate.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to each McCabe cut-off and re-fit (reduced)</summary>
