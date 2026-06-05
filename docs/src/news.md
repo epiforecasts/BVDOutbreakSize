@@ -44,16 +44,21 @@ each push to `main` also republishes the rendered analysis and the
   coverage·s thinning recentres the predictive on 17. Wired into
   `bvd_joint` as an optional stream (`confirmed_deaths` /
   `confirmed_death_offsets`), off by default.
-- Reparameterised growth to sample the growth rate `r` directly
-  (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
-  with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still
-  exposed. This is the exact reciprocal pushforward of the old `τ` prior,
-  so the implied priors are unchanged.
+- Reparameterised growth to sample the growth rate `r` directly, with the
+  doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still exposed, and
+  recentred the prior on the molecular clock. The default
+  `r ~ LogNormal(log(log(2)/20), 0.15)` centres on the 20-day doubling
+  time from Cuomo-Dannenburg & Ghafari's phylodynamic reanalysis of the
+  first ten BDBV genomes (`cuomodannenburg2026`; mean 15.2-24.5 days
+  across six substitution-rate assumptions), slower than McCabe et al.'s
+  14-day central scenario; the log-SD `0.15` is a light inflation of their
+  reported spread. The McCabe et al. Method 2 reproduction still pins the
+  growth rate to their 14-day value.
 - Recentred the doubling-count prior on a base that advances with the
   cut-off: `m ~ Normal(m_prior_centre(as_of), 3)`, centre
-  `9 + (cut-off − 18 May)/14` doublings, based on McCabe et al.'s
-  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the 14-day
-  doubling time, so it tracks data refreshes.
+  `9 + (cut-off − 18 May)/20` doublings, based on McCabe et al.'s
+  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the same
+  20-day molecular-clock doubling time, so it tracks data refreshes.
 - Added an independent DRC and Uganda ascertainment extension: a
   logit-scale reporting fraction for each surveillance system applied to
   the latent incidence, fitting the reported suspected-case count
