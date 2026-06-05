@@ -68,7 +68,6 @@
             first_export_detection_delta =
             obs.first_export_detection_delta,
             confirmed_q_random_effect = confirmed_q_re_model,
-            confirmed_queue = true,
             confirmed_epi_exclusion = epi_exclusion)
     end
 end

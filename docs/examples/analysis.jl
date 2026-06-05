@@ -785,13 +785,13 @@ vintage_table #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: test_selection_model</summary>
+#md # <details><summary>Submodel: severity_enrichment_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.test_selection_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.severity_enrichment_model()), "\n```"))
 #md # ```
 
 #md # ```@raw html
