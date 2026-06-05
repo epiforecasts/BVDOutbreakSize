@@ -43,3 +43,55 @@
     @test st.expected_received >= 0
     @test all(0 .<= st.p_pos .<= 1)
 end
+
+@testitem "confirmed_cases_model composition link ties positivity to λ_bg" begin
+    using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
+                           infection_model, onset_incidence_model,
+                           severity_enrichment_model
+    using Turing: @model, to_submodel, returned
+    using Random: MersenneTwister
+
+    @model function _latent(n)
+        inf ~ to_submodel(infection_model(n), false)
+        ons ~ to_submodel(onset_incidence_model(inf.infections), false)
+        return ons.onsets
+    end
+    n = 40
+    onsets = returned(_latent(n), rand(MersenneTwister(1), _latent(n)))
+
+    @model function _rep(onsets)
+        st ~ to_submodel(
+            reported_cases_model(
+                (; days = Int[], counts = Int[]), missing, onsets, 5.0, 0.3),
+            false)
+        return st
+    end
+    rep_state = returned(_rep(onsets), rand(MersenneTwister(3), _rep(onsets)))
+
+    ## `:composition` link: the tested share is the suspect-pool composition
+    ## upsampled by the severity enrichment, not a free per-window effect.
+    @model function _conf_comp(onsets, rep)
+        st ~ to_submodel(
+            confirmed_cases_model(
+                (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
+                rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
+                lab_history = (; days = [20, 40], counts = [5, 9]),
+                tests_received_history =
+                (; days = [20, 40], counts = [6, 11]),
+                positivity_link = :composition),
+            false)
+        return st
+    end
+    m = _conf_comp(onsets, rep_state)
+    st = returned(m, rand(MersenneTwister(4), m))
+    @test 0 <= st.p_positive <= 1
+    @test st.expected_confirmed >= 0
+    @test all(isfinite, st.p_pos)
+    @test all(0 .<= st.p_pos .<= 1)
+
+    ## The severity-enrichment submodel constructs and stays positive.
+    sv = returned(severity_enrichment_model(),
+        rand(MersenneTwister(5), severity_enrichment_model()))
+    @test sv.δ0 >= 0
+    @test sv.decay_scale >= 0
+end

@@ -112,7 +112,8 @@ positives (a Binomial of the observed analysed denominator in
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model(),
+        confirmed_positivity_link::Symbol = :free)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -126,7 +127,8 @@ positives (a Binomial of the observed analysed denominator in
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history))
+        lab_history, tests_received_history,
+        positivity_link = confirmed_positivity_link))
     C_T := latent.infection_state.C_T
 end
 
@@ -262,6 +264,7 @@ death-confirmation probability (`death_confirmation`).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        confirmed_positivity_link::Symbol = :free,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
@@ -304,7 +307,8 @@ death-confirmation probability (`death_confirmation`).
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history))
+        lab_history, tests_received_history,
+        positivity_link = confirmed_positivity_link))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,

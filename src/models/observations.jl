@@ -470,7 +470,9 @@ quantities.
         tests_received_history = (; days = Int[], counts = Int[]),
         tests_received::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
-        positivity = confirmed_positivity_model)
+        positivity = confirmed_positivity_model,
+        positivity_link::Symbol = :free,
+        severity_enrichment = severity_enrichment_model())
     n = length(onsets)
 
     ## Received-specimen volume: the suspected pipeline carried through the
@@ -495,9 +497,53 @@ quantities.
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
     nv = n_early + n_obs
-    pos_state ~ to_submodel(positivity(nv))
-    p_pos = pos_state.p_pos
     have_data = !ismissing(confirmed_cases)
+
+    ## Per-window tested BVD share `p_pos`. Two links:
+    ## `:free` (default) — a free partially-pooled per-window random effect
+    ## ([`confirmed_positivity_model`](@ref)), decoupled from `λ_bg`.
+    ## `:composition` — the tested share is the suspect-pool composition
+    ## `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)` over each laboratory
+    ## window, upsampled by a decaying severity enrichment δ0 (see
+    ## [`severity_enrichment_model`](@ref)), so the lab positivity identifies
+    ## the background `λ_bg` rather than absorbing it into a free curve.
+    window_days = vcat(windows.early_days, windows.obs_days)
+    if positivity_link === :composition
+        enrich_state ~ to_submodel(severity_enrichment, false)
+        δ0 = enrich_state.δ0
+        decay_scale = enrich_state.decay_scale
+        ## Suspect-pool composition over each window from the SAME suspected-
+        ## stream series that drive `reported_cases_model`.
+        bvd_window = bin_increments(p_drc .* bvd_reports_daily, window_days)
+        bg_window = bin_increments(bg_daily, window_days)
+        Tt = eltype(bvd_window)
+        ## Testing clock: cumulative modelled analysed volume at each window.
+        vol_window = bin_increments(received_daily, window_days)
+        c_window = cumsum(vol_window)
+        lo = convert(Tt, 1e-8)
+        hi = one(Tt) - lo
+        ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
+        ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        dscale = max(convert(Tt, decay_scale), one(Tt))
+        p_pos = map(eachindex(window_days)) do i
+            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
+            ## window, guarded against a zero/negative denominator.
+            num = bvd_window[i]
+            den = bvd_window[i] + bg_window[i]
+            ratio = num / (den + lo)
+            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            q = logistic(logit(φ) + δ_i)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the pool composition so the confirmed Binomial always sees
+            ## a valid probability even under an AD perturbation.
+            qf = isfinite(q) ? q : φ
+            clamp(qf, lo, hi)
+        end
+    else
+        pos_state ~ to_submodel(positivity(nv))
+        p_pos = pos_state.p_pos
+    end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
     ## modelled analysed volume), the volume binned from the received
