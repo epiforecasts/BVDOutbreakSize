@@ -94,6 +94,24 @@ each push to `main` also republishes the rendered analysis and the
   integral (`_gamma_cdf_integral`) instead of a per-draw quadrature, with
   an analytic reverse-mode rule, speeding up the lab-pipeline likelihood
   without changing the model.
+- Extended the confirmed-case fit to the lab vintages with no published
+  analysed denominator (early 18-22 May, late 29-31 May): an opt-in
+  condensed lab-throughput queue (`confirmed_queue`) derives each dark
+  window's expected analysed count from the capacity-limited drain of the
+  received suspect backlog, and fits those windows on the exact
+  Poisson-thinned marginal `ΔC_v ~ Poisson(μ_A,v · p_pos)`, so no free
+  per-vintage denominator is introduced. An optional
+  epidemiological-exclusion fraction `e` (`epi_exclusion_model`) gives the
+  received backlog the `(1 − e)·suspected` asymptote. Off by default; the
+  observed-denominator Binomial still drives the 23-28 May windows.
+- Raised the default ascertainment centre from a 0.25 to a 0.75 reporting
+  fraction (`pooled_ascertainment_model`): under the active case finding
+  most BVD cases reach the suspected-case count, so the under-counting
+  that matters is at laboratory confirmation, not at suspected reporting.
+- Headlined the cumulative-infections estimand in the summary (the natural
+  `2^m` quantity, not the incubation-rescaled case count) and anchored the
+  under-ascertainment multiplier on the laboratory-confirmed cases — most
+  infections are never confirmed — instead of the suspected total.
 
 ### Outputs
 
