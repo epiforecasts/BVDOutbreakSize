@@ -27,6 +27,19 @@
 #
 # ## What we do differently from McCabe et al.
 #
+# We reimplement the McCabe et al. [mccabe2026](@cite) report as a single
+# Bayesian model fitted jointly to every data stream, recast as a
+# discrete-time renewal process with a time-varying reproduction number.
+# The points below summarise how it differs from the report; the Methods
+# section carries the full treatment and the limitations are listed
+# separately.
+#
+#md # ```@raw html
+#md # <details><summary>Expand: differences from the report</summary>
+#md # ```
+#md #
+# **Latent process and parameters**
+#
 # - *Discrete-time renewal model.* The whole model runs on a daily grid.
 #   Infections follow the discrete renewal equation $I_t = R_t \sum_{s
 #   \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval
@@ -40,15 +53,21 @@
 #   number, case-fatality ratio, all delays, traveller volume and
 #   surveillance dispersion have priors and are sampled together. McCabe
 #   et al. fix each and sweep.
+# - *Euler–Lotka seeding.* The seeding window grows exponentially at the
+#   rate implied by the initial reproduction number and generation
+#   interval, so infections start smoothly rather than from a single
+#   seed.
+#
+# **Delays and convolutions**
+#
 # - *Delays sampled from priors and discretised.* Generation interval,
 #   incubation period, onset-to-death, onset-to-report,
 #   onset-to-confirmation and onset-to-detection-abroad each get a prior
 #   centred on published Ebola estimates, discretised with double
 #   interval censoring [charniga2024](@cite). No delay is fixed.
-# - *Euler–Lotka seeding.* The seeding window grows exponentially at the
-#   rate implied by the initial reproduction number and generation
-#   interval, so infections start smoothly rather than from a single
-#   seed.
+#
+# **Likelihoods and data streams**
+#
 # - *Per-vintage time-series fitting.* The DRC streams (suspected cases,
 #   confirmed cases, deaths) are fitted as cumulative series of
 #   between-vintage increments across successive sitreps, which sharpens
@@ -61,12 +80,29 @@
 #   scenario estimates with a coverage table, while $C_T$ (the latent
 #   infection count, summed from the renewal trajectory) is reported
 #   separately.
+#
+# **Extensions**
+#
 # - *No-onward-transmission counterfactual and one-week-ahead
 #   forecasts.* Future expected deaths from infections already seeded,
 #   and a posterior-predictive projection of each stream. Neither is in
 #   McCabe et al.
+#md #
+#md # ```@raw html
+#md # </details>
+#md # ```
 #
 # ## Limitations
+#
+# The limitations are grouped by the data, the model assumptions and
+# design, and the implementation, with the most consequential first in
+# each group.
+#
+#md # ```@raw html
+#md # <details><summary>Expand: limitations</summary>
+#md # ```
+#md #
+# **Data and what it can support**
 #
 # - *Fitted only to aggregate reported counts.* The data are a handful
 #   of summary figures from press and situation reports: suspected cases
@@ -81,6 +117,13 @@
 # - *Per-sitrep increments are not clean new incidence.* Later sitreps
 #   likely backfill earlier cases and add newly-reporting health zones,
 #   and ascertainment probably rose over the window.
+# - *Streams share one case pool.* They are fitted as conditionally
+#   independent given latent incidence but observe overlapping people,
+#   which can understate uncertainty. We have not checked whether the
+#   streams imply conflicting outbreak sizes.
+#
+# **Model assumptions and design**
+#
 # - *Inherits McCabe et al.'s epidemiological assumptions.* A single
 #   zoonotic seed, an assumed generation interval, no spatial structure
 #   beyond the Ituri / Nord Kivu split, and no depletion of
@@ -93,15 +136,18 @@
 # - *Ascertainment partially pooled, not separately identified.* The
 #   DRC and Uganda reporting fractions share a hyperprior; with a
 #   handful of exports the Uganda fraction leans on the DRC side.
-# - *Streams share one case pool.* They are fitted as conditionally
-#   independent given latent incidence but observe overlapping people,
-#   which can understate uncertainty. We have not checked whether the
-#   streams imply conflicting outbreak sizes.
+#
+# **Implementation**
+#
 # - *LLM-driven reimplementation.* The model code, priors and analysis
 #   were drafted by a language model from the McCabe et al.
 #   [mccabe2026](@cite) report and the companion delay reanalysis, then
 #   reviewed and revised. Not independently replicated against the
 #   authors' code.
+#md #
+#md # ```@raw html
+#md # </details>
+#md # ```
 #
 #md # ```@raw html
 #md # <details><summary>Load packages and seed the RNG</summary>
@@ -1823,6 +1869,13 @@ cumulative_density_fig #hide
 # for like against the model's expected cumulative reported cases.
 # For each scenario the table gives the narrowest joint credible
 # interval that contains it, so coverage reads off directly.
+#
+# - *A revision, not a replication.* Earlier versions of this work
+#   reimplemented McCabe et al. closely as an exponential-growth model.
+#   This version is a substantial revision of the modelling approach, a
+#   discrete-time renewal model with a time-varying reproduction number
+#   and five jointly-fitted data streams, so the comparison is now an
+#   external sense-check rather than a like-for-like reproduction.
 #
 # This renewal model has diverged from McCabe et al.'s exact
 # construction: it fits a time-varying reproduction number on a renewal
