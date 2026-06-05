@@ -260,14 +260,18 @@ uuid = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 version = "0.4.8"
 
 [[deps.BVDOutbreakSize]]
-deps = ["ADTypes", "AlgebraOfGraphics", "CairoMakie", "CensoredDistributions", "Chain", "ChainRulesCore", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "FlexiChains", "Makie", "Mooncake", "PairPlots", "Random", "Statistics", "StatsFuns", "TOML", "Turing"]
+deps = ["ADTypes", "AbstractMCMC", "AlgebraOfGraphics", "CairoMakie", "CensoredDistributions", "Chain", "ChainRulesCore", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "FlexiChains", "Makie", "Mooncake", "PairPlots", "Random", "Statistics", "StatsFuns", "TOML", "Turing"]
 path = "../.."
 uuid = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
 version = "1.3.0"
-weakdeps = ["Enzyme"]
 
     [deps.BVDOutbreakSize.extensions]
     BVDOutbreakSizeEnzymeExt = "Enzyme"
+    BVDOutbreakSizeTensorBoardLoggerExt = "TensorBoardLogger"
+
+    [deps.BVDOutbreakSize.weakdeps]
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+    TensorBoardLogger = "899adc3e-224a-11e9-021f-63837185c80f"
 
 [[deps.BangBang]]
 deps = ["Accessors", "ConstructionBase", "InitialValues", "LinearAlgebra"]
