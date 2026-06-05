@@ -10,14 +10,16 @@
 
     ## Synthetic prior carrying every parameter name that
     ## `forecast_reported` reads: :r, :expected_reports_T,
-    ## :expected_deaths_T, :expected_confirmed_T,
-    ## :expected_confirmed_deaths_T, :k.
+    ## :expected_deaths_T, :expected_infections_T, :R_T,
+    ## :expected_confirmed_T, :expected_confirmed_deaths_T, :k.
     @model function _forecast_test()
         r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
         inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
         k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
         expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
         expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
         expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
         expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
         return nothing
@@ -44,8 +46,10 @@ end
     @test fc isa DataFrame
     @test nrow(fc) == 200
     cols=[:cases_cum, :deaths_cum, :confirmed_cum, :confirmed_deaths_cum,
-        :cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new]
+        :cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new,
+        :infections_new, :rt_forecast]
     @test all(c -> c in propertynames(fc), cols)
+    @test all(fc.infections_new .>= 0)
     @test all(fc.cases_cum .>= 0)
     @test all(fc.deaths_cum .>= 0)
     @test all(fc.confirmed_cum .>= 0)

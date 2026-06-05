@@ -205,6 +205,8 @@ end
         Dict(
             FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
                 log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.log_R0_seed")) => reshape(
+                log.(1.0 .+ abs.(randn(rng, ndraws)) .* 0.2), ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                 abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
@@ -269,7 +271,9 @@ end
         cases_new = rand(rng, 0:30, n),
         deaths_new = rand(rng, 0:20, n),
         confirmed_new = rand(rng, 0:15, n),
-        confirmed_deaths_new = rand(rng, 0:5, n)
+        confirmed_deaths_new = rand(rng, 0:5, n),
+        infections_new = abs.(randn(rng, n)) .* 500,
+        rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
     )
     fig = plot_forecast(fc)
     @test fig isa CairoMakie.Makie.Figure
