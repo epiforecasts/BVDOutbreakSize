@@ -427,6 +427,47 @@ Returns `(; p_pos, q_mu, σ_q)` with `p_pos` a length-`nv` vector.
 end
 
 """
+Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
+(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
+that mode the per-window tested BVD share is not a free random effect; it
+is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
+λ_bg_v)` over each laboratory window, UPSAMPLED by a severity enrichment
+that decays as testing widens:
+
+```math
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_0\\, e^{-c_v / \\text{decay}},
+```
+
+with `c_v` the cumulative analysed volume at window `v` (the testing
+clock). The lab over-tests BVD early (severe cases are triaged first and
+are more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero
+as testing widens, at which point the tested share equals the pool
+composition. This ties positivity to the background `λ_bg`, so the
+confirmed/positivity data identify the non-BVD background rather than it
+being absorbed by a free per-window random effect, correcting the model's
+treatment of suspected cases as a large overestimate of true BVD.
+
+`δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
+because severity triage upsamples BVD, never down. The default
+`truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
+bounded: even severity-triaged testing cannot be near-pure BVD (other
+haemorrhagic / severe febrile illness is also triaged), so for a pool
+composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
+1.5) ≈ 0.75`. `decay_scale` is the relaxation timescale on the analysed-
+volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
+[`confirmed_cases_model`](@ref) in composition mode. Returns
+`(; δ0, decay_scale)`.
+"""
+@model function severity_enrichment_model(;
+        logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
+        decay_prior = truncated(Normal(0.0, 200.0); lower = 0.0))
+    δ0 ~ logodds_prior
+    decay_scale ~ decay_prior
+    return (; δ0, decay_scale)
+end
+
+"""
 Confirmed-death enrichment scalar `m_death` for the confirmed-death
 stream ([`confirmed_deaths_model`](@ref)). Confirmed deaths are a thinning
 of the suspected deaths whose per-window confirmation probability is the
