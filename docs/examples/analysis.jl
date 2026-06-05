@@ -2545,13 +2545,14 @@ pp_joint = predict(
 ## matching the observed total.
 pp_exports = vec(sum.(pp_joint[@varname(exported_cases_daily)]));
 ## All DRC streams are now per-vintage increment vectors (deaths, reported,
-## confirmed positives, samples received); sum each draw's bins for the
-## cumulative-total posterior predictive. Export deaths are a per-day series
-## summed the same way.
+## confirmed positives); sum each draw's bins for the cumulative-total
+## posterior predictive. Export deaths are a per-day series summed the same
+## way. The laboratory throughput (samples received and analysed) is a
+## conditioned input to the queue, not a generated quantity, so it has no
+## posterior-predictive panel here; the confirmed positives it drives do.
 pp_deaths = vec(sum.(pp_joint[@varname(total_deaths)]));
 pp_cases = vec(sum.(pp_joint[@varname(reported_cases)]));
 pp_confirmed = vec(sum.(pp_joint[@varname(confirmed_cases)]));
-pp_tests = vec(sum.(pp_joint[@varname(samples_received)]));
 pp_exports_deaths = vec(sum.(pp_joint[@varname(export_deaths_daily)]));
 
 joint_ppc_fig = plot_posterior_predictive(
@@ -2561,8 +2562,6 @@ joint_ppc_fig = plot_posterior_predictive(
     obs_cases = obs.reported_cases,
     pp_exports_deaths = pp_exports_deaths,
     obs_exports_deaths = obs.exports_deaths,
-    pp_tests = pp_tests,
-    obs_tests = obs.tests_received_history.values[end],
     pp_confirmed = pp_confirmed,
     obs_confirmed = obs.confirmed_cases);
 
@@ -3115,35 +3114,31 @@ pp_exports_deaths_only = vec(sum.(predict(
     exports_deaths_only_model(fill(missing, length(obs.export_deaths_daily));
         pre_start_deaths = missing),
     chn_exports_deaths)[@varname(export_deaths_daily)]));
-## Laboratory-pipeline fit: predict the confirmed Binomial and the
-## received-count NegBinomial from the confirmed-only posterior for the
-## individual row of the grid. Both are single-vintage vectors here.
+## Laboratory-pipeline fit: predict the confirmed Binomial from the
+## confirmed-only posterior for the individual row of the grid (a
+## single-vintage vector here). The analysed denominator is a conditioned
+## input, so only the confirmed positives are generated.
 pp_confirmed_only_chn = predict(
     confirmed_only_model(missing, obs.cumulative_tests_analysed),
     chn_confirmed);
 pp_confirmed_only = vec(sum.(
     pp_confirmed_only_chn[@varname(confirmed_cases)]));
-pp_tests_only = vec(sum.(
-    pp_confirmed_only_chn[@varname(samples_received)]));
 
 ppc_grid_fig = plot_posterior_predictive_grid(;
     individual = (; exports = pp_exports_only,
         exports_deaths = pp_exports_deaths_only,
         deaths = pp_deaths_only,
         cases = pp_cases_only,
-        tests = pp_tests_only,
         confirmed = pp_confirmed_only),
     joint = (; exports = pp_exports,
         exports_deaths = pp_exports_deaths,
         deaths = pp_deaths,
         cases = pp_cases,
-        tests = pp_tests,
         confirmed = pp_confirmed),
     observed = (; exports = obs.exported_cases,
         exports_deaths = obs.exports_deaths,
         deaths = obs.total_deaths,
         cases = obs.reported_cases,
-        tests = obs.tests_received_history.values[end],
         confirmed = obs.confirmed_cases)
 );
 
