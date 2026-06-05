@@ -9,3 +9,6 @@ sitrep,report_date,suspected_cases,suspected_deaths,confirmed_cases,confirmed_de
 015,2026-05-29,349,,263,42,,,,"confirmed-based reporting; suspect cumulative footnoted/frozen at 349, suspect deaths daily-only (13); confirmed deaths jump 17->42 (late-confirmation catch-up); lab now Bunia-only (received 758, positives 220, analysed ND), omitted from the national sample columns; beyond cut-off"
 016,2026-05-30,,,282,42,,,,"confirmed-based format; no national suspect cumulative (en cours d'investigation 220 / en isolement 101); lab 24h-only (52 analysed, 19 positive); beyond cut-off"
 017,2026-05-31,,,321,48,,,,"confirmed-based format; suspects investigation 116 / isolation 104; active confirmed 238; lab 24h-only (18 analysed, 12 positive); beyond cut-off"
+018,2026-06-01,,,344,60,,,,"confirmed-based format; suspects isolation 173 / investigation 116; confirmed deaths jump 48->60; lab 24h-only; beyond cut-off"
+019,2026-06-02,,,363,62,,,,"confirmed-based format; suspects isolation 206 / investigation ND; confirmed deaths 62; lab 24h-only; beyond cut-off"
+020,2026-06-03,,,381,64,,,,"confirmed-based format; suspects isolation 233 (banner 173) / investigation ND; confirmed deaths 64; lab 24h-only (per-zone, e.g. Mongbwalu 82 analysed/18 positive); beyond cut-off"
