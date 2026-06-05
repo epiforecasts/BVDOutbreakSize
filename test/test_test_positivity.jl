@@ -146,8 +146,6 @@ end
         @test all(cc[v, :] .<= A[v])
         @test all(cc[v, :] .>= 0)
     end
-    rr = reduce(hcat, vec(Array(pp[:samples_received])))
-    @test all(rr .>= 0)
 end
 
 @testitem "confirmed binomial single-total reduction" tags=[:slow] begin

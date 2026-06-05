@@ -192,11 +192,11 @@ end
     @test all(0 .< pos .< 1)
 
     pp = predict(confirmed_only_model(missing, missing), chn)
-    ## Single confirmed vintage stored as a length-1 vector per draw.
+    ## Single confirmed vintage stored as a length-1 vector per draw. The
+    ## received counts are a conditioned queue input, not a generated
+    ## quantity, so only the confirmed positives are predicted.
     cc = reduce(vcat, vec(Array(pp[:confirmed_cases])))
-    rr = reduce(vcat, vec(Array(pp[:samples_received])))
     @test all(cc .>= 0)
-    @test all(rr .>= 0)
 end
 
 @testitem "confirmed_only_model NUTS-fits with received observed" tags=[:slow] begin

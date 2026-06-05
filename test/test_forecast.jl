@@ -236,8 +236,8 @@ end
     f_receipt = Gamma(2.0, 1.5)
     recv = B._forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
         f_receipt; onset_fraction = os)
-    p_pos = B._forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
-        decay_scale)
+    p_pos = B._forecast_positivity(r, Th, α_rep, θ_rep, p_drc, λ_bg, s_test,
+        spec_test; onset_fraction = os)
     Δa = B._forecast_analysed_increment(recv, 40.0, 50.0, 7.0)
     @test recv > 0 && isfinite(recv)
     @test 0 < p_pos < 1

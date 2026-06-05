@@ -34,23 +34,25 @@ end
     ## Seed a version-stable MersenneTwister (the default RNG differs
     ## across Julia versions); assert on fast-converging moments rather
     ## than tail quantiles so the test is robust to any residual sampling
-    ## variation. log(τ) must be Normal(log 14, 0.4) because r = log(2)/τ
-    ## is a reciprocal, which preserves the log-scale SD.
+    ## variation. The molecular-clock prior puts r ~ LogNormal(log(log2/20),
+    ## 0.15), so log(τ) = log(log2) − log(r) is Normal(log 20, 0.15) (the
+    ## reciprocal preserves the log-scale SD).
     chn = sample(MersenneTwister(20260518), exponential_growth_model(),
         Prior(), 40_000; progress = false)
     logτ = log.(vec(Array(chn[:τ])))
 
-    @test isapprox(Statistics.mean(logτ), log(14); atol = 0.02)
-    @test isapprox(Statistics.std(logτ), 0.4; atol = 0.03)
+    @test isapprox(Statistics.mean(logτ), log(20); atol = 0.02)
+    @test isapprox(Statistics.std(logτ), 0.15; atol = 0.03)
 end
 
 @testitem "m_prior_centre advances with the cut-off date" begin
     using BVDOutbreakSize: m_prior_centre
     ## Base assumption: m = 9 at the 18 May 2026 report date.
     @test m_prior_centre("2026-05-18") ≈ 9.0
-    ## Advances by one doubling per 14 days of elapsed time.
-    @test m_prior_centre("2026-05-20") ≈ 9.0 + 2 / 14
-    @test m_prior_centre("2026-06-01") ≈ 9.0 + 14 / 14
+    ## Advances by one doubling per 20 days of elapsed time (molecular
+    ## clock).
+    @test m_prior_centre("2026-05-20") ≈ 9.0 + 2 / 20
+    @test m_prior_centre("2026-06-01") ≈ 9.0 + 14 / 20
     ## Base value is configurable.
     @test m_prior_centre("2026-05-18"; m_base = 8.0) ≈ 8.0
 end
