@@ -49,7 +49,9 @@ end
     fig = plot_posterior_predictive(
         rand(rng, 0:10, 400), rand(rng, 0:60, 400), 3, 40;
         pp_cases = rand(rng, 0:30, 400), obs_cases = 20,
-        pp_exports_deaths = rand(rng, 0:3, 400), obs_exports_deaths = 1)
+        pp_exports_deaths = rand(rng, 0:3, 400), obs_exports_deaths = 1,
+        pp_confirmed_deaths = rand(rng, 0:30, 400),
+        obs_confirmed_deaths = 17)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -168,6 +170,33 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_rt reconstructs and returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_rt, knot_days
+    rng = MersenneTwister(17)
+    ndraws = 120
+    n = 95
+    nz = length(knot_days(n; week = 7)) - 1
+    ## Vector-valued `rt_state.z`: one innovation vector per draw, stored as
+    ## a draws×chains matrix of vectors (as the predictive chain returns it).
+    zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
+    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        Dict(
+            FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
+                log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
+                abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
+                -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
+            FlexiChains.Parameter(:T) => reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
+    fig = plot_rt(chn; n = n, breakpoint = n - 11,
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
@@ -216,10 +245,12 @@ end
     fc = DataFrame(
         cases_cum = rand(rng, 50:150, n),
         deaths_cum = rand(rng, 40:100, n),
-        exports_cum = rand(rng, 2:10, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
         cases_new = rand(rng, 0:30, n),
         deaths_new = rand(rng, 0:20, n),
-        exports_new = rand(rng, 0:5, n)
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_new = rand(rng, 0:5, n)
     )
     fig = plot_forecast(fc)
     @test fig isa CairoMakie.Makie.Figure
