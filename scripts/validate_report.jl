@@ -5,7 +5,7 @@
 # clipped joint C_T density; confirmed-inclusive forecast.
 using BVDOutbreakSize
 using BVDOutbreakSize: confirmed_positivity_windows, knot_days,
-    interpolate_knots, sigmoid_ramp
+                       interpolate_knots, sigmoid_ramp
 using Turing: predict
 using Serialization: deserialize
 using Dates: Day
@@ -31,11 +31,13 @@ pp = predict(
         background_re = true),
     chn)
 
-_vrep(prefix) = collect(first(pp[k] for k in keys(pp)
+function _vrep(prefix)
+    collect(first(pp[k] for k in keys(pp)
     if occursin("$prefix.increments", string(k))))
+end
 _vdates(days) = string.(obs.seeding .+ Day.(days .- 1))
 _srep(name) = vec(Array(first(pp[k] for k in keys(pp)
-    if occursin(name, string(k)))))
+if occursin(name, string(k)))))
 
 # --- Confirmed-case per-vintage cumulative ---
 w = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history)
@@ -47,11 +49,12 @@ function _conf_at(day)
 end
 win_obs = [_conf_at(d) for d in win_days]
 early = _vrep("confirmed_state.early_increments")
-posv = collect(first(pp[k] for k in keys(pp)
-    if occursin("confirmed_state.confirmed_positives.positives", string(k))))
+posv = collect(first(pp[k]
+for k in keys(pp)
+if occursin("confirmed_state.confirmed_positives.positives", string(k))))
 # per-draw concatenated increment vector across windows (early then obs)
 conf_reps = [vcat(collect(e), collect(p))
-    for (e, p) in zip(vec(early), vec(posv))]
+             for (e, p) in zip(vec(early), vec(posv))]
 confirmed_panel = (; title = "Confirmed cases",
     dates = _vdates(win_days),
     replicates = conf_reps,
@@ -96,8 +99,8 @@ println("OK Rt trajectory: ", "ok")
 
 # --- intervention effect ---
 eff = vec(Array(chn[Symbol("rt_state.intervention_effect")]))
-println("intervention_effect: median ", round(median(eff); digits=3),
-    " exp ", round(exp(median(eff)); digits=3))
+println("intervention_effect: median ", round(median(eff); digits = 3),
+    " exp ", round(exp(median(eff)); digits = 3))
 
 # --- forecast incl confirmed ---
 fc = forecast_reported(chn; horizon = 7,
