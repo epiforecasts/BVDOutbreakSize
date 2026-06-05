@@ -198,7 +198,6 @@ is drawn from the posterior rather than conditioned on.
         report_delay = report_delay_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
-        test_selection = test_selection_model(),
         incubation = incubation_model(),
         report_onset_offset::Union{Nothing, Real} = nothing)
     growth_state ~ to_submodel(growth, false)
@@ -225,7 +224,6 @@ is drawn from the posterior rather than conditioned on.
             f_rep, [T], T;
             test_sensitivity = test_sensitivity,
             test_specificity = test_specificity,
-            test_selection = test_selection,
             report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
@@ -327,30 +325,20 @@ supplies the binomial denominator for any `missing` `samples_analysed`
 entry. Per-test positivity is exposed as a derived quantity. Pass
 `tests_analysed = missing` to drop the tested-volume NegBinomial.
 
-`confirmed_analysed_impute` toggles the imputed-denominator experiment:
-when set to the [`analysed_impute_model`](@ref) submodel, confirmed
-vintages whose analysed count is `missing` (the early 18-22 May and late
-29-31 May lab windows, where no national analysed total was published)
-get a TIGHT partially-pooled log-random-walk denominator anchored to the
-observed 23-28 May increments. This funnels and does not converge (see
-[`analysed_impute_model`](@ref)), so it is off by default; the default
-`nothing` keeps the model on the 23-28 May observed-denominator vintages.
-
-`confirmed_queue` (default `false`) switches the confirmed stream to a
-coherent laboratory-throughput queue that fits ALL confirmed vintages,
-including the dark early 18-22 May and late 29-31 May windows that lack a
-published analysed denominator. The queue drains the received backlog by a
-capacity-limited rate `μ_A = backlog·(1 − exp(−κ·Δt/backlog))` for every
-window. Observed-denominator windows condition on the real analysed count
+The confirmed stream is a coherent laboratory-throughput queue that fits
+ALL confirmed vintages, including the dark early 18-22 May and late
+29 May-3 June windows that lack a published analysed denominator. The
+queue drains the received backlog by a capacity-limited rate
+`μ_A = backlog·(1 − exp(−κ·Δt/backlog))` for every window.
+Observed-denominator windows condition on the real analysed count
 (`confirmed ~ Binomial(ΔA_obs, p_pos)` and `ΔA_obs ~ Poisson(μ_A)`); dark
 windows use the exact marginal of `Binomial(Poisson(μ_A), p_pos)`, namely
 `confirmed ~ Poisson(μ_A · p_pos)`, so the unobserved denominator is
-integrated out rather than carried as a free per-vintage latent. This
-replaces the [`analysed_impute_model`](@ref) funnel. Pass
+integrated out rather than carried as a free per-vintage latent. Pass
 `confirmed_epi_exclusion = epi_exclusion_model()` to add the opt-in
 epi-exclusion fraction `e ~ Beta(2, 12)` (received asymptotes to
 `(1 − e)·N_susp`); the default `nothing` pins `e = 0` (forward fraction 1)
-for the headline fit. `τ_forward` is dropped in this path.
+for the headline fit.
 
 `samples_received` is the per-vintage cumulative received-count vector
 (`Cumul échantillons reçus`). When supplied it conditions the forwarded
@@ -385,18 +373,16 @@ deaths (see [`death_forward_model`](@ref)).
 `confirmed_q_random_effect` is the per-vintage tested-BVD-share random
 effect for the confirmed positivity (see [`confirmed_q_re_model`](@ref)),
 on by default because the observed per-window positivity is non-monotone
-and a monotone severe-first q-curve cannot match it. Pass `nothing` to
-recover the smooth severe-first baseline.
+and the smooth composition baseline cannot match it. Pass `nothing` to
+recover the smooth baseline.
 
-`confirmed_positivity_link` chooses how the tested BVD share is set.
-`:free` (default) samples the severe-first selection curve (`q0 → qinf`),
-a free description of the tested share. `:composition` instead ties the
-tested share to the suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)`
-upsampled by the decaying severity enrichment
-`confirmed_severity_enrichment` (see [`severity_enrichment_model`](@ref)
-and [`confirmed_cases_model`](@ref)), so the confirmed/positivity data
-identify the non-BVD background `λ_bg` rather than it being absorbed by a
-free curve.
+The confirmed positivity uses the COMPOSITION link: the tested BVD share
+is the suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)` upsampled by the
+decaying severity enrichment `confirmed_severity_enrichment` on the
+analysed-VOLUME clock (see [`severity_enrichment_model`](@ref) and
+[`confirmed_cases_model`](@ref)), so the confirmed/positivity data identify
+the non-BVD background `λ_bg` rather than it being absorbed by a free
+curve. A lab stall (no new analysed) pauses the enrichment's relaxation.
 
 `deaths_ascertainment` samples a multiplicative drift factor `p_deaths`
 on the expected-deaths trajectory (see
@@ -496,15 +482,9 @@ export infection→detection delay rather than learning it.
         report_delay = report_delay_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
-        test_selection = test_selection_model(),
         confirmed_severity_enrichment = severity_enrichment_model(),
-        confirmed_positivity_link::Symbol = :free,
-        confirmed_overdispersion = nothing,
         confirmed_q_random_effect = confirmed_q_re_model,
-        confirmed_analysed_impute = nothing,
-        confirmed_queue::Bool = false,
         confirmed_epi_exclusion = nothing,
-        confirmed_selection_clock::Symbol = :time,
         confirmed_volume_scale::Real = 200.0,
         incubation = incubation_model(),
         genetic = nothing,
@@ -576,7 +556,7 @@ export infection→detection delay rather than learning it.
     ## exclusion submodel, so the `τ_forward` dimension is dead. Rebuild
     ## the test-positivity submodel with `sample_forward = false`,
     ## preserving any caller-supplied priors, so it is not sampled.
-    test_positivity_eff = if confirmed_queue
+    test_positivity_eff = if !isempty(confirmed_cases)
         d = test_positivity.defaults
         test_positivity_model(;
             lambda_prior = d.lambda_prior,
@@ -620,15 +600,9 @@ export infection→detection delay rather than learning it.
                 confirmed_edges, tests_edge;
                 test_sensitivity = test_sensitivity,
                 test_specificity = test_specificity,
-                test_selection = test_selection,
                 severity_enrichment = confirmed_severity_enrichment,
-                positivity_link = confirmed_positivity_link,
-                overdispersion = confirmed_overdispersion,
                 q_random_effect = confirmed_q_random_effect,
-                analysed_impute = confirmed_analysed_impute,
-                confirmed_queue = confirmed_queue,
                 epi_exclusion = confirmed_epi_exclusion,
-                selection_clock = confirmed_selection_clock,
                 volume_scale = confirmed_volume_scale,
                 report_onset_offset = report_onset_offset,
                 onset_fraction = os), false)

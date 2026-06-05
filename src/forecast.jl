@@ -48,13 +48,21 @@ function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
     return τ_forward * max(N_recv, zero(N_recv))
 end
 
-# Severe-first per-test positivity at horizon `Th`:
-# `p_pos = s·q + (1−spec)·(1−q)`, with `q = qinf + (q0−qinf)·exp(−c/scale)`
-# the tested BVD share at elapsed testing time `c = max(Th − t_report, 0)`.
-function _forecast_positivity(Th, t_report, s_test, spec_test, q0, qinf,
-        decay_scale)
-    c = max(Th - t_report, zero(Th))
-    q = severe_first_share(q0, qinf, c, decay_scale)
+# Composition-linked per-test positivity at horizon `Th`:
+# `p_pos = s·q + (1−spec)·(1−q)`, with the tested BVD share `q` the
+# suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)` at the horizon. Far out
+# the cumulative analysed volume is large, so the severity enrichment
+# `δ0·exp(−c/decay)` has fully relaxed and the tested share equals `φ`.
+function _forecast_positivity(r, Th, α_rep, θ_rep, p_drc, λ_bg, s_test,
+        spec_test; onset_fraction = 1.0)
+    f_rep = Gamma(α_rep, θ_rep)
+    μ_bvd = Th <= zero(Th) ? zero(Th) :
+            onset_fraction * p_drc *
+            delay_convolution(one(p_drc), r, Th, f_rep)
+    μ_bg = max(λ_bg * Th, zero(λ_bg))
+    denom = μ_bvd + μ_bg
+    q = denom > zero(denom) ? clamp(μ_bvd / denom, zero(denom), one(denom)) :
+        zero(denom)
     return clamp(s_test * q + (one(q) - spec_test) * (one(q) - q),
         zero(q), one(q))
 end
@@ -117,10 +125,10 @@ per draw and columns:
   coming week (`*_cum` minus the corresponding observed count at `T`,
   floored at zero).
 - `:confirmed_cum`, `:confirmed_new` — laboratory-confirmed counterparts
-  when the chain carries the severe-first confirmed-stream parameters
-  (`:s_test`, `:spec_test`, `:q0`, `:qinf`, `:decay_scale`, `:τ_forward`,
-  `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
-  `obs_analysed` are supplied. Otherwise these columns are absent.
+  when the chain carries the confirmed-stream parameters
+  (`:s_test`, `:spec_test`, `:τ_forward`, `:α_recv`, `:θ_recv`,
+  `:capacity_cutoff`) and `obs_confirmed` and `obs_analysed` are supplied.
+  Otherwise these columns are absent.
 - `:confirmed_deaths_cum`, `:confirmed_deaths_new` — laboratory-confirmed
   deaths when the chain additionally carries the confirmed-death
   parameters (`:τ_death`, `:p_deaths`, `:λ_bg_death`, sharing the case-lab
@@ -134,16 +142,15 @@ constant-rate non-BVD background. Laboratory-confirmed cases continue the
 queue of [`confirmed_cases_model`](@ref): the received backlog
 (`τ_forward · N_susp` convolved with the receipt delay) is analysed at the
 cut-off capacity `κ` over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`,
-and the new positives are `ΔA` times the severe-first positivity, added to
-the observed cumulative confirmed. Exports use `p_uganda · q` with
+and the new positives are `ΔA` times the composition-linked positivity,
+added to the observed cumulative confirmed. Exports use `p_uganda · q` with
 `q = daily_travellers / source_population`; pass `forecast_exports = false`
 to drop the export columns (e.g. when cross-border travel is disrupted so
 the forward travel rate no longer holds). Assumes growth continues
 unchanged over the horizon (no interventions, no saturation).
 
-`report_onset_offset` sets the severe-first testing-onset clock
-(`t_report = T − report_onset_offset`), matching the fit; pass the same
-value used in [`bvd_joint`](@ref) (see [`report_onset_offset`](@ref)).
+`report_onset_offset` is accepted for call-site compatibility with the
+fit; the composition-linked horizon positivity does not use it.
 The default `nothing` keeps the seeding-anchored clock (`t_report = 0`).
 """
 function forecast_reported(chn;
@@ -191,14 +198,11 @@ function forecast_reported(chn;
     ## the q-curve shape) live on the joint chain only; their absence drops
     ## the confirmed-cases columns.
     has_lab = all(haskey_chain(chn, n)
-              for n in (:s_test, :spec_test, :q0, :qinf, :decay_scale,
-                  :τ_forward, :α_recv, :θ_recv, :capacity_cutoff)) &&
+              for n in (:s_test, :spec_test, :τ_forward, :α_recv, :θ_recv,
+                  :capacity_cutoff)) &&
               obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
     spec_test = has_lab ? _draws(chn, :spec_test) : nothing
-    q0 = has_lab ? _draws(chn, :q0) : nothing
-    qinf = has_lab ? _draws(chn, :qinf) : nothing
-    decay_scale = has_lab ? _draws(chn, :decay_scale) : nothing
     τ_forward = has_lab ? _draws(chn, :τ_forward) : nothing
     α_recv = has_lab ? _draws(chn, :α_recv) : nothing
     θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
@@ -235,8 +239,6 @@ function forecast_reported(chn;
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
         ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
         ## f_rep(T+h-s) ds + λ_bg·(T+h) (constant-rate background).
-        t_report_i = report_onset_offset === nothing ? zero(T[i]) :
-                     max(T[i] - report_onset_offset, zero(T[i]))
         μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
             pr[i], λ_bg[i]; onset_fraction = os, alg)
         cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
@@ -277,8 +279,8 @@ function forecast_reported(chn;
                 pr[i], λ_bg[i], τ_forward[i], f_receipt; onset_fraction = os)
             Δanalysed = _forecast_analysed_increment(received, obs_analysed,
                 capacity[i], horizon)
-            p_pos = _forecast_positivity(Th, t_report_i, s_test[i],
-                spec_test[i], q0[i], qinf[i], decay_scale[i])
+            p_pos = _forecast_positivity(r[i], Th, α_rep[i], θ_rep[i],
+                pr[i], λ_bg[i], s_test[i], spec_test[i]; onset_fraction = os)
             confirmed_cum[i] = round(Int, obs_confirmed) +
                                _nb_rand(rng, k[i], p_pos * Δanalysed)
             if has_tests

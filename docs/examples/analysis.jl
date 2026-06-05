@@ -466,8 +466,8 @@ vintage_table #hide
 # | Report-to-lab delay |  |  |  | ● |  |  |  |
 # | PCR sensitivity $s$ |  |  |  | ● |  |  |  |
 # | PCR specificity |  |  |  | ● |  |  |  |
-# | Severe-first share $q_0, q_\infty, \text{decay}$ |  |  |  | ● |  |  |  |
-# | Forwarded fraction $\tau_{\text{forward}}$ |  |  |  | ● |  |  |  |
+# | Severity enrichment $\delta_0, \text{decay}$ |  |  |  | ● |  |  |  |
+# | Lab capacity / receipt delay |  |  |  | ● |  |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  |  |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
 # | Ascertainment | ● |  | ● | ● | ● | ● |  |
@@ -1348,75 +1348,85 @@ cfr_prior_fig #hide
 
 # ##### Confirmed cases and samples received
 #
-# The laboratory pipeline observes two per-vintage series: the confirmed
-# (PCR-positive) cases and the samples received from the suspected pool.
-# Testing is selection from an accumulated backlog. Every suspected
-# sample received stays eligible, and the lab draws which to run, so
-# there is no report-to-lab delay. The confirmed series reads from the
-# same reported backlog as the suspected stream.
+# The laboratory pipeline observes three per-vintage series: the samples
+# received from the suspected pool, the samples analysed, and the
+# confirmed (PCR-positive) cases. We model it as a throughput queue. The
+# suspected backlog reaches the lab after a transport delay, the lab
+# analyses a capacity-limited slice of the received backlog each window,
+# and the confirmed count is the positivity-thinned analysed slice. Some
+# vintages carry a published analysed denominator (23-28 May); the early
+# 18-22 May and late 29 May-3 June windows are dark (no national analysed
+# total), and the queue owns them.
 #
-# Each vintage's confirmed count is a Binomial draw on its observed
-# number of samples analysed, with the analysed count $A_v$ a known
-# denominator from the sitrep rather than a modelled quantity:
-#
-# ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
-# ```
-#
-# Per-test positivity mixes true and false positives. With PCR
-# sensitivity $s$, specificity $\text{spec}$ and $q_v$ the BVD share of
-# the analysed batch at vintage $v$,
-#
-# ```math
-# p_{\text{pos},v} = s\, q_v + (1 - \text{spec})\,(1 - q_v). \tag{22}
-# ```
-#
-# The lab tests the most-likely-BVD cases first, the obvious severe
-# cluster, so the BVD share of the tested pool starts high and relaxes
-# to a baseline as testing widens to the broad suspect pool:
-#
-# ```math
-# q(c) = q_\infty + (q_0 - q_\infty)\, e^{-c / \text{decay}},
-# \qquad c = \max(t - t_{\text{report}},\ 0), \tag{23}
-# ```
-#
-# with $c$ the time since surveillance onset. $q_0$ (near 1) is the early
-# severe-cluster BVD fraction, $q_\infty$ the broad-pool baseline, and
-# $\text{decay}$ the timescale over which the share relaxes. The early
-# vintages, where the BVD share is high, inform the sensitivity, and the
-# plateau positivity $s\, q_\infty + (1 - \text{spec})(1 - q_\infty)$ holds
-# the later vintages.
-#
-# The samples-received series conditions the fraction of suspects
-# forwarded to the lab. The cumulative suspect backlog at each vintage is
-# the BVD-suspected term of equation (18) plus the non-BVD background,
+# The cumulative suspect backlog at each vintage is the BVD-suspected term
+# of equation (18) plus the non-BVD background,
 # $N_{\text{susp},v} = \mu_{\text{BVD}}(t_v) + \lambda_{\text{bg}}\,t_v$.
-# The received count is a fraction $\tau_{\text{forward}}$ of that
-# backlog,
+# Specimens reach the lab after a receipt delay $f_{\text{receipt}}$, so
+# the received backlog is $N_{\text{susp}}$ convolved with that delay, and
+# the per-window received increment is observed through a NegBinomial,
 #
 # ```math
-# R_v \sim \mathrm{NegBinomial}(\tau_{\text{forward}}\,
-#     N_{\text{susp},v},\ k), \tag{24}
+# R_v \sim \mathrm{NegBinomial}(\Delta N_{\text{recv},v},\ k). \tag{21}
 # ```
 #
-# which pins $\tau_{\text{forward}}$ directly from received-versus-
-# suspected.
+# The lab drains the received backlog at a capacity-limited rate: with
+# daily capacity $\kappa_v$ over window length $\Delta t_v$ and standing
+# backlog $B_v$, the analysed mean is
+# $\mu_{A,v} = B_v\,(1 - e^{-\kappa_v \Delta t_v / B_v})$ — the whole
+# backlog when capacity is ample, capacity-limited when it is not. On
+# windows with a published analysed count the denominator is conditioned
+# and the confirmed count is a Binomial thinning of it; on dark windows the
+# denominator is integrated out via the exact Poisson-thinned marginal,
+#
+# ```math
+# \Delta A_v \sim \mathrm{Poisson}(\mu_{A,v}),\quad
+# C_v \sim \mathrm{Binomial}(\Delta A_v,\ p_{\text{pos},v})
+# \quad\text{(observed)}, \tag{22}
+# ```
+#
+# ```math
+# C_v \sim \mathrm{Poisson}(\mu_{A,v}\, p_{\text{pos},v})
+# \quad\text{(dark)}. \tag{23}
+# ```
+#
+# Per-test positivity mixes true and false positives. With PCR sensitivity
+# $s$, specificity $\text{spec}$ and $q_v$ the BVD share of the analysed
+# batch at vintage $v$,
+#
+# ```math
+# p_{\text{pos},v} = s\, q_v + (1 - \text{spec})\,(1 - q_v). \tag{24}
+# ```
+#
+# The tested BVD share follows the composition link. The lab triages the
+# severest, most-likely-BVD cases first, so it over-tests BVD early; the
+# enrichment then relaxes to the suspect-pool composition
+# $\varphi_v = \mu_{\text{BVD},v} / (\mu_{\text{BVD},v} + \mu_{\text{bg},v})$
+# as testing widens. The enrichment decays on the analysed-VOLUME clock
+# $c_v = (\sum_{j\le v}\Delta A_j) / \text{vol}$, so a lab stall pauses the
+# relaxation,
+#
+# ```math
+# \mathrm{logit}(q_v) = \mathrm{logit}(\varphi_v)
+#     + \delta_0\, e^{-c_v / \text{decay}}. \tag{25}
+# ```
+#
+# Tying $q$ to $\varphi$ makes the confirmed/positivity data identify the
+# non-BVD background $\lambda_{\text{bg}}$ rather than a free curve. A
+# per-vintage partially-pooled logit-scale offset lets each window's
+# positivity fit the non-monotone wobble while $s$ stays fixed.
 #
 # The priors are a Beta on the PCR sensitivity, a high Beta on the
-# specificity, a near-1 Beta on $q_0$, weakly-informative priors on
-# $q_\infty$ and the decay timescale, and a Beta on the forwarded
-# fraction:
+# specificity, and a moderate half-normal on the severity enrichment with a
+# half-normal decay timescale:
 #
 # ```math
 # s \sim \mathrm{Beta}(6,\ 2), \qquad
-# \text{spec} \sim \mathrm{Beta}(50,\ 1.5), \qquad
-# \tau_{\text{forward}} \sim \mathrm{Beta}(5,\ 2), \tag{25}
+# \text{spec} \sim \mathrm{Beta}(50,\ 1.5), \tag{26}
 # ```
 #
 # ```math
-# q_0 \sim \mathrm{Beta}(20,\ 1.5), \qquad
-# q_\infty \sim \mathrm{Beta}(6,\ 6), \qquad
-# \text{decay} \sim \mathrm{Normal}^{+}(0,\ 10)\ \text{days}. \tag{25a}
+# \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
+# \text{decay} \sim \mathrm{Normal}^{+}(0,\ 10). \tag{26a}
 # ```
 #
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR at
@@ -1433,15 +1443,13 @@ cfr_prior_fig #hide
 # $\approx 0.97$, reflecting the assay's strong analytical specificity and
 # keeping the false-positive term from absorbing the positivity signal.
 #
-# The forwarded fraction $\tau_{\text{forward}}$ has a
-# $\mathrm{Beta}(5, 2)$ prior, mean $0.71$, expressing that a majority
-# but not all of the suspected backlog is forwarded; the samples-received
-# series pulls it to the value the data imply. The $q_0$ prior sits near
-# 1, mean $\approx 0.93$; $q_\infty$ is centred at mean $0.5$ near the
-# cut-off positivity-implied share; the decay prior has median
-# $\approx 6.7$ days, spanning the lab window. The forwarded fraction and
-# the share curve carry no outbreak-specific data beyond the received and
-# confirmed series, so they are weakly informative.
+# The severity enrichment $\delta_0$ is moderate and bounded below at zero:
+# for a pool composition $\varphi \approx 0.4$ the early tested share is
+# $\approx 0.75$, not near-pure BVD, since other severe febrile illness is
+# also triaged. The decay prior has median $\approx 6.7$ volume units,
+# spanning the lab window. Outbreak size stays pinned by the deaths and
+# exports streams and the received counts, with $\lambda_{\text{bg}}$
+# carrying the positivity.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
@@ -1896,17 +1904,16 @@ function joint_obs(o; observe = true)
             confirmed_death_offsets = cdeath_off,
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
-            confirmed_queue = have_pervintage,
             confirmed_epi_exclusion = nothing,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
 
 ## Dummy non-missing confirmed/tested counts instantiate the laboratory
-## submodel so its priors (s, spec, the severe-first selection q0/qinf/
-## decay_scale, plus the derived per-test positivity) appear in the prior
-## chain for the lab-pipeline pair plot. Under `Prior()` the likelihood is
-## discarded, so the placeholder values do not influence the sampled priors.
+## submodel so its priors (s, spec, the severity enrichment δ0/decay_scale,
+## plus the derived per-test positivity) appear in the prior chain for the
+## lab-pipeline pair plot. Under `Prior()` the likelihood is discarded, so
+## the placeholder values do not influence the sampled priors.
 prior_args = joint_obs(obs; observe = false)
 prior_chn = sample(
     bvd_joint(missing, prior_args.deaths, prior_args.reported,
@@ -1932,8 +1939,8 @@ prior_C_table #hide
 prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
-        :λ_bg, :τ_forward, :s_test, :spec_test,
-        :q0, :qinf, :decay_scale,
+        :λ_bg, :s_test, :spec_test,
+        :δ0, :decay_scale,
         :positivity, :p_positive]);
 
 #md # ```@raw html
@@ -2400,7 +2407,7 @@ start_date_fig #hide
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep,
-        :s_test, :spec_test, :τ_forward, :λ_bg, :q0, :qinf, :decay_scale,
+        :s_test, :spec_test, :λ_bg, :δ0, :decay_scale,
         :positivity, :p_positive, :q_cutoff, :q_baseline,
         :cumulative_infections, :cumulative_cases]; digits = 2);
 
@@ -2460,8 +2467,8 @@ posterior_pair_fig #hide
 #md # ```
 
 lab_pair_fig = plot_pair(chn_joint,
-    [:α_rep, :θ_rep, :s_test, :spec_test, :τ_forward,
-        :λ_bg, :q0, :qinf, :decay_scale, :cumulative_cases];
+    [:α_rep, :θ_rep, :s_test, :spec_test,
+        :λ_bg, :δ0, :decay_scale, :cumulative_cases];
     prior = prior_chn);
 
 #md # ```@raw html

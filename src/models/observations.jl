@@ -389,31 +389,31 @@ slice, `s_test` the PCR sensitivity and `1 − spec` the false-positive rate
 than the cumulative total avoids re-using the early analysed samples in
 every later denominator.
 
-`q_v` is the **severe-first** tested BVD share: the lab tests the
-most-likely-BVD (severest / most obvious) suspects first, so `q` starts at
-the early severe-cluster fraction `q0` (near 1) and relaxes to a broad-pool
-baseline `qinf` as testing widens (see [`severe_first_share`](@ref) and
-[`test_selection_model`](@ref)):
+`q_v` is the tested BVD share set by the **composition link**: the lab
+over-tests BVD early (severe cases are triaged first and are more likely
+BVD), the severity enrichment relaxing to the suspect-pool composition
+`φ_v = μ_BVD,v / (μ_BVD,v + μ_bg,v)` as testing widens (see
+[`severity_enrichment_model`](@ref)):
 
 ```math
-q_v = q_\\infty + (q_0 - q_\\infty)\\, e^{-c_v / \\text{decay}},
-\\qquad c_v = \\max(s_v - t_{report},\\ 0),
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_0\\, e^{-c_v / \\text{decay}},
+\\qquad
+c_v = \\frac{\\sum_{j \\le v} \\Delta A_j}{\\text{volume\\_scale}},
 ```
 
-with `c_v` the elapsed time since testing (reporting) onset
-`t_report = T − report_onset_offset`. `q` FALLS from `q0` to `qinf` and
-LEVELS OFF there (no overshoot to zero). With `q0 ≈ 1` the first vintage
-reads positivity `≈ s`, so the sensitivity is identified from the early
-data and needs no lower floor; the plateau positivity
-`s·qinf + (1−spec)(1−qinf)` holds the late vintages. `q0`, `qinf` and the
-decay timescale are sampled by [`test_selection_model`](@ref).
+with `c_v` the cumulative analysed VOLUME (in units of `volume_scale`
+samples), so a lab stall pauses the relaxation. `δ0` is the early severity
+log-odds enrichment and `decay` its timescale. Tying `q` to `φ` makes the
+confirmed/positivity data identify the non-BVD background `λ_bg` rather
+than a free curve.
 
 `q_random_effect` adds a per-vintage partially-pooled logit-scale offset
 to this baseline share (`q_v = logistic(logit(q_base,v) + σ_q·z_v)`, see
 [`confirmed_q_re_model`](@ref)) so each window's positivity can fit the
 non-monotone wobble while `s` stays fixed. It is on by default because the
 observed positivity is non-monotone; pass `nothing` to recover the smooth
-severe-first baseline.
+composition baseline.
 
 The cumulative suspect backlog at each edge is split BVD / background:
 `μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
@@ -442,26 +442,14 @@ backlog, observed as `ΔA_v ~ Poisson(μ_A)`. Window 1's cumulative is the
 initial condition. Pass `missing` entries (with a non-missing
 `tests_analysed` fallback) to generate predictive draws.
 
-`tests_analysed` is the fallback Binomial denominator for any `missing`
-`samples_analysed` entry under predictive generation. The per-test
+`tests_analysed` is the cut-off cumulative analysed count, retained for
+the predictive denominator and the lab-cut-off diagnostic. The per-test
 positivity `p_pos`, tested BVD share `q_cutoff` and baseline `q_baseline`
 are exposed as derived quantities.
 
-`analysed_impute` (default `nothing`) toggles the imputed-denominator
-experiment: a function `(n_missing, log_anchor) -> submodel` (typically
-[`analysed_impute_model`](@ref)) that supplies a TIGHT log-random-walk
-denominator for the `missing` `samples_analysed` entries, anchored to the
-geometric mean of the observed analysed increments. When set, those
-vintages enter the likelihood (`ΔC_v ~ Binomial(round(ΔA_v), p_pos_v)`,
-floored at the observed positives) and the free capacity Poisson is
-skipped for them. This is the no-denominator extension intended to fit
-the early 18-22 May and late 29-31 May confirmed windows, but it FUNNELS
-and does not converge (see [`analysed_impute_model`](@ref)); the default
-`nothing` keeps the fit on the 23-28 May observed-denominator vintages.
-
-`confirmed_queue` (default `false`) replaces the `analysed_impute` funnel
-with a coherent throughput queue that fits ALL vintages, including the dark
-windows that lack a published analysed count. The capacity-limited drain
+The confirmed stream is a coherent lab-throughput queue that fits ALL
+vintages, including the dark windows that lack a published analysed count.
+The capacity-limited drain
 `μ_A_v = backlog·(1 − exp(−κ_v·Δt_v / backlog))` is computed for every
 window (the cumulative analysed advances by the observed increment where
 present, else by `μ_A_v`). Observed-denominator windows condition on the
@@ -492,59 +480,36 @@ cumulative confirmed Binomial.
         t_edges::AbstractVector, tests_edge::Real;
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
-        test_selection = test_selection_model(),
         severity_enrichment = severity_enrichment_model(),
-        positivity_link::Symbol = :free,
         receipt_delay = lab_receipt_delay_model(),
         capacity_model = lab_capacity_model,
         capacity_centre::Real = 150.0,
         report_onset_offset::Union{Nothing, Real} = nothing,
-        overdispersion = nothing,
         q_random_effect = confirmed_q_re_model,
-        analysed_impute = nothing,
-        confirmed_queue::Bool = false,
         epi_exclusion = nothing,
-        selection_clock::Symbol = :time,
         volume_scale::Real = 200.0,
         onset_fraction::Real = 1.0)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
-    ## Positivity link. `:free` (default) samples the severe-first selection
-    ## curve (q0 → qinf), a free description of the tested BVD share.
-    ## `:composition` instead ties the tested share to the suspect-pool
-    ## composition `φ = μ_BVD/(μ_BVD+μ_bg)` upsampled by a decaying severity
-    ## enrichment `δ0` (see [`severity_enrichment_model`](@ref)), so the
-    ## positivity data identify the background `λ_bg` rather than a free curve.
-    if positivity_link === :composition
-        enrich_state ~ to_submodel(severity_enrichment, false)
-        δ0 = enrich_state.δ0
-        decay_scale = enrich_state.decay_scale
-        q0 = zero(δ0)
-        qinf = zero(δ0)
-    else
-        selection_state ~ to_submodel(test_selection, false)
-        q0 = selection_state.q0
-        decay_scale = selection_state.decay_scale
-        qinf = selection_state.qinf
-        δ0 = zero(q0)
-    end
+    ## Composition-linked positivity. The tested BVD share is tied to the
+    ## suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)` upsampled by a
+    ## decaying severity enrichment `δ0` (see [`severity_enrichment_model`]
+    ## (@ref)), so the positivity data identify the background `λ_bg` rather
+    ## than a free curve.
+    enrich_state ~ to_submodel(severity_enrichment, false)
+    δ0 = enrich_state.δ0
+    decay_scale = enrich_state.decay_scale
     receipt_state ~ to_submodel(receipt_delay, false)
     ## Epi-exclusion fraction `e` for the throughput queue: the share of
     ## suspects ruled out by epi follow-up and never sampled, so the
     ## received backlog asymptotes to `(1 − e)·N_susp`. Default OFF (e = 0,
     ## forward = 1) for the headline fit; the opt-in Beta(2, 12) prior is a
-    ## sensitivity arm. Replaces `τ_forward` in the queue path.
-    if confirmed_queue && epi_exclusion !== nothing
+    ## sensitivity arm.
+    if epi_exclusion !== nothing
         epi_state ~ to_submodel(epi_exclusion, false)
         forward_frac = epi_state.forward
     else
         forward_frac = nothing
-    end
-    if overdispersion !== nothing
-        overdispersion_state ~ to_submodel(overdispersion, false)
-        φ_conf = overdispersion_state.φ_conf
-    else
-        φ_conf = nothing
     end
     n_edges_re = length(t_edges)
     if q_random_effect !== nothing
@@ -555,35 +520,12 @@ cumulative confirmed Binomial.
         σ_q = nothing
         z_q = nothing
     end
-    ## Imputed analysed denominators for vintages whose national analysed
-    ## count is missing (early 18-22 May, late 29-31 May lab windows). The
-    ## latent is a TIGHT log-random-walk anchored to the geometric mean of
-    ## the OBSERVED analysed increments, so the imputed denominators are a
-    ## smooth extrapolation of the known series rather than a free
-    ## dimension (a free per-vintage denominator funnels against p_pos).
-    n_missing = analysed_impute === nothing ? 0 :
-                count(x -> x === missing, samples_analysed)
-    if n_missing > 0
-        obs_inc = [convert(Float64, samples_analysed[i])
-                   for i in eachindex(samples_analysed)
-                   if samples_analysed[i] !== missing &&
-                      samples_analysed[i] > 0]
-        log_anchor = isempty(obs_inc) ? 0.0 :
-                     sum(log, obs_inc) / length(obs_inc)
-        impute_state ~ to_submodel(
-            analysed_impute(n_missing, log_anchor), false)
-        log_ΔA_imp = impute_state.log_ΔA
-    else
-        log_ΔA_imp = nothing
-    end
     n_edges = length(t_edges)
     capacity_state ~ to_submodel(
         capacity_model(n_edges; capacity_centre = capacity_centre), false)
     s_test = sensitivity_state.s_test
     spec_test = specificity_state.spec_test
-    ## `q0`, `qinf`, `decay_scale`, `δ0` are set above by the positivity-link
-    ## branch (`:free` from `test_selection`, `:composition` from
-    ## `severity_enrichment`).
+    ## `δ0`, `decay_scale` are set above by the severity-enrichment submodel.
     f_receipt = receipt_state.dist
     κ = capacity_state.capacity
     r = growth_state.r
@@ -610,57 +552,34 @@ cumulative confirmed Binomial.
     ## cumulative is `μ_bg(s) = λ_bg · s` (constant-rate). Their sum
     ## `N_susp,v` is the backlog the received-count likelihood conditions on
     ## (below). Their ratio `μ_BVD / N_susp` is the count-implied BVD
-    ## composition, exposed as a diagnostic; the q-curve baseline `qinf` is a
-    ## free parameter near the cut-off positivity, so the outbreak size stays
-    ## pinned by the deaths / exports streams and the received counts rather
-    ## than forced through this ratio.
+    ## composition `φ`, the plateau the composition link relaxes to.
     t_report = report_onset_offset === nothing ? zero(T) :
                max(T - report_onset_offset, zero(T))
 
-    imp_seed = log_ΔA_imp === nothing ? one(float(r)) :
-               float(exp(first(log_ΔA_imp)))
-    Tt = typeof(float(r) * float(λ_bg) * onset_fraction * float(q0) *
-                float(decay_scale) * float(qinf) * imp_seed)
-    ## Per-edge analysed denominator: observed where present, else the tight
-    ## imputed log-RW latent `exp(log ΔA)`. Both the volume clock and the
-    ## confirmed Binomial use this, so imputed vintages condition on a
-    ## denominator anchored to the observed series.
+    Tt = typeof(float(r) * float(λ_bg) * onset_fraction *
+                float(δ0) * float(decay_scale))
+    ## Per-edge analysed denominator: the observed analysed increment where
+    ## present, else zero (dark windows are owned by the Poisson-thinned
+    ## marginal below). Both the volume clock and the confirmed Binomial use
+    ## this.
     A_imp = Vector{Tt}(undef, n)
-    let mi = 0
-        for i in 1:n
-            if samples_analysed[i] === missing
-                if log_ΔA_imp === nothing
-                    A_imp[i] = zero(Tt)
-                else
-                    mi += 1
-                    A_imp[i] = convert(Tt, exp(log_ΔA_imp[mi]))
-                end
-            else
-                A_imp[i] = convert(Tt, samples_analysed[i])
-            end
-        end
+    for i in 1:n
+        A_imp[i] = samples_analysed[i] === missing ? zero(Tt) :
+                   convert(Tt, samples_analysed[i])
     end
     p_pos = Vector{Tt}(undef, n)
     q_at = Vector{Tt}(undef, n)
     qinf_count_at = Vector{Tt}(undef, n)
     Nsusp_at = Vector{Tt}(undef, n)
     Λ_at_edges = Vector{Tt}(undef, n)
-    qinf_c = convert(Tt, qinf)
-    ## Severe-first testing with modelled specificity, on cumulative counts.
-    ## The lab tests the most-likely-BVD (severest / obvious) suspects first,
-    ## so the BVD share of the analysed batch starts at the early
-    ## severe-cluster fraction `q0` (near 1) and relaxes to the broad-pool
-    ## baseline `qinf` as testing widens (`severe_first_share`):
-    ##   q_v = qinf + (q0 − qinf)·exp(−c_v / decay_scale),
-    ## with `c_v` the elapsed time since testing (reporting) onset. q FALLS
-    ## from q0 to qinf and LEVELS OFF there (no overshoot to zero). The
-    ## per-test positivity combines true and false positives,
+    ## Composition-linked positivity with modelled specificity. The tested
+    ## BVD share is the suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)`
+    ## upsampled by a severity log-odds enrichment `δ0·exp(−c/decay)` that
+    ## decays as testing widens, so `q → φ` at the plateau. The per-test
+    ## positivity combines true and false positives,
     ##   p_pos = s·q + (1 − spec)·(1 − q),
-    ## with `1 − spec` the false-positive rate. With q0 ≈ 1 the first vintage
-    ## reads positivity ≈ s, identifying the sensitivity from the early data
-    ## (no floor); the plateau s·qinf + (1−spec)(1−qinf) holds the late
-    ## positivity. The binomial conditions on the observed analysed
-    ## denominator.
+    ## with `1 − spec` the false-positive rate. The binomial conditions on
+    ## the observed analysed denominator.
     ## Cumulative analysed volume at each edge, for the volume-indexed
     ## clock. The severe-first share then relaxes with how many samples have
     ## been processed rather than calendar time, so a lab stall (no new
@@ -682,24 +601,18 @@ cumulative confirmed Binomial.
         qinf_count_at[i] = denom > zero(Tt) ?
                            clamp(μ_bvd / denom, zero(Tt), one(Tt)) :
                            zero(Tt)
-        ## Clock for the severe-first share: elapsed time since testing
-        ## onset (`:time`) or cumulative analysed volume in units of
-        ## `volume_scale` samples (`:volume`).
-        c_i = selection_clock === :volume ?
-              analysed_cum_at[i] / convert(Tt, volume_scale) :
-              max(s_i - oftype(s_i, t_report), zero(s_i))
-        ## `:free` — severe-first curve from q0 to qinf. `:composition` —
-        ## the suspect-pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a
-        ## decaying severity log-odds enrichment δ0·exp(−c/decay): the lab
-        ## over-tests BVD early, relaxing to the pool composition as testing
-        ## widens, so positivity is tied to the background μ_bg.
-        if positivity_link === :composition
-            φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
-            δ_i = convert(Tt, δ0) * exp(-c_i / convert(Tt, decay_scale))
-            q_base = logistic(logit(φ) + δ_i)
-        else
-            q_base = severe_first_share(q0, qinf_c, c_i, decay_scale)
-        end
+        ## Volume clock for the severity enrichment: cumulative analysed
+        ## volume in units of `volume_scale` samples, so a lab stall (no new
+        ## analysed) pauses the relaxation.
+        c_i = analysed_cum_at[i] / convert(Tt, volume_scale)
+        ## Composition link: the suspect-pool composition
+        ## φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a decaying severity log-odds
+        ## enrichment δ0·exp(−c/decay), so the lab over-tests BVD early and
+        ## relaxes to the pool composition as testing widens, tying
+        ## positivity to the background μ_bg.
+        φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
+        δ_i = convert(Tt, δ0) * exp(-c_i / convert(Tt, decay_scale))
+        q_base = logistic(logit(φ) + δ_i)
         ## Optional partially-pooled per-window offset on the tested BVD
         ## share, logit-scale, so each vintage's positivity can fit the
         ## non-monotone wobble while `s` stays fixed. `σ_q → 0` recovers the
@@ -745,14 +658,9 @@ cumulative confirmed Binomial.
         N_recv_at[i] = max(raw, zero(Tt))
     end
 
-    ## Forwarded fraction of the received backlog. The legacy path uses the
-    ## sampled `τ_forward`; the queue path replaces it with `(1 − e)` from
-    ## the epi-exclusion submodel (default `e = 0`, forward = 1).
-    fwd = if confirmed_queue
-        forward_frac === nothing ? one(Tt) : convert(Tt, forward_frac)
-    else
-        convert(Tt, τ_forward)
-    end
+    ## Forwarded fraction of the received backlog `(1 − e)` from the
+    ## epi-exclusion submodel (default `e = 0`, forward = 1).
+    fwd = forward_frac === nothing ? one(Tt) : convert(Tt, forward_frac)
 
     ## Per-window predicted analysed mean μ_A from the capacity-limited drain
     ## of the received backlog. Computed for ALL windows (the queue path needs
@@ -790,122 +698,34 @@ cumulative confirmed Binomial.
         end
     end
 
-    if confirmed_queue
-        ## Coherent lab-throughput queue with a Poisson-thinned denominator.
-        ## OBSERVED-denominator windows condition on the real analysed
-        ## increment: confirmed_v ~ Binomial(ΔA_obs, p_pos) AND
-        ## ΔA_obs ~ Poisson(μ_A) (pins positivity and capacity). DARK windows
-        ## (no published analysed) use the exact marginal of
-        ## Binomial(Poisson(μ_A), p_pos), namely
-        ## confirmed_v ~ Poisson(μ_A · p_pos): the denominator is integrated
-        ## out, NOT a free latent, so there is no per-vintage funnel.
-        for i in 1:n
-            if samples_analysed[i] === missing
-                μ_c = isfinite(μ_A_at[i] * p_pos[i]) ?
-                      max(μ_A_at[i] * p_pos[i], eps(Tt)) : eps(Tt)
-                confirmed_cases[i] ~ Poisson(μ_c)
-            else
-                samples_analysed[i] ~ Poisson(μ_A_at[i])
-                A_i = Int(samples_analysed[i])
-                if φ_conf === nothing
-                    confirmed_cases[i] ~ Binomial(A_i, p_pos[i])
-                else
-                    α_bb = max(φ_conf * p_pos[i], eps(Tt))
-                    β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
-                    confirmed_cases[i] ~ BetaBinomial(A_i, α_bb, β_bb)
-                end
-            end
+    ## Coherent lab-throughput queue with a Poisson-thinned denominator.
+    ## OBSERVED-denominator windows condition on the real analysed
+    ## increment: confirmed_v ~ Binomial(ΔA_obs, p_pos) AND
+    ## ΔA_obs ~ Poisson(μ_A) (pins positivity and capacity). DARK windows
+    ## (no published analysed) use the exact marginal of
+    ## Binomial(Poisson(μ_A), p_pos), namely
+    ## confirmed_v ~ Poisson(μ_A · p_pos): the denominator is integrated
+    ## out, NOT a free latent, so there is no per-vintage funnel.
+    for i in 1:n
+        if samples_analysed[i] === missing
+            μ_c = isfinite(μ_A_at[i] * p_pos[i]) ?
+                  max(μ_A_at[i] * p_pos[i], eps(Tt)) : eps(Tt)
+            confirmed_cases[i] ~ Poisson(μ_c)
+        else
+            samples_analysed[i] ~ Poisson(μ_A_at[i])
+            A_i = Int(samples_analysed[i])
+            confirmed_cases[i] ~ Binomial(A_i, p_pos[i])
         end
+    end
 
-        ## Received increments observed where present, mean (1 − e)·ΔN_recv.
-        ΔN_recv = daily_increment_kernel(N_recv_at)
-        recv_means = Vector{Tt}(undef, n)
-        for i in 1:n
-            raw = fwd * ΔN_recv[i]
-            recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-            samples_received[i] === missing && continue
-            samples_received[i] ~ safe_nbinomial(k, recv_means[i])
-        end
-    else
-        ## New positives observed on the newly-analysed slice ΔA_v via a
-        ## Binomial, the same between-vintage increment form as the reported
-        ## and deaths streams (first window's increment is the cumulative, so
-        ## a single vintage reduces to the cumulative Binomial). A `missing`
-        ## denominator uses the imputed log-RW latent when `analysed_impute`
-        ## is set, otherwise falls back to `tests_analysed` for predictive
-        ## draws. The imputed denominator is floored at the observed positives
-        ## so the Binomial stays well defined (ΔA ≥ ΔC).
-        for i in 1:n
-            if samples_analysed[i] === missing
-                if log_ΔA_imp === nothing
-                    A_i = tests_analysed === missing ? 0 : tests_analysed
-                else
-                    obs_c = confirmed_cases[i] === missing ? 0 :
-                            Int(confirmed_cases[i])
-                    A_i = max(round(Int, A_imp[i]), obs_c)
-                end
-            else
-                A_i = samples_analysed[i]
-            end
-            if φ_conf === nothing
-                confirmed_cases[i] ~ Binomial(Int(A_i), p_pos[i])
-            else
-                ## Beta-Binomial: positives disperse around ΔA·p with
-                ## concentration φ (α = φ·p, β = φ·(1−p)), absorbing the
-                ## laboratory reporting noise the plain Binomial cannot.
-                α_bb = max(φ_conf * p_pos[i], eps(Tt))
-                β_bb = max(φ_conf * (one(Tt) - p_pos[i]), eps(Tt))
-                confirmed_cases[i] ~ BetaBinomial(Int(A_i), α_bb, β_bb)
-            end
-        end
-
-        ## Received increments: the lab forwards a fraction τ_forward of the
-        ## received backlog, so the per-window mean is τ_forward·ΔN_recv,
-        ## observed through a NegBinomial sharing `k`. Vintages without a
-        ## received count (the imputed early / late windows) are skipped
-        ## rather than imputed: the received series only runs over the
-        ## observed 23-28 May lab window.
-        ΔN_recv = daily_increment_kernel(N_recv_at)
-        recv_means = Vector{Tt}(undef, n)
-        for i in 1:n
-            raw = convert(Tt, τ_forward) * ΔN_recv[i]
-            recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-            (analysed_impute !== nothing &&
-             samples_received[i] === missing) && continue
-            samples_received[i] ~ safe_nbinomial(k, recv_means[i])
-        end
-
-        ## Analysis throughput: the lab processes a fraction of the available
-        ## received backlog set by its daily capacity κ_v over the window
-        ## length Δt_v: μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog)) —
-        ## capacity-limited when the backlog is large, the whole backlog when
-        ## capacity is ample. Window 1's cumulative analysed is the initial
-        ## condition (it accumulated over an unknown pre-window period);
-        ## windows 2..n condition the capacity random walk on the genuine
-        ## between-sitrep gaps. A `missing` entry is generated. When
-        ## `analysed_impute` is set the missing analysed counts are supplied
-        ## by the tight log-RW latent instead, so the free capacity Poisson is
-        ## skipped for them (it is the free-denominator funnel this extension
-        ## avoids) and their imputed value enters the backlog.
-        analysed_cum = (n >= 1 && samples_analysed[1] !== missing) ?
-                       convert(Tt, samples_analysed[1]) :
-                       (log_ΔA_imp === nothing ? zero(Tt) : A_imp[1])
-        for i in 2:n
-            if log_ΔA_imp !== nothing && samples_analysed[i] === missing
-                analysed_cum += A_imp[i]
-                continue
-            end
-            Δt = max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
-                zero(T))
-            recv_cum = convert(Tt, τ_forward) * N_recv_at[i]
-            backlog = max(recv_cum - analysed_cum, eps(Tt))
-            cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
-            μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
-            μ_A = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
-            samples_analysed[i] ~ Poisson(μ_A)
-            analysed_cum += samples_analysed[i] === missing ? μ_A :
-                            convert(Tt, samples_analysed[i])
-        end
+    ## Received increments observed where present, mean (1 − e)·ΔN_recv.
+    ΔN_recv = daily_increment_kernel(N_recv_at)
+    recv_means = Vector{Tt}(undef, n)
+    for i in 1:n
+        raw = fwd * ΔN_recv[i]
+        recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
+        samples_received[i] === missing && continue
+        samples_received[i] ~ safe_nbinomial(k, recv_means[i])
     end
 
     ## Per-test positivity at the lab cut-off (last edge ≤ tests_edge):
@@ -916,12 +736,11 @@ cumulative confirmed Binomial.
             1:n), n)
     p_positive := p_pos[te_idx]
     q_cutoff := q_at[te_idx]
-    ## Plateau tested share: `qinf` in `:free` mode; in `:composition` mode
-    ## the enrichment relaxes to the pool composition, so the plateau is the
-    ## count-implied composition itself.
-    q_baseline := positivity_link === :composition ?
-                  qinf_count_at[te_idx] : qinf
+    ## Plateau tested share: the severity enrichment relaxes to the pool
+    ## composition, so the plateau is the count-implied composition itself.
+    q_baseline := qinf_count_at[te_idx]
     q_baseline_count := qinf_count_at[te_idx]
+    δ0_out := δ0
     τ_forward_out := τ_forward
     ## Daily analysis capacity at the cut-off vintage (samples/day).
     capacity_cutoff := κ[te_idx]
@@ -942,9 +761,9 @@ cumulative confirmed Binomial.
     μ_A_pred := copy(μ_A_at)
     recv_pred := copy(recv_means)
 
-    return (; p_positive, p_pos, q_at, qinf, qinf_count_at, Nsusp_at,
+    return (; p_positive, p_pos, q_at, qinf_count_at, Nsusp_at,
         N_recv_at, recv_means, μ_A_at, dark_analysed_total, capacity = κ,
-        s_test, spec_test, q0, decay_scale, τ_forward, p_drc_per_bin,
+        s_test, spec_test, δ0, decay_scale, τ_forward, p_drc_per_bin,
         expected_confirmed_total, expected_received_total, Λ_at_edges)
 end
 

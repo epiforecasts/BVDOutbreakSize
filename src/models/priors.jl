@@ -153,56 +153,8 @@ imposed. Pass `sensitivity_prior` to override. Used by
 end
 
 """
-Severe-first testing-selection prior for the laboratory confirmed stream.
-The lab tests the most-likely-BVD (severest / most obvious) suspects
-first, so the BVD share of the tested pool starts high and decays to a
-broad-pool baseline as testing widens (see [`confirmed_cases_model`](@ref)
-and [`severe_first_share`](@ref)):
-
-```math
-q_v = q_\\infty + (q_0 - q_\\infty)\\, e^{-c_v / \\text{scale}},
-```
-
-with `c_v` the elapsed time since testing (reporting) onset. This submodel
-samples the two shape parameters of that curve:
-
-- `q0` — the early severe-cluster BVD fraction (the share of the
-  first-tested obvious cases that are true BVD). Its prior is weak
-  (`Beta(2, 2)`, mean 0.5, broad): other haemorrhagic / febrile illness is
-  also severe, so the first-tested batch need not be near-pure BVD. A weak
-  `q0` deliberately lets the non-BVD suspect background `λ_bg` absorb more
-  of the positivity decline rather than attributing it all to severe-first
-  testing selection.
-- `decay_scale` — the timescale (days) over which the tested BVD share
-  relaxes from `q0` toward the baseline `q∞`. Identified by how fast the
-  observed positivity falls across the four vintages; a half-normal
-  `Normal+(0, 10)` (median ≈ 6.7 days) spans the lab window.
-- `qinf` — the baseline BVD fraction the broad suspect pool settles at once
-  the severe cluster is exhausted. Its prior `Beta(6, 6)` (mean 0.5,
-  central) sits near the cut-off test-positivity-implied share: with the
-  late positivity ≈ 0.30 and `s ≈ 0.48`, `qinf ≈ 0.6`. The plateau
-  positivity is `s·qinf + (1−spec)(1−qinf)`. Outbreak size stays pinned by
-  the deaths / exports streams and by the received-count likelihood (the
-  forwarded fraction of the suspect backlog), not by `qinf`. The
-  count-implied composition `μ_BVD / (μ_BVD + μ_bg)` is still exposed as a
-  diagnostic inside [`confirmed_cases_model`](@ref).
-
-Pass `q0_prior` / `decay_prior` / `qinf_prior` to override.
-"""
-@model function test_selection_model(;
-        q0_prior = Beta(2.0, 2.0),
-        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0),
-        qinf_prior = Beta(6.0, 6.0))
-    q0 ~ q0_prior
-    decay_scale ~ decay_prior
-    qinf ~ qinf_prior
-    return (; q0, decay_scale, qinf)
-end
-
-"""
-Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
-(`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
-that mode the tested BVD share is not a free severe-first curve; it is the
+Severity-enrichment prior for the composition-linked confirmed positivity
+(see [`confirmed_cases_model`](@ref)). The tested BVD share is the
 suspect-pool composition `φ = μ_BVD / (μ_BVD + μ_bg)` UPSAMPLED by a
 severity-enrichment that decays as testing widens:
 
@@ -224,10 +176,10 @@ because severity triage upsamples BVD, never down. The default
 bounded: even severity-triaged testing cannot be near-pure BVD (other
 haemorrhagic / severe febrile illness is also triaged), so for a pool
 composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
-1.5) ≈ 0.75`, not the near-1 of the radical free-`q0` prior. `decay_scale`
-is the relaxation timescale (shared structure with
-[`test_selection_model`](@ref)). Pass `logodds_prior` / `decay_prior` to
-override. Used by [`confirmed_cases_model`](@ref) in composition mode.
+1.5) ≈ 0.75`, not the near-1 of a radical free curve. `decay_scale`
+is the relaxation timescale on the analysed-volume clock. Pass
+`logodds_prior` / `decay_prior` to override. Used by
+[`confirmed_cases_model`](@ref).
 """
 @model function severity_enrichment_model(;
         logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
@@ -263,33 +215,10 @@ for a sensitivity analysis). Used by [`confirmed_cases_model`](@ref).
 end
 
 """
-Beta-Binomial overdispersion prior for the per-vintage confirmed
-likelihood. The cumulative-to-vintage analysed denominators carry
-laboratory reporting noise (backfill, batching, lab stalls) that a plain
-Binomial cannot absorb, so the per-window positivity is wildly
-non-monotone (0.48, 0.05, 0.15, 0.02, 0.79 on the 28 May data). A
-Beta-Binomial with concentration `φ` lets each window's positive count
-disperse around its mean `ΔA_v · p_pos,v` while keeping the same expected
-positivity, so the smooth positivity curve no longer has to thread every
-noisy window exactly. The Binomial is recovered as `φ → ∞`.
-
-The prior is on `φ` directly (samples per concentration); the default
-`Gamma(2, 25)` (mean 50, mass on 5–150) admits both near-Binomial
-(`φ` large) and strongly-overdispersed (`φ` small) windows. Pass
-`concentration_prior` to override. Used by [`confirmed_cases_model`](@ref)
-when `overdispersed = true`.
-"""
-@model function confirmed_overdispersion_model(;
-        concentration_prior = Gamma(2.0, 25.0))
-    φ_conf ~ concentration_prior
-    return (; φ_conf)
-end
-
-"""
 Per-vintage tested-BVD-share random effect for the confirmed stream. The
 per-window positivity on the 28 May data is non-monotone (0.48, 0.05,
-0.15, 0.02, 0.79): a monotone severe-first / volume q-curve cannot match
-both the early high batch and the late 28 May surge. This submodel adds a
+0.15, 0.02, 0.79): the smooth composition baseline cannot match both the
+early high batch and the late 28 May surge. This submodel adds a
 partially-pooled logit-scale offset to the smooth baseline share, so each
 vintage's tested BVD fraction `q_v = logistic(logit(q_base,v) + σ_q·z_v)`
 can fit its own positivity while sharing strength through the pooling
@@ -311,49 +240,8 @@ are sampled; `σ_q → 0` recovers the smooth baseline curve. Used by
 end
 
 """
-Imputed analysed-denominator latent for confirmed vintages with no
-observed analysed count (the 18-22 May early and 29-31 May late lab
-windows, where the national `Nbre d'échantillons analysés` is missing).
-The denominator is imputed as a TIGHT log-scale latent anchored to the
-observed analysed increments, so it is a smooth extrapolation of the
-known 23-28 May series rather than a free dimension.
-
-For `n` missing vintages the latent log increments are a log-random-walk
-anchored at `log_anchor` (the log geometric-mean of the observed analysed
-increments), `log ΔA_j = log_anchor + σ_A · cumsum(z_A)_j`, with `n` IID
-standard-normal steps `z_A` and a small walk SD `σ_A` (default
-`truncated(Normal(0, 0.3); lower = 0)`). The walk keeps the imputed
-denominators close to the observed scale. `σ_A → 0` pins every imputed
-denominator at the anchor. Used by [`confirmed_cases_model`](@ref) when
-`analysed_impute` is set and some `samples_analysed` entries are missing.
-
-NEGATIVE RESULT — DEFAULT OFF. Imputing the no-denominator confirmed
-vintages this way still funnels: a four-chain joint fit over the early
-18-22 May extension does not converge (R-hat ≈ 2.1, bulk ESS ≈ 1, every
-NUTS transition saturates the maximum tree depth with zero divergences),
-and tightening the pooling from `σ_A = 0.3` to `0.05` does not help. The
-ridge is the per-vintage `q` random effect times the imputed `ΔA`: each
-no-denominator vintage carries both a free positivity offset and a latent
-denominator, and `ΔC ≈ ΔA · p_pos(q)` leaves them jointly unidentified.
-The free analysis-capacity (`μ_A`) imputation funnels the same way. The
-confirmed stream is therefore fitted only over the 23-28 May vintages
-that carry an observed analysed denominator; this submodel is retained as
-an opt-in experiment, off by default.
-"""
-@model function analysed_impute_model(n::Integer, log_anchor::Real;
-        sigma_prior = truncated(Normal(0.0, 0.3); lower = 0))
-    σ_A ~ sigma_prior
-    z_A ~ filldist(Normal(0, 1), n)
-    ## Log-random-walk around the observed-increment anchor; the cumulative
-    ## sum gives a smooth drift while the tight σ_A keeps the imputed
-    ## denominators on the observed scale.
-    log_ΔA = log_anchor .+ σ_A .* cumsum(z_A)
-    return (; σ_A, z_A, log_ΔA)
-end
-
-"""
 Epidemiological-exclusion fraction `e` for the laboratory-throughput
-queue (see [`confirmed_cases_model`](@ref), `confirmed_queue = true`).
+queue (see [`confirmed_cases_model`](@ref)).
 `e` is the share of suspected cases ruled out by epidemiological
 follow-up and never sampled, so the cumulative received backlog
 asymptotes to `(1 − e)·N_susp` rather than the whole suspect total. It

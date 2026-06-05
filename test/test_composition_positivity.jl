@@ -1,9 +1,8 @@
-## Tests for the composition-linked confirmed positivity
-## (`positivity_link = :composition`). The tested BVD share is the
-## suspect-pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a decaying
-## severity enrichment δ0 (see `severity_enrichment_model`), so the
-## confirmed/positivity data identify the non-BVD background λ_bg rather
-## than a free severe-first curve.
+## Tests for the composition-linked confirmed positivity. The tested BVD
+## share is the suspect-pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by
+## a decaying severity enrichment δ0 on the analysed-volume clock (see
+## `severity_enrichment_model`), so the confirmed/positivity data identify
+## the non-BVD background λ_bg rather than a free curve.
 
 @testitem "severity_enrichment_model: δ0≥0, decay≥0, mean ≈ 1.5" tags=[:slow] begin
     using Turing: sample, Prior
@@ -46,7 +45,7 @@ end
     ## A single cumulative vintage at the cut-off; the composition φ is set by
     ## λ_bg against the BVD onset trajectory the growth/r imply. `f_rep` is a
     ## fixed onset-to-report Gamma (the report-delay prior centre).
-    @model function _harness(link)
+    @model function _harness()
         g ~ to_submodel(exponential_growth_model(), false)
         c ~ to_submodel(
             confirmed_cases_model(
@@ -54,12 +53,11 @@ end
                 Union{Missing, Int}[missing], 400, g, 5.0,
                 [0.3], 0.6, 0.7, Gamma(2.5, 4.5),
                 [g.T], g.T;
-                positivity_link = link,
                 severity_enrichment = severity_enrichment_model(),
                 q_random_effect = nothing), false)
     end
 
-    chn = sample(MersenneTwister(7), _harness(:composition), Prior(), 400;
+    chn = sample(MersenneTwister(7), _harness(), Prior(), 400;
         chain_type = FlexiChains.VNChain, progress = false)
     q = vec(Array(chn[:q_cutoff]))
     φ = vec(Array(chn[:q_baseline_count]))
@@ -71,7 +69,7 @@ end
     @test mean(q .>= φ .- 1e-6) > 0.99
 end
 
-@testitem "bvd_joint :composition builds, samples, identifies λ_bg path" tags=[:slow] begin
+@testitem "bvd_joint composition builds, samples, identifies λ_bg path" tags=[:slow] begin
     ## The joint with composition-linked positivity must sample finite
     ## generated quantities under the prior and expose δ0 / λ_bg, and fit a
     ## few NUTS steps (composition mode is AD-differentiable).
@@ -108,7 +106,6 @@ end
         confirmed_cases = conf, confirmed_offsets = aoff,
         samples_analysed = analysed, samples_received = received,
         tests_analysed = obs.cumulative_tests_analysed,
-        confirmed_positivity_link = :composition,
         first_export_detection_delta = obs.first_export_detection_delta)
 
     chn = sample(model, Prior(), 100;
