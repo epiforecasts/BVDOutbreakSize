@@ -302,18 +302,21 @@ streams. Samples
 - `τ_test` — the fraction of suspected cases that are sampled and routed
   to the laboratory pipeline.
 
-The default `λ_bg` prior is a diffuse half-normal
-`truncated(Normal(0, 5.0); lower = 0)`. Its total contribution to the
+The default `λ_bg` prior is a half-normal
+`truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
 expected suspected-case count over the grid is `λ_bg · T`, with `T` the
-seeding-to-cut-off span. `λ_bg` is degenerate with outbreak size on the
-suspected-case stream alone (the per-vintage reported mean mixes the
-`p_drc`-scaled BVD increment with `λ_bg · Δt`), so on that stream a tight
-prior would be the only thing keeping the background from absorbing
-arbitrarily many cases. Identification now comes instead from the
-composition link, which ties the suspected positivity to the background
-through the laboratory positivity data, so the prior can be permissive:
-SD 5.0 admits a background reaching the ≈ 1077 suspected cases observed
-by the 26 May cut-off, and the joint fit pins it down. Pass
+seeding-to-cut-off span. The prior is deliberately informative because
+`λ_bg` is degenerate with outbreak size (the per-vintage reported mean
+mixes the `p_drc`-scaled BVD increment with `λ_bg · Δt`), so a diffuse
+prior lets the background absorb arbitrarily many suspected cases and
+resolve at the high end where the deaths and exports streams anchor `C_T`.
+A background-noise process must not be able to explain more suspected
+cases than were ever reported. With SD 1.0 the median background is
+≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
+≈ 1077 suspected cases observed by the 26 May cut-off while still
+admitting a genuine non-BVD signal; a wider SD (e.g. SD 5) left a second
+posterior mode in which the background explains the majority of suspected
+cases (positivity ≈ 0.2, background ≈ 2.3× the observed total). Pass
 `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
 (mean ≈ 0.71).
 
@@ -322,7 +325,7 @@ The derived per-suspected positivity is exposed inside
 [`confirmed_cases_model`](@ref). Returns `(; λ_bg, τ_test)`.
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 5.0); lower = 0),
+        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
         fraction_tested_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
@@ -339,11 +342,10 @@ plausibly drives both streams, so the two backgrounds can share this
 submodel's hyperparameters.
 
 The baseline `λ_mu` is the scalar background rate on its natural
-half-normal scale, with the same diffuse default as the scalar `λ_bg`
-(`truncated(Normal(0, 5.0); lower = 0)` for cases, identified through the
-composition link; pass a tighter `baseline_prior` for deaths). The
-per-vintage rate is a multiplicative log-normal deviation from this
-baseline,
+half-normal scale, with the same informative default as the scalar
+`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases; pass a tighter
+`baseline_prior` for deaths). The per-vintage rate is a multiplicative
+log-normal deviation from this baseline,
 
 ```math
 \\lambda_v = \\lambda_\\mu \\,
@@ -362,7 +364,7 @@ windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
 per-vintage rates.
 """
 @model function background_re_model(nv::Integer, σ_bg::Real;
-        baseline_prior = truncated(Normal(0.0, 5.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
     m = max(nv, 1)
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), m))
