@@ -780,9 +780,10 @@ half of #193, the constant-rate non-BVD suspected-death background
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer},
-        expected_deaths::Real,
+        deaths_daily::AbstractVector,
         bvd_reports_daily::AbstractVector, p_drc::Real,
-        bg_daily::AbstractVector;
+        bg_daily::AbstractVector, k::Real;
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
         enrichment = confirmed_death_enrichment_model())
     enr_state ~ to_submodel(enrichment)
     m_death = enr_state.m_death
@@ -792,13 +793,20 @@ half of #193, the constant-rate non-BVD suspected-death background
     qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
     p_death_conf := logistic(logit(qc) + log(m_death))
 
-    ## Suspected-death denominator: the observed total when conditioned, or
-    ## the expected suspected deaths on the predictive-generator path.
-    n_deaths = ismissing(total_deaths) ?
-               max(round(Int, safe_rate(expected_deaths)), 0) :
-               Int(total_deaths)
-    confirmed_deaths ~ Binomial(n_deaths, p_death_conf)
-    expected_confirmed_deaths := p_death_conf * n_deaths
+    ## Confirmed deaths are a thinning of the modelled suspected-death daily
+    ## series by the composition-linked confirmation probability, scored as
+    ## per-vintage between-vintage increments (the confirmed-death series
+    ## grows 17→64 over 26 May-3 June). The suspected-death denominator is
+    ## frozen at 26 May, so the modelled death trajectory carries the timing,
+    ## the same modelled-volume route the post-lab confirmed cases use.
+    confirmed_death_daily = p_death_conf .* deaths_daily
+    n = length(deaths_daily)
+    vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
+    modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
+    cdeath_increments ~ to_submodel(
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
+
+    expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
 
     return (; m_death, q_susp, p_death_conf, expected_confirmed_deaths)
 end

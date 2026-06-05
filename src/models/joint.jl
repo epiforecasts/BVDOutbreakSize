@@ -143,6 +143,7 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -164,8 +165,9 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
         k, p_drc))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily))
+        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
+        p_drc, cases_state.bg_daily, k;
+        confirmed_deaths_history))
     C_T := latent.infection_state.C_T
 end
 
@@ -311,8 +313,9 @@ death-confirmation probability (`death_confirmation`).
         positivity_link = confirmed_positivity_link))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.expected_deaths_T, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily))
+        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
+        p_drc, cases_state.bg_daily, k;
+        confirmed_deaths_history))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         incubation_pmf = latent.incubation_pmf, source_population))
