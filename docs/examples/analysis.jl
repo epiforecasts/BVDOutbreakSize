@@ -1808,15 +1808,15 @@ function joint_obs(o; observe = true)
               fill(missing, length(h.values)), h.offsets)
     rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
     dth, dth_off = _stream(o.death_history, o.total_deaths)
-    ## Confirmed cases enter PER VINTAGE over the lab vintages that carry an
-    ## analysed denominator (the 23-28 May sitreps with denominators
-    ## 211/295/295/403/648/755). Each cumulative confirmed count is observed
-    ## as a Binomial on its analysed count, so the joint conditions on the
-    ## per-vintage positivity trajectory (reagent exhaustion plus modelled
-    ## assay specificity) rather than a single cumulative total. Confirmed
-    ## counts are aligned to the analysed offsets. When no per-vintage
-    ## analysed history is available,
-    ## fall back to the single cumulative total at the cut-off.
+    ## Confirmed cases enter the missing-lab-data queue: every vintage
+    ## 18 May-3 June is a between-vintage increment at its own offset. The
+    ## 23-28 May windows carry the published analysed/received denominators
+    ## (25 May analysis stall merged into the next window so every observed
+    ## denominator is positive); the early 18-22 May and late 29 May-3 June
+    ## windows have no national analysed total, so they are DARK (`missing`
+    ## analysed/received) and the queue owns them via the Poisson-thinned
+    ## marginal. When no per-vintage history is available, fall back to the
+    ## single cumulative total at the cut-off.
     have_conf = o.confirmed_case_history !== missing ||
                 o.confirmed_cases !== missing
     have_pervintage = have_conf &&
@@ -1824,37 +1824,29 @@ function joint_obs(o; observe = true)
                       o.tests_analysed_history !== missing
     if have_pervintage
         sa = o.tests_analysed_history
+        sr = o.tests_received_history
         ch = o.confirmed_case_history
-        idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
-        any(isnothing, idx) &&
-            error("confirmed history missing an analysed-vintage offset")
-        ## Merge any vintage that analysed no new samples (ΔA = 0, e.g. the
-        ## 25 May stall) into the next, so every window has a positive
-        ## denominator. Keep the first vintage and any with more cumulative
-        ## analysed than the previous kept one, then difference to the
-        ## between-vintage increments the confirmed model conditions on.
+        conf_off = collect(ch.offsets)
+        conf = observe ? Union{Missing, Int}[_increments(ch.values)...] :
+               fill(missing, length(conf_off))
+        ## Observed-denominator windows, stall-merged: keep the first
+        ## analysed vintage and any with strictly more cumulative analysed
+        ## than the previous kept one (drops the 25 May flat stall), then
+        ## difference to between-vintage increments.
         keep = [i == 1 || sa.values[i] > sa.values[i - 1]
                 for i in eachindex(sa.values)]
         aoff = collect(sa.offsets)[keep]
-        analysed = Union{Missing, Int}[_increments(sa.values[keep])...]
-        ccum = [ch.values[i] for i in idx][keep]
-        conf = observe ? Union{Missing, Int}[_increments(ccum)...] :
-               fill(missing, length(ccum))
-        conf_off = aoff
-        ## Tests-received increments (`Cumul échantillons reçus`), aligned
-        ## to the kept offsets, condition τ_forward via the received-count
-        ## NegBinomial.
-        if o.tests_received_history !== missing
-            sr = o.tests_received_history
-            ridx = [findfirst(==(off), sr.offsets) for off in aoff]
-            received = any(isnothing, ridx) ? Union{Missing, Int}[] :
-                       (observe ?
-                        Union{Missing, Int}[_increments([sr.values[i]
-                                                                             for i in ridx])...] :
-                        fill(missing, length(ridx)))
-        else
-            received = Union{Missing, Int}[]
-        end
+        a_inc = _increments(sa.values[keep])
+        ridx = [findfirst(==(off), sr.offsets) for off in aoff]
+        r_inc = _increments([sr.values[i] for i in ridx])
+        ## Map observed increments onto the kept offsets; every other vintage
+        ## (early + late dark) gets `missing`.
+        aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
+        robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
+        analysed = Union{Missing, Int}[get(aobs, off, missing)
+                                       for off in conf_off]
+        received = Union{Missing, Int}[get(robs, off, missing)
+                                       for off in conf_off]
     else
         conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
                      o.confirmed_case_history === missing ? missing :
@@ -1866,12 +1858,10 @@ function joint_obs(o; observe = true)
         analysed = Union{Missing, Int}[]
         received = Union{Missing, Int}[]
     end
-    ## Travel-gated export streams stop at the most recent reported import
-    ## to Uganda. Cross-border movement patterns likely shift over the
-    ## outbreak and the days after the last import are right-truncated by
-    ## reporting lag, so the trailing zeros are dropped from both the
-    ## export-case and deaths-among-exports series and each stream is run
-    ## only up to that date.
+    ## Travel-gated export streams stop at the most recent reported import to
+    ## Uganda: days after the last import are right-truncated by reporting
+    ## lag, so the trailing zeros are dropped from both the export-case and
+    ## export-death series and each runs only up to that date.
     ec_full = o.exported_cases_daily
     last_import = isempty(ec_full) ? nothing : findlast(!=(0), ec_full)
     export_last_offset = last_import === nothing ? 0 :
@@ -1882,18 +1872,17 @@ function joint_obs(o; observe = true)
               fill(missing, length(_truncate(ec_full))))
     ed_trunc = _truncate(o.export_deaths_daily)
     edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
-    ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
-    ## deaths that got confirmed. Confirmed deaths are flat at 17 over
-    ## 26-28 May, so the informative content is the single cut-off point.
-    ## Fit it as one cumulative vintage through the lab and positivity
-    ## process for deaths (forwarded fraction τ_death of the
-    ## suspect-death backlog, BVD share sets the death-specimen positivity
-    ## from the shared `s`/`spec`); empty when no confirmed-death history.
+    ## Laboratory-confirmed deaths span their full dark window (26 May-3
+    ## June). The stream is a lab/positivity process on the death specimens,
+    ## not gated on the analysed denominator, so every vintage enters as a
+    ## between-vintage increment at its own offset; empty when no
+    ## confirmed-death history.
     if o.confirmed_death_history !== missing
-        cdeath = Union{Missing, Int}[observe ?
-                                                         o.confirmed_death_history.values[end] :
-                                                         missing]
-        cdeath_off = [0]
+        cdh = o.confirmed_death_history
+        cdeath = observe ?
+                 Union{Missing, Int}[_increments(cdh.values)...] :
+                 fill(missing, length(cdh.values))
+        cdeath_off = collect(cdh.offsets)
     else
         cdeath = Union{Missing, Int}[]
         cdeath_off = Int[]
@@ -1907,6 +1896,8 @@ function joint_obs(o; observe = true)
             confirmed_death_offsets = cdeath_off,
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
+            confirmed_queue = have_pervintage,
+            confirmed_epi_exclusion = nothing,
             tests_analysed = observe ? o.cumulative_tests_analysed :
                              missing, tests_offset = 0))
 end
