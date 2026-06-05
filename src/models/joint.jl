@@ -13,8 +13,9 @@
 
 ## Run the generating infection process and onset staging, returning the
 ## infection state and the daily onsets shared by every stream.
-@model function _latent(n::Integer, breakpoint, infection, onset_incidence)
-    infection_state ~ to_submodel(infection(n; breakpoint), false)
+@model function _latent(n::Integer, breakpoint, infection, onset_incidence;
+        rt_start::Integer = 1)
+    infection_state ~ to_submodel(infection(n; breakpoint, rt_start), false)
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false)
     return (; infection_state, onsets = onset_state.onsets,
@@ -270,8 +271,14 @@ death-confirmation probability (`death_confirmation`).
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
+    ## Fix R_t at R0 over the pre-establishment seeding window, letting the
+    ## random walk vary R_t only from the conservative genetic TMRCA bound
+    ## (`n - tmrca_days`) onward — before that point the outbreak dynamics
+    ## are unidentified, so a free walk there only adds unsupported drift.
+    rt_start = ismissing(tmrca_days) ? 1 :
+               clamp(n - round(Int, tmrca_days), 1, n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence), false)
+        _latent(n, breakpoint, infection, onset_incidence; rt_start), false)
     infection_state = latent.infection_state
     onsets = latent.onsets
 

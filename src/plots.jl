@@ -505,7 +505,7 @@ annotated. The cut-off and the intervention breakpoint are marked.
 """
 function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
-        week::Integer = 7, ramp::Real = 14.0)
+        rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
@@ -515,7 +515,7 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     zmat = chn[Symbol("rt_state.z")]
     zrows = [collect(z) for z in vec(collect(zmat))]
 
-    days = knot_days(n; week)
+    days = knot_days(n; week, start = rt_start)
     nb = length(days)
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
     ndraws = length(log_R0)

@@ -1418,6 +1418,7 @@ joint_summary #hide
 
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
+    rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding);
 
 #md # ```@raw html
@@ -1547,7 +1548,9 @@ pp_joint = predict(
         tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = _BREAKPOINT,
         background_re = true,
-        confirmed_positivity_link = :composition),
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one

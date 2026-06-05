@@ -12,17 +12,19 @@ using Statistics: quantile
 obs = load_observations()
 const BP = obs.n - obs.who_first_sitrep_days
 
-mk(; kw...) = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
-    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-    obs.tests_analysed; confirmed_deaths = obs.confirmed_deaths,
-    deaths_history = obs.deaths_history, reported_history = obs.reported_history,
-    confirmed_history = obs.confirmed_history,
-    confirmed_deaths_history = obs.confirmed_deaths_history,
-    lab_history = obs.lab_history,
-    tests_received_history = obs.tests_received_history,
-    breakpoint = BP, background_re = true,
-    confirmed_positivity_link = :composition,
-    genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days, kw...)
+function mk(; kw...)
+    bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed; confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history, reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        breakpoint = BP, background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days, kw...)
+end
 
 chn = nuts_sample(mk(); samples = 200, chains = 2, progress = false)
 println("fit OK")
@@ -38,12 +40,15 @@ pp = predict(
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = BP, background_re = true,
-        confirmed_positivity_link = :composition),
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days),
     chn)
 println("predict OK")
 
-_vr(prefix) = collect(first(k for k in keys(pp)
-if occursin("$prefix.increments", string(k))) |> k -> pp[k])
+function _vr(prefix)
+    collect(first(k for k in keys(pp)
+    if occursin("$prefix.increments", string(k))) |> k -> pp[k])
+end
 function _vrep(prefix)
     key = first(k for k in keys(pp) if occursin("$prefix.increments", string(k)))
     return collect(pp[key])
@@ -54,14 +59,16 @@ w = BVDOutbreakSize.confirmed_positivity_windows(obs.confirmed_history,
     obs.lab_history)
 cwd = vcat(w.early_days, w.obs_days, w.late_days)
 ce = _vrep("confirmed_state.early_increments")
-co = collect(first(pp[k] for k in keys(pp)
+co = collect(first(pp[k]
+for k in keys(pp)
 if occursin("confirmed_state.confirmed_positives.positives", string(k))))
 cl = _vrep("confirmed_state.late_increments")
 conf_panel = (; title = "Confirmed cases", dates = _dates(cwd),
     replicates = [vcat(collect(e), collect(p), collect(l))
                   for (e, p, l) in zip(vec(ce), vec(co), vec(cl))],
     observed = [(i = searchsortedlast(obs.confirmed_history.days, d);
-                 i == 0 ? 0 : Int(obs.confirmed_history.counts[i])) for d in cwd],
+                    i == 0 ? 0 : Int(obs.confirmed_history.counts[i]))
+                for d in cwd],
     colour = :goldenrod)
 panels = [
     (; title = "Suspected cases", dates = _dates(obs.reported_history.days),
@@ -78,14 +85,16 @@ panels = [
     (; title = "Specimens received",
         dates = _dates(obs.tests_received_history.days),
         replicates = _vrep("confirmed_state.received_increments"),
-        observed = obs.tests_received_history.counts, colour = :seagreen),
+        observed = obs.tests_received_history.counts, colour = :seagreen)
 ]
 fig = plot_vintage_conditional_ppc(panels)
 println("5-panel vintage PPC built OK (incl. confirmed-case late windows + ",
     "per-vintage confirmed deaths)")
 
 ## Rt plot + forecast (the other new pieces).
-rtf = plot_rt(chn; n = obs.n, breakpoint = BP, as_of_date = string(obs.cutoff), seeding = obs.seeding)
+rtf = plot_rt(chn; n = obs.n, breakpoint = BP,
+    rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
+    as_of_date = string(obs.cutoff), seeding = obs.seeding)
 println("plot_rt OK")
 fc = forecast_reported(chn; horizon = 7)
 ft = forecast_table(fc)

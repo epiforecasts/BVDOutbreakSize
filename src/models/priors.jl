@@ -94,11 +94,12 @@ fortnight, the response damps `R_t` only partially by the cut-off.
 @model function rt_walk_model(n::Integer;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
         ramp::Real = 14.0,
         log_r0_prior = Normal(log(1.5), 0.25),
         sigma_prior = truncated(Normal(0, 0.05); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
-    days = knot_days(n; week)
+    days = knot_days(n; week, start = rt_start)
     nb = length(days)
     log_R0 ~ log_r0_prior
     sigma_rw ~ sigma_prior
@@ -148,11 +149,12 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
 """
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
         rt = rt_walk_model,
         gi = generation_interval_model,
         seed = seed_model,
         gi_nmax::Integer = 40)
-    rt_state ~ to_submodel(rt(n; breakpoint))
+    rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
     gi_state ~ to_submodel(gi(gi_nmax))
     seed_state ~ to_submodel(seed())
     Rt = rt_state.Rt

@@ -204,13 +204,19 @@ end
 
 """
 Day indices of the weekly reproduction-number knots over an `n`-day grid.
-Knot 1 sits on day 1 and the last knot on day `n`, with regular knots
-every `week` days, so a knot is always pinned to each end of the grid.
-Returns a sorted vector of unique day indices.
+The first knot sits on day `start` (default 1) and the last knot on day
+`n`, with regular knots every `week` days, so a knot is pinned to `start`
+and to the end of the grid. With `start > 1` the reproduction number is
+held flat (at the first knot's value) for all days before `start`
+([`interpolate_knots`](@ref) clamps below the first knot), so the random
+walk only varies `R_t` from `start` onward — used to fix `R_t` over the
+pre-establishment seeding window before the genetic TMRCA bound. Returns a
+sorted vector of unique day indices.
 """
-function knot_days(n::Integer; week::Integer = 7)
+function knot_days(n::Integer; week::Integer = 7, start::Integer = 1)
     n <= 1 && return [1]
-    days = collect(1:week:n)
+    s = clamp(Int(start), 1, n)
+    days = collect(s:week:n)
     days[end] == n || push!(days, n)
     return days
 end
