@@ -1887,13 +1887,18 @@ imperial_density_fig #hide
 # the 20 May freeze is the earliest matched cut-off with a coherent
 # suspected-case series; McCabe et al.'s 18 May report predates it.
 #
-# The renewal estimate moves with the data: at the 20 May cut-off it sees
-# far fewer suspected cases than at the final cut-off, so its outbreak
-# size is correspondingly smaller and closer to McCabe et al.'s scenario
-# range. The gap that remains at the matched date is the method: the
-# renewal infers latent infections through a time-varying reproduction
-# number and a convolved reporting delay, while McCabe et al. report
-# ascertained cases under fixed growth and window assumptions.
+# The expected reported-case count, the quantity directly comparable to
+# McCabe et al.'s scenarios, moves sharply with the data: at the 20 May
+# cut-off the renewal sees far fewer suspected cases than at the final
+# cut-off, so its reported-case estimate sits close to McCabe et al.'s
+# scenario range and well below the current-data fit. The latent
+# infection count C_T moves much less, because infections are inferred
+# back through the ascertainment and reporting delay and so are far less
+# sensitive to the accruing case series than the ascertained count is.
+# The gap that remains at the matched date is the method: the renewal
+# infers latent infections through a time-varying reproduction number and
+# a convolved reporting delay, while McCabe et al. report ascertained
+# cases under fixed growth and window assumptions.
 #
 # The freeze truncates the dated histories the model fits, so the
 # suspected-case, suspected-death, confirmed-case and laboratory streams
