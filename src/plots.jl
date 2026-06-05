@@ -382,6 +382,82 @@ function plot_pair(chn, params::AbstractVector{Symbol};
 end
 
 """
+Estimate-evolution plot: how an outbreak-size estimate moves as the data
+cut-off advances. `rows` is a vector of
+`(cutoff_date, central, lower, upper)` tuples, one per data cut-off,
+drawn as a median line with a shaded `[lower, upper]` band against the
+cut-off date on the x-axis. Pass `points` as a second vector of the same
+tuple shape to overlay a second series (for example the renewal model's
+frozen estimates) as points with whisker bars. A horizontal grey band
+spanning `scenario_range` marks a published scenario range (for example
+the spread of McCabe et al.'s 15 outbreak-size scenarios), so the
+estimates can be read against it. `xlabel`/`ylabel`/`title` set the axis
+text; `series_label` and `points_label` name the two series in the
+legend.
+"""
+function plot_estimate_evolution(
+        rows::AbstractVector;
+        points::AbstractVector = NamedTuple[],
+        scenario_range::Union{Nothing, Tuple{Real, Real}} = nothing,
+        xlabel::AbstractString = "Data cut-off date",
+        ylabel::AbstractString = "Cumulative cases C(T)",
+        title::AbstractString = "Outbreak-size estimate as data accrued",
+        series_label::AbstractString = "Released estimate",
+        points_label::AbstractString = "Renewal (frozen)")
+    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
+    ## then relabel the ticks with the dates.
+    dates = [Date(String(r[1])) for r in rows]
+    pdates = [Date(String(p[1])) for p in points]
+    alldates = sort(unique(vcat(dates, pdates)))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+    xs = _x.(dates)
+    central = [float(r[2]) for r in rows]
+    lo = [float(r[3]) for r in rows]
+    hi = [float(r[4]) for r in rows]
+
+    upper = maximum(hi)
+    isempty(points) || (upper = max(upper, maximum(float(p[4]) for p in points)))
+    isnothing(scenario_range) || (upper = max(upper, scenario_range[2]))
+
+    fig = Figure(; size = (840, 460))
+    ax = Axis(fig[1, 1];
+        xlabel = xlabel, ylabel = ylabel, title = title,
+        xticks = (_x.(alldates), [string(d) for d in alldates]),
+        xticklabelrotation = pi / 4,
+        limits = ((_x(ref) - 1, _x(maximum(alldates)) + 1),
+            (0, upper * 1.08)))
+
+    if !isnothing(scenario_range)
+        sxs = [_x(ref) - 1, _x(maximum(alldates)) + 1]
+        band!(ax, sxs, fill(float(scenario_range[1]), 2),
+            fill(float(scenario_range[2]), 2); color = (:grey, 0.18))
+    end
+
+    ord = sortperm(xs)
+    band!(ax, xs[ord], lo[ord], hi[ord]; color = (:steelblue, 0.20))
+    lines!(ax, xs[ord], central[ord]; color = :steelblue, linewidth = 2,
+        label = series_label)
+    scatter!(ax, xs[ord], central[ord]; color = :steelblue, markersize = 9)
+
+    if !isempty(points)
+        pxs = _x.(pdates)
+        pc = [float(p[2]) for p in points]
+        plo = [float(p[3]) for p in points]
+        phi = [float(p[4]) for p in points]
+        for i in eachindex(pxs)
+            lines!(ax, [pxs[i], pxs[i]], [plo[i], phi[i]];
+                color = (:firebrick, 0.8), linewidth = 2)
+        end
+        scatter!(ax, pxs, pc; color = :firebrick, markersize = 12,
+            marker = :diamond, label = points_label)
+    end
+
+    CairoMakie.axislegend(ax; position = :lt)
+    return fig
+end
+
+"""
 Horizontal point-and-interval comparison of cumulative-case estimates
 from several sources. `rows` is a vector of
 `(label, central, lower, upper)` tuples, drawn top to bottom with the
@@ -507,6 +583,7 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
+    log_R0_seed = _draws(chn, Symbol("rt_state.log_R0_seed"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
     T_draws = _draws(chn, :T)
@@ -527,8 +604,13 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         z = zrows[i]
         steps = sigma[i] .* z[1:(nb - 1)]
         log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
-        log_Rt = interpolate_knots(log_R, days, n) .+ effect[i] .* ramp_shape
-        start = max(1, n - round(Int, T_draws[i]) + 1)
+        walk = interpolate_knots(log_R, days, n)
+        ## Pre-bound days take the low seeding R_t, not the genetic walk base.
+        log_Rt = [d < rt_start ? log_R0_seed[i] : walk[d] for d in 1:n] .+
+                 effect[i] .* ramp_shape
+        ## Only the established R_t, from the genetic bound onward; the
+        ## pre-bound seeding window is not plotted.
+        start = clamp(rt_start, 1, n)
         for d in start:n
             rt[i, d] = exp(log_Rt[d])
         end
@@ -609,24 +691,27 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
 end
 
 """
-Three-panel histogram of the new-this-week forecast counts (cases,
-deaths, exports) from [`forecast_reported`](@ref).
+One-week-ahead forecast figure from [`forecast_reported`](@ref): new
+confirmed cases, new confirmed deaths, new latent infections, and the
+reproduction number carried over the horizon. The count panels are
+predictive-frequency histograms (new confirmed cases and deaths); the
+infections panel histograms the projected new latent infections; the
+reproduction-number panel shows the posterior of the forecast `R_t` with
+the no-growth line at one marked. Confirmed panels are drawn only when the
+forecast carries the laboratory streams.
 """
 function plot_forecast(fc::DataFrame)
-    cols = Tuple{Symbol, String, Symbol}[
-    (
-        :cases_new, "New reported cases (DRC)", :steelblue),
-    (
-        :deaths_new, "New deaths (DRC)", :firebrick)
-]
-    :confirmed_new in propertynames(fc) && push!(cols,
+    count_cols = Tuple{Symbol, String, Symbol}[]
+    :confirmed_new in propertynames(fc) && push!(count_cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
-    :confirmed_deaths_new in propertynames(fc) && push!(cols,
+    :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
         (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
-    ncols = min(length(cols), 3)
-    nrows = cld(length(cols), ncols)
-    fig = Figure(; size = (370 * ncols, 360 * nrows))
-    for (i, (col, title, colour)) in enumerate(cols)
+    push!(count_cols, (:infections_new, "New infections (DRC)", :steelblue))
+    npanels = length(count_cols) + 1
+    ncols = min(npanels, 2)
+    nrows = cld(npanels, ncols)
+    fig = Figure(; size = (400 * ncols, 360 * nrows))
+    for (i, (col, title, colour)) in enumerate(count_cols)
         v = fc[!, col]
         upper = max(1.0, quantile(v, 0.995))
         r, c = cld(i, ncols), mod1(i, ncols)
@@ -636,6 +721,16 @@ function plot_forecast(fc::DataFrame)
         hist!(ax, v; bins = range(0, upper; length = 30),
             color = (colour, 0.7))
     end
+    ## Forecast reproduction number panel (a value, not a count).
+    i = npanels
+    r, c = cld(i, ncols), mod1(i, ncols)
+    rt = fc[!, :rt_forecast]
+    ax = Axis(fig[r, c];
+        xlabel = "Forecast reproduction number (DRC)",
+        ylabel = "Posterior density", title = "One week ahead")
+    density!(ax, rt; color = (:purple, 0.5),
+        strokecolor = :purple, strokewidth = 2)
+    vlines!(ax, [1.0]; color = :black, linestyle = :dash, linewidth = 2)
     return fig
 end
 
@@ -718,8 +813,12 @@ conditioning baselines. `colour` is optional per panel.
 """
 function plot_vintage_conditional_ppc(
         panels::AbstractVector; xlabel = "Sitrep date")
-    fig = Figure(; size = (380 * length(panels), 380))
+    npanels = length(panels)
+    nrows = npanels > 1 ? 2 : 1
+    ncols = cld(npanels, nrows)
+    fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
+        row, col = cld(j, ncols), mod1(j, ncols)
         n = length(p.dates)
         colour = get(p, :colour, :steelblue)
         ## Observed cumulative at the previous vintage is the conditioning
@@ -738,10 +837,16 @@ function plot_vintage_conditional_ppc(
         lo50 = [q(i, 0.25) for i in 1:n]
         hi50 = [q(i, 0.75) for i in 1:n]
         x = collect(1:n)
-        ax = Axis(fig[1, j]; title = p.title, xlabel = xlabel,
-            ylabel = j == 1 ? "Cumulative count" : "",
+        ## Truncate the y-axis to a robust ceiling driven by the observed
+        ## counts and the 50% band, so a heavy upper tail in any one stream
+        ## (the 90% band can run far above the data) does not flatten the
+        ## visible detail; the band clips at the axis limit.
+        yupper = 1.6 * max(maximum(obs_cum), maximum(hi50), 1.0)
+        ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
+            ylabel = col == 1 ? "Cumulative count" : "",
             xticks = (x, string.(p.dates)),
-            xticklabelrotation = pi / 4, xticklabelsize = 9)
+            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            limits = (nothing, (0, yupper)))
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo50, hi50; color = (colour, 0.30))
         lines!(ax, x, med; color = colour, linewidth = 2)

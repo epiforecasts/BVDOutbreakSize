@@ -26,10 +26,16 @@ draw and columns:
 - `:cases_new`, … `:confirmed_deaths_new` — new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
+- `:infections_new` — new latent infections projected over the horizon at
+  the constant cut-off growth rate (a deterministic per-draw quantity, so
+  it carries parameter uncertainty only).
+- `:rt_forecast` — the reproduction number held over the horizon (the
+  terminal `R_T`).
 
-Reads `:r`, `:expected_reports_T`, `:expected_deaths_T`, `:k` and (for the
-laboratory streams) `:expected_confirmed_T` and
-`:expected_confirmed_deaths_T` from `chn`. Exports are not forecast:
+Reads `:r`, `:expected_reports_T`, `:expected_deaths_T`,
+`:expected_infections_T`, `:R_T`, `:k` and (for the laboratory streams)
+`:expected_confirmed_T` and `:expected_confirmed_deaths_T` from `chn`.
+Exports are not forecast:
 cross-border travel is unlikely to continue at its baseline rate, so the
 forward travel rate the export model relies on no longer holds. Assumes
 the current growth rate continues unchanged over the horizon (no further
@@ -45,6 +51,8 @@ function forecast_reported(chn;
     r = _draws(chn, :r)
     cases_T = _draws(chn, :expected_reports_T)
     deaths_T = _draws(chn, :expected_deaths_T)
+    infections_T = _draws(chn, :expected_infections_T)
+    rt_forecast = _draws(chn, :R_T)
     k = _draws(chn, :k)
     has_conf = obs_confirmed !== missing
     has_conf_deaths = obs_confirmed_deaths !== missing
@@ -56,6 +64,7 @@ function forecast_reported(chn;
     n = length(r)
     cases_cum = Vector{Int}(undef, n)
     deaths_cum = Vector{Int}(undef, n)
+    infections_new = Vector{Float64}(undef, n)
     confirmed_cum = has_conf ? Vector{Int}(undef, n) : nothing
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
 
@@ -63,6 +72,16 @@ function forecast_reported(chn;
         grow = exp(r[i] * horizon)
         cases_cum[i] = _nb_rand(rng, k[i], cases_T[i] * grow)
         deaths_cum[i] = _nb_rand(rng, k[i], deaths_T[i] * grow)
+        ## New latent infections over the horizon, continuing the cut-off
+        ## daily infections `I_T` at the constant daily growth `r`: the
+        ## geometric sum `I_T Σ_{d=1}^{h} e^{r d}`, which tends to `I_T · h`
+        ## as `r → 0`. Latent, so carries parameter (not observation)
+        ## uncertainty across draws.
+        er = exp(r[i])
+        h = float(horizon)
+        infections_new[i] = abs(er - 1) < 1e-8 ? infections_T[i] * h :
+                            infections_T[i] * er * (exp(r[i] * h) - 1) /
+                            (er - 1)
         has_conf && (confirmed_cum[i] = _nb_rand(rng, k[i], conf_T[i] * grow))
         ## Confirmed deaths grow with the suspected-death signal but are
         ## bounded by it (a thinning), so cap the replicate at the forecast
@@ -79,7 +98,9 @@ function forecast_reported(chn;
         cases_cum = cases_cum,
         deaths_cum = deaths_cum,
         cases_new = _new(cases_cum, obs_cases),
-        deaths_new = _new(deaths_cum, obs_deaths)
+        deaths_new = _new(deaths_cum, obs_deaths),
+        infections_new = infections_new,
+        rt_forecast = rt_forecast
     )
     if has_conf
         df.confirmed_cum = confirmed_cum

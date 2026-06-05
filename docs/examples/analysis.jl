@@ -27,6 +27,19 @@
 #
 # ## What we do differently from McCabe et al.
 #
+# We reimplement the McCabe et al. [mccabe2026](@cite) report as a single
+# Bayesian model fitted jointly to every data stream, recast as a
+# discrete-time renewal process with a time-varying reproduction number.
+# The points below summarise how it differs from the report; the Methods
+# section carries the full treatment and the limitations are listed
+# separately.
+#
+#md # ```@raw html
+#md # <details><summary>Expand: differences from the report</summary>
+#md # ```
+#md #
+# **Latent process and parameters**
+#
 # - *Discrete-time renewal model.* The whole model runs on a daily grid.
 #   Infections follow the discrete renewal equation $I_t = R_t \sum_{s
 #   \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval
@@ -40,15 +53,21 @@
 #   number, case-fatality ratio, all delays, traveller volume and
 #   surveillance dispersion have priors and are sampled together. McCabe
 #   et al. fix each and sweep.
+# - *Euler–Lotka seeding.* The seeding window grows exponentially at the
+#   rate implied by the initial reproduction number and generation
+#   interval, so infections start smoothly rather than from a single
+#   seed.
+#
+# **Delays and convolutions**
+#
 # - *Delays sampled from priors and discretised.* Generation interval,
 #   incubation period, onset-to-death, onset-to-report,
 #   onset-to-confirmation and onset-to-detection-abroad each get a prior
 #   centred on published Ebola estimates, discretised with double
 #   interval censoring [charniga2024](@cite). No delay is fixed.
-# - *Euler–Lotka seeding.* The seeding window grows exponentially at the
-#   rate implied by the initial reproduction number and generation
-#   interval, so infections start smoothly rather than from a single
-#   seed.
+#
+# **Likelihoods and data streams**
+#
 # - *Per-vintage time-series fitting.* The DRC streams (suspected cases,
 #   confirmed cases, deaths) are fitted as cumulative series of
 #   between-vintage increments across successive sitreps, which sharpens
@@ -61,12 +80,29 @@
 #   scenario estimates with a coverage table, while $C_T$ (the latent
 #   infection count, summed from the renewal trajectory) is reported
 #   separately.
+#
+# **Extensions**
+#
 # - *No-onward-transmission counterfactual and one-week-ahead
 #   forecasts.* Future expected deaths from infections already seeded,
 #   and a posterior-predictive projection of each stream. Neither is in
 #   McCabe et al.
+#md #
+#md # ```@raw html
+#md # </details>
+#md # ```
 #
 # ## Limitations
+#
+# The limitations are grouped by the data, the model assumptions and
+# design, and the implementation, with the most consequential first in
+# each group.
+#
+#md # ```@raw html
+#md # <details><summary>Expand: limitations</summary>
+#md # ```
+#md #
+# **Data and what it can support**
 #
 # - *Fitted only to aggregate reported counts.* The data are a handful
 #   of summary figures from press and situation reports: suspected cases
@@ -81,6 +117,13 @@
 # - *Per-sitrep increments are not clean new incidence.* Later sitreps
 #   likely backfill earlier cases and add newly-reporting health zones,
 #   and ascertainment probably rose over the window.
+# - *Streams share one case pool.* They are fitted as conditionally
+#   independent given latent incidence but observe overlapping people,
+#   which can understate uncertainty. We have not checked whether the
+#   streams imply conflicting outbreak sizes.
+#
+# **Model assumptions and design**
+#
 # - *Inherits McCabe et al.'s epidemiological assumptions.* A single
 #   zoonotic seed, an assumed generation interval, no spatial structure
 #   beyond the Ituri / Nord Kivu split, and no depletion of
@@ -93,15 +136,18 @@
 # - *Ascertainment partially pooled, not separately identified.* The
 #   DRC and Uganda reporting fractions share a hyperprior; with a
 #   handful of exports the Uganda fraction leans on the DRC side.
-# - *Streams share one case pool.* They are fitted as conditionally
-#   independent given latent incidence but observe overlapping people,
-#   which can understate uncertainty. We have not checked whether the
-#   streams imply conflicting outbreak sizes.
+#
+# **Implementation**
+#
 # - *LLM-driven reimplementation.* The model code, priors and analysis
 #   were drafted by a language model from the McCabe et al.
 #   [mccabe2026](@cite) report and the companion delay reanalysis, then
 #   reviewed and revised. Not independently replicated against the
 #   authors' code.
+#md #
+#md # ```@raw html
+#md # </details>
+#md # ```
 #
 #md # ```@raw html
 #md # <details><summary>Load packages and seed the RNG</summary>
@@ -300,7 +346,8 @@ vintage_table #hide
 #
 # Daily $\log R_t$ is the piecewise-linear interpolation between knots.
 # An intervention at the first WHO situation report adds a sampled
-# effect shaped by a logistic ramp over seven days:
+# effect shaped by a logistic ramp over about three weeks, reflecting that
+# a response takes weeks to bite rather than switching at a single date:
 #
 # ```math
 # \log R_t \mathrel{+}= \delta \cdot
@@ -1129,7 +1176,7 @@ prior_C_table #hide
 #md # ```
 
 prior_pair_fig = plot_pair(prior_chn,
-    [:C_T, :R_T, :r, :doubling_time, :T, :CFR, :k,
+    [:C_T, :R_T, :r, :T, :CFR, :k,
         :p_drc, :p_uganda]);
 
 #md # ```@raw html
@@ -1289,11 +1336,11 @@ summary_ranges = let
     ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
     Markdown.parse("""
-    - **Cumulative infections \$C_T\$:** the posterior is $(ints_i(sC))
-      infections, the latent pool behind every stream.
+    - **Cumulative infections** (\$C_T\$): the posterior is $(ints_i(sC))
+      infections.
     - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
       cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
-      confirmed cases capture only a small share of the outbreak.
+      confirmed cases capture only a small share of the estimated outbreak.
     - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
       cases by the cut-off, against $(obs.confirmed_cases) observed.
     - **Time since seeding:** the posterior is $(ints_i(sT)) days, placing
@@ -1401,14 +1448,10 @@ joint_summary #hide
 #
 # The model fits a weekly random-walk reproduction number, so we can show
 # the full daily $R_t$ trajectory rather than only its cut-off value
-# $R_T$. The saved chain stores the sampled random-walk parameters
-# (`rt_state.log_R0`, `rt_state.sigma_rw`, the innovation vector
-# `rt_state.z` and `rt_state.intervention_effect`), so the daily $R_t$ is
-# reconstructed per draw by mirroring the model's `rt_walk_model`. The
-# median and 50%/90% ribbons are shown only over the established-outbreak
-# window, the days on or after each draw's cumulative infections first
-# reach one. The earlier seeding window (shaded) is prior-driven and is
-# not an $R_t$ of an established epidemic, so it is left unplotted. The
+# $R_T$. The median and 50%/90% ribbons are shown only from the genetic
+# bound onward, where the random walk drives $R_t$. The earlier seeding
+# window (shaded) holds $R_t$ at its low introduction level and is not the
+# $R_t$ of an established epidemic, so it is left unplotted. The
 # WHO-response breakpoint (red dashed) and the data cut-off (grey dashed)
 # are marked.
 
@@ -1486,7 +1529,7 @@ lab_summary #hide
 #md # ```
 
 posterior_pair_fig = plot_pair(chn_joint,
-    [:C_T, :R_T, :r, :doubling_time, :T, :CFR, :k,
+    [:C_T, :R_T, :r, :T, :CFR, :k,
         :p_drc, :p_uganda];
     prior = prior_chn);
 
@@ -1747,7 +1790,9 @@ forecast_summary = forecast_table(forecast);
 
 forecast_summary #hide
 
-# New counts expected over the coming week, by stream:
+# The coming week at a glance: new confirmed cases and confirmed deaths,
+# the new latent infections behind them, and the reproduction number
+# carried over the horizon.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead forecast plot</summary>
@@ -1825,6 +1870,13 @@ cumulative_density_fig #hide
 # For each scenario the table gives the narrowest joint credible
 # interval that contains it, so coverage reads off directly.
 #
+# - *A revision, not a replication.* Earlier versions of this work
+#   reimplemented McCabe et al. closely as an exponential-growth model.
+#   This version is a substantial revision of the modelling approach, a
+#   discrete-time renewal model with a time-varying reproduction number
+#   and five jointly-fitted data streams, so the comparison is now an
+#   external sense-check rather than a like-for-like reproduction.
+#
 # This renewal model has diverged from McCabe et al.'s exact
 # construction: it fits a time-varying reproduction number on a renewal
 # process rather than the report's closed-form exponential growth, and
@@ -1867,6 +1919,168 @@ imperial_density_fig = plot_cumulative_cases(
 
 imperial_density_fig #hide
 
+# ### Matched-in-time comparison
+#
+# The coverage table above scores McCabe et al.'s scenarios against the
+# renewal fit to the *current* data, so it mixes two differences at once:
+# the method and the data each had to hand. McCabe et al. published their
+# scenarios at fixed situation-report cut-offs, so the like-for-like
+# comparison freezes the renewal data to the same cut-off and re-fits.
+# Then any gap is the method alone, read at the date the scenario was
+# computed rather than weeks later.
+#
+# McCabe et al.'s 20 May update [mccabe2026update](@cite) carries the 15
+# scenario estimates used throughout this section. We freeze the renewal
+# data to that date and to a later 23 May cut-off and re-fit the joint
+# model at each. These are reduced fits, 500 draws across two chains
+# rather than the four-chain headline fit, so they are illustrative of
+# the matched-in-time estimate rather than a production result. The
+# earliest INSP situation report the renewal conditions on is 18 May, so
+# the 20 May freeze is the earliest matched cut-off with a coherent
+# suspected-case series; McCabe et al.'s 18 May report predates it.
+#
+# The expected reported-case count, the quantity directly comparable to
+# McCabe et al.'s scenarios, moves sharply with the data: at the 20 May
+# cut-off the renewal sees far fewer suspected cases than at the final
+# cut-off, so its reported-case estimate sits close to McCabe et al.'s
+# scenario range and well below the current-data fit. The latent
+# infection count C_T moves much less, because infections are inferred
+# back through the ascertainment and reporting delay and so are far less
+# sensitive to the accruing case series than the ascertained count is.
+# The gap that remains at the matched date is the method: the renewal
+# infers latent infections through a time-varying reproduction number and
+# a convolved reporting delay, while McCabe et al. report ascertained
+# cases under fixed growth and window assumptions.
+#
+# The freeze truncates the dated histories the model fits, so the
+# suspected-case, suspected-death, confirmed-case and laboratory streams
+# are exactly what was available at the cut-off. The export count and the
+# genetic TMRCA bound are scalars rather than dated series, so they keep
+# their current values; their effect on the frozen fit is small relative
+# to the suspected-case streams that drive the outbreak-size estimate.
+
+#md # ```@raw html
+#md # <details><summary>Freeze the renewal data to each McCabe cut-off and re-fit (reduced)</summary>
+#md # ```
+
+## A reduced joint fit (500 draws × 2 chains) to the data frozen at
+## `cutoff_date`. The frozen named tuple has the same shape as the full
+## `obs`, so the model call mirrors the headline joint fit.
+function fit_frozen_joint(cutoff_date; samples = 500, chains = 2)
+    o = freeze_observations(cutoff_date)
+    bp = o.n - o.who_first_sitrep_days
+    chn = nuts_sample(
+        bvd_joint(
+            o.n, o.exported_cases, o.total_deaths,
+            o.reported_cases, o.exports_deaths, o.confirmed_cases,
+            o.tests_analysed;
+            confirmed_deaths = o.confirmed_deaths,
+            deaths_history = o.deaths_history,
+            reported_history = o.reported_history,
+            confirmed_history = o.confirmed_history,
+            confirmed_deaths_history = o.confirmed_deaths_history,
+            lab_history = o.lab_history,
+            tests_received_history = o.tests_received_history,
+            breakpoint = bp,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            genetic = genetic_seeding_model,
+            tmrca_days = o.tmrca_days);
+        samples = samples, chains = chains)
+    return (; cutoff = o.cutoff, chn)
+end
+
+frozen_20may = fit_frozen_joint("2026-05-20")
+frozen_23may = fit_frozen_joint("2026-05-23")
+
+frozen_C_20may = vec(Array(frozen_20may.chn[:C_T]))
+frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Side-by-side $C_T$ intervals for the two frozen fits and the headline
+# current-data fit, so the shift with the data cut-off reads off directly:
+
+#md # ```@raw html
+#md # <details><summary>Frozen-fit C_T table</summary>
+#md # ```
+
+frozen_streams_table = streams_table(
+    "frozen 20 May" => frozen_C_20may,
+    "frozen 23 May" => frozen_C_23may,
+    "current data" => posterior_C_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_streams_table #hide
+
+# ### Estimate evolution across releases
+#
+# The project has published a tagged results release at each data cut-off
+# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), each
+# bundling its posterior draws and the input data. Reading the released
+# cumulative-case estimate from each gives a record of how the published
+# outbreak size moved as the INSP situation reports accrued. The releases
+# to date are from the earlier closed-form integral model that the
+# renewal supersedes, so the line below is the *project's published*
+# estimate over time, not the renewal's; the renewal's own matched-date
+# estimates from the frozen fits are overlaid as points.
+#
+# Both the released estimate and the renewal climb as the suspected-case
+# count grows over the reporting period, and both sit above the band of
+# McCabe et al.'s 15 published scenarios, which span 235 to 1386 reported
+# cases. The released estimate is read off the archived posterior draws;
+# the values are recorded here so the figure builds without refetching
+# the releases.
+
+#md # ```@raw html
+#md # <details><summary>Released estimate per cut-off, with frozen renewal points</summary>
+#md # ```
+
+## Released median C_T and 90% interval per data cut-off, read from each
+## release's archived `posterior_draws.csv` (one canonical build per
+## cut-off date: builds 241, 350, 470 and 586). These are the integral
+## model's published estimates; see the release page for provenance.
+release_evolution = [
+    ("2026-05-18", 925, 419, 2075),
+    ("2026-05-23", 1364, 680, 3137),
+    ("2026-05-26", 3041, 1961, 5172),
+    ("2026-05-28", 3510, 2196, 6325)
+]
+
+## The renewal's frozen matched-date estimates (median and 90% interval),
+## from the reduced fits above.
+function _ci90(xs)
+    (round(Int, quantile(xs, 0.5)),
+        round(Int, quantile(xs, 0.05)), round(Int, quantile(xs, 0.95)))
+end
+renewal_frozen_points = [
+    (string(frozen_20may.cutoff), _ci90(frozen_C_20may)...),
+    (string(frozen_23may.cutoff), _ci90(frozen_C_23may)...)
+]
+
+## The McCabe et al. scenario range (min and max of the 15 published
+## reported-case scenarios), as a backdrop band.
+mccabe_range = (minimum(v for (_, v) in REPORT_SCENARIOS),
+    maximum(v for (_, v) in REPORT_SCENARIOS))
+
+evolution_fig = plot_estimate_evolution(release_evolution;
+    points = renewal_frozen_points,
+    scenario_range = mccabe_range,
+    series_label = "Released estimate (integral)",
+    points_label = "Renewal (frozen)",
+    title = "Outbreak-size estimate as data accrued");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evolution_fig #hide
+
 # ## Saving results
 #
 # The tables above are written to an `output/` directory at the repo
@@ -1894,6 +2108,8 @@ CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
 CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
     streams_C_table)
 CSV.write(joinpath(output_dir, "scenario_coverage.csv"), coverage_table)
+CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
+    frozen_streams_table)
 
 ## Copy the input data so the release records what produced these
 ## results.

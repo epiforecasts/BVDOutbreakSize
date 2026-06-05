@@ -357,6 +357,7 @@ death-confirmation probability (`death_confirmation`).
     doubling_time := infection_state.doubling_time
     T := infection_state.T
     R_T := infection_state.Rt[n]
+    expected_infections_T := infection_state.infections[n]
     CFR := deaths_state.CFR
     k := dispersion_state.k
     p_drc := asc_state.p_drc
