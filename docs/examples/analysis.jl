@@ -2591,35 +2591,26 @@ joint_ppc_fig #hide
 #md # <details><summary>Per-vintage conditional one-step-ahead predictive</summary>
 #md # ```
 
-## Confirmed cases span the merged lab vintages (the 25 May stall folded
-## into 26 May); align the observed cumulative to the kept offsets.
-conf_keep = [i == 1 ||
-             obs.tests_analysed_history.values[i] >
-             obs.tests_analysed_history.values[i - 1]
-             for i in eachindex(obs.tests_analysed_history.values)]
-conf_cidx = [findfirst(==(off), obs.confirmed_case_history.offsets)
-             for off in obs.tests_analysed_history.offsets]
+## Every confirmed-case and confirmed-death vintage is fitted as a
+## between-vintage increment, so the replicate vectors align one-to-one
+## with the full confirmed histories (cumulative observed per vintage).
 vintage_ppc_fig = plot_vintage_conditional_ppc([
     (; title = "Suspected cases",
         dates = obs.reported_case_history.dates,
         replicates = collect(pp_joint[@varname(reported_cases)]),
         observed = obs.reported_case_history.values, colour = :steelblue),
     (; title = "Confirmed cases",
-        dates = obs.tests_analysed_history.dates[conf_keep],
+        dates = obs.confirmed_case_history.dates,
         replicates = collect(pp_joint[@varname(confirmed_cases)]),
-        observed = [obs.confirmed_case_history.values[i]
-                    for i in conf_cidx][conf_keep], colour = :seagreen),
+        observed = obs.confirmed_case_history.values, colour = :seagreen),
     (; title = "Suspected deaths",
         dates = obs.death_history.dates,
         replicates = collect(pp_joint[@varname(total_deaths)]),
         observed = obs.death_history.values, colour = :firebrick),
-    ## Confirmed deaths are fit as a single cumulative vintage at the
-    ## cut-off (flat at 17 over 26-28 May), so the replicate vectors are
-    ## length 1; align the panel to the cut-off date / value only.
     (; title = "Confirmed deaths",
-        dates = [obs.confirmed_death_history.dates[end]],
+        dates = obs.confirmed_death_history.dates,
         replicates = collect(pp_joint[@varname(confirmed_deaths)]),
-        observed = [obs.confirmed_death_history.values[end]],
+        observed = obs.confirmed_death_history.values,
         colour = :darkorange)]);
 
 #md # ```@raw html
