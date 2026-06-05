@@ -1343,8 +1343,13 @@ cumulative_cases_summary #hide
 #md # <details><summary>Cumulative case count density</summary>
 #md # ```
 
+## The joint C_T posterior has a long upper tail (the slow-growth,
+## late-seeding draws), so clip the x-axis to the 97.5th percentile to
+## keep the bulk of the density legible rather than rendering the full
+## heavy tail.
 joint_density_fig = plot_cumulative_cases(
-    "joint" => posterior_C_joint; scenarios = []);
+    "joint" => posterior_C_joint; scenarios = [],
+    xmax = quantile(posterior_C_joint, 0.975));
 
 #md # ```@raw html
 #md # </details>
@@ -1388,6 +1393,58 @@ joint_summary = summary_table(chn_joint,
 
 joint_summary #hide
 
+# ### Reproduction number over time
+#
+# The model fits a weekly random-walk reproduction number, so we can show
+# the full daily $R_t$ trajectory rather than only its cut-off value
+# $R_T$. The saved chain stores the sampled random-walk parameters
+# (`rt_state.log_R0`, `rt_state.sigma_rw`, the innovation vector
+# `rt_state.z` and `rt_state.intervention_effect`), so the daily $R_t$ is
+# reconstructed per draw by mirroring the model's `rt_walk_model`. The
+# median and 50%/90% ribbons are shown only over the established-outbreak
+# window, the days on or after each draw's cumulative infections first
+# reach one. The earlier seeding window (shaded) is prior-driven and is
+# not an $R_t$ of an established epidemic, so it is left unplotted. The
+# WHO-response breakpoint (red dashed) and the data cut-off (grey dashed)
+# are marked.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction-number trajectory</summary>
+#md # ```
+
+rt_fig = plot_rt(chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rt_fig #hide
+
+# The WHO response is fitted as a sampled multiplicative shift on $R_t$
+# applied over a logistic ramp at the first situation report. The
+# intervention effect is constrained to be non-positive, so it can only
+# reduce transmission. The table reports its posterior on the
+# multiplicative $\exp(\text{effect})$ scale: a value below one is the
+# factor by which the response lowers $R_t$ once the ramp completes.
+
+#md # ```@raw html
+#md # <details><summary>Intervention-effect summary table</summary>
+#md # ```
+
+intervention_effect = vec(Array(
+    chn_joint[Symbol("rt_state.intervention_effect")]));
+intervention_table = streams_table(
+    "Rt multiplier exp(effect)" => exp.(intervention_effect);
+    digits = 2);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+intervention_table #hide
+
 # The laboratory pipeline fits the received-specimen volume through the
 # testing fraction `tau_test` and a receipt delay, and scores the confirmed
 # positives as a Binomial of the observed specimens-analysed denominator
@@ -1415,22 +1472,6 @@ lab_summary = summary_table(chn_joint,
 
 lab_summary #hide
 
-# A pair plot of the laboratory-pipeline parameters and the derived
-# per-test positivity shows their joint posterior and any trade-offs.
-
-#md # ```@raw html
-#md # <details><summary>Laboratory-pipeline pair plot</summary>
-#md # ```
-
-lab_pair_fig = plot_pair(chn_joint,
-    [:tau_test, :lambda_bg, :test_positivity, :death_confirmation]);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-lab_pair_fig #hide
-
 # The posterior pair plot shows the joint distribution of the key
 # parameters, with the prior overlaid so the data's contribution to
 # each marginal is visible.
@@ -1450,12 +1491,33 @@ posterior_pair_fig = plot_pair(chn_joint,
 
 posterior_pair_fig #hide
 
+# A pair plot of the laboratory-pipeline parameters and the derived
+# per-test positivity shows their joint posterior and any trade-offs, with
+# the prior overlaid so the laboratory observations' contribution to each
+# marginal is visible.
+
+#md # ```@raw html
+#md # <details><summary>Laboratory-pipeline pair plot (prior overlaid)</summary>
+#md # ```
+
+lab_pair_fig = plot_pair(chn_joint,
+    [:tau_test, :lambda_bg, :test_positivity, :death_confirmation];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+lab_pair_fig #hide
+
 # A posterior predictive check draws replicated observations from the
-# fitted joint model and compares them to the observed counts. The three
-# DRC sitrep streams are now real per-vintage observations, so the
-# replicated cumulative trajectory is shown across the situation-report
-# dates with the observed series overlaid. The single-count Uganda export
-# and export-death streams keep their scalar predictive check.
+# fitted joint model and compares them to the observed counts. The four
+# dated DRC streams are real per-vintage observations, so each replicated
+# cumulative trajectory is shown across the situation-report dates with the
+# observed series overlaid: suspected cases, confirmed cases, suspected
+# deaths and specimens received. The single-count Uganda export and
+# export-death streams, and the laboratory-confirmed-death total, keep
+# their scalar predictive check.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -1521,14 +1583,37 @@ tests_received_panel = (;
         pp_joint, "confirmed_state.received_increments"),
     observed = obs.tests_received_history.counts, colour = :seagreen);
 
-## Confirmed cases are scored as a Binomial of the observed analysed
-## denominator in each laboratory window, so their fit is a per-window
-## positivity rather than a cumulative sitrep series; it is summarised by
-## the expected confirmed total and the per-test positivity in the
-## laboratory-pipeline table rather than this cumulative per-vintage check.
-## The suspected-case, death and specimens-received streams are per-vintage.
+## Confirmed cases are scored over two groups of laboratory windows: the
+## early confirmed vintages (no per-vintage analysed denominator, scored
+## as counts against the modelled laboratory volume) and the observed
+## windows (a Binomial of the observed analysed denominator). Both groups
+## produce per-window replicate increments in `predict`, so concatenating
+## them oldest-first gives the per-vintage cumulative confirmed-case
+## trajectory, anchored on the observed cumulative confirmed at each window
+## end-day. The 24-25 May analysis stall merges into 26 May, so the window
+## grid is slightly coarser than the raw confirmed history.
+_conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
+    obs.confirmed_history, obs.lab_history);
+_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days);
+function _confirmed_at(day)
+    i = searchsortedlast(obs.confirmed_history.days, day)
+    return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
+end;
+_conf_early = _vintage_replicates(
+    pp_joint, "confirmed_state.early_increments");
+_conf_obs = collect(first(pp_joint[k]
+for k in keys(pp_joint)
+if occursin("confirmed_state.confirmed_positives.positives", string(k))));
+confirmed_panel = (;
+    title = "Confirmed cases",
+    dates = _vintage_dates(_conf_window_days),
+    replicates = [vcat(collect(e), collect(p))
+                  for (e, p) in zip(vec(_conf_early), vec(_conf_obs))],
+    observed = [_confirmed_at(d) for d in _conf_window_days],
+    colour = :goldenrod);
+
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, deaths_panel, tests_received_panel]);
+    [reported_panel, confirmed_panel, deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -1537,15 +1622,18 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
 joint_vintage_ppc_fig #hide
 
 # The Uganda export and export-death streams are single cut-off counts,
+# and the laboratory-confirmed deaths are a single Binomial thinning of the
+# suspected-death total (the three confirmed-death vintages are flat at the
+# same count, so there is no per-vintage increment to score). All three are
 # checked as scalar posterior predictives.
 
 #md # ```@raw html
-#md # <details><summary>Export posterior predictive plot</summary>
+#md # <details><summary>Scalar posterior predictive plot</summary>
 #md # ```
 
-## The replicated export counts are nested under their submodel prefix;
-## match the full prefixed varname so the deterministic
-## `expected_exports_deaths_T` is not picked up by a loose substring.
+## The replicated counts are nested under their submodel prefix; match the
+## full prefixed varname so the deterministic `expected_*_T` quantities are
+## not picked up by a loose substring.
 function _scalar_replicates(pp, name)
     key = first(k for k in keys(pp) if occursin(name, string(k)))
     return vec(Array(pp[key]))
@@ -1554,12 +1642,16 @@ end;
 pp_exports = _scalar_replicates(pp_joint, "exports_state.exported_cases");
 pp_exports_deaths = _scalar_replicates(
     pp_joint, "exports_deaths_state.exports_deaths");
+pp_confirmed_deaths = _scalar_replicates(
+    pp_joint, "confirmed_deaths_state.confirmed_deaths");
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
     obs.exported_cases, nothing;
     pp_exports_deaths = pp_exports_deaths,
-    obs_exports_deaths = obs.exports_deaths);
+    obs_exports_deaths = obs.exports_deaths,
+    pp_confirmed_deaths = pp_confirmed_deaths,
+    obs_confirmed_deaths = obs.confirmed_deaths);
 
 #md # ```@raw html
 #md # </details>
@@ -1612,9 +1704,13 @@ no_onward_fig #hide
 # ### One-week-ahead forecast
 #
 # The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$. This continues the current growth rate
-# (no interventions, no saturation) and carries both parameter and
-# observation uncertainty.
+# per stream by $T + 7$, for the four DRC streams (suspected reported
+# cases, suspected deaths, laboratory-confirmed cases and confirmed
+# deaths). This continues the current growth rate (no interventions, no
+# saturation) and carries both parameter and observation uncertainty.
+# Exports are not forecast: cross-border travel is unlikely to be
+# continuing at its baseline rate, so the forward travel rate the export
+# model relies on no longer holds.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -1624,7 +1720,8 @@ forecast = forecast_reported(chn_joint;
     horizon = 7,
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
-    obs_exports = obs.exported_cases);
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths);
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html
@@ -1702,12 +1799,26 @@ cumulative_density_fig #hide
 
 # ### Comparison with McCabe et al.
 #
-# The McCabe et al. scenarios are cumulative reported *cases*, so they
-# are not directly comparable to $C_T$, which counts latent
-# *infections*. We compare like for like against the model's expected
-# cumulative reported cases.
+# The headline comparison is the model's estimate of the cumulative
+# reported-case count, the ascertained quantity McCabe et al. report,
+# against their 15 published scenario estimates. The McCabe et al.
+# scenarios are cumulative reported *cases*, so they are not directly
+# comparable to $C_T$, which counts latent *infections*; we compare like
+# for like against the model's expected cumulative reported cases.
 # For each scenario the table gives the narrowest joint credible
 # interval that contains it, so coverage reads off directly.
+#
+# This renewal model has diverged from McCabe et al.'s exact
+# construction: it fits a time-varying reproduction number on a renewal
+# process rather than the report's closed-form exponential growth, and
+# scores five jointly-fitted streams rather than their two-source Method 1
+# and Method 2 sweep. So this is not an exact replication of either McCabe
+# et al. method, and the per-scenario coverage below should be read as a
+# like-for-like check on the reported-case count rather than a
+# reproduction of their estimator. The single-stream
+# [per-stream comparison](@ref "How the data streams compare") keeps each
+# stream as close to McCabe et al.'s assumptions as the renewal
+# parameterisation allows, for the most direct stream-by-stream contrast.
 
 #md # ```@raw html
 #md # <details><summary>Joint coverage table</summary>
