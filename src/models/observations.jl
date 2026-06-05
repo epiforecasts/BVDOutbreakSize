@@ -654,6 +654,25 @@ confirmed-death series is flat over the fitted window, so a single cut-off
 binomial captures its information; the suspected-death total is the
 denominator. Returns the enrichment, the composition, the confirmation
 probability and the expected confirmed-death count.
+
+This is the renewal analogue of the integral-lineage forwarded-positivity
+lab model (PR #193), which scores per-vintage confirmed-death increments as
+`NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
+`p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
+sensitivity `s` and specificity `spec` and the death-pool BVD share
+`q_death`. That form is not portable here: the renewal confirmed-case lab
+pipeline ([`confirmed_cases_model`](@ref)) conditions positives directly on
+the observed analysed denominator with an empirical partially-pooled
+positivity `p_pos` and carries no shared `s`/`spec` to import, and the
+death-pool composition `q_death = bvd_deaths / (bvd_deaths + bg_death_daily)`
+collapses to 1 whenever the death background is off (the renewal default),
+which would make a death-side composition link degenerate. The case
+composition `q_susp` is always informative because the case background
+`λ_bg` is always on, so anchoring the enrichment on `q_susp` reproduces
+#193's intent — a composition-driven confirmed-death rate that feeds back
+to `λ_bg` and `p_drc` — under the renewal architecture. The substantive
+half of #193, the constant-rate non-BVD suspected-death background
+`λ_bg_death`, is already carried by [`deaths_model`](@ref).
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
