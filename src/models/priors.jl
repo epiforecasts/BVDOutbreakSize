@@ -167,12 +167,12 @@ with `c_v` the elapsed time since testing (reporting) onset. This submodel
 samples the two shape parameters of that curve:
 
 - `q0` — the early severe-cluster BVD fraction (the share of the
-  first-tested obvious cases that are true BVD). Its prior is near 1
-  (`Beta(20, 1.5)`, mean ≈ 0.93, most mass above 0.85): the first batch
-  the lab runs is the obvious-BVD cluster. With `q0 ≈ 1` the first-vintage
-  positivity is `≈ s` (true positives on a near-pure-BVD batch), so the
-  sensitivity `s` is identified directly from the early data and needs no
-  lower floor.
+  first-tested obvious cases that are true BVD). Its prior is weak
+  (`Beta(2, 2)`, mean 0.5, broad): other haemorrhagic / febrile illness is
+  also severe, so the first-tested batch need not be near-pure BVD. A weak
+  `q0` deliberately lets the non-BVD suspect background `λ_bg` absorb more
+  of the positivity decline rather than attributing it all to severe-first
+  testing selection.
 - `decay_scale` — the timescale (days) over which the tested BVD share
   relaxes from `q0` toward the baseline `q∞`. Identified by how fast the
   observed positivity falls across the four vintages; a half-normal
@@ -190,7 +190,7 @@ samples the two shape parameters of that curve:
 Pass `q0_prior` / `decay_prior` / `qinf_prior` to override.
 """
 @model function test_selection_model(;
-        q0_prior = Beta(20.0, 1.5),
+        q0_prior = Beta(2.0, 2.0),
         decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0),
         qinf_prior = Beta(6.0, 6.0))
     q0 ~ q0_prior
