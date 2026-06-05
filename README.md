@@ -228,6 +228,17 @@ repository depends on:
   Bayesian reanalysis of the 2012 Isiro Bundibugyo line list.*
   <https://github.com/sbfnk/bdbv-linelist-analysis>.
 
+## Funding
+
+This work was funded by the National Institute for Health and Care
+Research (NIHR) Health Protection Research Unit in Health Analytics &
+Modelling, a partnership between the UK Health Security Agency, Imperial
+College London and the London School of Hygiene & Tropical Medicine
+(grant code NIHR207404).
+The views expressed are those of the author(s) and not necessarily those
+of the NIHR, UK Health Security Agency or the Department of Health and
+Social Care.
+
 ## Further references
 
 - Rosello et al., *Ebola virus disease in DRC, 1976–2014*, eLife 2015.
