@@ -22,47 +22,33 @@
         return out
     end
 
-    ## Build the FULL confirmed series: early dark windows (18-22 May, no
-    ## analysed denominator), observed windows (23-28 May, strictly
-    ## increasing analysed) and late dark windows (29-31 May, sitreps
-    ## 015-017 confirmed-only, cumulative 263, 282, 321).
+    ## Build the FULL confirmed series straight from the vintage
+    ## histories: every confirmed vintage enters as a between-vintage
+    ## increment at its own offset. The 23-28 May windows carry the
+    ## published analysed/received denominators (with the 25 May analysis
+    ## stall merged into the next window); every other vintage (the early
+    ## 18-22 May and late 29 May onward windows that lack a national
+    ## analysed total) is DARK (`missing` analysed/received). Offsets come
+    ## from the data, so the fixture tracks the as_of_date.
     function full_extension(obs)
         ch = obs.confirmed_case_history
         sa = obs.tests_analysed_history
         sr = obs.tests_received_history
         coff = collect(ch.offsets)
-        cval = collect(ch.values)
-        conf_at(off) = cval[findfirst(==(off), coff)]
+        confirmed = _inc(collect(ch.values))
         keep = [i == 1 || sa.values[i] > sa.values[i - 1]
                 for i in eachindex(sa.values)]
         aoff = collect(sa.offsets)[keep]
-        analysed_base = _inc(collect(sa.values)[keep])
+        a_inc = _inc(collect(sa.values)[keep])
         sroff = collect(sr.offsets)
         srval = collect(sr.values)
         ridx = [findfirst(==(off), sroff) for off in aoff]
-        recv_base = _inc([srval[i] for i in ridx])
-        offs, ccum = Int[], Int[]
-        a_vals = Union{Missing, Int}[]
-        r_vals = Union{Missing, Int}[]
-        for off in [10, 9, 8, 7, 6]
-            push!(offs, off)
-            push!(ccum, conf_at(off))
-            push!(a_vals, missing)
-            push!(r_vals, missing)
-        end
-        for (k, off) in enumerate(aoff)
-            push!(offs, off)
-            push!(ccum, conf_at(off))
-            push!(a_vals, analysed_base[k])
-            push!(r_vals, recv_base[k])
-        end
-        for (off, cum) in zip([-1, -2, -3], [263, 282, 321])
-            push!(offs, off)
-            push!(ccum, cum)
-            push!(a_vals, missing)
-            push!(r_vals, missing)
-        end
-        return (offsets = offs, confirmed = _inc(ccum),
+        r_inc = _inc([srval[i] for i in ridx])
+        aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
+        robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
+        a_vals = Union{Missing, Int}[get(aobs, off, missing) for off in coff]
+        r_vals = Union{Missing, Int}[get(robs, off, missing) for off in coff]
+        return (offsets = coff, confirmed = confirmed,
             analysed = a_vals, received = r_vals)
     end
 
@@ -90,9 +76,13 @@ end
 @testitem "queue: all confirmed vintages enter with finite C(T)" tags=[:slow] setup=[QueueFixtures] begin
     obs=load_observations()
     c=full_extension(obs)
-    ## Every confirmed vintage (early dark, observed, late dark) is present.
-    @test count(ismissing, c.analysed) == 8
+    ## Every confirmed vintage (early dark, observed, late dark) is present:
+    ## 5 observed-denominator windows (23-28 May, 25 May stall merged) and
+    ## the rest dark (early 18-22 May + late 29 May-3 June).
     @test count(!ismissing, c.analysed) == 5
+    @test count(ismissing, c.analysed) ==
+          length(c.offsets) - 5
+    @test sum(c.confirmed) == obs.confirmed_case_history.values[end]
     m=queue_model(obs, c)
     ## Prior draws: ALL vintages enter, C(T) finite and positive, and the
     ## queue predicts a positive analysed denominator for the dark windows.

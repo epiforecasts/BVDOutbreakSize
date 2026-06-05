@@ -35,62 +35,37 @@ _inc(values) = begin
     out
 end
 
-## Build the FULL confirmed series: the early 18-22 May dark windows
-## (offsets 10..6, no analysed denominator), the observed 23-28 May
-## windows (offsets 5..0, analysed + received published) and the late
-## 29-31 May dark windows (offsets -1..-3, confirmed-only sitreps 015-017,
-## cumulative 263, 282, 321). Dark windows carry `missing` analysed and
-## received counts.
+## Build the FULL confirmed series straight from the vintage histories:
+## every confirmed vintage (18 May-3 June) enters as a between-vintage
+## increment at its own offset. The 23-28 May windows carry the published
+## analysed/received denominators; every other vintage (the early
+## 18-22 May and late 29 May onward windows that lack a national analysed
+## total) is DARK, carrying `missing` analysed and received counts.
+## Offsets come from the data, so the series tracks the as_of_date.
 function full_extension(obs)
     ch = obs.confirmed_case_history
     sa = obs.tests_analysed_history
     sr = obs.tests_received_history
     coff = collect(ch.offsets)
-    cval = collect(ch.values)
-    conf_at(off) = cval[findfirst(==(off), coff)]
+    confirmed = _inc(collect(ch.values))
     ## Keep only observed analysed windows whose cumulative strictly
     ## increased: the 24-25 May vintage is flat (295 -> 295), so its
     ## analysed increment is 0 and a Binomial(0, p) cannot observe the
     ## nonzero confirmed increment. Collapsing it onto the next window
-    ## (the same construction the test fixture uses) keeps every denominator
-    ## positive.
+    ## keeps every observed denominator positive.
     keep = [i == 1 || sa.values[i] > sa.values[i - 1]
             for i in eachindex(sa.values)]
     aoff = collect(sa.offsets)[keep]
-    aval = collect(sa.values)[keep]
+    a_inc = _inc(collect(sa.values)[keep])
     sroff = collect(sr.offsets)
     srval = collect(sr.values)
     ridx = [findfirst(==(off), sroff) for off in aoff]
-    analysed_base = _inc(aval)
-    recv_base = _inc([srval[i] for i in ridx])
-
-    offs = Int[]
-    ccum = Int[]
-    a_vals = Union{Missing, Int}[]
-    r_vals = Union{Missing, Int}[]
-
-    ## Early dark windows.
-    for off in [10, 9, 8, 7, 6]
-        push!(offs, off)
-        push!(ccum, conf_at(off))
-        push!(a_vals, missing)
-        push!(r_vals, missing)
-    end
-    ## Observed-denominator windows (23-28 May).
-    for (k, off) in enumerate(aoff)
-        push!(offs, off)
-        push!(ccum, conf_at(off))
-        push!(a_vals, analysed_base[k])
-        push!(r_vals, recv_base[k])
-    end
-    ## Late dark windows (sitreps 015-017, confirmed-only).
-    for (off, cum) in zip([-1, -2, -3], [263, 282, 321])
-        push!(offs, off)
-        push!(ccum, cum)
-        push!(a_vals, missing)
-        push!(r_vals, missing)
-    end
-    return (offsets = offs, confirmed = _inc(ccum),
+    r_inc = _inc([srval[i] for i in ridx])
+    aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
+    robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
+    a_vals = Union{Missing, Int}[get(aobs, off, missing) for off in coff]
+    r_vals = Union{Missing, Int}[get(robs, off, missing) for off in coff]
+    return (offsets = coff, confirmed = confirmed,
         analysed = a_vals, received = r_vals)
 end
 
