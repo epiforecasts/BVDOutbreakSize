@@ -29,22 +29,24 @@ using Turing: DynamicPPL
 obs = load_observations()
 breakpoint = obs.n - obs.who_first_sitrep_days
 
-build_joint() = bvd_joint(
-    obs.n, obs.exported_cases, obs.total_deaths,
-    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-    obs.tests_analysed;
-    confirmed_deaths = obs.confirmed_deaths,
-    deaths_history = obs.deaths_history,
-    reported_history = obs.reported_history,
-    confirmed_history = obs.confirmed_history,
-    confirmed_deaths_history = obs.confirmed_deaths_history,
-    lab_history = obs.lab_history,
-    tests_received_history = obs.tests_received_history,
-    breakpoint = breakpoint,
-    background_re = true,
-    confirmed_positivity_link = :composition,
-    genetic = genetic_seeding_model,
-    tmrca_days = obs.tmrca_days)
+function build_joint()
+    bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        breakpoint = breakpoint,
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+end
 
 # Fraction of divergent transitions across the post-warmup chain, a quick
 # all-divergent sanity flag. Returns NaN if the diagnostic is absent.
@@ -93,7 +95,8 @@ let m = build_joint()
 end
 
 # 1. Tiny Enzyme fit: does warmup complete at all?
-status_tiny, res_tiny, t_en_tiny = try_fit(
+status_tiny, res_tiny,
+t_en_tiny = try_fit(
     "Enzyme tiny", enzyme_adtype(); samples = 50, chains = 1)
 
 # Paired tiny Mooncake fit for a baseline wall-clock.
@@ -109,7 +112,8 @@ println("  Mooncake (50x1): $(round(t_mc_tiny; digits = 1))s")
 
 # 2. Longer fit only if the tiny Enzyme fit completed.
 if status_tiny == :ok
-    status_big, _, t_en_big = try_fit(
+    status_big, _,
+    t_en_big = try_fit(
         "Enzyme 300x2", enzyme_adtype(); samples = 300, chains = 2)
     _, _, t_mc_big = try_fit(
         "Mooncake 300x2", default_adtype(); samples = 300, chains = 2)
