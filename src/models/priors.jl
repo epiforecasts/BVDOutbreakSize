@@ -371,6 +371,11 @@ end
 Case-fatality ratio prior. Default `Beta(6.6, 13.4)` has mean ≈ 0.33,
 matching the CDC summary for past BVD outbreaks. Used by
 [`deaths_model`](@ref) and [`exports_deaths_model`](@ref).
+
+The CFR multiplies the latent *infection* trajectory: with no asymptomatic
+fraction and no case-ascertainment on the death denominator it is applied
+as deaths per infection, coinciding with the infection-fatality ratio (IFR)
+under those assumptions. The conventional CFR label is kept.
 """
 @model function cfr_model(; cfr_prior = Beta(6.6, 13.4))
     CFR ~ cfr_prior

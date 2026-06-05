@@ -831,6 +831,13 @@ vintage_table #hide
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$. The mean
 # matches the CDC $55/169 \approx 33\%$ figure and the corrected central
 # CFR in the 20 May report [mccabe2026update](@cite).
+#
+# The CFR multiplies the latent *infection* trajectory directly: the model
+# assumes every infection becomes a symptomatic case (no asymptomatic
+# fraction) and applies no case-ascertainment to the death denominator.
+# It is therefore applied as deaths per infection, so under these
+# assumptions it coincides with the infection-fatality ratio (IFR); we keep
+# the conventional CFR label used in the BVD literature.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: cfr_model</summary>
