@@ -153,6 +153,25 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_estimate_evolution returns a Makie figure" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_estimate_evolution
+    rows = [
+        ("2026-05-18", 925, 419, 2075),
+        ("2026-05-23", 1364, 680, 3137),
+        ("2026-05-28", 3510, 2196, 6325)
+    ]
+    ## Series only.
+    @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
+    ## With overlaid points and a scenario range band.
+    points = [
+        ("2026-05-20", 1666, 900, 2900),
+        ("2026-05-23", 1900, 1000, 3300)
+    ]
+    fig = plot_estimate_evolution(rows; points = points,
+        scenario_range = (235, 1386))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_start_date_pair returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     import FlexiChains

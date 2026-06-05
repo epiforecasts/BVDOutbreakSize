@@ -382,6 +382,82 @@ function plot_pair(chn, params::AbstractVector{Symbol};
 end
 
 """
+Estimate-evolution plot: how an outbreak-size estimate moves as the data
+cut-off advances. `rows` is a vector of
+`(cutoff_date, central, lower, upper)` tuples, one per data cut-off,
+drawn as a median line with a shaded `[lower, upper]` band against the
+cut-off date on the x-axis. Pass `points` as a second vector of the same
+tuple shape to overlay a second series (for example the renewal model's
+frozen estimates) as points with whisker bars. A horizontal grey band
+spanning `scenario_range` marks a published scenario range (for example
+the spread of McCabe et al.'s 15 outbreak-size scenarios), so the
+estimates can be read against it. `xlabel`/`ylabel`/`title` set the axis
+text; `series_label` and `points_label` name the two series in the
+legend.
+"""
+function plot_estimate_evolution(
+        rows::AbstractVector;
+        points::AbstractVector = NamedTuple[],
+        scenario_range::Union{Nothing, Tuple{Real, Real}} = nothing,
+        xlabel::AbstractString = "Data cut-off date",
+        ylabel::AbstractString = "Cumulative cases C(T)",
+        title::AbstractString = "Outbreak-size estimate as data accrued",
+        series_label::AbstractString = "Released estimate",
+        points_label::AbstractString = "Renewal (frozen)")
+    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
+    ## then relabel the ticks with the dates.
+    dates = [Date(String(r[1])) for r in rows]
+    pdates = [Date(String(p[1])) for p in points]
+    alldates = sort(unique(vcat(dates, pdates)))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+    xs = _x.(dates)
+    central = [float(r[2]) for r in rows]
+    lo = [float(r[3]) for r in rows]
+    hi = [float(r[4]) for r in rows]
+
+    upper = maximum(hi)
+    isempty(points) || (upper = max(upper, maximum(float(p[4]) for p in points)))
+    isnothing(scenario_range) || (upper = max(upper, scenario_range[2]))
+
+    fig = Figure(; size = (840, 460))
+    ax = Axis(fig[1, 1];
+        xlabel = xlabel, ylabel = ylabel, title = title,
+        xticks = (_x.(alldates), [string(d) for d in alldates]),
+        xticklabelrotation = pi / 4,
+        limits = ((_x(ref) - 1, _x(maximum(alldates)) + 1),
+            (0, upper * 1.08)))
+
+    if !isnothing(scenario_range)
+        sxs = [_x(ref) - 1, _x(maximum(alldates)) + 1]
+        band!(ax, sxs, fill(float(scenario_range[1]), 2),
+            fill(float(scenario_range[2]), 2); color = (:grey, 0.18))
+    end
+
+    ord = sortperm(xs)
+    band!(ax, xs[ord], lo[ord], hi[ord]; color = (:steelblue, 0.20))
+    lines!(ax, xs[ord], central[ord]; color = :steelblue, linewidth = 2,
+        label = series_label)
+    scatter!(ax, xs[ord], central[ord]; color = :steelblue, markersize = 9)
+
+    if !isempty(points)
+        pxs = _x.(pdates)
+        pc = [float(p[2]) for p in points]
+        plo = [float(p[3]) for p in points]
+        phi = [float(p[4]) for p in points]
+        for i in eachindex(pxs)
+            lines!(ax, [pxs[i], pxs[i]], [plo[i], phi[i]];
+                color = (:firebrick, 0.8), linewidth = 2)
+        end
+        scatter!(ax, pxs, pc; color = :firebrick, markersize = 12,
+            marker = :diamond, label = points_label)
+    end
+
+    CairoMakie.axislegend(ax; position = :lt)
+    return fig
+end
+
+"""
 Horizontal point-and-interval comparison of cumulative-case estimates
 from several sources. `rows` is a vector of
 `(label, central, lower, upper)` tuples, drawn top to bottom with the
