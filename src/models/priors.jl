@@ -177,15 +177,20 @@ Onset-incidence submodel: convolve the renewal infections with the
 sampled incubation-period PMF to get daily symptom-onset incidence.
 Computed once per draw and reused by every downstream observation stream,
 so the staging infections → onsets → each observed event is explicit. The
-incubation delay submodel is injected, defaulting to a prior centred on
-the Ebola virus disease incubation period (mean 9.7 d, SD 5.4 d; WHO Ebola
-Response Team 2014, NEJM). Returns
+incubation delay submodel is injected. The incubation period cannot be
+fitted from the BDBV line list (no exposure dates), so the line-list
+reanalysis recommends the MacNeil et al. (2010) Bundibugyo estimate from
+the 2007 Uganda outbreak: mean 6.3 d (95% CI 5.2-7.3, n = 24). The mean
+prior `Normal(6.3, 0.54)` reproduces MacNeil's reported 95% CI (SD = CI
+half-width / 1.96); MacNeil give no interval on the spread, so the SD
+prior is a weakly-informative modelling choice centred on the
+CV-implied spread (≈ 3.5 d). Returns
 `(; onsets, incubation_pmf, incubation_mean, incubation_sd)`.
 """
 @model function onset_incidence_model(infections::AbstractVector;
         incubation = (nmax) -> censored_delay_model(nmax;
-            mean_prior = truncated(Normal(9.7, 2.0); lower = 1),
-            sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
+            mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
         incubation_nmax::Integer = 30)
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets = convolve_delay(infections, inc_state.pmf)
