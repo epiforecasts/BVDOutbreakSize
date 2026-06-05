@@ -36,16 +36,33 @@ function build_fit_args(o)
     rep, rep_off = _inc(rh.values), rh.offsets
     dth, dth_off = _inc(dh.values), dh.offsets
 
-    ## Confirmed per vintage over the analysed-denominator windows, merging
-    ## any zero-increment analysed window into the next.
-    idx = [findfirst(==(off), ch.offsets) for off in sa.offsets]
+    ## FULL confirmed series for the missing-lab-data queue: every vintage
+    ## 18 May-3 June enters as a between-vintage increment. The 23-28 May
+    ## windows carry the published analysed/received denominators (with the
+    ## 25 May analysis stall merged into the next window so every observed
+    ## denominator is positive); the early 18-22 May AND late 29 May-3 June
+    ## windows have no national analysed total, so they are DARK
+    ## (`missing` analysed/received) and the queue owns them via the
+    ## Poisson-thinned marginal. Offsets come straight from the vintage
+    ## histories, so they track the as_of_date (3 June) automatically.
+    coff = collect(ch.offsets)
+    conf = Union{Missing, Int}[_inc(ch.values)...]
+    ## Observed-denominator windows, stall-merged: keep the first analysed
+    ## vintage and any with strictly more cumulative analysed than the
+    ## previous kept one (drops the 24-25 May flat 295 stall), then
+    ## difference to between-vintage increments.
     keep = [i == 1 || sa.values[i] > sa.values[i - 1]
             for i in eachindex(sa.values)]
     aoff = collect(sa.offsets)[keep]
-    analysed = Union{Missing, Int}[_inc(sa.values[keep])...]
-    conf = Union{Missing, Int}[_inc([ch.values[i] for i in idx][keep])...]
+    a_inc = _inc(sa.values[keep])
     ridx = [findfirst(==(off), sr.offsets) for off in aoff]
-    received = Union{Missing, Int}[_inc([sr.values[i] for i in ridx])...]
+    r_inc = _inc([sr.values[i] for i in ridx])
+    ## Map observed increments onto the kept offsets; every other confirmed
+    ## vintage (early + late dark) gets `missing`.
+    aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
+    robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
+    analysed = Union{Missing, Int}[get(aobs, off, missing) for off in coff]
+    received = Union{Missing, Int}[get(robs, off, missing) for off in coff]
 
     ## Travel-gated exports truncated at the most recent reported import.
     ec_full = o.exported_cases_daily
@@ -56,15 +73,22 @@ function build_fit_args(o)
     edaily = _trunc(o.export_deaths_daily)
     ecases = isempty(ec_full) ? ec_full : _trunc(ec_full)
 
-    cdeath = Union{Missing, Int}[o.confirmed_death_history.values[end]]
+    ## Confirmed deaths span their full dark window too (26 May-3 June): the
+    ## stream is a lab/positivity process on the death specimens, not gated
+    ## on the analysed denominator, so every vintage enters as an increment
+    ## at its own offset.
+    cdh = o.confirmed_death_history
+    cdeath = Union{Missing, Int}[_inc(cdh.values)...]
+    cdeath_off = collect(cdh.offsets)
 
     return (deaths = dth, reported = rep, export_deaths = edaily,
         kw = (; reported_offsets = rep_off, death_offsets = dth_off,
-            confirmed_cases = conf, confirmed_offsets = aoff,
+            confirmed_cases = conf, confirmed_offsets = coff,
             samples_analysed = analysed, samples_received = received,
-            confirmed_deaths = cdeath, confirmed_death_offsets = [0],
+            confirmed_deaths = cdeath, confirmed_death_offsets = cdeath_off,
             exported_cases_daily = ecases,
             export_last_offset = export_last_offset,
+            confirmed_queue = true, confirmed_epi_exclusion = nothing,
             tests_analysed = o.cumulative_tests_analysed, tests_offset = 0))
 end
 

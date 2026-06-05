@@ -44,7 +44,7 @@
 #    not fitted, because the model anchors confirmed cases through the
 #    laboratory positivity and national testing totals stop after 28 May.
 
-as_of_date = "2026-05-28"
+as_of_date = "2026-06-03"
 
 [exported_cases]
 value  = 3
@@ -137,9 +137,12 @@ source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 L
 [confirmed_case_history]
 dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
-          "2026-05-26", "2026-05-27", "2026-05-28"]
-values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
-source = "INSP situation reports 18-28 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline."
+          "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
+          "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
+          "2026-06-03"]
+values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
+          282, 321, 344, 363, 381]
+source = "INSP situation reports 18 May - 3 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 3 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
 
 # Cumulative national confirmed-death totals (front-page `Cumul décès
 # parmi les confirmés`). First published in the SitRep 012 revised
@@ -153,9 +156,11 @@ source = "INSP situation reports 18-28 May 2026, read from the PDFs (recorded in
 # load time. The model does not currently fit a confirmed-death stream
 # (the deaths likelihood uses suspected deaths).
 [confirmed_death_history]
-dates  = ["2026-05-26", "2026-05-27", "2026-05-28"]
-values = [17, 17, 17]
-source = "INSP situation reports 26-28 May 2026 (SitReps 012_v2-014), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 over the fitted window; later vintages report 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), and 64 (3 June)."
+dates  = ["2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
+          "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
+          "2026-06-03"]
+values = [17, 17, 17, 42, 42, 48, 60, 62, 64]
+source = "INSP situation reports 26 May - 3 June 2026 (SitReps 012_v2-020), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June)."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
