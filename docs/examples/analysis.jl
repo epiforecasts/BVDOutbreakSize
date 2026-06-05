@@ -1107,6 +1107,7 @@ prior_chn = let
         confirmed_history = (; days = Int[], counts = Int[]),
         breakpoint = breakpoint,
         background_re = true,
+        confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
     sample(m, Prior(), 2_000; progress = false)
@@ -1166,6 +1167,7 @@ chn_joint = nuts_sample(
     tests_received_history = obs.tests_received_history,
     breakpoint = _BREAKPOINT,
     background_re = true,
+    confirmed_positivity_link = :composition,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days));
 
@@ -1543,7 +1545,8 @@ pp_joint = predict(
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
         breakpoint = _BREAKPOINT,
-        background_re = true),
+        background_re = true,
+        confirmed_positivity_link = :composition),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one
