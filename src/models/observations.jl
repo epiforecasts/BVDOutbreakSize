@@ -761,10 +761,22 @@ cumulative confirmed Binomial.
     μ_A_at = Vector{Tt}(undef, n)
     let analysed_cum = zero(Tt)
         for i in 1:n
-            Δt = i == 1 ?
-                 max(oftype(T, t_edges[1]), zero(T)) :
-                 max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
-                zero(T))
+            ## Window 1 has no preceding edge. Use the spacing to the next
+            ## vintage as the representative window length, NOT the full
+            ## seeding-to-edge-1 elapsed time: the latter (≈ t_edges[1],
+            ## ~120 days) makes cap ≫ backlog and drains the entire
+            ## pre-window received backlog in one step, blowing up the
+            ## first dark window's μ_A. A single-vintage fit falls back to
+            ## the cumulative.
+            Δt = if i == 1
+                n >= 2 ?
+                max(oftype(T, t_edges[2]) - oftype(T, t_edges[1]),
+                    zero(T)) :
+                max(oftype(T, t_edges[1]), zero(T))
+            else
+                max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
+                    zero(T))
+            end
             recv_cum = fwd * N_recv_at[i]
             backlog = max(recv_cum - analysed_cum, eps(Tt))
             cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))

@@ -975,7 +975,9 @@ cfr_prior_fig #hide
 # by essentially a single aggregate data point, the one reported-case
 # total and the one export count, so neither is well identified on its
 # own. We therefore centre the prior on an assumed reporting fraction
-# of 25% and partially pool the two fractions so they share strength.
+# of 75% — most cases reach the suspected-case count under the active
+# case finding in the response — and partially pool the two fractions so
+# they share strength.
 # Treating them as identical would conflate two different systems,
 # while treating them as independent would leave the Uganda fraction
 # almost wholly prior-driven.
@@ -984,7 +986,7 @@ cfr_prior_fig #hide
 # share a logit-scale hyperprior with mean $\mu$ and SD $\tau$:
 #
 # ```math
-# \mu \sim \mathrm{Normal}(\mathrm{logit}(0.25),\ 1),
+# \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{10}
 # ```
@@ -2195,7 +2197,7 @@ summary_ranges = let
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
 
-    C = posterior_C_joint
+    C = posterior_C_infections_joint
     Td = vec(Array(chn_joint[:T]))
     τd = vec(Array(chn_joint[:τ]))
     rd = vec(Array(chn_joint[:r]))
@@ -2203,22 +2205,25 @@ summary_ranges = let
     sT = posterior_summary(Td)
     sτ = posterior_summary(τd)
     sr = posterior_summary(rd)
-    f_lo = round(sC.lo90 / obs.reported_cases; digits = 1)
-    f_hi = round(sC.hi90 / obs.reported_cases; digits = 1)
+    f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
+    f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
 
-    moves = ["cumulative case load" => shift(C, vec(Array(
-            prior_chn[:cumulative_cases]))),
+    moves = [
+        "cumulative infections" => shift(C, vec(Array(
+            prior_chn[:cumulative_infections]))),
         "time since seeding" => shift(Td, vec(Array(prior_chn[:T]))),
         "doubling time" => shift(τd, vec(Array(prior_chn[:τ])))]
     biggest = argmax(p -> abs(p.second), moves)
 
     Markdown.parse("""
-    - **Current cumulative case load:** we estimate $(ints_i(sC)) cases,
-      combining all four data streams (reported and as-yet-unreported).
-    - That is roughly $(f_lo)–$(f_hi)× the $(obs.reported_cases) cases
-      reported to date, so most infections are not yet reported. This
-      multiplier is one over the DRC reporting fraction; see
-      [what the reporting fraction means](#Joint-model-estimates).
+    - **Current cumulative infections:** we estimate $(ints_i(sC))
+      infections, combining all four data streams (reported and
+      as-yet-unreported).
+    - That is roughly $(f_lo)–$(f_hi)× the $(obs.confirmed_cases)
+      laboratory-confirmed cases to date, so most infections are never
+      laboratory-confirmed. This multiplier is one over the share of
+      infections that are ultimately confirmed; see
+      [what the confirmation fraction means](#Joint-model-estimates).
     - **Time since seeding:** we estimate $(ints_i(sT)) days, placing
       the start of sustained transmission at $(ints_d(sT)).
     - **Doubling time and growth rate:** we estimate a doubling time of
@@ -2228,7 +2233,7 @@ summary_ranges = let
       from its prior, measured in prior interquartile ranges (IQRs) — a
       value of 1 means the posterior median sits one prior IQR from the
       prior median, 0 means unchanged, and the sign gives the direction.
-      The fit moves the cumulative case load by $(moves[1].second), the
+      The fit moves the cumulative infections by $(moves[1].second), the
       time since seeding by $(moves[2].second) and the doubling time by
       $(moves[3].second); the largest move is in the $(biggest.first).
     """)
@@ -2472,13 +2477,16 @@ lab_pair_fig = plot_pair(chn_joint,
 lab_pair_fig #hide
 
 # The DRC reporting fraction $p_{\text{DRC}}$ is the share of true cases
-# that reach the reported suspected-case count. The reported total
-# therefore scales up to the cumulative case load by about
-# $1/p_{\text{DRC}}$, the multiplier quoted in the
-# [summary](@ref "Summary"): a reporting fraction near $0.25$ implies a
-# roughly fourfold gap between reported and true cases. The pair plot
-# above shows its posterior against the prior. How far below one the
-# fraction sits is what sets that scaling.
+# that reach the reported suspected-case count; its prior centres near
+# $0.75$, so most cases are captured as suspected by the active case
+# finding in the response. The large gap between true cases and the
+# headline counts is instead at the laboratory: a case must be suspected,
+# have a sample taken and analysed, and test positive to be confirmed, so
+# only a small share of infections is ultimately laboratory-confirmed. The
+# cumulative case load is therefore about one over that confirmation
+# share times the confirmed total — the multiplier quoted in the
+# [summary](@ref "Summary"). The pair plot above shows $p_{\text{DRC}}$'s
+# posterior against the prior.
 #
 # The confirmed-case stream enters the joint fit per vintage, each
 # vintage a Binomial on its observed analysed denominator (equation

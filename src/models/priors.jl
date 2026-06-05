@@ -609,14 +609,15 @@ with no shared parameter. An alternative to the composer-default
 not share strength between the two systems.
 
 Both fractions default to a logit-Normal prior centred on a reporting
-fraction of 0.25 with SD 0.6 (95% support roughly 0.09–0.51), weakly
-informative about the low-ascertainment regime typical of passive BVD /
-Ebola surveillance in rural Ituri. Pass `drc_prior` / `uganda_prior` to
-set the two systems' priors separately.
+fraction of 0.75 with SD 0.6, matching the pooled composer default. This
+de-pooled variant is a sensitivity alternative to
+[`pooled_ascertainment_model`](@ref) (the headline default) and is not
+used by the joint composer. Pass `drc_prior` / `uganda_prior` to set the
+two systems' priors separately.
 """
 @model function independent_ascertainment_model(;
-        drc_prior = Normal(logit(0.25), 0.6),
-        uganda_prior = Normal(logit(0.25), 0.6))
+        drc_prior = Normal(logit(0.75), 0.6),
+        uganda_prior = Normal(logit(0.75), 0.6))
     logit_p_drc ~ drc_prior
     logit_p_uganda ~ uganda_prior
     p_drc := logistic(logit_p_drc)
@@ -633,7 +634,7 @@ and pooling strength `τ`. Used by [`reported_cases_model`](@ref),
 composer default.
 """
 @model function pooled_ascertainment_model(;
-        mu_prior = Normal(logit(0.25), 1.0),
+        mu_prior = Normal(logit(0.75), 1.0),
         tau_prior = truncated(Normal(0, 0.5); lower = 1e-4))
     μ_logit ~ mu_prior
     τ_logit ~ tau_prior
