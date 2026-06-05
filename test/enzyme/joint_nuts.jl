@@ -15,11 +15,10 @@
 # fit is paired with the same Mooncake fit for a wall-clock comparison and
 # a sanity check that the chains are not all-divergent.
 #
-# STATUS as of renewal HEAD a5f9ef6: the Enzyme tiny fit still does not
-# reach NUTS — it fails at the first gradient with the boxed-closure
-# `TypeError` documented in joint_explore.jl (joint.jl:309), so the 300x2
-# fit is skipped. This harness is kept for when the model-side closure box
-# is resolved; until then it records the failure.
+# STATUS as of renewal HEAD 3e1d320: after the de-box fix on this branch
+# (see joint_explore.jl), the Enzyme tiny fit reaches NUTS and completes,
+# so the 300x2 fit runs too. Both warmup and sampling finish under Enzyme,
+# chains sane, and Enzyme is faster than Mooncake (see PR #201).
 
 using Enzyme    # loads BVDOutbreakSizeEnzymeExt so enzyme_adtype() exists
 using Mooncake  # default backend

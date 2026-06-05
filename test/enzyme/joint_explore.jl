@@ -13,20 +13,19 @@
 # NUTS) isolates compile/differentiate viability from trajectory
 # exploration into extreme regions.
 #
-# STATUS as of renewal HEAD a5f9ef6 (`background_re` switch, plus the
-# composition positivity link, rt_start genetic bound, late windows,
-# molecular-clock R0; joint now 59-dim): Enzyme STILL does not
-# differentiate this joint. The blocker is unchanged: the
-# `if background_re ... else ... end` block in `bvd_joint`
-# (joint.jl:298-307) conditionally binds the `case_bg_re` / `death_bg_re`
-# closures (or `nothing`), which the compiler boxes into a
-# `Base.RefValue`; Enzyme cannot reverse-mode through the boxed captured
-# variable and aborts at the NamedTuple construction in `bvd_joint`
-# (joint.jl:309). `background_re = true` fails with a `TypeError`
-# (RefValue-wrapped closure), `background_re = false` with a `MethodError:
-# getindex(::Nothing)`. The composition link / rt_start / R0 changes did
-# NOT add any new AD blocker. Mooncake handles all of it. This harness
-# records the failure rather than a match; see PR #201 for the diagnosis.
+# STATUS as of renewal HEAD 3e1d320 (now with `log_R0_seed` and
+# `expected_infections_T`; joint 60-dim): Enzyme DIFFERENTIATES the joint
+# again after the de-box fix on this branch. Three conditional/anonymous
+# closures that Enzyme reverse mode could not handle were made
+# type-stable (pure refactor, Mooncake bit-identical):
+#   1. `bvd_joint`'s `if background_re … else … end` boxed the
+#      `case_bg_re`/`death_bg_re` closure capture in a `Base.RefValue`;
+#   2. the `:composition` positivity `map(do i)` in `confirmed_cases_model`
+#      was a second boxed closure, extracted to `composition_positivity`;
+#   3. that helper's `map(do i)` itself tripped Enzyme's shadow handling,
+#      so it was rewritten as an explicit loop (no closure).
+# This harness now asserts the Enzyme/Mooncake gradient match again; see
+# PR #201. The fix lives on this branch as a candidate for renewal.
 
 using Test
 using Enzyme
