@@ -35,10 +35,18 @@ history.
 function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
             "observations.toml");
-        seeding_lead::Integer = SEEDING_LEAD_DAYS)
+        seeding_lead::Integer = SEEDING_LEAD_DAYS,
+        cutoff_date::Union{Nothing, Date, AbstractString} = nothing)
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
-    cutoff = Date(String(raw["as_of_date"]))
+    ## The cut-off is the manifest `as_of_date` unless an earlier
+    ## `cutoff_date` is supplied (used to FREEZE the data to a past
+    ## date, see `freeze_observations`). Freezing only ever moves the
+    ## cut-off earlier and never invents vintages, so the grid stays
+    ## date-aligned with the full-data fit.
+    cutoff = isnothing(cutoff_date) ? Date(String(raw["as_of_date"])) :
+             (cutoff_date isa Date ? cutoff_date :
+              Date(String(cutoff_date)))
     ## Grid day-index (1-based) of a calendar date: seeding day is day 1.
     _gap(d) = Int(date2epochdays(cutoff) - date2epochdays(Date(String(d))))
     tmrca_date = Date(String(raw["genetic_tmrca"]["date"]))
@@ -48,12 +56,15 @@ function load_observations(
 
     ## A dated cumulative history → grid day-indices and counts, sorted
     ## oldest-first so the model differences consecutive vintages into
-    ## daily increments. Empty when the block is absent.
+    ## daily increments. Empty when the block is absent. Vintages dated
+    ## after the cut-off are dropped, so freezing to an earlier date
+    ## keeps only the data that was available by then.
     function history(key)
         haskey(raw, key) || return (; days = Int[], counts = Int[])
         block = raw[key]
-        idx = Int[_index(d) for d in block["dates"]]
-        vals = Int.(block["values"])
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        vals = Int.(block["values"][keep])
         ord = sortperm(idx)
         return (; days = idx[ord], counts = vals[ord])
     end
@@ -67,9 +78,13 @@ function load_observations(
     lab_history = history("tests_analysed_history")
     tests_received_history = history("tests_received_history")
     ## Cut-off scalar from an explicit TOML block, else the final
-    ## (most recent) vintage of the matching history.
+    ## (most recent) vintage of the matching history. When a `cutoff_date`
+    ## freeze is active the explicit TOML scalars (which hold the final,
+    ## full-data total) no longer match the truncated history, so the
+    ## frozen final vintage is used instead.
     _hist_end(h) = isempty(h.counts) ? missing : h.counts[end]
-    _scalar(k, h) = haskey(raw, k) ? Int(_val(k)) : _hist_end(h)
+    frozen = !isnothing(cutoff_date)
+    _scalar(k, h) = (frozen || !haskey(raw, k)) ? _hist_end(h) : Int(_val(k))
     ## The first WHO joint situation report is the earliest reported-case
     ## vintage; days from it to the cut-off set the intervention breakpoint.
     who_first_sitrep_days = isempty(reported_history.days) ? n :
@@ -78,8 +93,11 @@ function load_observations(
     return (; n, cutoff, seeding,
         exported_cases = Int(_val("exported_cases")),
         exports_deaths = Int(_val("exports_deaths")),
-        total_deaths = Int(_val("total_deaths")),
-        reported_cases = Int(_val("reported_cases")),
+        total_deaths = frozen ?
+                       _hist_end(deaths_history) : Int(_val("total_deaths")),
+        reported_cases = frozen ?
+                         _hist_end(reported_history) :
+                         Int(_val("reported_cases")),
         confirmed_cases = _scalar("confirmed_cases", confirmed_history),
         confirmed_deaths = _scalar("confirmed_deaths",
             confirmed_deaths_history),
@@ -92,4 +110,30 @@ function load_observations(
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
+end
+
+"""
+    freeze_observations(cutoff_date; path = default manifest)
+
+Load the observation manifest FROZEN to `cutoff_date`: the cut-off is
+moved to `cutoff_date` and every dated history is truncated to the
+vintages available by then, so the returned named tuple is what the
+renewal model would have seen on that date. The cut-off scalar totals
+(`reported_cases`, `total_deaths`, `confirmed_cases`, ...) are taken
+from the truncated histories rather than the manifest's full-data
+scalars. Use it to re-evaluate the renewal estimate at a past report
+date (for example a McCabe et al. situation-report cut-off) for a
+like-for-like, matched-in-time comparison.
+
+`cutoff_date` accepts a `Date` or an ISO date string. It must be on or
+after the earliest history vintage in the manifest (the renewal DRC
+series begins 18 May 2026); an earlier date leaves the suspected
+streams empty and is not a meaningful renewal fit.
+"""
+function freeze_observations(
+        cutoff_date::Union{Date, AbstractString};
+        path::AbstractString = joinpath(@__DIR__, "..", "data",
+            "observations.toml"),
+        seeding_lead::Integer = SEEDING_LEAD_DAYS)
+    return load_observations(path; seeding_lead, cutoff_date)
 end

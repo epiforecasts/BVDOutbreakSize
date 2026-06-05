@@ -1919,6 +1919,163 @@ imperial_density_fig = plot_cumulative_cases(
 
 imperial_density_fig #hide
 
+# ### Matched-in-time comparison
+#
+# The coverage table above scores McCabe et al.'s scenarios against the
+# renewal fit to the *current* data, so it mixes two differences at once:
+# the method and the data each had to hand. McCabe et al. published their
+# scenarios at fixed situation-report cut-offs, so the like-for-like
+# comparison freezes the renewal data to the same cut-off and re-fits.
+# Then any gap is the method alone, read at the date the scenario was
+# computed rather than weeks later.
+#
+# McCabe et al.'s 20 May update [mccabe2026update](@cite) carries the 15
+# scenario estimates used throughout this section. We freeze the renewal
+# data to that date and to a later 23 May cut-off and re-fit the joint
+# model at each. These are reduced fits, 500 draws across two chains
+# rather than the four-chain headline fit, so they are illustrative of
+# the matched-in-time estimate rather than a production result. The
+# earliest INSP situation report the renewal conditions on is 18 May, so
+# the 20 May freeze is the earliest matched cut-off with a coherent
+# suspected-case series; McCabe et al.'s 18 May report predates it.
+#
+# The renewal estimate moves with the data: at the 20 May cut-off it sees
+# far fewer suspected cases than at the final cut-off, so its outbreak
+# size is correspondingly smaller and closer to McCabe et al.'s scenario
+# range. The gap that remains at the matched date is the method: the
+# renewal infers latent infections through a time-varying reproduction
+# number and a convolved reporting delay, while McCabe et al. report
+# ascertained cases under fixed growth and window assumptions.
+#
+# The freeze truncates the dated histories the model fits, so the
+# suspected-case, suspected-death, confirmed-case and laboratory streams
+# are exactly what was available at the cut-off. The export count and the
+# genetic TMRCA bound are scalars rather than dated series, so they keep
+# their current values; their effect on the frozen fit is small relative
+# to the suspected-case streams that drive the outbreak-size estimate.
+
+#md # ```@raw html
+#md # <details><summary>Freeze the renewal data to each McCabe cut-off and re-fit (reduced)</summary>
+#md # ```
+
+## A reduced joint fit (500 draws × 2 chains) to the data frozen at
+## `cutoff_date`. The frozen named tuple has the same shape as the full
+## `obs`, so the model call mirrors the headline joint fit.
+function fit_frozen_joint(cutoff_date; samples = 500, chains = 2)
+    o = freeze_observations(cutoff_date)
+    bp = o.n - o.who_first_sitrep_days
+    chn = nuts_sample(
+        bvd_joint(
+            o.n, o.exported_cases, o.total_deaths,
+            o.reported_cases, o.exports_deaths, o.confirmed_cases,
+            o.tests_analysed;
+            confirmed_deaths = o.confirmed_deaths,
+            deaths_history = o.deaths_history,
+            reported_history = o.reported_history,
+            confirmed_history = o.confirmed_history,
+            confirmed_deaths_history = o.confirmed_deaths_history,
+            lab_history = o.lab_history,
+            tests_received_history = o.tests_received_history,
+            breakpoint = bp,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            genetic = genetic_seeding_model,
+            tmrca_days = o.tmrca_days);
+        samples = samples, chains = chains)
+    return (; cutoff = o.cutoff, chn)
+end
+
+frozen_20may = fit_frozen_joint("2026-05-20")
+frozen_23may = fit_frozen_joint("2026-05-23")
+
+frozen_C_20may = vec(Array(frozen_20may.chn[:C_T]))
+frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Side-by-side $C_T$ intervals for the two frozen fits and the headline
+# current-data fit, so the shift with the data cut-off reads off directly:
+
+#md # ```@raw html
+#md # <details><summary>Frozen-fit C_T table</summary>
+#md # ```
+
+frozen_streams_table = streams_table(
+    "frozen 20 May" => frozen_C_20may,
+    "frozen 23 May" => frozen_C_23may,
+    "current data" => posterior_C_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_streams_table #hide
+
+# ### Estimate evolution across releases
+#
+# The project has published a tagged results release at each data cut-off
+# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), each
+# bundling its posterior draws and the input data. Reading the released
+# cumulative-case estimate from each gives a record of how the published
+# outbreak size moved as the INSP situation reports accrued. The releases
+# to date are from the earlier closed-form integral model that the
+# renewal supersedes, so the line below is the *project's published*
+# estimate over time, not the renewal's; the renewal's own matched-date
+# estimates from the frozen fits are overlaid as points.
+#
+# Both the released estimate and the renewal climb as the suspected-case
+# count grows over the reporting period, and both sit above the band of
+# McCabe et al.'s 15 published scenarios, which span 235 to 1386 reported
+# cases. The released estimate is read off the archived posterior draws;
+# the values are recorded here so the figure builds without refetching
+# the releases.
+
+#md # ```@raw html
+#md # <details><summary>Released estimate per cut-off, with frozen renewal points</summary>
+#md # ```
+
+## Released median C_T and 90% interval per data cut-off, read from each
+## release's archived `posterior_draws.csv` (one canonical build per
+## cut-off date: builds 241, 350, 470 and 586). These are the integral
+## model's published estimates; see the release page for provenance.
+release_evolution = [
+    ("2026-05-18", 925, 419, 2075),
+    ("2026-05-23", 1364, 680, 3137),
+    ("2026-05-26", 3041, 1961, 5172),
+    ("2026-05-28", 3510, 2196, 6325)
+]
+
+## The renewal's frozen matched-date estimates (median and 90% interval),
+## from the reduced fits above.
+function _ci90(xs)
+    (round(Int, quantile(xs, 0.5)),
+        round(Int, quantile(xs, 0.05)), round(Int, quantile(xs, 0.95)))
+end
+renewal_frozen_points = [
+    (string(frozen_20may.cutoff), _ci90(frozen_C_20may)...),
+    (string(frozen_23may.cutoff), _ci90(frozen_C_23may)...)
+]
+
+## The McCabe et al. scenario range (min and max of the 15 published
+## reported-case scenarios), as a backdrop band.
+mccabe_range = (minimum(v for (_, v) in REPORT_SCENARIOS),
+    maximum(v for (_, v) in REPORT_SCENARIOS))
+
+evolution_fig = plot_estimate_evolution(release_evolution;
+    points = renewal_frozen_points,
+    scenario_range = mccabe_range,
+    series_label = "Released estimate (integral)",
+    points_label = "Renewal (frozen)",
+    title = "Outbreak-size estimate as data accrued");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evolution_fig #hide
+
 # ## Saving results
 #
 # The tables above are written to an `output/` directory at the repo
@@ -1946,6 +2103,8 @@ CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
 CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
     streams_C_table)
 CSV.write(joinpath(output_dir, "scenario_coverage.csv"), coverage_table)
+CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
+    frozen_streams_table)
 
 ## Copy the input data so the release records what produced these
 ## results.
