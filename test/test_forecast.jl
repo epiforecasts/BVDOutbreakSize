@@ -16,6 +16,10 @@
             delay::Bool = false)
         r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
         T ~ truncated(Normal(100.0, 10.0); lower = 1.0)
+        ## Latent cumulative infections C(T) = 2^m, the chain symbol the
+        ## forecast and counterfactual read for new/committed infections.
+        m ~ truncated(Normal(13.0, 0.5); lower = 1.0)
+        cumulative_infections := 2.0^m
         CFR ~ Beta(6.0, 14.0)
         α ~ truncated(Normal(4.3, 0.5); lower = 0.5)
         θ ~ truncated(Normal(2.6, 0.3); lower = 0.2)
@@ -51,6 +55,12 @@
             α_recv ~ truncated(Normal(2.0, 1.0); lower = 0.1)
             θ_recv ~ truncated(Normal(1.5, 0.75); lower = 0.1)
             capacity_cutoff ~ truncated(Normal(150.0, 30.0); lower = 1.0)
+            ## Confirmed-death stream draws: forwarding fraction, deaths
+            ## drift and suspect-death background; share the case-lab
+            ## sensitivity / specificity and the CFR / onset-to-death delay.
+            τ_death ~ Beta(5.0, 2.0)
+            p_deaths ~ Beta(6.0, 2.0)
+            λ_bg_death ~ truncated(Normal(0.0, 5.0); lower = 0)
         end
         return nothing
     end
@@ -70,46 +80,48 @@ end
     fc=forecast_reported(chn;
         horizon = 7,
         daily_travellers = 1871,
-        source_population = 4_392_200,
-        obs_cases = 514,
-        obs_deaths = 136,
-        obs_exports = 2)
+        source_population = 4_392_200)
 
     @test fc isa DataFrame
     @test nrow(fc) == 200
-    cols=[:cases_cum, :deaths_cum, :exports_cum,
-        :cases_new, :deaths_new, :exports_new]
+    cols=[:infections_new, :bvd_deaths_new]
     @test all(c -> c in propertynames(fc), cols)
-    ## Counts are non-negative integers.
-    @test all(fc.cases_cum .>= 0)
-    @test all(fc.deaths_cum .>= 0)
-    @test all(fc.exports_cum .>= 0)
-    @test all(fc.cases_new .>= 0)
-    ## New-this-week cannot exceed the cumulative forecast.
-    @test all(fc.cases_new .<= fc.cases_cum)
-    @test all(fc.deaths_new .<= fc.deaths_cum)
+    ## Counts are non-negative, finite integers.
+    @test all(fc.infections_new .>= 0)
+    @test all(fc.bvd_deaths_new .>= 0)
+    @test all(isfinite, fc.infections_new)
+    @test all(isfinite, fc.bvd_deaths_new)
+    ## Suspected/reported streams are dropped.
+    @test !(:cases_new in propertynames(fc))
+    @test !(:deaths_new in propertynames(fc))
+    @test !(:tests_new in propertynames(fc))
+    ## Exports default off.
+    @test !(:exports_new in propertynames(fc))
     ## No lab-turnaround draws in this fixture → no confirmed columns.
-    @test !(:confirmed_cum in propertynames(fc))
+    @test !(:confirmed_new in propertynames(fc))
 end
 
-@testitem "forecast_reported drops exports when forecast_exports=false" tags=[:slow] setup=[ForecastFixtures] begin
-    using DataFrames: DataFrame, nrow
+@testitem "forecast_reported adds exports when forecast_exports=true" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame
     using BVDOutbreakSize: forecast_reported, forecast_table, plot_forecast
 
     chn=_forecast_chain(200)
     fc=forecast_reported(chn;
         horizon = 7, daily_travellers = 1871,
         source_population = 4_392_200,
-        obs_cases = 514, obs_deaths = 136,
-        forecast_exports = false)
+        forecast_exports = true)
 
-    @test !(:exports_cum in propertynames(fc))
-    @test !(:exports_new in propertynames(fc))
-    @test :cases_cum in propertynames(fc)
-    ## The table and plot must not assume the export columns.
-    tbl=forecast_table(fc)
+    @test :exports_new in propertynames(fc)
+    @test all(fc.exports_new .>= 0)
+    ## Default (false) drops the export column.
+    fc0=forecast_reported(chn;
+        horizon = 7, daily_travellers = 1871,
+        source_population = 4_392_200)
+    @test !(:exports_new in propertynames(fc0))
+    ## The table and plot must not assume the export column.
+    tbl=forecast_table(fc0)
     @test !any(occursin.("Uganda", string.(tbl[!, 1])))
-    @test plot_forecast(fc) !== nothing
+    @test plot_forecast(fc0) !== nothing
 end
 
 @testitem "forecast_reported works on the onset-to-detection delay chain" tags=[:slow] setup=[ForecastFixtures] begin
@@ -125,13 +137,11 @@ end
         horizon = 7,
         daily_travellers = 1871,
         source_population = 4_392_200,
-        obs_cases = 514,
-        obs_deaths = 136,
-        obs_exports = 2)
+        forecast_exports = true)
 
     @test fc isa DataFrame
-    @test :exports_cum in propertynames(fc)
-    @test all(fc.exports_cum .>= 0)
+    @test :exports_new in propertynames(fc)
+    @test all(fc.exports_new .>= 0)
 end
 
 @testitem "forecast_reported adds confirmed columns when lab delay sampled" tags=[:slow] setup=[ForecastFixtures] begin
@@ -142,14 +152,11 @@ end
     fc=forecast_reported(chn;
         horizon = 7, daily_travellers = 1871,
         source_population = 4_392_200,
-        obs_cases = 514, obs_deaths = 136, obs_exports = 2,
         obs_confirmed = 33, obs_analysed = 211)
 
-    @test :confirmed_cum in propertynames(fc)
     @test :confirmed_new in propertynames(fc)
-    @test all(fc.confirmed_cum .>= 0)
     @test all(fc.confirmed_new .>= 0)
-    @test all(fc.confirmed_new .<= fc.confirmed_cum)
+    @test all(isfinite, fc.confirmed_new)
 end
 
 @testitem "forecast_table and plot_forecast" tags=[:slow] setup=[
@@ -160,54 +167,64 @@ end
     chn=_forecast_chain(200)
     fc=forecast_reported(chn;
         horizon = 7, daily_travellers = 1871,
-        source_population = 4_392_200,
-        obs_cases = 514, obs_deaths = 136, obs_exports = 2)
+        source_population = 4_392_200)
 
     tbl=forecast_table(fc)
     @test tbl isa DataFrame
-    ## Three streams × two quantities (cumulative, new this week).
-    @test nrow(tbl) == 6
+    ## Two trusted quantities (infections, BVD deaths) without lab draws.
+    @test nrow(tbl) == 2
     @test names(tbl) ==
-          ["Stream", "Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
+          ["Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
         "Upper 30%", "Upper 60%", "Upper 90%"]
     @test Set(tbl[!, "Quantity"]) ==
-          Set(["cumulative by T+7", "new this week"])
+          Set(["New infections", "New BVD deaths (DRC)"])
 
     fig=plot_forecast(fc)
     @test fig !== nothing
 end
 
-@testitem "forecast_vs_truth compares cumulative forecast to observed" tags=[:slow] setup=[
+@testitem "predict_committed returns the four committed totals" tags=[:slow] setup=[
     ForecastFixtures, HeadlessMakie] begin
     using DataFrames: DataFrame, nrow
-    using BVDOutbreakSize: forecast_reported, forecast_vs_truth, plot_forecast_vs_truth
+    using BVDOutbreakSize: predict_committed, plot_committed
 
-    chn=_forecast_chain(200)
-    fc=forecast_reported(chn;
-        horizon = 7, daily_travellers = 1871,
-        source_population = 4_392_200,
-        obs_cases = 514, obs_deaths = 136, obs_exports = 2)
+    chn=_forecast_chain(200; include_lab = true)
+    obs_confirmed=33
+    obs_confirmed_deaths=11
+    df=predict_committed(chn;
+        obs_confirmed = obs_confirmed,
+        obs_confirmed_deaths = obs_confirmed_deaths,
+        obs_analysed = 211,
+        horizon_days = 365)
 
-    tbl=forecast_vs_truth(fc;
-        cases = 600, deaths = 150, exports = 3)
+    @test df isa DataFrame
+    @test nrow(df) == 200
+    cols=[:infections, :bvd_deaths, :confirmed_cases, :confirmed_deaths]
+    @test all(c -> c in propertynames(df), cols)
+    @test all(isfinite, df.infections)
+    @test all(isfinite, df.bvd_deaths)
+    @test all(isfinite, df.confirmed_cases)
+    @test all(isfinite, df.confirmed_deaths)
+    ## Committed infections equal the cumulative infection draws C(T) = 2^m.
+    ci=vec(Array(chn[:cumulative_infections]))
+    @test df.infections ≈ float.(ci)
+    ## Committed BVD deaths = CFR · C(T) and never exceed the infected pool.
+    @test all(df.bvd_deaths .>= 0)
+    @test all(df.bvd_deaths .<= df.infections)
+    ## Committed confirmed totals can only add to what was already confirmed.
+    @test all(df.confirmed_cases .>= obs_confirmed)
+    @test all(df.confirmed_deaths .>= obs_confirmed_deaths)
 
-    @test tbl isa DataFrame
-    ## One row per stream (cases, deaths, exports).
-    @test nrow(tbl) == 3
-    @test names(tbl) ==
-          ["Stream", "Observed", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
-    @test Set(tbl[!, "Stream"]) ==
-          Set(["DRC reported cases", "DRC deaths", "Uganda exports"])
-
-    ## Coverage flag agrees with the reported interval endpoints.
-    for row in eachrow(tbl)
-        covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]
-        @test row["Within 90% PI"] == (covered ? "yes" : "no")
-    end
-
-    fig=plot_forecast_vs_truth(fc; cases = 600, deaths = 150, exports = 3)
+    fig=plot_committed(df;
+        obs_confirmed = obs_confirmed,
+        obs_confirmed_deaths = obs_confirmed_deaths)
     @test fig !== nothing
+
+    ## Without lab args the lab columns are dropped.
+    df0=predict_committed(chn)
+    @test :infections in propertynames(df0)
+    @test :bvd_deaths in propertynames(df0)
+    @test !(:confirmed_cases in propertynames(df0))
 end
 
 @testitem "forecast BVD means apply the incubation onset_fraction" begin
@@ -269,51 +286,20 @@ end
     @test scaled ≈ os * base
 end
 
-@testitem "forecast_vs_truth_trajectory scores the daily trajectory" tags=[:slow] setup=[
-    ForecastFixtures] begin
-    using DataFrames: DataFrame, nrow
-    using BVDOutbreakSize: forecast_vs_truth_trajectory
+@testitem "committed confirmed-deaths helper adds to the observed count" begin
+    using Distributions: Gamma
+    using BVDOutbreakSize: onset_rescale
+    import BVDOutbreakSize as B
 
-    chn=_forecast_chain(200)
-    ## 16 May is the fit cut-off; 18-22 May are the post-cut-off
-    ## vintages that should be scored.
-    dates=["2026-05-16", "2026-05-18", "2026-05-20", "2026-05-22"]
-    cases=[336, 516, 672, 872]
-    deaths=[88, 131, 160, 204]
-
-    tbl=forecast_vs_truth_trajectory(chn;
-        dates = dates, cases = cases, deaths = deaths,
-        snapshot_date = "2026-05-16",
-        daily_travellers = 1871, source_population = 4_392_200,
-        baseline_cases = 336, baseline_deaths = 88)
-
-    @test tbl isa DataFrame
-    ## Two streams x three post-snapshot vintages; the snapshot date
-    ## itself (horizon 0) is excluded.
-    @test nrow(tbl) == 6
-    @test !("2026-05-16" in tbl[!, "Date"])
-    @test Set(tbl[!, "Date"]) ==
-          Set(["2026-05-18", "2026-05-20", "2026-05-22"])
-    @test Set(tbl[!, "Stream"]) ==
-          Set(["DRC reported cases", "DRC deaths"])
-    @test sort(unique(tbl[!, "Horizon (days)"])) == [2, 4, 6]
-
-    ## Coverage flag agrees with the reported 90% endpoints.
-    for row in eachrow(tbl)
-        covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]
-        @test row["Within 90% PI"] == (covered ? "yes" : "no")
-    end
-
-    ## Vintages at or before the cut-off yield no rows.
-    empty=forecast_vs_truth_trajectory(chn;
-        dates = ["2026-05-14", "2026-05-16"], cases = [200, 336],
-        deaths = [50, 88], snapshot_date = "2026-05-16",
-        daily_travellers = 1871, source_population = 4_392_200)
-    @test nrow(empty) == 0
-
-    ## Mismatched input lengths error.
-    @test_throws ErrorException forecast_vs_truth_trajectory(chn;
-        dates = ["2026-05-18"], cases = [1, 2], deaths = [1],
-        snapshot_date = "2026-05-16",
-        daily_travellers = 1871, source_population = 4_392_200)
+    r, T, α, θ, CFR = 0.05, 100.0, 4.3, 2.6, 0.3
+    p_deaths, λ_bg_death, τ_death = 1.0, 0.5, 0.6
+    s, spec = 0.9, 0.97
+    os = onset_rescale(Gamma(3.0, 2.1), r)
+    obs_cd = 11.0
+    ## Over a long horizon the committed total adds the drained suspect-death
+    ## backlog to the already-observed confirmed deaths.
+    committed = B._committed_confirmed_deaths_one(r, T, T + 365, α, θ, CFR,
+        p_deaths, λ_bg_death, τ_death, s, spec, obs_cd; onset_fraction = os)
+    @test committed >= obs_cd
+    @test isfinite(committed)
 end

@@ -25,7 +25,7 @@ import FastGaussQuadrature
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
-using CairoMakie: Figure, Axis, hist!, density!, vlines!, vspan!,
+using CairoMakie: Figure, Axis, hist!, density!, vlines!,
                   lines!, scatter!, band!
 
 export REPORT_SCENARIOS,
@@ -51,9 +51,8 @@ export REPORT_SCENARIOS,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        predict_no_onward_deaths, plot_no_onward_deaths,
+       predict_committed, plot_committed,
        forecast_reported, forecast_table, plot_forecast,
-       forecast_vs_truth, forecast_vs_truth_trajectory,
-       plot_forecast_vs_truth,
 # prior submodels
        exponential_growth_model, genetic_seeding_model, delay_model,
        report_delay_model, test_sensitivity_model,

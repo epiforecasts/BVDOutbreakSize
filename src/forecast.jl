@@ -1,9 +1,10 @@
 # One-week-ahead posterior-predictive forecast. Continues the fitted
-# exponential growth `h` days past the cut-off `T` and applies the same
-# observation models to forecast the cumulative reported cases (DRC),
-# deaths (DRC) and exports (Uganda) by `T + h`, plus the new counts
-# expected over the coming week. Each draw produces a replicated integer
-# count so the intervals include both parameter and observation
+# exponential growth `h` days past the cut-off `T` and projects the four
+# trusted quantities over the coming week: new infections, new true BVD
+# deaths, new laboratory-confirmed cases (DRC) and new laboratory-confirmed
+# deaths (DRC). The untrusted suspected/reported cases, suspected deaths and
+# tests-analysed streams are dropped. Each draw produces a replicated
+# integer count so the intervals include both parameter and observation
 # uncertainty.
 
 # Deaths convolution evaluated at horizon `Th = T + h`, sharing the
@@ -115,39 +116,40 @@ end
 
 """
 One-week-ahead (default `horizon = 7` days) posterior-predictive
-forecast. For each draw, continue exponential growth to `T + horizon`
-and apply the observation models, returning a `DataFrame` with one row
-per draw and columns:
+forecast of the four trusted quantities. For each draw, continue
+exponential growth to `T + horizon` and project the new counts over the
+coming week, returning a `DataFrame` with one row per draw and columns:
 
-- `:cases_cum`, `:deaths_cum`, `:exports_cum` — replicated cumulative
-  counts reported by `T + horizon`.
-- `:cases_new`, `:deaths_new`, `:exports_new` — new counts over the
-  coming week (`*_cum` minus the corresponding observed count at `T`,
-  floored at zero).
-- `:confirmed_cum`, `:confirmed_new` — laboratory-confirmed counterparts
-  when the chain carries the confirmed-stream parameters
-  (`:s_test`, `:spec_test`, `:τ_forward`, `:α_recv`, `:θ_recv`,
-  `:capacity_cutoff`) and `obs_confirmed` and `obs_analysed` are supplied.
-  Otherwise these columns are absent.
-- `:confirmed_deaths_cum`, `:confirmed_deaths_new` — laboratory-confirmed
-  deaths when the chain additionally carries the confirmed-death
-  parameters (`:τ_death`, `:p_deaths`, `:λ_bg_death`, sharing the case-lab
-  `:s_test` / `:spec_test`) and `obs_confirmed_deaths` is supplied.
-  Otherwise these columns are absent.
+- `:infections_new` — new latent BVD infections over the week, the
+  continued-growth increment `C(T) · (exp(r·h) − 1)` of the cumulative
+  infection trajectory `C(T) = 2^m` (chain symbol `:cumulative_infections`).
+- `:bvd_deaths_new` — new true BVD deaths over the week, the latent
+  all-BVD-deaths mean increment `μ_bvd(T+h) − μ_bvd(T)` with
+  `μ_bvd(s) = os · CFR · ∫₀^s exp(r·u) f_death(s−u) du` (no `p_deaths`, no
+  background, no observed-count subtraction; these are latent toll counts).
+- `:confirmed_new` — new laboratory-confirmed cases over the week from the
+  queue of [`confirmed_cases_model`](@ref): the received backlog
+  (`τ_forward · N_susp` convolved with the receipt delay) is analysed at
+  the cut-off capacity `κ` over the horizon,
+  `ΔA = backlog·(1 − exp(−κ·h/backlog))`, and the new positives are `ΔA`
+  times the composition-linked positivity. Present when the chain carries
+  the confirmed-stream parameters (`:s_test`, `:spec_test`, `:τ_forward`,
+  `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
+  `obs_analysed` are supplied; otherwise absent.
+- `:confirmed_deaths_new` — new laboratory-confirmed deaths over the week,
+  the forwarded positive increment of the suspect-death backlog, when the
+  chain additionally carries `:τ_death`, `:p_deaths`, `:λ_bg_death`
+  (sharing the case-lab `:s_test` / `:spec_test`) and `obs_confirmed_deaths`
+  is supplied; otherwise absent.
 
-DRC reported cases follow the additive expectation
-`p_drc · ∫₀^{T+h} exp(r·s) · f_rep(T+h-s) ds + λ_bg·(T+h)`, with
-`f_rep = Gamma(α_rep, θ_rep)` for the BVD-driven contribution and the
-constant-rate non-BVD background. Laboratory-confirmed cases continue the
-queue of [`confirmed_cases_model`](@ref): the received backlog
-(`τ_forward · N_susp` convolved with the receipt delay) is analysed at the
-cut-off capacity `κ` over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`,
-and the new positives are `ΔA` times the composition-linked positivity,
-added to the observed cumulative confirmed. Exports use `p_uganda · q` with
-`q = daily_travellers / source_population`; pass `forecast_exports = false`
-to drop the export columns (e.g. when cross-border travel is disrupted so
-the forward travel rate no longer holds). Assumes growth continues
-unchanged over the horizon (no interventions, no saturation).
+`obs_confirmed` and `obs_analysed` anchor the confirmed-case queue at the
+cut-off (the lab backlog already received and analysed by `T`);
+`obs_confirmed_deaths` anchors the confirmed-death queue. Exports remain
+available behind `forecast_exports = true`, which adds `:exports_new`
+(`p_uganda · q`, `q = daily_travellers / source_population`); the report
+default is `false` (cross-border travel disrupted, so the forward travel
+rate no longer holds). Assumes growth continues unchanged over the horizon
+(no interventions, no saturation).
 
 `report_onset_offset` is accepted for call-site compatibility with the
 fit; the composition-linked horizon positivity does not use it.
@@ -157,14 +159,11 @@ function forecast_reported(chn;
         horizon::Real = 7,
         daily_travellers::Real,
         source_population::Real,
-        obs_cases::Real,
-        obs_deaths::Real,
-        obs_exports::Union{Real, Missing} = missing,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_confirmed_deaths::Union{Real, Missing} = missing,
-        obs_tests::Union{Real, Missing} = missing,
         obs_analysed::Union{Real, Missing} = missing,
-        forecast_exports::Bool = true,
+        obs_exports::Union{Real, Missing} = missing,
+        forecast_exports::Bool = false,
         seed::Integer = 20260520,
         report_onset_offset::Union{Nothing, Real} = nothing,
         alg = DEATH_INTEGRAL_ALG)
@@ -173,6 +172,9 @@ function forecast_reported(chn;
     CFR = _draws(chn, :CFR)
     α = _draws(chn, :α)
     θ = _draws(chn, :θ)
+    ## Latent cumulative infections `C(T) = 2^m` (a `:=` on the model);
+    ## continued growth over the horizon gives the new-infections increment.
+    cumulative_infections = _draws(chn, :cumulative_infections)
     ## Uganda exports use either the McCabe rectangular detection window
     ## `w` or the explicit onset-to-detection delay convolution. The delay
     ## reuses the DRC onset-to-report delay `Gamma(α_rep, θ_rep)`, so there
@@ -197,13 +199,18 @@ function forecast_reported(chn;
     ## Severe-first confirmed-stream draws (PCR sensitivity / specificity and
     ## the q-curve shape) live on the joint chain only; their absence drops
     ## the confirmed-cases columns.
-    has_lab = all(haskey_chain(chn, n)
-              for n in (:s_test, :spec_test, :τ_forward, :α_recv, :θ_recv,
+    ## The forwarding fraction is `τ_forward_out` on the production queue
+    ## chain (where `τ_forward` is fixed, not sampled) and `τ_forward` on the
+    ## prior/test chains; resolve whichever is present.
+    fwd_key = _forward_key(chn)
+    has_lab = fwd_key !== nothing &&
+              all(haskey_chain(chn, n)
+              for n in (:s_test, :spec_test, :α_recv, :θ_recv,
                   :capacity_cutoff)) &&
               obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
     spec_test = has_lab ? _draws(chn, :spec_test) : nothing
-    τ_forward = has_lab ? _draws(chn, :τ_forward) : nothing
+    τ_forward = has_lab ? _draws(chn, fwd_key) : nothing
     α_recv = has_lab ? _draws(chn, :α_recv) : nothing
     θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
     capacity = has_lab ? _draws(chn, :capacity_cutoff) : nothing
@@ -222,30 +229,34 @@ function forecast_reported(chn;
     p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
     λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
 
-    has_tests = has_lab && obs_tests !== missing
     rng = MersenneTwister(seed)
     n = length(r)
     q = daily_travellers / source_population
-    cases_cum = Vector{Int}(undef, n)
-    deaths_cum = Vector{Int}(undef, n)
-    exports_cum = forecast_exports ? Vector{Int}(undef, n) : nothing
-    confirmed_cum = has_lab ? Vector{Int}(undef, n) : nothing
-    confirmed_deaths_cum = has_lab_deaths ? Vector{Int}(undef, n) : nothing
-    tests_cum = has_tests ? Vector{Int}(undef, n) : nothing
+    infections_new = Vector{Int}(undef, n)
+    bvd_deaths_new = Vector{Int}(undef, n)
+    exports_new = forecast_exports ? Vector{Int}(undef, n) : nothing
+    confirmed_new = has_lab ? Vector{Int}(undef, n) : nothing
+    confirmed_deaths_new = has_lab_deaths ? Vector{Int}(undef, n) : nothing
 
     @inbounds for i in 1:n
         Th = T[i] + horizon
         os = has_incubation ?
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
-        ## DRC reported cases: onset_fraction · p_drc · ∫₀^{T+h} exp(r·s) ·
-        ## f_rep(T+h-s) ds + λ_bg·(T+h) (constant-rate background).
-        μ_cases = _forecast_cases_mean(r[i], Th, α_rep[i], θ_rep[i],
-            pr[i], λ_bg[i]; onset_fraction = os, alg)
-        cases_cum[i] = _nb_rand(rng, k[i], μ_cases)
-        ## DRC deaths: onset_fraction · CFR · ∫_0^{T+h} exp(r·s) f(T+h−s) ds.
-        μ_deaths = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
+        ## New latent infections over the week: the continued-growth
+        ## increment of the cumulative infection trajectory C(T) = 2^m.
+        infections_new[i] = max(
+            round(Int,
+                cumulative_infections[i] * (exp(r[i] * horizon) - 1)), 0)
+        ## New true BVD deaths over the week: the latent all-BVD-deaths mean
+        ## increment μ_bvd(T+h) − μ_bvd(T) with μ_bvd(s) = os · CFR ·
+        ## ∫₀^s exp(r·u) f_death(s−u) du (no p_deaths, no background, no
+        ## observed-count subtraction; these are latent toll counts).
+        μ_bvd_Th = _forecast_deaths_mean(r[i], Th, α[i], θ[i], CFR[i];
             onset_fraction = os, alg)
-        deaths_cum[i] = _nb_rand(rng, k[i], μ_deaths)
+        μ_bvd_T = _forecast_deaths_mean(r[i], T[i], α[i], θ[i], CFR[i];
+            onset_fraction = os, alg)
+        bvd_deaths_new[i] = _nb_rand(rng, k[i],
+            max(μ_bvd_Th - μ_bvd_T, zero(μ_bvd_Th)))
         ## Uganda exports. With the McCabe window: p_uganda · q ·
         ## ∫_{T+h−w}^{T+h} C(s) ds (closed form). With the delay
         ## mechanism: the at-risk export window runs from infection, so
@@ -266,14 +277,14 @@ function forecast_reported(chn;
                 μ_exports = expected_exports_delay(r[i], pu[i], q, Th, f_det;
                     alg = alg)
             end
-            exports_cum[i] = rand(rng,
+            exports_new[i] = rand(rng,
                 Poisson(max(μ_exports, eps(μ_exports))))
         end
         if has_lab
             ## Received backlog (receipt-delayed) and the capacity-limited
-            ## analysed increment over the horizon; new confirmed positives
-            ## are the horizon positivity times that increment, added to the
-            ## observed cumulative confirmed at the cut-off.
+            ## analysed increment over the horizon; the new confirmed
+            ## positives this week are the horizon positivity times that
+            ## increment (the queue increment over `(T, T+h]`).
             f_receipt = Gamma(α_recv[i], θ_recv[i])
             received = _forecast_received(r[i], Th, α_rep[i], θ_rep[i],
                 pr[i], λ_bg[i], τ_forward[i], f_receipt; onset_fraction = os)
@@ -281,48 +292,31 @@ function forecast_reported(chn;
                 capacity[i], horizon)
             p_pos = _forecast_positivity(r[i], Th, α_rep[i], θ_rep[i],
                 pr[i], λ_bg[i], s_test[i], spec_test[i]; onset_fraction = os)
-            confirmed_cum[i] = round(Int, obs_confirmed) +
-                               _nb_rand(rng, k[i], p_pos * Δanalysed)
-            if has_tests
-                tests_cum[i] = _nb_rand(rng, k[i], received)
-            end
+            confirmed_new[i] = _nb_rand(rng, k[i], p_pos * Δanalysed)
         end
         if has_lab_deaths
-            ## Forwarded positive increment of the suspect-death backlog
-            ## over the horizon, sharing the case-lab sensitivity /
-            ## specificity, added to the observed cumulative confirmed
-            ## deaths at the cut-off.
+            ## New confirmed deaths this week: the forwarded positive
+            ## increment of the suspect-death backlog over `(T, T+h]`,
+            ## sharing the case-lab sensitivity / specificity.
             μ_cdeath = _forecast_confirmed_deaths_increment(r[i], T[i], Th,
                 α[i], θ[i], CFR[i], p_deaths[i], λ_bg_death[i], τ_death[i],
                 s_test[i], spec_test[i]; onset_fraction = os, alg)
-            confirmed_deaths_cum[i] = round(Int, obs_confirmed_deaths) +
-                                      _nb_rand(rng, k[i], μ_cdeath)
+            confirmed_deaths_new[i] = _nb_rand(rng, k[i], μ_cdeath)
         end
     end
 
-    _new(cum, obs) = max.(cum .- round(Int, obs), 0)
     df = DataFrame(
-        cases_cum = cases_cum,
-        deaths_cum = deaths_cum,
-        cases_new = _new(cases_cum, obs_cases),
-        deaths_new = _new(deaths_cum, obs_deaths)
+        infections_new = infections_new,
+        bvd_deaths_new = bvd_deaths_new
     )
     if forecast_exports
-        df.exports_cum = exports_cum
-        df.exports_new = _new(exports_cum, obs_exports)
+        df.exports_new = exports_new
     end
     if has_lab
-        df.confirmed_cum = confirmed_cum
-        df.confirmed_new = _new(confirmed_cum, obs_confirmed)
+        df.confirmed_new = confirmed_new
     end
     if has_lab_deaths
-        df.confirmed_deaths_cum = confirmed_deaths_cum
-        df.confirmed_deaths_new = _new(confirmed_deaths_cum,
-            obs_confirmed_deaths)
-    end
-    if has_tests
-        df.tests_cum = tests_cum
-        df.tests_new = _new(tests_cum, obs_tests)
+        df.confirmed_deaths_new = confirmed_deaths_new
     end
     return df
 end
@@ -339,151 +333,43 @@ function haskey_chain(chn, name::Symbol)
     end
 end
 
+## Resolve the suspect-case forwarding fraction symbol. The production queue
+## chain pins `τ_forward` (unsampled) and exposes the derived
+## `τ_forward_out`; prior/test chains sample `τ_forward` directly. Returns
+## the present symbol, preferring the sampled `τ_forward`, or `nothing`.
+function _forward_key(chn)
+    haskey_chain(chn, :τ_forward) && return :τ_forward
+    haskey_chain(chn, :τ_forward_out) && return :τ_forward_out
+    return nothing
+end
+
 """
 Summarise a [`forecast_reported`](@ref) result into a `DataFrame` with
-one row per stream (cases, deaths, exports) and quantity (cumulative
-total by `T + 7`, or new this week), reporting the same equal-tailed
-30/60/90% credible interval endpoints (`lower_90 … upper_90`) as the
-other summary tables.
+one row per projected quantity (new infections, new BVD deaths, and the
+new confirmed cases / confirmed deaths when present), reporting the same
+equal-tailed 30/60/90% credible interval endpoints (`lower_90 …
+upper_90`) as the other summary tables. Every quantity is the new count
+over the coming week.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(label,
-        quantity,
         draws) = begin
         s = posterior_summary(draws)
-        (stream = label, quantity = quantity,
+        (quantity = label,
             lower_90 = round(s.lo90; digits), lower_60 = round(s.lo60; digits),
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
             upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
     end
-    rows = NamedTuple[]
-    streams = [
-        ("DRC reported cases", :cases_cum, :cases_new),
-        ("DRC deaths", :deaths_cum, :deaths_new)]
-    :exports_cum in propertynames(fc) &&
-        push!(streams, ("Uganda exports", :exports_cum, :exports_new))
-    :tests_cum in propertynames(fc) &&
-        push!(streams, ("DRC tests analysed", :tests_cum, :tests_new))
-    :confirmed_cum in propertynames(fc) &&
-        push!(streams, ("DRC confirmed cases",
-            :confirmed_cum, :confirmed_new))
-    :confirmed_deaths_cum in propertynames(fc) &&
-        push!(streams, ("DRC confirmed deaths",
-            :confirmed_deaths_cum, :confirmed_deaths_new))
-    for (label, cum, new) in streams
-        push!(rows, _row(label, "cumulative by T+7", fc[!, cum]))
-        push!(rows, _row(label, "new this week", fc[!, new]))
-    end
-    return _prettify(DataFrame(rows))
-end
-
-"""
-Validate a [`forecast_reported`](@ref) projection against the counts
-that were later observed. `cases`, `deaths` and `exports` are the
-observed cumulative DRC reported cases, DRC deaths and Uganda exports at
-the forecast target date. Returns a `DataFrame` with one row per stream
-giving the observed count, the equal-tailed 30/60/90% predictive
-intervals (the same endpoints as the other summary tables), and whether
-the observed count falls inside the 90% interval. Use it to forecast
-from an earlier data snapshot and check the now-known truth against the
-projection.
-"""
-function forecast_vs_truth(fc::DataFrame;
-        cases::Real, deaths::Real, exports::Real,
-        confirmed::Union{Real, Missing} = missing,
-        tests::Union{Real, Missing} = missing,
-        digits::Integer = 0)
-    _row(label,
-        draws,
-        obs) = begin
-        s = posterior_summary(draws)
-        lo = round(s.lo90; digits)
-        hi = round(s.hi90; digits)
-        (stream = label, observed = round(obs; digits),
-            lower_90 = lo, lower_60 = round(s.lo60; digits),
-            lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
-            upper_60 = round(s.hi60; digits), upper_90 = hi,
-            within_90 = lo <= obs <= hi ? "yes" : "no")
-    end
     rows = NamedTuple[
-    _row("DRC reported cases", fc[!, :cases_cum], cases),
+    _row("New infections", fc[!, :infections_new]),
     _row(
-        "DRC deaths", fc[!, :deaths_cum], deaths),
-    _row(
-        "Uganda exports", fc[!, :exports_cum], exports)
-]
-    tests !== missing && :tests_cum in propertynames(fc) &&
+        "New BVD deaths (DRC)", fc[!, :bvd_deaths_new])]
+    :exports_new in propertynames(fc) &&
+        push!(rows, _row("New exports (Uganda)", fc[!, :exports_new]))
+    :confirmed_new in propertynames(fc) &&
+        push!(rows, _row("New confirmed cases (DRC)", fc[!, :confirmed_new]))
+    :confirmed_deaths_new in propertynames(fc) &&
         push!(rows,
-            _row("DRC tests analysed", fc[!, :tests_cum], tests))
-    confirmed !== missing && :confirmed_cum in propertynames(fc) &&
-        push!(rows,
-            _row("DRC confirmed cases", fc[!, :confirmed_cum], confirmed))
-    return _prettify(DataFrame(rows))
-end
-
-"""
-Validate a fitted chain's projection against the full observed daily
-trajectory rather than a single endpoint.
-
-Given the per-vintage observed cumulative series (`dates`, with `cases`
-and `deaths` the cumulative DRC reported cases and suspected deaths at
-each date) and the fit's data cut-off `snapshot_date`, project the chain
-forward to every vintage date that falls *after* the cut-off and compare
-the predicted cumulative count against the observed one. This scores the
-whole forecast horizon, not just its endpoint.
-
-Returns a `DataFrame` with one row per (stream, date): the horizon in
-days, the observed count, the equal-tailed 30/60/90% predictive
-intervals (the same endpoints as the other tables) and whether the
-observed count falls within the 90% interval. Streams with no
-per-vintage series (Uganda exports) stay with [`forecast_vs_truth`](@ref).
-
-`baseline_cases` / `baseline_deaths` are the fit's cut-off counts; they
-only feed the unused `*_new` columns of the per-horizon projection.
-"""
-function forecast_vs_truth_trajectory(chn;
-        dates::AbstractVector,
-        cases::AbstractVector,
-        deaths::AbstractVector,
-        snapshot_date,
-        daily_travellers::Real,
-        source_population::Real,
-        baseline_cases::Real = 0,
-        baseline_deaths::Real = 0,
-        seed::Integer = 20260520,
-        report_onset_offset::Union{Nothing, Real} = nothing,
-        digits::Integer = 0,
-        alg = DEATH_INTEGRAL_ALG)
-    length(dates) == length(cases) == length(deaths) ||
-        error("dates, cases and deaths must be equal length (got " *
-              "$(length(dates)), $(length(cases)), $(length(deaths)))")
-    snap = date2epochdays(Date(snapshot_date))
-    rows = NamedTuple[]
-    for i in eachindex(dates)
-        ## Only vintages strictly after the fit cut-off are a forecast.
-        h = date2epochdays(Date(dates[i])) - snap
-        h > 0 || continue
-        fc = forecast_reported(chn; horizon = h,
-            daily_travellers, source_population,
-            obs_cases = baseline_cases, obs_deaths = baseline_deaths,
-            obs_exports = 0, seed, report_onset_offset, alg)
-        for (label,
-            col,
-            obs) in (
-            ("DRC reported cases", :cases_cum, cases[i]),
-            ("DRC deaths", :deaths_cum, deaths[i]))
-            s = posterior_summary(fc[!, col])
-            lo = round(s.lo90; digits)
-            hi = round(s.hi90; digits)
-            push!(rows,
-                (stream = label, date = string(dates[i]),
-                    horizon_days = h, observed = round(obs; digits),
-                    lower_90 = lo, lower_60 = round(s.lo60; digits),
-                    lower_30 = round(s.lo30; digits),
-                    upper_30 = round(s.hi30; digits),
-                    upper_60 = round(s.hi60; digits), upper_90 = hi,
-                    within_90 = lo <= obs <= hi ? "yes" : "no"))
-        end
-    end
+            _row("New confirmed deaths (DRC)", fc[!, :confirmed_deaths_new]))
     return _prettify(DataFrame(rows))
 end

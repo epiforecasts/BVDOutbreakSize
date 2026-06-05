@@ -82,10 +82,12 @@
 # **Extensions**
 #
 # - *No-onward-transmission counterfactual.* A lower bound on the eventual
-#   death toll if all onward transmission stopped at the cut-off.
-# - *Posterior-predictive forecasts.* A one-week-ahead projection of each
-#   stream, plus a retrospective refit of the original report's data to
-#   the current cut-off.
+#   death toll if all onward transmission stopped at the cut-off, and the
+#   committed counterfactual-year totals for infections, BVD deaths,
+#   confirmed cases and confirmed deaths.
+# - *Posterior-predictive forecasts.* A one-week-ahead projection of the
+#   four trusted quantities (infections, true BVD deaths, confirmed cases
+#   and confirmed deaths).
 #md #
 #md # ```@raw html
 #md # </details>
@@ -2664,10 +2666,65 @@ no_onward_fig = plot_no_onward_deaths(no_onward; obs_deaths = obs.total_deaths);
 
 no_onward_fig #hide
 
+# ### Counterfactual-year committed totals
+#
+# The committed toll over the coming year under no onward transmission.
+# Infections are held flat at the current outbreak size $C(T)$ after the
+# cut-off, and the already-infected pool continues to die and be confirmed
+# over a one-year horizon.
+# Four committed totals per draw: infections (the current outbreak size,
+# flat), true BVD deaths ($\mathrm{CFR} \cdot C(T)$, since over a year
+# essentially every infection contributes its delayed death), and the
+# laboratory-confirmed cases and confirmed deaths the lab will record as it
+# drains the committed backlog.
+
+#md # ```@raw html
+#md # <details><summary>Project the committed counterfactual-year totals</summary>
+#md # ```
+
+committed = predict_committed(chn_joint;
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths,
+    obs_analysed = obs.cumulative_tests_analysed,
+    horizon_days = 365);
+
+committed_table = streams_table(
+    "committed infections" => committed.infections,
+    "committed BVD deaths" => committed.bvd_deaths,
+    "committed confirmed cases" => committed.confirmed_cases,
+    "committed confirmed deaths" => committed.confirmed_deaths;
+    digits = 0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+committed_table #hide
+
+# The four committed-total panels:
+
+#md # ```@raw html
+#md # <details><summary>Committed counterfactual-year plot</summary>
+#md # ```
+
+committed_fig = plot_committed(committed;
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+committed_fig #hide
+
 # ### One-week-ahead forecast
 #
-# The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$. Exports are dropped from this projection.
+# The seven-day no-change projection of the four trusted quantities: the
+# new counts expected over the coming week for infections, true BVD deaths,
+# laboratory-confirmed cases and laboratory-confirmed deaths.
+# The untrusted suspected/reported cases, suspected deaths and
+# tests-analysed streams are dropped.
+# Exports are also dropped from this projection.
 # Cross-border travel is unlikely to be continuing at its baseline rate,
 # so the forward travel rate the export forecast relies on no longer
 # holds.
@@ -2680,11 +2737,8 @@ forecast = forecast_reported(chn_joint;
     horizon = 7,
     daily_travellers = ITURI_DAILY_TRAVEL,
     source_population = ITURI_POPULATION,
-    obs_cases = obs.reported_cases,
-    obs_deaths = obs.total_deaths,
     obs_confirmed = obs.confirmed_cases,
     obs_confirmed_deaths = obs.confirmed_deaths,
-    obs_tests = obs.tests_received_history.values[end],
     obs_analysed = obs.cumulative_tests_analysed,
     forecast_exports = false,
     report_onset_offset = report_onset_offset(obs.as_of_date));
@@ -2696,7 +2750,7 @@ forecast_summary = forecast_table(forecast);
 
 forecast_summary #hide
 
-# New counts expected over the coming week, by stream:
+# New counts expected over the coming week, by quantity:
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead forecast plot</summary>
@@ -2709,125 +2763,6 @@ forecast_fig = plot_forecast(forecast);
 #md # ```
 
 forecast_fig #hide
-
-# ### Forecast validation against later data
-#
-# The one-week-ahead forecast above projects from the current fit, so it
-# cannot yet be checked. We instead validate the same machinery
-# retrospectively: take our joint fit to the original McCabe et al.
-# report's data, project each posterior draw forward to the current data
-# cut-off, and compare the predicted cumulative counts against the counts
-# observed since.
-
-#md # ```@raw html
-#md # <details><summary>Fit the joint model to the original report's data and forecast it forward</summary>
-#md # ```
-
-obs_report = load_observations(
-    joinpath(pkgdir(BVDOutbreakSize), "data", "report-snapshot.toml"));
-
-report_args = joint_obs(obs_report)
-chn_joint_report = nuts_sample(
-    bvd_joint(obs_report.exported_cases, report_args.deaths,
-    report_args.reported, report_args.export_deaths; report_args.kw...,
-    growth = growth_for(obs_report),
-    first_export_detection_delta =
-    obs_report.first_export_detection_delta));
-posterior_C_joint_report = vec(Array(chn_joint_report[:cumulative_cases]));
-
-validation_horizon = value(Date(obs.as_of_date) - Date(obs_report.as_of_date))
-
-## The report-snapshot fit predates the laboratory streams (no
-## confirmed-case or analysed-test counts in its observation
-## data), so the chain does not carry the lab-pipeline parameters and
-## the validation forecast covers the three streams that were
-## available at the snapshot date only.
-forecast_validation = forecast_reported(chn_joint_report;
-    horizon = validation_horizon,
-    daily_travellers = ITURI_DAILY_TRAVEL,
-    source_population = ITURI_POPULATION,
-    obs_cases = obs_report.reported_cases,
-    obs_deaths = obs_report.total_deaths,
-    obs_exports = obs_report.exported_cases);
-
-forecast_validation_table = forecast_vs_truth(forecast_validation;
-    cases = obs.reported_cases,
-    deaths = obs.total_deaths,
-    exports = obs.exported_cases);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, Markdown
-#md # using Dates: Date, value
-#md # rep = load_observations(joinpath(pkgdir(BVDOutbreakSize), "data",
-#md #     "report-snapshot.toml")).as_of_date
-#md # cur = load_observations().as_of_date
-#md # h = value(Date(cur) - Date(rep))
-#md # Markdown.parse("Projecting the original-report fit $(h) days " *
-#md #     "forward to the current ($(cur)) data, against the counts " *
-#md #     "observed by then:")
-#md # ```
-
-forecast_validation_table #hide
-
-# The top row shows the cumulative forecast per stream and the bottom row
-# the new counts over the horizon, mirroring the one-week-ahead forecast.
-# Each panel shades the 90% predictive interval and draws the
-# later-observed count as a dashed rule, so coverage can be read off
-# directly. The confirmed and samples-received streams are absent here.
-# The validation refits the original report snapshot, which predates any
-# laboratory data, so that fit carries no lab parameters to project
-# forward.
-
-#md # ```@raw html
-#md # <details><summary>Forecast-validation plot</summary>
-#md # ```
-
-forecast_validation_fig = plot_forecast_vs_truth(forecast_validation;
-    cases = obs.reported_cases,
-    deaths = obs.total_deaths,
-    exports = obs.exported_cases,
-    baseline_cases = obs_report.reported_cases,
-    baseline_deaths = obs_report.total_deaths,
-    baseline_exports = obs_report.exported_cases);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_validation_fig #hide
-
-# The check above scores only the endpoint at the current cut-off. Since
-# The INSP reports give a cumulative count at every sitrep date, so we can
-# score the whole horizon: project the same original-report fit forward
-# to each vintage date between the report and now, and compare against
-# the count observed at that date. Each row is one stream at one date,
-# with the 90% predictive interval and whether the observed cumulative
-# fell inside it, so forecast coverage can be read across the horizon
-# rather than at a single point.
-
-#md # ```@raw html
-#md # <details><summary>Score the report fit against the observed daily trajectory</summary>
-#md # ```
-
-forecast_trajectory_table = forecast_vs_truth_trajectory(chn_joint_report;
-    dates = obs.reported_case_history.dates,
-    cases = obs.reported_case_history.values,
-    deaths = obs.death_history.values,
-    snapshot_date = obs_report.as_of_date,
-    daily_travellers = ITURI_DAILY_TRAVEL,
-    source_population = ITURI_POPULATION,
-    baseline_cases = obs_report.reported_cases,
-    baseline_deaths = obs_report.total_deaths);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_trajectory_table #hide
 
 # ### Delay sensitivity
 #
@@ -3188,8 +3123,21 @@ cumulative_density_fig #hide
 #md # <details><summary>Fit our model to each report version's data, and run the Method 2 reproductions</summary>
 #md # ```
 
-## The 18 May report's data and its joint fit are loaded and fitted
-## earlier, in the forecast-validation section.
+## The 18 May original report's data and its joint fit, for the C(T)
+## comparison against the published Method 2 headline and our current-data
+## fit.
+obs_report = load_observations(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "report-snapshot.toml"));
+
+report_args = joint_obs(obs_report)
+chn_joint_report = nuts_sample(
+    bvd_joint(obs_report.exported_cases, report_args.deaths,
+    report_args.reported, report_args.export_deaths; report_args.kw...,
+    growth = growth_for(obs_report),
+    first_export_detection_delta =
+    obs_report.first_export_detection_delta));
+posterior_C_joint_report = vec(Array(chn_joint_report[:cumulative_cases]));
+
 obs_report_20may = load_observations(
     joinpath(pkgdir(BVDOutbreakSize), "data",
     "report-snapshot-20may.toml"));
