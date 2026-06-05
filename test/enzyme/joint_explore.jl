@@ -13,16 +13,20 @@
 # NUTS) isolates compile/differentiate viability from trajectory
 # exploration into extreme regions.
 #
-# STATUS as of the renewal merge (`background_re` switch): Enzyme NO
-# LONGER differentiates this joint. The `if background_re ... else ...
-# end` block in `bvd_joint` conditionally binds the `case_bg_re` /
-# `death_bg_re` closures (or `nothing`), which the compiler boxes into a
+# STATUS as of renewal HEAD a5f9ef6 (`background_re` switch, plus the
+# composition positivity link, rt_start genetic bound, late windows,
+# molecular-clock R0; joint now 59-dim): Enzyme STILL does not
+# differentiate this joint. The blocker is unchanged: the
+# `if background_re ... else ... end` block in `bvd_joint`
+# (joint.jl:298-307) conditionally binds the `case_bg_re` / `death_bg_re`
+# closures (or `nothing`), which the compiler boxes into a
 # `Base.RefValue`; Enzyme cannot reverse-mode through the boxed captured
 # variable and aborts at the NamedTuple construction in `bvd_joint`
-# (joint.jl:293). `background_re = true` fails with a `TypeError`
+# (joint.jl:309). `background_re = true` fails with a `TypeError`
 # (RefValue-wrapped closure), `background_re = false` with a `MethodError:
-# getindex(::Nothing)`. Mooncake handles both. This harness now records
-# the failure rather than a match; see PR #201 for the diagnosis.
+# getindex(::Nothing)`. The composition link / rt_start / R0 changes did
+# NOT add any new AD blocker. Mooncake handles all of it. This harness
+# records the failure rather than a match; see PR #201 for the diagnosis.
 
 using Test
 using Enzyme
@@ -51,6 +55,7 @@ function build_joint()
         tests_received_history = obs.tests_received_history,
         breakpoint = breakpoint,
         background_re = true,
+        confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
 end
