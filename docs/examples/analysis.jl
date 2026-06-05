@@ -772,7 +772,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_model(
-#md #         missing, Float64[], 0.25)), "\n```"))
+#md #         missing, Float64[], 0.25; incubation_pmf = Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -892,7 +892,7 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_cases_model(
 #md #         (; days = Int[], counts = Int[]), missing, Float64[],
-#md #         1.0, 0.25, 1.0, 0.5, Float64[])), "\n```"))
+#md #         1.0, 0.25, Float64[], 0.5, Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -923,7 +923,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_deaths_model(
-#md #         missing, missing, 1.0, Float64[], 1.0, 0.25)), "\n```"))
+#md #         missing, missing, 1.0, Float64[], 1.0, Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -950,7 +950,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_deaths_model(
-#md #         missing, Float64[], 0.33, Float64[])), "\n```"))
+#md #         missing, Float64[], 0.33, Float64[], Float64[])), "\n```"))
 #md # ```
 
 #md # ```@raw html
