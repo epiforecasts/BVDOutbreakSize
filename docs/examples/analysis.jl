@@ -45,6 +45,12 @@
 #   fatality ratio (CFR), delays, traveller volume and surveillance
 #   dispersion are given priors and sampled jointly, where McCabe et al.
 #   fix each and sweep scenarios.
+# - *Growth prior centred on the molecular clock.* The growth-rate prior is
+#   centred on the 20-day doubling time from the phylodynamic reanalysis of
+#   the first ten BDBV genomes [cuomodannenburg2026](@cite), rather than
+#   McCabe et al.'s 14-day central scenario. The McCabe et al. Method 2
+#   reproduction pins the growth rate to their 14-day value, so that
+#   comparison is on their own assumptions.
 #
 # **Delays and convolutions**
 #
@@ -533,26 +539,38 @@ vintage_table #hide
 # ```
 #
 # so that the cumulative infection count at the cut-off is $C(T) = 2^m$
-# with $m = T/\tau$ the number of doublings since seeding. McCabe et al.'s
-# primary assumption is the doubling time, which they vary over a
-# sensitivity sweep of 7 / 14 / 21 days; each choice of doubling time
-# implies a growth rate $r = \log 2/\tau$. We place the prior on that
-# implied growth rate $r$ directly, centred at the main-scenario doubling
-# time (14 d, so $r = \log 2/14$) with log-SD 0.4:
+# with $m = T/\tau$ the number of doublings since seeding. The doubling
+# time is the primary epidemiological assumption; each choice of doubling
+# time implies a growth rate $r = \log 2/\tau$, and we place the prior on
+# that implied growth rate $r$ directly. The centre comes from the
+# molecular-clock estimate for this outbreak: the phylodynamic reanalysis
+# of the first ten BDBV genomes by [cuomodannenburg2026](@cite) reports a
+# mean doubling time of 15.2-24.5 days across six substitution-rate
+# assumptions, so we centre on 20 d (the middle of that range, slower than
+# McCabe et al.'s 14-day central scenario) with a log-SD of 0.15:
 #
 # ```math
-# r \sim \mathrm{LogNormal}(\log(\log 2 / 14),\ 0.4),
+# r \sim \mathrm{LogNormal}(\log(\log 2 / 20),\ 0.15),
 # \qquad
 # \tau = \frac{\log 2}{r}. \tag{2}
 # ```
 #
 # Because $r = \log 2/\tau$ is a reciprocal, putting this LogNormal on $r$
-# is exactly equivalent to a $\mathrm{LogNormal}(\log 14, 0.4)$ prior on
+# is exactly equivalent to a $\mathrm{LogNormal}(\log 20, 0.15)$ prior on
 # the doubling time: a reciprocal negates and shifts the log-scale mean
-# but preserves the log-scale SD 0.4, so the implied doubling-time prior
-# is unchanged (95% interval roughly $(6, 31)$ d, spanning the full
-# sweep), as is every derived quantity. Only the sampled coordinate
-# differs.
+# but preserves the log-scale SD 0.15, so the implied doubling-time prior
+# is the same on $\tau$, as is every derived quantity. Only the sampled
+# coordinate differs. The log-SD is set by reading the 15.2-24.5 day spread
+# of their mean doubling times as roughly a 95% interval, which implies a
+# log-SD near 0.12; 0.15 inflates that a little to allow for their wide
+# per-assumption intervals without drifting off the molecular-clock
+# estimate. The implied 95% doubling-time interval is then roughly
+# $(14.9, 26.8)$ d, sitting on the reported range. The McCabe et al.
+# Method 2 reproduction below instead pins the growth rate to their 14-day
+# central doubling time, so that comparison rests on McCabe et al.'s own
+# assumptions rather than the genetic update. The fit stays
+# likelihood-dominated, so the situation-report trajectory drives the
+# posterior growth rate.
 #
 # Rather than sampling $T$ directly (ridge-correlated with $r$ through
 # $C(T) = \exp(r T)$), the model samples the *doubling count*
@@ -563,15 +581,17 @@ vintage_table #hide
 # ```math
 # m \sim \mathrm{Normal}(m_0,\ 3)\ \text{on}\ (0, \infty),
 # \qquad
-# m_0 = 9 + \frac{\text{cut-off} - \text{18 May 2026}}{14}. \tag{3}
+# m_0 = 9 + \frac{\text{cut-off} - \text{18 May 2026}}{20}. \tag{3}
 # ```
 #
 # The base assumption is McCabe et al.'s first report (18 May 2026): its
 # Method 2 central scenario of 501 cases is a doubling count
 # $m = \log_2 501 \approx 9$. Each day that the cut-off runs past that
-# report adds a fraction of a doubling at the central 14-day doubling
-# time, so the size prior stays centred on the plausible outbreak as the
-# data are refreshed rather than being fixed at the report-date value.
+# report adds a fraction of a doubling at the central 20-day doubling time
+# (the [cuomodannenburg2026](@cite) molecular-clock estimate, shared with
+# the growth-rate prior above), so the size prior stays centred on the
+# plausible outbreak as the data are refreshed rather than being fixed at
+# the report-date value.
 # The doubling time $\tau$, the elapsed time $T = m\cdot\tau$ and $C(T)$
 # are exposed as deterministics so they appear in posterior tables and
 # pair plots.

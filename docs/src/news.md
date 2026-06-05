@@ -29,34 +29,23 @@ each push to `main` also republishes the rendered analysis and the
 
 - Added a laboratory-confirmed-deaths stream
   (`confirmed_deaths_model`, `confirmed_deaths_only_model`,
-  `death_background_model`, `death_forward_model`) fitting the sitrep
-  front-page `Cumul décès parmi les confirmés` (deaths that got
-  laboratory-confirmed, 17 at the 28 May cut-off) as a genuine
-  lab/positivity process rather than a thinning of the modelled BVD-death
-  trajectory (issue #193). The suspected deaths gain a constant-rate
-  non-BVD background `λ_bg_death` (`death_background_model`, the death
-  analogue of the case `λ_bg`), so suspected deaths are BVD signal plus
-  background. Confirmed deaths are positives among the death specimens
-  forwarded at fraction `τ_death`: `ΔD_conf,v ~ NegBinomial(τ_death ·
-  p_pos_death,v · ΔN_death,v, k)` with `p_pos_death = s·q_death +
-  (1−spec)(1−q_death)`, `q_death = μ_BVD_death / N_death_susp` the BVD
-  share of the suspect-death pool, and the PCR sensitivity `s` /
-  specificity `spec` imported *shared* from the confirmed-case lab
-  pipeline. This replaces the earlier `coverage_death · s` thinning, whose
-  slack sat in `coverage_death` at its boundary with no observation or
-  background process. A time-varying background is a follow-up (issue
-  #194). Wired into `bvd_joint` as an optional stream (`confirmed_deaths`
-  / `confirmed_death_offsets`), off by default.
-- Reparameterised growth to sample the growth rate `r` directly
-  (`LogNormal(log(log(2)/14), 0.4)`, McCabe et al.'s primary assumption),
-  with the doubling time `τ = log(2)/r` and `m`, `T`, `C(T)` still
-  exposed. This is the exact reciprocal pushforward of the old `τ` prior,
-  so the implied priors are unchanged.
+  `death_background_model`, `death_forward_model`) fitting the front-page
+  `Cumul décès parmi les confirmés` as a lab/positivity process: suspected
+  deaths gain a constant-rate non-BVD background `λ_bg_death`, and confirmed
+  deaths are positives among the forwarded death specimens
+  (`τ_death · p_pos_death · ΔN_death`, sharing the case-lab sensitivity and
+  specificity) — replacing the earlier `coverage · s` thinning (issue #193).
+  Off by default.
+- Recentred the growth prior on the molecular clock:
+  `r ~ LogNormal(log(log(2)/20), 0.15)`, the 20-day doubling time from the
+  phylodynamic reanalysis of the first ten BDBV genomes
+  ([cuomodannenburg2026](@cite); 15.2-24.5 days across six substitution-rate
+  assumptions), slower than McCabe et al.'s 14-day scenario.
 - Recentred the doubling-count prior on a base that advances with the
   cut-off: `m ~ Normal(m_prior_centre(as_of), 3)`, centre
-  `9 + (cut-off − 18 May)/14` doublings, based on McCabe et al.'s
-  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the 14-day
-  doubling time, so it tracks data refreshes.
+  `9 + (cut-off − 18 May)/20` doublings, based on McCabe et al.'s
+  first-report Method 2 central (501 cases, `log2 ≈ 9`) and the same
+  20-day molecular-clock doubling time, so it tracks data refreshes.
 - Added an independent DRC and Uganda ascertainment extension: a
   logit-scale reporting fraction for each surveillance system applied to
   the latent incidence, fitting the reported suspected-case count

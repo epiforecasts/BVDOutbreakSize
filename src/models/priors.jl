@@ -13,14 +13,28 @@ as deterministics for downstream submodels. `C(T)` is the latent
 incubation period (see [`incubation_model`](@ref)) before the per-stream
 delays act.
 
-McCabe et al.'s primary assumption is the doubling time (their 7/14/21-day
-sweep); each doubling time implies a growth rate `r = log(2)/τ`, and the
-prior is placed on that implied `r`, with `τ = log(2)/r` recovered as a
-deterministic. The default `r ~ LogNormal(log(log(2)/14), 0.4)` is
-exactly equivalent to a `LogNormal(log(14), 0.4)` prior on the doubling
-time: because `r = log(2)/τ` is a reciprocal, the log-scale SD `0.4` is
-preserved, so the implied doubling-time prior (and every derived
-quantity) matches that prior on `τ`.
+The prior is placed on the doubling time (the primary epidemiological
+assumption); each doubling time implies a growth rate `r = log(2)/τ`, so
+the prior is sampled on that implied `r`, with `τ = log(2)/r` recovered as
+a deterministic. The default centres on the molecular-clock doubling-time
+estimate for this outbreak: Cuomo-Dannenburg & Ghafari's phylodynamic
+reanalysis of the first ten BDBV genomes (cuomodannenburg2026) puts the
+mean doubling time at 15.2-24.5 days across six substitution-rate
+assumptions, so the centre is
+set to 20 days (`M_PRIOR_DOUBLING_DAYS`), the middle of that range, slower
+than McCabe et al.'s 14-day central scenario. The log-SD is set to `0.15`:
+reading the 15.2-24.5 day spread of mean doubling times as roughly a 95%
+interval implies a log-SD near `0.12`, and `0.15` inflates that a little to
+allow for the wide per-assumption intervals without drifting off the
+molecular-clock estimate. The default `r ~ LogNormal(log(log(2)/20), 0.15)`
+is exactly equivalent to a `LogNormal(log(20), 0.15)` prior on the doubling
+time, because `r = log(2)/τ` is a reciprocal that preserves the log-scale
+SD. The implied 95% doubling-time interval is roughly `τ ∈ (14.9, 26.8)`
+days, sitting on the reported range with a light inflation. The McCabe et
+al. Method 2 reproduction instead pins the growth rate to their 14-day
+central doubling time (see the report). Fits remain likelihood-dominated,
+so the
+situation-report trajectory still drives the posterior growth rate.
 
 The default doubling-count prior `m ~ Normal(M_PRIOR_BASE, 3)` (truncated
 at 0) is centred on `M_PRIOR_BASE = 9` (`C_T = 2^9 = 512`), the doubling
@@ -35,7 +49,7 @@ support ≈ `m ∈ (3, 15)`, `C_T ∈ (8, 32000)`); the fit is dominated by the
 likelihood, so it mainly sets where the joint sampler starts.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / 14), 0.4),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.15),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
