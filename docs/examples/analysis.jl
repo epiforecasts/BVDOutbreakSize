@@ -625,10 +625,32 @@ cfr_prior_fig #hide
 # ##### Genetic seeding bound
 #
 # A BEAST time tree of the first ten sequenced genomes
-# [virological2026](@cite) places the TMRCA at a mean of
-# 25 March 2026. We treat it as a right-censored, noisy reading of
-# the seeding time, contributing $\Pr[\mathrm{Normal}(T, \sigma) \ge g]$
-# where $g = t_{\text{cut}} - t_{\text{TMRCA}}$ and $\sigma = 15$ d.
+# [virological2026](@cite) places the TMRCA, the age of the oldest
+# internal node of the tree, at a mean of 25 March 2026. The temporal
+# sampling range is too short to estimate the molecular clock, so it is
+# fixed to the $1.2\times10^{-3}$ substitutions/site/year rate of the
+# 2013-2016 West African Ebola epidemic [holmes2016](@cite).
+# The TMRCA is a lower bound on the seeding time $T$. Adding sequences,
+# or more geographically representative ones, can only push it earlier,
+# never later, as the sampled tree is almost entirely from Bunia.
+# Using the genetic TMRCA as a one-sided seeding bound rather than a
+# point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+#
+# We treat the TMRCA as a right-censored, noisy reading of the seeding
+# time. Writing $g = t_{\text{cut}} - t_{\text{TMRCA}}$ for the seeding
+# age implied by the reported TMRCA date, so that $g$ tracks the cut-off
+# rather than a fixed offset, the bound contributes the probability that
+# a $\mathrm{Normal}(T, \sigma)$ reading falls at or beyond $g$,
+#
+# ```math
+# p_\text{gen}(T) = \Pr[\mathrm{Normal}(T, \sigma) \ge g]
+#   = \Phi\!\left(\frac{T - g}{\sigma}\right),
+# \qquad \sigma = 15\ \text{d}. \tag{16}
+# ```
+#
+# The bound is one-sided. It penalises outbreak ages younger than the
+# TMRCA but leaves $T$ free above it, with the clock fixed and no
+# propagation of cross-outbreak or clock uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -668,7 +690,7 @@ cfr_prior_fig #hide
 # ```math
 # q_\mu \sim \mathrm{Normal}(\operatorname{logit}(0.28),\ 0.7), \qquad
 # \sigma_q \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{16}
+# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{17}
 # ```
 
 #md # ```@raw html
@@ -746,7 +768,7 @@ cfr_prior_fig #hide
 # \mu_e = p_{\text{Uganda}} \cdot q
 #         \cdot \sum_{t=1}^{n} \mathrm{onsets}_t \cdot f_{\text{det}}(n - t),
 # \qquad
-# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{16}
+# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{18}
 # ```
 #
 # The onset-to-detection delay is centred on the Ebola
@@ -755,7 +777,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
-# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{17}
+# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{19}
 # ```
 #
 # The exports stream uses this onset-to-detection delay in place of a
@@ -793,7 +815,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim
 #     \mathrm{NegBinomial}(\mu_i - \mu_{i-1},\ k),
-#     \qquad \mu_0 = 0. \tag{18}
+#     \qquad \mu_0 = 0. \tag{20}
 # ```
 
 #md # ```@raw html
@@ -825,7 +847,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{cases}} \sim \mathrm{NegBinomial}\!\bigl(p_{\text{DRC}}
 #     \cdot \mathrm{conv}(\mathrm{onsets},\, f_{\text{rep}})[n]
-#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{19}
+#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{21}
 # ```
 
 #md # ```@raw html
@@ -856,7 +878,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{received}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}
 #     \cdot \mathrm{conv}(p_{\text{DRC}}\, \mathrm{BVD}_{\text{rep}}
-#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{20}
+#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{22}
 # ```
 #
 # The confirmed positives are scored as a Binomial of the *observed*
@@ -869,7 +891,7 @@ cfr_prior_fig #hide
 # size, which the deaths and exports streams pin instead:
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{23}
 # ```
 #
 # The early confirmed vintages (18-23 May) have no per-vintage analysed
@@ -880,7 +902,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{early}} \sim \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k).
-# \tag{21b}
+# \tag{23b}
 # ```
 
 #md # ```@raw html
@@ -912,7 +934,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{conf-deaths}} \sim \mathrm{Binomial}\bigl(D_{\text{susp}},\
 #     \operatorname{logistic}(\operatorname{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}})\bigr). \tag{22}
+#     + \log m_{\text{death}})\bigr). \tag{24}
 # ```
 
 #md # ```@raw html
@@ -939,7 +961,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{exp-deaths}} \sim \mathrm{Poisson}(\mathrm{CFR}
-#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{23}
+#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{25}
 # ```
 
 #md # ```@raw html
