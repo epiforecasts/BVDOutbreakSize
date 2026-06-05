@@ -44,7 +44,7 @@
 #   incubation period, onset-to-death, onset-to-report,
 #   onset-to-confirmation and onset-to-detection-abroad each get a prior
 #   centred on published Ebola estimates, discretised with double
-#   interval censoring. No delay is fixed.
+#   interval censoring [charniga2024](@cite). No delay is fixed.
 # - *Euler–Lotka seeding.* The seeding window grows exponentially at the
 #   rate implied by the initial reproduction number and generation
 #   interval, so infections start smoothly rather than from a single
@@ -328,28 +328,35 @@ vintage_table #hide
 # The generation-interval PMF $g$ is sampled from a prior centred on
 # the Ebola virus disease serial interval as a generation-time proxy
 # (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), then
-# discretised with double interval censoring
-# (CensoredDistributions). The lag-0 bin is dropped and the remainder
-# renormalised so an infectee is always strictly later than its
-# infector:
+# discretised with double interval censoring [charniga2024](@cite). The
+# prior is centred on those published moments, with an assumed
+# weakly-informative spread (the SDs on the mean and SD priors are our
+# choice, not from the source). The lag-0 bin is dropped and the
+# remainder renormalised so an infectee is always strictly later than
+# its infector:
 #
 # ```math
 # \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 3.0), \qquad
 # \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 2.0). \tag{5}
 # ```
 #
-# The incubation period is similarly discretised with a prior centred
-# on the Ebola incubation (mean 9.7 d, SD 5.4 d; WHO Ebola Response
-# Team 2014, NEJM):
+# The incubation period is similarly discretised with a prior centred on
+# the Bundibugyo virus incubation estimate from the 2007 Uganda outbreak
+# (mean 6.3 d, 95% CI 5.2-7.3, $n = 24$; [macneil2010](@cite)). The
+# line-list reanalysis cannot fit incubation, as the line list has no
+# exposure dates, so it recommends this estimate instead. The mean prior
+# reproduces MacNeil et al.'s 95% CI; the spread prior is a
+# weakly-informative modelling choice, as they report no interval on the
+# SD:
 #
 # ```math
-# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(9.7,\ 2.0), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{6}
+# \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{6}
 # ```
 #
 # All LogNormal parameters are recovered by moment-matching from the
-# sampled mean and SD. Every delay in the model shares the generic
-# double-interval-censored discretisation of `censored_delay_model`; the
+# sampled mean and SD. Every delay in the model shares the same
+# double-interval-censored discretisation [charniga2024](@cite); the
 # generation interval wraps it to drop the lag-0 bin.
 
 #md # ```@raw html
@@ -429,9 +436,8 @@ vintage_table #hide
 #
 # Infections are convolved with the incubation PMF to produce daily
 # symptom-onset incidence, which every downstream stream then consumes.
-# The incubation delay is the injected delay submodel of
-# `onset_incidence_model`, defaulting to the Ebola incubation prior of
-# equation (6).
+# The incubation delay is an injected delay submodel, defaulting to the
+# Bundibugyo incubation prior of equation (6).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -468,10 +474,10 @@ vintage_table #hide
 # companion Bayesian reanalysis of the same Isiro 2012 BDBV line list
 # [bdbv_linelist_analysis_2026](@cite), which re-estimates the delay with
 # uncertainty. The renewal samples the delay by its mean and SD rather
-# than a Gamma shape and scale: the prior means are the reanalysis'
-# posterior mean (11.2 d) and SD (5.4 d), and the SD prior is set so the
-# fit reproduces the reanalysis uncertainty rather than collapsing onto a
-# single point estimate.
+# than a Gamma shape and scale. The prior means are centred on the
+# reanalysis' posterior mean (11.2 d) and SD (5.4 d), with an assumed
+# weakly-informative spread on each so the fit reproduces the reanalysis
+# uncertainty rather than collapsing onto a single point estimate:
 #
 # ```math
 # \mu_d \sim \mathrm{Normal}^{+}(11.2,\ 2.0), \qquad
@@ -479,9 +485,9 @@ vintage_table #hide
 # ```
 #
 # The sampled mean and SD are moment-matched to a LogNormal and
-# discretised with double interval censoring, as for every delay above.
-# The delay estimation in that reanalysis follows the recommendations of
-# [charniga2024](@cite). The submodel source is shown with the deaths
+# discretised with double interval censoring [charniga2024](@cite), as
+# for every delay above. The delay estimation in that reanalysis follows
+# the same recommendations. The submodel source is shown with the deaths
 # observation submodel below, where the delay is injected.
 #
 # ##### Case-fatality ratio
@@ -605,8 +611,8 @@ cfr_prior_fig #hide
 #
 # The prior is sampled in non-centred form to avoid the funnel geometry.
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
-# likelihoods use $p_{\text{Uganda}}$. An independent alternative
-# ([`independent_ascertainment_model`](@ref)) drops the shared hyperprior.
+# likelihoods use $p_{\text{Uganda}}$. An independent alternative drops
+# the shared hyperprior and gives each system its own fraction.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_ascertainment_model</summary>
@@ -625,10 +631,32 @@ cfr_prior_fig #hide
 # ##### Genetic seeding bound
 #
 # A BEAST time tree of the first ten sequenced genomes
-# [virological2026](@cite) places the TMRCA at a mean of
-# 25 March 2026. We treat it as a right-censored, noisy reading of
-# the seeding time, contributing $\Pr[\mathrm{Normal}(T, \sigma) \ge g]$
-# where $g = t_{\text{cut}} - t_{\text{TMRCA}}$ and $\sigma = 15$ d.
+# [virological2026](@cite) places the TMRCA, the age of the oldest
+# internal node of the tree, at a mean of 25 March 2026. The temporal
+# sampling range is too short to estimate the molecular clock, so it is
+# fixed to the $1.2\times10^{-3}$ substitutions/site/year rate of the
+# 2013-2016 West African Ebola epidemic [holmes2016](@cite).
+# The TMRCA is a lower bound on the seeding time $T$. Adding sequences,
+# or more geographically representative ones, can only push it earlier,
+# never later, as the sampled tree is almost entirely from Bunia.
+# Using the genetic TMRCA as a one-sided seeding bound rather than a
+# point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+#
+# We treat the TMRCA as a right-censored, noisy reading of the seeding
+# time. Writing $g = t_{\text{cut}} - t_{\text{TMRCA}}$ for the seeding
+# age implied by the reported TMRCA date, so that $g$ tracks the cut-off
+# rather than a fixed offset, the bound contributes the probability that
+# a $\mathrm{Normal}(T, \sigma)$ reading falls at or beyond $g$,
+#
+# ```math
+# p_\text{gen}(T) = \Pr[\mathrm{Normal}(T, \sigma) \ge g]
+#   = \Phi\!\left(\frac{T - g}{\sigma}\right),
+# \qquad \sigma = 15\ \text{d}. \tag{16}
+# ```
+#
+# The bound is one-sided. It penalises outbreak ages younger than the
+# TMRCA but leaves $T$ free above it, with the clock fixed and no
+# propagation of cross-outbreak or clock uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -668,7 +696,7 @@ cfr_prior_fig #hide
 # ```math
 # q_\mu \sim \mathrm{Normal}(\operatorname{logit}(0.28),\ 0.7), \qquad
 # \sigma_q \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{16}
+# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{17}
 # ```
 
 #md # ```@raw html
@@ -746,16 +774,17 @@ cfr_prior_fig #hide
 # \mu_e = p_{\text{Uganda}} \cdot q
 #         \cdot \sum_{t=1}^{n} \mathrm{onsets}_t \cdot f_{\text{det}}(n - t),
 # \qquad
-# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{16}
+# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{18}
 # ```
 #
 # The onset-to-detection delay is centred on the Ebola
 # onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola
-# Response Team 2014, NEJM):
+# Response Team 2014, NEJM), again with an assumed weakly-informative
+# spread rather than uncertainty taken from the source:
 #
 # ```math
 # \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
-# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{17}
+# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{19}
 # ```
 #
 # The exports stream uses this onset-to-detection delay in place of a
@@ -793,7 +822,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim
 #     \mathrm{NegBinomial}(\mu_i - \mu_{i-1},\ k),
-#     \qquad \mu_0 = 0. \tag{18}
+#     \qquad \mu_0 = 0. \tag{20}
 # ```
 
 #md # ```@raw html
@@ -825,7 +854,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{cases}} \sim \mathrm{NegBinomial}\!\bigl(p_{\text{DRC}}
 #     \cdot \mathrm{conv}(\mathrm{onsets},\, f_{\text{rep}})[n]
-#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{19}
+#     + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{21}
 # ```
 
 #md # ```@raw html
@@ -856,7 +885,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{received}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}
 #     \cdot \mathrm{conv}(p_{\text{DRC}}\, \mathrm{BVD}_{\text{rep}}
-#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{20}
+#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{22}
 # ```
 #
 # The confirmed positives are scored as a Binomial of the *observed*
@@ -869,7 +898,7 @@ cfr_prior_fig #hide
 # size, which the deaths and exports streams pin instead:
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{21}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{23}
 # ```
 #
 # The early confirmed vintages (18-23 May) have no per-vintage analysed
@@ -880,7 +909,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{early}} \sim \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k).
-# \tag{21b}
+# \tag{23b}
 # ```
 
 #md # ```@raw html
@@ -912,7 +941,7 @@ cfr_prior_fig #hide
 # ```math
 # Y_{\text{conf-deaths}} \sim \mathrm{Binomial}\bigl(D_{\text{susp}},\
 #     \operatorname{logistic}(\operatorname{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}})\bigr). \tag{22}
+#     + \log m_{\text{death}})\bigr). \tag{24}
 # ```
 
 #md # ```@raw html
@@ -939,7 +968,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{exp-deaths}} \sim \mathrm{Poisson}(\mathrm{CFR}
-#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{23}
+#     \cdot \mathrm{conv}(\mathrm{export\_onsets},\, f_d)[n]). \tag{25}
 # ```
 
 #md # ```@raw html
