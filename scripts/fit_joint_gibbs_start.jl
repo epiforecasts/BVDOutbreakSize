@@ -17,6 +17,8 @@ using Serialization: serialize
 const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 400
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const PLINK = length(ARGS) >= 3 ? Symbol(ARGS[3]) : :composition
+const BG_RE = length(ARGS) >= 4 ? parse(Bool, ARGS[4]) : true
+const TAG = length(ARGS) >= 5 ? ARGS[5] : "start"
 
 const obs = load_observations()
 const BREAKPOINT = obs.n - obs.who_first_sitrep_days
@@ -33,14 +35,16 @@ model = bvd_joint(
     lab_history = obs.lab_history,
     tests_received_history = obs.tests_received_history,
     breakpoint = BREAKPOINT,
-    background_re = true,
+    background_re = BG_RE,
     confirmed_positivity_link = PLINK,
     fit_start = true,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days)
 
 isdir("logs") || mkdir("logs")
-cb = progress_callback(; path = "logs/gibbs_start_fit.log", every = 10)
+const LOGFILE = "logs/gibbs_$(TAG)_fit.log"
+const CHAINFILE = "logs/gibbs_$(TAG)_chain.jls"
+cb = progress_callback(; path = LOGFILE, every = 10)
 
 println("Gibbs joint w/ explicit T ($(SAMPLES)x$(CHAINS), n=$(obs.n), ",
     "tmrca_days=$(obs.tmrca_days), plink=$(PLINK)). ",
@@ -49,7 +53,7 @@ println("Gibbs joint w/ explicit T ($(SAMPLES)x$(CHAINS), n=$(obs.n), ",
 chn = gibbs_sample(model; samples = SAMPLES, chains = CHAINS,
     callback = cb, progress = false)
 
-serialize("logs/gibbs_start_chain.jls", chn)
+serialize(CHAINFILE, chn)
 
 d = fit_diagnostics(chn)
 
