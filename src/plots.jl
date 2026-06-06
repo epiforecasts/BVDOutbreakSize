@@ -382,45 +382,51 @@ function plot_pair(chn, params::AbstractVector{Symbol};
 end
 
 """
-Estimate-evolution plot: how an outbreak-size estimate moves as the data
-cut-off advances. `rows` is a vector of
-`(cutoff_date, central, lower, upper)` tuples, one per data cut-off,
-drawn as a median line with a shaded `[lower, upper]` band against the
-cut-off date on the x-axis. Pass `points` as a second vector of the same
-tuple shape to overlay a second series (for example the renewal model's
-frozen estimates) as points with whisker bars. A horizontal grey band
-spanning `scenario_range` marks a published scenario range (for example
-the spread of McCabe et al.'s 15 outbreak-size scenarios), so the
-estimates can be read against it. `xlabel`/`ylabel`/`title` set the axis
-text; `series_label` and `points_label` name the two series in the
-legend.
+Estimate-evolution plot: how the outbreak-size estimate moves as the
+data cut-off advances. Two series are drawn against the cut-off date.
+
+`released` is a vector of `(cutoff_date, central, lower, upper)` tuples,
+one per published project release, shown as blue points joined by a line
+with vertical whisker bars for their credible intervals.
+
+`renewal` is a vector of the same tuple shape, the renewal model re-fit
+frozen at each release date, shown as red points joined by a line with a
+shaded credible-interval ribbon.
+
+A horizontal grey band spanning `scenario_range` marks the published
+McCabe et al. scenario range. `xlabel`/`ylabel`/`title` set the axis
+text; `released_label` and `renewal_label` name the two series.
 """
 function plot_estimate_evolution(
-        rows::AbstractVector;
-        points::AbstractVector = NamedTuple[],
+        released::AbstractVector;
+        renewal::AbstractVector = NamedTuple[],
         scenario_range::Union{Nothing, Tuple{Real, Real}} = nothing,
         xlabel::AbstractString = "Data cut-off date",
         ylabel::AbstractString = "Cumulative cases C(T)",
         title::AbstractString = "Outbreak-size estimate as data accrued",
-        series_label::AbstractString = "Released estimate",
-        points_label::AbstractString = "Renewal (frozen)")
+        released_label::AbstractString =
+        "Released estimates (per project release)",
+        renewal_label::AbstractString =
+        "Renewal model re-fit frozen at each release date")
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
     ## then relabel the ticks with the dates.
-    dates = [Date(String(r[1])) for r in rows]
-    pdates = [Date(String(p[1])) for p in points]
-    alldates = sort(unique(vcat(dates, pdates)))
+    rdates = [Date(String(r[1])) for r in released]
+    ndates = [Date(String(p[1])) for p in renewal]
+    alldates = sort(unique(vcat(rdates, ndates)))
     ref = minimum(alldates)
     _x(d) = Float64((d - ref).value)
-    xs = _x.(dates)
-    central = [float(r[2]) for r in rows]
-    lo = [float(r[3]) for r in rows]
-    hi = [float(r[4]) for r in rows]
 
-    upper = maximum(hi)
-    isempty(points) || (upper = max(upper, maximum(float(p[4]) for p in points)))
+    rx = _x.(rdates)
+    rc = [float(r[2]) for r in released]
+    rlo = [float(r[3]) for r in released]
+    rhi = [float(r[4]) for r in released]
+
+    upper = maximum(rhi)
+    isempty(renewal) ||
+        (upper = max(upper, maximum(float(p[4]) for p in renewal)))
     isnothing(scenario_range) || (upper = max(upper, scenario_range[2]))
 
-    fig = Figure(; size = (840, 460))
+    fig = Figure(; size = (860, 480))
     ax = Axis(fig[1, 1];
         xlabel = xlabel, ylabel = ylabel, title = title,
         xticks = (_x.(alldates), [string(d) for d in alldates]),
@@ -428,32 +434,56 @@ function plot_estimate_evolution(
         limits = ((_x(ref) - 1, _x(maximum(alldates)) + 1),
             (0, upper * 1.08)))
 
+    scenario_plt = nothing
     if !isnothing(scenario_range)
         sxs = [_x(ref) - 1, _x(maximum(alldates)) + 1]
-        band!(ax, sxs, fill(float(scenario_range[1]), 2),
+        scenario_plt = band!(ax, sxs, fill(float(scenario_range[1]), 2),
             fill(float(scenario_range[2]), 2); color = (:grey, 0.18))
     end
 
-    ord = sortperm(xs)
-    band!(ax, xs[ord], lo[ord], hi[ord]; color = (:steelblue, 0.20))
-    lines!(ax, xs[ord], central[ord]; color = :steelblue, linewidth = 2,
-        label = series_label)
-    scatter!(ax, xs[ord], central[ord]; color = :steelblue, markersize = 9)
-
-    if !isempty(points)
-        pxs = _x.(pdates)
-        pc = [float(p[2]) for p in points]
-        plo = [float(p[3]) for p in points]
-        phi = [float(p[4]) for p in points]
-        for i in eachindex(pxs)
-            lines!(ax, [pxs[i], pxs[i]], [plo[i], phi[i]];
-                color = (:firebrick, 0.8), linewidth = 2)
-        end
-        scatter!(ax, pxs, pc; color = :firebrick, markersize = 12,
-            marker = :diamond, label = points_label)
+    ## Renewal frozen-fit ribbon first, so the released markers sit on
+    ## top of it.
+    renewal_band = nothing
+    renewal_pts = nothing
+    if !isempty(renewal)
+        nx = _x.(ndates)
+        no = sortperm(nx)
+        nc = [float(p[2]) for p in renewal][no]
+        nlo = [float(p[3]) for p in renewal][no]
+        nhi = [float(p[4]) for p in renewal][no]
+        nx = nx[no]
+        renewal_band = band!(ax, nx, nlo, nhi;
+            color = (:firebrick, 0.18))
+        lines!(ax, nx, nc; color = :firebrick, linewidth = 2)
+        renewal_pts = scatter!(ax, nx, nc; color = :firebrick,
+            markersize = 11, marker = :diamond)
     end
 
-    CairoMakie.axislegend(ax; position = :lt)
+    ## Released estimates: points joined by a line, with whisker bars.
+    ord = sortperm(rx)
+    rx, rc, rlo, rhi = rx[ord], rc[ord], rlo[ord], rhi[ord]
+    for i in eachindex(rx)
+        lines!(ax, [rx[i], rx[i]], [rlo[i], rhi[i]];
+            color = (:steelblue, 0.9), linewidth = 2)
+    end
+    lines!(ax, rx, rc; color = :steelblue, linewidth = 2)
+    released_pts = scatter!(ax, rx, rc; color = :steelblue,
+        markersize = 11)
+
+    ## Build an explicit legend so the two series and the ribbon read
+    ## unambiguously.
+    handles = Any[released_pts]
+    labels = String[released_label]
+    if !isnothing(renewal_band)
+        push!(handles, [renewal_pts, renewal_band])
+        push!(labels, renewal_label * " (point + 90% ribbon)")
+    end
+    if !isnothing(scenario_plt)
+        push!(handles, scenario_plt)
+        push!(labels, "McCabe et al. scenario range")
+    end
+    CairoMakie.axislegend(ax, handles, labels; position = :lt,
+        framevisible = true)
     return fig
 end
 
