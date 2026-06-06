@@ -1188,8 +1188,8 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # NUTS [hoffman2014nuts](@cite) with Mooncake [mooncake_jl](@cite)
-# reverse-mode automatic differentiation, four chains, 1000
-# post-warmup draws each, with a target acceptance probability of 0.95.
+# reverse-mode automatic differentiation, two chains, 1500
+# post-warmup draws each, with a target acceptance probability of 0.9.
 # Chains initialise from the prior to keep the sampler away from the
 # boundary of the renewal recursion. We fit the joint model and the
 # five single-stream models so the per-stream posteriors over $C_T$ can

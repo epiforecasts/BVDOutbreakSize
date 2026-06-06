@@ -146,7 +146,10 @@ the random-walk and ascertainment blocks in non-centred form, so the
 posterior geometry is benign (the sanity fit converges with ≈1 divergence).
 A lower target acceptance shortens the average NUTS trajectory, cutting
 leapfrog steps (and so gradient evaluations) per iteration; raise it back
-toward 0.95–0.99 if a model variant reintroduces divergences.
+toward 0.95–0.99 if a model variant reintroduces divergences. The default
+is two longer chains (1500 post-warmup draws each) rather than four shorter
+ones, mirroring the integral model (#211), which roughly halves the docs
+build at a similar total draw count.
 
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
@@ -176,8 +179,8 @@ adaptation steps rather than posterior samples; raise `samples`
 accordingly or drop them before summarising.
 """
 function nuts_sample(model;
-        samples::Integer = 1_000,
-        chains::Integer = 4,
+        samples::Integer = 1_500,
+        chains::Integer = 2,
         target_accept::Real = 0.90,
         seed::Integer = 20260518,
         progress::Bool = false,
