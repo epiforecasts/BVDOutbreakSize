@@ -56,7 +56,7 @@ genetically-plausible window (about three months) rather than the much
 longer span implied by a doubling count tied to the cut-off case total.
 A wider doubling count would push the seeding time implausibly early.
 """
-const M_PRIOR_BASE = 4.5
+const M_PRIOR_BASE = 4.0
 
 """
     ITURI_POPULATION

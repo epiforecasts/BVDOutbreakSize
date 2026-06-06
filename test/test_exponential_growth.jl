@@ -49,7 +49,7 @@ end
     m = vec(Array(chn[:m]))
     T = vec(Array(chn[:T]))
 
-    ## Centre near 4.5, SD near 3 (truncated Normal(4.5, 3); lower 0): the
+    ## Centre near 4, SD near 3 (truncated Normal(4, 3); lower 0): the
     ## prior is deliberately wide so T stays uncertain, but centred in the
     ## genetically-plausible window rather than at ~180 days. The lower
     ## truncation lifts the mean slightly above the 4.5 centre.
