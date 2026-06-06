@@ -485,6 +485,20 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   laboratory volume with the same pooled positivity, so all the confirmed
   data is used and the early per-vintage shape informs the fit.
 
+The per-window positivity has two links, set by `positivity_link`. The
+default `:composition` ties the tested BVD share to the suspect-pool
+composition `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)`, severity-
+upsampled by a decaying enrichment δ0, then mapped to the tested-positive
+probability through the assay sensitivity and specificity,
+`p = s · q + (1 − spec)(1 − q)`. The false-positive term `(1 − spec)(1 − q)`
+makes the confirmed counts respond to the non-BVD share `1 − q`, so the
+laboratory positivity identifies the background `λ_bg` rather than
+absorbing it into a free curve — the structural link that lets the lab data
+pin `λ_bg`. The alternative `:free` link uses a free partially-pooled
+per-window random effect ([`confirmed_positivity_model`](@ref)) decoupled
+from `λ_bg`; it leaves `λ_bg` weakly identified and is kept for sensitivity
+analysis.
+
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
 share them. Exposes the per-window positivity, the expected received and
@@ -502,8 +516,10 @@ quantities.
         tests_received::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
         positivity = confirmed_positivity_model,
-        positivity_link::Symbol = :free,
-        severity_enrichment = severity_enrichment_model())
+        positivity_link::Symbol = :composition,
+        severity_enrichment = severity_enrichment_model(),
+        sensitivity = test_sensitivity_model(),
+        specificity = test_specificity_model())
     n = length(onsets)
 
     ## Received-specimen volume: the suspected pipeline carried through the
@@ -535,9 +551,9 @@ quantities.
     have_data = !ismissing(confirmed_cases)
 
     ## Per-window tested BVD share `p_pos`. Two links:
-    ## `:free` (default) — a free partially-pooled per-window random effect
+    ## `:free` — a free partially-pooled per-window random effect
     ## ([`confirmed_positivity_model`](@ref)), decoupled from `λ_bg`.
-    ## `:composition` — the tested share is the suspect-pool composition
+    ## `:composition` (default) — the tested share is the suspect-pool
     ## `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)` over each laboratory
     ## window, upsampled by a decaying severity enrichment δ0 (see
     ## [`severity_enrichment_model`](@ref)), so the lab positivity identifies
@@ -548,6 +564,17 @@ quantities.
         enrich_state ~ to_submodel(severity_enrichment, false)
         δ0 = enrich_state.δ0
         decay_scale = enrich_state.decay_scale
+        ## PCR sensitivity and specificity. The tested-positive probability
+        ## is `p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share:
+        ## the false-positive term `(1 − spec)(1 − q)` makes the confirmed
+        ## counts respond to the non-BVD share `1 − q`, so the laboratory
+        ## data identify the background `λ_bg` through the composition `φ`
+        ## rather than the BVD signal alone. Without it the confirmed
+        ## positivity tracks only `q`, leaving `λ_bg` weakly identified.
+        sens_state ~ to_submodel(sensitivity, false)
+        spec_state ~ to_submodel(specificity, false)
+        s_test = sens_state.s_test
+        spec = spec_state.spec
         ## Suspect-pool composition over each window from the SAME suspected-
         ## stream series that drive `reported_cases_model`.
         bvd_window = bin_increments(p_drc .* bvd_reports_daily, window_days)
@@ -561,6 +588,8 @@ quantities.
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
         ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
         dscale = max(convert(Tt, decay_scale), one(Tt))
+        s_t = convert(Tt, s_test)
+        sp_t = convert(Tt, spec)
         p_pos = map(eachindex(window_days)) do i
             ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
             ## window, guarded against a zero/negative denominator.
@@ -569,12 +598,17 @@ quantities.
             ratio = num / (den + lo)
             φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
             δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            ## Severity-enriched tested BVD share, then the assay
+            ## sensitivity/specificity transform to the tested-positive
+            ## probability so the false-positive term identifies `λ_bg`.
             q = logistic(logit(φ) + δ_i)
-            ## Final guard: clamp into (0,1) and replace any non-finite value
-            ## with the pool composition so the confirmed Binomial always sees
-            ## a valid probability even under an AD perturbation.
             qf = isfinite(q) ? q : φ
-            clamp(qf, lo, hi)
+            qe = clamp(qf, lo, hi)
+            p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the composition so the confirmed Binomial always sees a
+            ## valid probability even under an AD perturbation.
+            clamp(isfinite(p) ? p : φ, lo, hi)
         end
     else
         pos_state ~ to_submodel(positivity(nv))
