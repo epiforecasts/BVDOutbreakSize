@@ -21,7 +21,10 @@ cut-off) using the cut-off (`as_of_date`) and a seeding day placed
 Returns the grid length `n`, the `cutoff` and `seeding` dates, the
 per-stream cumulative totals at the cut-off (`reported_cases`,
 `total_deaths`, `confirmed_cases`, `confirmed_deaths`, `tests_analysed`,
-`exported_cases`, `exports_deaths`), the per-vintage histories as
+`exported_cases`, `exports_deaths`), the dated Uganda export series as
+grid day-indices (`export_case_days`, `export_death_days`, each a sorted
+list of detection/death days on or before the cut-off, fitted with a
+per-day Poisson likelihood), the per-vintage histories as
 `(; days, counts)` with `days` the grid day-indices (`reported_history`,
 `confirmed_history`, `confirmed_deaths_history`, `deaths_history`,
 `lab_history` from the analysed-specimen series, `tests_received_history`),
@@ -69,6 +72,26 @@ function load_observations(
         return (; days = idx[ord], counts = vals[ord])
     end
 
+    ## A dated list of event dates (not a cumulative block) → the grid
+    ## day-indices on or before the cut-off, sorted ascending. Used for the
+    ## dated Uganda export-case and export-death series, each a list of
+    ## detection/death dates fitted with a per-day Poisson likelihood.
+    ## Empty when the block is absent or every date falls after the cut-off.
+    function event_days(key)
+        haskey(raw, key) || return Int[]
+        ds = String.(raw[key]["value"])
+        keep = [Date(d) <= cutoff for d in ds]
+        idx = Int[_index(d) for d in ds[keep]]
+        return sort(idx)
+    end
+
+    ## Dated Uganda export-case detection days and export-death days
+    ## (1-based grid indices). Each detection/death contributes one Poisson
+    ## term at its day; days carry the per-day expected export count
+    ## differenced from the at-risk export person-time (see `exports_model`).
+    export_case_days = event_days("export_case_dates")
+    export_death_days = event_days("export_death_dates")
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -90,9 +113,20 @@ function load_observations(
     who_first_sitrep_days = isempty(reported_history.days) ? n :
                             n - reported_history.days[1] + 1
 
+    ## Cut-off export scalars. When freezing to an earlier date the dated
+    ## series is truncated, so the cumulative export totals are the number
+    ## of dated detections/deaths kept (matching the per-day series). The
+    ## full-data manifest scalars are used otherwise.
+    exported_cases = frozen ? length(export_case_days) :
+                     Int(_val("exported_cases"))
+    exports_deaths = frozen ? length(export_death_days) :
+                     Int(_val("exports_deaths"))
+
     return (; n, cutoff, seeding,
-        exported_cases = Int(_val("exported_cases")),
-        exports_deaths = Int(_val("exports_deaths")),
+        exported_cases = exported_cases,
+        exports_deaths = exports_deaths,
+        export_case_days = export_case_days,
+        export_death_days = export_death_days,
         total_deaths = frozen ?
                        _hist_end(deaths_history) : Int(_val("total_deaths")),
         reported_cases = frozen ?

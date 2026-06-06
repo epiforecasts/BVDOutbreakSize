@@ -13,19 +13,26 @@
 # NUTS) isolates compile/differentiate viability from trajectory
 # exploration into extreme regions.
 #
-# STATUS as of renewal HEAD 3e1d320 (now with `log_R0_seed` and
-# `expected_infections_T`; joint 60-dim): Enzyme DIFFERENTIATES the joint
-# again after the de-box fix on this branch. Three conditional/anonymous
+# STATUS as of renewal HEAD 7dc5620 (composition-link DEFAULT positivity
+# with the assay-specificity term `p = s·q + (1 − spec)(1 − q)`, the dated
+# per-day Uganda export likelihood, and the genetic seeding bound; full
+# real-data joint 62-dim): Enzyme DIFFERENTIATES the joint and matches
+# Mooncake after the de-box fix on this branch. Three conditional/anonymous
 # closures that Enzyme reverse mode could not handle were made
 # type-stable (pure refactor, Mooncake bit-identical):
 #   1. `bvd_joint`'s `if background_re … else … end` boxed the
 #      `case_bg_re`/`death_bg_re` closure capture in a `Base.RefValue`;
 #   2. the `:composition` positivity `map(do i)` in `confirmed_cases_model`
-#      was a second boxed closure, extracted to `composition_positivity`;
+#      was a second boxed closure, extracted to `composition_positivity`
+#      (which now also applies the sensitivity/specificity transform);
 #   3. that helper's `map(do i)` itself tripped Enzyme's shadow handling,
 #      so it was rewritten as an explicit loop (no closure).
-# This harness now asserts the Enzyme/Mooncake gradient match again; see
-# PR #201. The fix lives on this branch as a candidate for renewal.
+# This harness asserts the Enzyme/Mooncake gradient match on the current
+# joint: logp identical, single gradient maxabs ≈ 2.7e-12 / relerr ≈ 2e-15.
+# See PR #201. The fix lives on this branch as a candidate for renewal.
+#
+# Note: a further renewal change (the m-induced-T seeding) is still pending
+# and will need another sync of this branch once it lands.
 
 using Test
 using Enzyme

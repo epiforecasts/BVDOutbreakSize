@@ -406,6 +406,22 @@ Matches the integral `main` prior. Returns `(; s_test)`.
 end
 
 """
+PCR specificity prior for the Ebola assay. `Beta(60, 2)` has mean ≈ 0.97
+and 95% interval ≈ 0.91–0.998, a high-but-imperfect specificity reflecting
+that a small fraction of non-BVD specimens test positive (cross-reaction,
+contamination, low-level false positives). Used by the composition-linked
+confirmed-case positivity so the tested-positive probability is
+`p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share: the
+false-positive term `(1 − spec)(1 − q)` makes the confirmed counts respond
+to the non-BVD share `1 − q`, so the laboratory data identify the
+background `λ_bg` rather than only the BVD signal. Returns `(; spec)`.
+"""
+@model function test_specificity_model(; specificity_prior = Beta(60.0, 2.0))
+    spec ~ specificity_prior
+    return (; spec)
+end
+
+"""
 Report-to-laboratory-confirmation (lab-turnaround) delay submodel. The
 delay from a suspected case being reported to its specimen being
 laboratory confirmed, discretised to a daily PMF over lags `0 … nmax`
