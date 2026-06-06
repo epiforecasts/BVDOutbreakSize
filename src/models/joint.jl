@@ -114,7 +114,7 @@ positives (a Binomial of the observed analysed denominator in
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        confirmed_positivity_link::Symbol = :free)
+        confirmed_positivity_link::Symbol = :composition)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -267,7 +267,7 @@ death-confirmation probability (`death_confirmation`).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
-        confirmed_positivity_link::Symbol = :free,
+        confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
