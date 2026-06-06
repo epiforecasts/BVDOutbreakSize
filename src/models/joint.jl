@@ -14,8 +14,9 @@
 ## Run the generating infection process and onset staging, returning the
 ## infection state and the daily onsets shared by every stream.
 @model function _latent(n::Integer, breakpoint, infection, onset_incidence;
-        rt_start::Integer = 1)
-    infection_state ~ to_submodel(infection(n; breakpoint, rt_start), false)
+        rt_start::Integer = 1, fit_start::Bool = false)
+    infection_state ~ to_submodel(
+        infection(n; breakpoint, rt_start, fit_start), false)
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false)
     return (; infection_state, onsets = onset_state.onsets,
@@ -268,6 +269,7 @@ death-confirmation probability (`death_confirmation`).
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :free,
+        fit_start::Bool = false,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
@@ -278,7 +280,8 @@ death-confirmation probability (`death_confirmation`).
     rt_start = ismissing(tmrca_days) ? 1 :
                clamp(n - round(Int, tmrca_days), 1, n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence; rt_start), false)
+        _latent(n, breakpoint, infection, onset_incidence;
+            rt_start, fit_start), false)
     infection_state = latent.infection_state
     onsets = latent.onsets
 

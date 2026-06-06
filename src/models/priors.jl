@@ -152,6 +152,37 @@ seeding window is filled by exponential growth at the implied rate in
 end
 
 """
+Outbreak start-time submodel: samples the outbreak age `T` (the seeding-
+to-cut-off span in days) as an EXPLICIT parameter with a WIDE prior
+centred in the plausible window, replacing the renewal model's post-hoc
+derivation of `T` from where cumulative infections first cross one. The
+explicit-`T` formulation reproduces the older integral model's behaviour,
+in which `T` was a sampled quantity (`T := m·τ`) with wide uncertainty,
+rather than the implied-seeding behaviour that produced a two-stage spike
+and a tiny-outbreak multimodal collapse.
+
+The default prior is a truncated `Normal(t_centre, t_sd)` over `(t_lower,
+t_upper)`, centred near the genetic TMRCA with enough spread to cover the
+introduction window. `t_centre` defaults to `0.7·n` (≈ the molecular-clock
+seeding time for a grid placed a fixed lead before the TMRCA), `t_sd` to a
+broad `0.2·n`, and the support is bounded to `(1, n)` so the seeding day
+stays on the grid. Pass `t_prior` to override outright. The grid-day
+coordinate of the start is `t0 = n − T`; both are returned. Used by the
+explicit-start [`infection_model`](@ref) (`fit_start = true`).
+"""
+@model function seed_time_model(n::Integer;
+        t_centre::Real = 0.7 * n,
+        t_sd::Real = 0.2 * n,
+        t_lower::Real = 1.0,
+        t_upper::Real = float(n),
+        t_prior = truncated(Normal(t_centre, t_sd);
+            lower = t_lower, upper = t_upper))
+    T ~ t_prior
+    t0 := float(n) - T
+    return (; T, t0)
+end
+
+"""
 Generating infection process: the latent submodel whose expected daily
 infections every downstream stream consumes. Samples the reproduction
 number trajectory, the generation interval and the seed via injected
@@ -177,6 +208,9 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
         rt = rt_walk_model,
         gi = generation_interval_model,
         seed = seed_model,
+        fit_start::Bool = false,
+        seed_time = seed_time_model,
+        start_width::Real = 1.0,
         gi_nmax::Integer = 40)
     rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
     gi_state ~ to_submodel(gi(gi_nmax))
@@ -184,8 +218,24 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
     Rt = rt_state.Rt
     g = gi_state.g
     r0 = euler_lotka_r(Rt[1], g)
-    seed_vec = seed_infections(seed_state.I0, r0, length(g))
-    infections = renewal_infections(Rt, g, seed_vec)
+    L = length(g)
+    if fit_start
+        ## EXPLICIT outbreak start: sample the outbreak age `T`, anchor the
+        ## seed and renewal recursion to the implied (continuous) start day
+        ## `t0 = n − T`, and report that sampled `T` directly. This replaces
+        ## the post-hoc `seeding_age` crossing and its two-stage spike.
+        start_state ~ to_submodel(seed_time(n))
+        t0 = start_state.t0
+        mask = start_mask(n, t0; width = start_width)
+        seed_vec = seed_infections_at(seed_state.I0, r0, t0, L, n;
+            width = start_width)
+        infections = renewal_infections_at(Rt, g, seed_vec, mask, t0, L)
+        T = start_state.T
+    else
+        seed_vec = seed_infections(seed_state.I0, r0, L)
+        infections = renewal_infections(Rt, g, seed_vec)
+        T = seeding_age(cumsum(infections), n)
+    end
     cumulative = cumsum(infections)
     ## Current growth rate from the last two days; n ≥ 2 (the cut-off grid
     ## always spans the seeding window, so this holds in practice), with a
@@ -194,7 +244,7 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
         log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1])) :
         zero(eltype(infections))
     return (; infections, cumulative, Rt, g, I0 = seed_state.I0, r0, r,
-        T = seeding_age(cumulative, n), C_T = cumulative[n],
+        T, C_T = cumulative[n],
         doubling_time = doubling_time(r))
 end
 

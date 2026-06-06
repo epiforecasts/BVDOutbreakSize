@@ -262,3 +262,84 @@ end
     @test age > 0
     @test age <= n
 end
+
+@testitem "start_mask: smooth 0→1 ramp centred on t0" begin
+    using BVDOutbreakSize: start_mask
+
+    n, t0 = 100, 70.0
+    m = start_mask(n, t0; width = 1.0)
+    @test length(m) == n
+    @test all(0 .<= m .<= 1)
+    ## ≈0 well before t0, 0.5 at t0, ≈1 well after.
+    @test m[50] < 1e-6
+    @test isapprox(m[70], 0.5; atol = 1e-6)
+    @test m[100] > 0.999
+    ## Monotone non-decreasing.
+    @test all(diff(m) .>= 0)
+    ## A later start shifts the mask right (later days less switched on).
+    m_late = start_mask(n, 85.0; width = 1.0)
+    @test m_late[80] < m[80]
+end
+
+@testitem "seed_infections_at: I0-anchored growth from a continuous start" begin
+    using BVDOutbreakSize: seed_infections_at
+
+    n, t0, len = 100, 70.0, 20
+    I0, r = 0.1, 0.05
+    seed = seed_infections_at(I0, r, t0, len, n; width = 1.0)
+    @test length(seed) == n
+    @test all(seed .>= 0)
+    ## ≈0 before the start day.
+    @test seed[50] < 1e-6
+    ## Grows to I0 at the end of the seed window (t0 + len - 1 = 89).
+    @test isapprox(seed[89], I0; rtol = 0.05)
+    ## Exponential within the window.
+    @test seed[80] < seed[85] < seed[89]
+end
+
+@testitem "renewal_infections_at: masked recursion, differentiable in t0" begin
+    using BVDOutbreakSize: seed_infections_at, renewal_infections_at,
+                           start_mask, generation_interval_model, discretise_censored,
+                           lognormal_meansd
+
+    n = 100
+    g = let pmf = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
+        pmf[2:end] ./ sum(pmf[2:end])
+    end
+    L = length(g)
+    Rt = fill(1.5, n)
+    I0, r, t0 = 0.1, 0.05, 70.0
+    mask = start_mask(n, t0; width = 1.0)
+    seed = seed_infections_at(I0, r, t0, L, n; width = 1.0)
+    I = renewal_infections_at(Rt, g, seed, mask, t0, L)
+    @test length(I) == n
+    @test all(isfinite, I)
+    @test all(I .>= 0)
+    ## Pre-start infections are ≈0; the epidemic builds after t0.
+    @test I[50] < 1e-4
+    @test I[n] > I[80]
+    ## A later start gives a smaller outbreak at the cut-off.
+    t0b = 80.0
+    maskb = start_mask(n, t0b; width = 1.0)
+    seedb = seed_infections_at(I0, r, t0b, L, n; width = 1.0)
+    Ib = renewal_infections_at(Rt, g, seedb, maskb, t0b, L)
+    @test Ib[n] < I[n]
+end
+
+@testitem "seed_time_model: wide unimodal prior on outbreak age T" begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: seed_time_model
+
+    n = 100
+    chn = sample(seed_time_model(n), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false)
+    T = vec(Array(chn[:T]))
+    @test all(1 .<= T .<= n)
+    ## Centred in the plausible window with broad spread.
+    @test 0.5n < sum(T) / length(T) < 0.85n
+    s = sort(T)
+    lo = s[round(Int, 0.05 * length(s))]
+    hi = s[round(Int, 0.95 * length(s))]
+    @test hi - lo > 0.3n   # wide
+end

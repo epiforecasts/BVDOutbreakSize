@@ -119,6 +119,50 @@ function seed_infections(I0, r, len::Integer)
 end
 
 """
+Smooth start mask over an `n`-day grid for an EXPLICIT, continuous
+outbreak start day `t0` (grid-day coordinate; `t0 = n − T` for an outbreak
+age `T`). Returns a length-`n` vector rising from ≈0 well before `t0` to
+≈1 well after, via the logistic ramp `1 / (1 + e^{−(t − t0)/width})`. A
+fractional `t0` shifts the whole mask continuously, so multiplying the
+seeded / renewed trajectory by this mask makes the infection curve a
+DIFFERENTIABLE function of the sampled start day. `width` (default 1 day)
+sets how sharply the outbreak switches on; smaller is closer to a hard
+step but stiffer for the sampler. AD-transparent in `t0` under Mooncake.
+"""
+function start_mask(n::Integer, t0::Real; width::Real = 1.0)
+    Tp = float(typeof(t0))
+    w = max(width, eps(Tp))
+    return Tp[logistic((t - t0) / w) for t in 1:n]
+end
+
+"""
+Seed the first `len` days of the infection trajectory as exponential
+growth `I_t = I0 · e^{r (t − len)}` (see [`seed_infections`](@ref)),
+anchored to an EXPLICIT continuous start day `t0` (grid-day coordinate)
+rather than to day 1. The seed is placed in the window `[t0, t0 + len)`:
+day `t` of the full `n`-day grid carries `I0 · e^{r (t − t0 − len + 1)}`
+when `t ≥ t0` and ≈0 before, the transition smoothed by [`start_mask`](@ref)
+so the result is a differentiable function of `t0`. The seed grows from
+the start day, reaching `I0` at `t0 + len − 1`. Returns a length-`n`
+vector whose element type follows `I0`, `r` and `t0`. Used in place of
+the day-1-anchored [`seed_infections`](@ref) when the outbreak start time
+is a sampled parameter.
+"""
+function seed_infections_at(I0, r, t0::Real, len::Integer, n::Integer;
+        width::Real = 1.0)
+    Tp = promote_type(typeof(float(I0)), typeof(float(r)), typeof(float(t0)))
+    mask = start_mask(n, t0; width)
+    seed = zeros(Tp, n)
+    @inbounds for t in 1:n
+        ## Days since the (continuous) start; the seed ramps I0·e^{r·s}
+        ## from s = -(len-1) at the start day up to s = 0 at t0+len-1.
+        s = (t - t0) - (len - 1)
+        seed[t] = I0 * exp(r * s) * mask[t]
+    end
+    return seed
+end
+
+"""
 Daily latent infections from the renewal equation
 `I_t = R_t Σ_{s ≥ 1} I_{t−s} g_s`, with generation-interval PMF `g`
 (indexed from lag 1), per-day reproduction numbers `Rt` (length `n`) and
@@ -144,6 +188,47 @@ function renewal_infections(Rt::AbstractVector, g::AbstractVector,
             force += I[t - s] * g[s]
         end
         I[t] = Rt[t] * force
+    end
+    return I
+end
+
+"""
+Daily latent infections from the renewal equation with an EXPLICIT,
+continuous outbreak start day `t0` (grid-day coordinate; `t0 = n − T` for
+an outbreak age `T`). A full-length `seed` (see [`seed_infections_at`](@ref),
+already gated by [`start_mask`](@ref)) supplies the exponential-growth
+introduction over the moving window `[t0, t0 + L)`; from `L` renewal
+generations after the start day onward the renewal recursion
+`I_t = R_t Σ_s I_{t−s} g_s` takes over, with each renewal day additionally
+multiplied by the start `mask` so days before `t0` stay ≈0 and the
+introduction switches on smoothly. Blending the seed (within its window)
+and the masked recursion (after it) makes the whole trajectory a
+differentiable function of `t0`, so the outbreak start can be sampled
+directly rather than derived post-hoc from where cumulative infections
+cross one. `L` is the seed-window length (`length(g)`); `mask` is the
+length-`n` start mask. Returns the length-`n` infection trajectory.
+"""
+function renewal_infections_at(Rt::AbstractVector, g::AbstractVector,
+        seed::AbstractVector, mask::AbstractVector, t0::Real, L::Integer)
+    n = length(Rt)
+    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed), eltype(mask),
+        typeof(float(t0)))
+    I = zeros(Tp, n)
+    ## Last grid day still inside the seed window (rounded so the recursion
+    ## hands over once the seed has grown to I0). Before it, use the seeded
+    ## exponential growth; from it on, the masked renewal recursion.
+    handover = clamp(round(Int, t0 + L - 1), 1, n)
+    @inbounds for t in 1:n
+        if t <= handover
+            I[t] = seed[t]
+        else
+            force = zero(Tp)
+            kmax = min(t - 1, length(g))
+            for s in 1:kmax
+                force += I[t - s] * g[s]
+            end
+            I[t] = mask[t] * Rt[t] * force
+        end
     end
     return I
 end

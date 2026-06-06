@@ -1,6 +1,9 @@
 # Sampler glue: the package-default AD type and the NUTS driver used
 # to fit every Turing model.
 
+using Turing: Gibbs, HMC, MH
+using Turing.DynamicPPL: VarInfo, VarName, getsym, @varname
+
 """
 Mooncake reverse-mode AD with default `Mooncake.Config()`. Used as
 the NUTS `adtype` keyword.
@@ -201,6 +204,78 @@ function nuts_sample(model;
         check_model = check_model,
         cb_kwargs...,
         warmup_kwargs...,
+        kwargs...
+    )
+end
+
+"""
+All sampled `VarName`s of `model` whose leaf symbol is NOT `target_sym`,
+collected from a fresh `VarInfo`. The outbreak-start time enters the
+model through the `seed_time` submodel, so its `VarName` carries that
+submodel's prefix (`start_state.T`) and its leaf symbol is the prefix
+(`:start_state`); filtering on that symbol pulls the whole start block out
+of the NUTS group. Used by [`gibbs_sample`](@ref) so the Gibbs partition
+is derived from the model rather than hard-coded and stays correct as
+parameters are added.
+"""
+function _other_varnames(model, target_sym::Symbol)
+    vi = VarInfo(model)
+    out = VarName[]
+    for vn in keys(vi)
+        getsym(vn) === target_sym || push!(out, vn)
+    end
+    return out
+end
+
+"""
+Gibbs fit of `model` that samples the outbreak-start time in its OWN
+block, with NUTS on every other (continuous) parameter. The explicit
+outbreak age `T` (see [`seed_time_model`](@ref) and the `fit_start = true`
+path of [`infection_model`](@ref)) is updated by a separate sampler so the
+start time can move with WIDE, sensible uncertainty without the rest of
+the continuous geometry pinning it through a shared mass matrix — the
+renewal analogue of the integral model's explicitly-sampled `T`.
+
+The continuous block runs `NUTS(target_accept; adtype)`; the start block
+runs `start_sampler`, an `HMC` leapfrog step by default (a small,
+gradient-based move on the single, scalar, differentiable start time),
+with `MH()` available as a gradient-free alternative. `target_vn` is the
+`VarName` of the start-time variable, defaulting to `@varname(start_state.T)`
+(the outbreak age `T` inside the `seed_time` submodel); `target_sym` is the
+symbol filtered out of the NUTS group (the submodel-prefix symbol
+`:start_state`). Chains initialise from the prior. Other keywords mirror
+[`nuts_sample`](@ref).
+"""
+function gibbs_sample(model;
+        samples::Integer = 1_000,
+        chains::Integer = 4,
+        target_accept::Real = 0.90,
+        seed::Integer = 20260518,
+        progress::Bool = false,
+        adtype = default_adtype(),
+        init = InitFromPrior(),
+        check_model::Bool = true,
+        target_vn = @varname(start_state.T),
+        target_sym::Symbol = getsym(target_vn),
+        start_sampler = HMC(0.05, 8; adtype),
+        callback = nothing,
+        kwargs...)
+    rng = MersenneTwister(seed)
+    others = _other_varnames(model, target_sym)
+    spl = Gibbs(
+        Tuple(others) => NUTS(target_accept; adtype),
+        (target_vn,) => start_sampler)
+    cb_kwargs = callback === nothing ? (;) : (; callback = callback)
+    return sample(
+        rng,
+        model,
+        spl,
+        MCMCThreads(),
+        samples, chains;
+        initial_params = fill(init, chains),
+        progress = progress,
+        check_model = check_model,
+        cb_kwargs...,
         kwargs...
     )
 end
