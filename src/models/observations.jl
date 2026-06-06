@@ -854,21 +854,23 @@ death stream inherits the case lab calibration.
 
 The death-specimen forwarding rate `τ_death` is set one of two ways. When
 the effective `case_test_rate` is supplied (the joint path), deaths are
-*enriched* relative to cases: `τ_death = clamp(case_test_rate ·
-death_enrichment, 0, 1)` with `death_enrichment` from
-[`death_testing_model`](@ref), a multiplier centred on 2× (deaths are
-prioritised for post-mortem testing). The joint passes the share of
-suspected cases actually analysed (`Σμ_A / ΣN_susp`) as `case_test_rate`,
-not the nominal queue forwarding fraction (which the headline path pins to
-1). This ties the death rate to the case-testing signal and resolves the
-free, weakly-identified `τ_death` that left confirmed deaths under-predicted
-and badly mixed (issue #206). When `case_test_rate` is not supplied
-(`nothing`, e.g. the deaths-only composer), `τ_death` falls back to the
-standalone forwarding fraction from [`death_forward_model`](@ref). Either
-way the BVD-share signal lives in the composition-driven positivity, so
-`τ_death` is identified by the confirmed deaths without sitting at a
-boundary. `confirmed_deaths` accepts `missing` entries for
-posterior-predictive generation.
+*enriched* relative to cases on the odds scale: `logit(τ_death) =
+logit(case_test_rate) + log(death_enrichment)` with `death_enrichment` from
+[`death_testing_model`](@ref), the deaths-vs-cases testing odds ratio
+centred on 2× (deaths are prioritised for post-mortem testing). The joint
+passes the share of suspected cases actually analysed (`Σμ_A / ΣN_susp`) as
+`case_test_rate`, not the nominal queue forwarding fraction (which the
+headline path pins to 1). The odds-scale enrichment keeps `τ_death` a
+probability smoothly without a clamp, so it stays well-behaved even when
+the case testing rate is already high. This ties the death rate to the
+case-testing signal and resolves the free, weakly-identified `τ_death` that
+left confirmed deaths under-predicted and badly mixed (issue #206). When
+`case_test_rate` is not supplied (`nothing`, e.g. the deaths-only
+composer), `τ_death` falls back to the standalone forwarding fraction from
+[`death_forward_model`](@ref). Either way the BVD-share signal lives in the
+composition-driven positivity, so `τ_death` is identified by the confirmed
+deaths without sitting at a boundary. `confirmed_deaths` accepts `missing`
+entries for posterior-predictive generation.
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::AbstractVector,
@@ -886,10 +888,13 @@ posterior-predictive generation.
         error("bvd_death_at_edges length must match nsusp_death_at_edges " *
               "(got $(length(bvd_death_at_edges)) vs $n)")
 
-    ## Death-testing enrichment (joint path): the death forwarding rate is
-    ## the effective case testing rate scaled by a >0 enrichment factor
-    ## centred on 2×, clamped to a probability. Falls back to the standalone
-    ## forwarding fraction when no case rate is supplied.
+    ## Death-testing enrichment (joint path): the death forwarding rate
+    ## enriches the effective case testing rate on the ODDS scale, so it
+    ## stays a probability smoothly (no clamp kink) even when the case rate
+    ## is already high. `death_enrichment` is the testing odds ratio (deaths
+    ## vs cases), centred on 2×: `logit(τ_death) = logit(case rate) +
+    ## log(enrichment)`. Falls back to the standalone forwarding fraction
+    ## when no case rate is supplied.
     if case_test_rate === nothing
         forward_state ~ to_submodel(death_forward, false)
         τ_death = forward_state.τ_death
@@ -897,8 +902,9 @@ posterior-predictive generation.
     else
         testing_state ~ to_submodel(death_testing, false)
         death_enrichment = testing_state.death_enrichment
-        prod = case_test_rate * death_enrichment
-        τ_death = clamp(prod, zero(prod), one(prod))
+        cr = clamp(float(case_test_rate), eps(float(case_test_rate)),
+            one(float(case_test_rate)) - eps(float(case_test_rate)))
+        τ_death = logistic(logit(cr) + log(death_enrichment))
     end
 
     ## Per-edge BVD share of the suspect-death pool (composition), then the

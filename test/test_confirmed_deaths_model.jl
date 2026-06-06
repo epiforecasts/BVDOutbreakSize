@@ -86,14 +86,16 @@ end
 end
 
 @testitem "confirmed_deaths_model: enrichment scales case rate" tags=[:slow] begin
-    ## When the case forwarding rate `τ_forward` is supplied, the death rate
-    ## is `clamp(τ_forward · death_enrichment, 0, 1)`: with the same RNG draws
-    ## a fixed `τ_forward` and a 2×-centred enrichment must exceed the
-    ## case rate, and the enrichment factor is exposed.
+    ## When `case_test_rate` is supplied, the death rate enriches the case
+    ## rate on the odds scale: `logit(τ_death) = logit(case_test_rate) +
+    ## log(death_enrichment)`. A 2×-centred odds ratio raises the death rate
+    ## above the case rate, the death rate stays a probability, and the
+    ## enrichment factor is exposed.
     using Turing: sample, Prior, @model, to_submodel
     using Random: MersenneTwister
     import FlexiChains
     using Statistics: median
+    using StatsFuns: logit, logistic
     using BVDOutbreakSize: confirmed_deaths_model
 
     bvd_death = [30.0, 70.0, 100.0]
@@ -114,14 +116,13 @@ end
     e = vec(Array(chn[:death_enrichment]))
     @test all(e .> 0)
     τd = vec(Array(chn[:τ_death_out]))
-    @test all(0 .<= τd .<= 1)
-    ## Death rate is the case rate enriched: with a 2×-centred factor the
-    ## median death rate exceeds the case rate (before any clamp bites at
-    ## these low rates).
+    @test all(0 .< τd .< 1)
+    ## Odds-scale enrichment with a 2×-centred odds ratio lifts the median
+    ## death rate above the case rate.
     @test median(τd) > τf
-    ## Where the product is below 1 it equals τ_forward · enrichment.
-    unclamped = (τf .* e) .< 1
-    @test all(isapprox.(τd[unclamped], τf .* e[unclamped]; atol = 1e-8))
+    ## The death rate equals the odds-scale link exactly (no clamp kink).
+    expected = logistic.(logit(τf) .+ log.(e))
+    @test all(isapprox.(τd, expected; atol = 1e-8))
 end
 
 @testitem "deaths_model: λ_bg_death lifts the suspected-death expectation" tags=[:slow] begin

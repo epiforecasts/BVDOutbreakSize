@@ -449,23 +449,26 @@ override. Used by [`confirmed_deaths_model`](@ref).
 end
 
 """
-Death-testing enrichment factor `death_enrichment`: the multiplicative
-factor by which post-mortem death specimens are forwarded to and tested
-by the laboratory *relative to* the case forwarding rate `τ_forward`
-([`test_positivity_model`](@ref)). Deaths are prioritised for testing, so
-the death forwarding rate is `τ_death = clamp(τ_forward · death_enrichment,
-0, 1)` rather than an independent fraction (see
-[`confirmed_deaths_model`](@ref)).
+Death-testing enrichment `death_enrichment`: the odds ratio by which
+post-mortem death specimens are forwarded to and tested by the laboratory
+*relative to* the effective case testing rate. Deaths are prioritised for
+testing, so the death forwarding rate enriches the case rate on the odds
+scale, `logit(τ_death) = logit(case_test_rate) + log(death_enrichment)`,
+rather than being an independent fraction (see
+[`confirmed_deaths_model`](@ref)). The odds-scale link keeps `τ_death` a
+probability smoothly, so it stays well-behaved even when the case testing
+rate is already high (a multiplicative `case_test_rate · enrichment` would
+saturate at 1 and leave the factor unidentified).
 
 Tying the death rate to the case rate this way removes the free,
 weakly-identified `τ_death` that left the confirmed-death stream low and
 poorly mixed (issue #206): the enrichment shares the case-rate signal and
 only has to absorb the deaths-vs-cases testing differential.
 
-Default `LogNormal(log(2), 0.4)` is centred on a 2× enrichment (median 2,
-95% interval ≈ 0.91-4.39): deaths roughly twice as likely to be tested as
-cases, with mass either side of parity. Pass `factor_prior` to override.
-Used by [`confirmed_deaths_model`](@ref).
+Default `LogNormal(log(2), 0.4)` is centred on a 2× testing odds ratio
+(median 2, 95% interval ≈ 0.91-4.39): deaths roughly twice the odds of
+being tested as cases, with mass either side of parity. Pass `factor_prior`
+to override. Used by [`confirmed_deaths_model`](@ref).
 """
 @model function death_testing_model(;
         factor_prior = LogNormal(log(2.0), 0.4))

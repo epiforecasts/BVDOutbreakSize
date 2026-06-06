@@ -641,13 +641,14 @@ export infection→detection delay rather than learning it.
                                  zero(λ_bg_death * cdeath_edges[i]))
                              for i in eachindex(cdeath_edges)]
         ## Death specimens are forwarded/tested at the EFFECTIVE case testing
-        ## rate scaled by the death-testing enrichment (deaths prioritised,
-        ## prior centred ~2×; issue #206). The headline queue path pins the
-        ## nominal `τ_forward = 1`, so the case-rate signal is the share of
-        ## suspected cases actually analysed, `Σμ_A / ΣN_susp` (cumulative
-        ## analysed over cumulative suspected at the case edges), a genuine
-        ## fraction < 1. The death rate then inherits that case-testing signal
-        ## rather than being a free fraction.
+        ## rate enriched on the odds scale by the death-testing enrichment
+        ## (deaths prioritised, odds-ratio prior centred ~2×; issue #206).
+        ## The headline queue path pins the nominal `τ_forward = 1`, so the
+        ## case-rate signal is the share of suspected cases actually analysed,
+        ## `Σμ_A / ΣN_susp` (cumulative analysed over cumulative suspected at
+        ## the case edges), a genuine fraction < 1. The death rate then
+        ## inherits that case-testing signal rather than being a free
+        ## fraction.
         case_susp = sum(confirmed_state.Nsusp_at)
         case_test_frac = case_susp > zero(case_susp) ?
                          clamp(sum(confirmed_state.μ_A_at) / case_susp,
