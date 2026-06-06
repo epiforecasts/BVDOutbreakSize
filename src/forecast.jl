@@ -221,11 +221,12 @@ function forecast_reported(chn;
     ## and the deaths CFR / onset-to-death delay (`CFR`, `α`, `θ`). Present
     ## on the joint chain only; their absence (or a missing
     ## `obs_confirmed_deaths`) drops the confirmed-death columns.
-    has_lab_deaths = has_lab &&
+    death_fwd_key = _death_forward_key(chn)
+    has_lab_deaths = has_lab && death_fwd_key !== nothing &&
                      all(haskey_chain(chn, n)
-                     for n in (:τ_death, :p_deaths, :λ_bg_death)) &&
+                     for n in (:p_deaths, :λ_bg_death)) &&
                      obs_confirmed_deaths !== missing
-    τ_death = has_lab_deaths ? _draws(chn, :τ_death) : nothing
+    τ_death = has_lab_deaths ? _draws(chn, death_fwd_key) : nothing
     p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
     λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
 
@@ -340,6 +341,16 @@ end
 function _forward_key(chn)
     haskey_chain(chn, :τ_forward) && return :τ_forward
     haskey_chain(chn, :τ_forward_out) && return :τ_forward_out
+    return nothing
+end
+
+## Resolve the death-specimen forwarding-rate symbol. Under the death-testing
+## enrichment the joint derives `τ_death` (not a sampled variable) and exposes
+## the derived `τ_death_out`; the standalone-fallback path samples `τ_death`
+## directly. Returns the present symbol, preferring `τ_death`, or `nothing`.
+function _death_forward_key(chn)
+    haskey_chain(chn, :τ_death) && return :τ_death
+    haskey_chain(chn, :τ_death_out) && return :τ_death_out
     return nothing
 end
 

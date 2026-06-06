@@ -227,13 +227,14 @@ function predict_committed(chn;
     p_drc = has_lab ? _draws(chn, :p_drc) : nothing
     λ_bg = has_lab ? _draws(chn, :λ_bg) : nothing
 
-    has_lab_deaths = has_lab &&
+    death_fwd_key = _death_forward_key(chn)
+    has_lab_deaths = has_lab && death_fwd_key !== nothing &&
                      all(haskey_chain(chn, n)
-                     for n in (:τ_death, :p_deaths, :λ_bg_death, :α, :θ)) &&
+                     for n in (:p_deaths, :λ_bg_death, :α, :θ)) &&
                      obs_confirmed_deaths !== missing
     α = has_lab_deaths ? _draws(chn, :α) : nothing
     θ = has_lab_deaths ? _draws(chn, :θ) : nothing
-    τ_death = has_lab_deaths ? _draws(chn, :τ_death) : nothing
+    τ_death = has_lab_deaths ? _draws(chn, death_fwd_key) : nothing
     p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
     λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
 

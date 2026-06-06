@@ -59,6 +59,71 @@ end
     @test mean(τ2) > mean(τ)                          # override took effect
 end
 
+@testitem "death_testing_model: LogNormal(log2,0.4), median ≈ 2" tags=[:slow] begin
+    ## The death-testing enrichment factor carries a LogNormal(log 2, 0.4)
+    ## prior centred on a 2× enrichment (deaths tested more than cases),
+    ## strictly positive.
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    import FlexiChains
+    using Statistics: median
+    using Distributions: LogNormal
+    using BVDOutbreakSize: death_testing_model
+    chn = sample(MersenneTwister(20260606), death_testing_model(),
+        Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
+    f = vec(Array(chn[:death_enrichment]))
+    @test length(f) == 20_000
+    @test all(f .> 0)
+    ## LogNormal(log 2, ·) has median exp(log 2) = 2.
+    @test isapprox(median(f), 2.0; atol = 0.05)
+
+    ## The prior is overridable via the `factor_prior` keyword.
+    chn2 = sample(MersenneTwister(20260606),
+        death_testing_model(; factor_prior = LogNormal(log(4.0), 0.4)),
+        Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
+    f2 = vec(Array(chn2[:death_enrichment]))
+    @test median(f2) > median(f)                       # override took effect
+end
+
+@testitem "confirmed_deaths_model: enrichment scales case rate" tags=[:slow] begin
+    ## When the case forwarding rate `τ_forward` is supplied, the death rate
+    ## is `clamp(τ_forward · death_enrichment, 0, 1)`: with the same RNG draws
+    ## a fixed `τ_forward` and a 2×-centred enrichment must exceed the
+    ## case rate, and the enrichment factor is exposed.
+    using Turing: sample, Prior, @model, to_submodel
+    using Random: MersenneTwister
+    import FlexiChains
+    using Statistics: median
+    using BVDOutbreakSize: confirmed_deaths_model
+
+    bvd_death = [30.0, 70.0, 100.0]
+    nsusp_death = [40.0, 110.0, 170.0]
+    s = 0.75; spec = 0.97; k = 5.0
+    cd_obs = Union{Missing, Int}[6, 5, 4]
+    τf = 0.3
+
+    @model function _enrich_harness(cd, bvd, nsusp, s, spec, k, τf)
+        cd_state ~ to_submodel(
+            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k;
+                case_test_rate = τf), false)
+    end
+
+    chn = sample(MersenneTwister(20260606),
+        _enrich_harness(cd_obs, bvd_death, nsusp_death, s, spec, k, τf),
+        Prior(), 2_000; chain_type = FlexiChains.VNChain, progress = false)
+    e = vec(Array(chn[:death_enrichment]))
+    @test all(e .> 0)
+    τd = vec(Array(chn[:τ_death_out]))
+    @test all(0 .<= τd .<= 1)
+    ## Death rate is the case rate enriched: with a 2×-centred factor the
+    ## median death rate exceeds the case rate (before any clamp bites at
+    ## these low rates).
+    @test median(τd) > τf
+    ## Where the product is below 1 it equals τ_forward · enrichment.
+    unclamped = (τf .* e) .< 1
+    @test all(isapprox.(τd[unclamped], τf .* e[unclamped]; atol = 1e-8))
+end
+
 @testitem "deaths_model: λ_bg_death lifts the suspected-death expectation" tags=[:slow] begin
     ## Adding a positive constant-rate background must raise the expected
     ## suspected-death total above the pure-BVD (λ_bg_death = 0) baseline by
@@ -307,8 +372,13 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     C_on = vec(Array(chn_on[:cumulative_cases]))
     @test all(isfinite, C_on)
-    τ = vec(Array(chn_on[:τ_death]))
-    @test all(0 .< τ .< 1)
+    ## Joint path derives the death rate as the case rate × enrichment, so the
+    ## forwarding rate is exposed as `τ_death_out` (and the enrichment factor
+    ## as `death_enrichment`), both genuine and bounded.
+    τ = vec(Array(chn_on[:τ_death_out]))
+    @test all(0 .<= τ .<= 1)
+    e = vec(Array(chn_on[:death_enrichment]))
+    @test all(e .> 0)
 
     ## Predictive confirmed deaths are finite and non-negative.
     model_pp = bvd_joint(obs.exported_cases, death_incr, _inc(rh.values),
@@ -371,6 +441,11 @@ end
     C = vec(Array(chn[:cumulative_cases]))
     @test all(isfinite, C)
     @test all(C .> 0)
-    τ = vec(Array(chn[:τ_death]))
-    @test all(0 .< τ .< 1)
+    ## Joint path: the derived death forwarding rate is exposed as
+    ## `τ_death_out`, the case rate scaled by the death-testing enrichment.
+    τ = vec(Array(chn[:τ_death_out]))
+    @test all(0 .<= τ .<= 1)
+    e = vec(Array(chn[:death_enrichment]))
+    @test all(isfinite, e)
+    @test all(e .> 0)
 end

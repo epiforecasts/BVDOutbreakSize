@@ -361,7 +361,7 @@ confirmés`, deaths that got confirmed) aligned with
 genuine lab/positivity process on the death specimens forwarded to the
 laboratory (issue #193): the suspect-death backlog at the confirmed-death
 edges (the BVD-death CFR-weighted convolution plus the constant-rate
-non-BVD background `λ_bg_death`) is forwarded at fraction `τ_death`, and
+non-BVD background `λ_bg_death`) is forwarded at rate `τ_death`, and
 its BVD share sets the death-specimen positivity `s·q_death +
 (1−spec)(1−q_death)`. The PCR sensitivity `s` and specificity `spec` are
 imported *shared* from the confirmed-case lab pipeline (see
@@ -372,9 +372,13 @@ existing callers are unchanged.
 `death_background` samples the constant-rate non-BVD suspected-death
 background `λ_bg_death` (see [`death_background_model`](@ref)), the death
 analogue of the case `λ_bg`, added to the BVD-driven suspected-death
-expectation; pass `λ_bg_death_fixed = 0.0` to disable it. `death_forward`
-samples the death-specimen forwarding fraction `τ_death` for the confirmed
-deaths (see [`death_forward_model`](@ref)).
+expectation; pass `λ_bg_death_fixed = 0.0` to disable it. `death_testing`
+samples the death-testing enrichment factor, so the death forwarding rate
+is the case rate `τ_forward` times that factor (deaths prioritised for
+post-mortem testing, prior centred ~2×; issue #206), tying the death rate
+to the case-rate signal (see [`death_testing_model`](@ref)). `death_forward`
+is retained as the standalone fallback forwarding fraction for callers that
+do not supply a case rate (see [`death_forward_model`](@ref)).
 
 `confirmed_q_random_effect` is the per-vintage tested-BVD-share random
 effect for the confirmed positivity (see [`confirmed_q_re_model`](@ref)),
@@ -484,6 +488,7 @@ export infection→detection delay rather than learning it.
         death_background = death_background_model(),
         λ_bg_death_fixed::Union{Nothing, Real} = nothing,
         death_forward = death_forward_model(),
+        death_testing = death_testing_model(),
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
         test_sensitivity = test_sensitivity_model(),
@@ -635,10 +640,24 @@ export infection→detection delay rather than learning it.
                              max(λ_bg_death * cdeath_edges[i],
                                  zero(λ_bg_death * cdeath_edges[i]))
                              for i in eachindex(cdeath_edges)]
+        ## Death specimens are forwarded/tested at the EFFECTIVE case testing
+        ## rate scaled by the death-testing enrichment (deaths prioritised,
+        ## prior centred ~2×; issue #206). The headline queue path pins the
+        ## nominal `τ_forward = 1`, so the case-rate signal is the share of
+        ## suspected cases actually analysed, `Σμ_A / ΣN_susp` (cumulative
+        ## analysed over cumulative suspected at the case edges), a genuine
+        ## fraction < 1. The death rate then inherits that case-testing signal
+        ## rather than being a free fraction.
+        case_susp = sum(confirmed_state.Nsusp_at)
+        case_test_frac = case_susp > zero(case_susp) ?
+                         clamp(sum(confirmed_state.μ_A_at) / case_susp,
+            zero(case_susp), one(case_susp)) : zero(case_susp)
         confirmed_deaths_state ~ to_submodel(
             confirmed_deaths_submodel(confirmed_deaths, bvd_death_edges,
                 nsusp_death_edges, confirmed_state.s_test,
                 confirmed_state.spec_test, k;
+                case_test_rate = case_test_frac,
+                death_testing = death_testing,
                 death_forward = death_forward), false)
     end
 
