@@ -47,17 +47,20 @@
 #   al. [mccabe2026](@cite) use continuous-time closed forms.
 # - *Time-varying reproduction number.* $R_t$ follows a weekly Gaussian
 #   random walk on the log scale, interpolated within weeks, with a
-#   logistic intervention ramp at the first WHO situation report. McCabe
-#   et al. use one constant exponential growth rate.
+#   logistic outbreak-response ramp of about three weeks at the first WHO
+#   situation report (18 May 2026). McCabe et al. use one constant
+#   exponential growth rate.
 # - *Joint posterior, not 15 scenario estimates.* The reproduction
 #   number, case-fatality ratio, all delays, traveller volume and
 #   surveillance dispersion have priors and are sampled together. McCabe
 #   et al. fix each and sweep.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.*
-#   A single import grows exponentially through an unobserved cryptic
-#   phase whose length is set by a wide prior, floored by the genetic
-#   time to the most recent common ancestor, before the renewal process
-#   takes over. McCabe et al. fix the start from a single seed.
+#   A single import grows through an unobserved cryptic exponential phase
+#   to a magnitude set by a wide prior on the doubling count, at a rate
+#   derived from the established reproduction number, before the renewal
+#   process takes over. The genetic time to the most recent common
+#   ancestor floors the cryptic duration from below. McCabe et al. fix the
+#   start from a single seed.
 #
 # **Delays and convolutions**
 #
@@ -76,11 +79,11 @@
 # - *Ascertainment extension.* The DRC and Uganda reporting fractions
 #   share a logit-scale hyperprior, giving a joint posterior over
 #   ascertainment alongside outbreak size. Not in McCabe et al.
-# - *Comparison against published scenarios.* The model's expected
-#   cumulative confirmed cases are compared against all 15 McCabe et al.
-#   scenario estimates with a coverage table, while $C_T$ (the latent
-#   infection count, summed from the renewal trajectory) is reported
-#   separately.
+# - *Comparison against published scenarios.* The model is set beside the
+#   McCabe et al. scenario estimates as an external sense-check, matched in
+#   time at the cut-off each scenario was computed, while $C_T$ (the latent
+#   infection count, summed from the renewal trajectory) is the headline
+#   quantity reported separately.
 #
 # **Extensions**
 #
@@ -331,13 +334,12 @@ vintage_table #hide
 #
 # ##### Reproduction number — weekly random walk with intervention ramp
 #
-# Knots are placed at weekly intervals (day 1, 8, 15, …, $n$).
-# The knot values follow a Gaussian random walk on the log scale in
-# non-centred cumulative-sum form:
+# Knots are placed at weekly intervals (day 1, 8, 15, …, $n$), with values
+# following a non-centred Gaussian random walk on the log scale:
 #
 # ```math
-# \log R_0 \sim \mathrm{Normal}(\log 1.3,\ 0.4), \qquad
-# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.2), \tag{2}
+# \log R_0 \sim \mathrm{Normal}(\log 1.6,\ 0.10), \qquad
+# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.05), \tag{2}
 # ```
 #
 # ```math
@@ -346,17 +348,23 @@ vintage_table #hide
 # z_j \sim \mathrm{Normal}(0, 1). \tag{3}
 # ```
 #
-# Daily $\log R_t$ is the piecewise-linear interpolation between knots.
-# An intervention at the first WHO situation report adds a sampled
-# effect shaped by a logistic ramp over about three weeks, reflecting that
-# a response takes weeks to bite rather than switching at a single date:
+# Here $R_0$ is the established reproduction number at the anchor, the base
+# the walk grows from and the single source of the cryptic growth rate
+# through Euler–Lotka. Daily $\log R_t$ is the piecewise-linear
+# interpolation between knots. The outbreak response adds a sampled effect
+# shaped by a logistic ramp of about three weeks (21 days), at the first
+# WHO situation report on 18 May 2026, reflecting that a response takes
+# weeks to bite rather than switching at a single date:
 #
 # ```math
 # \log R_t \mathrel{+}= \delta \cdot
-#     \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{7}\right),
+#     \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right),
 # \qquad
-# \delta \sim \mathrm{Normal}(0,\ 0.5). \tag{4}
+# \delta \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{4}
 # ```
+#
+# The effect is constrained to be non-positive, so the response can only
+# damp transmission.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: rt_walk_model</summary>
@@ -440,28 +448,34 @@ vintage_table #hide
 
 # ##### Seeding — cryptic exponential phase and outbreak age
 #
-# A single import starts the outbreak and grows exponentially through an
-# unobserved cryptic phase before sustained transmission is established.
-# We do not know how long that phase lasted, so the outbreak age, the
-# elapsed time from the import to the cut-off, is treated as unknown and
-# wide.
-# We place the prior on the number of times infections doubled over that
-# age rather than on the age itself, which avoids the trade-off between
-# growth rate and duration that an age prior would suffer.
-# A wide prior on the doubling count gives an outbreak age spanning weeks
-# to months, with of order tens to a thousand cumulative infections at the
-# cut-off under pure exponential growth.
-# The age is left prior-driven and is not read off a trajectory crossing.
+# A single import grows through an unobserved cryptic exponential phase to
+# a magnitude of $2^m$ infections at the anchor, the day the renewal takes
+# over:
 #
-# The growth rate of the cryptic phase is anchored on the molecular-clock
-# doubling time for this outbreak, centred near twenty days with the
-# spread of the phylodynamic estimate.
-# Combined with the doubling-count prior this sets when the outbreak
-# started and how large the cryptic phase had grown by the cut-off.
-# The genetic bound below floors the age from one side, and the renewal
-# process then carries the outbreak forward over the observed window,
-# so the realised outbreak size is driven by the time-varying
-# reproduction number rather than by this prior.
+# ```math
+# \tau = \frac{\log 2}{r}, \qquad
+# T_{\text{cryptic}} = m\,\tau, \qquad
+# \text{anchor seed} = 2^m. \tag{S1}
+# ```
+#
+# Here $m$ is the number of times infections doubled during the cryptic
+# phase and $\tau$ is the doubling time. The seed magnitude $2^m$ is set
+# directly and does not depend on $r$, so the growth rate enters only the
+# renewal that follows. The prior is placed on the doubling count rather
+# than the age:
+#
+# ```math
+# m \sim \mathrm{Normal}^{+}(2,\ 3). \tag{S2}
+# ```
+#
+# The cryptic rate $r$ is not a free parameter. It is derived from the
+# single established reproduction number $R_0 = \exp(\log R_0)$ and the
+# generation interval through the inverse Euler–Lotka relation, so one
+# growth source drives both the cryptic phase and the renewal. With $R_0$
+# centred near $1.6$ the implied doubling time $\tau$ tracks the genetic
+# estimate of about twenty days. The wide prior on $m$ leaves the cryptic
+# duration $m\,\tau$ spanning weeks to months, floored from one side by the
+# genetic bound below.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: exponential_growth_model</summary>
@@ -479,29 +493,34 @@ vintage_table #hide
 
 # ##### Generating infection process and onset staging
 #
-# The renewal recursion runs over the observed window, from an anchor day
-# near the genetic time to the most recent common ancestor up to the
-# cut-off.
-# The cryptic exponential phase from the import to the anchor sits off
-# this window, so the size handed to the recursion at the anchor is the
-# cut-off size scaled back along the cryptic exponential over the length
-# of the observed window.
-# The days just before the anchor are filled by the same cryptic curve to
-# give the recursion a full generation interval of history, and the
-# renewal then grows the trajectory forward under the time-varying
-# reproduction number.
-# So the cut-off outbreak size is driven by that reproduction number,
-# while the doubling-count prior fixes only the anchor-day scale.
+# The renewal recursion runs from the anchor to the cut-off:
+#
+# ```math
+# \text{anchor} = n - \text{tmrca}_{\text{days}} + 7, \qquad
+# \tau_{\text{obs}} = n - \text{anchor}. \tag{S3}
+# ```
+#
+# The anchor sits seven days after the genetic time to the most recent
+# common ancestor, past the clock uncertainty, where sustained
+# transmission is treated as established. The pre-anchor grid days are
+# filled by the cryptic exponential curve at rate $r$ ending at $2^m$,
+# giving the recursion a full generation interval of history. The renewal
+# of equation (1) then grows the trajectory forward under the time-varying
+# reproduction number, so the cut-off size is data-driven while the
+# doubling count sets only the anchor scale.
+#
+# The total outbreak age is the cryptic duration plus the observed window:
+#
+# ```math
+# T = m\,\tau + \tau_{\text{obs}}. \tag{S4}
+# ```
 #
 # Cumulative infections are the running sum of the daily series, and the
-# cut-off cumulative is the headline outbreak size.
-# The current growth rate is the day-over-day log-ratio of infections at
-# the cut-off, and the doubling time is the logarithm of two divided by
-# that rate.
-# Infections are convolved with the incubation-period distribution to give
-# daily symptom-onset incidence, which every downstream stream then
-# consumes.
-# The incubation delay is the Bundibugyo prior of equation (6).
+# cut-off cumulative $C_T$ is the headline outbreak size. The current
+# growth rate is the day-over-day log-ratio of infections at the cut-off,
+# and the doubling time is $\log 2$ divided by that rate. Infections are
+# convolved with the incubation-period distribution of equation (6) to give
+# daily symptom-onset incidence, which every downstream stream consumes.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -706,21 +725,23 @@ cfr_prior_fig #hide
 # Using the genetic TMRCA as a one-sided seeding bound rather than a
 # point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
 #
-# We treat the TMRCA as a right-censored, noisy reading of the outbreak
-# age. Writing $a$ for the age implied by the reported TMRCA date, which
-# tracks the cut-off rather than a fixed offset, the bound contributes the
-# probability that a noisy reading of the sampled age $T$ falls at or
-# beyond $a$,
+# We treat the TMRCA day as a right-censored, noisy reading of the total
+# outbreak age $T = m\,\tau + \tau_{\text{obs}}$,
 #
 # ```math
-# p_\text{gen}(T) = \Pr[\mathrm{Normal}(T, \sigma) \ge a]
-#   = \Phi\!\left(\frac{T - a}{\sigma}\right),
+# \text{tmrca}_{\text{days}} \sim
+#   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
+#   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
 # \qquad \sigma = 15\ \text{d}. \tag{13}
 # ```
 #
-# The bound is one-sided. It penalises outbreak ages younger than the
-# TMRCA but leaves the age free above it, with the clock fixed and no
-# propagation of cross-outbreak or clock uncertainty.
+# The anchor sits seven days after the TMRCA day, so the observed window
+# $\tau_{\text{obs}}$ is shorter than the TMRCA age. The bound therefore
+# stays informative on the cryptic duration $m\,\tau$, pulling the origin
+# to sit at or before the most recent common ancestor and bounding the
+# cryptic phase from below. It is one-sided, leaving the age free above the
+# TMRCA, with the clock fixed and no propagation of cross-outbreak or clock
+# uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
