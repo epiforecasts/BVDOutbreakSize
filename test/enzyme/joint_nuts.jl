@@ -15,15 +15,14 @@
 # fit is paired with the same Mooncake fit for a wall-clock comparison and
 # a sanity check that the chains are not all-divergent.
 #
-# STATUS as of renewal HEAD 7dc5620 (composition-link DEFAULT positivity
+# STATUS as of renewal HEAD 67f6b6d (composition-link DEFAULT positivity
 # with the assay-specificity term, the dated per-day Uganda export
-# likelihood, and genetic seeding; full real-data joint 62-dim): after the
-# de-box fix on this branch (see joint_explore.jl), the Enzyme tiny fit
-# reaches NUTS and completes, so the 300x2 fit runs too. Both warmup and
-# sampling finish under Enzyme, chains sane (see PR #201).
-#
-# Note: a further renewal change (the m-induced-T seeding) is still pending
-# and will need another sync of this branch once it lands.
+# likelihood, genetic seeding, and the m-induced-T two-phase seeding; full
+# real-data joint 63-dim): after the de-box fix on this branch (see
+# joint_explore.jl), the Enzyme tiny fit reaches NUTS and completes, so the
+# 300x2 fit runs too. Both warmup and sampling finish under Enzyme, chains
+# sane (see PR #201). The two-phase seeding is closure-free and needed no
+# further de-boxing.
 
 using Enzyme    # loads BVDOutbreakSizeEnzymeExt so enzyme_adtype() exists
 using Mooncake  # default backend

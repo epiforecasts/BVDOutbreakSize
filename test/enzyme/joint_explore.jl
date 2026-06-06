@@ -13,13 +13,16 @@
 # NUTS) isolates compile/differentiate viability from trajectory
 # exploration into extreme regions.
 #
-# STATUS as of renewal HEAD 7dc5620 (composition-link DEFAULT positivity
+# STATUS as of renewal HEAD 67f6b6d (composition-link DEFAULT positivity
 # with the assay-specificity term `p = s·q + (1 − spec)(1 − q)`, the dated
-# per-day Uganda export likelihood, and the genetic seeding bound; full
-# real-data joint 62-dim): Enzyme DIFFERENTIATES the joint and matches
-# Mooncake after the de-box fix on this branch. Three conditional/anonymous
-# closures that Enzyme reverse mode could not handle were made
-# type-stable (pure refactor, Mooncake bit-identical):
+# per-day Uganda export likelihood, the genetic seeding bound, and the
+# m-induced-T two-phase seeding — samples doublings `m` and growth `r`,
+# derives outbreak age `T = m·τ`, scales `2^m` back to the genetic-TMRCA
+# anchor via `seed_at_anchor` and runs the renewal forward; full real-data
+# joint 63-dim): Enzyme DIFFERENTIATES the joint and matches Mooncake after
+# the de-box fix on this branch. Three conditional/anonymous closures that
+# Enzyme reverse mode could not handle were made type-stable (pure refactor,
+# Mooncake bit-identical):
 #   1. `bvd_joint`'s `if background_re … else … end` boxed the
 #      `case_bg_re`/`death_bg_re` closure capture in a `Base.RefValue`;
 #   2. the `:composition` positivity `map(do i)` in `confirmed_cases_model`
@@ -27,12 +30,13 @@
 #      (which now also applies the sensitivity/specificity transform);
 #   3. that helper's `map(do i)` itself tripped Enzyme's shadow handling,
 #      so it was rewritten as an explicit loop (no closure).
+# The two-phase seeding (`infection_model` / `exponential_growth_model` /
+# `seed_at_anchor` / `seed_infections` / `renewal_infections`) is already
+# closure-free (explicit loops, no `map(do)`), so it needed no further
+# de-boxing; Enzyme differentiates it as-is.
 # This harness asserts the Enzyme/Mooncake gradient match on the current
-# joint: logp identical, single gradient maxabs ≈ 2.7e-12 / relerr ≈ 2e-15.
+# joint: logp identical, single gradient maxabs ≈ 1.2e-12, relerr ≈ 2.5e-15.
 # See PR #201. The fix lives on this branch as a candidate for renewal.
-#
-# Note: a further renewal change (the m-induced-T seeding) is still pending
-# and will need another sync of this branch once it lands.
 
 using Test
 using Enzyme
