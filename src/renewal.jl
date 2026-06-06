@@ -149,6 +149,65 @@ function renewal_infections(Rt::AbstractVector, g::AbstractVector,
 end
 
 """
+Single-seed onset pulse: ONE infection placed at the continuous seeding
+day `t_s`, spread over days `1 … n` by a smooth Gaussian pulse `κ_j =
+exp(−½((j − t_s) / w)²)` normalised to sum to one. The seed scale is
+fixed at exactly one infection (no sampled seed size), so this is a
+proper unit-mass onset — the single zoonotic introduction. The pulse is
+smooth in `t_s` with no hard delta, so the recursion that consumes it
+stays differentiable in `t_s` under Mooncake (the requirement for plain
+NUTS). A narrow `w` (default 1.5 days) keeps the introduction a tight
+few-day onset rather than a smeared seed. Returns a length-`n` vector
+whose element type follows `t_s` and `w`.
+"""
+function seed_pulse(t_s, n::Integer; width = 1.5)
+    Tp = promote_type(typeof(float(t_s)), typeof(float(width)))
+    raw = Vector{Tp}(undef, n)
+    w = safe_rate(width)
+    @inbounds for j in 1:n
+        z = (j - t_s) / w
+        raw[j] = exp(-Tp(0.5) * z * z)
+    end
+    s = sum(raw)
+    if !isfinite(s) || s <= zero(s)
+        return fill(one(Tp) / n, n)
+    end
+    return raw ./ s
+end
+
+"""
+Single-seeded renewal infections: the renewal recursion forced by a
+fixed single-infection seed pulse,
+`I_j = seed_j + R_j Σ_{s ≥ 1} I_{j−s} g_s`, with generation-interval PMF
+`g` (indexed from lag 1), per-day reproduction numbers `Rt` (length `n`)
+and the unit-mass seed pulse `seed` (length `n`, see
+[`seed_pulse`](@ref)). The single seeded infection enters at the
+continuous seeding day `t_s` and then grows through the renewal sum under
+`R_t` — early growth from one case is approximately exponential, so this
+is the renewal analogue of the integral model's exponential-growth
+seeding, with the cumulative size `C_T = Σ_j I_j` set by `R_t` rather
+than by a sampled seed magnitude. Additive smooth seeding (rather than a
+hard start day) keeps `I_j` differentiable in `t_s` for plain NUTS.
+Returns the length-`n` trajectory; the output element type is promoted
+from `Rt`, `g` and `seed`.
+"""
+function renewal_seeded(Rt::AbstractVector, g::AbstractVector,
+        seed::AbstractVector)
+    n = length(Rt)
+    Tp = promote_type(eltype(Rt), eltype(g), eltype(seed))
+    I = zeros(Tp, n)
+    @inbounds for j in 1:n
+        force = zero(Tp)
+        kmax = min(j - 1, length(g))
+        for s in 1:kmax
+            force += I[j - s] * g[s]
+        end
+        I[j] = seed[j] + Rt[j] * force
+    end
+    return I
+end
+
+"""
 Convolve a daily trajectory `x` (infections or onsets) with a delay PMF
 `delay` (indexed from lag 0), returning the expected daily counts of the
 delayed event on the same daily grid: entry `t` sums `x[t−d] · delay[d+1]`

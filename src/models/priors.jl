@@ -199,6 +199,72 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
 end
 
 """
+Anchored single-seed renewal infection process: the import-seeding
+variant of [`infection_model`](@ref) built for plain-NUTS stability. A
+SINGLE infection is seeded at a continuous seeding day `t_s` and grown by
+the renewal recursion under `R_t`, so the outbreak size is data-driven
+through `R_t` rather than set by a sampled seed magnitude.
+
+The seeding day `t_s` is sampled from a NARROW prior anchored just after
+the genetic TMRCA day, the LATEST-POSSIBLE start consistent with the
+genetics (and so the smallest outbreak the genetics allow). With the
+TMRCA grid day `n − tmrca_days` and a fixed `ts_lead` (default 3 days),
+the prior is `truncated(Normal(ts_anchor, ts_sd); 1 … n)` with
+`ts_anchor = n − tmrca_days + ts_lead` and a tight `ts_sd` (default 3
+days). Pinning `t_s` rather than placing a wide prior on the outbreak age
+cuts the `(start, R_t)` ridge that otherwise funnels: the start is fixed
+by the genetics, leaving `R_t` to set the size. `ts_anchor` /
+`ts_sd` / `ts_lead` are injectable; passing `ts_prior` overrides the
+default outright.
+
+The single seed enters via a smooth unit-mass onset pulse at `t_s`
+([`seed_pulse`](@ref)) so the trajectory is differentiable in `t_s`
+(plain NUTS, no Gibbs), and the renewal sum carries it forward
+([`renewal_seeded`](@ref)). Early growth from one case is approximately
+exponential. The genetic bound is kept as the soft censored prior on the
+derived outbreak age `T = n − t_s` at the composer level; `seeding_age`
+(the day cumulative infections cross one) is still reported as a
+diagnostic. The seeding-vs-established `R_t` split (`rt_start`) is
+forwarded unchanged. Returns `(; infections, cumulative, Rt, g, T, t_s,
+r0, r, C_T, seeding_age, doubling_time)`.
+"""
+@model function infection_import_model(n::Integer;
+        breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
+        tmrca_days::Real = max(n - 1, 1),
+        ts_lead::Real = 3.0,
+        ts_sd::Real = 3.0,
+        seed_width::Real = 1.5,
+        ts_prior = nothing,
+        rt = rt_walk_model,
+        gi = generation_interval_model,
+        gi_nmax::Integer = 40)
+    ts_anchor = clamp(n - tmrca_days + ts_lead, 1, n)
+    tspr = ts_prior === nothing ?
+           truncated(Normal(ts_anchor, ts_sd); lower = 1, upper = n) :
+           ts_prior
+    ## Sampled under a distinct name (`seed_day`) so a composer that
+    ## re-exposes this submodel's draws can still surface the outbreak age
+    ## through its own `T :=` deterministic without a name clash.
+    seed_day ~ tspr
+    rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
+    gi_state ~ to_submodel(gi(gi_nmax))
+    Rt = rt_state.Rt
+    g = gi_state.g
+    r0 = euler_lotka_r(Rt[1], g)
+    seed = seed_pulse(seed_day, n; width = seed_width)
+    infections = renewal_seeded(Rt, g, seed)
+    cumulative = cumsum(infections)
+    r = n >= 2 ?
+        log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1])) :
+        zero(eltype(infections))
+    return (; infections, cumulative, Rt, g,
+        T = n - seed_day, t_s = seed_day, r0, r, C_T = cumulative[n],
+        seeding_age = seeding_age(cumulative, n),
+        doubling_time = doubling_time(r))
+end
+
+"""
 Onset-incidence submodel: convolve the renewal infections with the
 sampled incubation-period PMF to get daily symptom-onset incidence.
 Computed once per draw and reused by every downstream observation stream,

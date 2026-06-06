@@ -138,6 +138,78 @@ end
     @test I[n] < seed[end]
 end
 
+@testitem "seed_pulse: unit mass, peaks at t_s, smooth in t_s" begin
+    using BVDOutbreakSize: seed_pulse
+
+    n = 100
+    ## Single seed placed at t_s = 35: a normalised (unit-mass) pulse that
+    ## peaks at the seeding day.
+    k = seed_pulse(35.0, n; width = 1.5)
+    @test length(k) == n
+    @test all(k .>= 0)
+    @test isapprox(sum(k), 1.0; atol = 1e-10)
+    @test argmax(k) == 35
+
+    ## Smooth in t_s: a half-day shift moves no single bin by a large jump
+    ## (the requirement for differentiability under Mooncake / plain NUTS).
+    k1 = seed_pulse(35.0, n)
+    k2 = seed_pulse(35.5, n)
+    @test maximum(abs.(k1 .- k2)) < 0.2
+
+    ## A degenerate width falls back to a finite uniform pulse, never NaN.
+    kz = seed_pulse(35.0, n; width = 0.0)
+    @test all(isfinite, kz)
+    @test isapprox(sum(kz), 1.0; atol = 1e-10)
+end
+
+@testitem "renewal_seeded: single seed grows under R > 1" begin
+    using BVDOutbreakSize: renewal_seeded, seed_pulse, lognormal_meansd,
+                           discretise_censored
+
+    gi = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
+    g = gi[2:end] ./ sum(gi[2:end])
+    n = 100
+    Rt = fill(1.6, n)
+    seed = seed_pulse(35.0, n)
+    I = renewal_seeded(Rt, g, seed)
+    @test length(I) == n
+    @test all(I .>= 0)
+    ## The single seeded case grows through the renewal sum under R > 1.
+    @test I[n] > I[40]
+    ## Total infections come only from the one seeded case plus its
+    ## renewal offspring, so the cumulative exceeds the unit seed.
+    @test sum(I) > 1.0
+end
+
+@testitem "renewal_seeded: reduces to seed pulse when R = 0" begin
+    using BVDOutbreakSize: renewal_seeded, seed_pulse
+
+    ## With R_t = 0 there is no onward transmission, so the trajectory is
+    ## exactly the seed pulse (the additive forcing) — its mass is one.
+    n = 50
+    g = [1.0]
+    Rt = zeros(n)
+    seed = seed_pulse(20.0, n)
+    I = renewal_seeded(Rt, g, seed)
+    @test I ≈ seed
+    @test isapprox(sum(I), 1.0; atol = 1e-10)
+end
+
+@testitem "renewal_seeded: later seed shifts the trajectory later" begin
+    using BVDOutbreakSize: renewal_seeded, seed_pulse, lognormal_meansd,
+                           discretise_censored
+
+    gi = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
+    g = gi[2:end] ./ sum(gi[2:end])
+    n = 100
+    Rt = fill(1.8, n)
+    early = renewal_seeded(Rt, g, seed_pulse(20.0, n))
+    late = renewal_seeded(Rt, g, seed_pulse(40.0, n))
+    ## A later seeding day means less time to grow, so a smaller outbreak
+    ## by the cut-off — the size is driven by the start time and R_t.
+    @test sum(late) < sum(early)
+end
+
 @testitem "convolve_delay: hand-calculation" begin
     using BVDOutbreakSize: convolve_delay
 

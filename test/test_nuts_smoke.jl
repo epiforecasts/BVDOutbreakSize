@@ -61,6 +61,28 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "NUTS smoke: infection_import_model (n=40)" tags = [:slow] begin
+    using Turing: @model, to_submodel
+    import FlexiChains
+    using BVDOutbreakSize: infection_import_model, nuts_sample
+
+    ## Anchored single-seed variant: t_s is sampled from a narrow prior
+    ## just after the genetic TMRCA day; the single seed grows via R_t.
+    @model function _wrap_imp()
+        st ~ to_submodel(
+            infection_import_model(40; tmrca_days = 28.0), false)
+        Cap_T := st.C_T
+        return st
+    end
+
+    chn = nuts_sample(_wrap_imp(); samples = 12, chains = 1, progress = false)
+    ts = vec(Array(chn[:seed_day]))
+    C_T = vec(Array(chn[:Cap_T]))
+    @test length(ts) == 12
+    @test all(isfinite, ts)
+    @test all(C_T .> 0)
+end
+
 @testitem "NUTS smoke: exports_only_model (n=40, obs=2)" tags = [:slow] begin
     import FlexiChains
     using BVDOutbreakSize: exports_only_model, nuts_sample
