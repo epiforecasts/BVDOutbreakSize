@@ -19,12 +19,6 @@
 # report, built from the same run, is attached to each results release:
 # [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
 #
-# **See:**
-# [current outbreak size](@ref "Summary") ·
-# [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") ·
-# [how the data streams compare](@ref "How the data streams compare") ·
-# [limitations](@ref "Limitations").
-#
 # ## What we do differently from McCabe et al.
 #
 # We reimplement the McCabe et al. [mccabe2026](@cite) report as a single
@@ -1430,12 +1424,22 @@ diagnostics_table( #hide
 summary_ranges = let
     C = posterior_C_joint
     Td = vec(Array(chn_joint[:T]))
+    r0d = vec(Array(chn_joint[:r0]))
     rd = vec(Array(chn_joint[:r]))
+    dt0 = log(2) ./ r0d
     dt = vec(Array(chn_joint[:doubling_time]))
+    R0d = vec(Array(chn_joint[:R0]))
+    RTd = vec(Array(chn_joint[:R_T]))
+    cfrd = vec(Array(chn_joint[:CFR]))
     sC = posterior_summary(C)
     sT = posterior_summary(Td)
+    sr0 = posterior_summary(r0d)
     sr = posterior_summary(rd)
+    sdt0 = posterior_summary(dt0)
     sdt = posterior_summary(dt)
+    sR0 = posterior_summary(R0d)
+    sRT = posterior_summary(RTd)
+    scfr = posterior_summary(cfrd)
 
     ints_i(s) = string(
         "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
@@ -1463,13 +1467,16 @@ summary_ranges = let
       confirmed cases capture only a small share of the estimated outbreak.
     - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
       cases by the cut-off, against $(obs.confirmed_cases) observed.
-    - **Outbreak start:** the outbreak began on a start date of
-      $(ints_d(sT)).
-    - **Outbreak age:** the elapsed time from that start to the cut-off is
-      $(ints_i(sT)) days.
-    - **Growth rate and doubling time:** the current growth rate is
-      $(ints_f(sr, 3)) per day.
-      The implied doubling time is $(ints_f(sdt, 1)) days.
+    - **Outbreak start and age:** the outbreak began on a start date of
+      $(ints_d(sT)), an elapsed age to the cut-off of $(ints_i(sT)) days.
+    - **Growth rate and doubling time:** the initial growth rate was
+      $(ints_f(sr0, 3)) per day, an initial doubling time of
+      $(ints_f(sdt0, 1)) days.
+      The latest growth rate is $(ints_f(sr, 3)) per day, a latest doubling
+      time of $(ints_f(sdt, 1)) days.
+    - **Reproduction number:** the initial reproduction number was
+      $(ints_f(sR0, 2)) and the latest is $(ints_f(sRT, 2)).
+    - **Case-fatality ratio:** the posterior is $(ints_f(scfr, 2)).
     """)
 end;
 
@@ -1478,14 +1485,6 @@ end;
 #md # ```
 
 summary_ranges #hide
-
-# **Why our estimate may differ from McCabe et al.**
-# Our estimate fits all streams jointly, samples the nuisance parameters
-# that McCabe et al. vary in scenario sweeps, and uses a time-varying
-# reproduction number constrained by the sitrep trajectory.
-# See [what we do differently](#What-we-do-differently-from-McCabe-et-al.),
-# the [comparison with McCabe et al.](#Comparison-with-McCabe-et-al.) and
-# the [limitations](#Limitations) for the detail behind this.
 
 # ### Joint model estimates
 #

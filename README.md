@@ -12,40 +12,33 @@ of the Institut National de Santé Publique (INSP); Uganda imports come
 from WHO. Estimates are reported as of this date; it can lag the update
 date above.
 
+**See:**
+[current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
+[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast) ·
+[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Estimate-evolution-across-releases) ·
+[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-McCabe-et-al.) ·
+[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#How-the-data-streams-compare) ·
+[limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
+[full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
+
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus
-(BVD) is ongoing in the Democratic Republic of the Congo (DRC),
-with cases also detected across the border in Uganda. Estimating
-the likely current size of the outbreak is useful for the response,
-but most
-cases are not yet reported and have to be inferred from the data
-streams that are available. The Imperial College London report
-(McCabe et al., [18 May 2026](https://www.imperial.ac.uk/mrc-global-infectious-disease-analysis/research-themes/preparedness-and-response-to-emerging-threats/report-ebola-18-05-2026/),
-revised in a [20 May 2026 update](https://www.imperial.ac.uk/media/imperial-college/medicine/mrc-gida/Report-ebola-update-20-05-2026.pdf))
-estimates the size with two analyses, geographic spread from the cases
-exported to Uganda and back-calculation from suspected deaths in DRC.
-Building on that work, we re-analyse the same problem as a single joint
-Bayesian model over the latent infection count, fitting all streams
-together with priors on the nuisance parameters that the report varies
-in scenario sweeps. The model is a discrete-time renewal process on a
-daily grid: infections drive a time-varying reproduction number,
-symptom onsets follow after a sampled incubation period, and every
-observed stream sits downstream of those onsets through its own delay.
-Beyond the exported cases and DRC deaths the report uses, we condition
-on two further streams, the reported cases in DRC (with an ascertainment
-component) and the deaths among exported cases in Uganda. We fit the DRC
-streams to the full situation-report trajectory, conditioning on the
-between-vintage increments across successive sitreps rather than only
-the latest cumulative total, which sharpens the reproduction number. We
-also add a no-onward-transmission projected-deaths counterfactual, a
-one-week-ahead forecast and an onset-to-death delay sensitivity
-analysis. We report the joint posterior from current data, and to
-separate newer data from the change in method we also fit the data as of
-each report version in sequence (18 May, then the 20 May update),
-comparing against both a joint reimplementation of the report's approach
-and its published estimates. The cumulative infection count $C_T$ is the
-headline latent quantity; we compare against the report's scenarios on
-the expected confirmed cases, the ascertained quantity recovered
-downstream.
+(BVD) is ongoing in the Democratic Republic of the Congo (DRC), with
+cases also detected across the border in Uganda.
+This is a real-time joint Bayesian estimate of the current size of that
+outbreak, refreshed as new data arrive.
+Most infections are not yet reported, so the current size has to be
+inferred from the surveillance data that are available.
+The model is a discrete-time renewal process on a daily grid, fitting
+every data stream together in a single posterior.
+It estimates the cumulative number of infections to date, the
+reproduction number with the growth rate and doubling time, the
+case-fatality ratio, the ascertainment of each surveillance system, and a
+short forecast of the streams over the coming week.
+The data that inform it are the DRC INSP situation-report streams of
+suspected cases, suspected deaths and laboratory-confirmed cases, fitted
+across successive report vintages, the Uganda WHO export cases and export
+deaths, a genetic bound on the time to the most recent common ancestor,
+and priors taken from the McCabe et al. report.
 
 **Scope.** This work is motivated by adding an external view of the
 current situation, based on our understanding of real-time infectious
@@ -61,26 +54,7 @@ Find out more in the
 model and reviewed and revised under human oversight; the named authors
 are responsible for that oversight.
 
-**Why our numbers differ from McCabe et al.** Two reasons. First, the
-method: we fit all streams jointly in a single Bayesian model rather
-than combining separate scenario analyses (see
-[each way our method departs from the report](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#What-we-do-differently-from-McCabe-et-al.)).
-Second, the data: our cut-off is later than either McCabe et al.
-report version (16 May for the 18 May report; 18 May for the 20 May
-update), and we fit the DRC streams to the full run of situation
-reports rather than a single total at the cut-off, so the reproduction
-number is informed by the shape of the reported trajectory rather than
-the prior alone. The joint posterior assumes a single common cut-off for
-every data stream, so the deaths, exports and reported-case counts must
-all be kept in sync to the same date.
 <!-- SHARED:END -->
-
-**See:**
-[current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
-[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-McCabe-et-al.) ·
-[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#How-the-data-streams-compare) ·
-[limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
-[full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
 
 ## Installing the package
 
