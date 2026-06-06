@@ -470,7 +470,7 @@ vintage_table #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.exponential_growth_model(0.0)), "\n```"))
 #md # ```
 
 #md # ```@raw html

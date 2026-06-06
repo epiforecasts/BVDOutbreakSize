@@ -60,6 +60,36 @@ println("  divergences (of $(SAMPLES * CHAINS)) : ", d.n_divergent)
 println("  max R-hat                  : ", round(d.max_rhat; digits = 4))
 println("  min bulk ESS               : ", round(d.min_ess_bulk; digits = 1))
 
+## R0 = the SINGLE established reproduction number (= the first R_t), the
+## one growth source for both the cryptic phase (via Euler–Lotka) and the
+## renewal. THE headline failure signature of the earlier R0-rate attempt
+## was R0 collapsing toward 1.0 and going bimodal across chains, because the
+## seed back-scaling put R0 in both the seed and the renewal growth. With
+## the 2^m seed magnitude r-free, R0 should stay near its prior (≈1.6),
+## single-basin across chains.
+R0v = vec(collect(chn[:R0]))
+println("\n=== R0 (single established reproduction number) ===")
+println("  median ", round(median(R0v); digits = 4),
+    "  90% [", round(quantile(R0v, 0.05); digits = 4), ", ",
+    round(quantile(R0v, 0.95); digits = 4), "]",
+    "  SD ", round(std(R0v); digits = 4))
+println("  quantiles 1/10/25/50/75/90/99 % : ",
+    join(
+        round.(quantile(R0v,
+                [0.01, 0.10, 0.25, 0.50, 0.75, 0.90, 0.99]); digits = 3), "  "))
+println("  fraction of draws below 1.1 (collapse check) : ",
+    round(mean(R0v .< 1.1); digits = 4))
+println("  per-chain R0 medians (bimodality check):")
+R0all = collect(chn[:R0])
+for c in 1:CHAINS
+    rows = ((c - 1) * SAMPLES + 1):(c * SAMPLES)
+    R0c = vec(R0all)[rows]
+    println("    chain ", c, " : median ", round(median(R0c); digits = 4),
+        "  mean ", round(mean(R0c); digits = 4),
+        "  [", round(quantile(R0c, 0.05); digits = 3), ", ",
+        round(quantile(R0c, 0.95); digits = 3), "]")
+end
+
 ## T width: median / 90% interval / SD. The headline question is whether
 ## the wide m prior leaves T genuinely uncertain (vs the SD-3 tightness of
 ## the fixed-anchor placement in PR #216).
@@ -87,7 +117,7 @@ for c in 1:CHAINS
 end
 
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")
-for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
+for sym in (:C_T, :R0, :r0, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
     :lambda_bg, :lambda_bg_death,
     :suspected_positivity, :test_positivity,
     :expected_reports_T, :expected_deaths_T, :expected_exports_T,

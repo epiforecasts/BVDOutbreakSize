@@ -91,39 +91,32 @@ end
     end
 end
 
-@testitem "seed_at_anchor: scales 2^m back to the anchor day" begin
+@testitem "seed_at_anchor: anchor magnitude is 2^m, r-independent" begin
     using BVDOutbreakSize: seed_at_anchor
 
-    C_T = 512.0          # 2^9, the cut-off-referenced size scale
-    r = log(2) / 20      # 20-day doubling molecular-clock rate
-    τ_obs = 70           # observation span (cut-off − anchor)
+    C_T_prior = 512.0    # 2^9, the cryptic-phase realised size at the anchor
 
-    s = seed_at_anchor(C_T, r, τ_obs)
-    ## Scaling back over τ_obs then forward by the same span recovers C_T.
-    @test isapprox(s * exp(r * τ_obs), C_T; rtol = 1e-10)
-    ## τ_obs = 0 (anchor at the cut-off) leaves the size unchanged.
-    @test isapprox(seed_at_anchor(C_T, r, 0), C_T; rtol = 1e-10)
-    ## A longer observation span scales the anchor seed smaller.
-    @test seed_at_anchor(C_T, r, 90) < s
-    ## Positive size in, positive size out.
-    @test s > 0
+    ## The anchor seed magnitude is `2^m` DIRECTLY — passed through
+    ## unchanged, no back-scaling by a rate. This keeps `r` (hence the
+    ## single R0) out of the seed magnitude.
+    @test seed_at_anchor(C_T_prior) === C_T_prior
+    @test seed_at_anchor(C_T_prior) > 0
 end
 
 @testitem "seed_at_anchor: composes with seed_infections at the anchor" begin
     using BVDOutbreakSize: seed_at_anchor, seed_infections
 
-    C_T = 1000.0
+    C_T_prior = 1000.0   # 2^m, the anchor-day seed magnitude
     r = 0.04
-    anchor = 31          # genetic-TMRCA grid day
-    n = 101
-    τ_obs = n - anchor
+    anchor = 38          # genetic-TMRCA day + seeding-anchor lead
 
-    seed0 = seed_at_anchor(C_T, r, τ_obs)
+    seed0 = seed_at_anchor(C_T_prior)
     seed_vec = seed_infections(seed0, r, anchor)
-    ## The cryptic curve ends at the anchor-day seed.
+    ## The anchor magnitude is exactly 2^m, independent of r.
+    @test seed0 == C_T_prior
+    ## The cryptic curve ends at the anchor-day seed and grows at rate r.
     @test isapprox(seed_vec[end], seed0; rtol = 1e-10)
-    ## Growing the anchor seed forward over τ_obs recovers the prior C_T.
-    @test isapprox(seed0 * exp(r * τ_obs), C_T; rtol = 1e-10)
+    @test isapprox(seed_vec[end - 1], seed0 * exp(-r); rtol = 1e-10)
 end
 
 @testitem "renewal_infections: hand-calculation on a tiny example" begin

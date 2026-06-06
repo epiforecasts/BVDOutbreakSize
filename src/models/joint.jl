@@ -234,8 +234,10 @@ BVD composition enriched on the odds scale (`confirmed_deaths`,
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
 seeding submodel when `tmrca_days` is given. Tracked deterministics:
-`C_T` (cumulative infections by the cut-off), `r` and `doubling_time`
-(current growth), `r0` (implied initial growth), `T` (outbreak age),
+`C_T` (cumulative infections by the cut-off), the single established
+reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
+(current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
+(outbreak age),
 `R_T` (current reproduction number), the per-stream expected counts, the
 testing fraction `tau_test`, the background rate `lambda_bg`, the
 confirmed-death enrichment `m_death`, the implied per-suspected
@@ -275,13 +277,19 @@ death-confirmation probability (`death_confirmation`).
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
-        tmrca_days_sd::Real = 15.0)
+        tmrca_days_sd::Real = 15.0,
+        seeding_anchor_lead::Integer = SEEDING_ANCHOR_LEAD)
     ## Fix R_t at R0 over the pre-establishment seeding window, letting the
-    ## random walk vary R_t only from the conservative genetic TMRCA bound
-    ## (`n - tmrca_days`) onward — before that point the outbreak dynamics
-    ## are unidentified, so a free walk there only adds unsupported drift.
+    ## random walk vary R_t only from the anchor onward — before that point
+    ## the outbreak dynamics are unidentified, so a free walk there only adds
+    ## unsupported drift. The anchor sits `seeding_anchor_lead` days AFTER the
+    ## genetic TMRCA day (`n - tmrca_days + lead`), past the TMRCA's
+    ## uncertainty where sustained transmission is confident. The lead keeps
+    ## the observed span `τ_obs = n − anchor` strictly shorter than
+    ## `tmrca_days`, so the genetic bound on the total age `T = m·τ + τ_obs`
+    ## stays informative (it bounds the cryptic duration `m·τ` from below).
     rt_start = ismissing(tmrca_days) ? 1 :
-               clamp(n - round(Int, tmrca_days), 1, n)
+               clamp(n - round(Int, tmrca_days) + seeding_anchor_lead, 1, n)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence; rt_start), false)
     infection_state = latent.infection_state
@@ -343,6 +351,7 @@ death-confirmation probability (`death_confirmation`).
     end
 
     C_T := infection_state.C_T
+    R0 := infection_state.R0
     r := infection_state.r
     r0 := infection_state.r0
     doubling_time := infection_state.doubling_time
