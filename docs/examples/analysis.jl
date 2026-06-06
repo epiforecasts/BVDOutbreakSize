@@ -586,12 +586,20 @@ vintage_table #hide
 # ```math
 # m \sim \mathrm{Normal}(m_0,\ 3)\ \text{on}\ (0, \infty),
 # \qquad
-# m_0 = 9 + \frac{\text{cut-off} - \text{18 May 2026}}{20}. \tag{3}
+# m_0 = 8.73 + \frac{\text{cut-off} - \text{18 May 2026}}{20}. \tag{3}
 # ```
 #
-# The base assumption is McCabe et al.'s first report (18 May 2026): its
-# Method 2 central scenario of 501 cases is a doubling count
-# $m = \log_2 501 \approx 9$. Each day that the cut-off runs past that
+# The base assumption is McCabe et al.'s first report (18 May 2026):
+# their Method 2 back-calculates cumulative cases from the 88 suspected
+# deaths and central CFR $0.30$ as
+# $C = D\,(1 + r\theta)^{\alpha}/\mathrm{CFR}$, with $r = \log 2/\tau$
+# and onset-to-death $\mathrm{Gamma}(\alpha = 4.3,\ \theta = 2.6)$. At
+# their 14-day doubling this gives $C \approx 494$, reproducing their
+# published 501 ($\log_2 501 \approx 9$). Re-evaluating the same
+# back-calculation at the molecular-clock 20-day doubling gives
+# $C \approx 425$, a doubling count $m = \log_2 425 \approx 8.73$:
+# slower growth places fewer cases behind the same deaths. Each day that
+# the cut-off runs past that
 # report adds a fraction of a doubling at the central 20-day doubling time
 # (the [cuomodannenburg2026](@cite) molecular-clock estimate, shared with
 # the growth-rate prior above), so the size prior stays centred on the

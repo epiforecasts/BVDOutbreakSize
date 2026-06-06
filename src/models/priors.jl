@@ -37,11 +37,14 @@ so the
 situation-report trajectory still drives the posterior growth rate.
 
 The default doubling-count prior `m ~ Normal(M_PRIOR_BASE, 3)` (truncated
-at 0) is centred on `M_PRIOR_BASE = 9` (`C_T = 2^9 = 512`), the doubling
-count implied by McCabe et al.'s first-report (18 May 2026) Method 2
-central scenario of 501 cases (`log2(501) ≈ 9`). `C_T = 2^m` is now the
-cumulative *infection* count; 9 is kept as a weakly-informative centre of
-the same order rather than rescaled to a case-equivalent infection count.
+at 0) is centred on `M_PRIOR_BASE = 8.73` (`C_T = 2^8.73 ≈ 425`), the
+doubling count implied by McCabe et al.'s first-report (18 May 2026)
+Method 2 deaths back-calculation re-evaluated at the molecular-clock
+20-day doubling time (`C ≈ 425`, `log2(425) ≈ 8.73`); at their original
+14-day doubling the same back-calculation gives `C ≈ 494`, reproducing
+their published 501 (`log2(501) ≈ 9`). `C_T = 2^m` is now the cumulative
+*infection* count; 8.73 is kept as a weakly-informative centre of the
+same order rather than rescaled to a case-equivalent infection count.
 For a fit at a later cut-off, pass an `m_prior` whose centre advances from
 that base date via [`m_prior_centre`](@ref) so the prior tracks the
 elapsed time. This is a weakly-informative centring choice (SD 3 gives 95%

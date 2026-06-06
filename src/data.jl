@@ -269,21 +269,32 @@ function load_observations(
 end
 
 ## Doubling-count prior base: McCabe et al.'s first report (18 May
-## 2026), whose Method 2 central scenario of 501 cases implies a doubling
-## count `log2(501) ≈ 9`. `C(T) = 2^m` is now the cumulative *infection*
-## count, but 9 is kept as a weakly-informative centre of the same
-## order: the prior only sets where the sampler starts and the fit is
-## likelihood-dominated, so the small incubation rescale between
-## infections and cases is not worth carrying here. The centre advances
-## by one doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to the
-## cut-off. `M_PRIOR_DOUBLING_DAYS` is the central doubling time, set to
-## 20 days from Cuomo-Dannenburg & Ghafari's molecular-clock reanalysis
+## 2026; 88 suspected deaths, central CFR 0.30). Their Method 2
+## back-calculates cumulative cases from deaths as
+## `C(T) = D · (1 + r/β)^α / CFR`, with `r = log(2)/τ` the growth rate
+## and `Gamma(α = 4.3, θ = 2.6)` the onset-to-death delay (rate
+## `β = 1/θ`). At their 14-day central doubling time this gives
+## `C ≈ 494`, reproducing their published 501. Our growth prior now
+## follows the molecular clock (`M_PRIOR_DOUBLING_DAYS = 20`, below),
+## and the deaths-based estimate scales with the doubling time: slower
+## growth places fewer cases relative to the same deaths. Re-evaluating
+## the back-calculation at `τ = 20` gives `C ≈ 425`, so the base is
+## `log2(425) ≈ 8.73` rather than the 14-day `log2(501) ≈ 9`. `C(T) =
+## 2^m` is now the cumulative *infection* count, but 8.73 is kept as a
+## weakly-informative centre of the same order: the prior only sets
+## where the sampler starts and the fit is likelihood-dominated, so the
+## small incubation rescale between infections and cases is not worth
+## carrying here. The centre advances by one doubling per
+## `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
+## `M_PRIOR_DOUBLING_DAYS` is the central doubling time, set to 20 days
+## from Cuomo-Dannenburg & Ghafari's molecular-clock reanalysis
 ## (cuomodannenburg2026; mean 15.2-24.5 days across six clock
 ## assumptions), so the size and growth priors share one central
-## doubling time (see [`exponential_growth_model`](@ref)).
+## doubling time and the base is derived under that same clock (see
+## [`exponential_growth_model`](@ref)).
 const M_PRIOR_BASE_DATE = "2026-05-18"
 const M_PRIOR_DOUBLING_DAYS = 20.0
-const M_PRIOR_BASE = 9.0
+const M_PRIOR_BASE = 8.73
 
 """
     m_prior_centre(as_of_date; base_date, m_base, doubling_days)

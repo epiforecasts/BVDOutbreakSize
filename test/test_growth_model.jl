@@ -47,12 +47,13 @@ end
 
 @testitem "m_prior_centre advances with the cut-off date" begin
     using BVDOutbreakSize: m_prior_centre
-    ## Base assumption: m = 9 at the 18 May 2026 report date.
-    @test m_prior_centre("2026-05-18") ≈ 9.0
+    ## Base assumption: m = 8.73 at the 18 May 2026 report date
+    ## (McCabe Method 2 back-calc re-derived at the 20-day clock).
+    @test m_prior_centre("2026-05-18") ≈ 8.73
     ## Advances by one doubling per 20 days of elapsed time (molecular
     ## clock).
-    @test m_prior_centre("2026-05-20") ≈ 9.0 + 2 / 20
-    @test m_prior_centre("2026-06-01") ≈ 9.0 + 14 / 20
+    @test m_prior_centre("2026-05-20") ≈ 8.73 + 2 / 20
+    @test m_prior_centre("2026-06-01") ≈ 8.73 + 14 / 20
     ## Base value is configurable.
     @test m_prior_centre("2026-05-18"; m_base = 8.0) ≈ 8.0
 end
@@ -64,10 +65,11 @@ end
     using BVDOutbreakSize: exponential_growth_model
 
     ## Seeded, version-stable RNG; generous tolerance so it is robust to
-    ## sampling variation. Centred on m = 9 (C_T = 2^9 = 512); truncation
-    ## at 0 nudges the sample mean up only slightly from the location.
+    ## sampling variation. Centred on m = 8.73 (C_T = 2^8.73 ≈ 425);
+    ## truncation at 0 nudges the sample mean up only slightly from the
+    ## location.
     chn = sample(MersenneTwister(20260518), exponential_growth_model(),
         Prior(), 40_000; progress = false)
     m = vec(Array(chn[:m]))
-    @test isapprox(mean(m), 9.0; atol = 0.3)
+    @test isapprox(mean(m), 8.73; atol = 0.3)
 end
