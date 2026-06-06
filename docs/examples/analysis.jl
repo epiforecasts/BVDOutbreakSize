@@ -449,8 +449,8 @@ vintage_table #hide
 # age rather than on the age itself, which avoids the trade-off between
 # growth rate and duration that an age prior would suffer.
 # A wide prior on the doubling count gives an outbreak age spanning weeks
-# to months, with roughly eight to thirty-two thousand cumulative
-# infections at the cut-off under pure exponential growth.
+# to months, with of order tens to a thousand cumulative infections at the
+# cut-off under pure exponential growth.
 # The age is left prior-driven and is not read off a trajectory crossing.
 #
 # The growth rate of the cryptic phase is anchored on the molecular-clock
