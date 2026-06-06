@@ -52,11 +52,11 @@ source = "WHO DON 2026-DON602, 2026-DON603, and WHO Director-General Ministerial
 
 [exports_deaths]
 value  = 1
-source = "WHO DON 2026-DON602 — one death (import #1, died 14 May 2026). No deaths reported among imports #2 or #3 as of the 28 May 2026 cut-off. The exports count is the cumulative detected by the cut-off: a 4th Uganda travel-linked case appears in 2-June reporting but is detected after 28 May, so it is not counted here."
+source = "WHO DON 2026-DON602 — one death among the three travel-related imports (import #1, hospital-admitted 11 May, died 14 May 2026). No deaths reported among imports #2 or #3 by the 3 June 2026 cut-off. Loaded as a dated death series ([export_death_dates]) and fitted with the per-day Poisson export-death likelihood; the scalar is the cumulative dated count."
 
 [first_export_detection_date]
 value  = "2026-05-11"
-source = "WHO DON 2026-DON602 — import #1 hospital-admitted 11 May 2026 (point-of-entry/hospital detection date). Used as a one-sided timing bound on T. Detection dates for imports #2 (confirmed 16 May) and #3 (announced 23 May; underlying detection date not published) are not used by the model: only the earliest detection enters the timing term."
+source = "WHO DON 2026-DON602 — import #1 hospital-admitted 11 May 2026 (point-of-entry/hospital detection date). Retained for reference; the dated export-case likelihood ([export_case_dates]) now uses every detection date directly (one per-day Poisson term each) and subsumes the earliest-detection timing bound through its pre-detection zero term, so this scalar is no longer read by the model."
 
 [export_case_dates]
 value  = ["2026-05-11", "2026-05-16", "2026-05-23"]
@@ -64,7 +64,7 @@ source = "WHO DON 2026-DON602, 2026-DON603, and WHO Director-General Ministerial
 
 [export_death_dates]
 value  = ["2026-05-14"]
-source = "WHO DON 2026-DON602 — the fatal Uganda export (import #1) was hospital-admitted 11 May 2026 and died 14 May 2026 (hospital-recorded death date). A list of dated export deaths; loaded as a daily series and fitted with a binned-Poisson likelihood that bounds T."
+source = "WHO DON 2026-DON602 — the fatal Uganda export (import #1) was hospital-admitted 11 May 2026 and died 14 May 2026 (hospital-recorded death date). A list of dated export deaths; loaded as a daily grid series and fitted with the per-day Poisson export-death likelihood (a pre-death zero term plus per-death-day increments, truncated at the last death day)."
 
 [total_deaths]
 value  = 246

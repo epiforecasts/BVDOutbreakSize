@@ -813,15 +813,30 @@ cfr_prior_fig #hide
 #
 # ##### Exports — geographic spread
 #
-# Each onset-day case travels to Uganda with daily rate
-# $q = N_{\text{travel}} / N_{\text{pop}}$. The expected detected
-# exports sum the onset-to-detection daily series:
+# The exports stream is travel-gated, so the at-risk clock runs from
+# infection: an infected person travels to Uganda with daily rate
+# $q = N_{\text{travel}} / N_{\text{pop}}$ and stays at risk of being
+# exported and detected only until the infection-to-detection delay has
+# elapsed. The day-$t$ at-risk export person-time is
+# $\lambda_t = p_{\text{Uganda}} \cdot q \cdot
+# (C_t - \mathrm{detected}_t)$, where $C_t$ is cumulative infections and
+# $\mathrm{detected}_t$ the infections that have completed the
+# infection-to-detection delay $f_{\text{det}}$ by day $t$. This daily
+# series is the per-day expected export increment, so the cumulative export
+# intensity is $\Lambda(t) = \sum_{s \le t} \lambda_s$.
+#
+# The three observed Uganda imports are a dated series: each import
+# $i$ detected on grid day $d_i$ is scored as a Poisson of the increment of
+# $\Lambda$ between consecutive detection days, with a pre-detection term
+# $\mathrm{Poisson}(\Lambda(d_1 - 1))$ observed at zero (no export expected
+# before the earliest detection $d_1$) and the at-risk clock truncated at
+# the last import day $t_{\text{last}} = d_{\text{last}}$ (days after the
+# last import carry no informative zero):
 #
 # ```math
-# \mu_e = p_{\text{Uganda}} \cdot q
-#         \cdot \sum_{t=1}^{n} \mathrm{onsets}_t \cdot f_{\text{det}}(n - t),
-# \qquad
-# Y_{\text{exports}} \sim \mathrm{Poisson}(\mu_e). \tag{18}
+# Y_{\text{exports},i} \sim
+#     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
+# \qquad \Lambda(d_0) = \Lambda(d_1 - 1). \tag{18}
 # ```
 #
 # The onset-to-detection delay is centred on the Ebola
@@ -834,11 +849,12 @@ cfr_prior_fig #hide
 # \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{19}
 # ```
 #
-# The exports stream uses this onset-to-detection delay in place of a
-# fixed detection window: rather than a single mean window over which a
-# case is detectable abroad, exports are the export-onset series convolved
-# with a sampled onset-to-detection delay PMF, so the timing of detection
-# is carried explicitly.
+# The infection-to-detection delay $f_{\text{det}}$ is the sampled
+# onset-to-detection delay convolved with the shared incubation PMF, so the
+# survival clock runs from infection and the timing of each dated detection
+# is carried explicitly. The deaths-among-exports stream weights the same
+# daily at-risk export person-time by the infection-to-death PMF and scores
+# the dated Uganda export death(s) with the matching per-day Poisson.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: exports_model</summary>
@@ -1153,6 +1169,8 @@ prior_chn = let
         deaths_history = (; days = Int[], counts = Int[]),
         reported_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
         background_re = true,
         confirmed_positivity_link = :composition,
@@ -1213,6 +1231,8 @@ chn_joint = nuts_sample(
     confirmed_deaths_history = obs.confirmed_deaths_history,
     lab_history = obs.lab_history,
     tests_received_history = obs.tests_received_history,
+    export_case_days = obs.export_case_days,
+    export_death_days = obs.export_death_days,
     breakpoint = _BREAKPOINT,
     background_re = true,
     confirmed_positivity_link = :composition,
@@ -1221,6 +1241,7 @@ chn_joint = nuts_sample(
 
 chn_exports = nuts_sample(
     exports_only_model(obs.n, obs.exported_cases;
+    export_case_days = obs.export_case_days,
     breakpoint = _BREAKPOINT));
 
 chn_deaths = nuts_sample(
@@ -1564,8 +1585,9 @@ lab_pair_fig #hide
 # dated DRC streams are real per-vintage observations, so each replicated
 # cumulative trajectory is shown across the situation-report dates with the
 # observed series overlaid: suspected cases, confirmed cases, suspected
-# deaths, confirmed deaths and specimens received. The single-count Uganda
-# export and export-death streams keep their scalar predictive check.
+# deaths, confirmed deaths and specimens received. The dated Uganda export
+# and export-death streams are summed over their per-day replicates into a
+# cumulative total for the scalar predictive check.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -1590,6 +1612,8 @@ pp_joint = predict(
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
         background_re = true,
         confirmed_positivity_link = :composition,
@@ -1689,24 +1713,28 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
 
 joint_vintage_ppc_fig #hide
 
-# The Uganda export and export-death streams are single cut-off counts,
-# checked as scalar posterior predictives.
+# The Uganda export and export-death streams are dated per-day series, each
+# import/death scored as a Poisson at its detection day. The scalar
+# posterior predictive sums each replicate's per-day count vector across the
+# dated days, giving the cumulative export/death total to compare with the
+# observed count.
 
 #md # ```@raw html
 #md # <details><summary>Scalar posterior predictive plot</summary>
 #md # ```
 
-## The replicated counts are nested under their submodel prefix; match the
-## full prefixed varname so the deterministic `expected_*_T` quantities are
-## not picked up by a loose substring.
-function _scalar_replicates(pp, name)
-    key = first(k for k in keys(pp) if occursin(name, string(k)))
-    return vec(Array(pp[key]))
+## The dated counts are nested under their submodel prefix as a single
+## per-day count vector `<prefix>.counts`; match the full prefixed varname so
+## the deterministic `expected_*_T` quantities are not picked up by a loose
+## substring, then sum each replicate's per-day vector into the total.
+function _dated_total(pp, name)
+    key = first(k for k in keys(pp) if occursin("$name.counts", string(k)))
+    return [sum(v) for v in vec(Array(pp[key]))]
 end;
 
-pp_exports = _scalar_replicates(pp_joint, "exports_state.exported_cases");
-pp_exports_deaths = _scalar_replicates(
-    pp_joint, "exports_deaths_state.exports_deaths");
+pp_exports = _dated_total(pp_joint, "exports_state.export_obs");
+pp_exports_deaths = _dated_total(
+    pp_joint, "exports_deaths_state.death_obs");
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
@@ -1967,6 +1995,8 @@ function fit_frozen_joint(cutoff_date; samples = 500, chains = 2)
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
             tests_received_history = o.tests_received_history,
+            export_case_days = o.export_case_days,
+            export_death_days = o.export_death_days,
             breakpoint = bp,
             background_re = true,
             confirmed_positivity_link = :composition,
