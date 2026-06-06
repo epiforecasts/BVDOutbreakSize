@@ -3,7 +3,8 @@
 ## stream models the laboratory-confirmed cases as a composition-linked
 ## BVD share of the tested pool (the suspect-pool composition upsampled by
 ## a decaying severity enrichment on the analysed-volume clock), with
-## received counts conditioning the forwarded fraction `τ_forward`.
+## received counts conditioning the received-backlog increment. Forwarding
+## is handled by the lab-throughput queue, not a forwarded fraction.
 
 @testitem "sensitivity prior is untruncated Beta(6,2)" begin
     using Turing: sample, Prior
@@ -80,24 +81,20 @@ end
     @test isapprox(quantile(λ, 0.5), 0.674; atol = 0.05)
 end
 
-@testitem "τ_forward prior is Beta(5,2) and overridable" tags=[:slow] begin
+@testitem "test_positivity_model exposes only λ_bg (no τ_forward)" tags=[:slow] begin
+    ## Forwarding is handled by the lab queue, so the test-positivity
+    ## submodel samples only the background rate `λ_bg`; there is no
+    ## `τ_forward` parameter.
     using Turing: sample, Prior
     using Random: MersenneTwister
-    using Statistics: mean
-    using Distributions: Beta
     using BVDOutbreakSize: test_positivity_model
 
     chn = sample(MersenneTwister(20260518), test_positivity_model(),
-        Prior(), 8_000; progress = false)
-    τ = vec(Array(chn[:τ_forward]))
-    @test isapprox(mean(τ), 5 / 7; atol = 0.02)       # Beta(5,2) mean
-    @test all(0 .< τ .< 1)
-
-    chn2 = sample(MersenneTwister(20260518),
-        test_positivity_model(; fraction_forwarded_prior = Beta(2.0, 8.0)),
-        Prior(), 8_000; progress = false)
-    τ2 = vec(Array(chn2[:τ_forward]))
-    @test mean(τ2) < mean(τ)                          # override took effect
+        Prior(), 2_000; progress = false)
+    @test all(0 .<= vec(Array(chn[:λ_bg])))
+    res = test_positivity_model()()
+    @test :λ_bg in propertynames(res)
+    @test !(:τ_forward in propertynames(res))
 end
 
 @testitem "confirmed binomial conditions on observed analysed" tags=[:slow] begin
@@ -126,7 +123,7 @@ end
         confirmed_state ~ to_submodel(
             confirmed_cases_model(confirmed, analysed, received, 211,
                 growth_state, disp_state.k, fill(0.3, length(confirmed)),
-                0.6, 0.7, rep_state.dist, edges, 126.0), false)
+                0.6, rep_state.dist, edges, 126.0), false)
     end
 
     chn = sample(_binom_harness(C, A, R), Prior(), 300;
@@ -169,10 +166,11 @@ end
     @test all(0 .<= cc .<= 211)
 end
 
-@testitem "received likelihood pins τ_forward to received/suspect" tags=[:slow] begin
-    ## The received mean is τ_forward · N_susp. With a fixed suspect backlog,
-    ## conditioning on received counts well above the prior-implied mean
-    ## should pull the τ_forward posterior up relative to the prior.
+@testitem "received likelihood conditions on the received backlog" tags=[:slow] begin
+    ## The received mean is the received-backlog increment (suspect backlog
+    ## convolved with the receipt delay), no forwarded-fraction scaling.
+    ## With received counts supplied the model samples and the expected
+    ## received total is positive and finite.
     using Turing: sample, Prior, NUTS, @model, to_submodel
     import FlexiChains
     using Statistics: mean
@@ -193,7 +191,7 @@ end
         confirmed_state ~ to_submodel(
             confirmed_cases_model(confirmed, analysed, received, 403,
                 growth_state, disp_state.k, fill(0.5, length(confirmed)),
-                1.0, 0.5, rep_state.dist, edges, 126.0), false)
+                1.0, rep_state.dist, edges, 126.0), false)
     end
 
     ## Sanity: with received supplied the model samples without error and
@@ -285,7 +283,7 @@ end
         confirmed_state ~ to_submodel(
             confirmed_cases_model(confirmed, analysed, received, 211,
                 growth_state, disp_state.k, fill(0.3, length(confirmed)),
-                0.6, 0.7, rep_state.dist, edges, 126.0), false)
+                0.6, rep_state.dist, edges, 126.0), false)
     end
 
     chn = nuts_sample(_cap_harness(C, A, R);
@@ -350,7 +348,7 @@ end
         confirmed_state ~ to_submodel(
             confirmed_cases_model(confirmed, analysed, received, 211,
                 growth_state, disp_state.k, fill(0.3, length(confirmed)),
-                0.6, 0.7, rep_state.dist, edges, 128.0;
+                0.6, rep_state.dist, edges, 128.0;
                 q_random_effect = q_re), false)
     end
 

@@ -123,19 +123,20 @@ end
 Confirmed-deaths-only composer (laboratory-confirmed deaths in
 isolation). Samples the growth, CFR, onset-to-death delay and incubation
 machinery the deaths stream uses to build the modelled BVD-death
-trajectory, the non-BVD background `λ_bg_death`, and the shared PCR
-sensitivity and specificity, then conditions a single cumulative
+trajectory, the non-BVD background `λ_bg_death`, the shared PCR sensitivity
+and specificity, and (with no case stream to import them) its OWN lab
+capacity and receipt delay, then conditions a single cumulative
 confirmed-death total (`Cumul décès parmi les confirmés`) through the
-lab/positivity process of [`confirmed_deaths_model`](@ref): the BVD share
-of the suspect-death pool (BVD plus background) sets the death-specimen
-positivity `s·q_death + (1−spec)(1−q_death)` and a forwarded fraction
-`τ_death` of the suspect-death backlog gives the expected confirmed count.
-`τ_death` is the free death-specimen forwarding rate; `s` and `spec` are
-the confirmed-case sensitivity / specificity. `confirmed_deaths` defaults
-to `missing` (posterior-predictive generator); pass an integer to
-condition. `susp_deaths` is retained for the public signature but no longer
-feeds the likelihood (the suspect-death backlog is modelled, not the
-observed suspected count).
+shared-queue lab/positivity process of [`confirmed_deaths_model`](@ref):
+the suspect-death backlog is received after the receipt delay and drained
+at the capacity-limited rate `κ_death = κ · death_factor`, and the BVD
+share of the analysed batch sets the death-specimen positivity
+`s·q_death + (1−spec)(1−q_death)`. There is no forwarding fraction. `s`
+and `spec` are the confirmed-case sensitivity / specificity.
+`confirmed_deaths` defaults to `missing` (posterior-predictive generator);
+pass an integer to condition. `susp_deaths` is retained for the public
+signature but no longer feeds the likelihood (the suspect-death backlog is
+modelled, not the observed suspected count).
 """
 @model function confirmed_deaths_only_model(
         susp_deaths::Integer,
@@ -148,6 +149,9 @@ observed suspected count).
         death_background = death_background_model(),
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
+        receipt_delay = lab_receipt_delay_model(),
+        capacity_model = lab_capacity_model,
+        capacity_centre::Real = 150.0,
         incubation = incubation_model())
     growth_state ~ to_submodel(growth, false)
     delay_state ~ to_submodel(delay, false)
@@ -156,41 +160,53 @@ observed suspected count).
     death_bg_state ~ to_submodel(death_background, false)
     sensitivity_state ~ to_submodel(test_sensitivity, false)
     specificity_state ~ to_submodel(test_specificity, false)
+    receipt_state ~ to_submodel(receipt_delay, false)
     incubation_state ~ to_submodel(incubation, false)
     os = onset_rescale(incubation_state.dist, growth_state.r)
     λ_bg_death = death_bg_state.λ_bg_death
     edges = [growth_state.T]
+    capacity_state ~ to_submodel(
+        capacity_model(length(edges); capacity_centre = capacity_centre),
+        false)
     bvd_death_edges = bvd_death_trajectory(growth_state.r, cfr_state.CFR,
         delay_state.dist, edges; onset_fraction = os)
     nsusp_death_edges = [max(bvd_death_edges[i], zero(eltype(bvd_death_edges))) +
                          max(λ_bg_death * edges[i],
                              zero(λ_bg_death * edges[i]))
                          for i in eachindex(edges)]
+    nsusp_death_fn = let r = growth_state.r, CFR = cfr_state.CFR,
+        f_death = delay_state.dist, os = os, λ_bg_death = λ_bg_death
+
+        u -> u <= zero(u) ? zero(u) :
+             max(os * delay_convolution(CFR, r, u, f_death), zero(u)) +
+             max(λ_bg_death * u, zero(λ_bg_death))
+    end
     confirmed_vec = Union{Missing, Int}[confirmed_deaths]
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_submodel(confirmed_vec, bvd_death_edges,
             nsusp_death_edges, sensitivity_state.s_test,
-            specificity_state.spec_test, dispersion_state.k), false)
+            specificity_state.spec_test, dispersion_state.k,
+            capacity_state.capacity, receipt_state.dist,
+            nsusp_death_fn, edges), false)
     cumulative_infections := growth_state.C_T
     cumulative_cases := growth_state.C_T * os
 end
 
 """
 Confirmed-cases-only composer (laboratory pipeline in isolation).
-Samples growth, dispersion, pooled ascertainment, the background /
-testing-fraction prior and the report and lab delays, then conditions
-on the laboratory pipeline alone. The single cumulative confirmed count
-(and optional `tests_analysed`) is wrapped into the length-1 per-vintage
-form at the cut-off, so it reduces to the cumulative laboratory
-likelihood. See [`confirmed_cases_model`](@ref).
+Samples growth, dispersion, pooled ascertainment, the background prior and
+the report and lab delays, then conditions on the laboratory pipeline
+alone. The single cumulative confirmed count (and optional `tests_analysed`)
+is wrapped into the length-1 per-vintage form at the cut-off, so it reduces
+to the cumulative laboratory likelihood. See [`confirmed_cases_model`](@ref).
 
 `tests_received` (cumulative `Cumul échantillons reçus` at the cut-off)
-conditions the forwarded fraction `τ_forward` via the received-count
-NegBinomial. Pass it when fitting: leaving it `missing` turns the
-received count into a sampled discrete latent, which HMC / NUTS cannot
-handle (the gradient-based sampler rejects discrete unknowns). The
-`missing` default is for predictive generation, where the received count
-is drawn from the posterior rather than conditioned on.
+conditions the received-count NegBinomial on the received-backlog
+increment. Pass it when fitting: leaving it `missing` turns the received
+count into a sampled discrete latent, which HMC / NUTS cannot handle (the
+gradient-based sampler rejects discrete unknowns). The `missing` default is
+for predictive generation, where the received count is drawn from the
+posterior rather than conditioned on.
 """
 @model function confirmed_only_model(
         confirmed_cases::Union{Missing, Integer},
@@ -226,7 +242,7 @@ is drawn from the posterior rather than conditioned on.
     confirmed_state ~ to_submodel(
         confirmed(confirmed_vec, analysed_vec, received_vec, tests_analysed,
             growth_state, k,
-            [asc_state.p_drc], λ_bg, test_positivity_state.τ_forward,
+            [asc_state.p_drc], λ_bg,
             f_rep, [T], T;
             test_sensitivity = test_sensitivity,
             test_specificity = test_specificity,
@@ -347,38 +363,39 @@ epi-exclusion fraction `e ~ Beta(2, 12)` (received asymptotes to
 for the headline fit.
 
 `samples_received` is the per-vintage cumulative received-count vector
-(`Cumul échantillons reçus`). When supplied it conditions the forwarded
-fraction `τ_forward` via `R_v ~ NegBinomial(τ_forward · N_susp,v, k)`,
-with `N_susp,v` the cumulative suspect backlog (BVD-suspected plus
-background) the confirmed model already uses for the positivity baseline
-(see [`confirmed_cases_model`](@ref)). This pins `τ_forward` directly from
-received-versus-suspected; left empty it drops the received likelihood.
+(`Cumul échantillons reçus`). When supplied it conditions the received
+NegBinomial on the received-backlog increment `ΔN_recv,v`, with the
+received backlog the suspect backlog (BVD-suspected plus background)
+convolved with the receipt delay (see [`confirmed_cases_model`](@ref));
+left empty it drops the received likelihood.
 
 `confirmed_deaths` is an optional per-vintage laboratory-confirmed-death
 increment vector (the sitrep front-page `Cumul décès parmi les
 confirmés`, deaths that got confirmed) aligned with
-`confirmed_death_offsets` (default `death_offsets`). Each increment is a
-genuine lab/positivity process on the death specimens forwarded to the
-laboratory (issue #193): the suspect-death backlog at the confirmed-death
-edges (the BVD-death CFR-weighted convolution plus the constant-rate
-non-BVD background `λ_bg_death`) is forwarded at rate `τ_death`, and
-its BVD share sets the death-specimen positivity `s·q_death +
-(1−spec)(1−q_death)`. The PCR sensitivity `s` and specificity `spec` are
-imported *shared* from the confirmed-case lab pipeline (see
-[`confirmed_deaths_model`](@ref)), so the stream requires the
-confirmed-case stream. Left empty (the default) the stream is off and
-existing callers are unchanged.
+`confirmed_death_offsets` (default `death_offsets`). Each increment runs
+the SAME laboratory-throughput queue as the confirmed-case stream
+([`confirmed_deaths_model`](@ref)), on the suspect-death backlog (the
+BVD-death CFR-weighted convolution plus the constant-rate non-BVD
+background `λ_bg_death`). The capacity `κ` ([`lab_capacity_model`](@ref))
+and the receipt-delay kernel are imported *shared* from the confirmed-case
+stream (deaths have no analysed data to re-estimate them), scaled to the
+death throughput by ONE sampled non-centred factor `κ_death = κ_case ·
+death_factor` (`death_testing`, see [`death_testing_model`](@ref)); the BVD
+share of the analysed death batch sets the positivity `s·q_death +
+(1−spec)(1−q_death)`, with `s`/`spec` shared from the case lab. There is no
+forwarding fraction. The stream therefore requires the confirmed-case
+stream. Left empty (the default) the stream is off and existing callers are
+unchanged.
 
 `death_background` samples the constant-rate non-BVD suspected-death
 background `λ_bg_death` (see [`death_background_model`](@ref)), the death
 analogue of the case `λ_bg`, added to the BVD-driven suspected-death
 expectation; pass `λ_bg_death_fixed = 0.0` to disable it. `death_testing`
-samples the death-testing enrichment factor, so the death forwarding rate
-is the case rate `τ_forward` times that factor (deaths prioritised for
-post-mortem testing, prior centred ~2×; issue #206), tying the death rate
-to the case-rate signal (see [`death_testing_model`](@ref)). `death_forward`
-is retained as the standalone fallback forwarding fraction for callers that
-do not supply a case rate (see [`death_forward_model`](@ref)).
+samples the non-centred case→death testing-uncertainty factor
+`death_factor = exp(σ_dc·z_dc)` scaling the shared case capacity to the
+death throughput (centred at parity, 95% range ≈ 0.5×-2.5×; see
+[`death_testing_model`](@ref)). It is prior-dominated by design, carrying
+honest uncertainty into the confirmed-death predictions.
 
 `confirmed_q_random_effect` is the per-vintage tested-BVD-share random
 effect for the confirmed positivity (see [`confirmed_q_re_model`](@ref)),
@@ -487,7 +504,6 @@ export infection→detection delay rather than learning it.
         p_deaths_fixed::Union{Nothing, Real} = nothing,
         death_background = death_background_model(),
         λ_bg_death_fixed::Union{Nothing, Real} = nothing,
-        death_forward = death_forward_model(),
         death_testing = death_testing_model(),
         test_positivity = test_positivity_model(),
         report_delay = report_delay_model(),
@@ -563,26 +579,12 @@ export infection→detection delay rather than learning it.
         k_rep = reported_dispersion_state.k
     end
 
-    ## In the queue path forwarding is governed by `1 − e` from the
-    ## exclusion submodel, so the `τ_forward` dimension is dead. Rebuild
-    ## the test-positivity submodel with `sample_forward = false`,
-    ## preserving any caller-supplied priors, so it is not sampled.
-    test_positivity_eff = if !isempty(confirmed_cases)
-        d = test_positivity.defaults
-        test_positivity_model(;
-            lambda_prior = d.lambda_prior,
-            fraction_forwarded_prior = d.fraction_forwarded_prior,
-            sample_forward = false)
-    else
-        test_positivity
-    end
-
     reported_edges = [T - δ for δ in reported_offsets]
     reported_state ~ to_submodel(
         reported_cases_submodel(reported_cases, growth_state, k_rep,
             p_drc_per_bin[1:n_rep], reported_edges;
             report_delay = report_delay,
-            test_positivity = test_positivity_eff,
+            test_positivity = test_positivity,
             report_onset_offset = report_onset_offset,
             onset_fraction = os), false)
 
@@ -597,16 +599,15 @@ export infection→detection delay rather than learning it.
                        fill(tests_analysed, n_conf) :
                        samples_analysed
         ## Per-vintage received counts (cumulative `Cumul échantillons
-        ## reçus`). When supplied they condition the forwarded fraction
-        ## `τ_forward` via a NegBinomial on the suspect backlog; an empty
-        ## vector drops the received likelihood.
+        ## reçus`). When supplied they condition a NegBinomial on the
+        ## received-backlog increment; an empty vector drops the received
+        ## likelihood.
         received_vec = isempty(samples_received) ?
                        fill(missing, n_conf) : samples_received
         confirmed_state ~ to_submodel(
             confirmed(confirmed_cases, analysed_vec, received_vec,
                 tests_analysed, growth_state, k,
                 p_drc_per_bin[1:n_conf], reported_state.λ_bg,
-                reported_state.τ_forward,
                 reported_state.report_delay_dist,
                 confirmed_edges, tests_edge;
                 test_sensitivity = test_sensitivity,
@@ -621,17 +622,20 @@ export infection→detection delay rather than learning it.
 
     if !isempty(confirmed_deaths)
         ## Laboratory-confirmed deaths (`Cumul décès parmi les confirmés`):
-        ## a genuine lab/positivity process on the post-mortem death
-        ## specimens forwarded to the laboratory (issue #193), importing the
-        ## SHARED case-lab sensitivity `s` and specificity `spec`. The
-        ## suspect-death backlog at the confirmed-death edges is the BVD-death
-        ## CFR-weighted convolution (sharing the deaths CFR / delay / growth /
-        ## drift) plus the constant-rate non-BVD background `λ_bg_death`; the
-        ## BVD share of that pool sets the death-specimen positivity and a
-        ## forwarded fraction `τ_death` gives the expected confirmed count.
+        ## the SAME lab-throughput queue as the confirmed-case stream, run on
+        ## the suspect-death backlog (issue #193). The shared case capacity
+        ## `κ` ([`lab_capacity_model`](@ref)) and receipt-delay kernel
+        ## `f_receipt` are imported from the case stream (deaths have no
+        ## analysed data to re-estimate them), and scaled to the death
+        ## throughput by ONE sampled non-centred factor
+        ## (`κ_death = κ_case · death_factor`, see [`death_testing_model`]
+        ## (@ref)). The BVD share of the analysed death batch sets the
+        ## positivity, importing the SHARED case-lab sensitivity `s` /
+        ## specificity `spec`. There is no forwarding fraction.
         isempty(confirmed_cases) &&
             error("confirmed_deaths requires confirmed_cases for the " *
-                  "shared sensitivity `s` and specificity `spec`")
+                  "shared sensitivity `s`, specificity `spec`, capacity " *
+                  "`κ` and receipt delay")
         cdeath_edges = [T - δ for δ in confirmed_death_offsets]
         bvd_death_edges = bvd_death_trajectory(growth_state.r,
             deaths_state.CFR, deaths_state.delay_dist, cdeath_edges;
@@ -640,26 +644,35 @@ export infection→detection delay rather than learning it.
                              max(λ_bg_death * cdeath_edges[i],
                                  zero(λ_bg_death * cdeath_edges[i]))
                              for i in eachindex(cdeath_edges)]
-        ## Death specimens are forwarded/tested at the EFFECTIVE case testing
-        ## rate enriched on the odds scale by the death-testing enrichment
-        ## (deaths prioritised, odds-ratio prior centred ~2×; issue #206).
-        ## The headline queue path pins the nominal `τ_forward = 1`, so the
-        ## case-rate signal is the share of suspected cases actually analysed,
-        ## `Σμ_A / ΣN_susp` (cumulative analysed over cumulative suspected at
-        ## the case edges), a genuine fraction < 1. The death rate then
-        ## inherits that case-testing signal rather than being a free
-        ## fraction.
-        case_susp = sum(confirmed_state.Nsusp_at)
-        case_test_frac = case_susp > zero(case_susp) ?
-                         clamp(sum(confirmed_state.μ_A_at) / case_susp,
-            zero(case_susp), one(case_susp)) : zero(case_susp)
+        ## Continuous suspect-death backlog for the receipt-delay convolution:
+        ## the CFR-weighted onset-to-death convolution (sharing the deaths
+        ## CFR / delay / growth / drift) plus the constant-rate non-BVD
+        ## background `λ_bg_death·u`.
+        nsusp_death_fn = let r = growth_state.r, CFR = deaths_state.CFR,
+            f_death = deaths_state.delay_dist, p_deaths = p_deaths, os = os,
+            λ_bg_death = λ_bg_death
+
+            u -> u <= zero(u) ? zero(u) :
+                 max(p_deaths * os * delay_convolution(CFR, r, u, f_death),
+                zero(u)) +
+                 max(λ_bg_death * u, zero(λ_bg_death))
+        end
+        ## Shared case capacity aligned to the death edges: for each death
+        ## edge take the case capacity at the latest case edge at or before
+        ## it (step function over the log-RW state), defaulting to the first.
+        case_edges = [T - δ for δ in confirmed_offsets]
+        κ_case = confirmed_state.capacity
+        κ_death_aligned = [κ_case[something(
+                               findlast(ce -> ce <= de +
+                                                    sqrt(eps(float(de))), case_edges), 1)]
+                           for de in cdeath_edges]
         confirmed_deaths_state ~ to_submodel(
             confirmed_deaths_submodel(confirmed_deaths, bvd_death_edges,
                 nsusp_death_edges, confirmed_state.s_test,
-                confirmed_state.spec_test, k;
-                case_test_rate = case_test_frac,
-                death_testing = death_testing,
-                death_forward = death_forward), false)
+                confirmed_state.spec_test, k,
+                κ_death_aligned, confirmed_state.f_receipt,
+                nsusp_death_fn, cdeath_edges;
+                death_testing = death_testing), false)
     end
 
     ## Exports are travel-gated, so the at-risk clock runs from infection:

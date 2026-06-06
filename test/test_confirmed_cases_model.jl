@@ -176,8 +176,8 @@ end
     ## same composer with missing observations must populate the
     ## per-vintage `confirmed_cases` and `samples_received` predictive
     ## draws. Confirmed positives are a Binomial on the analysed
-    ## denominator; received samples are a NegBinomial on the suspect
-    ## backlog (the τ_forward stream).
+    ## denominator; received samples are a NegBinomial on the received
+    ## backlog (suspect backlog convolved with the receipt delay).
     using Turing: sample, Prior, predict
     import FlexiChains
     using BVDOutbreakSize: confirmed_only_model

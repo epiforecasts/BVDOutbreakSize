@@ -30,11 +30,12 @@ function _forecast_cases_mean(r, Th, α_rep, θ_rep, p_drc, λ_bg;
     return onset_fraction * p_drc * conv + max(λ_bg * Th, zero(λ_bg))
 end
 
-# Cumulative samples received at horizon `Th`: the forwarded fraction
-# `τ_forward` of the suspect backlog `N_susp = μ_BVD + μ_bg` convolved with
-# the receipt-delay kernel `f_receipt` (specimens reach the lab after a
-# transport delay), matching the received stream of `confirmed_cases_model`.
-function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+# Cumulative samples received at horizon `Th`: the suspect backlog
+# `N_susp = μ_BVD + μ_bg` convolved with the receipt-delay kernel
+# `f_receipt` (specimens reach the lab after a transport delay), matching
+# the received stream of `confirmed_cases_model`. Forwarding is handled by
+# the lab queue, so there is no forwarded-fraction scaling.
+function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg,
         f_receipt; onset_fraction = 1.0)
     f_rep = Gamma(α_rep, θ_rep)
     N_susp = let r = r, f_rep = f_rep, p_drc = p_drc, onset_fraction = onset_fraction,
@@ -46,7 +47,7 @@ function _forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
              max(λ_bg * u, zero(λ_bg))
     end
     N_recv = delay_convolution(N_susp, Th, f_receipt)
-    return τ_forward * max(N_recv, zero(N_recv))
+    return max(N_recv, zero(N_recv))
 end
 
 # Composition-linked per-test positivity at horizon `Th`:
@@ -68,26 +69,35 @@ function _forecast_positivity(r, Th, α_rep, θ_rep, p_drc, λ_bg, s_test,
         zero(q), one(q))
 end
 
-# Cumulative confirmed deaths at horizon `Th`: a fraction `τ_death` of the
-# suspect-death backlog increment over the horizon, weighted by the
-# death-specimen positivity `p_pos_death = s·q_death + (1−spec)(1−q_death)`,
-# with `q_death = μ_BVD_death / N_death_susp` the BVD share of the
-# suspect-death pool. The suspect-death backlog is the modelled BVD-death
-# trajectory (`CFR·p_deaths·os` convolved with the onset-to-death delay)
-# plus the constant-rate `λ_bg_death` background, matching
-# `confirmed_deaths_model` and the joint's `nsusp_death_edges`. Returns the
-# forwarded positive increment over `(T, Th]` to add to the observed
-# cumulative confirmed deaths.
+# New confirmed deaths over `(T, Th]` from the SHARED lab queue run on the
+# suspect-death backlog (matching `confirmed_deaths_model`): the death
+# received backlog is the suspect-death trajectory convolved with the shared
+# receipt delay `f_receipt`, drained at the death capacity
+# `κ_death = κ · death_factor` over the horizon, weighted by the death
+# positivity `p_pos_death = s·q_death + (1−spec)(1−q_death)`. The suspect-
+# death backlog is the modelled BVD-death trajectory (`CFR·p_deaths·os`
+# convolved with the onset-to-death delay) plus the `λ_bg_death` background.
+# `obs_analysed_deaths` anchors the already-analysed death backlog at the
+# cut-off; with the default `0` the queue starts draining from the received
+# backlog already accrued.
 function _forecast_confirmed_deaths_increment(r, T, Th, α, θ, CFR, p_deaths,
-        λ_bg_death, τ_death, s, spec; onset_fraction = 1.0,
+        λ_bg_death, κ, death_factor, f_receipt, s, spec, horizon;
+        obs_analysed_deaths = 0, onset_fraction = 1.0,
         alg = DEATH_INTEGRAL_ALG)
     f_death = Gamma(α, θ)
     bvd_death(u) = u <= zero(u) ? zero(u) :
                    onset_fraction * p_deaths *
                    delay_convolution(CFR, r, u, f_death; alg)
-    nsusp(u) = max(bvd_death(u), zero(u)) +
-               max(λ_bg_death * u, zero(λ_bg_death))
-    ΔN = max(nsusp(Th) - nsusp(T), zero(Th))
+    nsusp = let bvd_death = bvd_death, λ_bg_death = λ_bg_death
+        u -> u <= zero(u) ? zero(u) :
+             max(bvd_death(u), zero(u)) + max(λ_bg_death * u, zero(λ_bg_death))
+    end
+    ## Received death backlog at the horizon, then the capacity-limited drain
+    ## of the not-yet-analysed received backlog at κ_death over the horizon.
+    received = max(delay_convolution(nsusp, Th, f_receipt), zero(Th))
+    κ_death = κ * death_factor
+    ΔA = _forecast_analysed_increment(received, obs_analysed_deaths, κ_death,
+        horizon)
     ## BVD share of the suspect-death pool at the horizon sets positivity.
     denom = nsusp(Th)
     q_d = denom > zero(denom) ?
@@ -95,7 +105,7 @@ function _forecast_confirmed_deaths_increment(r, T, Th, α, θ, CFR, p_deaths,
           zero(Th)
     p_pos = clamp(s * q_d + (one(q_d) - spec) * (one(q_d) - q_d),
         zero(q_d), one(q_d))
-    return max(τ_death * p_pos * ΔN, zero(ΔN))
+    return max(p_pos * ΔA, zero(ΔA))
 end
 
 # Capacity-limited analysed throughput over the horizon: the lab processes
@@ -128,19 +138,20 @@ coming week, returning a `DataFrame` with one row per draw and columns:
   `μ_bvd(s) = os · CFR · ∫₀^s exp(r·u) f_death(s−u) du` (no `p_deaths`, no
   background, no observed-count subtraction; these are latent toll counts).
 - `:confirmed_new` — new laboratory-confirmed cases over the week from the
-  queue of [`confirmed_cases_model`](@ref): the received backlog
-  (`τ_forward · N_susp` convolved with the receipt delay) is analysed at
-  the cut-off capacity `κ` over the horizon,
-  `ΔA = backlog·(1 − exp(−κ·h/backlog))`, and the new positives are `ΔA`
-  times the composition-linked positivity. Present when the chain carries
-  the confirmed-stream parameters (`:s_test`, `:spec_test`, `:τ_forward`,
+  queue of [`confirmed_cases_model`](@ref): the received backlog (`N_susp`
+  convolved with the receipt delay) is analysed at the cut-off capacity `κ`
+  over the horizon, `ΔA = backlog·(1 − exp(−κ·h/backlog))`, and the new
+  positives are `ΔA` times the composition-linked positivity. Present when
+  the chain carries the confirmed-stream parameters (`:s_test`, `:spec_test`,
   `:α_recv`, `:θ_recv`, `:capacity_cutoff`) and `obs_confirmed` and
   `obs_analysed` are supplied; otherwise absent.
-- `:confirmed_deaths_new` — new laboratory-confirmed deaths over the week,
-  the forwarded positive increment of the suspect-death backlog, when the
-  chain additionally carries `:τ_death`, `:p_deaths`, `:λ_bg_death`
-  (sharing the case-lab `:s_test` / `:spec_test`) and `obs_confirmed_deaths`
-  is supplied; otherwise absent.
+- `:confirmed_deaths_new` — new laboratory-confirmed deaths over the week
+  from the SAME shared queue run on the suspect-death backlog: the death
+  received backlog is drained at the death capacity `κ · death_factor` over
+  the horizon and weighted by the death positivity. Present when the chain
+  additionally carries `:death_factor`, `:p_deaths`, `:λ_bg_death` (sharing
+  the case-lab `:s_test` / `:spec_test` / `:capacity_cutoff` / receipt
+  delay) and `obs_confirmed_deaths` is supplied; otherwise absent.
 
 `obs_confirmed` and `obs_analysed` anchor the confirmed-case queue at the
 cut-off (the lab backlog already received and analysed by `T`);
@@ -196,37 +207,32 @@ function forecast_reported(chn;
     has_incubation = all(haskey_chain(chn, n) for n in (:α_inc, :θ_inc))
     α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
     θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
-    ## Severe-first confirmed-stream draws (PCR sensitivity / specificity and
-    ## the q-curve shape) live on the joint chain only; their absence drops
-    ## the confirmed-cases columns.
-    ## The forwarding fraction is `τ_forward_out` on the production queue
-    ## chain (where `τ_forward` is fixed, not sampled) and `τ_forward` on the
-    ## prior/test chains; resolve whichever is present.
-    fwd_key = _forward_key(chn)
-    has_lab = fwd_key !== nothing &&
-              all(haskey_chain(chn, n)
+    ## Confirmed-stream draws (PCR sensitivity / specificity, receipt delay
+    ## and capacity) live on the joint chain only; their absence drops the
+    ## confirmed-cases columns. Forwarding is handled by the lab queue, so
+    ## there is no forwarded-fraction parameter.
+    has_lab = all(haskey_chain(chn, n)
               for n in (:s_test, :spec_test, :α_recv, :θ_recv,
                   :capacity_cutoff)) &&
               obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
     spec_test = has_lab ? _draws(chn, :spec_test) : nothing
-    τ_forward = has_lab ? _draws(chn, fwd_key) : nothing
     α_recv = has_lab ? _draws(chn, :α_recv) : nothing
     θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
     capacity = has_lab ? _draws(chn, :capacity_cutoff) : nothing
 
-    ## Confirmed-death draws: the death-specimen forwarding fraction
-    ## `τ_death`, the deaths drift `p_deaths` and background `λ_bg_death`,
-    ## sharing the case-lab sensitivity `s_test` / specificity `spec_test`
-    ## and the deaths CFR / onset-to-death delay (`CFR`, `α`, `θ`). Present
-    ## on the joint chain only; their absence (or a missing
+    ## Confirmed-death draws: the case→death testing factor `death_factor`,
+    ## the deaths drift `p_deaths` and background `λ_bg_death`, sharing the
+    ## case-lab sensitivity `s_test` / specificity `spec_test`, capacity and
+    ## receipt delay, and the deaths CFR / onset-to-death delay (`CFR`, `α`,
+    ## `θ`). Present on the joint chain only; their absence (or a missing
     ## `obs_confirmed_deaths`) drops the confirmed-death columns.
-    death_fwd_key = _death_forward_key(chn)
-    has_lab_deaths = has_lab && death_fwd_key !== nothing &&
+    death_factor_key = _death_factor_key(chn)
+    has_lab_deaths = has_lab && death_factor_key !== nothing &&
                      all(haskey_chain(chn, n)
                      for n in (:p_deaths, :λ_bg_death)) &&
                      obs_confirmed_deaths !== missing
-    τ_death = has_lab_deaths ? _draws(chn, death_fwd_key) : nothing
+    death_factor = has_lab_deaths ? _draws(chn, death_factor_key) : nothing
     p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
     λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
 
@@ -288,7 +294,7 @@ function forecast_reported(chn;
             ## increment (the queue increment over `(T, T+h]`).
             f_receipt = Gamma(α_recv[i], θ_recv[i])
             received = _forecast_received(r[i], Th, α_rep[i], θ_rep[i],
-                pr[i], λ_bg[i], τ_forward[i], f_receipt; onset_fraction = os)
+                pr[i], λ_bg[i], f_receipt; onset_fraction = os)
             Δanalysed = _forecast_analysed_increment(received, obs_analysed,
                 capacity[i], horizon)
             p_pos = _forecast_positivity(r[i], Th, α_rep[i], θ_rep[i],
@@ -296,12 +302,16 @@ function forecast_reported(chn;
             confirmed_new[i] = _nb_rand(rng, k[i], p_pos * Δanalysed)
         end
         if has_lab_deaths
-            ## New confirmed deaths this week: the forwarded positive
-            ## increment of the suspect-death backlog over `(T, T+h]`,
-            ## sharing the case-lab sensitivity / specificity.
+            ## New confirmed deaths this week from the shared queue run on
+            ## the suspect-death backlog over `(T, T+h]`: the death received
+            ## backlog drained at κ · death_factor over the horizon, weighted
+            ## by the death positivity (sharing the case-lab sensitivity /
+            ## specificity / receipt delay / capacity).
+            f_receipt = Gamma(α_recv[i], θ_recv[i])
             μ_cdeath = _forecast_confirmed_deaths_increment(r[i], T[i], Th,
-                α[i], θ[i], CFR[i], p_deaths[i], λ_bg_death[i], τ_death[i],
-                s_test[i], spec_test[i]; onset_fraction = os, alg)
+                α[i], θ[i], CFR[i], p_deaths[i], λ_bg_death[i], capacity[i],
+                death_factor[i], f_receipt, s_test[i], spec_test[i], horizon;
+                onset_fraction = os, alg)
             confirmed_deaths_new[i] = _nb_rand(rng, k[i], μ_cdeath)
         end
     end
@@ -334,23 +344,13 @@ function haskey_chain(chn, name::Symbol)
     end
 end
 
-## Resolve the suspect-case forwarding fraction symbol. The production queue
-## chain pins `τ_forward` (unsampled) and exposes the derived
-## `τ_forward_out`; prior/test chains sample `τ_forward` directly. Returns
-## the present symbol, preferring the sampled `τ_forward`, or `nothing`.
-function _forward_key(chn)
-    haskey_chain(chn, :τ_forward) && return :τ_forward
-    haskey_chain(chn, :τ_forward_out) && return :τ_forward_out
-    return nothing
-end
-
-## Resolve the death-specimen forwarding-rate symbol. Under the death-testing
-## enrichment the joint derives `τ_death` (not a sampled variable) and exposes
-## the derived `τ_death_out`; the standalone-fallback path samples `τ_death`
-## directly. Returns the present symbol, preferring `τ_death`, or `nothing`.
-function _death_forward_key(chn)
-    haskey_chain(chn, :τ_death) && return :τ_death
-    haskey_chain(chn, :τ_death_out) && return :τ_death_out
+## Resolve the case→death testing-factor symbol. The submodel samples the
+## non-centred `z_dc` and exposes the multiplicative `death_factor`; the
+## joint also re-exposes it as `death_factor_out`. Returns the present
+## symbol, preferring `death_factor`, or `nothing`.
+function _death_factor_key(chn)
+    haskey_chain(chn, :death_factor) && return :death_factor
+    haskey_chain(chn, :death_factor_out) && return :death_factor_out
     return nothing
 end
 

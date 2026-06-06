@@ -313,7 +313,6 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
     report_state ~ to_submodel(report_delay, false)
     test_positivity_state ~ to_submodel(test_positivity, false)
     λ_bg = test_positivity_state.λ_bg
-    τ_forward = test_positivity_state.τ_forward
     f_rep = report_state.dist
     r = growth_state.r
 
@@ -367,7 +366,7 @@ positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
 
     expected_reports_total := Λ_at_edges[end]
 
-    return (; p_drc_per_bin, λ_bg, τ_forward,
+    return (; p_drc_per_bin, λ_bg,
         expected_reports_total, positivity,
         report_delay_dist = f_rep,
         μ_BVD0_at_edges, Λ_at_edges)
@@ -436,9 +435,9 @@ Specimens reach the lab after a transport delay, so the cumulative
 
 `samples_received` is the per-vintage received-count *increment* vector
 (differenced `Cumul échantillons reçus`). When supplied each window is
-observed as `ΔR_v ~ NegBinomial(τ_forward · ΔN_recv,v, k)`, pinning the
-forwarded fraction `τ_forward`. A vector of `missing` entries drops the
-received likelihood (and is generated for predictive checks).
+observed as `ΔR_v ~ NegBinomial(ΔN_recv,v, k)` on the received-backlog
+increment. A vector of `missing` entries drops the received likelihood
+(and is generated for predictive checks).
 
 `samples_analysed` is the per-vintage analysed-increment denominator
 vector (`ΔA_v`) aligned with `t_edges`. It both denominates the confirmed
@@ -471,8 +470,7 @@ predicted dark-window denominators are exposed as `μ_A_pred` /
 `epi_exclusion` (default `nothing`) supplies the queue's forwarded fraction
 `(1 − e)`: with `nothing` the headline fit pins `e = 0` (forward 1); pass
 [`epi_exclusion_model`](@ref) for the opt-in `e ~ Beta(2, 12)` sensitivity.
-In the queue path `τ_forward` is unused (the received asymptote is
-`(1 − e)·N_susp`).
+The received asymptote is then `(1 − e)·N_susp`.
 
 A single observation (`length 1`, `t_edges = [T]`) reduces to the
 cumulative confirmed Binomial.
@@ -483,7 +481,7 @@ cumulative confirmed Binomial.
         samples_received::AbstractVector,
         tests_analysed::Union{Missing, Integer},
         growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, λ_bg::Real, τ_forward::Real, f_rep,
+        p_drc_per_bin::AbstractVector, λ_bg::Real, f_rep,
         t_edges::AbstractVector, tests_edge::Real;
         test_sensitivity = test_sensitivity_model(),
         test_specificity = test_specificity_model(),
@@ -748,7 +746,6 @@ cumulative confirmed Binomial.
     q_baseline := qinf_count_at[te_idx]
     q_baseline_count := qinf_count_at[te_idx]
     δ0_out := δ0
-    τ_forward_out := τ_forward
     ## Daily analysis capacity at the cut-off vintage (samples/day).
     capacity_cutoff := κ[te_idx]
 
@@ -770,7 +767,7 @@ cumulative confirmed Binomial.
 
     return (; p_positive, p_pos, q_at, qinf_count_at, Nsusp_at,
         N_recv_at, recv_means, μ_A_at, dark_analysed_total, capacity = κ,
-        s_test, spec_test, δ0, decay_scale, τ_forward, p_drc_per_bin,
+        f_receipt, s_test, spec_test, δ0, decay_scale, p_drc_per_bin,
         expected_confirmed_total, expected_received_total, Λ_at_edges)
 end
 
@@ -822,64 +819,61 @@ end
 
 """
 Laboratory-confirmed-deaths likelihood. The DRC sitrep front page reports
-`Cumul décès parmi les confirmés`, the cumulative deaths that have been
-laboratory-confirmed (17 at the 28 May cut-off). This is a genuine
-lab/positivity process on the post-mortem death specimens that reach the
-laboratory, mirroring the confirmed-case pipeline
-([`confirmed_cases_model`](@ref)) rather than the earlier
-`coverage_death · s` thinning of the modelled BVD-death trajectory (issue
-#193): that thinning conditioned directly on the latent BVD-death
-trajectory with no observation/background process, so all the slack sat in
-`coverage_death` at its boundary.
+`Cumul décès parmi les confirmés`, the cumulative laboratory-confirmed
+deaths. This is the SAME laboratory-throughput queue as the confirmed-case
+stream ([`confirmed_cases_model`](@ref)) run on the suspect-death backlog:
+post-mortem death specimens reach the lab after a receipt delay and are
+drained at a capacity-limited rate, and the BVD share of the analysed batch
+sets the positivity. There is no death-specific analysed data, so the
+capacity and receipt-delay states are *shared* from the case stream (passed
+in from the joint), not re-estimated.
 
-A fraction `τ_death` of the suspect-death backlog is forwarded to and
-analysed by the laboratory; the BVD share of that pool sets the positivity:
+The shared case capacity `κ_case` (the [`lab_capacity_model`](@ref) log-RW
+state, aligned to the death edges) is scaled to the death throughput by ONE
+sampled factor, `κ_death = κ_case · death_factor` with `death_factor =
+exp(σ_dc · z_dc)` from the non-centred [`death_testing_model`](@ref)
+(centred at parity, 95% range ≈ 0.5×-2.5×). This factor encodes the large
+uncertainty of extrapolating the case lab to deaths with no death-analysed
+data; it is prior-dominated (the ~9 confirmed-death counts barely inform
+it), which is intended.
+
+The cumulative received death backlog is the suspect-death backlog
+`N_susp_death(u)` convolved with the shared receipt-delay kernel
+`f_receipt`. For each window the queue analyses `μ_A_death = backlog·(1 −
+exp(−κ_death·Δt / backlog))` of the not-yet-analysed received backlog. As
+deaths have no observed analysed denominator every window is dark, so the
+exact marginal of `Binomial(Poisson(μ_A), p_pos)` applies and the confirmed
+increment is
 
 ```math
 \\Delta D_{conf,v} \\sim
-    \\mathrm{NegBinomial}(
-        \\tau_{death}\\cdot p_{pos,death,v}\\cdot\\Delta N_{death,v},\\ k),
+    \\mathrm{NegBinomial}(\\mu_{A,death,v}\\cdot p_{pos,death,v},\\ k),
 \\qquad
 p_{pos,death,v} = s\\, q_{death,v} + (1 - \\text{spec})(1 - q_{death,v}),
 ```
 
-with `ΔN_death,v` the between-edge increment of `nsusp_death_at_edges` (the
-cumulative suspect-death backlog, BVD plus non-BVD background, that
-[`deaths_model`](@ref) builds), `q_death,v = μ_BVD_death / N_death_susp` the
-BVD share of the suspect-death pool at edge `v` (from `bvd_death_at_edges`
-and `nsusp_death_at_edges`), and `k` the shared count dispersion. The PCR
-sensitivity `s` and specificity `spec` are *imported shared* from the
-confirmed-case lab submodel (assay properties, not re-sampled), so the
-death stream inherits the case lab calibration.
+with `q_death,v = μ_BVD_death / N_death_susp` the BVD share of the
+suspect-death pool at edge `v` (from `bvd_death_at_edges` and
+`nsusp_death_at_edges`), `k` the shared count dispersion, and the PCR
+sensitivity `s` and specificity `spec` *imported shared* from the
+confirmed-case lab submodel (assay properties, not re-sampled). No
+forwarding fraction enters: forwarding is the queue. `confirmed_deaths`
+accepts `missing` entries for posterior-predictive generation.
 
-The death-specimen forwarding rate `τ_death` is set one of two ways. When
-the effective `case_test_rate` is supplied (the joint path), deaths are
-*enriched* relative to cases on the odds scale: `logit(τ_death) =
-logit(case_test_rate) + log(death_enrichment)` with `death_enrichment` from
-[`death_testing_model`](@ref), the deaths-vs-cases testing odds ratio
-centred on 2× (deaths are prioritised for post-mortem testing). The joint
-passes the share of suspected cases actually analysed (`Σμ_A / ΣN_susp`) as
-`case_test_rate`, not the nominal queue forwarding fraction (which the
-headline path pins to 1). The odds-scale enrichment keeps `τ_death` a
-probability smoothly without a clamp, so it stays well-behaved even when
-the case testing rate is already high. This ties the death rate to the
-case-testing signal and resolves the free, weakly-identified `τ_death` that
-left confirmed deaths under-predicted and badly mixed (issue #206). When
-`case_test_rate` is not supplied (`nothing`, e.g. the deaths-only
-composer), `τ_death` falls back to the standalone forwarding fraction from
-[`death_forward_model`](@ref). Either way the BVD-share signal lives in the
-composition-driven positivity, so `τ_death` is identified by the confirmed
-deaths without sitting at a boundary. `confirmed_deaths` accepts `missing`
-entries for posterior-predictive generation.
+`κ_case` is the length-`n` shared case capacity vector aligned to the death
+edges, `f_receipt` the shared receipt-delay kernel, `nsusp_death_fn(u)` the
+continuous suspect-death backlog (so the received convolution can run), and
+`t_edges` the death edges (ascending). `death_testing` supplies the
+non-centred factor submodel.
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::AbstractVector,
         bvd_death_at_edges::AbstractVector,
         nsusp_death_at_edges::AbstractVector,
-        s::Real, spec::Real, k::Real;
-        case_test_rate::Union{Nothing, Real} = nothing,
-        death_testing = death_testing_model(),
-        death_forward = death_forward_model())
+        s::Real, spec::Real, k::Real,
+        κ_case::AbstractVector, f_receipt, nsusp_death_fn,
+        t_edges::AbstractVector;
+        death_testing = death_testing_model())
     n = length(nsusp_death_at_edges)
     n == length(confirmed_deaths) ||
         error("confirmed_deaths length must match nsusp_death_at_edges " *
@@ -887,37 +881,24 @@ entries for posterior-predictive generation.
     n == length(bvd_death_at_edges) ||
         error("bvd_death_at_edges length must match nsusp_death_at_edges " *
               "(got $(length(bvd_death_at_edges)) vs $n)")
+    n == length(κ_case) ||
+        error("κ_case length must match nsusp_death_at_edges " *
+              "(got $(length(κ_case)) vs $n)")
+    n == length(t_edges) ||
+        error("t_edges length must match nsusp_death_at_edges " *
+              "(got $(length(t_edges)) vs $n)")
 
-    ## Death-testing enrichment (joint path): the death forwarding rate
-    ## enriches the effective case testing rate on the ODDS scale, so it
-    ## stays a probability smoothly (no clamp kink) even when the case rate
-    ## is already high. `death_enrichment` is the testing odds ratio (deaths
-    ## vs cases), centred on 2×: `logit(τ_death) = logit(case rate) +
-    ## log(enrichment)`. Falls back to the standalone forwarding fraction
-    ## when no case rate is supplied.
-    if case_test_rate === nothing
-        forward_state ~ to_submodel(death_forward, false)
-        τ_death = forward_state.τ_death
-        death_enrichment = missing
-    else
-        testing_state ~ to_submodel(death_testing, false)
-        death_enrichment = testing_state.death_enrichment
-        cr = clamp(float(case_test_rate), eps(float(case_test_rate)),
-            one(float(case_test_rate)) - eps(float(case_test_rate)))
-        τ_death = logistic(logit(cr) + log(death_enrichment))
-    end
+    ## Non-centred case→death throughput factor, the one sampled degree of
+    ## freedom: κ_death = κ_case · exp(σ_dc · z_dc), centred at parity.
+    testing_state ~ to_submodel(death_testing, false)
+    death_factor = testing_state.death_factor
 
-    ## Per-edge BVD share of the suspect-death pool (composition), then the
-    ## death-specimen positivity combining true positives at sensitivity `s`
-    ## and false positives at false-positive rate `1 − spec`, the same form
-    ## the confirmed-case stream uses. The expected confirmed increment is
-    ## the forwarded fraction `τ_death` of the suspect-death backlog
-    ## increment `ΔN_death`, weighted by that positivity. Clamped positive
-    ## inside `safe_nbinomial`.
-    Tt = typeof(float(s) * float(spec) * float(τ_death) *
+    Tt = typeof(float(s) * float(spec) * float(death_factor) *
                 float(nsusp_death_at_edges[1]))
-    ΔN = daily_increment_kernel(convert(Vector{Tt}, nsusp_death_at_edges))
-    conf_means = Vector{Tt}(undef, n)
+
+    ## Per-edge BVD share of the suspect-death pool (composition) and the
+    ## death-specimen positivity, the same true/false-positive form the
+    ## confirmed-case stream uses.
     q_death_at = Vector{Tt}(undef, n)
     p_pos_death_at = Vector{Tt}(undef, n)
     for i in 1:n
@@ -931,7 +912,51 @@ entries for posterior-predictive generation.
         p_pos_death_at[i] = isfinite(p_raw) ?
                             clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) :
                             eps(Tt)
-        raw = convert(Tt, τ_death) * p_pos_death_at[i] * ΔN[i]
+    end
+
+    ## Received death backlog: the suspect-death backlog convolved with the
+    ## shared receipt-delay kernel, the death analogue of the case received
+    ## queue (built before the drain because μ_A depends on it).
+    N_recv_at = Vector{Tt}(undef, n)
+    for i in 1:n
+        s_i = convert(Tt, t_edges[i])
+        raw = s_i <= zero(s_i) ? zero(Tt) :
+              convert(Tt, delay_convolution(nsusp_death_fn, s_i, f_receipt))
+        N_recv_at[i] = max(raw, zero(Tt))
+    end
+
+    ## Capacity-limited drain on the SHARED case capacity scaled by the
+    ## death factor: κ_death = κ_case · death_factor. Mirrors the case queue
+    ## μ_A = backlog·(1 − exp(−κ·Δt/backlog)); the analysed cumulative
+    ## advances by the predicted μ_A (deaths have no observed denominator).
+    μ_A_at = Vector{Tt}(undef, n)
+    let analysed_cum = zero(Tt)
+        for i in 1:n
+            Δt = if i == 1
+                n >= 2 ?
+                max(convert(Tt, t_edges[2]) - convert(Tt, t_edges[1]),
+                    zero(Tt)) :
+                max(convert(Tt, t_edges[1]), zero(Tt))
+            else
+                max(convert(Tt, t_edges[i]) - convert(Tt, t_edges[i - 1]),
+                    zero(Tt))
+            end
+            backlog = max(N_recv_at[i] - analysed_cum, eps(Tt))
+            κ_d = convert(Tt, κ_case[i]) * convert(Tt, death_factor)
+            cap = max(κ_d * Δt, zero(Tt))
+            μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
+            μ_A_at[i] = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
+            analysed_cum += μ_A_at[i]
+        end
+    end
+
+    ## Every death window is dark (no observed analysed denominator), so the
+    ## exact marginal of Binomial(Poisson(μ_A), p_pos) applies: the expected
+    ## confirmed increment is μ_A_death · p_pos_death, observed with the
+    ## shared-k NegBinomial.
+    conf_means = Vector{Tt}(undef, n)
+    for i in 1:n
+        raw = μ_A_at[i] * p_pos_death_at[i]
         conf_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
     end
 
@@ -939,13 +964,13 @@ entries for posterior-predictive generation.
         confirmed_deaths[i] ~ safe_nbinomial(k, conf_means[i])
     end
 
-    τ_death_out := τ_death
+    death_factor_out := death_factor
     q_death_cutoff := q_death_at[end]
     p_pos_death_cutoff := p_pos_death_at[end]
     expected_confirmed_deaths_total := sum(conf_means)
 
-    return (; τ_death, death_enrichment, s, spec, q_death_at,
-        p_pos_death_at, conf_means, expected_confirmed_deaths_total)
+    return (; death_factor, s, spec, q_death_at, p_pos_death_at,
+        μ_A_at, N_recv_at, conf_means, expected_confirmed_deaths_total)
 end
 
 """

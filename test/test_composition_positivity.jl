@@ -51,7 +51,7 @@ end
             confirmed_cases_model(
                 Union{Missing, Int}[120], Union{Missing, Int}[400],
                 Union{Missing, Int}[missing], 400, g, 5.0,
-                [0.3], 0.6, 0.7, Gamma(2.5, 4.5),
+                [0.3], 0.6, Gamma(2.5, 4.5),
                 [g.T], g.T;
                 severity_enrichment = severity_enrichment_model(),
                 q_random_effect = nothing), false)

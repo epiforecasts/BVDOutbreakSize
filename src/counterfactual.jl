@@ -103,13 +103,14 @@ end
 # committed backlog, so the committed total is capacity-independent. Returns
 # `obs_confirmed + p_pos · max(received(Th) − obs_analysed, 0)`.
 function _committed_confirmed_one(r, T, Th, α_rep, θ_rep, p_drc, λ_bg,
-        τ_forward, α_recv, θ_recv, s_test, spec_test, obs_confirmed,
+        α_recv, θ_recv, s_test, spec_test, obs_confirmed,
         obs_analysed; onset_fraction = 1.0)
     f_recv = Gamma(α_recv, θ_recv)
     C = _flat_cumulative(r, T)
     f_rep = Gamma(α_rep, θ_rep)
     ## Suspect-case pool as a function of time, BVD onsets (flat infections)
-    ## plus continuing background, then receipt-delay convolved and forwarded.
+    ## plus continuing background, then receipt-delay convolved (forwarding
+    ## is handled by the lab queue, so there is no forwarded-fraction scaling).
     nsusp = let r = r, T = T, f_rep = f_rep, p_drc = p_drc, onset_fraction = onset_fraction,
         λ_bg = λ_bg, C = C
 
@@ -117,8 +118,7 @@ function _committed_confirmed_one(r, T, Th, α_rep, θ_rep, p_drc, λ_bg,
              onset_fraction * p_drc * delay_convolution(C, u, f_rep) +
              max(λ_bg * u, zero(λ_bg))
     end
-    received = τ_forward * max(delay_convolution(nsusp, Th, f_recv),
-        zero(Th))
+    received = max(delay_convolution(nsusp, Th, f_recv), zero(Th))
     ## Composition-linked positivity at the horizon: tested BVD share is the
     ## suspect-pool composition φ = μ_BVD / (μ_BVD + μ_bg).
     ntot, μ_bvd = _committed_nsusp_one(r, T, Th, α_rep, θ_rep, p_drc, λ_bg;
@@ -132,34 +132,40 @@ function _committed_confirmed_one(r, T, Th, α_rep, θ_rep, p_drc, λ_bg,
 end
 
 # Committed laboratory-confirmed deaths under the counterfactual: the
-# already-observed confirmed deaths plus the forwarded-positive increment of
-# the suspect-death backlog drained over the long horizon, with infections
-# held FLAT at `C(T)` after `T` (no onward transmission). Mirrors the
-# suspect-death forward of `_forecast_confirmed_deaths_increment` but on the
-# flat infection trajectory, so the BVD-death pool plateaus rather than
-# growing exponentially over the year. The death pool is
+# already-observed confirmed deaths plus the positive increment of the
+# received suspect-death backlog drained over the long horizon, with
+# infections held FLAT at `C(T)` after `T` (no onward transmission). The
+# shared lab queue (matching `confirmed_deaths_model`) drains the finite
+# committed backlog over the year, so as for cases the capacity limit (and
+# hence the death factor) does not bind and the committed total is the
+# received-backlog beyond what has already been analysed, weighted by the
+# horizon positivity. The received death pool is the BVD-death convolution
 # `os · p_deaths · CFR · ∫₀^u C_flat(s) f_death(u−s) ds` plus the continuing
-# constant-rate background `λ_bg_death·u`; positivity uses the BVD share of
-# the suspect-death pool at the horizon.
+# constant-rate background `λ_bg_death·u`, convolved with the shared receipt
+# delay `f_receipt`; positivity uses the BVD share of the suspect-death pool
+# at the horizon.
 function _committed_confirmed_deaths_one(r, T, Th, α, θ, CFR, p_deaths,
-        λ_bg_death, τ_death, s, spec, obs_confirmed_deaths;
-        onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
+        λ_bg_death, α_recv, θ_recv, s, spec, obs_confirmed_deaths,
+        obs_analysed_deaths; onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
     f_death = Gamma(α, θ)
+    f_recv = Gamma(α_recv, θ_recv)
     C = _flat_cumulative(r, T)
     bvd_death(u) = u <= zero(u) ? zero(u) :
                    onset_fraction * p_deaths * CFR *
                    delay_convolution(C, u, f_death)
-    nsusp(u) = max(bvd_death(u), zero(u)) +
-               max(λ_bg_death * u, zero(λ_bg_death))
-    ΔN = max(nsusp(Th) - nsusp(T), zero(Th))
+    nsusp = let bvd_death = bvd_death, λ_bg_death = λ_bg_death
+        u -> u <= zero(u) ? zero(u) :
+             max(bvd_death(u), zero(u)) + max(λ_bg_death * u, zero(λ_bg_death))
+    end
+    received = max(delay_convolution(nsusp, Th, f_recv), zero(Th))
     denom = nsusp(Th)
     q_d = denom > zero(denom) ?
           clamp(max(bvd_death(Th), zero(Th)) / denom, zero(Th), one(Th)) :
           zero(Th)
     p_pos = clamp(s * q_d + (one(q_d) - spec) * (one(q_d) - q_d),
         zero(q_d), one(q_d))
-    inc = max(τ_death * p_pos * ΔN, zero(ΔN))
-    return float(obs_confirmed_deaths) + inc
+    committed_backlog = max(received - obs_analysed_deaths, zero(received))
+    return float(obs_confirmed_deaths) + p_pos * committed_backlog
 end
 
 """
@@ -179,16 +185,18 @@ columns:
   closed form `CFR · C(T)` (equivalently the realised deaths plus the
   committed-deaths tail of [`predict_no_onward_deaths`](@ref)).
 - `:confirmed_cases` — committed laboratory-confirmed cases when the chain
-  carries the lab parameters (`:s_test`, `:spec_test`, `:τ_forward`,
-  `:α_recv`, `:θ_recv`) and `obs_confirmed` / `obs_analysed` are supplied.
-  Computed by draining the committed suspect-case backlog (flat infections,
-  continuing background) over the horizon: `obs_confirmed + p_pos ·
+  carries the lab parameters (`:s_test`, `:spec_test`, `:α_recv`,
+  `:θ_recv`) and `obs_confirmed` / `obs_analysed` are supplied. Computed by
+  draining the committed suspect-case backlog (flat infections, continuing
+  background) over the horizon: `obs_confirmed + p_pos ·
   max(received(T + horizon) − obs_analysed, 0)`. The capacity limit is not
   applied because over a year the lab clears the finite committed backlog.
 - `:confirmed_deaths` — committed laboratory-confirmed deaths when the chain
-  additionally carries `:τ_death`, `:p_deaths`, `:λ_bg_death` and
-  `obs_confirmed_deaths` is supplied: the observed confirmed deaths plus the
-  forwarded-positive suspect-death backlog drained over the horizon.
+  additionally carries `:p_deaths`, `:λ_bg_death` (sharing the case-lab
+  receipt delay / positivity) and `obs_confirmed_deaths` is supplied: the
+  observed confirmed deaths plus the positive received suspect-death backlog
+  drained over the horizon. The capacity limit (death factor) does not bind
+  over a year, so the committed total is capacity-independent.
 
 `horizon_days` sets how far the lab drains; the default `365` is long
 enough that the committed lab outcomes have effectively saturated. `alg` is
@@ -208,18 +216,14 @@ function predict_committed(chn;
     α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
     θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
 
-    ## Lab parameters for the committed confirmed-case backlog. The
-    ## forwarding fraction is `τ_forward_out` on the production queue chain
-    ## and `τ_forward` on prior/test chains; resolve whichever is present.
-    fwd_key = _forward_key(chn)
-    has_lab = fwd_key !== nothing &&
-              all(haskey_chain(chn, n)
+    ## Lab parameters for the committed confirmed-case backlog. Forwarding is
+    ## handled by the lab queue, so there is no forwarded-fraction parameter.
+    has_lab = all(haskey_chain(chn, n)
               for n in (:s_test, :spec_test, :α_recv, :θ_recv,
                   :α_rep, :θ_rep, :p_drc, :λ_bg)) &&
               obs_confirmed !== missing && obs_analysed !== missing
     s_test = has_lab ? _draws(chn, :s_test) : nothing
     spec_test = has_lab ? _draws(chn, :spec_test) : nothing
-    τ_forward = has_lab ? _draws(chn, fwd_key) : nothing
     α_recv = has_lab ? _draws(chn, :α_recv) : nothing
     θ_recv = has_lab ? _draws(chn, :θ_recv) : nothing
     α_rep = has_lab ? _draws(chn, :α_rep) : nothing
@@ -227,14 +231,16 @@ function predict_committed(chn;
     p_drc = has_lab ? _draws(chn, :p_drc) : nothing
     λ_bg = has_lab ? _draws(chn, :λ_bg) : nothing
 
-    death_fwd_key = _death_forward_key(chn)
-    has_lab_deaths = has_lab && death_fwd_key !== nothing &&
+    ## Committed confirmed deaths: the shared lab queue drains the finite
+    ## death backlog over the long horizon, so the death factor (capacity
+    ## scaling) does not bind. Needs the deaths CFR / onset-to-death delay
+    ## and the shared receipt delay.
+    has_lab_deaths = has_lab &&
                      all(haskey_chain(chn, n)
                      for n in (:p_deaths, :λ_bg_death, :α, :θ)) &&
                      obs_confirmed_deaths !== missing
     α = has_lab_deaths ? _draws(chn, :α) : nothing
     θ = has_lab_deaths ? _draws(chn, :θ) : nothing
-    τ_death = has_lab_deaths ? _draws(chn, death_fwd_key) : nothing
     p_deaths = has_lab_deaths ? _draws(chn, :p_deaths) : nothing
     λ_bg_death = has_lab_deaths ? _draws(chn, :λ_bg_death) : nothing
 
@@ -252,15 +258,15 @@ function predict_committed(chn;
              onset_rescale(Gamma(α_inc[i], θ_inc[i]), r[i]) : 1.0
         if has_lab
             confirmed_cases[i] = _committed_confirmed_one(r[i], T[i], Th,
-                α_rep[i], θ_rep[i], p_drc[i], λ_bg[i], τ_forward[i],
+                α_rep[i], θ_rep[i], p_drc[i], λ_bg[i],
                 α_recv[i], θ_recv[i], s_test[i], spec_test[i],
                 obs_confirmed, obs_analysed; onset_fraction = os)
         end
         if has_lab_deaths
             confirmed_deaths[i] = _committed_confirmed_deaths_one(r[i], T[i],
                 Th, α[i], θ[i], CFR[i], p_deaths[i], λ_bg_death[i],
-                τ_death[i], s_test[i], spec_test[i], obs_confirmed_deaths;
-                onset_fraction = os, alg)
+                α_recv[i], θ_recv[i], s_test[i], spec_test[i],
+                obs_confirmed_deaths, 0; onset_fraction = os, alg)
         end
     end
 

@@ -4,7 +4,7 @@
 
 @testsnippet ForecastFixtures begin
     using Turing: Turing, @model, sample, Prior
-    using Distributions: Beta, Normal, truncated
+    using Distributions: Beta, Normal, LogNormal, truncated
     import FlexiChains
     using BVDOutbreakSize: bvd_joint
 
@@ -41,24 +41,25 @@
         θ_rep ~ truncated(Normal(3.0, 0.3); lower = 0.2)
         λ_bg ~ truncated(Normal(0.0, 10.0); lower = 0)
         if include_lab
-            ## Severe-first confirmed-stream draws the forecast reads:
-            ## sensitivity, specificity, the q-curve shape (q0, qinf,
-            ## decay) and the forwarded fraction.
+            ## Confirmed-stream draws the forecast reads: sensitivity,
+            ## specificity and the q-curve shape (q0, qinf, decay).
+            ## Forwarding is handled by the lab queue, so there is no
+            ## forwarded fraction.
             s_test ~ Beta(15.0, 2.0)
             spec_test ~ Beta(50.0, 1.5)
             q0 ~ Beta(20.0, 1.5)
             qinf ~ Beta(6.0, 6.0)
             decay_scale ~ truncated(Normal(0.0, 10.0); lower = 0)
-            τ_forward ~ Beta(5.0, 2.0)
             ## Receipt-delay Gamma and the cut-off analysis capacity the
             ## capacity-limited confirmed forecast reads.
             α_recv ~ truncated(Normal(2.0, 1.0); lower = 0.1)
             θ_recv ~ truncated(Normal(1.5, 0.75); lower = 0.1)
             capacity_cutoff ~ truncated(Normal(150.0, 30.0); lower = 1.0)
-            ## Confirmed-death stream draws: forwarding fraction, deaths
-            ## drift and suspect-death background; share the case-lab
-            ## sensitivity / specificity and the CFR / onset-to-death delay.
-            τ_death ~ Beta(5.0, 2.0)
+            ## Confirmed-death stream draws: the case→death testing factor
+            ## (scaling the shared capacity), deaths drift and suspect-death
+            ## background; share the case-lab sensitivity / specificity /
+            ## capacity / receipt delay and the CFR / onset-to-death delay.
+            death_factor ~ LogNormal(0.0, 0.45)
             p_deaths ~ Beta(6.0, 2.0)
             λ_bg_death ~ truncated(Normal(0.0, 5.0); lower = 0)
         end
@@ -310,7 +311,7 @@ end
     α, θ, CFR = 4.3, 2.6, 0.3
     α_rep, θ_rep, p_drc, λ_bg = 4.0, 3.0, 0.2, 1.5
     s_test, spec_test = 0.9, 0.97
-    q0, qinf, decay_scale, τ_forward = 0.95, 0.4, 5.0, 0.6
+    q0, qinf, decay_scale = 0.95, 0.4, 5.0
     t_report = Th - 8.0
     os = onset_rescale(Gamma(3.0, 2.1), r)
 
@@ -324,7 +325,7 @@ end
     ## capacity-limited analysed increment are positive and finite; the
     ## lab analyses at most the available backlog.
     f_receipt = Gamma(2.0, 1.5)
-    recv = B._forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg, τ_forward,
+    recv = B._forecast_received(r, Th, α_rep, θ_rep, p_drc, λ_bg,
         f_receipt; onset_fraction = os)
     p_pos = B._forecast_positivity(r, Th, α_rep, θ_rep, p_drc, λ_bg, s_test,
         spec_test; onset_fraction = os)
@@ -365,14 +366,17 @@ end
     import BVDOutbreakSize as B
 
     r, T, α, θ, CFR = 0.05, 100.0, 4.3, 2.6, 0.3
-    p_deaths, λ_bg_death, τ_death = 1.0, 0.5, 0.6
+    p_deaths, λ_bg_death = 1.0, 0.5
+    α_recv, θ_recv = 2.0, 1.5
     s, spec = 0.9, 0.97
     os = onset_rescale(Gamma(3.0, 2.1), r)
     obs_cd = 11.0
     ## Over a long horizon the committed total adds the drained suspect-death
-    ## backlog to the already-observed confirmed deaths.
+    ## backlog (shared receipt delay) to the already-observed confirmed
+    ## deaths; the death factor (capacity scaling) does not bind.
     committed = B._committed_confirmed_deaths_one(r, T, T + 365, α, θ, CFR,
-        p_deaths, λ_bg_death, τ_death, s, spec, obs_cd; onset_fraction = os)
+        p_deaths, λ_bg_death, α_recv, θ_recv, s, spec, obs_cd, 0;
+        onset_fraction = os)
     @test committed >= obs_cd
     @test isfinite(committed)
 end

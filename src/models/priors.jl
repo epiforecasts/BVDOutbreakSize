@@ -275,15 +275,10 @@ headline fit pins `e = 0` (forward fraction 1) by passing
 end
 
 """
-Test-positivity machinery. Samples
-- `λ_bg` — the per-day non-BVD background suspected-case rate, on a
-  half-normal scale. Underlies the suspected/confirmed contrast; the
-  cumulative background is the constant-rate `μ_bg(t) = λ_bg · t`.
-- `τ_forward` — the fraction of suspected cases forwarded to the
-  laboratory. It scales the cumulative suspect backlog into the expected
-  received count (`received_v ~ NegBinomial(τ_forward · N_susp,v, k)`, see
-  [`confirmed_cases_model`](@ref)), so the received-count stream pins it
-  directly from received-versus-suspected.
+Test-positivity machinery. Samples `λ_bg`, the per-day non-BVD background
+suspected-case rate, on a half-normal scale. Underlies the
+suspected/confirmed contrast; the cumulative background is the
+constant-rate `μ_bg(t) = λ_bg · t`.
 
 The default `λ_bg` prior is a half-normal
 `truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
@@ -299,31 +294,17 @@ background is ≈ 0.67/day (≈ 89 cases, ≈ 8% of the 1077 observed at the
 keeping the background a modest minority of the suspected total while
 still admitting a genuine non-BVD signal. Pass `lambda_prior` to override.
 
-`τ_forward` has a `Beta(5, 2)` default (mean ≈ 0.71). The derived
-per-suspected positivity `μ_BVD / μ_cases` is exposed inside
-[`reported_cases_model`](@ref); the per-test positivity and the tested
-BVD share are exposed inside [`confirmed_cases_model`](@ref). Pass
-`fraction_forwarded_prior` to override.
-
-Set `sample_forward = false` to fix `τ_forward = 1` without sampling it.
-The queue path (`confirmed_queue = true`) uses this because forwarding is
-governed by `1 − e` from [`epi_exclusion_model`](@ref), leaving
-`τ_forward` a dead dimension that would otherwise clutter the posterior.
+Forwarding of suspected cases to the laboratory is handled by the
+lab-throughput queue of [`confirmed_cases_model`](@ref) (receipt delay +
+capacity-limited drain), so there is no separate forwarded-fraction
+parameter here. The derived per-suspected positivity `μ_BVD / μ_cases` is
+exposed inside [`reported_cases_model`](@ref); the per-test positivity and
+the tested BVD share are exposed inside [`confirmed_cases_model`](@ref).
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        fraction_forwarded_prior = Beta(5.0, 2.0),
-        sample_forward::Bool = true)
+        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0))
     λ_bg ~ lambda_prior
-    if sample_forward
-        τ_forward ~ fraction_forwarded_prior
-    else
-        ## Queue path: forwarding is governed by `1 − e` from the
-        ## exclusion submodel, so `τ_forward` is a fixed constant and is
-        ## not sampled (avoids a dead posterior dimension).
-        τ_forward = one(λ_bg)
-    end
-    return (; λ_bg, τ_forward)
+    return (; λ_bg)
 end
 
 """
@@ -414,66 +395,31 @@ case `λ_bg`. Pass `lambda_prior` to override. Used by
 end
 
 """
-Death-specimen forwarding fraction `τ_death`: the fraction of the
-suspect-death backlog whose post-mortem specimen reaches the laboratory
-and is analysed. It is the death analogue of the case forwarding fraction
-`τ_forward` ([`test_positivity_model`](@ref)). The confirmed-death
-increment is a genuine lab/positivity process on those analysed death
-specimens (see [`confirmed_deaths_model`](@ref)):
+Case→death testing-uncertainty factor for the shared laboratory queue.
+Confirmed deaths run the SAME capacity-limited drain as confirmed cases on
+the suspect-death backlog (see [`confirmed_deaths_model`](@ref)), sharing
+the case-fitted daily capacity `κ` (the [`lab_capacity_model`](@ref)
+log-RW state) and the receipt delay ([`lab_receipt_delay_model`](@ref)).
+There is no death-specific analysed data to re-estimate those states, so
+they are imported from the case stream.
 
-```math
-\\Delta D_{conf,v} \\sim
-    \\mathrm{NegBinomial}(
-        \\tau_{death}\\cdot p_{pos,death,v}\\cdot\\Delta N_{death,v},\\ k),
-\\qquad
-p_{pos,death,v} = s\\, q_{death,v} + (1 - \\text{spec})(1 - q_{death,v}),
-```
+This submodel adds the ONE sampled factor scaling the death throughput
+relative to cases, `κ_death = κ_case · exp(σ_dc · z_dc)`, parameterised
+non-centred so it mixes: `z_dc ~ Normal(0, 1)` with a fixed prior spread
+`σ_dc` centred at parity (factor mean ≈ 1). The default `σ_dc = 0.45` puts
+the 95% range of the multiplicative factor at roughly `exp(±1.96·0.45) ≈
+0.41-2.42` (≈ 0.5×-2.5×), encoding the large uncertainty of extrapolating
+the case lab to deaths with no death-analysed data. The ~9 confirmed-death
+counts barely inform it, so it is prior-dominated by design: that
+propagates honest uncertainty into the confirmed-death predictions.
 
-with `ΔN_death,v` the suspect-death backlog increment (BVD plus
-background), `q_death,v = μ_BVD_death / N_death_susp` the BVD share of that
-pool, and `s`, `spec` the PCR sensitivity / specificity *shared* with the
-confirmed-case lab pipeline. `τ_death` carries the forwarding rate; the
-BVD-share signal lives in the positivity, not in `τ_death`, so it is not
-forced to a boundary the way the old `coverage_death` thinning was.
-
-Default `Beta(2, 8)` is weakly-informative favouring low forwarding (mean
-0.20, 95% interval ≈ 0.03-0.48): post-mortem specimen submission is
-sparse. It is identified by the 17 confirmed deaths against the
-positivity-weighted suspect-death backlog. Pass `fraction_prior` to
-override. Used by [`confirmed_deaths_model`](@ref).
+Returns `(; z_dc, σ_dc, death_factor = exp(σ_dc · z_dc))`. Pass `sigma_dc`
+to change the spread. Used by [`confirmed_deaths_model`](@ref).
 """
-@model function death_forward_model(;
-        fraction_prior = Beta(2.0, 8.0))
-    τ_death ~ fraction_prior
-    return (; τ_death)
-end
-
-"""
-Death-testing enrichment `death_enrichment`: the odds ratio by which
-post-mortem death specimens are forwarded to and tested by the laboratory
-*relative to* the effective case testing rate. Deaths are prioritised for
-testing, so the death forwarding rate enriches the case rate on the odds
-scale, `logit(τ_death) = logit(case_test_rate) + log(death_enrichment)`,
-rather than being an independent fraction (see
-[`confirmed_deaths_model`](@ref)). The odds-scale link keeps `τ_death` a
-probability smoothly, so it stays well-behaved even when the case testing
-rate is already high (a multiplicative `case_test_rate · enrichment` would
-saturate at 1 and leave the factor unidentified).
-
-Tying the death rate to the case rate this way removes the free,
-weakly-identified `τ_death` that left the confirmed-death stream low and
-poorly mixed (issue #206): the enrichment shares the case-rate signal and
-only has to absorb the deaths-vs-cases testing differential.
-
-Default `LogNormal(log(2), 0.4)` is centred on a 2× testing odds ratio
-(median 2, 95% interval ≈ 0.91-4.39): deaths roughly twice the odds of
-being tested as cases, with mass either side of parity. Pass `factor_prior`
-to override. Used by [`confirmed_deaths_model`](@ref).
-"""
-@model function death_testing_model(;
-        factor_prior = LogNormal(log(2.0), 0.4))
-    death_enrichment ~ factor_prior
-    return (; death_enrichment)
+@model function death_testing_model(; sigma_dc::Real = 0.45)
+    z_dc ~ Normal(0, 1)
+    death_factor := exp(sigma_dc * z_dc)
+    return (; z_dc, σ_dc = sigma_dc, death_factor)
 end
 
 """

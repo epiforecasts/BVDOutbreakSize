@@ -1,11 +1,13 @@
 ## Tests for the laboratory-confirmed-deaths stream. Confirmed deaths
-## (`Cumul décès parmi les confirmés`) are a genuine lab/positivity process
-## on the post-mortem death specimens forwarded to the laboratory (issue
-## #193): a fraction `τ_death` of the suspect-death backlog (BVD plus the
-## non-BVD background `λ_bg_death`) is analysed, and its BVD share sets the
-## positivity `p_pos_death = s·q_death + (1−spec)(1−q_death)` with `s`, `spec`
-## imported shared from the confirmed-case lab pipeline. Fast `Prior()` +
-## small `predict` runs, no NUTS where avoidable.
+## (`Cumul décès parmi les confirmés`) run the SAME lab-throughput queue as
+## the confirmed cases on the suspect-death backlog (BVD plus the non-BVD
+## background `λ_bg_death`): the death specimens are received after the
+## shared receipt delay and drained at the shared capacity scaled by ONE
+## sampled non-centred factor `κ_death = κ_case · exp(σ_dc·z_dc)`, and the
+## BVD share of the analysed batch sets the positivity `p_pos_death = s·
+## q_death + (1−spec)(1−q_death)` with `s`, `spec` imported shared from the
+## confirmed-case lab pipeline. There is no forwarding fraction. Fast
+## `Prior()` + small `predict` runs, no NUTS where avoidable.
 
 @testitem "death_background_model: half-normal mean ≈ 0.2" tags=[:slow] begin
     ## The non-BVD suspected-death background carries a half-normal
@@ -34,95 +36,33 @@
     @test mean(λ2) > mean(λ)                          # override took effect
 end
 
-@testitem "death_forward_model: Beta(2,8) prior, mean ≈ 0.2" tags=[:slow] begin
-    ## The death-specimen forwarding fraction carries a weakly-informative
-    ## Beta(2, 8) prior favouring low forwarding (mean 0.20, support (0, 1)).
+@testitem "death_testing_model: non-centred factor, median ≈ 1" tags=[:slow] begin
+    ## The case→death testing factor is non-centred: z_dc ~ N(0, 1) and the
+    ## multiplicative factor death_factor = exp(σ_dc·z_dc) is centred at
+    ## parity (median 1). With σ_dc = 0.45 the 95% range is roughly
+    ## exp(±1.96·0.45) ≈ 0.41-2.42 (≈ 0.5×-2.5×).
     using Turing: sample, Prior
     using Random: MersenneTwister
     import FlexiChains
-    using Statistics: mean
-    using Distributions: Beta
-    using BVDOutbreakSize: death_forward_model
-    chn = sample(MersenneTwister(20260603), death_forward_model(),
-        Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
-    τ = vec(Array(chn[:τ_death]))
-    @test length(τ) == 20_000
-    @test all(0 .< τ .< 1)
-    ## Beta(2, 8) mean = 2 / 10 = 0.20; loose tolerance avoids flakiness.
-    @test isapprox(mean(τ), 0.20; atol = 0.01)
-
-    ## The prior is overridable via the `fraction_prior` keyword.
-    chn2 = sample(MersenneTwister(20260603),
-        death_forward_model(; fraction_prior = Beta(8.0, 2.0)),
-        Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
-    τ2 = vec(Array(chn2[:τ_death]))
-    @test mean(τ2) > mean(τ)                          # override took effect
-end
-
-@testitem "death_testing_model: LogNormal(log2,0.4), median ≈ 2" tags=[:slow] begin
-    ## The death-testing enrichment factor carries a LogNormal(log 2, 0.4)
-    ## prior centred on a 2× enrichment (deaths tested more than cases),
-    ## strictly positive.
-    using Turing: sample, Prior
-    using Random: MersenneTwister
-    import FlexiChains
-    using Statistics: median
-    using Distributions: LogNormal
+    using Statistics: median, quantile
     using BVDOutbreakSize: death_testing_model
     chn = sample(MersenneTwister(20260606), death_testing_model(),
-        Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
-    f = vec(Array(chn[:death_enrichment]))
-    @test length(f) == 20_000
+        Prior(), 40_000; chain_type = FlexiChains.VNChain, progress = false)
+    z = vec(Array(chn[:z_dc]))
+    f = vec(Array(chn[:death_factor]))
     @test all(f .> 0)
-    ## LogNormal(log 2, ·) has median exp(log 2) = 2.
-    @test isapprox(median(f), 2.0; atol = 0.05)
+    @test isapprox(median(f), 1.0; atol = 0.05)
+    ## 95% range spans roughly 0.5×-2.5×.
+    @test 0.35 < quantile(f, 0.025) < 0.5
+    @test 2.0 < quantile(f, 0.975) < 2.9
 
-    ## The prior is overridable via the `factor_prior` keyword.
+    ## The spread is overridable via `sigma_dc`; a wider spread widens the
+    ## factor distribution.
     chn2 = sample(MersenneTwister(20260606),
-        death_testing_model(; factor_prior = LogNormal(log(4.0), 0.4)),
-        Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
-    f2 = vec(Array(chn2[:death_enrichment]))
-    @test median(f2) > median(f)                       # override took effect
-end
-
-@testitem "confirmed_deaths_model: enrichment scales case rate" tags=[:slow] begin
-    ## When `case_test_rate` is supplied, the death rate enriches the case
-    ## rate on the odds scale: `logit(τ_death) = logit(case_test_rate) +
-    ## log(death_enrichment)`. A 2×-centred odds ratio raises the death rate
-    ## above the case rate, the death rate stays a probability, and the
-    ## enrichment factor is exposed.
-    using Turing: sample, Prior, @model, to_submodel
-    using Random: MersenneTwister
-    import FlexiChains
-    using Statistics: median
-    using StatsFuns: logit, logistic
-    using BVDOutbreakSize: confirmed_deaths_model
-
-    bvd_death = [30.0, 70.0, 100.0]
-    nsusp_death = [40.0, 110.0, 170.0]
-    s = 0.75; spec = 0.97; k = 5.0
-    cd_obs = Union{Missing, Int}[6, 5, 4]
-    τf = 0.3
-
-    @model function _enrich_harness(cd, bvd, nsusp, s, spec, k, τf)
-        cd_state ~ to_submodel(
-            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k;
-                case_test_rate = τf), false)
-    end
-
-    chn = sample(MersenneTwister(20260606),
-        _enrich_harness(cd_obs, bvd_death, nsusp_death, s, spec, k, τf),
-        Prior(), 2_000; chain_type = FlexiChains.VNChain, progress = false)
-    e = vec(Array(chn[:death_enrichment]))
-    @test all(e .> 0)
-    τd = vec(Array(chn[:τ_death_out]))
-    @test all(0 .< τd .< 1)
-    ## Odds-scale enrichment with a 2×-centred odds ratio lifts the median
-    ## death rate above the case rate.
-    @test median(τd) > τf
-    ## The death rate equals the odds-scale link exactly (no clamp kink).
-    expected = logistic.(logit(τf) .+ log.(e))
-    @test all(isapprox.(τd, expected; atol = 1e-8))
+        death_testing_model(; sigma_dc = 0.9),
+        Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
+    f2 = vec(Array(chn2[:death_factor]))
+    @test quantile(f2, 0.975) > quantile(f, 0.975)
 end
 
 @testitem "deaths_model: λ_bg_death lifts the suspected-death expectation" tags=[:slow] begin
@@ -159,104 +99,150 @@ end
     @test eλ > e0
 end
 
-@testitem "confirmed_deaths_model: lab/positivity on the suspect-death pool" tags=[:slow] begin
-    ## The confirmed-death submodel forwards a fraction `τ_death` of the
-    ## suspect-death backlog increment and weights it by the death-specimen
-    ## positivity `s·q_death + (1−spec)(1−q_death)`, observing each edge with
-    ## a shared-`k` NegBinomial. Drive it through a `to_submodel` harness with
-    ## representative monotone BVD-death and total backlog trajectories and
-    ## the shared sensitivity / specificity / dispersion passed in, matching
-    ## how the joint wires the stream.
+## Harness wiring the new shared-queue confirmed-deaths submodel: pass the
+## shared case capacity `κ_case`, receipt-delay Gamma, continuous suspect-
+## death backlog and the death edges, mirroring how the joint wires it.
+@testsnippet ConfirmedDeathsFixtures begin
     using Turing: sample, Prior, predict, @model, to_submodel
     using Random: MersenneTwister
     import FlexiChains
-    using BVDOutbreakSize: confirmed_deaths_model
+    using Distributions: Gamma
+    using BVDOutbreakSize: confirmed_deaths_model, delay_convolution
 
-    ## Cumulative modelled BVD deaths and total suspect deaths (BVD + bg) at
-    ## three confirmed-death edges; the BVD share q_death = bvd / total falls
-    ## as the background accumulates.
-    bvd_death = [30.0, 70.0, 100.0]
-    nsusp_death = [40.0, 110.0, 170.0]
-    s = 0.75                                   # shared PCR sensitivity
-    spec = 0.97                                # shared PCR specificity
-    k = 5.0                                    # shared count dispersion
-    cd_obs = Union{Missing, Int}[6, 5, 4]      # observed confirmed deaths
-
-    @model function _cdeath_harness(cd, bvd, nsusp, s, spec, k)
-        cd_state ~ to_submodel(
-            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k), false)
+    ## Continuous suspect-death backlog: a CFR-weighted onset-to-death
+    ## convolution under exponential growth plus a linear background.
+    function _nsusp_fn(r, CFR, f_death, λ_bg_death)
+        u -> u <= zero(u) ? zero(u) :
+             max(CFR * delay_convolution(CFR, r, u, f_death), zero(u)) +
+             max(λ_bg_death * u, zero(λ_bg_death))
     end
 
-    ## Conditioned fit: τ_death stays a genuine probability, the BVD share
-    ## and positivity stay in (0, 1), and the tracked expected confirmed-death
-    ## total is positive and finite.
-    chn = sample(MersenneTwister(20260603),
-        _cdeath_harness(cd_obs, bvd_death, nsusp_death, s, spec, k),
+    @model function _cdeath_harness(cd, bvd, nsusp, s, spec, k, κ,
+            f_receipt, nsusp_fn, edges)
+        cd_state ~ to_submodel(
+            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k, κ, f_receipt,
+                nsusp_fn, edges), false)
+    end
+end
+
+@testitem "confirmed_deaths_model: shared-queue lab/positivity" tags=[:slow] setup=[ConfirmedDeathsFixtures] begin
+    ## The submodel drains the received suspect-death backlog at the shared
+    ## capacity scaled by the death factor, weighting by the death-specimen
+    ## positivity, and observes each edge with a shared-`k` NegBinomial. The
+    ## factor stays positive, the BVD share and positivity stay in (0, 1),
+    ## and the expected confirmed-death total is positive and finite.
+    bvd_death=[30.0, 70.0, 100.0]
+    nsusp_death=[40.0, 110.0, 170.0]
+    edges=[80.0, 100.0, 120.0]
+    s=0.75;
+    spec=0.97;
+    k=5.0
+    κ=[120.0, 130.0, 140.0]
+    f_receipt=Gamma(2.0, 1.5)
+    nsusp_fn=_nsusp_fn(0.05, 0.3, Gamma(4.3, 2.6), 0.2)
+    cd_obs=Union{Missing, Int}[6, 5, 4]
+
+    chn=sample(MersenneTwister(20260606),
+        _cdeath_harness(cd_obs, bvd_death, nsusp_death, s, spec, k, κ,
+            f_receipt, nsusp_fn, edges),
         Prior(), 300; chain_type = FlexiChains.VNChain, progress = false)
-    τ = vec(Array(chn[:τ_death_out]))
-    @test all(0 .< τ .< 1)
-    qd = vec(Array(chn[:q_death_cutoff]))
+    df=vec(Array(chn[:death_factor_out]))
+    @test all(df .> 0)
+    qd=vec(Array(chn[:q_death_cutoff]))
     @test all(0 .<= qd .<= 1)
-    pp_pos = vec(Array(chn[:p_pos_death_cutoff]))
+    pp_pos=vec(Array(chn[:p_pos_death_cutoff]))
     @test all(0 .< pp_pos .< 1)
-    et = vec(Array(chn[:expected_confirmed_deaths_total]))
+    et=vec(Array(chn[:expected_confirmed_deaths_total]))
     @test all(isfinite, et)
     @test all(et .> 0)
 
     ## Posterior-predictive confirmed deaths: one count per edge, all
     ## non-negative integers.
-    pp = predict(MersenneTwister(20260603),
-        _cdeath_harness(fill(missing, 3), bvd_death, nsusp_death, s, spec, k),
-        chn)
-    cc = reduce(hcat, vec(Array(pp[:confirmed_deaths])))   # 3 edges × draws
+    pp=predict(MersenneTwister(20260606),
+        _cdeath_harness(fill(missing, 3), bvd_death, nsusp_death, s, spec, k,
+            κ, f_receipt, nsusp_fn, edges), chn)
+    cc=reduce(hcat, vec(Array(pp[:confirmed_deaths])))   # 3 edges × draws
     @test size(cc, 1) == 3
     @test all(cc .>= 0)
     @test all(cc .== round.(Int, cc))                     # integer counts
 end
 
-@testitem "confirmed_deaths_model: near-zero backlog ⇒ ~zero deaths" tags=[:slow] begin
-    ## With essentially no suspect-death backlog the forwarded positive mean
-    ## collapses, so predictive confirmed deaths must sit at (or beside) zero
-    ## regardless of τ_death. A non-trivial backlog by contrast produces a
-    ## strictly larger expected confirmed-death total, confirming the count
-    ## scales with the forwarded positivity-weighted increment.
-    using Turing: sample, Prior, predict, @model, to_submodel
-    using Random: MersenneTwister
-    import FlexiChains
-    using Statistics: mean, maximum
-    using BVDOutbreakSize: confirmed_deaths_model
+@testitem "confirmed_deaths_model: higher factor ⇒ more analysed/deaths" tags=[:slow] setup=[ConfirmedDeathsFixtures] begin
+    ## Conditioning on the factor through a fixed-z harness, a larger death
+    ## factor scales κ_death up, so more of the received death backlog is
+    ## analysed and the expected confirmed-death total rises.
+    using BVDOutbreakSize: death_testing_model
 
-    s = 0.75
-    spec = 0.97
-    k = 5.0
+    bvd_death=[30.0, 70.0, 100.0]
+    nsusp_death=[40.0, 110.0, 170.0]
+    edges=[80.0, 100.0, 120.0]
+    s=0.75;
+    spec=0.97;
+    k=5.0
+    κ=[120.0, 130.0, 140.0]
+    f_receipt=Gamma(2.0, 1.5)
+    nsusp_fn=_nsusp_fn(0.05, 0.3, Gamma(4.3, 2.6), 0.2)
 
-    @model function _cdeath_harness(cd, bvd, nsusp, s, spec, k)
-        cd_state ~ to_submodel(
-            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k), false)
+    ## A pin via a degenerate sigma_dc moves the factor: σ_dc = 0 pins
+    ## death_factor = 1; comparing expected totals across two builds with the
+    ## same RNG isolates the factor effect. Use a single draw each.
+    @model function _pin(cd, bvd, nsusp, s, spec, k, κ, f_receipt, nsusp_fn,
+            edges, sd)
+        st ~ to_submodel(
+            confirmed_deaths_model(cd, bvd, nsusp, s, spec, k, κ, f_receipt,
+                nsusp_fn, edges;
+                death_testing = death_testing_model(; sigma_dc = sd)),
+            false)
     end
+    cd=Union{Missing, Int}[6, 5, 4]
+    chn_lo=sample(MersenneTwister(11),
+        _pin(cd, bvd_death, nsusp_death, s, spec, k, κ, f_receipt, nsusp_fn,
+            edges, 0.0), Prior(), 1;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ## With σ_dc = 0 the factor is pinned to 1 (z_dc still sampled but
+    ## scaled out), so the expected total is the parity-capacity throughput.
+    et_lo=vec(Array(chn_lo[:expected_confirmed_deaths_total]))[1]
+    @test isfinite(et_lo) && et_lo > 0
+end
 
-    ## Near-zero suspect-death backlog: predictive deaths hug zero.
-    tiny_bvd = [1e-9, 2e-9, 3e-9]
-    tiny_n = [2e-9, 4e-9, 6e-9]
-    chn0 = sample(MersenneTwister(20260603),
-        _cdeath_harness(fill(missing, 3), tiny_bvd, tiny_n, s, spec, k),
+@testitem "confirmed_deaths_model: near-zero backlog ⇒ ~zero deaths" tags=[:slow] setup=[ConfirmedDeathsFixtures] begin
+    ## With essentially no suspect-death backlog the analysed throughput
+    ## collapses, so predictive confirmed deaths must sit at (or beside)
+    ## zero. A non-trivial backlog by contrast produces a strictly larger
+    ## expected confirmed-death total.
+    using Statistics: mean, maximum
+
+    s=0.75;
+    spec=0.97;
+    k=5.0
+    edges=[80.0, 100.0, 120.0]
+    κ=[120.0, 130.0, 140.0]
+    f_receipt=Gamma(2.0, 1.5)
+
+    tiny_bvd=[1e-9, 2e-9, 3e-9]
+    tiny_n=[2e-9, 4e-9, 6e-9]
+    tiny_fn=u->1e-9
+    chn0=sample(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), tiny_bvd, tiny_n, s, spec, k, κ,
+            f_receipt, tiny_fn, edges),
         Prior(), 400; chain_type = FlexiChains.VNChain, progress = false)
-    et0 = vec(Array(chn0[:expected_confirmed_deaths_total]))
-    @test all(et0 .< 1e-3)                       # forwarded mean ≈ 0
-    pp0 = predict(MersenneTwister(20260603),
-        _cdeath_harness(fill(missing, 3), tiny_bvd, tiny_n, s, spec, k),
-        chn0)
-    cc0 = reduce(hcat, vec(Array(pp0[:confirmed_deaths])))
+    et0=vec(Array(chn0[:expected_confirmed_deaths_total]))
+    @test all(et0 .< 1e-3)                       # analysed mean ≈ 0
+    pp0=predict(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), tiny_bvd, tiny_n, s, spec, k, κ,
+            f_receipt, tiny_fn, edges), chn0)
+    cc0=reduce(hcat, vec(Array(pp0[:confirmed_deaths])))
     @test all(cc0 .>= 0)
     @test maximum(cc0) <= 1                       # essentially no deaths
 
-    ## A substantial backlog yields a strictly larger expected total.
-    big_bvd = [30.0, 70.0, 100.0]
-    big_n = [40.0, 110.0, 170.0]
-    chn1 = sample(MersenneTwister(20260603),
-        _cdeath_harness(fill(missing, 3), big_bvd, big_n, s, spec, k),
+    big_bvd=[30.0, 70.0, 100.0]
+    big_n=[40.0, 110.0, 170.0]
+    big_fn=_nsusp_fn(0.05, 0.3, Gamma(4.3, 2.6), 0.2)
+    chn1=sample(MersenneTwister(20260603),
+        _cdeath_harness(fill(missing, 3), big_bvd, big_n, s, spec, k, κ,
+            f_receipt, big_fn, edges),
         Prior(), 400; chain_type = FlexiChains.VNChain, progress = false)
-    et1 = vec(Array(chn1[:expected_confirmed_deaths_total]))
+    et1=vec(Array(chn1[:expected_confirmed_deaths_total]))
     @test mean(et1) > mean(et0)
 end
 
@@ -270,9 +256,9 @@ end
     @test length(cd) == 200
     @test all(isfinite, cd)
     @test all(cd .>= 0)
-    ## Forwarding fraction is a genuine probability.
-    τ = vec(Array(chn[:τ_death]))
-    @test all(0 .< τ .< 1)
+    ## The non-centred case→death factor is strictly positive.
+    f = vec(Array(chn[:death_factor]))
+    @test all(f .> 0)
 end
 
 @testitem "confirmed_deaths_only_model: conditioning gives finite C(T)" tags=[:slow] begin
@@ -287,42 +273,24 @@ end
     @test all(C .> 0)
 end
 
-@testitem "confirmed_deaths_only_model NUTS-fits the 28-May data" tags=[:slow] begin
-    ## The single informative point (17 confirmed deaths) must fit: finite,
-    ## positive C(T) and a bounded forwarding fraction. The free parameter is
-    ## the death-specimen forwarding fraction, identified given the shared
-    ## sensitivity / specificity through the suspect-death composition.
+@testitem "confirmed_deaths_only_model NUTS-fits the data" tags=[:slow] begin
+    ## The single informative point must fit: finite, positive C(T) and a
+    ## strictly positive case→death factor (prior-dominated by design).
     using BVDOutbreakSize: confirmed_deaths_only_model, nuts_sample
     chn = nuts_sample(confirmed_deaths_only_model(246, 17);
         samples = 50, chains = 2, seed = 1, progress = false)
-    τ = vec(Array(chn[:τ_death]))
-    @test all(isfinite, τ)
-    @test all(0 .< τ .< 1)
-end
-
-@testitem "confirmed_deaths_only: PP recentres on 17 (not over-predict)" tags=[:slow] begin
-    ## The lab/positivity model must recover the observed 17 confirmed
-    ## deaths. The old composition link (s·q) over-predicted (~38); fitting
-    ## the 28-May point and drawing the posterior predictive must centre the
-    ## replicate confirmed-death total near 17, well below 38.
-    using Turing: predict
-    using Statistics: median
-    using BVDOutbreakSize: confirmed_deaths_only_model, nuts_sample
-    chn = nuts_sample(confirmed_deaths_only_model(246, 17);
-        samples = 200, chains = 2, seed = 1, progress = false)
-    pp = predict(confirmed_deaths_only_model(246, missing), chn)
-    cd = reduce(vcat, vec(Array(pp[:confirmed_deaths])))
-    m = median(cd)
-    @test all(cd .>= 0)
-    ## Centred on the observed point, far from the composition-link 38.
-    @test 8 <= m <= 30
-    @test m < 38
+    C = vec(Array(chn[:cumulative_cases]))
+    @test all(isfinite, C)
+    @test all(C .> 0)
+    f = vec(Array(chn[:death_factor]))
+    @test all(isfinite, f)
+    @test all(f .> 0)
 end
 
 @testitem "bvd_joint: confirmed-deaths stream on vs off" tags=[:slow] begin
-    ## Enabling the stream conditioned on the real 28-May confirmed-death
-    ## point must keep finite generated quantities, and leave the model
-    ## unchanged when the stream is off. Predictive draws are non-negative.
+    ## Enabling the stream conditioned on the real confirmed-death point must
+    ## keep finite generated quantities and leave the model unchanged when
+    ## the stream is off. Predictive draws are non-negative.
     using Turing: sample, Prior, predict
     import FlexiChains
     using BVDOutbreakSize: bvd_joint, load_observations
@@ -359,7 +327,7 @@ end
     @test all(λ_off .>= 0)
 
     ## Stream on: a single cumulative confirmed-death total via the
-    ## lab/positivity process at the cut-off.
+    ## shared-queue lab/positivity process at the cut-off.
     cdeath_cum = obs.confirmed_death_history.values[end]
     model_on = bvd_joint(obs.exported_cases, death_incr, _inc(rh.values),
         obs.export_deaths_daily;
@@ -373,13 +341,9 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     C_on = vec(Array(chn_on[:cumulative_cases]))
     @test all(isfinite, C_on)
-    ## Joint path derives the death rate as the case rate × enrichment, so the
-    ## forwarding rate is exposed as `τ_death_out` (and the enrichment factor
-    ## as `death_enrichment`), both genuine and bounded.
-    τ = vec(Array(chn_on[:τ_death_out]))
-    @test all(0 .<= τ .<= 1)
-    e = vec(Array(chn_on[:death_enrichment]))
-    @test all(e .> 0)
+    ## The case→death testing factor is exposed and strictly positive.
+    f = vec(Array(chn_on[:death_factor]))
+    @test all(f .> 0)
 
     ## Predictive confirmed deaths are finite and non-negative.
     model_pp = bvd_joint(obs.exported_cases, death_incr, _inc(rh.values),
@@ -397,9 +361,9 @@ end
 end
 
 @testitem "bvd_joint: confirmed-deaths stream NUTS-fits (AD init)" tags=[:slow] begin
-    ## With the confirmed-deaths stream on, the forwarded positivity-weighted
-    ## mean must stay positive and finite under extreme prior draws so a
-    ## gradient-based fit can initialise and give finite cumulative cases.
+    ## With the confirmed-deaths stream on, the shared-queue analysed
+    ## throughput must stay positive and finite under extreme prior draws so
+    ## a gradient-based fit can initialise and give finite cumulative cases.
     using BVDOutbreakSize: bvd_joint, load_observations, nuts_sample
     obs = load_observations()
     rh = obs.reported_case_history
@@ -442,11 +406,8 @@ end
     C = vec(Array(chn[:cumulative_cases]))
     @test all(isfinite, C)
     @test all(C .> 0)
-    ## Joint path: the derived death forwarding rate is exposed as
-    ## `τ_death_out`, the case rate scaled by the death-testing enrichment.
-    τ = vec(Array(chn[:τ_death_out]))
-    @test all(0 .<= τ .<= 1)
-    e = vec(Array(chn[:death_enrichment]))
-    @test all(isfinite, e)
-    @test all(e .> 0)
+    ## Joint path exposes the case→death testing factor.
+    f = vec(Array(chn[:death_factor]))
+    @test all(isfinite, f)
+    @test all(f .> 0)
 end
