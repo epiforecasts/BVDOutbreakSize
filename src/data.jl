@@ -171,3 +171,32 @@ function freeze_observations(
         seeding_lead::Integer = SEEDING_LEAD_DAYS)
     return load_observations(path; seeding_lead, cutoff_date)
 end
+
+"""
+    m_prior_centre(as_of_date; base_date, m_base, doubling_days)
+
+Centre for the doubling-count prior `m`, based on `m_base` doublings at
+`base_date` and advancing by one doubling per `doubling_days` of elapsed
+time to `as_of_date`:
+
+```math
+m_0 = m_\\text{base} +
+    \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
+```
+
+The base is McCabe et al.'s first report (18 May 2026; Method 2 central
+501 cases ⇒ `m ≈ 9`), advancing at the central 20-day doubling time
+(`M_PRIOR_DOUBLING_DAYS`, the molecular-clock estimate of
+cuomodannenburg2026), so the prior stays centred on the plausible outbreak
+size as the cut-off moves. `C_T = 2^m` is the cumulative *infection*
+count; 9 is a weakly-informative centre of the same order. Passed into
+[`exponential_growth_model`](@ref) as the centre of the wide `m` prior.
+"""
+function m_prior_centre(as_of_date::Union{Date, AbstractString};
+        base_date::AbstractString = M_PRIOR_BASE_DATE,
+        m_base::Real = M_PRIOR_BASE,
+        doubling_days::Real = M_PRIOR_DOUBLING_DAYS)
+    as_of = as_of_date isa Date ? as_of_date : Date(String(as_of_date))
+    elapsed = date2epochdays(as_of) - date2epochdays(Date(base_date))
+    return m_base + elapsed / doubling_days
+end
