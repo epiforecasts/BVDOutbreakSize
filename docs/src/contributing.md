@@ -146,6 +146,27 @@ predictive checks.
   expected counts) guard against extreme NUTS warmup proposals; keep
   them when editing the likelihoods.
 
+### Analysis report prose
+
+These apply to the narrative prose in `docs/examples/analysis.jl`.
+Use the existing report text as the template for tone.
+
+- No code references in the narrative.
+  Do not name functions, parameters, files, or `:symbols` in the prose.
+  Describe each quantity in words, and define a derived quantity in
+  words the first time it appears, near its figure or table.
+- Concise and direct.
+  Cut filler and adjectives.
+  Avoid the LLM-indicator words: comprehensive, leverage, robust,
+  framework (when vague), utilise, facilitate, novel, landscape, foster,
+  harness, streamline, pivotal, nuanced, multifaceted, cornerstone,
+  synergy, overarching.
+- Report intervals as sentences, without a leading median.
+  Write the credible interval as a phrase, not a
+  "median (lower, upper)" construction.
+- Minimise colons and dashes in prose; use them only when needed.
+- UK English throughout.
+
 ## Pull requests
 
 - `main` is branch-protected; changes go through pull requests.
