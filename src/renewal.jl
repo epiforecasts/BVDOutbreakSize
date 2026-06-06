@@ -119,6 +119,32 @@ function seed_infections(I0, r, len::Integer)
 end
 
 """
+Anchor-day seed size for the two-phase renewal: the cumulative infection
+count scaled back from the cut-off (today) to the anchor day. The
+integral-model prior places `2^m` infections at the cut-off as the total
+size of a pure-exponential outbreak of age `T = m·τ`. The renewal is
+two-phase: an analytic exponential cryptic phase from the origin to the
+anchor (≈ the genetic TMRCA day, off the renewal grid), then the renewal
+recursion on `[anchor, cut-off]`. The seed handed to the recursion at the
+anchor is the cryptic phase grown from a single import to that day:
+
+```math
+\\text{seed\\_at\\_anchor} = e^{r(T - \\tau_{obs})}
+    = 2^m\\,e^{-r\\,\\tau_{obs}},
+\\qquad \\tau_{obs} = \\text{cut-off} - \\text{anchor},
+```
+
+i.e. the cut-off-referenced size `2^m = e^{rT}` scaled BACK to the anchor
+by `e^{-r·τ_obs}`. The renewal then grows this seed forward over the
+observation window under the time-varying `R_t`, so the realized cut-off
+size is data-driven through `R_t` while the prior fixes only the
+anchor-day scale. Smooth and AD-transparent in `(C_T, r)`.
+"""
+@inline function seed_at_anchor(C_T, r, τ_obs::Real)
+    return C_T * exp(-r * τ_obs)
+end
+
+"""
 Daily latent infections from the renewal equation
 `I_t = R_t Σ_{s ≥ 1} I_{t−s} g_s`, with generation-interval PMF `g`
 (indexed from lag 1), per-day reproduction numbers `Rt` (length `n`) and
