@@ -114,7 +114,7 @@ positives (a Binomial of the observed analysed denominator in
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        confirmed_positivity_link::Symbol = :free)
+        confirmed_positivity_link::Symbol = :composition)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -257,6 +257,7 @@ death-confirmation probability (`death_confirmation`).
         tests_received_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
+        export_last_offset::Integer = 0,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         exports = exports_model,
@@ -267,7 +268,7 @@ death-confirmation probability (`death_confirmation`).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
-        confirmed_positivity_link::Symbol = :free,
+        confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0)
@@ -325,7 +326,8 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_history))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
-        incubation_pmf = latent.incubation_pmf, source_population))
+        incubation_pmf = latent.incubation_pmf, source_population,
+        last_offset = export_last_offset))
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(exports_deaths,
         exports_state.export_prevalence, deaths_state.CFR,

@@ -485,6 +485,20 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   laboratory volume with the same pooled positivity, so all the confirmed
   data is used and the early per-vintage shape informs the fit.
 
+The per-window positivity has two links, set by `positivity_link`. The
+default `:composition` ties the tested BVD share to the suspect-pool
+composition `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)`, severity-
+upsampled by a decaying enrichment δ0, then mapped to the tested-positive
+probability through the assay sensitivity and specificity,
+`p = s · q + (1 − spec)(1 − q)`. The false-positive term `(1 − spec)(1 − q)`
+makes the confirmed counts respond to the non-BVD share `1 − q`, so the
+laboratory positivity identifies the background `λ_bg` rather than
+absorbing it into a free curve — the structural link that lets the lab data
+pin `λ_bg`. The alternative `:free` link uses a free partially-pooled
+per-window random effect ([`confirmed_positivity_model`](@ref)) decoupled
+from `λ_bg`; it leaves `λ_bg` weakly identified and is kept for sensitivity
+analysis.
+
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
 share them. Exposes the per-window positivity, the expected received and
@@ -502,8 +516,10 @@ quantities.
         tests_received::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
         positivity = confirmed_positivity_model,
-        positivity_link::Symbol = :free,
-        severity_enrichment = severity_enrichment_model())
+        positivity_link::Symbol = :composition,
+        severity_enrichment = severity_enrichment_model(),
+        sensitivity = test_sensitivity_model(),
+        specificity = test_specificity_model())
     n = length(onsets)
 
     ## Received-specimen volume: the suspected pipeline carried through the
@@ -548,6 +564,17 @@ quantities.
         enrich_state ~ to_submodel(severity_enrichment, false)
         δ0 = enrich_state.δ0
         decay_scale = enrich_state.decay_scale
+        ## PCR sensitivity and specificity. The tested-positive probability
+        ## is `p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share:
+        ## the false-positive term `(1 − spec)(1 − q)` makes the confirmed
+        ## counts respond to the non-BVD share `1 − q`, so the laboratory
+        ## data identify the background `λ_bg` through the composition `φ`
+        ## rather than the BVD signal alone. Without it the confirmed
+        ## positivity tracks only `q`, leaving `λ_bg` weakly identified.
+        sens_state ~ to_submodel(sensitivity, false)
+        spec_state ~ to_submodel(specificity, false)
+        s_test = sens_state.s_test
+        spec = spec_state.spec
         ## Suspect-pool composition over each window from the SAME suspected-
         ## stream series that drive `reported_cases_model`.
         bvd_window = bin_increments(p_drc .* bvd_reports_daily, window_days)
@@ -561,6 +588,8 @@ quantities.
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
         ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
         dscale = max(convert(Tt, decay_scale), one(Tt))
+        s_t = convert(Tt, s_test)
+        sp_t = convert(Tt, spec)
         p_pos = map(eachindex(window_days)) do i
             ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
             ## window, guarded against a zero/negative denominator.
@@ -569,12 +598,17 @@ quantities.
             ratio = num / (den + lo)
             φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
             δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            ## Severity-enriched tested BVD share, then the assay
+            ## sensitivity/specificity transform to the tested-positive
+            ## probability so the false-positive term identifies `λ_bg`.
             q = logistic(logit(φ) + δ_i)
-            ## Final guard: clamp into (0,1) and replace any non-finite value
-            ## with the pool composition so the confirmed Binomial always sees
-            ## a valid probability even under an AD perturbation.
             qf = isfinite(q) ? q : φ
-            clamp(qf, lo, hi)
+            qe = clamp(qf, lo, hi)
+            p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the composition so the confirmed Binomial always sees a
+            ## valid probability even under an AD perturbation.
+            clamp(isfinite(p) ? p : φ, lo, hi)
         end
     else
         pos_state ~ to_submodel(positivity(nv))
@@ -674,6 +708,7 @@ reuse by [`exports_deaths_model`](@ref).
         infections::AbstractVector, p_uganda::Real;
         incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
+        last_offset::Integer = 0,
         traveller = traveller_volume_model(),
         onset_to_detection = censored_delay_model(30;
             mean_prior = truncated(Normal(5.0, 2.0); lower = 1),
@@ -691,7 +726,19 @@ reuse by [`exports_deaths_model`](@ref).
     prevalence = cumsum(infections) .- cumsum(detected_daily)
     export_prevalence = p_uganda .* q .* prevalence
 
-    raw_exports = sum(export_prevalence)
+    ## The observed export count is cumulative detected by the LAST import
+    ## day, which can be before the grid cut-off (the cut-off scalar counts
+    ## no exports in the post-last-import window). Summing the at-risk
+    ## person-time over the whole grid would therefore over-expect exports in
+    ## that trailing window where none occurred. `last_offset` (days from the
+    ## last observed import to the cut-off) truncates the at-risk sum at
+    ## `n - last_offset`, so the expectation matches the window the data
+    ## actually cover. `last_offset = 0` recovers the full-grid sum. The
+    ## full daily `export_prevalence` series is still returned for the
+    ## export-deaths stream, which carries its own remaining-age weighting.
+    n = length(export_prevalence)
+    last_day = clamp(n - Int(last_offset), 1, n)
+    raw_exports = sum(@view export_prevalence[1:last_day])
     expected_exports_T := safe_rate(raw_exports)
     exported_cases ~ Poisson(expected_exports_T)
 

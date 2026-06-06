@@ -1,23 +1,27 @@
 ## Tests for the test-positivity submodel from `src/models/priors.jl`.
-## The `λ_bg` prior was retuned to a half-normal `Normal+(0, 1)` so the
-## background non-BVD suspected-case process cannot absorb more cases
-## than were observed: it is degenerate with outbreak size, so a diffuse
-## prior resolves at the high end where deaths and exports anchor `C_T`.
+## The `λ_bg` prior was retuned to a truncated Normal with its CENTRE
+## above zero (`truncated(Normal(0.5, 0.3); lower = 0)`) so the background
+## non-BVD suspected-case process pins at a sane non-zero rate rather than
+## collapsing to zero, while still staying a minority of observed cases.
 
-@testitem "default λ_bg prior matches half-normal SD 1" tags=[:slow] begin
+@testitem "default λ_bg prior is above-zero truncated Normal" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
-    using Statistics: mean, std
+    using Statistics: mean, median
+    using Distributions: truncated, Normal
+    import Distributions
     using BVDOutbreakSize: test_positivity_model
 
-    ## The retuned default is `truncated(Normal(0, 1); lower = 0)`.
-    ## Fold a half-normal back to its untruncated SD via the known
-    ## moments: E|X| = σ√(2/π), so σ = mean·√(π/2), and check the SD.
+    ## The retuned default is `truncated(Normal(0.5, 0.3); lower = 0)`,
+    ## a half-normal with its centre shifted above zero. Compare the
+    ## sampled mean against the analytic truncated-Normal mean and check
+    ## the centre is genuinely above zero.
+    ref = truncated(Normal(0.5, 0.3); lower = 0)
     chn = sample(MersenneTwister(20260518), test_positivity_model(),
         Prior(), 40_000; progress = false)
     λ_bg = vec(Array(chn[:λ_bg]))
-    @test isapprox(mean(λ_bg) * sqrt(pi / 2), 1.0; atol = 0.05)
-    @test isapprox(std(λ_bg), 1.0 * sqrt(1 - 2 / pi); atol = 0.05)
+    @test isapprox(mean(λ_bg), Distributions.mean(ref); atol = 0.03)
+    @test median(λ_bg) > 0.3
 end
 
 @testitem "λ_bg prior keeps background a minority of observed" tags=[:slow] begin

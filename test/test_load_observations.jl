@@ -15,6 +15,11 @@
     @test obs.cutoff >= obs.seeding
     @test obs.who_first_sitrep_days isa Integer
     @test obs.who_first_sitrep_days >= 1
+    ## Days from the last observed Uganda import to the cut-off; the
+    ## exports likelihood truncates its at-risk person-time sum here.
+    @test obs.export_last_offset isa Integer
+    @test obs.export_last_offset >= 0
+    @test obs.export_last_offset < obs.n
 
     ## Cumulative stream totals
     @test obs.exported_cases isa Integer

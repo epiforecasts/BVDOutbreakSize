@@ -90,6 +90,21 @@ function load_observations(
     who_first_sitrep_days = isempty(reported_history.days) ? n :
                             n - reported_history.days[1] + 1
 
+    ## Days from the LAST observed Uganda import detection to the cut-off.
+    ## The exported-case scalar counts imports detected by this last import
+    ## day; no export was detected in the trailing window to the cut-off, so
+    ## the exports likelihood truncates the at-risk person-time sum here
+    ## rather than over-expecting exports in that window. Zero when no
+    ## dated import series is present (sum runs to the cut-off).
+    export_last_offset = if haskey(raw, "export_case_dates")
+        dts = [Date(String(d)) for d in raw["export_case_dates"]["value"]]
+        kept = filter(d -> d <= cutoff, dts)
+        isempty(kept) ? 0 :
+        Int(date2epochdays(cutoff) - date2epochdays(maximum(kept)))
+    else
+        0
+    end
+
     return (; n, cutoff, seeding,
         exported_cases = Int(_val("exported_cases")),
         exports_deaths = Int(_val("exports_deaths")),
@@ -109,7 +124,7 @@ function load_observations(
         lab_history = lab_history,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
-        who_first_sitrep_days)
+        who_first_sitrep_days, export_last_offset)
 end
 
 """

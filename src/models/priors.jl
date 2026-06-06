@@ -145,8 +145,30 @@ seeding window, representing the zoonotic introduction. Default prior is a
 truncated Normal centred on a single seed; the prior is injectable. The
 seeding window is filled by exponential growth at the implied rate in
 [`infection_model`](@ref).
+
+The lower truncation is `0.02` rather than `0`. The implied outbreak start
+`T` ([`seeding_age`](@ref)) is a monotone, saturating function of `I0`: as
+`I0 → 0` the whole seeded trajectory shrinks toward zero and the cumulative
+never crosses one over the unobserved seeding stretch, collapsing into a
+degenerate tiny-outbreak / very-early-start mode (`C_T ≈ 3`, `T` pinned at
+the grid edge). Bounding `I0` away from zero removes that mode without
+biasing the start: in the infection-plus-genetic submodel IN ISOLATION the
+implied `T` is then wide and unimodal (median ≈ 82 d, 95% ≈ 64–93 d on the
+report grid, no grid-edge pile-up, no divergences). The exponential-forcing
+renewal seed cannot make the start a free parameter decoupled from outbreak
+size — `T` is a monotone, saturating function of `I0` and the implied growth
+`r0` — so the start is controlled through this `I0` bound and the
+molecular-clock `T` bound rather than a direct `T` prior (a likelihood term
+on the derived crossing funnels the geometry badly and was rejected). In the
+FULL joint, the streams that anchor outbreak size (deaths, exports) can
+still pull `I0` / `R_t` up enough to drive `T` toward the grid edge: the
+edge-pinning is then a symptom of the size streams demanding a large `C_T`,
+not of the seed prior, and is addressed by the size-stream tensions (the
+exports truncation, the background identification) rather than the seed
+alone. Fitting `T` explicitly (e.g. via a Gibbs step on a seeding day) is
+the alternative when a fully size-decoupled start is required.
 """
-@model function seed_model(; i0_prior = truncated(Normal(0.1, 0.1); lower = 0))
+@model function seed_model(; i0_prior = truncated(Normal(0.1, 0.1); lower = 0.02))
     I0 ~ i0_prior
     return (; I0)
 end
@@ -177,14 +199,22 @@ Returns `(; infections, cumulative, Rt, g, I0, r0, r, T, C_T, doubling_time)`.
         rt = rt_walk_model,
         gi = generation_interval_model,
         seed = seed_model,
-        gi_nmax::Integer = 40)
+        gi_nmax::Integer = 40,
+        seed_len::Union{Nothing, Integer} = nothing)
     rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
     gi_state ~ to_submodel(gi(gi_nmax))
     seed_state ~ to_submodel(seed())
     Rt = rt_state.Rt
     g = gi_state.g
     r0 = euler_lotka_r(Rt[1], g)
-    seed_vec = seed_infections(seed_state.I0, r0, length(g))
+    ## Seeding-window length. Defaults to the generation-interval support
+    ## (`length(g)`), the natural lookback the renewal recursion needs. A
+    ## shorter window concentrates the seed near the establishment day and
+    ## reduces the flat low-count stretch over which the cumulative=1
+    ## crossing (the implied outbreak start) wanders, which otherwise admits
+    ## a second, very-early start regime.
+    L = seed_len === nothing ? length(g) : min(Int(seed_len), length(g))
+    seed_vec = seed_infections(seed_state.I0, r0, L)
     infections = renewal_infections(Rt, g, seed_vec)
     cumulative = cumsum(infections)
     ## Current growth rate from the last two days; n ≥ 2 (the cut-off grid
@@ -302,30 +332,32 @@ streams. Samples
 - `τ_test` — the fraction of suspected cases that are sampled and routed
   to the laboratory pipeline.
 
-The default `λ_bg` prior is a half-normal
-`truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
-expected suspected-case count over the grid is `λ_bg · T`, with `T` the
-seeding-to-cut-off span. The prior is deliberately informative because
-`λ_bg` is degenerate with outbreak size (the per-vintage reported mean
-mixes the `p_drc`-scaled BVD increment with `λ_bg · Δt`), so a diffuse
-prior lets the background absorb arbitrarily many suspected cases and
-resolve at the high end where the deaths and exports streams anchor `C_T`.
-A background-noise process must not be able to explain more suspected
-cases than were ever reported. With SD 1.0 the median background is
-≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
-≈ 1077 suspected cases observed by the 26 May cut-off while still
-admitting a genuine non-BVD signal; a wider SD (e.g. SD 5) left a second
-posterior mode in which the background explains the majority of suspected
-cases (positivity ≈ 0.2, background ≈ 2.3× the observed total). Pass
-`lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
-(mean ≈ 0.71).
+The default `λ_bg` prior is `truncated(Normal(0.5, 0.3); lower = 0)`, a
+half-normal with its CENTRE shifted above zero. Its total contribution to
+the expected suspected-case count over the grid is `λ_bg · T`, with `T`
+the seeding-to-cut-off span. The prior is deliberately informative and
+non-zero-centred because `λ_bg` is degenerate with outbreak size (the
+per-vintage reported mean mixes the `p_drc`-scaled BVD increment with
+`λ_bg · Δt`): a diffuse prior lets the background absorb arbitrarily many
+suspected cases and resolve at the high end where the deaths and exports
+streams anchor `C_T`, while a prior with its mode AT zero leaves a second
+mode that collapses the background to zero (the suspected-death definition
+and the laboratory's large negative fraction imply a genuine non-BVD
+signal exists). Centring at 0.5/day with SD 0.3 pins a sane non-zero
+background — mode 0.5/day, 95% bound ≈ 1.1/day, ≈ 50 of the ≈ 1077
+suspected cases over a ≈ 100-day grid — a modest minority that still
+admits a real non-BVD signal but cannot explain the majority of suspected
+cases. Earlier diffuse SD-1 / SD-5 priors left a second posterior mode in
+which the background explained most suspected cases (positivity ≈ 0.2);
+the tightened above-zero centre removes that mode. Pass `lambda_prior` to
+override. `τ_test` defaults to `Beta(5, 2)` (mean ≈ 0.71).
 
 The derived per-suspected positivity is exposed inside
 [`reported_cases_model`](@ref); the per-test positivity inside
 [`confirmed_cases_model`](@ref). Returns `(; λ_bg, τ_test)`.
 """
 @model function test_positivity_model(;
-        lambda_prior = truncated(Normal(0.0, 1.0); lower = 0),
+        lambda_prior = truncated(Normal(0.5, 0.3); lower = 0),
         fraction_tested_prior = Beta(5.0, 2.0))
     λ_bg ~ lambda_prior
     τ_test ~ fraction_tested_prior
@@ -342,9 +374,10 @@ plausibly drives both streams, so the two backgrounds can share this
 submodel's hyperparameters.
 
 The baseline `λ_mu` is the scalar background rate on its natural
-half-normal scale, with the same informative default as the scalar
-`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases; pass a tighter
-`baseline_prior` for deaths). The per-vintage rate is a multiplicative
+half-normal scale, with the same informative above-zero-centred default as
+the scalar `λ_bg` (`truncated(Normal(0.5, 0.3); lower = 0)` for cases;
+pass a tighter `baseline_prior` for deaths). The per-vintage rate is a
+multiplicative
 log-normal deviation from this baseline,
 
 ```math
@@ -364,7 +397,7 @@ windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
 per-vintage rates.
 """
 @model function background_re_model(nv::Integer, σ_bg::Real;
-        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
+        baseline_prior = truncated(Normal(0.5, 0.3); lower = 0))
     m = max(nv, 1)
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), m))
@@ -403,6 +436,22 @@ Matches the integral `main` prior. Returns `(; s_test)`.
 @model function test_sensitivity_model(; sensitivity_prior = Beta(30.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
+end
+
+"""
+PCR specificity prior for the Ebola assay. `Beta(60, 2)` has mean ≈ 0.97
+and 95% interval ≈ 0.91–0.998, a high-but-imperfect specificity reflecting
+that a small fraction of non-BVD specimens test positive (cross-reaction,
+contamination, low-level false positives). Used by the composition-linked
+confirmed-case positivity so the tested-positive probability is
+`p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share: the
+false-positive term `(1 − spec)(1 − q)` makes the confirmed counts respond
+to the non-BVD share `1 − q`, so the laboratory data identify the
+background `λ_bg` rather than only the BVD signal. Returns `(; spec)`.
+"""
+@model function test_specificity_model(; specificity_prior = Beta(60.0, 2.0))
+    spec ~ specificity_prior
+    return (; spec)
 end
 
 """

@@ -16,6 +16,7 @@ const SAMPLES = length(ARGS) >= 1 ? parse(Int, ARGS[1]) : 500
 const CHAINS = length(ARGS) >= 2 ? parse(Int, ARGS[2]) : 4
 const AD = length(ARGS) >= 3 ? ARGS[3] : "mooncake"
 const PLINK = length(ARGS) >= 4 ? Symbol(ARGS[4]) : :free
+const BG_RE = length(ARGS) >= 5 ? parse(Bool, ARGS[5]) : true
 
 ## Enzyme is opt-in (~3x faster than the Mooncake default on the joint).
 ## Its weak-dep extension registers only once `Enzyme` is loaded.
@@ -41,7 +42,8 @@ model = bvd_joint(
     lab_history = obs.lab_history,
     tests_received_history = obs.tests_received_history,
     breakpoint = BREAKPOINT,
-    background_re = true,
+    export_last_offset = obs.export_last_offset,
+    background_re = BG_RE,
     confirmed_positivity_link = PLINK,
     genetic = genetic_seeding_model,
     tmrca_days = obs.tmrca_days)
