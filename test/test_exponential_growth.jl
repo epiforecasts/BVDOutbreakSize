@@ -49,10 +49,12 @@ end
     m = vec(Array(chn[:m]))
     T = vec(Array(chn[:T]))
 
-    ## Centre near 9, SD near 3 (truncated Normal(9, 3)): the prior is
-    ## deliberately wide so T stays uncertain.
-    @test 8.0 < mean(m) < 10.0
-    @test 2.5 < std(m) < 3.3
+    ## Centre near 4.5, SD near 3 (truncated Normal(4.5, 3); lower 0): the
+    ## prior is deliberately wide so T stays uncertain, but centred in the
+    ## genetically-plausible window rather than at ~180 days. The lower
+    ## truncation lifts the mean slightly above the 4.5 centre.
+    @test 4.0 < mean(m) < 5.6
+    @test 2.3 < std(m) < 3.1
     ## The induced T is correspondingly wide (SD well above the SD-3
     ## tightness of a fixed-anchor placement).
     @test std(T) > 30.0
