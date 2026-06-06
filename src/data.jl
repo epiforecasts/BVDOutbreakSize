@@ -268,33 +268,32 @@ function load_observations(
     )
 end
 
-## Doubling-count prior base: McCabe et al.'s first report (18 May
-## 2026; 88 suspected deaths, central CFR 0.30). Their Method 2
-## back-calculates cumulative cases from deaths as
-## `C(T) = D · (1 + r/β)^α / CFR`, with `r = log(2)/τ` the growth rate
-## and `Gamma(α = 4.3, θ = 2.6)` the onset-to-death delay (rate
-## `β = 1/θ`). At their 14-day central doubling time this gives
-## `C ≈ 494`, reproducing their published 501. Our growth prior now
-## follows the molecular clock (`M_PRIOR_DOUBLING_DAYS = 20`, below),
-## and the deaths-based estimate scales with the doubling time: slower
-## growth places fewer cases relative to the same deaths. Re-evaluating
-## the back-calculation at `τ = 20` gives `C ≈ 425`, so the base is
-## `log2(425) ≈ 8.73` rather than the 14-day `log2(501) ≈ 9`. `C(T) =
-## 2^m` is now the cumulative *infection* count, but 8.73 is kept as a
-## weakly-informative centre of the same order: the prior only sets
-## where the sampler starts and the fit is likelihood-dominated, so the
-## small incubation rescale between infections and cases is not worth
-## carrying here. The centre advances by one doubling per
-## `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
-## `M_PRIOR_DOUBLING_DAYS` is the central doubling time, set to 20 days
-## from Cuomo-Dannenburg & Ghafari's molecular-clock reanalysis
-## (cuomodannenburg2026; mean 15.2-24.5 days across six clock
-## assumptions), so the size and growth priors share one central
-## doubling time and the base is derived under that same clock (see
-## [`exponential_growth_model`](@ref)).
+## Doubling-count prior base: anchors the *outbreak start* (seeding
+## time), not the outbreak size. The implied start is `T = m·τ` with
+## `τ = log(2)/r` the doubling time, so the base must rescale whenever
+## the growth prior's central doubling time changes, to hold the same
+## seeding time. McCabe et al.'s first report (18 May 2026) implied
+## `m = 9` doublings at their 14-day central doubling, a start
+## `T = 9·14 = 126` days before 18 May. The growth prior now follows
+## the molecular clock (`M_PRIOR_DOUBLING_DAYS = 20`, below), so holding
+## that 126-day start gives `126/20 = 9·14/20 ≈ 6.3`, rounded to
+## `M_PRIOR_BASE = 6`. This implies a small BVD outbreak at 18 May
+## (`2^6 ≈ 64` BVD), with the bulk of the ≈516 observed suspected cases
+## being non-BVD background — coherent with the high-background
+## picture. `C(T) = 2^m`
+## is the cumulative *infection* count; the prior only sets where the
+## sampler starts and the fit is likelihood-dominated, so the small
+## incubation rescale between infections and cases is not worth carrying
+## here. The centre advances by one doubling per `M_PRIOR_DOUBLING_DAYS`
+## of elapsed time to the cut-off. `M_PRIOR_DOUBLING_DAYS` is the central
+## doubling time, set to 20 days from Cuomo-Dannenburg & Ghafari's
+## molecular-clock reanalysis (cuomodannenburg2026; mean 15.2-24.5 days
+## across six clock assumptions), so the size and growth priors share
+## one central doubling time and the base re-anchors the start under
+## that same clock (see [`exponential_growth_model`](@ref)).
 const M_PRIOR_BASE_DATE = "2026-05-18"
 const M_PRIOR_DOUBLING_DAYS = 20.0
-const M_PRIOR_BASE = 8.73
+const M_PRIOR_BASE = 6.0
 
 """
     m_prior_centre(as_of_date; base_date, m_base, doubling_days)
@@ -308,14 +307,16 @@ m_0 = m_\\text{base} +
     \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
 ```
 
-The base is McCabe et al.'s first report (18 May 2026; Method 2 central
-501 cases ⇒ `m ≈ 9`), advancing at the central 20-day doubling time
-(`M_PRIOR_DOUBLING_DAYS`, the molecular-clock estimate of
-cuomodannenburg2026), so the prior stays centred on the plausible outbreak
-size as the cut-off moves — it tracks data refreshes without manual edits,
-and a McCabe-date fit recovers the base value. `C(T) = 2^m` is now the
-cumulative *infection* count; 9 is kept as a weakly-informative centre of
-the same order rather than rescaled to a case-equivalent infection count.
+The base anchors the *outbreak start*: McCabe et al.'s first report
+(18 May 2026) implied `m = 9` at a 14-day doubling, a start
+`T = m·τ ≈ 126` days earlier. Holding that start under the 20-day
+molecular clock (`M_PRIOR_DOUBLING_DAYS`, the cuomodannenburg2026
+estimate) gives `M_PRIOR_BASE = 9·14/20 ≈ 6.3`, rounded to 6. The
+centre then advances at the same 20-day doubling time as the cut-off
+moves, so it tracks data refreshes without manual edits and a
+McCabe-date fit recovers the base value. `C(T) = 2^m` is the cumulative
+*infection* count, kept as a weakly-informative start anchor rather than
+rescaled to a case-equivalent infection count.
 """
 function m_prior_centre(as_of_date::AbstractString;
         base_date::AbstractString = M_PRIOR_BASE_DATE,
