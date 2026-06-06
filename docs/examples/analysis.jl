@@ -1945,18 +1945,19 @@ streams_C_table = streams_table(
 
 streams_C_table #hide
 
-# Overlaid posterior densities of $C_T$ from the five fits:
+# Overlaid posterior densities of the cumulative infection count from the
+# five fits.
+# The horizontal axis is clipped to the ninetieth percentile of the joint
+# fit so the long right tail of the DRC-cases fit does not flatten the
+# other curves; that tail continues beyond the panel.
 
 #md # ```@raw html
 #md # <details><summary>Overlaid C_T density plot</summary>
 #md # ```
 
-## Clip the x-axis so the exports-deaths heavy tail does not
-## compress the other curves.
-density_xmax = 1.1 * maximum(quantile(v, 0.95)
-for v in (
-    posterior_C_exports, posterior_C_deaths, posterior_C_cases,
-    posterior_C_confirmed, posterior_C_joint))
+## Clip the x-axis to the 90th percentile of the joint posterior so the
+## heavy DRC-cases right tail does not compress the other curves.
+density_xmax = 1.05 * quantile(posterior_C_joint, 0.90)
 
 cumulative_density_fig = plot_cumulative_cases(
     "exports (cases)" => posterior_C_exports,
