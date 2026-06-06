@@ -1,10 +1,10 @@
-# Gibbs joint fit with an EXPLICIT, sampled outbreak start time `T`.
-# Samples the outbreak age `T` in its own Gibbs block (HMC by default)
-# and NUTS on every other continuous parameter, replacing the renewal
-# model's post-hoc `seeding_age` crossing (which produced a two-stage
-# spike and a tiny-outbreak multimodal collapse). Writes live progress to
-# logs/gibbs_start_fit.log and prints a posterior summary with the `T`
-# posterior front and centre.
+# Gibbs joint fit with EXPLICIT (m, r) → (T, C_T) seeding (main's
+# `exponential_growth_model` ported into the renewal). Samples the size
+# coordinate `(m, r)` in its own Gibbs block (HMC by default) and NUTS on
+# every other continuous parameter, so the block can move across the
+# multimodal `C_T = 2^m` basins (the #208 split) while NUTS handles the
+# conditional geometry. Writes live progress to logs/gibbs_*_fit.log and
+# prints a posterior summary with the `T`/`C_T` posterior front and centre.
 #
 # Run: JULIA_NUM_THREADS=4 julia --project=. \
 #        scripts/fit_joint_gibbs_start.jl [samples] [chains] [plink]
@@ -76,6 +76,21 @@ try
     println("  (tmrca_days = ", obs.tmrca_days, ", grid n = ", obs.n, ")")
 catch e
     println("  (T absent: ", e, ")")
+end
+
+## Per-chain C_T / T means: the #208 multimodality test. If Gibbs-blocking
+## the size coordinate worked, chains should agree (no basin split).
+println("\n=== Per-chain means (basin-split check) ===")
+for sym in (:C_T, :T)
+    try
+        arr = Array(chn[sym])
+        if ndims(arr) == 2
+            println("  ", rpad(string(sym), 5), " per chain: ",
+                [round(sum(arr[:, c]) / size(arr, 1); digits = 1)
+                 for c in 1:size(arr, 2)])
+        end
+    catch
+    end
 end
 
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")

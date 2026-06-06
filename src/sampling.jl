@@ -2,7 +2,7 @@
 # to fit every Turing model.
 
 using Turing: Gibbs, HMC, MH
-using Turing.DynamicPPL: VarInfo, VarName, getsym, @varname
+using Turing.DynamicPPL: VarInfo, VarName, @varname
 
 """
 Mooncake reverse-mode AD with default `Mooncake.Config()`. Used as
@@ -209,42 +209,41 @@ function nuts_sample(model;
 end
 
 """
-All sampled `VarName`s of `model` whose leaf symbol is NOT `target_sym`,
-collected from a fresh `VarInfo`. The outbreak-start time enters the
-model through the `seed_time` submodel, so its `VarName` carries that
-submodel's prefix (`start_state.T`) and its leaf symbol is the prefix
-(`:start_state`); filtering on that symbol pulls the whole start block out
-of the NUTS group. Used by [`gibbs_sample`](@ref) so the Gibbs partition
-is derived from the model rather than hard-coded and stays correct as
-parameters are added.
+All sampled `VarName`s of `model` EXCEPT those in `target_vns`, collected
+from a fresh `VarInfo`. The seeding `m` enters the model through the
+`exponential_growth_model` submodel, so its `VarName` carries that
+submodel's prefix (`growth_state.m`); filtering it out (by exact `VarName`
+match, leaving `growth_state.r` in the NUTS group) pulls only the size
+coordinate into its own block. Used by [`gibbs_sample`](@ref) so the Gibbs
+partition is derived from the model rather than hard-coded and stays
+correct as parameters are added.
 """
-function _other_varnames(model, target_sym::Symbol)
+function _other_varnames(model, target_vns)
     vi = VarInfo(model)
     out = VarName[]
     for vn in keys(vi)
-        getsym(vn) === target_sym || push!(out, vn)
+        any(t -> t == vn, target_vns) || push!(out, vn)
     end
     return out
 end
 
 """
-Gibbs fit of `model` that samples the outbreak-start time in its OWN
-block, with NUTS on every other (continuous) parameter. The explicit
-outbreak age `T` (see [`seed_time_model`](@ref) and the `fit_start = true`
-path of [`infection_model`](@ref)) is updated by a separate sampler so the
-start time can move with WIDE, sensible uncertainty without the rest of
-the continuous geometry pinning it through a shared mass matrix — the
-renewal analogue of the integral model's explicitly-sampled `T`.
+Gibbs fit of `model` that samples the doubling count `m` in its OWN block,
+with NUTS on every other (continuous) parameter (including the
+molecular-clock rate `r`). `m` sets the cumulative SIZE `C_T = 2^m` and is
+the MULTIMODAL coordinate behind the #208 basin split, so it is updated by
+a separate sampler that can move across `C_T` basins while NUTS handles
+the conditional geometry of the rest, exactly mirroring main's
+`(m, r)`-seeded model (see [`exponential_growth_model`](@ref) and the
+`fit_start = true` path of [`infection_model`](@ref)).
 
-The continuous block runs `NUTS(target_accept; adtype)`; the start block
-runs `start_sampler`, an `HMC` leapfrog step by default (a small,
-gradient-based move on the single, scalar, differentiable start time),
-with `MH()` available as a gradient-free alternative. `target_vn` is the
-`VarName` of the start-time variable, defaulting to `@varname(start_state.T)`
-(the outbreak age `T` inside the `seed_time` submodel); `target_sym` is the
-symbol filtered out of the NUTS group (the submodel-prefix symbol
-`:start_state`). Chains initialise from the prior. Other keywords mirror
-[`nuts_sample`](@ref).
+The continuous block runs `NUTS(target_accept; adtype)`; the size block
+runs `start_sampler`, an `HMC` leapfrog step by default (a gradient-based
+move on the scalar `m`), with `MH()` available as a gradient-free
+alternative able to jump basins. `target_vns` are the size `VarName`s,
+defaulting to just `growth_state.m`; they are removed from the NUTS group
+by exact `VarName` match. Chains initialise from the prior. Other keywords
+mirror [`nuts_sample`](@ref).
 """
 function gibbs_sample(model;
         samples::Integer = 1_000,
@@ -255,16 +254,15 @@ function gibbs_sample(model;
         adtype = default_adtype(),
         init = InitFromPrior(),
         check_model::Bool = true,
-        target_vn = @varname(start_state.T),
-        target_sym::Symbol = getsym(target_vn),
-        start_sampler = HMC(0.05, 8; adtype),
+        target_vns = (@varname(growth_state.m),),
+        start_sampler = HMC(0.02, 10; adtype),
         callback = nothing,
         kwargs...)
     rng = MersenneTwister(seed)
-    others = _other_varnames(model, target_sym)
+    others = _other_varnames(model, target_vns)
     spl = Gibbs(
         Tuple(others) => NUTS(target_accept; adtype),
-        (target_vn,) => start_sampler)
+        Tuple(target_vns) => start_sampler)
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     return sample(
         rng,

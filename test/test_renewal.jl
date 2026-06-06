@@ -326,20 +326,46 @@ end
     @test Ib[n] < I[n]
 end
 
-@testitem "seed_time_model: wide unimodal prior on outbreak age T" begin
+@testitem "exponential_growth_model: (m,r) → explicit T and C_T" begin
     using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: seed_time_model
+    using BVDOutbreakSize: exponential_growth_model
 
-    n = 100
-    chn = sample(seed_time_model(n), Prior(), 2000;
+    chn = sample(exponential_growth_model(), Prior(), 2000;
         chain_type = FlexiChains.VNChain, progress = false)
+    m = vec(Array(chn[:m]))
+    r = vec(Array(chn[:r]))
     T = vec(Array(chn[:T]))
-    @test all(1 .<= T .<= n)
-    ## Centred in the plausible window with broad spread.
-    @test 0.5n < sum(T) / length(T) < 0.85n
-    s = sort(T)
+    C_T = vec(Array(chn[:C_T]))
+    @test all(m .>= 0)
+    @test all(r .> 0)
+    ## T = m·τ = m·log(2)/r and C_T = 2^m hold exactly per draw.
+    @test all(isapprox.(T, m .* log(2) ./ r; rtol = 1e-6))
+    @test all(isapprox.(C_T, 2.0 .^ m; rtol = 1e-6))
+    ## m centred near 9 (C_T ≈ 512) with broad spread.
+    @test 6 < sum(m) / length(m) < 12
+    s = sort(m)
     lo = s[round(Int, 0.05 * length(s))]
     hi = s[round(Int, 0.95 * length(s))]
-    @test hi - lo > 0.3n   # wide
+    @test hi - lo > 4   # wide
+end
+
+@testitem "infection_model fit_start: explicit (m,r) → T, C_T = 2^m" begin
+    using Turing: sample, Prior, returned, @varname
+    import FlexiChains
+    using BVDOutbreakSize: infection_model
+
+    n = 90
+    model = infection_model(n; fit_start = true)
+    chn = sample(model, Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false)
+    rets = returned(model, chn)
+    ## Per draw the explicit deterministics hold: C_T = 2^m, T = m·log2/r,
+    ## the seed SIZE and outbreak age come straight from (m, r).
+    m = vec(Array(chn[@varname(growth_state.m)]))
+    @test all(isapprox.([r.C_T for r in vec(rets)], 2.0 .^ m; rtol = 1e-4))
+    @test all(r.C_T > 0 && r.T > 0 && isfinite(r.T) for r in vec(rets))
+    ## Cumulative infections at the cut-off are rescaled to equal C_T.
+    @test all(isapprox(r.cumulative[end], r.C_T; rtol = 1e-3) for
+    r in vec(rets))
 end
