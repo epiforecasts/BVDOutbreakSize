@@ -304,10 +304,13 @@ Random.seed!(20260518)
 ## Loading TensorBoardLogger activates the package's tracing extension.
 haskey(ENV, "BVD_TRACE_DIR") && @eval using TensorBoardLogger
 function trace_kw(label)
-    ## A high target-acceptance (small step) clears the residual
-    ## divergences in the joint fit's geometry (71 -> ~4 at δ=0.99) while
-    ## keeping R-hat ≈ 1.0; harmless for the simpler single-stream fits.
-    base = (; target_accept = 0.99)
+    ## A relaxed target-acceptance (δ = 0.9) keeps the docs build within
+    ## the CI time budget. Larger NUTS steps mean a handful of
+    ## divergences in the joint fit's geometry are accepted and expected;
+    ## R-hat on the headline parameters stays ≈ 1.0. Two longer chains
+    ## (set via the `nuts_sample` defaults) halve the per-chain warmup and
+    ## compile cost relative to four shorter ones.
+    base = (; target_accept = 0.9)
     haskey(ENV, "BVD_TRACE_DIR") ?
     (; base..., callback = tensorboard_callback(
             joinpath(ENV["BVD_TRACE_DIR"], label)),
@@ -1981,8 +1984,9 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # NUTS [hoffman2014nuts](@cite) with Mooncake [mooncake_jl](@cite)
-# reverse-mode automatic differentiation, four chains, 1000 post-warmup
-# draws each, with a target acceptance probability of 0.95. Chains
+# reverse-mode automatic differentiation, two chains, 1500 post-warmup
+# draws each, with a target acceptance probability of 0.9. The relaxed
+# target trades a few accepted divergences for a faster fit. Chains
 # initialise from the prior to keep the sampler away from the boundary
 # of $r$ and $m$. We fit the joint model and the four single-stream
 # models so the per-stream posteriors over $C(T)$ can be compared with
