@@ -485,23 +485,26 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
 end
 
 """
-Three-panel histogram of the new-this-week forecast counts (cases,
-deaths, exports) from [`forecast_reported`](@ref).
+Histogram panels of the new-this-week forecast counts from
+[`forecast_reported`](@ref): new infections, new true BVD deaths (DRC) and
+the new laboratory-confirmed cases / confirmed deaths (DRC) when the chain
+carries the lab parameters. Uganda exports are shown only when
+`forecast_exports = true` produced the `:exports_new` column.
 """
 function plot_forecast(fc::DataFrame)
     cols = Tuple{Symbol, String, Symbol}[
     (
-        :cases_new, "New reported cases (DRC)", :steelblue),
+        :infections_new, "New infections", :slateblue),
     (
-        :deaths_new, "New deaths (DRC)", :firebrick)
+        :bvd_deaths_new, "New BVD deaths (DRC)", :firebrick)
 ]
-    :exports_new in propertynames(fc) && push!(cols,
-        (:exports_new, "New exports (Uganda)", :seagreen))
-    :tests_new in propertynames(fc) && push!(cols,
-        (:tests_new, "New tests analysed (DRC)", :teal))
     :confirmed_new in propertynames(fc) && push!(cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
-    ncols = min(length(cols), 3)
+    :confirmed_deaths_new in propertynames(fc) && push!(cols,
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange))
+    :exports_new in propertynames(fc) && push!(cols,
+        (:exports_new, "New exports (Uganda)", :seagreen))
+    ncols = min(length(cols), 2)
     nrows = cld(length(cols), ncols)
     fig = Figure(; size = (370 * ncols, 360 * nrows))
     for (i, (col, title, colour)) in enumerate(cols)
@@ -518,47 +521,39 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
-Validation figure for a [`forecast_reported`](@ref) projection, laid out
-as a 2×3 grid. The top row shows the cumulative forecast distribution per
-stream (DRC reported cases, DRC deaths, Uganda exports); the bottom row
-shows the new counts forecast over the horizon, mirroring the
-one-week-ahead forecast. Each panel is a histogram with the 90%
-predictive interval shaded and the later-observed count drawn as a dashed
-black rule. `cases`, `deaths` and `exports` are the observed cumulative
-counts; `baseline_*` are the counts at the forecast origin, so the
+Coverage plot for [`forecast_vs_truth`](@ref): a 2x2 grid scoring the
+confirmed-case and confirmed-death forecast against the later-observed
+counts. The top row shows the predicted cumulative count at the target
+date for each quantity, the bottom row the new count over the forecast
+horizon. Each panel is a histogram of the posterior-predictive draws with
+the 90% predictive interval shaded and the later-observed count drawn as a
+dashed black rule, so coverage can be read off directly.
+
+`fc` is a [`forecast_reported`](@ref) result carrying `:confirmed_new` and
+`:confirmed_deaths_new`. `confirmed` / `confirmed_deaths` are the observed
+cumulative counts at the target date; `baseline_confirmed` /
+`baseline_confirmed_deaths` are the cut-off cumulative counts the forecast
+started from, so the cumulative prediction is `baseline + new` and the
 observed new count is the cumulative truth minus the baseline.
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        cases::Real, deaths::Real, exports::Real,
-        confirmed::Union{Real, Missing} = missing,
-        tests::Union{Real, Missing} = missing,
-        baseline_cases::Real = 0, baseline_deaths::Real = 0,
-        baseline_exports::Real = 0,
-        baseline_confirmed::Real = 0,
-        baseline_tests::Real = 0)
-    streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}([
-        (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue,
-            float(cases), float(cases) - float(baseline_cases)),
-        (:deaths_cum, :deaths_new, "deaths (DRC)", :firebrick,
-            float(deaths), float(deaths) - float(baseline_deaths)),
-        (:exports_cum, :exports_new, "exports (Uganda)", :seagreen,
-            float(exports), float(exports) - float(baseline_exports))
-    ])
-    tests !== missing && :tests_cum in propertynames(fc) &&
-        push!(streams,
-            (:tests_cum, :tests_new, "tests analysed (DRC)", :teal,
-                float(tests), float(tests) - float(baseline_tests)))
-    confirmed !== missing && :confirmed_cum in propertynames(fc) &&
-        push!(streams,
-            (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)",
-                :goldenrod, float(confirmed),
-                float(confirmed) - float(baseline_confirmed)))
-    ncols = length(streams)
-    fig = Figure(; size = (370 * ncols, 680))
+        confirmed::Real, confirmed_deaths::Real,
+        baseline_confirmed::Real, baseline_confirmed_deaths::Real)
+    :confirmed_new in propertynames(fc) &&
+    :confirmed_deaths_new in propertynames(fc) ||
+        error("plot_forecast_vs_truth needs :confirmed_new and " *
+              ":confirmed_deaths_new columns")
+    streams = [
+        (:confirmed_new, "confirmed cases (DRC)", :goldenrod,
+            float(confirmed), float(baseline_confirmed)),
+        (:confirmed_deaths_new, "confirmed deaths (DRC)", :darkorange,
+            float(confirmed_deaths), float(baseline_confirmed_deaths))
+    ]
+    fig = Figure(; size = (370 * length(streams), 680))
     function panel!(row, col, v, obs, title, colour)
+        upper = max(1.0, quantile(v, 0.995), obs * 1.05)
         lo = quantile(v, 0.05)
         hi = quantile(v, 0.95)
-        upper = max(1.0, quantile(v, 0.995), obs * 1.05)
         ax = Axis(fig[row, col];
             xlabel = title, ylabel = "Predictive frequency",
             limits = ((0, upper), nothing))
@@ -567,10 +562,51 @@ function plot_forecast_vs_truth(fc::DataFrame;
             color = (colour, 0.7))
         vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
-    for (j, (ccol, ncol, name, colour, obs_cum, obs_new)) in
-        enumerate(streams)
-        panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour)
-        panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour)
+    for (j, (ncol, name, colour, obs_cum, base)) in enumerate(streams)
+        new = fc[!, ncol]
+        panel!(1, j, new .+ base, obs_cum, "Cumulative $name", colour)
+        panel!(2, j, new, max(obs_cum - base, 0.0), "New $name", colour)
+    end
+    return fig
+end
+
+"""
+Four-panel density of the committed counterfactual totals from
+[`predict_committed`](@ref): the committed infections (the current
+outbreak size `C(T)`, flat under no onward transmission), committed true
+BVD deaths, committed laboratory-confirmed cases and committed confirmed
+deaths over the counterfactual horizon. Each panel is a posterior density;
+the confirmed panels carry a dashed black rule at the already-observed
+cumulative count when `obs_confirmed` / `obs_confirmed_deaths` are passed,
+since the committed total can only add to what the lab has confirmed.
+"""
+function plot_committed(df::DataFrame;
+        obs_confirmed::Union{Real, Missing} = missing,
+        obs_confirmed_deaths::Union{Real, Missing} = missing)
+    panels = Tuple{Symbol, String, Symbol, Union{Real, Missing}}[
+    (
+        :infections, "Committed infections", :slateblue, missing),
+    (
+        :bvd_deaths, "Committed BVD deaths (DRC)", :firebrick, missing)]
+    :confirmed_cases in propertynames(df) && push!(panels,
+        (:confirmed_cases, "Committed confirmed cases (DRC)",
+            :goldenrod, obs_confirmed))
+    :confirmed_deaths in propertynames(df) && push!(panels,
+        (:confirmed_deaths, "Committed confirmed deaths (DRC)",
+            :darkorange, obs_confirmed_deaths))
+    ncols = min(length(panels), 2)
+    nrows = cld(length(panels), ncols)
+    fig = Figure(; size = (490 * ncols, 360 * nrows))
+    for (i, (col, title, colour, rule)) in enumerate(panels)
+        r, c = cld(i, ncols), mod1(i, ncols)
+        ax = Axis(fig[r, c];
+            xlabel = title, ylabel = "Posterior density",
+            title = "Committed total (no onward transmission)")
+        density!(ax, df[!, col]; color = (colour, 0.5),
+            strokecolor = colour, strokewidth = 2)
+        rule !== missing &&
+            vlines!(ax, [float(rule)];
+                color = :black, linestyle = :dash, linewidth = 2)
     end
     return fig
 end

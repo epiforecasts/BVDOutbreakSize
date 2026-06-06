@@ -18,7 +18,7 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Binomial, BetaBinomial, Normal,
+                     NegativeBinomial, Binomial, Normal,
                      LogNormal, Beta, truncated, censored
 using StatsFuns: logit, logistic
 import FastGaussQuadrature
@@ -51,19 +51,20 @@ export REPORT_SCENARIOS,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        predict_no_onward_deaths, plot_no_onward_deaths,
+       predict_committed, plot_committed,
        forecast_reported, forecast_table, plot_forecast,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth,
 # prior submodels
        exponential_growth_model, genetic_seeding_model, delay_model,
        report_delay_model, test_sensitivity_model,
-       test_positivity_model, test_specificity_model, test_selection_model,
-       confirmed_overdispersion_model, confirmed_q_re_model,
-       analysed_impute_model,
+       test_positivity_model, test_specificity_model,
+       severity_enrichment_model, confirmed_q_re_model,
+       epi_exclusion_model,
        reported_dispersion_model,
        lab_receipt_delay_model, lab_capacity_model,
        incubation_model,
-       cfr_model, death_coverage_model,
+       cfr_model, death_background_model, death_forward_model,
        detection_window_model, traveller_volume_model,
        surveillance_dispersion_model, pooled_ascertainment_model,
        independent_ascertainment_model,

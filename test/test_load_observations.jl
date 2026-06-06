@@ -73,16 +73,19 @@
     @test obs.sources.death_history isa String
     @test !isempty(obs.sources.death_history)
 
-    ## confirmed-case history runs to the 28 May cut-off; its final
+    ## confirmed-case history runs to the 3 June cut-off; its final
     ## vintage equals the cut-off `confirmed_cases` total.
     @test obs.confirmed_case_history.values ==
-          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210]
+          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
+        282, 321, 344, 363, 381]
     @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
 
-    ## confirmed deaths: recorded, flat at 17 over the fitted window.
+    ## confirmed deaths: flat at 17 through 28 May, then the late-
+    ## confirmation catch-up to 64 on 3 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_death_history isa NamedTuple
-    @test obs.confirmed_death_history.values == [17, 17, 17]
+    @test obs.confirmed_death_history.values ==
+          [17, 17, 17, 42, 42, 48, 60, 62, 64]
     @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
     @test obs.sources.confirmed_death_history isa String
 
@@ -128,10 +131,12 @@ end
     @test obs.tests_received_history.dates ==
           obs.tests_analysed_history.dates
     ## Per-vintage confirmed positives never exceed tests analysed (the
-    ## binomial denominator), checked on the shared 23-28 May tail.
+    ## binomial denominator), checked on the shared 23-28 May lab dates
+    ## (the confirmed history now runs past them to 3 June).
     ch = obs.confirmed_case_history
-    tail = ch.values[(end - 5):end]
-    @test all(tail .<= obs.tests_analysed_history.values)
+    aidx = [findfirst(==(d), ch.dates)
+            for d in obs.tests_analysed_history.dates]
+    @test all(ch.values[aidx] .<= obs.tests_analysed_history.values)
 
     @test obs.sources.tests_received_history isa String
     @test obs.sources.tests_analysed_history isa String
@@ -248,4 +253,48 @@ end
         open(io -> _write_obs(io; as_of = "2026-05-26"), path, "w")
         @test load_observations(path).exported_cases_daily == Int[]
     end
+end
+
+@testitem "as_of_override truncates to the earlier cut-off" begin
+    using BVDOutbreakSize: load_observations
+    using Dates: Date, value
+
+    ## The committed data file's own cut-off (3 June) and a one-week
+    ## earlier as-of (28 May). The 28 May totals are the known
+    ## INSP/WHO values: confirmed cases 210, confirmed deaths 17, samples
+    ## analysed 755; the frozen suspected totals stay at their 26 May
+    ## values (reported cases 1077, suspected deaths 246) and the dated
+    ## exports are 3 cases / 1 death detected by 28 May.
+    full = load_observations()
+    cut = load_observations(; as_of_override = "2026-05-28")
+
+    @test cut.as_of_date == "2026-05-28"
+    @test cut.confirmed_cases == 210
+    @test cut.confirmed_deaths == 17
+    @test cut.cumulative_tests_analysed == 755
+    @test cut.reported_cases == 1077
+    @test cut.total_deaths == 246
+    @test cut.exported_cases == 3
+    @test cut.exports_deaths == 1
+
+    ## Histories are truncated to entries on or before the cut-off.
+    @test cut.confirmed_case_history.dates[end] == "2026-05-28"
+    @test all(Date.(cut.confirmed_case_history.dates) .<= Date("2026-05-28"))
+    @test cut.confirmed_death_history.dates[end] == "2026-05-28"
+    @test cut.confirmed_case_history.values[end] == cut.confirmed_cases
+
+    ## Elapsed-time offsets are recomputed relative to the new cut-off, so
+    ## the genetic floor is one week closer than under the 3 June file.
+    @test cut.genetic_tmrca_days ==
+          full.genetic_tmrca_days -
+          value(Date("2026-06-03") - Date("2026-05-28"))
+
+    ## A `Date` argument is equivalent to the ISO string.
+    @test load_observations(; as_of_override = Date("2026-05-28")).as_of_date ==
+          "2026-05-28"
+
+    ## The default (no override) loads the file's own cut-off unchanged.
+    @test full.as_of_date == "2026-06-03"
+    @test full.confirmed_cases == 381
+    @test full.confirmed_deaths == 64
 end

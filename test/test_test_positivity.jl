@@ -1,9 +1,9 @@
 ## Tests for the test-positivity / confirmed-stream submodels in
 ## `src/models/priors.jl` and `src/models/observations.jl`. The confirmed
-## stream models the laboratory-confirmed cases as a severe-first BVD share
-## of the tested pool that relaxes from a near-1 early severe cluster `q0`
-## to a baseline `qinf`, with received counts conditioning the forwarded
-## fraction `τ_forward`.
+## stream models the laboratory-confirmed cases as a composition-linked
+## BVD share of the tested pool (the suspect-pool composition upsampled by
+## a decaying severity enrichment on the analysed-volume clock), with
+## received counts conditioning the forwarded fraction `τ_forward`.
 
 @testitem "sensitivity prior is untruncated Beta(6,2)" begin
     using Turing: sample, Prior
@@ -36,46 +36,20 @@ end
     @test all(0 .< sp .< 1)
 end
 
-@testitem "test_selection_model: q0 near 1, qinf central, decay positive" begin
+@testitem "severity_enrichment_model: δ0 bounded, decay positive" begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: mean
-    using BVDOutbreakSize: test_selection_model
+    using BVDOutbreakSize: severity_enrichment_model
 
-    chn = sample(MersenneTwister(20260518), test_selection_model(),
+    chn = sample(MersenneTwister(20260518), severity_enrichment_model(),
         Prior(), 10_000; progress = false)
-    q0 = vec(Array(chn[:q0]))
-    qinf = vec(Array(chn[:qinf]))
+    δ0 = vec(Array(chn[:δ0]))
     decay = vec(Array(chn[:decay_scale]))
-    @test isapprox(mean(q0), 20 / 21.5; atol = 0.02)    # Beta(20,1.5) mean
-    @test mean(q0) > 0.85                                # severe cluster
-    @test isapprox(mean(qinf), 0.5; atol = 0.02)         # Beta(6,6) central
-    @test all(0 .< q0 .< 1)
-    @test all(0 .< qinf .< 1)
+    ## δ0 ~ N₊(1.5, 0.75): non-negative, moderate enrichment.
+    @test all(δ0 .>= 0)
+    @test isapprox(mean(δ0), 1.5; atol = 0.1)
     @test all(decay .>= 0)
-end
-
-@testitem "severe_first_share: high q0 to baseline qinf, levels off" begin
-    using BVDOutbreakSize: severe_first_share
-
-    q0 = 0.95
-    qinf = 0.3
-    scale = 5.0
-    ## At c = 0 the share is q0 exactly.
-    @test severe_first_share(q0, qinf, 0.0, scale) ≈ q0
-    ## Monotone decline toward qinf, never below it (no overshoot).
-    cs = 0.0:1.0:60.0
-    qs = [severe_first_share(q0, qinf, c, scale) for c in cs]
-    @test all(diff(qs) .<= 1e-12)          # non-increasing
-    @test all(qs .>= qinf - 1e-9)          # bounded below by qinf
-    @test all(qs .<= q0 + 1e-9)
-    ## Far past the decay scale it has effectively levelled at qinf.
-    @test isapprox(severe_first_share(q0, qinf, 80.0, scale), qinf;
-        atol = 1e-3)
-    ## q0 = qinf gives a flat share at every c.
-    @test severe_first_share(0.5, 0.5, 3.0, scale) ≈ 0.5
-    ## Always a valid probability.
-    @test all(0 .<= qs .<= 1)
 end
 
 @testitem "specificity term: spec=1 is s·q, false positives raise p_pos" begin
@@ -172,8 +146,6 @@ end
         @test all(cc[v, :] .<= A[v])
         @test all(cc[v, :] .>= 0)
     end
-    rr = reduce(hcat, vec(Array(pp[:samples_received])))
-    @test all(rr .>= 0)
 end
 
 @testitem "confirmed binomial single-total reduction" tags=[:slow] begin
@@ -351,7 +323,7 @@ end
 
 @testitem "q random effect on by default; nothing recovers baseline" tags=[:slow] begin
     ## With the q-RE on (the default) each vintage's tested BVD share can
-    ## depart from the smooth severe-first baseline, so the confirmed
+    ## depart from the smooth composition baseline, so the confirmed
     ## stream fits the non-monotone positivity. The model must fit under
     ## Prior and keep per-vintage positivity and the cut-off share in
     ## (0, 1); predictive confirmed draws stay bounded by the analysed
@@ -398,7 +370,7 @@ end
         @test all(cc[v, :] .>= 0)
     end
 
-    ## q-RE off recovers the smooth severe-first baseline and still fits.
+    ## q-RE off recovers the smooth composition baseline and still fits.
     chn0 = sample(_qre_conf(C, A, R; q_re = nothing),
         Prior(), 200; chain_type = FlexiChains.VNChain, progress = false)
     pos0 = vec(Array(chn0[:p_positive]))
