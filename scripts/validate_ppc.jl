@@ -23,6 +23,8 @@ pp_joint = predict(
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
         background_re = true),
     chn)

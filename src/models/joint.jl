@@ -29,6 +29,7 @@ exports likelihood only. See [`exports_model`](@ref).
 """
 @model function exports_only_model(
         n::Integer, exported_cases::Union{Missing, Integer};
+        export_case_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
@@ -40,7 +41,8 @@ exports likelihood only. See [`exports_model`](@ref).
     asc_state ~ to_submodel(ascertainment)
     exports_state ~ to_submodel(
         exports(exported_cases, latent.infection_state.infections,
-        asc_state.p_uganda; incubation_pmf = latent.incubation_pmf,
+        asc_state.p_uganda; export_case_days,
+        incubation_pmf = latent.incubation_pmf,
         source_population))
     C_T := latent.infection_state.C_T
 end
@@ -180,6 +182,7 @@ See [`exports_deaths_model`](@ref).
 """
 @model function exports_deaths_only_model(
         n::Integer, exports_deaths::Union{Missing, Integer};
+        export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
@@ -202,7 +205,7 @@ See [`exports_deaths_model`](@ref).
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(exports_deaths,
         exports_state.export_prevalence, deaths_state.CFR,
-        deaths_state.od_pmf, latent.incubation_pmf))
+        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
     C_T := latent.infection_state.C_T
 end
 
@@ -255,6 +258,8 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
         tests_received_history = (; days = Int[], counts = Int[]),
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
@@ -325,11 +330,12 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_history))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
-        incubation_pmf = latent.incubation_pmf, source_population))
+        export_case_days, incubation_pmf = latent.incubation_pmf,
+        source_population))
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(exports_deaths,
         exports_state.export_prevalence, deaths_state.CFR,
-        deaths_state.od_pmf, latent.incubation_pmf))
+        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
 
     if genetic !== nothing
         genetic_state ~ to_submodel(

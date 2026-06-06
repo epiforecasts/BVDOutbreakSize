@@ -27,6 +27,8 @@ pp = predict(
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
         background_re = true),
     chn)
@@ -79,8 +81,16 @@ CairoMakie.save("logs/val_vintage.png", fig1)
 println("OK vintage PPC (with confirmed cases): ", "ok")
 
 # --- scalar PP: exports, export-deaths, confirmed deaths ---
-pp_exports = _srep("exports_state.exported_cases")
-pp_exports_deaths = _srep("exports_deaths_state.exports_deaths")
+## The dated export likelihood scores one Poisson per detection/death day,
+## stored as a single per-day count vector `<prefix>.counts`; the scalar
+## PPC total sums each replicate's per-day vector across the dated days.
+function _dated_total(prefix)
+    k = first(k for k in keys(pp)
+    if occursin("$prefix.counts", string(k)))
+    [sum(v) for v in vec(Array(pp[k]))]
+end
+pp_exports = _dated_total("exports_state.export_obs")
+pp_exports_deaths = _dated_total("exports_deaths_state.death_obs")
 pp_conf_deaths = _srep("confirmed_deaths_state.confirmed_deaths")
 fig2 = plot_posterior_predictive(
     pp_exports, nothing, obs.exported_cases, nothing;

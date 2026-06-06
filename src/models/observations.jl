@@ -88,6 +88,48 @@ function expand_vintage_rate(rate::AbstractVector,
 end
 
 """
+Group a sorted event-day list `event_days` (grid day-indices, ascending,
+one entry per dated event, possibly with repeats) into its unique days and
+the per-day occupancy count, clamped to `[1, n]`. Returns `(days, counts)`
+with `days` the unique detection/death days and `counts[i]` the number of
+events on `days[i]`. Used by [`exports_model`](@ref) and the export-deaths
+likelihood to place one Poisson term per detection/death day with an
+observed count equal to that day's occupancy, so simultaneous imports on
+one day share a single edge. `event_days` must be non-empty.
+"""
+function dated_event_bins(event_days::AbstractVector{<:Integer}, n::Integer)
+    clamped = [clamp(Int(d), 1, Int(n)) for d in event_days]
+    days = unique(clamped)
+    counts = Int[count(==(d), clamped) for d in days]
+    return days, counts
+end
+
+"""
+Per-day Poisson likelihood for a dated event series. Scores the observed
+per-day counts `obs` against the modelled per-day means `means` with one
+Poisson term each, NaN/Inf-safe via [`safe_rate`](@ref). When `obs` is
+`missing` the counts are sampled, the predictive-generator path; the
+indexed `counts[i]` keeps the predict keys (`<prefix>.counts[i]`)
+replicable. Used by [`exports_model`](@ref) and the export-deaths
+likelihood for the dated Uganda export series.
+"""
+@model function dated_poisson_model(means::AbstractVector,
+        counts::Union{Missing, AbstractVector{<:Integer}})
+    n = length(means)
+    ## `counts` is the model argument scored on the LHS of `~`, so a supplied
+    ## vector is observed data DynamicPPL conditions on and a `missing`
+    ## argument is sampled (the predictive-generator path). The indexed
+    ## `counts[i]` keeps the predict keys (`<prefix>.counts[i]`) replicable.
+    if ismissing(counts)
+        counts = Vector{Union{Missing, Int}}(missing, n)
+    end
+    for i in 1:n
+        counts[i] ~ Poisson(safe_rate(means[i]))
+    end
+    return (; means, counts)
+end
+
+"""
 Resolve a stream's per-vintage observation into the vintage day indices
 and the observed between-vintage increment vector to score, given the
 dated cumulative `history` `(; days, counts)`, the cut-off total `total`
@@ -694,18 +736,47 @@ prevalence is the discrete person-time integral, the discrete analogue of
 the integral model's at-risk person-time export integral; the earlier
 onset-incidence form summed `q · onsets`, charging each case only a
 single day of travel risk and so under-counting exports by roughly the
-mean at-risk dwell time. Fitted with Poisson (Uganda's stream is small).
-Samples the traveller volume and the onset-to-detection delay via
-injected submodels. The onset-to-detection prior is centred on the Ebola
-onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d; WHO Ebola Response
-Team 2014, NEJM), the delay from symptom onset to detection at a point of
-entry abroad. Returns the expected count, the per-capita travel rate,
-the daily at-risk prevalence and the daily expected export incidence for
-reuse by [`exports_deaths_model`](@ref).
+mean at-risk dwell time. Samples the traveller volume and the
+onset-to-detection delay via injected submodels. The onset-to-detection
+prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
+SD 4.7 d; WHO Ebola Response Team 2014, NEJM), the delay from symptom
+onset to detection at a point of entry abroad.
+
+## Dated per-day likelihood
+
+The observed Uganda imports are a dated series — `export_case_days` gives
+the grid day-index of each detection (sorted ascending) — fitted as an
+inhomogeneous Poisson process rather than a single cumulative count. The
+cumulative export intensity is `Λ(t) = sum(export_prevalence[1:t])`, so
+the per-day expected export increment `Λ(t) − Λ(t−1)` is just the day-`t`
+at-risk person-time `export_prevalence[t]`. The likelihood places one
+Poisson term per import at its detection day, the increment between
+consecutive detection-day edges (via [`bin_increments`](@ref) on the daily
+prevalence series), with two extra terms:
+
+  - `pre_detection_exports ~ Poisson(Λ(d₁−1))` observed at zero, the
+    first-detection timing bound: no export is expected before the
+    earliest detection day `d₁`. The first import's increment is measured
+    from `Λ(d₁−1)`, so the pre-detection weight and the import increments
+    partition `Λ(t_last)` and the model still conditions on the same total
+    as a cumulative single-Poisson would.
+  - `last_offset` truncation: the travel-gated export clock stops at the
+    last observed import `t_last = day of the most recent detection`. Days
+    after the last import carry no informative zero (cross-border movement
+    shifts over the outbreak and the most recent days are right-truncated
+    by reporting lag), so prevalence past `t_last` does not accrue. With an
+    empty `export_case_days` the model falls back to the cut-off cumulative
+    Poisson `exported_cases ~ Poisson(Λ(T))`.
+
+Returns the expected cumulative count at `t_last`, the per-capita travel
+rate and the daily at-risk prevalence for reuse by
+[`exports_deaths_model`](@ref).
 """
 @model function exports_model(
         exported_cases::Union{Missing, Integer},
         infections::AbstractVector, p_uganda::Real;
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        pre_detection_exports::Union{Missing, Integer} = 0,
         incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model(),
@@ -724,10 +795,35 @@ reuse by [`exports_deaths_model`](@ref).
     ## At-risk prevalence (person-days): infected but not yet detected.
     prevalence = cumsum(infections) .- cumsum(detected_daily)
     export_prevalence = p_uganda .* q .* prevalence
+    n = length(export_prevalence)
 
-    raw_exports = sum(export_prevalence)
-    expected_exports_T := safe_rate(raw_exports)
-    exported_cases ~ Poisson(expected_exports_T)
+    if isempty(export_case_days)
+        ## No dated series: cumulative single-total Poisson at the cut-off.
+        raw_exports = sum(export_prevalence)
+        expected_exports_T := safe_rate(raw_exports)
+        exported_cases ~ Poisson(expected_exports_T)
+    else
+        ## Dated per-day Poisson. The export clock stops at the last import
+        ## `t_last` (the `last_offset` truncation); prevalence past it does
+        ## not accrue. `d₁` is the earliest detection day.
+        days, counts = dated_event_bins(export_case_days, n)
+        d₁ = days[1]
+        ## Pre-detection survival weight Λ(d₁−1): the cumulative export
+        ## intensity up to the day before the earliest detection.
+        pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
+              zero(eltype(export_prevalence))
+        pre_detection_exports ~ Poisson(safe_rate(pre))
+        ## Per-day-edge increments between consecutive detection days; the
+        ## first is measured from the pre-detection weight `pre`, so the
+        ## pre-detection term and the increments partition Λ(t_last).
+        raw_inc = bin_increments(export_prevalence, days)
+        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                 for i in eachindex(raw_inc)]
+        obs = ismissing(exported_cases) ? missing : counts
+        export_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        ## Reported expected count is the cumulative intensity to `t_last`.
+        expected_exports_T := safe_rate(pre + sum(μ_day))
+    end
 
     return (; p_uganda, daily_travellers, q, prevalence,
         export_prevalence,
@@ -735,36 +831,63 @@ reuse by [`exports_deaths_model`](@ref).
 end
 
 """
-Deaths-among-detected-exports likelihood. Deaths accrue among the at-risk
-export person-time of [`exports_model`](@ref): each day's at-risk
-prevalence is weighted by the infection→death CDF at its remaining age to
-the cut-off and summed, scaled by the CFR, the discrete analogue of the
-integral model's `∫ C(s)·S_det(T−s)·F_death(T−s) ds`. The onset-to-death
-PMF shared from [`deaths_model`](@ref) is convolved with the incubation
-PMF to give the infection→death distribution, keyed to infection like the
-prevalence. Fitted with Poisson.
+Deaths-among-detected-exports likelihood, dated per-day. Deaths accrue
+among the at-risk export person-time of [`exports_model`](@ref): the
+day-`t` expected export-death increment is the CFR-scaled convolution of
+the daily at-risk export prevalence with the infection→death PMF,
+
+```math
+\\mathrm{d}\\Lambda_\\text{d}(t) = \\mathrm{CFR}
+    \\sum_{s\\le t} \\text{export\\_prevalence}(s)\\, f_\\text{d}(t-s),
+```
+
+so the cumulative export-death intensity `Λ_d(t)` is its running sum, the
+discrete analogue of the integral model's `∫ C(s)·S_det·F_death ds`. The
+onset-to-death PMF `od_pmf` shared from [`deaths_model`](@ref) is convolved
+with the incubation PMF to give the infection→death distribution `f_d`,
+keyed to infection like the prevalence.
+
+The observed Uganda export deaths are a dated series `export_death_days`
+(grid day-indices, ascending), fitted as an inhomogeneous Poisson exactly
+as [`exports_model`](@ref) fits the imports: one Poisson term per death day
+(the increment of `Λ_d` between consecutive death-day edges), a
+`pre_death_exports ~ Poisson(Λ_d(δ₁−1))` zero term bounding the first death
+day `δ₁`, and the `last_offset` truncation that stops the clock at the last
+observed death day. With an empty `export_death_days` the model falls back
+to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 """
 @model function exports_deaths_model(
         exports_deaths::Union{Missing, Integer},
         export_prevalence::AbstractVector, CFR::Real,
-        od_pmf::AbstractVector, incubation_pmf::AbstractVector)
+        od_pmf::AbstractVector, incubation_pmf::AbstractVector;
+        export_death_days::AbstractVector{<:Integer} = Int[],
+        pre_death_exports::Union{Missing, Integer} = 0)
     n = length(export_prevalence)
-    ## Infection→death CDF by age (age 0 = same day).
+    ## Infection→death PMF by age (age 0 = same day).
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
-    death_cdf = cumsum(fd_pmf)
-    ## Weight each day's at-risk prevalence by the death CDF at its
-    ## remaining age to the cut-off (day n).
-    acc = zero(eltype(export_prevalence))
-    @inbounds for s in 1:n
-        age = n - s
-        w = age + 1 <= length(death_cdf) ? death_cdf[age + 1] :
-            (isempty(death_cdf) ? zero(eltype(death_cdf)) : death_cdf[end])
-        acc += export_prevalence[s] * w
-    end
-    raw = CFR * acc
+    ## Per-day expected export-death increment: CFR-scaled convolution of
+    ## the daily at-risk prevalence with the infection→death PMF. Its
+    ## running sum is the cumulative export-death intensity `Λ_d`.
+    death_daily = CFR .* convolve_delay(export_prevalence, fd_pmf)
 
-    expected_exports_deaths_T := safe_rate(raw)
-    exports_deaths ~ Poisson(expected_exports_deaths_T)
+    if isempty(export_death_days)
+        ## No dated series: cumulative single-total Poisson at the cut-off.
+        expected_exports_deaths_T := safe_rate(sum(death_daily))
+        exports_deaths ~ Poisson(expected_exports_deaths_T)
+    else
+        ## Dated per-day Poisson; the clock stops at the last death day.
+        days, counts = dated_event_bins(export_death_days, n)
+        δ₁ = days[1]
+        pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
+              zero(eltype(death_daily))
+        pre_death_exports ~ Poisson(safe_rate(pre))
+        raw_inc = bin_increments(death_daily, days)
+        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                 for i in eachindex(raw_inc)]
+        obs = ismissing(exports_deaths) ? missing : counts
+        death_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        expected_exports_deaths_T := safe_rate(pre + sum(μ_day))
+    end
 
     return (; expected_exports_deaths_T)
 end

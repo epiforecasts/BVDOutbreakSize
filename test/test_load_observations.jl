@@ -77,6 +77,23 @@
     @test obs.lab_history.counts == [211, 295, 295, 403, 648, 755]
     @test obs.lab_history.counts[end] == obs.tests_analysed
 
+    ## Dated Uganda export series: grid day-indices of the three imports
+    ## (11, 16, 23 May) and the single export death (14 May), sorted
+    ## ascending and within the grid. Their lengths match the scalar totals.
+    @test obs.export_case_days isa AbstractVector{<:Integer}
+    @test obs.export_death_days isa AbstractVector{<:Integer}
+    @test issorted(obs.export_case_days)
+    @test issorted(obs.export_death_days)
+    @test all(1 .<= obs.export_case_days .<= obs.n)
+    @test all(1 .<= obs.export_death_days .<= obs.n)
+    @test length(obs.export_case_days) == 3
+    @test length(obs.export_death_days) == 1
+    ## Detection days are spaced 5 (11→16 May) then 7 (16→23 May) apart.
+    @test diff(obs.export_case_days) == [5, 7]
+    ## The export death (14 May) falls between imports #1 (11 May) and #2.
+    @test obs.export_case_days[1] < obs.export_death_days[1] <
+          obs.export_case_days[2]
+
     ## Genetic TMRCA bound
     @test !ismissing(obs.tmrca_days)
     @test obs.tmrca_days isa Real
@@ -146,6 +163,27 @@ end
     @test frozen.reported_cases < full.reported_cases
     @test frozen.total_deaths < full.total_deaths
     @test frozen.confirmed_cases == frozen.confirmed_history.counts[end]
+
+    ## The dated export series are truncated to detections on or before the
+    ## freeze date. 23 May keeps all three imports (last detection 23 May)
+    ## and the single export death (14 May); the export scalars come from
+    ## the truncated dated count.
+    @test length(frozen.export_case_days) == 3
+    @test length(frozen.export_death_days) == 1
+    @test frozen.exported_cases == 3
+    @test frozen.exports_deaths == 1
+    @test all(1 .<= frozen.export_case_days .<= frozen.n)
+    @test frozen.export_case_days[end] == frozen.n   # last import = cut-off
+
+    ## Freezing before the last import drops the post-cut-off detection.
+    ## 18 May keeps imports #1 (11 May) and #2 (16 May) plus the death
+    ## (14 May), but not import #3 (23 May).
+    early = freeze_observations("2026-05-18")
+    @test length(early.export_case_days) == 2        # 11 and 16 May imports
+    @test early.exported_cases == 2
+    @test length(early.export_death_days) == 1        # 14 May ≤ 18 May
+    @test early.exports_deaths == 1
+    @test all(1 .<= early.export_death_days .<= early.n)
 
     ## A Date argument is equivalent to the ISO string.
     @test freeze_observations(Date("2026-05-23")).n == frozen.n

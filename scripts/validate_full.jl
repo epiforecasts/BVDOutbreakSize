@@ -21,6 +21,8 @@ function mk(; kw...)
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         tests_received_history = obs.tests_received_history,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = BP, background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days, kw...)
@@ -39,6 +41,8 @@ pp = predict(
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         tests_received_history = _days_only(obs.tests_received_history),
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
         breakpoint = BP, background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model, tmrca_days = obs.tmrca_days),
