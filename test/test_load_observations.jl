@@ -73,19 +73,19 @@
     @test obs.sources.death_history isa String
     @test !isempty(obs.sources.death_history)
 
-    ## confirmed-case history runs to the 3 June cut-off; its final
+    ## confirmed-case history runs to the 4 June cut-off; its final
     ## vintage equals the cut-off `confirmed_cases` total.
     @test obs.confirmed_case_history.values ==
           [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
-        282, 321, 344, 363, 381]
+        282, 321, 344, 363, 381, 452]
     @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
 
     ## confirmed deaths: flat at 17 through 28 May, then the late-
-    ## confirmation catch-up to 64 on 3 June.
+    ## confirmation catch-up to 82 on 4 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_death_history isa NamedTuple
     @test obs.confirmed_death_history.values ==
-          [17, 17, 17, 42, 42, 48, 60, 62, 64]
+          [17, 17, 17, 42, 42, 48, 60, 62, 64, 82]
     @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
     @test obs.sources.confirmed_death_history isa String
 
@@ -259,8 +259,8 @@ end
     using BVDOutbreakSize: load_observations
     using Dates: Date, value
 
-    ## The committed data file's own cut-off (3 June) and a one-week
-    ## earlier as-of (28 May). The 28 May totals are the known
+    ## The committed data file's own cut-off (4 June) and an earlier
+    ## as-of (28 May). The 28 May totals are the known
     ## INSP/WHO values: confirmed cases 210, confirmed deaths 17, samples
     ## analysed 755; the frozen suspected totals stay at their 26 May
     ## values (reported cases 1077, suspected deaths 246) and the dated
@@ -284,17 +284,17 @@ end
     @test cut.confirmed_case_history.values[end] == cut.confirmed_cases
 
     ## Elapsed-time offsets are recomputed relative to the new cut-off, so
-    ## the genetic floor is one week closer than under the 3 June file.
+    ## the genetic floor is closer than under the 4 June file.
     @test cut.genetic_tmrca_days ==
           full.genetic_tmrca_days -
-          value(Date("2026-06-03") - Date("2026-05-28"))
+          value(Date("2026-06-04") - Date("2026-05-28"))
 
     ## A `Date` argument is equivalent to the ISO string.
     @test load_observations(; as_of_override = Date("2026-05-28")).as_of_date ==
           "2026-05-28"
 
     ## The default (no override) loads the file's own cut-off unchanged.
-    @test full.as_of_date == "2026-06-03"
-    @test full.confirmed_cases == 381
-    @test full.confirmed_deaths == 64
+    @test full.as_of_date == "2026-06-04"
+    @test full.confirmed_cases == 452
+    @test full.confirmed_deaths == 82
 end
