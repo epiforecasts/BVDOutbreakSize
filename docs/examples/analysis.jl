@@ -453,9 +453,13 @@ vintage_table #hide
 # cut-off under pure exponential growth.
 # The age is left prior-driven and is not read off a trajectory crossing.
 #
-# The growth rate of the cryptic phase is anchored on the molecular-clock
-# doubling time for this outbreak, centred near twenty days with the
-# spread of the phylodynamic estimate.
+# The growth rate of the cryptic phase is the rate implied by the
+# reproduction number and the generation interval, so the cryptic phase
+# and the established epidemic share one growth source rather than the
+# cryptic phase carrying its own separate clock rate.
+# The reproduction number prior is itself anchored on the molecular clock,
+# so the implied cryptic doubling time tracks the phylodynamic estimate
+# near twenty days.
 # Combined with the doubling-count prior this sets when the outbreak
 # started and how large the cryptic phase had grown by the cut-off.
 # The genetic bound below floors the age from one side, and the renewal
@@ -470,7 +474,8 @@ vintage_table #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.exponential_growth_model(0.03)),
+#md #     "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1555,9 +1560,9 @@ joint_summary #hide
 # cut-off value.
 # The median and 50% and 90% ribbons are shown only from the genetic bound
 # onward, where the random walk drives the reproduction number.
-# The earlier seeding window (shaded) holds it at its low introduction
-# level and is not the reproduction number of an established epidemic, so
-# it is left unplotted.
+# The earlier cryptic phase (shaded) is grown by the analytic exponential
+# at the reproduction-number-implied rate, not by the random walk, so it is
+# left unplotted.
 # The WHO-response breakpoint (red dashed) and the data cut-off (grey
 # dashed) are marked.
 
@@ -1773,8 +1778,7 @@ confirmed_panel = (;
     title = "Confirmed cases",
     dates = _vintage_dates(_conf_window_days),
     replicates = [vcat(collect(e), collect(p), collect(l))
-                  for (e, p, l) in
-                      zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
+                  for (e, p, l) in zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
     observed = [_confirmed_at(d) for d in _conf_window_days],
     colour = :goldenrod);
 

@@ -80,7 +80,8 @@ There are three layers.
 **Building-block submodels**, one per parameter family, each owning
 its own priors:
 
-- `exponential_growth_model` samples the doubling time `τ` and the
+- `exponential_growth_model` takes the growth rate `r` (derived from the
+  reproduction number via Euler–Lotka, not sampled here) and samples the
   doubling-time multiplier `m = T/τ`, not `τ` and `T` directly, to
   break the `C(T) = exp(rT)` ridge.
 - `delay_model` is the gamma onset-to-death delay.

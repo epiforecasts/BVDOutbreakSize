@@ -9,11 +9,12 @@
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
-    ## `to_submodel(x, false)` already re-exposes the submodel's sampled
-    ## (`r`, `m`) and `:=` (`τ`, `T`, `C_T`) names at the parent, so they
-    ## surface as bare chain keys without re-declaration here.
+    ## `r` is now passed in (derived from R0 via Euler–Lotka at the
+    ## composer), not sampled here. `to_submodel(x, false)` re-exposes the
+    ## sampled `m` and `:=` (`τ`, `T`, `C_T`) names at the parent.
+    r_in = log(2) / 20.0
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(), false)
+        st ~ to_submodel(exponential_growth_model(r_in), false)
         return st
     end
 
@@ -23,12 +24,12 @@
     C_T = vec(Array(chn[:C_T]))
     τ = vec(Array(chn[:τ]))
     m = vec(Array(chn[:m]))
-    r = vec(Array(chn[:r]))
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r and T = m·τ, C_T = 2^m hold draw-by-draw.
-    @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
+    ## τ = log(2)/r (fixed by the passed-in r) and T = m·τ, C_T = 2^m hold
+    ## draw-by-draw.
+    @test all(isapprox.(τ, log(2) / r_in; rtol = 1e-8))
     @test all(isapprox.(T, m .* τ; rtol = 1e-8))
     @test all(isapprox.(C_T, 2.0 .^ m; rtol = 1e-8))
 end
@@ -39,8 +40,9 @@ end
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
+    r_in = log(2) / 20.0
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(), false)
+        st ~ to_submodel(exponential_growth_model(r_in), false)
         return st
     end
 
@@ -49,10 +51,12 @@ end
     m = vec(Array(chn[:m]))
     T = vec(Array(chn[:T]))
 
-    ## Centre near 9, SD near 3 (truncated Normal(9, 3)): the prior is
-    ## deliberately wide so T stays uncertain.
-    @test 8.0 < mean(m) < 10.0
-    @test 2.5 < std(m) < 3.3
+    ## Centre near 4.5, SD near 3 (truncated Normal(4.5, 3); lower 0): the
+    ## prior is deliberately wide so T stays uncertain, but centred in the
+    ## genetically-plausible window rather than at ~180 days. The lower
+    ## truncation lifts the mean slightly above the 4.5 centre.
+    @test 4.0 < mean(m) < 5.6
+    @test 2.3 < std(m) < 3.1
     ## The induced T is correspondingly wide (SD well above the SD-3
     ## tightness of a fixed-anchor placement).
     @test std(T) > 30.0

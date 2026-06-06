@@ -235,8 +235,10 @@ BVD composition enriched on the odds scale (`confirmed_deaths`,
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
 seeding submodel when `tmrca_days` is given. Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), `r` and `doubling_time`
-(current growth), `r0` (implied initial growth), `T` (outbreak age),
-`R_T` (current reproduction number), the per-stream expected counts, the
+(current growth), `r0` and `doubling_time_initial` (the `R0`-implied
+initial cryptic growth), `T` (outbreak age), `R0` (initial reproduction
+number) and `R_T` (current reproduction number), the per-stream expected
+counts, the
 testing fraction `tau_test`, the background rate `lambda_bg`, the
 confirmed-death enrichment `m_death`, the implied per-suspected
 (`suspected_positivity`) and per-test (`test_positivity`) positivities,
@@ -346,7 +348,9 @@ death-confirmation probability (`death_confirmation`).
     r := infection_state.r
     r0 := infection_state.r0
     doubling_time := infection_state.doubling_time
+    doubling_time_initial := infection_state.doubling_time_initial
     T := infection_state.T
+    R0 := infection_state.R0
     R_T := infection_state.Rt[n]
     expected_infections_T := infection_state.infections[n]
     CFR := deaths_state.CFR

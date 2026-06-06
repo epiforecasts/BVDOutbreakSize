@@ -614,7 +614,6 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
-    log_R0_seed = _draws(chn, Symbol("rt_state.log_R0_seed"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
     T_draws = _draws(chn, :T)
@@ -636,9 +635,9 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         steps = sigma[i] .* z[1:(nb - 1)]
         log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
         walk = interpolate_knots(log_R, days, n)
-        ## Pre-bound days take the low seeding R_t, not the genetic walk base.
-        log_Rt = [d < rt_start ? log_R0_seed[i] : walk[d] for d in 1:n] .+
-                 effect[i] .* ramp_shape
+        ## The established walk fills every day; pre-bound days are unused
+        ## (masked out below), matching `rt_walk_model`.
+        log_Rt = walk .+ effect[i] .* ramp_shape
         ## Only the established R_t, from the genetic bound onward; the
         ## pre-bound seeding window is not plotted.
         start = clamp(rt_start, 1, n)
