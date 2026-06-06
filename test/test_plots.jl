@@ -160,14 +160,14 @@ end
         ("2026-05-23", 1364, 680, 3137),
         ("2026-05-28", 3510, 2196, 6325)
     ]
-    ## Series only.
+    ## Released series only.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
-    ## With overlaid points and a scenario range band.
-    points = [
+    ## With a renewal frozen-fit ribbon and a scenario range band.
+    renewal = [
         ("2026-05-20", 1666, 900, 2900),
         ("2026-05-23", 1900, 1000, 3300)
     ]
-    fig = plot_estimate_evolution(rows; points = points,
+    fig = plot_estimate_evolution(rows; renewal = renewal,
         scenario_range = (235, 1386))
     @test fig isa CairoMakie.Makie.Figure
 end
