@@ -292,6 +292,14 @@ using BVDOutbreakSize: integrate_cumulative,
                        integrate_exports_deaths, delay_convolution
 import CairoMakie
 
+## Build the docs with Enzyme reverse-mode AD instead of the default
+## Mooncake backend, to compare end-to-end doc-build time. Loading
+## Enzyme activates `enzyme_adtype` through the package extension;
+## overriding `default_adtype` routes every `nuts_sample` call below
+## through Enzyme without changing the individual call sites.
+using Enzyme
+@eval BVDOutbreakSize default_adtype() = enzyme_adtype()
+
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
