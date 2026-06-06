@@ -550,8 +550,9 @@ end
 
 """
 One-row, two-panel figure summarising when the outbreak began. The
-left panel is the posterior density of the outbreak start date,
-obtained by rescaling the days-since-seeding `T` to a calendar date
+left panel is the posterior density of the outbreak start date, the
+calendar date of the import that started the outbreak, obtained by
+rescaling the outbreak age `T` (origin to cut-off) to a calendar date
 (`as_of_date` minus `T`). The right panel is the joint
 `(doubling_time, T)` posterior pair plot: shorter doubling times
 correspond to faster early growth, which reaches the same epidemic
@@ -567,7 +568,7 @@ function plot_start_date_pair(chn;
     ax = Axis(fig[1, 1];
         xlabel = "Outbreak start date",
         ylabel = "Posterior density",
-        title = "Implied start of sustained transmission",
+        title = "Estimated outbreak start date",
         xticklabelrotation = π / 6
     )
     density!(ax, start_days; color = (:steelblue, 0.5),
