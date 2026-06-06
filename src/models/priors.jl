@@ -151,10 +151,12 @@ implied-doubling-time scale) and a doubling count `m = T/τ`, then exposes
 
 as deterministics. `T` is the TOTAL outbreak age (origin → cut-off),
 deliberately WIDE: `m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)`
-gives 95% support `m ∈ (3, 15)`, `C_T ∈ (8, 32000)`, so `T` stays
-prior-dominated rather than pinned by a post-hoc crossing. The genetic
-seeding bound ([`genetic_seeding_model`](@ref)) is applied SEPARATELY to
-this same `T` at the composer.
+centres the prior age near three months, the genetically-plausible window,
+rather than the much longer span a cut-off-case-total doubling count would
+imply. The spread keeps `T` wide and prior-dominated rather than pinned by
+a post-hoc crossing, while not forcing an implausibly early start. The
+genetic seeding bound ([`genetic_seeding_model`](@ref)) is applied
+SEPARATELY to this same `T` at the composer.
 
 The growth-rate prior centres on the molecular-clock doubling time
 (`M_PRIOR_DOUBLING_DAYS = 20` d, log-SD 0.15), implying a 95% doubling-time

@@ -48,10 +48,15 @@ const M_PRIOR_DOUBLING_DAYS = 20.0
 """
     M_PRIOR_BASE
 
-Base doubling count at `M_PRIOR_BASE_DATE` (`C_T = 2^9 = 512`), the centre
-of the wide doubling-count prior in [`exponential_growth_model`](@ref).
+Centre of the wide doubling-count prior in
+[`exponential_growth_model`](@ref).
+The doubling count sets the cryptic-phase length through `T = m·τ`, so the
+centre is chosen to place the prior outbreak age near the
+genetically-plausible window (about three months) rather than the much
+longer span implied by a doubling count tied to the cut-off case total.
+A wider doubling count would push the seeding time implausibly early.
 """
-const M_PRIOR_BASE = 9.0
+const M_PRIOR_BASE = 4.5
 
 """
     ITURI_POPULATION
