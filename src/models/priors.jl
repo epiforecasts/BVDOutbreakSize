@@ -457,6 +457,24 @@ suspected deaths. Pass `lambda_prior` to override. Returns
 end
 
 """
+Death-specimen forwarding fraction `τ_death` for the composition-linked
+confirmed-death lab model (`death_link = :composition` in
+[`confirmed_deaths_model`](@ref)). `τ_death` is the fraction of the
+suspect-death backlog that is forwarded to and analysed by the laboratory,
+the death-side analogue of the suspected-case tested fraction `τ_test`.
+The BVD-share signal lives in the composition-driven positivity
+`s·q_death + (1−spec)(1−q_death)`, not in `τ_death`, so `τ_death` only sets
+the overall forwarded level and is identified by the confirmed-death count
+without sitting at a boundary. The prior is a weakly-informative
+`Beta(2, 2)` (mean 0.5, broad over the unit interval). Returns
+`(; τ_death)`.
+"""
+@model function death_forward_model(; forward_prior = Beta(2.0, 2.0))
+    τ_death ~ forward_prior
+    return (; τ_death)
+end
+
+"""
 Test-positivity machinery shared by the suspected- and confirmed-case
 streams. Samples
 

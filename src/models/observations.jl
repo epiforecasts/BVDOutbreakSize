@@ -698,6 +698,11 @@ quantities.
     else
         pos_state ~ to_submodel(positivity(nv))
         p_pos = pos_state.p_pos
+        ## No assay sensitivity/specificity is sampled on the `:free` link;
+        ## expose `nothing` so a downstream consumer (the composition-linked
+        ## confirmed-death stream) can detect that there is nothing to share.
+        s_test = nothing
+        spec = nothing
     end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
@@ -756,7 +761,7 @@ quantities.
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
 
     return (; τ_test, bg_daily, p_pos, windows, received_daily,
-        expected_received, expected_confirmed, p_positive)
+        expected_received, expected_confirmed, p_positive, s_test, spec)
 end
 
 """
@@ -978,24 +983,36 @@ binomial captures its information; the suspected-death total is the
 denominator. Returns the enrichment, the composition, the confirmation
 probability and the expected confirmed-death count.
 
-This is the renewal analogue of the integral-lineage forwarded-positivity
-lab model (PR #193), which scores per-vintage confirmed-death increments as
-`NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
-`p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
-sensitivity `s` and specificity `spec` and the death-pool BVD share
-`q_death`. A death-side composition link of that form is not portable here:
-the death-pool composition `q_death = bvd_deaths / (bvd_deaths +
-bg_death_daily)` collapses to 1 whenever the death background is off (the
-renewal default), which would make a death-side composition link degenerate.
-The renewal confirmed-case lab pipeline ([`confirmed_cases_model`](@ref))
-does now carry sampled PCR sensitivity `s` and specificity `spec` (its
-composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but grounding
-the death-confirmation rate on the case composition `q_susp` is what makes it
-well-defined: the case background `λ_bg` is always on, so `q_susp` is always
-informative. Grounding the enrichment on `q_susp` reproduces #193's intent —
-a composition-driven confirmed-death rate that feeds back to `λ_bg` and
-`p_drc` — under the renewal architecture. The substantive half of #193, the
-constant-rate non-BVD suspected-death background `λ_bg_death`, is already
+## Two confirmation links are available, selected by `death_link`:
+
+`death_link = :enrichment` (default) keeps the renewal thinning above: the
+death-confirmation probability is anchored on the suspected-CASE composition
+`q_susp` because the case background `λ_bg` is always on and so `q_susp` is
+always informative.
+
+`death_link = :composition` is the experimental port of the integral-lineage
+forwarded-positivity lab model (PR #193, issue #225), which scores the
+confirmed-death increments as `NegBinomial(τ_death · p_pos_death · Δμ_death, k)`
+with a genuine death-side assay positivity
+
+```math
+p_\\text{pos,death} = s\\, q_\\text{death} + (1 - \\text{spec})(1 - q_\\text{death}),
+```
+
+built from the PCR sensitivity `s` and specificity `spec` shared from the
+composition-linked confirmed-CASE lab ([`confirmed_cases_model`](@ref) with
+`positivity_link = :composition`) and the DEATH-pool BVD share
+`q_death = bvd_deaths_daily / (bvd_deaths_daily + bg_death_daily)`. `τ_death`
+([`death_forward_model`](@ref)) is the forwarded fraction of the
+suspect-death backlog. The expected confirmed-death daily series is then
+`τ_death · p_pos_death · deaths_daily`, scored per-vintage exactly as the
+thinning is. `q_death` collapses to 1 whenever the suspect-death background
+is off (the renewal default), making the link degenerate; the composer
+therefore turns a constant-rate `λ_bg_death` ON whenever this link is
+selected, so `bvd_deaths_daily` and `bg_death_daily` are both informative.
+`s`/`spec` must be supplied (the case lab must use the `:composition` link);
+they are passed as `nothing` on the `:free` case link, which is rejected.
+The substantive half of #193, the suspect-death background `λ_bg_death`, is
 carried by [`deaths_model`](@ref).
 """
 @model function confirmed_deaths_model(
@@ -1005,24 +1022,87 @@ carried by [`deaths_model`](@ref).
         bvd_reports_daily::AbstractVector, p_drc::Real,
         bg_daily::AbstractVector, k::Real;
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
-        enrichment = confirmed_death_enrichment_model())
-    enr_state ~ to_submodel(enrichment)
-    m_death = enr_state.m_death
-
-    bvd_total = p_drc * sum(bvd_reports_daily)
-    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + sum(bg_daily))
-    qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
-    p_death_conf := logistic(logit(qc) + log(m_death))
-
-    ## Confirmed deaths are a thinning of the modelled suspected-death daily
-    ## series by the composition-linked confirmation probability, scored as
-    ## per-vintage between-vintage increments over the confirmed-death
-    ## vintages. The observed suspected-death total is frozen at its last
-    ## stable vintage (well before the cut-off), so the modelled death
-    ## trajectory carries the timing of the later confirmed-death vintages,
-    ## the same modelled-volume route the post-lab confirmed cases use.
-    confirmed_death_daily = p_death_conf .* deaths_daily
+        death_link::Symbol = :enrichment,
+        enrichment = confirmed_death_enrichment_model(),
+        death_forward = death_forward_model(),
+        bvd_deaths_daily::Union{Nothing, AbstractVector} = nothing,
+        bg_death_daily::Union{Nothing, AbstractVector} = nothing,
+        s::Union{Nothing, Real} = nothing,
+        spec::Union{Nothing, Real} = nothing)
     n = length(deaths_daily)
+
+    if death_link === :composition
+        ## Experimental main-like death lab process (issue #225). The
+        ## death-confirmation probability is the assay positivity on the
+        ## DEATH-pool composition, with the PCR sensitivity / specificity
+        ## SHARED from the confirmed-case lab, and a forwarded fraction
+        ## `τ_death` of the suspect-death backlog.
+        (bvd_deaths_daily === nothing || bg_death_daily === nothing) &&
+            error("death_link = :composition needs bvd_deaths_daily and " *
+                  "bg_death_daily (turn the death background on)")
+        (s === nothing || spec === nothing) &&
+            error("death_link = :composition needs shared s/spec from the " *
+                  "confirmed-case lab (use confirmed_positivity_link = " *
+                  ":composition)")
+        fwd_state ~ to_submodel(death_forward)
+        τ_death = fwd_state.τ_death
+
+        ## Per-day death-pool BVD share q_death = bvd_deaths / (bvd_deaths +
+        ## bg_death), then the assay positivity p = s·q + (1−spec)(1−q). The
+        ## false-positive term makes the confirmed-death counts respond to
+        ## the non-BVD death share, so they help identify `λ_bg_death`.
+        Tt = typeof(float(s) * float(spec) * float(τ_death) *
+                    float(first(deaths_daily)))
+        lo = convert(Tt, 1e-8)
+        hi = one(Tt) - lo
+        s_t = convert(Tt, s)
+        sp_t = convert(Tt, spec)
+        p_pos_death = map(1:n) do i
+            bvd_i = convert(Tt, bvd_deaths_daily[i])
+            bg_i = convert(Tt, bg_death_daily[i])
+            ratio = bvd_i / (bvd_i + bg_i + lo)
+            q = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+            p = s_t * q + (one(Tt) - sp_t) * (one(Tt) - q)
+            clamp(isfinite(p) ? p : q, lo, hi)
+        end
+        q_death_cutoff = safe_rate(convert(Tt, bvd_deaths_daily[end])) /
+                         safe_rate(convert(Tt, bvd_deaths_daily[end]) +
+                                   convert(Tt, bg_death_daily[end]))
+        ## Expose the death-side diagnostics under the same names the
+        ## enrichment link uses, so the composer and predict-mode summaries
+        ## read one set of keys regardless of link: the forwarding fraction
+        ## stands in for `m_death`, the cut-off positivity for the
+        ## confirmation probability and the death composition for `q_susp`.
+        m_death = τ_death
+        p_death_conf := p_pos_death[end]
+        q_susp := q_death_cutoff
+
+        ## Forwarded, positivity-weighted thinning of the modelled
+        ## suspect-death daily series, scored per-vintage.
+        confirmed_death_daily = τ_death .* p_pos_death .* deaths_daily
+    else
+        ## Renewal thinning: composition-linked confirmation probability
+        ## anchored on the suspected-CASE composition `q_susp`.
+        enr_state ~ to_submodel(enrichment)
+        m_death = enr_state.m_death
+
+        bvd_total = p_drc * sum(bvd_reports_daily)
+        q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + sum(bg_daily))
+        qc = clamp(q_susp, eps(typeof(q_susp)),
+            one(q_susp) - eps(typeof(q_susp)))
+        p_death_conf := logistic(logit(qc) + log(m_death))
+
+        ## Confirmed deaths are a thinning of the modelled suspected-death
+        ## daily series by the composition-linked confirmation probability,
+        ## scored as per-vintage between-vintage increments over the
+        ## confirmed-death vintages. The observed suspected-death total is
+        ## frozen at its last stable vintage (well before the cut-off), so
+        ## the modelled death trajectory carries the timing of the later
+        ## confirmed-death vintages, the same modelled-volume route the
+        ## post-lab confirmed cases use.
+        confirmed_death_daily = p_death_conf .* deaths_daily
+    end
+
     vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
     modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
     cdeath_increments ~ to_submodel(

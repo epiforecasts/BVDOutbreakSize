@@ -81,3 +81,44 @@ end
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
 end
+
+@testitem "confirmed_deaths_model :composition link is main-like" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Turing.DynamicPPL: logjoint
+    using Random: MersenneTwister
+
+    ## Main-like death lab process (issue #225): the confirmation
+    ## probability is the assay positivity `s·q_death + (1−spec)(1−q_death)`
+    ## on the death-pool composition, with `s`/`spec` shared from the case
+    ## lab and a forwarded fraction `τ_death`.
+    deaths_daily = fill(6.0, 40)
+    bvd_deaths = fill(4.0, 40)
+    bg_death = fill(1.0, 40)
+    s = 0.94
+    spec = 0.97
+    m = confirmed_deaths_model(17, 246, deaths_daily, fill(1.0, 40), 0.3,
+        fill(0.5, 40), 5.0; death_link = :composition,
+        bvd_deaths_daily = bvd_deaths, bg_death_daily = bg_death,
+        s = s, spec = spec)
+    st = returned(m, rand(MersenneTwister(2), m))
+    ## q_death = 4/5 = 0.8; p_pos_death = s·q + (1−spec)(1−q).
+    q = 0.8
+    @test isapprox(st.q_susp, q; atol = 1e-6)
+    @test isapprox(st.p_death_conf, s * q + (1 - spec) * (1 - q); atol = 1e-6)
+    @test st.m_death > 0          # τ_death exposed under the m_death key
+    @test st.expected_confirmed_deaths >= 0
+    @test isfinite(logjoint(m, rand(MersenneTwister(3), m)))
+end
+
+@testitem "confirmed_deaths_model :composition rejects missing inputs" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    deaths_daily = fill(6.0, 40)
+    ## No death-pool series supplied.
+    @test_throws ErrorException confirmed_deaths_model(17, 246, deaths_daily,
+        fill(1.0, 40), 0.3, fill(0.5, 40), 5.0; death_link = :composition)()
+    ## No shared s/spec supplied.
+    @test_throws ErrorException confirmed_deaths_model(17, 246, deaths_daily,
+        fill(1.0, 40), 0.3, fill(0.5, 40), 5.0; death_link = :composition,
+        bvd_deaths_daily = fill(4.0, 40), bg_death_daily = fill(1.0, 40))()
+end

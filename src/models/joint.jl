@@ -281,6 +281,8 @@ death-confirmation probability (`death_confirmation`).
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
+        confirmed_death_link::Symbol = :enrichment,
+        death_forward = death_forward_model(),
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
@@ -326,8 +328,18 @@ death-confirmation probability (`death_confirmation`).
         death_bg_re = nothing
     end
 
+    ## The composition-linked confirmed-death lab needs an informative
+    ## death-pool composition `q_death = bvd_deaths / (bvd_deaths +
+    ## bg_death)`, which collapses to 1 when the suspect-death background is
+    ## off (the renewal default). When that link is selected and no
+    ## per-vintage death random effect is on, turn a constant-rate
+    ## `λ_bg_death` ON so `q_death` is informative.
+    death_scalar_bg = (confirmed_death_link === :composition &&
+                       death_bg_re === nothing) ?
+                      death_background_model() : nothing
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k;
+        death_background = death_scalar_bg,
         background_re = death_bg_re))
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k, p_drc;
@@ -342,7 +354,12 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
-        confirmed_deaths_history))
+        confirmed_deaths_history,
+        death_link = confirmed_death_link,
+        death_forward = death_forward,
+        bvd_deaths_daily = deaths_state.bvd_deaths_daily,
+        bg_death_daily = deaths_state.bg_death_daily,
+        s = confirmed_state.s_test, spec = confirmed_state.spec))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,

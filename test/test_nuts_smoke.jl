@@ -159,6 +159,31 @@ end
     end
 end
 
+@testitem "NUTS smoke: bvd_joint composition death link (n=40)" tags = [:slow] begin
+    import FlexiChains
+    using BVDOutbreakSize: bvd_joint, nuts_sample
+
+    ## The main-like confirmed-death lab process (issue #225): the
+    ## composition link turns the suspect-death background on so the
+    ## death-pool composition is informative, and shares the case-lab
+    ## sensitivity/specificity into the death positivity.
+    chn = nuts_sample(
+        bvd_joint(40, 2, 18, 905, 0, 27; confirmed_deaths = 5,
+            confirmed_positivity_link = :composition,
+            confirmed_death_link = :composition);
+        samples = 12, chains = 1, progress = false
+    )
+    for name in [:C_T, :lambda_bg_death, :death_confirmation, :m_death]
+        vals = vec(Array(chn[name]))
+        @test length(vals) == 12
+        @test all(isfinite, vals)
+    end
+    ## The death background must be strictly positive (composition link
+    ## forces it on) so the death-pool composition does not collapse to 1.
+    @test all(vec(Array(chn[:lambda_bg_death])) .> 0)
+    @test all(0 .< vec(Array(chn[:death_confirmation])) .< 1)
+end
+
 @testitem "NUTS smoke: bvd_joint with histories + breakpoint + genetic" tags = [:slow] begin
     import FlexiChains
     using BVDOutbreakSize: bvd_joint, genetic_seeding_model, nuts_sample
