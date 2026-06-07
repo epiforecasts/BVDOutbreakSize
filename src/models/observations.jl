@@ -573,6 +573,14 @@ quantities.
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
     received_daily = τ_test .* convolve_delay(suspected_daily,
         receipt_state.pmf)
+    ## In predict mode (no AD) the daily series can infer as `Vector{Any}`
+    ## on some Julia versions, which then makes `reduce_empty` / `zero(Any)`
+    ## fail on the empty derived window vectors below. Concretise to the
+    ## working scalar type; this runs only when the element type has widened,
+    ## so the AD/fit path (concrete eltype) is left untouched.
+    if eltype(received_daily) === Any
+        received_daily = convert(Vector{typeof(τ_test)}, received_daily)
+    end
     rvobs = vintage_obs(tests_received_history, tests_received, n)
     received_inc = bin_increments(received_daily, rvobs.days)
     received_increments ~ to_submodel(
@@ -696,12 +704,15 @@ quantities.
 
     expected_received := safe_rate(sum(received_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
-    ## modelled early and late volume and the observed analysed windows.
-    denom = sum(early_volume) + float(sum(windows.obs_analysed)) +
-            sum(late_volume)
-    expected_positives = sum(early_mean) + sum(late_mean) +
-                         (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) :
-                          zero(eltype(p_pos)))
+    ## modelled early and late volume and the observed analysed windows. The
+    ## early/late window vectors are empty when a vintage has no such window,
+    ## and in predict mode their element type can widen to `Any`, so each sum
+    ## is given a concrete `init` to skip `reduce_empty`'s `zero(Any)`.
+    z = zero(eltype(p_pos))
+    denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
+            sum(late_volume; init = z)
+    expected_positives = sum(early_mean; init = z) + sum(late_mean; init = z) +
+                         (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
     expected_confirmed := safe_rate(expected_positives)
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
 

@@ -238,8 +238,7 @@ end
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
                 -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
-            FlexiChains.Parameter(:T) =>
-                reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
+            FlexiChains.Parameter(:T) => reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
     fig = plot_rt(chn; n = n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
     @test fig isa CairoMakie.Makie.Figure
