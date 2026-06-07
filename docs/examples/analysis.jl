@@ -2286,7 +2286,7 @@ frozen_streams_table #hide
 # GitHub Actions workflow regenerates these files and publishes them
 # as a GitHub Release, downloadable from the repository's releases
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
-# The release bundles the four summary tables, a thinned set of
+# The release bundles the summary tables, a thinned set of
 # posterior draws, and a copy of the input `observations.toml` so the
 # exact data that produced each result is recorded alongside it.
 

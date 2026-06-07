@@ -24,10 +24,10 @@ TestItemRunner = "f8b46487-2199-4994-9208-9a1283c18c0a"
 TestItems = "1c621080-faea-4a02-84b6-bbd5e436b8fe"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
+[sources]
+BVDOutbreakSize = {path = "/Users/lshsa2/code/seabbs/BVDOutbreakSize/worktrees/renewal"}
+
 [compat]
 Coverage = "1"
 SpecialFunctions = "2"
 TensorBoardLogger = "0.1"
-
-[sources]
-BVDOutbreakSize = {path = ".."}
