@@ -506,6 +506,7 @@ cumulative confirmed Binomial.
     enrich_state ~ to_submodel(severity_enrichment, false)
     δ0 = enrich_state.δ0
     decay_scale = enrich_state.decay_scale
+    δ∞ = enrich_state.δ∞
     receipt_state ~ to_submodel(receipt_delay, false)
     ## Epi-exclusion fraction `e` for the throughput queue: the share of
     ## suspects ruled out by epi follow-up and never sampled, so the
@@ -612,13 +613,17 @@ cumulative confirmed Binomial.
         ## volume in units of `volume_scale` samples, so a lab stall (no new
         ## analysed) pauses the relaxation.
         c_i = analysed_cum_at[i] / convert(Tt, volume_scale)
-        ## Composition link: the suspect-pool composition
-        ## φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a decaying severity log-odds
-        ## enrichment δ0·exp(−c/decay), so the lab over-tests BVD early and
-        ## relaxes to the pool composition as testing widens, tying
-        ## positivity to the background μ_bg.
+        ## Composition link with persistent testing selection: the suspect-
+        ## pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a severity
+        ## log-odds enrichment δ∞ + (δ0−δ∞)·exp(−c/decay) that relaxes from
+        ## the early severity surge δ0 to a persistent selection floor δ∞.
+        ## δ∞ = 0 recovers the pure composition link (tested share → φ, so
+        ## positivity pins λ_bg); δ∞ > 0 keeps the tested share above φ, so
+        ## positivity no longer pins the background.
         φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
-        δ_i = convert(Tt, δ0) * exp(-c_i / convert(Tt, decay_scale))
+        δ∞_c = convert(Tt, δ∞)
+        δ_i = δ∞_c + (convert(Tt, δ0) - δ∞_c) *
+              exp(-c_i / convert(Tt, decay_scale))
         q_base = logistic(logit(φ) + δ_i)
         ## Optional partially-pooled per-window offset on the tested BVD
         ## share, logit-scale, so each vintage's positivity can fit the

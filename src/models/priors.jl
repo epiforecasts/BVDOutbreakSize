@@ -178,11 +178,24 @@ severity-enrichment that decays as testing widens:
 ```
 
 so the lab over-tests BVD early (severe cases are triaged first and are
-more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero as
-testing widens, at which point the tested share equals the pool composition.
-This ties positivity to `μ_bg`, so the confirmed/positivity data identify
-the non-BVD background `λ_bg` rather than it being absorbed by a free
-selection curve.
+more likely BVD), the enrichment relaxing toward a **persistent selection
+floor** `δ∞` as testing widens:
+
+```math
+\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
+    + \\delta_\\infty + (\\delta_0 - \\delta_\\infty)\\, e^{-c_v / \\text{decay}},
+```
+
+With `δ∞ = 0` the enrichment relaxes to zero and the late tested share
+equals the pool composition, tying positivity to `μ_bg` so the
+confirmed/positivity data identify the non-BVD background `λ_bg` (the
+composition link). A positive `δ∞` encodes **persistent testing
+selection**: clinicians keep preferentially testing likely-BVD suspects
+even once testing widens, so the tested share stays above the pool
+composition and the observed positivity no longer pins `φ`/`λ_bg`. The
+`δ∞` prior must be informative — a free floor is non-identifiable against
+`λ_bg` (both raise positivity), which is the multimodality a radical free
+selection curve reintroduces.
 
 `δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
 because severity triage upsamples BVD, never down. The default
@@ -191,16 +204,20 @@ bounded: even severity-triaged testing cannot be near-pure BVD (other
 haemorrhagic / severe febrile illness is also triaged), so for a pool
 composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
 1.5) ≈ 0.75`, not the near-1 of a radical free curve. `decay_scale`
-is the relaxation timescale on the analysed-volume clock. Pass
-`logodds_prior` / `decay_prior` to override. Used by
-[`confirmed_cases_model`](@ref).
+is the relaxation timescale on the analysed-volume clock. `δ∞`'s default
+`truncated(Normal(0.0, 0.05); lower = 0)` is tight at zero, recovering the
+pure composition link; pass a wider/positive `floor_prior` to allow
+persistent testing selection. Pass `logodds_prior` / `decay_prior` /
+`floor_prior` to override. Used by [`confirmed_cases_model`](@ref).
 """
 @model function severity_enrichment_model(;
         logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
-        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0))
+        decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0),
+        floor_prior = truncated(Normal(0.0, 0.05); lower = 0.0))
     δ0 ~ logodds_prior
     decay_scale ~ decay_prior
-    return (; δ0, decay_scale)
+    δ∞ ~ floor_prior
+    return (; δ0, decay_scale, δ∞)
 end
 
 """

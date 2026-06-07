@@ -1,0 +1,36 @@
+
+============ COMPOSITION LINK floor~0 N(0,0.05) ============
+DIAG max_rhat=2.1250 min_ess_bulk=3 div=2
+PARAM cumulative_infections    med=14114.1476 [3900.5682, 14925.9328]
+PARAM m                        med=13.7849 [11.9295, 13.8655]
+PARAM T                        med=123.4035 [104.6057, 250.1099]
+PARAM λ_bg                     med=3.7974 [1.1038, 3.9970]
+PARAM δ∞                       med=0.0604 [0.0058, 0.0813]
+PARAM δ0                       med=0.2582 [0.1415, 1.4727]
+PARAM q_cutoff                 med=0.9960 [0.7611, 0.9995]
+PARAM positivity               med=0.8068 [0.7677, 0.8983]
+DONE link
+
+============ PERSISTENT SELECTION floor N(1.0,0.5) ============
+DIAG max_rhat=1.0340 min_ess_bulk=117 div=52
+PARAM cumulative_infections    med=5151.4637 [3457.2644, 8217.6753]
+PARAM m                        med=12.3308 [11.7554, 13.0045]
+PARAM T                        med=201.4774 [159.3440, 257.6757]
+PARAM λ_bg                     med=1.7863 [0.8128, 3.0532]
+PARAM δ∞                       med=0.8954 [0.1754, 1.6725]
+PARAM δ0                       med=0.5838 [0.0512, 1.6310]
+PARAM q_cutoff                 med=0.9839 [0.6676, 0.9999]
+PARAM positivity               med=0.8411 [0.7305, 0.9236]
+DONE select
+
+============ WIDE SELECTION floor N(0,1.0) ============
+DIAG max_rhat=1.0183 min_ess_bulk=264 div=23
+PARAM cumulative_infections    med=5251.2154 [3558.3231, 8448.3026]
+PARAM m                        med=12.3584 [11.7970, 13.0444]
+PARAM T                        med=203.3367 [160.0679, 255.9380]
+PARAM λ_bg                     med=1.8025 [0.7576, 3.1210]
+PARAM δ∞                       med=0.5179 [0.0423, 1.6934]
+PARAM δ0                       med=0.5966 [0.0645, 1.7145]
+PARAM q_cutoff                 med=0.9780 [0.6633, 0.9999]
+PARAM positivity               med=0.8418 [0.7261, 0.9254]
+DONE wide
