@@ -372,10 +372,10 @@ grid is `λ_bg_death · n`.
 
 The default `truncated(Normal(0, 0.25); lower = 0)` is deliberately
 informative, mirroring the case background: deaths are far fewer than
-suspected cases (≈ 246 suspected deaths at the cut-off vs ≈ 1077
-suspected cases), so the background rate is scaled down accordingly. With
-SD 0.25 the median background is ≈ 0.17/day (≈ 22 deaths over a ≈ 132-day
-grid, a modest minority of the suspected-death total) while still
+suspected cases (≈ 246 suspected deaths vs ≈ 1077 suspected cases at the
+last stable suspected vintages), so the background rate is scaled down
+accordingly. With SD 0.25 the median background is ≈ 0.17/day (a modest
+minority of the suspected-death total over the grid) while still
 admitting a genuine non-BVD signal. The background is degenerate with
 outbreak size, so a diffuse prior would let it absorb arbitrarily many
 suspected deaths. Pass `lambda_prior` to override. Returns
@@ -409,8 +409,9 @@ resolve at the high end where the deaths and exports streams anchor `C_T`.
 A background-noise process must not be able to explain more suspected
 cases than were ever reported. With SD 1.0 the median background is
 ≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
-≈ 1077 suspected cases observed by the 26 May cut-off while still
-admitting a genuine non-BVD signal; a wider SD (e.g. SD 5) left a second
+≈ 1077 suspected cases observed by the last stable suspected-case vintage
+while still admitting a genuine non-BVD signal; a wider SD (e.g. SD 5) left
+a second
 posterior mode in which the background explains the majority of suspected
 cases (positivity ≈ 0.2, background ≈ 2.3× the observed total). Pass
 `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
@@ -625,11 +626,11 @@ it is less likely, as when deaths are under-swabbed relative to living
 suspected cases (post-mortem confirmation is rarer). `m_death = 1` ties
 the death-confirmation rate to the case composition. The default
 `LogNormal(0, 1.0)` is weakly informative and centred on no enrichment, so
-the single informative confirmed-death total (17 of 246 suspected deaths
-on the 28 May data) determines the differential rather than the prior:
-with a suspected-case BVD composition near 0.4, that count needs
-`m_death ≈ 0.1`, which a tight prior centred on 1 would fight. Returns
-`(; m_death)`.
+the confirmed-death vintages (a small fraction of the ≈ 246 suspected
+deaths) determine the differential rather than the prior: with a
+suspected-case BVD composition near 0.4, a low confirmed-death share needs
+`m_death` well below 1, which a tight prior centred on 1 would fight.
+Returns `(; m_death)`.
 """
 @model function confirmed_death_enrichment_model(;
         enrichment_prior = LogNormal(0.0, 1.0))

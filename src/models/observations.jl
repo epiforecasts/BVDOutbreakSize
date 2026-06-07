@@ -398,8 +398,9 @@ them into three non-overlapping groups so all the confirmed data is used:
   score them against the modelled laboratory volume, with the per-window
   positivity partially pooled with the observed windows.
 - *Late* windows, the confirmed vintages strictly after the last
-  laboratory date (29 May-3 June, INSP's confirmed-only format with no
-  national analysed-specimen denominators). Like the early windows, their
+  laboratory date (the days after national testing stops, INSP's
+  confirmed-only format with no national analysed-specimen denominators).
+  Like the early windows, their
   confirmed increments are scored against the modelled laboratory volume
   with the pooled positivity. Their day grid carries a `late_start` day
   (the last laboratory day) so the model bins the modelled volume over
@@ -938,19 +939,20 @@ lab model (PR #193), which scores per-vintage confirmed-death increments as
 `NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
 `p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
 sensitivity `s` and specificity `spec` and the death-pool BVD share
-`q_death`. That form is not portable here: the renewal confirmed-case lab
-pipeline ([`confirmed_cases_model`](@ref)) conditions positives directly on
-the observed analysed denominator with an empirical partially-pooled
-positivity `p_pos` and carries no shared `s`/`spec` to import, and the
-death-pool composition `q_death = bvd_deaths / (bvd_deaths + bg_death_daily)`
-collapses to 1 whenever the death background is off (the renewal default),
-which would make a death-side composition link degenerate. The case
-composition `q_susp` is always informative because the case background
-`λ_bg` is always on, so anchoring the enrichment on `q_susp` reproduces
-#193's intent — a composition-driven confirmed-death rate that feeds back
-to `λ_bg` and `p_drc` — under the renewal architecture. The substantive
-half of #193, the constant-rate non-BVD suspected-death background
-`λ_bg_death`, is already carried by [`deaths_model`](@ref).
+`q_death`. A death-side composition link of that form is not portable here:
+the death-pool composition `q_death = bvd_deaths / (bvd_deaths +
+bg_death_daily)` collapses to 1 whenever the death background is off (the
+renewal default), which would make a death-side composition link degenerate.
+The renewal confirmed-case lab pipeline ([`confirmed_cases_model`](@ref))
+does now carry sampled PCR sensitivity `s` and specificity `spec` (its
+composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but anchoring
+the death-confirmation rate on the case composition `q_susp` is what makes it
+well-defined: the case background `λ_bg` is always on, so `q_susp` is always
+informative. Anchoring the enrichment on `q_susp` reproduces #193's intent —
+a composition-driven confirmed-death rate that feeds back to `λ_bg` and
+`p_drc` — under the renewal architecture. The substantive half of #193, the
+constant-rate non-BVD suspected-death background `λ_bg_death`, is already
+carried by [`deaths_model`](@ref).
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
@@ -970,9 +972,10 @@ half of #193, the constant-rate non-BVD suspected-death background
 
     ## Confirmed deaths are a thinning of the modelled suspected-death daily
     ## series by the composition-linked confirmation probability, scored as
-    ## per-vintage between-vintage increments (the confirmed-death series
-    ## grows 17→64 over 26 May-3 June). The suspected-death denominator is
-    ## frozen at 26 May, so the modelled death trajectory carries the timing,
+    ## per-vintage between-vintage increments over the confirmed-death
+    ## vintages. The observed suspected-death total is frozen at its last
+    ## stable vintage (well before the cut-off), so the modelled death
+    ## trajectory carries the timing of the later confirmed-death vintages,
     ## the same modelled-volume route the post-lab confirmed cases use.
     confirmed_death_daily = p_death_conf .* deaths_daily
     n = length(deaths_daily)
