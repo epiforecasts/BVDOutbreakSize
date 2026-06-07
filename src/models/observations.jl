@@ -37,11 +37,16 @@ function bin_increments(daily::AbstractVector,
         days::AbstractVector{<:Integer})
     n = length(daily)
     out = Vector{eltype(daily)}(undef, length(days))
+    ## Concrete zero for empty bins. `zero(first(daily))` dispatches on the
+    ## runtime element type, so it works even when the container has widened
+    ## to `Vector{Any}` in predict mode (`zero(eltype(daily))` would call
+    ## `zero(::Type{Any})` and error).
+    zfill = isempty(daily) ? zero(eltype(daily)) : zero(@inbounds daily[begin])
     prev = 0
     @inbounds for (i, d) in enumerate(days)
         hi = clamp(Int(d), 0, n)
         lo = clamp(prev, 0, n)
-        out[i] = hi > lo ? sum(@view daily[(lo + 1):hi]) : zero(eltype(daily))
+        out[i] = hi > lo ? sum(@view daily[(lo + 1):hi]) : zfill
         prev = hi
     end
     return out
@@ -707,8 +712,10 @@ quantities.
     ## modelled early and late volume and the observed analysed windows. The
     ## early/late window vectors are empty when a vintage has no such window,
     ## and in predict mode their element type can widen to `Any`, so each sum
-    ## is given a concrete `init` to skip `reduce_empty`'s `zero(Any)`.
-    z = zero(eltype(p_pos))
+    ## is given a concrete `init` to skip `reduce_empty`'s `zero(Any)`. The
+    ## init is taken from the scalar `τ_test` (always concrete), NOT from
+    ## `eltype(p_pos)`, which can itself widen to `Any` in predict mode.
+    z = zero(τ_test)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
             sum(late_volume; init = z)
     expected_positives = sum(early_mean; init = z) + sum(late_mean; init = z) +
@@ -822,7 +829,7 @@ rate and the daily at-risk prevalence for reuse by
         ## Pre-detection survival weight Λ(d₁−1): the cumulative export
         ## intensity up to the day before the earliest detection.
         pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
-              zero(eltype(export_prevalence))
+              zero(@inbounds export_prevalence[begin])
         pre_detection_exports ~ Poisson(safe_rate(pre))
         ## Per-day-edge increments between consecutive detection days; the
         ## first is measured from the pre-detection weight `pre`, so the
@@ -890,7 +897,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         days, counts = dated_event_bins(export_death_days, n)
         δ₁ = days[1]
         pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
-              zero(eltype(death_daily))
+              zero(@inbounds death_daily[begin])
         pre_death_exports ~ Poisson(safe_rate(pre))
         raw_inc = bin_increments(death_daily, days)
         μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]

@@ -285,7 +285,7 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     ## practice, with a zero-growth fallback on a degenerate single-day grid.
     r = n >= 2 ?
         log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1])) :
-        zero(eltype(infections))
+        zero(@inbounds infections[begin])
     return (; infections, cumulative, Rt, g, seed_at_anchor = seed0,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
         doubling_time_initial = doubling_time(r_clock),
