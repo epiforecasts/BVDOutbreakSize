@@ -11,7 +11,9 @@
     ## Synthetic prior carrying every parameter name that
     ## `forecast_reported` reads: :r, :expected_reports_T,
     ## :expected_deaths_T, :expected_infections_T, :R_T,
-    ## :expected_confirmed_T, :expected_confirmed_deaths_T, :k.
+    ## :expected_confirmed_T, :expected_confirmed_deaths_T, :k. The
+    ## cumulative-onset and cumulative-death trajectories are absent, so the
+    ## latent onset and death forecasts fall back to the scalar proxies.
     @model function _forecast_test()
         r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
         inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
@@ -47,9 +49,11 @@ end
     @test nrow(fc) == 200
     cols=[:cases_cum, :deaths_cum, :confirmed_cum, :confirmed_deaths_cum,
         :cases_new, :deaths_new, :confirmed_new, :confirmed_deaths_new,
-        :infections_new, :rt_forecast]
+        :infections_new, :onsets_new, :deaths_latent_new, :rt_forecast]
     @test all(c -> c in propertynames(fc), cols)
     @test all(fc.infections_new .>= 0)
+    @test all(fc.onsets_new .>= 0)
+    @test all(fc.deaths_latent_new .>= 0)
     @test all(fc.cases_cum .>= 0)
     @test all(fc.deaths_cum .>= 0)
     @test all(fc.confirmed_cum .>= 0)
