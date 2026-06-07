@@ -1659,14 +1659,9 @@ end
 #
 # ### Summary
 #
-# The question that matters for the response is how many people have
-# already been infected.
-# The confirmed counts capture only part of the outbreak, and planning
-# for beds, contacts and vaccine needs depends on the true total.
-# The numbers below are our current best estimate of that total, from
-# the joint posterior and refreshed on every build.
-# Each headline number is given as equal-tailed 30%, 60% and 90%
-# credible intervals, the same intervals used in the tables below.
+# The numbers below are our estimate of the underlying infections to date,
+# reported and unreported, from the joint posterior.
+# Each is given as equal-tailed 30%, 60% and 90% credible intervals.
 
 #md # ```@raw html
 #md # <details><summary>Compute the headline ranges</summary>
@@ -1739,15 +1734,8 @@ summary_ranges #hide
 
 # ### Joint model estimates
 #
-# Our main result is the current number of infections to date, reported
-# and unreported, at the report date.
-# It is the joint posterior over the cumulative infection count $C_T$,
-# fitting all five data streams together: cases exported to Uganda,
-# suspected deaths in the DRC, reported cases in the DRC (with an
-# ascertainment component), laboratory-confirmed cases in the DRC, and
-# deaths among exported cases in Uganda.
-# We show it first as a credible-interval table on the cumulative infection
-# count.
+# This section reports the joint posterior over the cumulative infection
+# count to date, fitting all five data streams together.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative infection count summary table</summary>
@@ -1762,27 +1750,24 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
-# The headline figure below shows three cumulative quantities over time, one
-# per row: latent infections, symptom onsets, and deaths.
-# The left column is the modelled expected cumulative trajectory with its
-# 90% interval; the right column is the posterior density of the final
-# cut-off cumulative.
+# The figure below shows three modelled cumulative quantities over time, one
+# per row, all latent.
+# The top row is infections, the middle row symptom onsets and the bottom
+# row deaths.
+# The left column is the modelled cumulative trajectory with its 50% and 90%
+# intervals; the right column is the posterior density of the current cut-off
+# cumulative.
 # The infection density on the top right is the headline outbreak size, a
 # count of infections rather than reported cases.
-# The onsets row carries the cumulative reported cases as points, and the
-# deaths row the observed cumulative deaths, both ascertained quantities
-# that sit below the modelled totals.
+# No observed counts are overlaid, since each quantity sits upstream of the
+# ascertainment, confirmation and reporting that produce the observations.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative infections, onsets and deaths figure</summary>
 #md # ```
 
 cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
-    n = obs.n, seeding = obs.seeding,
-    obs_onset_days = obs.reported_history.days,
-    obs_onset_counts = obs.reported_history.counts,
-    obs_death_days = obs.deaths_history.days,
-    obs_death_counts = obs.deaths_history.counts);
+    n = obs.n, seeding = obs.seeding);
 
 #md # ```@raw html
 #md # </details>
@@ -1812,54 +1797,49 @@ start_date_fig = plot_start_date_pair(chn_joint;
 
 start_date_fig #hide
 
-# The full posterior summary table reports equal-tailed 30%, 60% and
-# 90% credible intervals on the key joint-fit parameters.
+# The summary table reports the credible intervals on the infection-process
+# parameters: the growth rate and doubling time, the reproduction number,
+# the outbreak age, the case-fatality ratio and the cumulative infection
+# count.
 # The pair plot beside it shows their joint distribution, with the prior
 # overlaid so the data's contribution to each marginal is visible.
 
 #md # ```@raw html
-#md # <details><summary>Joint posterior summary table</summary>
+#md # <details><summary>Infection-parameter summary table</summary>
 #md # ```
 
-joint_summary = summary_table(chn_joint,
-    [:r, :r0, :doubling_time, :T, :R_T, :CFR,
-        :p_drc, :p_uganda, :k, :C_T]; digits = 2);
+infection_summary = summary_table(chn_joint,
+    [:r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T]; digits = 2);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-joint_summary #hide
+infection_summary #hide
 
 #md # ```@raw html
-#md # <details><summary>Posterior pair plot (prior overlaid)</summary>
+#md # <details><summary>Infection-parameter pair plot (prior overlaid)</summary>
 #md # ```
 
-posterior_pair_fig = plot_pair(chn_joint,
-    [:C_T, :R_T, :r, :T, :CFR, :k,
-        :p_drc, :p_uganda];
+infection_pair_fig = plot_pair(chn_joint,
+    [:R_T, :r, :T, :CFR];
     prior = prior_chn);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-posterior_pair_fig #hide
+infection_pair_fig #hide
 
 # ### Reproduction number over time
 #
-# The model fits a weekly random-walk reproduction number, so we can show
-# the full daily reproduction-number trajectory rather than only its
-# cut-off value.
-# The median and 50% and 90% ribbons are shown only from the genetic bound
-# onward, where the random walk drives the reproduction number.
-# The earlier seeding window (shaded) holds it at its low introduction
-# level and is not the reproduction number of an established epidemic, so
-# it is left unplotted.
-# The outbreak-response breakpoint, the first WHO situation report on 18 May
-# 2026 (red dashed), and the data cut-off (grey dashed) are marked.
-# The response enters over a logistic ramp spanning about three weeks
-# (21 days) rather than at a single date.
+# The daily reproduction number over the period we estimate it for, the
+# established outbreak from the genetic bound to the cut-off.
+# The median is shown with 50% and 90% ribbons and about a hundred sampled
+# trajectories.
+# The first situation report on 18 May 2026 marks the start of the response
+# scale-up (red dashed) and the end of the three-week scale-up is the red
+# dotted line; the data cut-off is grey dashed.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction-number trajectory</summary>
@@ -1878,12 +1858,10 @@ rt_fig = plot_rt(chn_joint;
 
 rt_fig #hide
 
-# The outbreak response is fitted as a sampled multiplicative shift on
-# $R_t$ applied over the three-week logistic ramp at the first situation
-# report. The effect is constrained to be non-positive, so it can only
-# reduce transmission. The table reports its posterior on the
-# multiplicative $\exp(\text{effect})$ scale, where a value below one is
-# the factor by which the response lowers $R_t$ once the ramp completes.
+# The table reports the posterior of the response effect on the
+# reproduction number as a multiplier, where a value below one is the factor
+# by which the response lowers the reproduction number once the scale-up
+# completes.
 
 #md # ```@raw html
 #md # <details><summary>Intervention-effect summary table</summary>
@@ -1901,44 +1879,39 @@ intervention_table = streams_table(
 
 intervention_table #hide
 
-# The laboratory pipeline fits the received-specimen volume through the
-# testing fraction and a receipt delay, and scores the confirmed positives
-# as a Binomial of the observed specimens-analysed denominator with a
-# positivity linked to the composition of the tested pool.
-# The implied per-suspected and per-test positivity and the non-BVD
-# background rate are surfaced for comparison with the sitrep figures.
-# The confirmed deaths are a thinning of the suspected deaths, with the BVD
-# composition among suspected deaths enriched on the odds scale to give the
-# death-confirmation probability.
+# ### Surveillance parameters
+#
+# The surveillance-data parameters: the reporting fractions for the DRC and
+# Uganda, the surveillance dispersion, and the laboratory pipeline (the
+# testing fraction and receipt delay, the per-suspected and per-test
+# positivity, the non-BVD background rate, and the death-confirmation
+# probability).
+# The table reports their credible intervals; the pair plot beside it shows
+# their joint posterior with the prior overlaid.
 
 #md # ```@raw html
-#md # <details><summary>Laboratory-pipeline posterior summary table</summary>
+#md # <details><summary>Surveillance-parameter summary table</summary>
 #md # ```
 
-lab_summary = summary_table(chn_joint,
-    [:tau_test, :lambda_bg, :lambda_bg_death, :suspected_positivity,
-        :test_positivity, :expected_confirmed_T, :expected_received_T,
-        :m_death, :death_composition, :death_confirmation,
-        :expected_confirmed_deaths_T];
+surveillance_summary = summary_table(chn_joint,
+    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg, :lambda_bg_death,
+        :suspected_positivity, :test_positivity, :expected_confirmed_T,
+        :expected_received_T, :m_death, :death_composition,
+        :death_confirmation, :expected_confirmed_deaths_T];
     digits = 3);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-lab_summary #hide
-
-# The pair plot beside it shows the joint posterior of the
-# laboratory-pipeline parameters and the derived per-test positivity, with
-# the prior overlaid so the laboratory observations' contribution to each
-# marginal is visible.
+surveillance_summary #hide
 
 #md # ```@raw html
-#md # <details><summary>Laboratory-pipeline pair plot (prior overlaid)</summary>
+#md # <details><summary>Surveillance-parameter pair plot (prior overlaid)</summary>
 #md # ```
 
-lab_pair_fig = plot_pair(chn_joint,
-    [:tau_test, :lambda_bg, :lambda_bg_death, :test_positivity,
+surveillance_pair_fig = plot_pair(chn_joint,
+    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg, :test_positivity,
         :death_confirmation];
     prior = prior_chn);
 
@@ -1946,7 +1919,43 @@ lab_pair_fig = plot_pair(chn_joint,
 #md # </details>
 #md # ```
 
-lab_pair_fig #hide
+surveillance_pair_fig #hide
+
+# ### Export parameters
+#
+# The export-stream parameters: the daily outbound traveller volume that
+# sets the cross-border travel rate, and the implied expected exported cases
+# by the cut-off.
+# The table reports their credible intervals; the pair plot beside it shows
+# their joint posterior with the prior overlaid.
+
+#md # ```@raw html
+#md # <details><summary>Export-parameter summary table</summary>
+#md # ```
+
+export_summary = summary_table(chn_joint,
+    [Symbol("travel_state.daily_travellers"), :expected_exports_T];
+    digits = 2);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+export_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Export-parameter pair plot (prior overlaid)</summary>
+#md # ```
+
+export_pair_fig = plot_pair(chn_joint,
+    [Symbol("travel_state.daily_travellers"), :expected_exports_T];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+export_pair_fig #hide
 
 # A posterior predictive check draws replicated observations from the
 # fitted joint model and compares them to the observed counts. The five
@@ -2181,12 +2190,28 @@ forecast_summary = forecast_table(forecast);
 
 forecast_summary #hide
 
-# The coming week at a glance: new confirmed cases and confirmed deaths,
-# the new latent infections behind them, and the reproduction number
-# carried over the horizon.
+# The coming week at a glance, split into the latent quantities and the
+# observations.
+# The latent figure shows the new infections, symptom onsets and deaths over
+# the horizon, with the reproduction number carried forward.
 
 #md # ```@raw html
-#md # <details><summary>One-week-ahead forecast plot</summary>
+#md # <details><summary>One-week-ahead latent forecast plot</summary>
+#md # ```
+
+forecast_latent_fig = plot_forecast_latent(forecast);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_latent_fig #hide
+
+# The observation figure shows the new reported cases, confirmed cases and
+# confirmed deaths over the horizon.
+
+#md # ```@raw html
+#md # <details><summary>One-week-ahead observed forecast plot</summary>
 #md # ```
 
 forecast_fig = plot_forecast(forecast);
@@ -2229,9 +2254,10 @@ validation_table = forecast_vs_truth(validation_forecast;
 
 validation_table #hide
 
-# Each panel histograms the one-week-ahead cumulative forecast made from the
-# frozen fit, with the 90% predictive interval shaded and the count actually
-# observed by the current cut-off drawn as a dashed black rule.
+# The observation panels histogram the one-week-ahead cumulative forecast
+# made from the frozen fit, with the 90% predictive interval shaded and the
+# count actually observed by the current cut-off drawn as a dashed black
+# rule.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -2250,20 +2276,49 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 
 validation_fig #hide
 
-# ### How the data streams compare
+# The latent quantities are not observed, so they are scored distribution
+# against distribution: what the frozen fit forecast for the past week's new
+# infections, onsets and deaths against what the current fit now estimates
+# for the same window.
+
+#md # ```@raw html
+#md # <details><summary>Forecast-versus-now latent plot</summary>
+#md # ```
+
+## Current fit's draws of the new latent counts over the past week, the last
+## seven days of each cumulative-trajectory deterministic.
+function _now_new(chn, key)
+    mat = chn[key]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    return Float64[t[end] - t[max(1, length(t) - 7)] for t in trajs]
+end
+now_latent = (;
+    infections_new = _now_new(chn_joint, :cumulative_infections),
+    onsets_new = _now_new(chn_joint, :cumulative_onsets),
+    deaths_latent_new = _now_new(chn_joint, :cumulative_expected_deaths))
+
+validation_latent_fig = plot_forecast_vs_truth_latent(
+    validation_forecast; now = now_latent);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_latent_fig #hide
+
+# ### Outbreak size estimated by each data stream
 #
 # Each data stream constrains the latent outbreak size differently.
-# The table below puts the posteriors over $C_T$ side by side, the five
-# single-stream fits and the joint, to show what each stream implies on
+# The table below puts the posteriors over the infection count side by side,
+# the single-stream fits and the joint, to show what each stream implies on
 # its own and what the joint adds.
 
 #md # ```@raw html
-#md # <details><summary>Per-stream C_T table</summary>
+#md # <details><summary>Per-stream infection-count table</summary>
 #md # ```
 
 streams_C_table = streams_table(
     "exports (cases)" => posterior_C_exports,
-    "exports (deaths)" => posterior_C_exports_deaths,
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
@@ -2275,23 +2330,23 @@ streams_C_table = streams_table(
 
 streams_C_table #hide
 
-# Overlaid posterior densities of the cumulative infection count from the
-# five fits.
-# The horizontal axis is clipped to the ninetieth percentile of the joint
-# fit so the long right tail of the DRC-cases fit does not flatten the
-# other curves; that tail continues beyond the panel.
+# Overlaid posterior densities of the infection count from each fit.
+# The horizontal axis is set to the upper tail of the widest fit so the
+# bulk of every stream's posterior mass is visible.
 
 #md # ```@raw html
-#md # <details><summary>Overlaid C_T density plot</summary>
+#md # <details><summary>Overlaid infection-count density plot</summary>
 #md # ```
 
-## Clip the x-axis to the 90th percentile of the joint posterior so the
-## heavy DRC-cases right tail does not compress the other curves.
-density_xmax = 1.05 * quantile(posterior_C_joint, 0.90)
+## Set the x-axis to the 95th percentile across the streams so the bulk of
+## each posterior is visible rather than clipping out the upper mass.
+density_xmax = 1.05 * maximum(
+    quantile(s, 0.95)
+for s in (posterior_C_exports, posterior_C_deaths,
+    posterior_C_cases, posterior_C_confirmed, posterior_C_joint))
 
 cumulative_density_fig = plot_cumulative_cases(
     "exports (cases)" => posterior_C_exports,
-    "exports (deaths)" => posterior_C_exports_deaths,
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
@@ -2330,20 +2385,20 @@ frozen_reports_23may = vec(Array(frozen_23may.chn[:expected_reports_T]))
 
 # ### Estimate evolution across releases
 #
-# How the published outbreak size moved as the situation reports accrued.
+# How the outbreak-size estimate moved as the situation reports accrued.
 #
 # The project has published a tagged results release at each data cut-off
 # (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
 # the posterior draws and input data.
 # The releases to date are from the earlier closed-form integral model, so
-# the released series is the project's published estimate over time, and the
-# renewal series is the current model re-fit frozen at each release date.
-# Both climb as the suspected-case count grows, and both sit above the
-# McCabe et al. scenario range of 235 to 1386 reported cases.
+# the released series is the project's published estimate over time.
+# The current-model series is this renewal model re-fit frozen at each date
+# up to the present cut-off, so it is the current method evaluated at each
+# past date and rises as the outbreak grows rather than sitting flat.
+# Both climb as the suspected-case count grows.
 # The released values are read off the archived posterior draws so the
 # figure builds without refetching the releases.
-# The current-data estimate is drawn as a horizontal band, its 90% interval
-# across the date range with the median as a line.
+# Each estimate is a median with an alpha-shaded 90% credible band.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and frozen renewal re-fits</summary>
@@ -2360,35 +2415,24 @@ release_evolution = [
     ("2026-05-28", 3510, 2196, 6325)
 ]
 
-## The renewal re-fit frozen at each release date (median and 90%
-## interval), reusing the reduced frozen fits defined above.
+## The current model evaluated at each past date, the renewal re-fit frozen
+## at each cut-off plus the live current-data fit, as a rising series.
 function _ci90(xs)
     (round(Int, quantile(xs, 0.5)),
         round(Int, quantile(xs, 0.05)), round(Int, quantile(xs, 0.95)))
 end
 renewal_frozen = [
+    (string(frozen_20may.cutoff), _ci90(frozen_C_20may)...),
     (string(frozen_23may.cutoff), _ci90(frozen_C_23may)...),
     (string(frozen_26may.cutoff),
         _ci90(vec(Array(frozen_26may.chn[:C_T])))...),
     (string(frozen_28may.cutoff),
-        _ci90(vec(Array(frozen_28may.chn[:C_T])))...)
+        _ci90(vec(Array(frozen_28may.chn[:C_T])))...),
+    (string(obs.cutoff), _ci90(posterior_C_joint)...)
 ]
-
-## The McCabe et al. scenario range (min and max of the 15 published
-## reported-case scenarios), as a backdrop band.
-mccabe_range = (minimum(v for (_, v) in REPORT_SCENARIOS),
-    maximum(v for (_, v) in REPORT_SCENARIOS))
-
-## The current-data joint estimate as a horizontal band (median and 90%
-## interval) spanning the full date range.
-current_band = (round(Int, quantile(posterior_C_joint, 0.5)),
-    round(Int, quantile(posterior_C_joint, 0.05)),
-    round(Int, quantile(posterior_C_joint, 0.95)))
 
 evolution_fig = plot_estimate_evolution(release_evolution;
     renewal = renewal_frozen,
-    scenario_range = mccabe_range,
-    current = current_band,
     title = "Outbreak-size estimate as data accrued");
 
 #md # ```@raw html
@@ -2399,36 +2443,24 @@ evolution_fig #hide
 
 # ### Comparison with McCabe et al.
 #
-# An external sense-check, not a replication.
-#
 # Earlier versions of this work reimplemented McCabe et al. closely as an
 # exponential-growth model.
-# This version is a substantial revision, a discrete-time renewal model
-# with a time-varying reproduction number and five jointly-fitted data
-# streams.
-# The single-stream
-# [per-stream comparison](@ref "How the data streams compare") keeps each
-# stream as close to McCabe et al.'s assumptions as the renewal
-# parameterisation allows.
+# This version is a discrete-time renewal model with a time-varying
+# reproduction number and five jointly-fitted data streams.
 # McCabe et al. computed their scenarios at fixed situation-report cut-offs,
-# so we match in time, freezing the renewal data to the same cut-off and
-# re-fitting, with any remaining gap the method read at the date the
-# scenario was computed.
-# Their scenarios are deterministic point estimates carrying no uncertainty,
-# so they appear as points rather than intervals.
-# We freeze to the 20 May update [mccabe2026update](@cite) and to a later
-# 23 May cut-off.
+# so we match in time, freezing our data to the same cut-off and re-fitting.
+# The McCabe scenarios shown are the 20 May update [mccabe2026update](@cite).
+# They are deterministic point estimates carrying no uncertainty, so they
+# appear as bare points rather than intervals.
+# Alongside them we show our own estimates at the matched cut-offs, the
+# renewal fit frozen at 20 May and at 23 May with their 95% intervals, so
+# the comparison carries our trajectory and not only McCabe's.
 # The 20 May freeze is the earliest matched cut-off with a coherent
-# suspected-case series, since the earliest INSP situation report is 18 May.
+# suspected-case series, since the earliest situation report is 18 May.
 #
 # The expected reported-case count moves sharply with the data.
-# At the 20 May cut-off it sits close to McCabe et al.'s scenario range and
-# well below the current-data fit.
-# The latent infection count moves much less, because infections are
-# inferred back through ascertainment and the reporting delay.
-# The gap at the matched date is the method, since the renewal infers
-# infections through a time-varying reproduction number while McCabe et al.
-# assume fixed growth and a detection window.
+# At the 20 May cut-off it sits close to McCabe et al.'s scenarios and well
+# below the current-data fit.
 
 #md # ```@raw html
 #md # <details><summary>Matched-in-time reported-case comparison</summary>
@@ -2445,8 +2477,17 @@ matched_rows = vcat(
     [("Renewal frozen 20 May", _ci95(frozen_reports_20may)...),
         ("Renewal frozen 23 May", _ci95(frozen_reports_23may)...)])
 
+## Colour the rows by source so McCabe's deterministic scenarios and our own
+## renewal estimates read apart.
+matched_groups = vcat(
+    fill("McCabe et al. (20 May update)", length(REPORT_SCENARIOS)),
+    ["Our renewal estimate", "Our renewal estimate"])
+
 matched_comparison_fig = plot_estimate_comparison(matched_rows;
-    xlabel = "Cumulative reported cases");
+    xlabel = "Cumulative reported cases",
+    groups = matched_groups,
+    group_colours = ["McCabe et al. (20 May update)" => :grey,
+        "Our renewal estimate" => :firebrick]);
 
 #md # ```@raw html
 #md # </details>
@@ -2456,15 +2497,13 @@ matched_comparison_fig #hide
 
 # The figure is on the reported-case scale, the ascertained quantity McCabe
 # et al. report.
-# The project's released estimates are not overlaid here, because those are
-# cumulative infections rather than reported cases and sit on a different
-# scale; their evolution is shown in the
+# The project's released outbreak-size estimates are on the infection scale
+# and are shown in the
 # [estimate evolution](@ref "Estimate evolution across releases") figure
 # above.
 #
 # Side-by-side outbreak-size intervals for the two frozen fits and the
-# headline current-data fit, so the shift with the data cut-off reads off
-# directly:
+# current-data fit, so the shift with the data cut-off reads off directly.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit C_T table</summary>
@@ -2504,6 +2543,12 @@ output_dir = get(ENV, "BVD_OUTPUT_DIR",
     joinpath(pkgdir(BVDOutbreakSize), "output"))
 mkpath(output_dir)
 
+## Full parameter summary for the published CSV (infection, surveillance and
+## export parameters together).
+joint_summary = summary_table(chn_joint,
+    [:r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
+        :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
+        Symbol("travel_state.daily_travellers")]; digits = 2)
 CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
 CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
     streams_C_table)
