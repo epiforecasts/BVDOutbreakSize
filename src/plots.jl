@@ -462,26 +462,31 @@ end
 
 """
 Estimate-evolution plot: how the outbreak-size estimate moves as the
-data cut-off advances. Two series are drawn against the cut-off date.
+data cut-off advances, drawn against the cut-off date.
 
 `released` is a vector of `(cutoff_date, central, lower, upper)` tuples,
 one per published project release, shown as blue points joined by a line
 with vertical whisker bars for their credible intervals.
 
 `renewal` is a vector of the same tuple shape, the renewal model re-fit
-frozen at each release date, shown as red points joined by a line with a
-shaded credible-interval ribbon.
+frozen at each release date, shown as red points with vertical whisker
+bars and a joining line (not a filled ribbon).
+
+`current` is a `(central, lower, upper)` tuple for the current-data
+estimate, drawn as a horizontal band spanning the date range (its 90%
+interval) with the median as a line.
 
 A horizontal grey band spanning `scenario_range` marks the published
-McCabe et al. scenario range. `xlabel`/`ylabel`/`title` set the axis
-text; `released_label` and `renewal_label` name the two series.
+McCabe et al. scenario range. `xlabel`/`ylabel`/`title` set the axis text;
+`released_label` and `renewal_label` name the two series.
 """
 function plot_estimate_evolution(
         released::AbstractVector;
         renewal::AbstractVector = NamedTuple[],
         scenario_range::Union{Nothing, Tuple{Real, Real}} = nothing,
+        current::Union{Nothing, Tuple{Real, Real, Real}} = nothing,
         xlabel::AbstractString = "Data cut-off date",
-        ylabel::AbstractString = "Cumulative cases C(T)",
+        ylabel::AbstractString = "Cumulative infections C(T)",
         title::AbstractString = "Outbreak-size estimate as data accrued",
         released_label::AbstractString =
         "Released estimates (per project release)",
@@ -504,25 +509,36 @@ function plot_estimate_evolution(
     isempty(renewal) ||
         (upper = max(upper, maximum(float(p[4]) for p in renewal)))
     isnothing(scenario_range) || (upper = max(upper, scenario_range[2]))
+    isnothing(current) || (upper = max(upper, float(current[3])))
 
+    xlo = _x(ref) - 1
+    xhi = _x(maximum(alldates)) + 1
     fig = Figure(; size = (860, 480))
     ax = Axis(fig[1, 1];
         xlabel = xlabel, ylabel = ylabel, title = title,
         xticks = (_x.(alldates), [string(d) for d in alldates]),
         xticklabelrotation = pi / 4,
-        limits = ((_x(ref) - 1, _x(maximum(alldates)) + 1),
-            (0, upper * 1.08)))
+        limits = ((xlo, xhi), (0, upper * 1.08)))
 
     scenario_plt = nothing
     if !isnothing(scenario_range)
-        sxs = [_x(ref) - 1, _x(maximum(alldates)) + 1]
+        sxs = [xlo, xhi]
         scenario_plt = band!(ax, sxs, fill(float(scenario_range[1]), 2),
             fill(float(scenario_range[2]), 2); color = (:grey, 0.18))
     end
 
-    ## Renewal frozen-fit ribbon first, so the released markers sit on
-    ## top of it.
-    renewal_band = nothing
+    ## Current-data estimate as a horizontal band spanning the x-range,
+    ## with the median as a line.
+    current_band = nothing
+    if !isnothing(current)
+        cxs = [xlo, xhi]
+        current_band = band!(ax, cxs, fill(float(current[2]), 2),
+            fill(float(current[3]), 2); color = (:seagreen, 0.18))
+        lines!(ax, cxs, fill(float(current[1]), 2);
+            color = :seagreen, linewidth = 2, linestyle = :dash)
+    end
+
+    ## Renewal frozen-fit points with whisker bars and a joining line.
     renewal_pts = nothing
     if !isempty(renewal)
         nx = _x.(ndates)
@@ -531,8 +547,10 @@ function plot_estimate_evolution(
         nlo = [float(p[3]) for p in renewal][no]
         nhi = [float(p[4]) for p in renewal][no]
         nx = nx[no]
-        renewal_band = band!(ax, nx, nlo, nhi;
-            color = (:firebrick, 0.18))
+        for i in eachindex(nx)
+            lines!(ax, [nx[i], nx[i]], [nlo[i], nhi[i]];
+                color = (:firebrick, 0.9), linewidth = 2)
+        end
         lines!(ax, nx, nc; color = :firebrick, linewidth = 2)
         renewal_pts = scatter!(ax, nx, nc; color = :firebrick,
             markersize = 11, marker = :diamond)
@@ -549,13 +567,16 @@ function plot_estimate_evolution(
     released_pts = scatter!(ax, rx, rc; color = :steelblue,
         markersize = 11)
 
-    ## Build an explicit legend so the two series and the ribbon read
-    ## unambiguously.
+    ## Build an explicit legend so each series reads unambiguously.
     handles = Any[released_pts]
     labels = String[released_label]
-    if !isnothing(renewal_band)
-        push!(handles, [renewal_pts, renewal_band])
-        push!(labels, renewal_label * " (point + 90% ribbon)")
+    if !isnothing(renewal_pts)
+        push!(handles, renewal_pts)
+        push!(labels, renewal_label * " (point + 90% bar)")
+    end
+    if !isnothing(current_band)
+        push!(handles, current_band)
+        push!(labels, "Current-data estimate (90% band)")
     end
     if !isnothing(scenario_plt)
         push!(handles, scenario_plt)
@@ -853,10 +874,12 @@ one-week-ahead forecast. Each panel is a histogram with the 90%
 predictive interval shaded and the later-observed count drawn as a dashed
 black rule. `cases`, `deaths` and `exports` are the observed cumulative
 counts; `baseline_*` are the counts at the forecast origin, so the
-observed new count is the cumulative truth minus the baseline.
+observed new count is the cumulative truth minus the baseline. The exports
+panel is drawn only when the forecast carries the exports columns.
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        cases::Real, deaths::Real, exports::Real,
+        cases::Real, deaths::Real,
+        exports::Union{Real, Missing} = missing,
         confirmed::Union{Real, Missing} = missing,
         tests::Union{Real, Missing} = missing,
         baseline_cases::Real = 0, baseline_deaths::Real = 0,
@@ -867,10 +890,12 @@ function plot_forecast_vs_truth(fc::DataFrame;
         (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue,
             float(cases), float(cases) - float(baseline_cases)),
         (:deaths_cum, :deaths_new, "deaths (DRC)", :firebrick,
-            float(deaths), float(deaths) - float(baseline_deaths)),
-        (:exports_cum, :exports_new, "exports (Uganda)", :seagreen,
-            float(exports), float(exports) - float(baseline_exports))
+            float(deaths), float(deaths) - float(baseline_deaths))
     ])
+    exports !== missing && :exports_cum in propertynames(fc) &&
+        push!(streams,
+            (:exports_cum, :exports_new, "exports (Uganda)", :seagreen,
+                float(exports), float(exports) - float(baseline_exports)))
     tests !== missing && :tests_cum in propertynames(fc) &&
         push!(streams,
             (:tests_cum, :tests_new, "tests analysed (DRC)", :teal,
