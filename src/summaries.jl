@@ -71,11 +71,23 @@ end
 
 ## --- Fit diagnostics ----------------------------------------------------
 
-# Flat vector of a scalar diagnostic (R-hat or ESS), one entry per
-# scalar parameter in a FlexiChains summary.
-function _scalar_stats(summary)
+# Derived daily latent trajectories carried only for the figures. Their
+# early cryptic-phase entries are near-degenerate deterministic functions
+# of the seed, so their R-hat / ESS would dominate the headline fit
+# summary without reflecting genuine sampler mixing. Excluded from the
+# convergence pool; the sampled vectors (random-walk innovations) stay in.
+const _DIAGNOSTIC_EXCLUDE = (
+    "cumulative_infections", "cumulative_onsets", "cumulative_expected_deaths")
+
+# Flat vector of a scalar diagnostic (R-hat or ESS), one entry per scalar
+# parameter in a FlexiChains summary; vector-valued sampled parameters
+# contribute one entry per element. Excluded derived trajectories skipped.
+function _scalar_stats(summary; exclude = _DIAGNOSTIC_EXCLUDE)
     out = Float64[]
     for p in FlexiChains.parameters(summary)
+        ## Vector deterministics surface as indexed scalars
+        ## (`cumulative_infections[1]`, ...), so match on the name prefix.
+        any(b -> startswith(string(p), b), exclude) && continue
         v = summary[p]
         if v isa Number
             ismissing(v) && continue
