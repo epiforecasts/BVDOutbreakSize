@@ -170,6 +170,34 @@ end
     fig = plot_estimate_evolution(rows; renewal = renewal,
         scenario_range = (235, 1386))
     @test fig isa CairoMakie.Makie.Figure
+    ## With the current-data horizontal band.
+    fig2 = plot_estimate_evolution(rows; renewal = renewal,
+        scenario_range = (235, 1386), current = (4000, 2500, 6000))
+    @test fig2 isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_cumulative_trajectories
+    rng = MersenneTwister(21)
+    ndraws = 60
+    n = 40
+    ## Each cumulative trajectory deterministic is a draws×chains matrix of
+    ## per-draw monotone vectors.
+    _traj() = reshape(
+        [cumsum(abs.(randn(rng, n))) for _ in 1:ndraws], ndraws, 1)
+    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        Dict(
+            FlexiChains.Parameter(:cumulative_infections) => _traj(),
+            FlexiChains.Parameter(:cumulative_onsets) => _traj(),
+            FlexiChains.Parameter(:cumulative_expected_deaths) => _traj()))
+    fig = plot_cumulative_trajectories(chn; n = n,
+        seeding = Date("2026-02-23"),
+        obs_onset_days = [10, 20, 30], obs_onset_counts = [3, 8, 15],
+        obs_death_days = [10, 20, 30], obs_death_counts = [1, 2, 4])
+    @test fig isa CairoMakie.Makie.Figure
 end
 
 @testitem "plot_start_date_pair returns a Makie figure" setup=[HeadlessMakie] begin
@@ -295,4 +323,13 @@ end
     fig = plot_forecast_vs_truth(fc;
         cases = 130, deaths = 80, exports = 7)
     @test fig isa CairoMakie.Makie.Figure
+    ## Exports column absent (the DRC-only forecast used by the validation
+    ## section): the exports panel is dropped without error.
+    fc_drc = DataFrame(
+        cases_cum = rand(rng, 50:150, n),
+        deaths_cum = rand(rng, 40:100, n),
+        cases_new = rand(rng, 0:30, n),
+        deaths_new = rand(rng, 0:20, n))
+    fig2 = plot_forecast_vs_truth(fc_drc; cases = 130, deaths = 80)
+    @test fig2 isa CairoMakie.Makie.Figure
 end
