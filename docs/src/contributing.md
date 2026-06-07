@@ -166,6 +166,51 @@ Use the existing report text as the template for tone.
   "median (lower, upper)" construction.
 - Minimise colons and dashes in prose; use them only when needed.
 - UK English throughout.
+- Section and subsection titles are just the title.
+  No descriptive suffix after a title (not "Reproduction number —
+  weekly random walk with intervention ramp", just "Reproduction
+  number"), and no detail-dump in the first sentence after a heading.
+- Order the methods generatively, infections through to observation
+  endpoints: the infection process first, then the epidemiological
+  processes (delays, case-fatality ratio), then the observation models
+  (surveillance streams before exports), then the joint model.
+- Define every quantity before it is used.
+  Define the reproduction number before the seeding that relies on it;
+  introduce the initial infection count before describing how it
+  arises; define every symbol and operator (including convolution) the
+  first time it appears. Never use a symbol the reader has not met.
+- Do not repeat. State a convention once (the credible-interval levels,
+  the delay discretisation) and do not restate it per bullet or
+  subsection. Cut sentences that duplicate earlier content.
+- Cite the source of each prior and carry the uncertainty the source
+  reports. When a source gives a distribution with uncertainty (a shape
+  and scale with intervals), propagate that, not a self-assigned
+  weakly-informative spread. Do not write "with an assumed
+  weakly-informative spread" repeatedly. If a prior is our own choice,
+  say so plainly ("we use a prior of ...").
+- State assumptions as assumptions ("we assume a single seed case",
+  "we assume the response scale-up takes about three weeks"). Do not
+  assert a false rationale for a modelling choice (not "a Poisson
+  because the count is small").
+- Do not editorialise or justify priors in the narrative (not "a
+  diffuse prior would let the background absorb the whole stream").
+  State what the model does.
+- Methods belong in the methods. Do not leave model description (the
+  intervention model, the counterfactual, the forecast, the evaluation)
+  in the results; move it to the methods and keep the results to
+  findings.
+- Label quantities accurately. Do not call suspected cases onsets;
+  prefer "current cumulative" over "final cumulative".
+- For a latent quantity (infections, onsets, deaths) report the
+  modelled estimate without overlaying observed data that sits
+  downstream of unmodelled processes.
+- Plots use the same credible-interval ribbons as the tables, not a
+  bare median, and show only the period being estimated rather than
+  greying out the rest.
+- Model code shown in the report is clean; strip working comments
+  before it is displayed.
+- Flag a future improvement as a GitHub issue, not a buried caveat in
+  the prose.
 
 ## Pull requests
 
