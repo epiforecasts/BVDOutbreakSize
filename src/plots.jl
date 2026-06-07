@@ -11,7 +11,9 @@ are drawn as faint dashed Makie `vlines` on top of the AoG figure.
 function plot_cumulative_cases(
         streams::Pair{String, <:AbstractVector}...;
         scenarios = REPORT_SCENARIOS,
-        xmax::Union{Nothing, Real} = nothing)
+        xmax::Union{Nothing, Real} = nothing,
+        xlabel::AbstractString = "Cumulative infections C_T",
+        title::AbstractString = "Outbreak size estimated by each data stream")
     upper = isnothing(xmax) ?
             1.05 * maximum(quantile(s.second, 0.995) for s in streams) :
             xmax
@@ -29,13 +31,13 @@ function plot_cumulative_cases(
     end
 
     spec = AoG.data(df) *
-           AoG.mapping(:C_T => "Cumulative cases C_T",
+           AoG.mapping(:C_T => xlabel,
                color = :stream => "Data stream") *
            AoG.AlgebraOfGraphics.density() *
            AoG.subvisual(:line, linewidth = 2)
     fg = AoG.draw(spec;
         axis = (; ylabel = "Posterior density",
-            title = "Posterior C_T by data stream",
+            title = title,
             limits = ((0, upper), nothing)),
         figure = (; size = (760, 420))
     )
@@ -48,25 +50,19 @@ end
 
 """
 Headline 3x2 cumulative figure. Rows are cumulative infections, cumulative
-symptom onsets and cumulative deaths. The left column is the modelled
-expected cumulative trajectory over the grid as a median line with a 90%
-ribbon; the right column is the posterior density of the final cut-off
-cumulative. The chain must carry the vector deterministics
-`cumulative_infections`, `cumulative_onsets` and
+symptom onsets and cumulative deaths, all modelled latent quantities. The
+left column is the modelled expected cumulative trajectory over the grid as
+a median line with 50% and 90% ribbons; the right column is the posterior
+density of the current cut-off cumulative. The chain must carry the vector
+deterministics `cumulative_infections`, `cumulative_onsets` and
 `cumulative_expected_deaths` (one per draw). `seeding` is the calendar date
-of grid day 1, so day `d` is `seeding + (d - 1)`. Observed comparators are
-optional points overlaid on the trajectory panels: `obs_onset_days` /
-`obs_onset_counts` are the cumulative reported (ascertained) cases at their
-situation-report days, drawn against the onsets row; `obs_death_days` /
-`obs_death_counts` the observed cumulative deaths against the deaths row.
-The infections row has no observed counterpart, since infections are latent.
+of grid day 1, so day `d` is `seeding + (d - 1)`. No observed data is
+overlaid: each row is a latent quantity that sits upstream of ascertainment,
+confirmation and reporting delays, so the observed counts are not on the
+same scale.
 """
 function plot_cumulative_trajectories(chn;
-        n::Integer, seeding::Date,
-        obs_onset_days::AbstractVector = Int[],
-        obs_onset_counts::AbstractVector = Real[],
-        obs_death_days::AbstractVector = Int[],
-        obs_death_counts::AbstractVector = Real[])
+        n::Integer, seeding::Date)
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
 
@@ -79,35 +75,30 @@ function plot_cumulative_trajectories(chn;
     function _ribbon(trajs)
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
         med = [q(d, 0.5) for d in 1:n]
-        lo = [q(d, 0.05) for d in 1:n]
-        hi = [q(d, 0.95) for d in 1:n]
-        return med, lo, hi
+        lo90 = [q(d, 0.05) for d in 1:n]
+        hi90 = [q(d, 0.95) for d in 1:n]
+        lo50 = [q(d, 0.25) for d in 1:n]
+        hi50 = [q(d, 0.75) for d in 1:n]
+        return med, lo90, hi90, lo50, hi50
     end
 
     rows = (
-        (:cumulative_infections, "infections", :steelblue,
-            Int[], Real[]),
-        (:cumulative_onsets, "symptom onsets", :seagreen,
-            obs_onset_days, obs_onset_counts),
-        (:cumulative_expected_deaths, "deaths", :firebrick,
-            obs_death_days, obs_death_counts)
+        (:cumulative_infections, "infections", :steelblue),
+        (:cumulative_onsets, "symptom onsets", :seagreen),
+        (:cumulative_expected_deaths, "deaths", :firebrick)
     )
 
     fig = Figure(; size = (940, 1020))
-    for (i, (key, name, colour, odays, ocounts)) in enumerate(rows)
+    for (i, (key, name, colour)) in enumerate(rows)
         trajs = _trajectories(key)
-        med, lo, hi = _ribbon(trajs)
+        med, lo90, hi90, lo50, hi50 = _ribbon(trajs)
         ax = Axis(fig[i, 1];
             xlabel = "Date", ylabel = "Cumulative $name",
             title = "Modelled cumulative $name over time",
             xticklabelrotation = pi / 6)
-        band!(ax, x, lo, hi; color = (colour, 0.2))
+        band!(ax, x, lo90, hi90; color = (colour, 0.15))
+        band!(ax, x, lo50, hi50; color = (colour, 0.30))
         lines!(ax, x, med; color = colour, linewidth = 2)
-        if !isempty(odays)
-            ox = Float64[epoch + (d - 1) for d in odays]
-            scatter!(ax, ox, float.(ocounts); color = :black,
-                markersize = 8)
-        end
         loax = floor(Int, minimum(x))
         hiax = ceil(Int, maximum(x))
         ax.xticks = collect(loax:14:hiax)
@@ -118,7 +109,7 @@ function plot_cumulative_trajectories(chn;
         axd = Axis(fig[i, 2];
             xlabel = "Cumulative $name at the cut-off",
             ylabel = "Posterior density",
-            title = "Final cumulative $name")
+            title = "Current cumulative $name")
         density!(axd, finals; color = (colour, 0.5),
             strokecolor = colour, strokewidth = 2)
     end
@@ -468,30 +459,25 @@ data cut-off advances, drawn against the cut-off date.
 one per published project release, shown as blue points joined by a line
 with vertical whisker bars for their credible intervals.
 
-`renewal` is a vector of the same tuple shape, the renewal model re-fit
-frozen at each release date, shown as red points with vertical whisker
-bars and a joining line (not a filled ribbon).
+`renewal` is a vector of the same tuple shape, the current renewal model
+re-fit frozen at each release date. This is the current model evaluated at
+each past cut-off, so the series rises as the outbreak grows. Both series
+are drawn as a median line through their points with an alpha-shaded
+credible-interval ribbon along the date axis.
 
-`current` is a `(central, lower, upper)` tuple for the current-data
-estimate, drawn as a horizontal band spanning the date range (its 90%
-interval) with the median as a line.
-
-A horizontal grey band spanning `scenario_range` marks the published
-McCabe et al. scenario range. `xlabel`/`ylabel`/`title` set the axis text;
-`released_label` and `renewal_label` name the two series.
+`xlabel`/`ylabel`/`title` set the axis text; `released_label` and
+`renewal_label` name the two series.
 """
 function plot_estimate_evolution(
         released::AbstractVector;
         renewal::AbstractVector = NamedTuple[],
-        scenario_range::Union{Nothing, Tuple{Real, Real}} = nothing,
-        current::Union{Nothing, Tuple{Real, Real, Real}} = nothing,
         xlabel::AbstractString = "Data cut-off date",
         ylabel::AbstractString = "Cumulative infections C(T)",
         title::AbstractString = "Outbreak-size estimate as data accrued",
         released_label::AbstractString =
         "Released estimates (per project release)",
         renewal_label::AbstractString =
-        "Renewal model re-fit frozen at each release date")
+        "Current model re-fit frozen at each release date")
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
     ## then relabel the ticks with the dates.
     rdates = [Date(String(r[1])) for r in released]
@@ -508,8 +494,6 @@ function plot_estimate_evolution(
     upper = maximum(rhi)
     isempty(renewal) ||
         (upper = max(upper, maximum(float(p[4]) for p in renewal)))
-    isnothing(scenario_range) || (upper = max(upper, scenario_range[2]))
-    isnothing(current) || (upper = max(upper, float(current[3])))
 
     xlo = _x(ref) - 1
     xhi = _x(maximum(alldates)) + 1
@@ -520,68 +504,32 @@ function plot_estimate_evolution(
         xticklabelrotation = pi / 4,
         limits = ((xlo, xhi), (0, upper * 1.08)))
 
-    scenario_plt = nothing
-    if !isnothing(scenario_range)
-        sxs = [xlo, xhi]
-        scenario_plt = band!(ax, sxs, fill(float(scenario_range[1]), 2),
-            fill(float(scenario_range[2]), 2); color = (:grey, 0.18))
+    ## Draw one series as a median line through its points with an
+    ## alpha-shaded interval ribbon along the date axis.
+    function _series!(dates, tuples, colour, marker)
+        xs = _x.(dates)
+        ord = sortperm(xs)
+        xs = xs[ord]
+        c = [float(t[2]) for t in tuples][ord]
+        lo = [float(t[3]) for t in tuples][ord]
+        hi = [float(t[4]) for t in tuples][ord]
+        band!(ax, xs, lo, hi; color = (colour, 0.18))
+        lines!(ax, xs, c; color = colour, linewidth = 2)
+        return scatter!(ax, xs, c; color = colour, markersize = 11,
+            marker = marker)
     end
 
-    ## Current-data estimate as a horizontal band spanning the x-range,
-    ## with the median as a line.
-    current_band = nothing
-    if !isnothing(current)
-        cxs = [xlo, xhi]
-        current_band = band!(ax, cxs, fill(float(current[2]), 2),
-            fill(float(current[3]), 2); color = (:seagreen, 0.18))
-        lines!(ax, cxs, fill(float(current[1]), 2);
-            color = :seagreen, linewidth = 2, linestyle = :dash)
-    end
-
-    ## Renewal frozen-fit points with whisker bars and a joining line.
-    renewal_pts = nothing
+    handles = Any[]
+    labels = String[]
     if !isempty(renewal)
-        nx = _x.(ndates)
-        no = sortperm(nx)
-        nc = [float(p[2]) for p in renewal][no]
-        nlo = [float(p[3]) for p in renewal][no]
-        nhi = [float(p[4]) for p in renewal][no]
-        nx = nx[no]
-        for i in eachindex(nx)
-            lines!(ax, [nx[i], nx[i]], [nlo[i], nhi[i]];
-                color = (:firebrick, 0.9), linewidth = 2)
-        end
-        lines!(ax, nx, nc; color = :firebrick, linewidth = 2)
-        renewal_pts = scatter!(ax, nx, nc; color = :firebrick,
-            markersize = 11, marker = :diamond)
-    end
-
-    ## Released estimates: points joined by a line, with whisker bars.
-    ord = sortperm(rx)
-    rx, rc, rlo, rhi = rx[ord], rc[ord], rlo[ord], rhi[ord]
-    for i in eachindex(rx)
-        lines!(ax, [rx[i], rx[i]], [rlo[i], rhi[i]];
-            color = (:steelblue, 0.9), linewidth = 2)
-    end
-    lines!(ax, rx, rc; color = :steelblue, linewidth = 2)
-    released_pts = scatter!(ax, rx, rc; color = :steelblue,
-        markersize = 11)
-
-    ## Build an explicit legend so each series reads unambiguously.
-    handles = Any[released_pts]
-    labels = String[released_label]
-    if !isnothing(renewal_pts)
+        renewal_pts = _series!(ndates, renewal, :firebrick, :diamond)
         push!(handles, renewal_pts)
-        push!(labels, renewal_label * " (point + 90% bar)")
+        push!(labels, renewal_label * " (median + 90% band)")
     end
-    if !isnothing(current_band)
-        push!(handles, current_band)
-        push!(labels, "Current-data estimate (90% band)")
-    end
-    if !isnothing(scenario_plt)
-        push!(handles, scenario_plt)
-        push!(labels, "McCabe et al. scenario range")
-    end
+    released_pts = _series!(rdates, released, :steelblue, :circle)
+    push!(handles, released_pts)
+    push!(labels, released_label * " (median + 90% band)")
+
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
     return fig
@@ -591,20 +539,31 @@ end
 Horizontal point-and-interval comparison of cumulative-case estimates
 from several sources. `rows` is a vector of
 `(label, central, lower, upper)` tuples, drawn top to bottom with the
-central estimate as a point and `[lower, upper]` as a bar. Use it to
-place model posteriors next to published point estimates and their
-intervals.
+central estimate as a point and `[lower, upper]` as a bar. A row whose
+lower and upper match its central is a deterministic point estimate and is
+drawn as a bare marker with no bar.
+
+`groups` is an optional vector of group keys, one per row, matched against
+`group_colours` (a vector of `key => colour` pairs) to colour each row's
+marker and bar and build a legend, so several sources read apart at a
+glance. Without `groups` the rows share a single colour.
 """
 function plot_estimate_comparison(
         rows::AbstractVector;
         xlabel::AbstractString = "Cumulative cases C(T)",
-        xmax::Union{Nothing, Real} = nothing)
+        xmax::Union{Nothing, Real} = nothing,
+        groups::Union{Nothing, AbstractVector} = nothing,
+        group_colours::AbstractVector = Pair[])
     n = length(rows)
     labels = [String(r[1]) for r in rows]
     central = [float(r[2]) for r in rows]
     lo = [float(r[3]) for r in rows]
     hi = [float(r[4]) for r in rows]
     top = isnothing(xmax) ? maximum(hi) * 1.08 : xmax
+
+    cmap = Dict(group_colours)
+    _colour(i) = isnothing(groups) ? :steelblue :
+                 get(cmap, groups[i], :steelblue)
 
     fig = Figure(; size = (840, 120 + 46n))
     ax = Axis(fig[1, 1];
@@ -614,10 +573,21 @@ function plot_estimate_comparison(
     )
     for i in 1:n
         y = n - i + 1
-        lines!(ax, [lo[i], hi[i]], [y, y];
-            color = (:steelblue, 0.8), linewidth = 3)
-        scatter!(ax, [central[i]], [y];
-            color = :firebrick, markersize = 12)
+        col = _colour(i)
+        ## A deterministic point estimate has no interval, so draw a bare
+        ## marker; otherwise draw the bar with the central point on top.
+        if hi[i] > lo[i]
+            lines!(ax, [lo[i], hi[i]], [y, y];
+                color = (col, 0.8), linewidth = 3)
+        end
+        scatter!(ax, [central[i]], [y]; color = col, markersize = 12)
+    end
+    if !isnothing(groups) && !isempty(group_colours)
+        handles = [CairoMakie.MarkerElement(; color = c, marker = :circle,
+                       markersize = 12) for (_, c) in group_colours]
+        glabels = [String(k) for (k, _) in group_colours]
+        CairoMakie.axislegend(ax, handles, glabels; position = :rb,
+            framevisible = true)
     end
     return fig
 end
@@ -702,17 +672,18 @@ non-centred Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 `rt_state.intervention_effect` along a logistic ramp
 ([`sigmoid_ramp`](@ref)) anchored at the outbreak-response `breakpoint`.
 
-Each draw's `Rt` is masked to days at or after its own establishment day
-(`n - round(T)`, where cumulative infections cross one), so the median
-and 50/90% ribbons cover only the established epidemic; the
-pre-establishment seeding window is prior-driven and is left unshaded and
-annotated. The cut-off and the intervention breakpoint are marked.
-`seeding` is the calendar date of grid day 1 (so day `d` is
+The estimated window runs from `rt_start` (the random-walk anchor) to the
+cut-off; only that period is drawn, the median with 50% and 90% ribbons, and
+about `n_traj` thinned sampled trajectories are overlaid thin and faint to
+show the per-draw spread. The intervention breakpoint, the end of the
+intervention scale-up (`breakpoint + ramp`) as a dotted rule, and the cut-off
+are marked. `seeding` is the calendar date of grid day 1 (so day `d` is
 `seeding + (d - 1)`).
 """
 function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
-        rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0)
+        rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
+        n_traj::Integer = 100)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
@@ -767,8 +738,6 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     lo50 = [q(d, 0.25) for d in 1:n]
     hi50 = [q(d, 0.75) for d in 1:n]
     est = findall(!ismissing, med)
-    ## Median establishment day for the unshaded seeding-window annotation.
-    est_start = isempty(est) ? n : minimum(est)
 
     epoch = date2epochdays(seeding)
     x = [epoch + (d - 1) for d in 1:n]
@@ -777,9 +746,15 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
         title = "Estimated Rt over the established outbreak",
         xticklabelrotation = pi / 6)
-    ## Shade the pre-establishment seeding window (prior-driven).
-    est_start > 1 && vspan!(ax, x[1], x[est_start];
-        color = (:grey, 0.12))
+    ## Thin sampled trajectories over the estimated window, faint, so the
+    ## per-draw spread reads alongside the ribbons.
+    if n_traj > 0 && !isempty(est)
+        step = max(1, fld(ndraws, n_traj))
+        for i in 1:step:ndraws
+            yi = Float64[rt[i, d] for d in est]
+            lines!(ax, xe, yi; color = (:purple, 0.05), linewidth = 0.5)
+        end
+    end
     band!(ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
         color = (:purple, 0.15))
     band!(ax, xe, Float64[lo50[d] for d in est], Float64[hi50[d] for d in est];
@@ -789,10 +764,16 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     hlines!(ax, [1.0]; color = :black, linestyle = :dot)
     vlines!(ax, [Float64(epoch + breakpoint - 1)];
         color = :firebrick, linestyle = :dash, linewidth = 2)
+    ## End of the intervention scale-up (breakpoint plus the ramp length).
+    vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
+        color = :firebrick, linestyle = :dot, linewidth = 2)
     vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
         color = :grey, linestyle = :dash)
-    lo = floor(Int, minimum(x))
+    ## Limit the x-axis to the estimated window so only the period being
+    ## estimated is shown.
+    lo = isempty(xe) ? floor(Int, minimum(x)) : floor(Int, minimum(xe))
     hi = ceil(Int, maximum(x))
+    CairoMakie.xlims!(ax, lo, hi)
     ax.xticks = collect(lo:14:hi)
     ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                               for v in vals]
@@ -830,36 +811,44 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     return fig
 end
 
+## Shared panel painter for the forecast figures: a histogram of the
+## forecast new-count draws with its 90% predictive interval shaded.
+function _forecast_count_panel!(fig, pos, v, title, colour)
+    r, c = pos
+    upper = max(1.0, quantile(v, 0.995))
+    lo = quantile(v, 0.05)
+    hi = quantile(v, 0.95)
+    ax = Axis(fig[r, c];
+        xlabel = title, ylabel = "Predictive frequency",
+        title = "One week ahead", limits = ((0, upper), nothing))
+    vspan!(ax, lo, hi; color = (colour, 0.15))
+    hist!(ax, v; bins = range(0, upper; length = 30), color = (colour, 0.7))
+    return ax
+end
+
 """
-One-week-ahead forecast figure from [`forecast_reported`](@ref): new
-confirmed cases, new confirmed deaths, new latent infections, and the
-reproduction number carried over the horizon. The count panels are
-predictive-frequency histograms (new confirmed cases and deaths); the
-infections panel histograms the projected new latent infections; the
-reproduction-number panel shows the posterior of the forecast `R_t` with
-the no-growth line at one marked. Confirmed panels are drawn only when the
-forecast carries the laboratory streams.
+One-week-ahead forecast of the unobserved (latent) quantities from
+[`forecast_reported`](@ref): new infections, new symptom onsets and new
+deaths over the horizon, with the reproduction number carried over the
+horizon. Each count panel histograms the projected new latent count with
+its 90% predictive interval shaded; the reproduction-number panel shows the
+posterior of the forecast `R_t` with the no-growth line at one marked.
+These are the latent counterparts of the observed-stream forecast in
+[`plot_forecast`](@ref).
 """
-function plot_forecast(fc::DataFrame)
-    count_cols = Tuple{Symbol, String, Symbol}[]
-    :confirmed_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
-    :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
-    push!(count_cols, (:infections_new, "New infections (DRC)", :steelblue))
+function plot_forecast_latent(fc::DataFrame)
+    count_cols = [
+        (:infections_new, "New infections (DRC)", :steelblue),
+        (:onsets_new, "New symptom onsets (DRC)", :seagreen),
+        (:deaths_latent_new, "New deaths (DRC)", :firebrick)
+    ]
     npanels = length(count_cols) + 1
-    ncols = min(npanels, 2)
+    ncols = 2
     nrows = cld(npanels, ncols)
     fig = Figure(; size = (400 * ncols, 360 * nrows))
     for (i, (col, title, colour)) in enumerate(count_cols)
-        v = fc[!, col]
-        upper = max(1.0, quantile(v, 0.995))
-        r, c = cld(i, ncols), mod1(i, ncols)
-        ax = Axis(fig[r, c];
-            xlabel = title, ylabel = "Predictive frequency",
-            title = "One week ahead", limits = ((0, upper), nothing))
-        hist!(ax, v; bins = range(0, upper; length = 30),
-            color = (colour, 0.7))
+        pos = (cld(i, ncols), mod1(i, ncols))
+        _forecast_count_panel!(fig, pos, fc[!, col], title, colour)
     end
     ## Forecast reproduction number panel (a value, not a count).
     i = npanels
@@ -875,16 +864,45 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
-Validation figure for a [`forecast_reported`](@ref) projection, laid out
-as a 2×3 grid. The top row shows the cumulative forecast distribution per
-stream (DRC reported cases, DRC deaths, Uganda exports); the bottom row
-shows the new counts forecast over the horizon, mirroring the
-one-week-ahead forecast. Each panel is a histogram with the 90%
+One-week-ahead forecast of the observed (reported) quantities from
+[`forecast_reported`](@ref): new reported cases, new confirmed cases and
+new confirmed deaths over the horizon. Each panel histograms the projected
+new count with its 90% predictive interval shaded. The confirmed panels are
+drawn only when the forecast carries the laboratory streams. The latent
+counterparts are shown by [`plot_forecast_latent`](@ref).
+"""
+function plot_forecast(fc::DataFrame)
+    count_cols = Tuple{Symbol, String, Symbol}[
+    (
+        :cases_new, "New reported cases (DRC)", :seagreen)]
+    :confirmed_new in propertynames(fc) && push!(count_cols,
+        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
+    :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
+    npanels = length(count_cols)
+    ncols = min(npanels, 2)
+    nrows = cld(npanels, ncols)
+    fig = Figure(; size = (400 * ncols, 360 * nrows))
+    for (i, (col, title, colour)) in enumerate(count_cols)
+        pos = (cld(i, ncols), mod1(i, ncols))
+        _forecast_count_panel!(fig, pos, fc[!, col], title, colour)
+    end
+    return fig
+end
+
+"""
+Observed-stream validation figure for a [`forecast_reported`](@ref)
+projection, laid out as a two-row grid. The top row shows the cumulative
+forecast distribution per stream (DRC reported cases, DRC deaths, and the
+laboratory streams when present); the bottom row shows the new counts
+forecast over the horizon. Each panel is a histogram with the 90%
 predictive interval shaded and the later-observed count drawn as a dashed
-black rule. `cases`, `deaths` and `exports` are the observed cumulative
-counts; `baseline_*` are the counts at the forecast origin, so the
-observed new count is the cumulative truth minus the baseline. The exports
-panel is drawn only when the forecast carries the exports columns.
+black rule, so the forecast distribution is scored against the count that
+was actually observed. `cases`, `deaths` and `exports` are the observed
+cumulative counts; `baseline_*` are the counts at the forecast origin, so
+the observed new count is the cumulative truth minus the baseline. The
+latent counterparts are scored distribution-versus-distribution by
+[`plot_forecast_vs_truth_latent`](@ref).
 """
 function plot_forecast_vs_truth(fc::DataFrame;
         cases::Real, deaths::Real,
@@ -932,6 +950,43 @@ function plot_forecast_vs_truth(fc::DataFrame;
         panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour)
         panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour)
     end
+    return fig
+end
+
+"""
+Latent-quantity validation figure: for each unobserved quantity (new
+infections, new symptom onsets, new deaths over the past week) overlay the
+distribution the frozen (last-week) fit forecast against the distribution
+the current fit now estimates for the same window. Both are latent, so the
+comparison is density versus density rather than density versus a single
+observed count. `fc` is the frozen forecast from [`forecast_reported`](@ref)
+(its `*_new` latent columns); `now` is a `NamedTuple` carrying the current
+fit's draws of the same new-count quantities,
+`(; infections_new, onsets_new, deaths_latent_new)`.
+"""
+function plot_forecast_vs_truth_latent(fc::DataFrame; now::NamedTuple)
+    panels = [
+        (:infections_new, "New infections (DRC)", :steelblue),
+        (:onsets_new, "New symptom onsets (DRC)", :seagreen),
+        (:deaths_latent_new, "New deaths (DRC)", :firebrick)
+    ]
+    ncols = length(panels)
+    fig = Figure(; size = (370 * ncols, 380))
+    local frozen_h, now_h
+    for (j, (col, title, colour)) in enumerate(panels)
+        vf = float.(fc[!, col])
+        vn = float.(getproperty(now, col))
+        upper = max(1.0, quantile(vf, 0.99), quantile(vn, 0.99))
+        ax = Axis(fig[1, j];
+            xlabel = title, ylabel = "Posterior density",
+            limits = ((0, upper), nothing))
+        frozen_h = density!(ax, vf; color = (colour, 0.25),
+            strokecolor = colour, strokewidth = 2)
+        now_h = density!(ax, vn; color = (:grey, 0.0),
+            strokecolor = :black, strokewidth = 2, linestyle = :dash)
+    end
+    CairoMakie.Legend(fig[1, ncols + 1], [frozen_h, now_h],
+        ["Forecast last week", "Estimated now"])
     return fig
 end
 

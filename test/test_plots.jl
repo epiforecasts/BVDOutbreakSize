@@ -162,18 +162,14 @@ end
     ]
     ## Released series only.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
-    ## With a renewal frozen-fit ribbon and a scenario range band.
+    ## With the rising current-model frozen-fit ribbon.
     renewal = [
         ("2026-05-20", 1666, 900, 2900),
-        ("2026-05-23", 1900, 1000, 3300)
+        ("2026-05-23", 1900, 1000, 3300),
+        ("2026-05-28", 4000, 2500, 6000)
     ]
-    fig = plot_estimate_evolution(rows; renewal = renewal,
-        scenario_range = (235, 1386))
+    fig = plot_estimate_evolution(rows; renewal = renewal)
     @test fig isa CairoMakie.Makie.Figure
-    ## With the current-data horizontal band.
-    fig2 = plot_estimate_evolution(rows; renewal = renewal,
-        scenario_range = (235, 1386), current = (4000, 2500, 6000))
-    @test fig2 isa CairoMakie.Makie.Figure
 end
 
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
@@ -194,9 +190,7 @@ end
             FlexiChains.Parameter(:cumulative_onsets) => _traj(),
             FlexiChains.Parameter(:cumulative_expected_deaths) => _traj()))
     fig = plot_cumulative_trajectories(chn; n = n,
-        seeding = Date("2026-02-23"),
-        obs_onset_days = [10, 20, 30], obs_onset_counts = [3, 8, 15],
-        obs_death_days = [10, 20, 30], obs_death_counts = [1, 2, 4])
+        seeding = Date("2026-02-23"))
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -302,6 +296,41 @@ end
         rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
     )
     fig = plot_forecast(fc)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_latent returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_latent
+    rng = MersenneTwister(34)
+    n = 300
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30,
+        rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
+    )
+    fig = plot_forecast_latent(fc)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_vs_truth_latent
+    rng = MersenneTwister(35)
+    n = 300
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30
+    )
+    now = (;
+        infections_new = abs.(randn(rng, n)) .* 600,
+        onsets_new = abs.(randn(rng, n)) .* 350,
+        deaths_latent_new = abs.(randn(rng, n)) .* 35)
+    fig = plot_forecast_vs_truth_latent(fc; now = now)
     @test fig isa CairoMakie.Makie.Figure
 end
 
