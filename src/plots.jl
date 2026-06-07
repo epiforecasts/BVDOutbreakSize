@@ -724,6 +724,15 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
 
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
+    ## The innovation vector length is fixed by the model's own `rt_start`
+    ## (the anchor, `n - tmrca_days + SEEDING_ANCHOR_LEAD`). If the caller
+    ## passes a different `rt_start` the knot grid here will not match, so
+    ## fail with a clear message rather than a downstream bounds error.
+    if !isempty(zrows) && length(zrows[1]) != nb - 1
+        error("plot_rt: rt_start = $rt_start gives $(nb - 1) random-walk " *
+              "steps but the chain has $(length(zrows[1])); pass the same " *
+              "anchor the model used (n - tmrca_days + SEEDING_ANCHOR_LEAD).")
+    end
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
     ndraws = length(log_R0)
 

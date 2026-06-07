@@ -1616,7 +1616,8 @@ posterior_pair_fig #hide
 
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
-    rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
+    rt_start = clamp(
+        obs.n - round(Int, obs.tmrca_days) + SEEDING_ANCHOR_LEAD, 1, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
     ramp = 21.0);
 
