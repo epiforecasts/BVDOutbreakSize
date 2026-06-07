@@ -627,7 +627,7 @@ cumulative confirmed Binomial.
         φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
         δ∞_c = convert(Tt, δ∞)
         δ_i = δ∞_c + (convert(Tt, δ0) - δ∞_c) *
-              exp(-c_i / convert(Tt, decay_scale))
+                     exp(-c_i / convert(Tt, decay_scale))
         q_base = logistic(logit(φ) + δ_i)
         ## Optional partially-pooled per-window offset on the tested BVD
         ## share, logit-scale, so each vintage's positivity can fit the
