@@ -1735,7 +1735,7 @@ summary_ranges #hide
 # ### Joint model estimates
 #
 # This section reports the joint posterior over the cumulative infection
-# count to date, fitting all five data streams together.
+# count to date, fitting every data stream together.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative infection count summary table</summary>
@@ -1894,7 +1894,7 @@ intervention_table #hide
 #md # ```
 
 surveillance_summary = summary_table(chn_joint,
-    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg, :lambda_bg_death,
+    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_received_T, :m_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T];
@@ -2069,9 +2069,9 @@ confirmed_panel = (;
     observed = [_confirmed_at(d) for d in _conf_window_days],
     colour = :goldenrod);
 
-## Confirmed deaths are now a per-vintage stream (the series grows 17→64
-## over 26 May-3 June), scored as increments of the modelled confirmed-death
-## trajectory, so they get the same cumulative conditional check.
+## Confirmed deaths are a per-vintage stream, scored as increments of the
+## modelled confirmed-death trajectory up to the cut-off, so they get the
+## same cumulative conditional check.
 confirmed_deaths_panel = (;
     title = "Confirmed deaths",
     dates = _vintage_dates(obs.confirmed_deaths_history.days),
@@ -2446,7 +2446,7 @@ evolution_fig #hide
 # Earlier versions of this work reimplemented McCabe et al. closely as an
 # exponential-growth model.
 # This version is a discrete-time renewal model with a time-varying
-# reproduction number and five jointly-fitted data streams.
+# reproduction number and every data stream fitted jointly.
 # McCabe et al. computed their scenarios at fixed situation-report cut-offs,
 # so we match in time, freezing our data to the same cut-off and re-fitting.
 # The McCabe scenarios shown are the 20 May update [mccabe2026update](@cite).

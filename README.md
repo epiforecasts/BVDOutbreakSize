@@ -14,10 +14,10 @@ date above.
 
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
-[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast) ·
+[one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
 [estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Estimate-evolution-across-releases) ·
 [comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-McCabe-et-al.) ·
-[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#How-the-data-streams-compare) ·
+[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Outbreak-size-estimated-by-each-data-stream) ·
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
 [full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
 
@@ -35,9 +35,10 @@ reproduction number with the growth rate and doubling time, the
 case-fatality ratio, the ascertainment of each surveillance system, and a
 short-term forecast of the streams over the coming week.
 The data that inform it are the DRC INSP situation-report streams of
-suspected cases, suspected deaths and laboratory-confirmed cases, fitted
-across successive report vintages, the cases and deaths exported to
-Uganda taken from the WHO situation reports and Disease Outbreak News, a
+suspected cases, suspected deaths, laboratory-confirmed cases and
+confirmed deaths, fitted across successive report vintages, the cases and
+deaths exported to Uganda taken from the WHO situation reports and Disease
+Outbreak News, a
 genetic bound on the time to the most recent common ancestor, and priors
 taken from the McCabe et al. report.
 
