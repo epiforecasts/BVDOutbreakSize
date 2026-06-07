@@ -477,7 +477,7 @@ vintage_table #hide
 # | Report-to-lab delay |  |  |  | ● |  |  |  |
 # | PCR sensitivity $s$ |  |  |  | ● |  |  |  |
 # | PCR specificity |  |  |  | ● |  |  |  |
-# | Severity enrichment $\delta_0, \text{decay}$ |  |  |  | ● |  |  |  |
+# | Severity enrichment $\delta_0, \text{decay}, \delta_\infty$ |  |  |  | ● |  |  |  |
 # | Lab capacity / receipt delay |  |  |  | ● |  |  |  |
 # | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● |  |  |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
@@ -1431,25 +1431,30 @@ cfr_prior_fig #hide
 #
 # The tested BVD share follows the composition link. The lab triages the
 # severest, most-likely-BVD cases first, so it over-tests BVD early; the
-# enrichment then relaxes to the suspect-pool composition
+# enrichment then relaxes from the early surge $\delta_0$ toward a persistent
+# selection floor $\delta_\infty$ over the suspect-pool composition
 # $\varphi_v = \mu_{\text{BVD},v} / (\mu_{\text{BVD},v} + \mu_{\text{bg},v})$
-# as testing widens. The enrichment decays on the analysed-VOLUME clock
+# as testing widens. The enrichment relaxes on the analysed-VOLUME clock
 # $c_v = (\sum_{j\le v}\Delta A_j) / \text{vol}$, so a lab stall pauses the
 # relaxation,
 #
 # ```math
 # \mathrm{logit}(q_v) = \mathrm{logit}(\varphi_v)
-#     + \delta_0\, e^{-c_v / \text{decay}}. \tag{25}
+#     + \delta_\infty + (\delta_0 - \delta_\infty)\, e^{-c_v / \text{decay}}.
+#     \tag{25}
 # ```
 #
-# Tying $q$ to $\varphi$ makes the confirmed/positivity data identify the
-# non-BVD background $\lambda_{\text{bg}}$ rather than a free curve. A
-# per-vintage partially-pooled logit-scale offset lets each window's
-# positivity fit the non-monotone wobble while $s$ stays fixed.
+# With $\delta_\infty = 0$ the enrichment relaxes to zero, tying $q$ to
+# $\varphi$ so the confirmed/positivity data identify the non-BVD background
+# $\lambda_{\text{bg}}$; a positive $\delta_\infty$ keeps the tested share
+# above $\varphi$ (persistent testing selection), which the
+# weakly-informative floor prior lets the data decide. A per-vintage
+# partially-pooled logit-scale offset lets each window's positivity fit the
+# non-monotone wobble while $s$ stays fixed.
 #
 # The priors are a Beta on the PCR sensitivity, a high Beta on the
-# specificity, and a moderate half-normal on the severity enrichment with a
-# half-normal decay timescale:
+# specificity, a moderate half-normal on the early severity enrichment, a
+# half-normal decay timescale, and a weakly-informative half-normal floor:
 #
 # ```math
 # s \sim \mathrm{Beta}(6,\ 2), \qquad
@@ -1458,7 +1463,8 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \text{decay} \sim \mathrm{Normal}^{+}(0,\ 10). \tag{26a}
+# \text{decay} \sim \mathrm{Normal}^{+}(0,\ 10), \qquad
+# \delta_\infty \sim \mathrm{Normal}^{+}(0,\ 1). \tag{26a}
 # ```
 #
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR at
@@ -1479,9 +1485,12 @@ cfr_prior_fig #hide
 # for a pool composition $\varphi \approx 0.4$ the early tested share is
 # $\approx 0.75$, not near-pure BVD, since other severe febrile illness is
 # also triaged. The decay prior has median $\approx 6.7$ volume units,
-# spanning the lab window. Outbreak size stays pinned by the deaths and
-# exports streams and the received counts, with $\lambda_{\text{bg}}$
-# carrying the positivity.
+# spanning the lab window. The persistent floor $\delta_\infty$ is
+# weakly-informative and free to sit near zero (the pure composition link),
+# but the data support a positive floor, which improves identifiability of
+# the positivity model. Outbreak size stays pinned by the deaths and exports
+# streams and the received counts; freeing $\lambda_{\text{bg}}$ via the
+# floor leaves the size near-unchanged.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_sensitivity_model</summary>
@@ -1972,7 +1981,7 @@ prior_pair_fig = plot_pair(prior_chn,
     [:r, :τ, :m, :cumulative_cases, :CFR, :α_rep, :inv_sqrt_k, :k,
         :p_drc, :p_uganda, :τ_logit,
         :λ_bg, :s_test, :spec_test,
-        :δ0, :decay_scale,
+        :δ0, :decay_scale, :δ∞,
         :positivity, :p_positive]);
 
 #md # ```@raw html
@@ -2441,7 +2450,7 @@ start_date_fig #hide
 joint_summary = summary_table(chn_joint,
     [:r, :τ, :m, :T, :CFR, :p_drc, :p_uganda, :τ_logit,
         :inv_sqrt_k, :k, :α_rep, :θ_rep,
-        :s_test, :spec_test, :λ_bg, :δ0, :decay_scale,
+        :s_test, :spec_test, :λ_bg, :δ0, :decay_scale, :δ∞,
         :positivity, :p_positive, :q_cutoff, :q_baseline,
         :cumulative_infections, :cumulative_cases]; digits = 2);
 
@@ -2502,7 +2511,7 @@ posterior_pair_fig #hide
 
 lab_pair_fig = plot_pair(chn_joint,
     [:α_rep, :θ_rep, :s_test, :spec_test,
-        :λ_bg, :δ0, :decay_scale, :cumulative_cases];
+        :λ_bg, :δ0, :decay_scale, :δ∞, :cumulative_cases];
     prior = prior_chn);
 
 #md # ```@raw html

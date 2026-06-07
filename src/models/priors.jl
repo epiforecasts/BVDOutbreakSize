@@ -183,7 +183,8 @@ floor** `δ∞` as testing widens:
 
 ```math
 \\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
-    + \\delta_\\infty + (\\delta_0 - \\delta_\\infty)\\, e^{-c_v / \\text{decay}},
+    + \\delta_\\infty
+    + (\\delta_0 - \\delta_\\infty)\\, e^{-c_v / \\text{decay}},
 ```
 
 With `δ∞ = 0` the enrichment relaxes to zero and the late tested share
@@ -205,15 +206,19 @@ haemorrhagic / severe febrile illness is also triaged), so for a pool
 composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
 1.5) ≈ 0.75`, not the near-1 of a radical free curve. `decay_scale`
 is the relaxation timescale on the analysed-volume clock. `δ∞`'s default
-`truncated(Normal(0.0, 0.05); lower = 0)` is tight at zero, recovering the
-pure composition link; pass a wider/positive `floor_prior` to allow
-persistent testing selection. Pass `logodds_prior` / `decay_prior` /
-`floor_prior` to override. Used by [`confirmed_cases_model`](@ref).
+`truncated(Normal(0.0, 1.0); lower = 0)` is weakly informative: a
+half-normal free to sit at zero (the pure composition link) but letting the
+confirmed/positivity data pull it up if persistent testing selection is
+supported. It is deliberately not diffuse — a free floor is non-identifiable
+against `λ_bg` — but it is not pinned at zero either. Pass a tight
+`floor_prior` (e.g. `truncated(Normal(0, 0.05); lower = 0)`) to recover the
+pure composition link, or `logodds_prior` / `decay_prior` to override the
+other enrichment parameters. Used by [`confirmed_cases_model`](@ref).
 """
 @model function severity_enrichment_model(;
         logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
         decay_prior = truncated(Normal(0.0, 10.0); lower = 0.0),
-        floor_prior = truncated(Normal(0.0, 0.05); lower = 0.0))
+        floor_prior = truncated(Normal(0.0, 1.0); lower = 0.0))
     δ0 ~ logodds_prior
     decay_scale ~ decay_prior
     δ∞ ~ floor_prior

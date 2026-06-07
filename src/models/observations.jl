@@ -398,22 +398,26 @@ every later denominator.
 
 `q_v` is the tested BVD share set by the **composition link**: the lab
 over-tests BVD early (severe cases are triaged first and are more likely
-BVD), the severity enrichment relaxing to the suspect-pool composition
+BVD), the severity enrichment relaxing from the early surge `δ0` toward a
+persistent selection floor `δ∞` over the suspect-pool composition
 `φ_v = μ_BVD,v / (μ_BVD,v + μ_bg,v)` as testing widens (see
 [`severity_enrichment_model`](@ref)):
 
 ```math
 \\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
-    + \\delta_0\\, e^{-c_v / \\text{decay}},
+    + \\delta_\\infty + (\\delta_0 - \\delta_\\infty)\\, e^{-c_v / \\text{decay}},
 \\qquad
 c_v = \\frac{\\sum_{j \\le v} \\Delta A_j}{\\text{volume\\_scale}},
 ```
 
 with `c_v` the cumulative analysed VOLUME (in units of `volume_scale`
 samples), so a lab stall pauses the relaxation. `δ0` is the early severity
-log-odds enrichment and `decay` its timescale. Tying `q` to `φ` makes the
-confirmed/positivity data identify the non-BVD background `λ_bg` rather
-than a free curve.
+log-odds enrichment, `decay` its timescale, and `δ∞` the persistent
+selection floor. With `δ∞ = 0` the enrichment relaxes to zero, tying `q`
+to `φ` so the confirmed/positivity data identify the non-BVD background
+`λ_bg`; a positive `δ∞` keeps the tested share above `φ` (persistent
+testing selection), which the weakly-informative floor prior lets the data
+decide.
 
 `q_random_effect` adds a per-vintage partially-pooled logit-scale offset
 to this baseline share (`q_v = logistic(logit(q_base,v) + σ_q·z_v)`, see

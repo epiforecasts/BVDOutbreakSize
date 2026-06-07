@@ -1,10 +1,10 @@
 ## Tests for the composition-linked confirmed positivity. The tested BVD
 ## share is the suspect-pool composition φ = μ_BVD/(μ_BVD+μ_bg) upsampled by
-## a decaying severity enrichment δ0 on the analysed-volume clock (see
-## `severity_enrichment_model`), so the confirmed/positivity data identify
-## the non-BVD background λ_bg rather than a free curve.
+## a severity enrichment δ0 on the analysed-volume clock that relaxes to a
+## persistent selection floor δ∞ (see `severity_enrichment_model`), so the
+## confirmed/positivity data identify the non-BVD background λ_bg.
 
-@testitem "severity_enrichment_model: δ0≥0, decay≥0, mean ≈ 1.5" tags=[:slow] begin
+@testitem "severity_enrichment_model: δ0,δ∞,decay ≥ 0, prior centres" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     import FlexiChains
@@ -15,18 +15,29 @@
         Prior(), 20_000; chain_type = FlexiChains.VNChain, progress = false)
     δ = vec(Array(chn[:δ0]))
     dec = vec(Array(chn[:decay_scale]))
+    floor = vec(Array(chn[:δ∞]))
     @test all(δ .>= 0)
     @test all(dec .>= 0)
+    @test all(floor .>= 0)
     ## Half-normal-ish centre near 1.5 (targets ~0.75 early tested-BVD for a
     ## pool composition φ ≈ 0.4).
     @test isapprox(mean(δ), 1.5; atol = 0.2)
+    ## Default floor is a weakly-informative half-normal N(0,1): mean ≈
+    ## √(2/π) ≈ 0.8, free to sit near zero but not pinned there.
+    @test isapprox(mean(floor), 0.8; atol = 0.15)
 
-    ## Overridable prior.
+    ## Overridable priors.
     chn2 = sample(MersenneTwister(20260603),
         severity_enrichment_model(;
             logodds_prior = truncated(Normal(3.0, 0.5); lower = 0)),
         Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
     @test mean(vec(Array(chn2[:δ0]))) > mean(δ)
+    ## A tight floor prior recovers the pure composition link (δ∞ ≈ 0).
+    chn3 = sample(MersenneTwister(20260603),
+        severity_enrichment_model(;
+            floor_prior = truncated(Normal(0.0, 0.05); lower = 0)),
+        Prior(), 8_000; chain_type = FlexiChains.VNChain, progress = false)
+    @test mean(vec(Array(chn3[:δ∞]))) < 0.1
 end
 
 @testitem "composition positivity: enrichment upsamples BVD (q ≥ φ)" tags=[:slow] begin
