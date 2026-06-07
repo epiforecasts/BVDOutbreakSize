@@ -33,12 +33,13 @@ every data stream together in a single posterior.
 It estimates the cumulative number of infections to date, the
 reproduction number with the growth rate and doubling time, the
 case-fatality ratio, the ascertainment of each surveillance system, and a
-short forecast of the streams over the coming week.
+short-term forecast of the streams over the coming week.
 The data that inform it are the DRC INSP situation-report streams of
 suspected cases, suspected deaths and laboratory-confirmed cases, fitted
-across successive report vintages, the Uganda WHO export cases and export
-deaths, a genetic bound on the time to the most recent common ancestor,
-and priors taken from the McCabe et al. report.
+across successive report vintages, the cases and deaths exported to
+Uganda taken from the WHO situation reports and Disease Outbreak News, a
+genetic bound on the time to the most recent common ancestor, and priors
+taken from the McCabe et al. report.
 
 **Scope.** This work is motivated by adding an external view of the
 current situation, based on our understanding of real-time infectious

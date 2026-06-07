@@ -44,10 +44,10 @@
 #   logistic outbreak-response ramp of about three weeks at the first WHO
 #   situation report (18 May 2026). McCabe et al. use one constant
 #   exponential growth rate.
-# - *Joint posterior, not 15 scenario estimates.* The reproduction
+# - *Joint posterior rather than scenario estimates.* The reproduction
 #   number, case-fatality ratio, all delays, traveller volume and
 #   surveillance dispersion have priors and are sampled together. McCabe
-#   et al. fix each and sweep.
+#   et al. [mccabe2026](@cite) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.*
 #   A single import grows through an unobserved cryptic exponential phase
 #   to a magnitude set by a wide prior on the doubling count, at a rate
@@ -58,33 +58,41 @@
 #
 # **Delays and convolutions**
 #
-# - *Delays sampled from priors and discretised.* Generation interval,
-#   incubation period, onset-to-death, onset-to-report,
-#   onset-to-confirmation and onset-to-detection-abroad each get a prior
-#   centred on published Ebola estimates, discretised with double
-#   interval censoring [charniga2024](@cite). No delay is fixed.
+# - *Delays re-estimated with uncertainty.* McCabe et al.
+#   [mccabe2026](@cite) take the onset-to-death delay from the Isiro 2012
+#   point estimate of Rosello et al. [rosello2015](@cite). We instead use
+#   a Bayesian reanalysis of the same line list
+#   [bdbv_linelist_analysis_2026](@cite) that re-estimates the delay with
+#   uncertainty, and we sample every other delay (generation interval,
+#   incubation period, onset-to-report, onset-to-confirmation and
+#   onset-to-detection abroad) from a prior centred on published Ebola
+#   estimates, discretised with double interval censoring
+#   [charniga2024](@cite), so the delay uncertainty propagates.
 #
 # **Likelihoods and data streams**
 #
-# - *Per-vintage time-series fitting.* The DRC streams (suspected cases,
-#   confirmed cases, deaths) are fitted as cumulative series of
-#   between-vintage increments across successive sitreps, which sharpens
-#   $R_t$. McCabe et al. condition on a single cumulative total.
-# - *Ascertainment extension.* The DRC and Uganda reporting fractions
-#   share a logit-scale hyperprior, giving a joint posterior over
-#   ascertainment alongside outbreak size. Not in McCabe et al.
+# - *More streams fitted.* McCabe et al. [mccabe2026](@cite) fit the
+#   Uganda export cases and deaths. We add the DRC suspected cases, the
+#   laboratory-confirmed cases, the confirmed deaths and the deaths among
+#   the Uganda exports.
+# - *Per-vintage time-series fitting.* The DRC streams are fitted as
+#   cumulative series of between-vintage increments across successive
+#   sitreps, which sharpens $R_t$. McCabe et al. condition on a single
+#   cumulative total.
+# - *Ascertainment estimated.* We estimate the fraction of cases each
+#   surveillance system reports jointly with the outbreak size. McCabe et
+#   al. have no ascertainment component.
 # - *Comparison against published scenarios.* The model is set beside the
-#   McCabe et al. scenario estimates as an external sense-check, matched in
-#   time at the cut-off each scenario was computed, while $C_T$ (the latent
-#   infection count, summed from the renewal trajectory) is the headline
-#   quantity reported separately.
+#   McCabe et al. [mccabe2026](@cite) scenario estimates as an external
+#   sense-check, matched in time at the cut-off each scenario was computed,
+#   while $C_T$ (the latent infection count, summed from the renewal
+#   trajectory) is the headline quantity reported separately.
 #
 # **Extensions**
 #
 # - *No-onward-transmission counterfactual and one-week-ahead
 #   forecasts.* Future expected deaths from infections already seeded,
-#   and a posterior-predictive projection of each stream. Neither is in
-#   McCabe et al.
+#   and a posterior-predictive projection of each stream.
 #md #
 #md # ```@raw html
 #md # </details>
@@ -102,19 +110,34 @@
 #md #
 # **Data and what it can support**
 #
-# - *Fitted only to aggregate reported counts.* The data are a handful
-#   of summary figures from press and situation reports: suspected cases
-#   and deaths in the DRC, and cases (with one death) in Uganda. There
-#   is no line list, and no information on case definitions, testing
-#   capacity or reporting completeness. Every estimate is a model-based
-#   extrapolation under strong assumptions, not a measurement.
-# - *Prior-driven where data is scarce.* The sitrep trajectory pins down
-#   $R_t$, but a few totals say little about the delays, surveillance
-#   dispersion or reporting fraction on their own, so those posteriors
-#   track their priors.
-# - *Per-sitrep increments are not clean new incidence.* Later sitreps
-#   likely backfill earlier cases and add newly-reporting health zones,
-#   and ascertainment probably rose over the window.
+# - *Most quantities rest on weakly-informed priors.* Nearly all of the
+#   delays, the case-fatality ratio and the laboratory assumptions are
+#   set by priors informed at best by a handful of literature sources,
+#   often from other outbreaks, and in places by our own prior judgement
+#   rather than anything from this outbreak. The data do little to move
+#   them, so these posteriors largely track their priors. We fit the
+#   between-report increments, so the trajectory informs the change in
+#   the reproduction number over the window, but says little about the
+#   delays, the surveillance dispersion or the reporting fractions on
+#   their own.
+# - *Only report-date totals, no epidemiological dating.* We have no
+#   counts by symptom onset or any other epidemiologically relevant date,
+#   only cumulative totals at the report date. The timing of the
+#   underlying epidemic is therefore weakly identified, and we recover it
+#   only through the assumed delays.
+# - *Fitted to aggregate counts.* The DRC data are situation-report
+#   totals of suspected cases and deaths, laboratory-confirmed cases and
+#   deaths, and specimens received and analysed; the Uganda data are
+#   three export cases with one death. There is no line list and no
+#   information on case definitions or reporting completeness. The
+#   laboratory testing series gives partial information on testing
+#   capacity, but it is incomplete and stops at the cut-off. Every
+#   estimate is a model-based extrapolation under strong assumptions, not
+#   a measurement.
+# - *Later sitreps revise earlier figures.* A later situation report can
+#   revise an earlier total up or down as suspects are reclassified and
+#   newly-reporting health zones are added, and ascertainment probably
+#   rose over the window. We do not model this revision process.
 # - *Streams share one case pool.* They are fitted as conditionally
 #   independent given latent incidence but observe overlapping people,
 #   which can understate uncertainty. We have not checked whether the
@@ -131,9 +154,6 @@
 # - *Intervention ramp is weakly identified.* With only a few sitreps
 #   straddling it, the ramp effect and the pre-ramp reproduction number
 #   are not well separated.
-# - *Ascertainment partially pooled, not separately identified.* The
-#   DRC and Uganda reporting fractions share a hyperprior; with a
-#   handful of exports the Uganda fraction leans on the DRC side.
 #
 # **Implementation**
 #
@@ -175,38 +195,67 @@ Random.seed!(20260518)
 #
 # ### Data
 #
-# The analysis uses a handful of aggregate counts. The DRC suspected
-# cases, suspected deaths and laboratory-confirmed cases are the
-# national cumulative totals from the INSP situation reports
-# [insp_sitrep_2026](@cite), read from the report PDFs (archived by
-# INRB-UMIE [inrb_umie_2026](@cite)). We draw straight from the sitreps
-# rather than the published per-zone CSVs because the regional (health
-# zone) breakdown is inconsistent with the national totals: the zone
-# sums omit cases not yet attributed to a zone, understating the count.
-# The Uganda export-case counts and deaths come from WHO Disease Outbreak
-# News DON602 [who_don_2026_602](@cite); the cross-border traveller
-# volume and source population from McCabe et al. [mccabe2026](@cite).
-# The first table lists each figure as of the cut-off; the source
+# The DRC data come from the situation reports of the Institut National
+# de Santé Publique [insp_sitrep_2026](@cite). Each report gives the
+# national cumulative suspected cases and deaths, laboratory-confirmed
+# cases and deaths, and the specimens received and analysed by the
+# laboratory, at the report date. We extracted these figures from the
+# written situation-report PDFs (archived by INRB-UMIE
+# [inrb_umie_2026](@cite)) using a language model, with a second pass to
+# re-read them, rather than the published per-zone CSVs. The zone sums in
+# the CSVs are inconsistent with the national headline totals because they
+# drop counts not yet attributed to a zone, so they understate the count.
+# The Uganda data are the cases and the one death exported across the
+# border, taken from the WHO situation reports and Disease Outbreak News
+# [who_don_2026_602](@cite). The cross-border traveller volume and source
+# population come from McCabe et al. [mccabe2026](@cite); the source
 # population is fixed and the traveller volume is given a Normal prior
-# around the McCabe et al. figure. The three DRC streams are
-# additionally resolved by sitrep vintage and fitted as between-vintage
-# increments, shown in the second table.
+# around the McCabe et al. figure.
+#
+# The first table lists each figure at the cut-off, or at the date
+# reporting stopped for that stream. The second table gives the per-date
+# history of each situation-report stream; the model fits the
+# between-report increments of these series, so a single date reduces to
+# the cut-off total.
 
 #md # ```@raw html
 #md # <details><summary>Loading observations and building the data table</summary>
 #md # ```
 
 obs = load_observations()
+## Grid day-index (day n is the cut-off) back to a calendar date.
+grid_date(day) = obs.cutoff - Day(obs.n - day)
+## Date a cumulative history last reports (the cut-off for streams that
+## run to it, or the freeze date for streams that stop earlier).
+hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
 observations_table = DataFrame(
     field = [
         "exported_cases",
         "exports_deaths",
-        "total_deaths",
-        "reported_cases",
+        "suspected_deaths",
+        "suspected_cases",
         "confirmed_cases",
+        "confirmed_deaths",
+        "specimens_analysed",
+        "genetic_tmrca_bound",
         "daily_outbound_travellers (prior mean)",
         "daily_outbound_travellers_sd (prior SD)",
         "source_population"
+    ],
+    date = [
+        isempty(obs.export_case_days) ? missing :
+        grid_date(maximum(obs.export_case_days)),
+        isempty(obs.export_death_days) ? missing :
+        grid_date(maximum(obs.export_death_days)),
+        hist_last_date(obs.deaths_history),
+        hist_last_date(obs.reported_history),
+        hist_last_date(obs.confirmed_history),
+        hist_last_date(obs.confirmed_deaths_history),
+        hist_last_date(obs.lab_history),
+        grid_date(obs.n - obs.tmrca_days),
+        missing,
+        missing,
+        missing
     ],
     value = [
         obs.exported_cases,
@@ -214,6 +263,9 @@ observations_table = DataFrame(
         obs.total_deaths,
         obs.reported_cases,
         obs.confirmed_cases,
+        obs.confirmed_deaths,
+        obs.tests_analysed,
+        obs.tmrca_days,
         ITURI_DAILY_TRAVEL,
         ITURI_DAILY_TRAVEL_SD,
         ITURI_POPULATION
@@ -226,29 +278,38 @@ observations_table = DataFrame(
 
 observations_table #hide
 
-# The per-vintage cumulative history of the three DRC sitrep streams,
-# the national totals at each INSP situation-report date. The joint
-# model fits the between-vintage increments of these series (a single
-# vintage reduces to the cut-off total). See `data/observations.toml`
-# for the per-stream sources.
+# The per-date cumulative history of the DRC situation-report streams,
+# the national totals at each report date. The joint model fits the
+# between-report increments of these series, so a single date reduces to
+# the cut-off total. See `data/observations.toml` for the per-stream
+# sources.
 
 #md # ```@raw html
-#md # <details><summary>Building the per-vintage time-series table</summary>
+#md # <details><summary>Building the per-date time-series table</summary>
 #md # ```
 
 vintage_table = let
-    dh = obs.deaths_history
-    rh = obs.reported_history
-    ch = obs.confirmed_history
-    nm = maximum([length(dh.days), length(rh.days), length(ch.days)])
-    _pad(v) = vcat(v, fill(missing, nm - length(v)))
+    ## Each history carries grid day-indices and counts; key the counts
+    ## by calendar date so every stream lines up in one table.
+    bydate(h) = Dict(grid_date(d) => c for (d, c) in zip(h.days, h.counts))
+    streams = (
+        suspected_cases = bydate(obs.reported_history),
+        suspected_deaths = bydate(obs.deaths_history),
+        confirmed_cases = bydate(obs.confirmed_history),
+        confirmed_deaths = bydate(obs.confirmed_deaths_history),
+        specimens_received = bydate(obs.tests_received_history),
+        specimens_analysed = bydate(obs.lab_history)
+    )
+    dates = sort(collect(union((keys(s) for s in streams)...)))
+    at(s) = [haskey(s, d) ? s[d] : missing for d in dates]
     DataFrame(
-        deaths_day = _pad(dh.days),
-        deaths_count = _pad(dh.counts),
-        reported_day = _pad(rh.days),
-        reported_count = _pad(rh.counts),
-        confirmed_day = _pad(ch.days),
-        confirmed_count = _pad(ch.counts)
+        date = dates,
+        suspected_cases = at(streams.suspected_cases),
+        suspected_deaths = at(streams.suspected_deaths),
+        confirmed_cases = at(streams.confirmed_cases),
+        confirmed_deaths = at(streams.confirmed_deaths),
+        specimens_received = at(streams.specimens_received),
+        specimens_analysed = at(streams.specimens_analysed)
     )
 end;
 
