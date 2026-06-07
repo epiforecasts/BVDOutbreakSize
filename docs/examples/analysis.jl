@@ -1934,7 +1934,7 @@ surveillance_pair_fig #hide
 #md # ```
 
 export_summary = summary_table(chn_joint,
-    [Symbol("travel_state.daily_travellers"), :expected_exports_T];
+    [Symbol("exports_state.travel_state.daily_travellers"), :expected_exports_T];
     digits = 2);
 
 #md # ```@raw html
@@ -1948,7 +1948,7 @@ export_summary #hide
 #md # ```
 
 export_pair_fig = plot_pair(chn_joint,
-    [Symbol("travel_state.daily_travellers"), :expected_exports_T];
+    [Symbol("exports_state.travel_state.daily_travellers"), :expected_exports_T];
     prior = prior_chn);
 
 #md # ```@raw html
@@ -2548,7 +2548,7 @@ mkpath(output_dir)
 joint_summary = summary_table(chn_joint,
     [:r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T,
         :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
-        Symbol("travel_state.daily_travellers")]; digits = 2)
+        Symbol("exports_state.travel_state.daily_travellers")]; digits = 2)
 CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
 CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
     streams_C_table)
