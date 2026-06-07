@@ -1488,18 +1488,18 @@ summary_ranges #hide
 
 # ### Joint model estimates
 #
-# Our main result is the current cumulative case load, reported and
-# unreported, at the report date.
-# It is the joint posterior over the cumulative case count $C_T$, fitting
-# all five data streams together: cases exported to Uganda, suspected
-# deaths in the DRC, reported cases in the DRC (with an ascertainment
-# component), laboratory-confirmed cases in the DRC, and deaths among
-# exported cases in Uganda.
-# We show it first as a credible-interval table and then as a posterior
-# density.
+# Our main result is the current number of infections to date, reported
+# and unreported, at the report date.
+# It is the joint posterior over the cumulative infection count $C_T$,
+# fitting all five data streams together: cases exported to Uganda,
+# suspected deaths in the DRC, reported cases in the DRC (with an
+# ascertainment component), laboratory-confirmed cases in the DRC, and
+# deaths among exported cases in Uganda.
+# We show it first as a credible-interval table on the cumulative infection
+# count.
 
 #md # ```@raw html
-#md # <details><summary>Cumulative case count summary table</summary>
+#md # <details><summary>Cumulative infection count summary table</summary>
 #md # ```
 
 cumulative_cases_summary = summary_table(
@@ -1511,25 +1511,35 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
+# The headline figure below shows three cumulative quantities over time, one
+# per row: latent infections, symptom onsets, and deaths.
+# The left column is the modelled expected cumulative trajectory with its
+# 90% interval; the right column is the posterior density of the final
+# cut-off cumulative.
+# The infection density on the top right is the headline outbreak size, a
+# count of infections rather than reported cases.
+# The onsets row carries the cumulative reported cases as points, and the
+# deaths row the observed cumulative deaths, both ascertained quantities
+# that sit below the modelled totals.
+
 #md # ```@raw html
-#md # <details><summary>Cumulative case count density</summary>
+#md # <details><summary>Cumulative infections, onsets and deaths figure</summary>
 #md # ```
 
-## The joint C_T posterior has a long upper tail (the slow-growth,
-## late-seeding draws), so clip the x-axis to the 97.5th percentile to
-## keep the bulk of the density legible rather than rendering the full
-## heavy tail.
-joint_density_fig = plot_cumulative_cases(
-    "joint" => posterior_C_joint; scenarios = [],
-    xmax = quantile(posterior_C_joint, 0.975));
+cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
+    n = obs.n, seeding = obs.seeding,
+    obs_onset_days = obs.reported_history.days,
+    obs_onset_counts = obs.reported_history.counts,
+    obs_death_days = obs.deaths_history.days,
+    obs_death_counts = obs.deaths_history.counts);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-joint_density_fig #hide
+cumulative_traj_fig #hide
 
-# The cumulative case count is set by the reproduction number trajectory
+# The cumulative infection count is set by the reproduction number trajectory
 # and the outbreak age, the elapsed time from the import that started the
 # outbreak to the cut-off.
 # Read as a calendar date, the age places the outbreak start at the
@@ -1553,6 +1563,8 @@ start_date_fig #hide
 
 # The full posterior summary table reports equal-tailed 30%, 60% and
 # 90% credible intervals on the key joint-fit parameters.
+# The pair plot beside it shows their joint distribution, with the prior
+# overlaid so the data's contribution to each marginal is visible.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior summary table</summary>
@@ -1568,6 +1580,21 @@ joint_summary = summary_table(chn_joint,
 
 joint_summary #hide
 
+#md # ```@raw html
+#md # <details><summary>Posterior pair plot (prior overlaid)</summary>
+#md # ```
+
+posterior_pair_fig = plot_pair(chn_joint,
+    [:C_T, :R_T, :r, :T, :CFR, :k,
+        :p_drc, :p_uganda];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+posterior_pair_fig #hide
+
 # ### Reproduction number over time
 #
 # The model fits a weekly random-walk reproduction number, so we can show
@@ -1578,8 +1605,10 @@ joint_summary #hide
 # The earlier seeding window (shaded) holds it at its low introduction
 # level and is not the reproduction number of an established epidemic, so
 # it is left unplotted.
-# The WHO-response breakpoint (red dashed) and the data cut-off (grey
-# dashed) are marked.
+# The outbreak-response breakpoint, the first WHO situation report on 18 May
+# 2026 (red dashed), and the data cut-off (grey dashed) are marked.
+# The response enters over a logistic ramp spanning about three weeks
+# (21 days) rather than at a single date.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction-number trajectory</summary>
@@ -1588,7 +1617,8 @@ joint_summary #hide
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
     rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
-    as_of_date = string(obs.cutoff), seeding = obs.seeding);
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    ramp = 21.0);
 
 #md # ```@raw html
 #md # </details>
@@ -1596,12 +1626,12 @@ rt_fig = plot_rt(chn_joint;
 
 rt_fig #hide
 
-# The WHO response is fitted as a sampled multiplicative shift on $R_t$
-# applied over a logistic ramp at the first situation report. The
-# intervention effect is constrained to be non-positive, so it can only
+# The outbreak response is fitted as a sampled multiplicative shift on
+# $R_t$ applied over the three-week logistic ramp at the first situation
+# report. The effect is constrained to be non-positive, so it can only
 # reduce transmission. The table reports its posterior on the
-# multiplicative $\exp(\text{effect})$ scale: a value below one is the
-# factor by which the response lowers $R_t$ once the ramp completes.
+# multiplicative $\exp(\text{effect})$ scale, where a value below one is
+# the factor by which the response lowers $R_t$ once the ramp completes.
 
 #md # ```@raw html
 #md # <details><summary>Intervention-effect summary table</summary>
@@ -1646,27 +1676,8 @@ lab_summary = summary_table(chn_joint,
 
 lab_summary #hide
 
-# The posterior pair plot shows the joint distribution of the key
-# parameters, with the prior overlaid so the data's contribution to
-# each marginal is visible.
-
-#md # ```@raw html
-#md # <details><summary>Posterior pair plot (prior overlaid)</summary>
-#md # ```
-
-posterior_pair_fig = plot_pair(chn_joint,
-    [:C_T, :R_T, :r, :T, :CFR, :k,
-        :p_drc, :p_uganda];
-    prior = prior_chn);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-posterior_pair_fig #hide
-
-# A pair plot of the laboratory-pipeline parameters and the derived
-# per-test positivity shows their joint posterior and any trade-offs, with
+# The pair plot beside it shows the joint posterior of the
+# laboratory-pipeline parameters and the derived per-test positivity, with
 # the prior overlaid so the laboratory observations' contribution to each
 # marginal is visible.
 

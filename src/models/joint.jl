@@ -350,6 +350,13 @@ death-confirmation probability (`death_confirmation`).
             genetic(infection_state.T, tmrca_days; tmrca_days_sd), false)
     end
 
+    ## Daily cumulative trajectories for the headline 3x2 figure: the
+    ## modelled expected cumulative infections, symptom onsets and deaths
+    ## over the grid. Exposed as vector deterministics so the ribbon panels
+    ## reconstruct from the chain without re-running the renewal.
+    cumulative_infections := cumsum(infection_state.infections)
+    cumulative_onsets := cumsum(onsets)
+    cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
     C_T := infection_state.C_T
     R0 := infection_state.R0
     r := infection_state.r

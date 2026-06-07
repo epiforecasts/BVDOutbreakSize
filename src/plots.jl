@@ -47,6 +47,85 @@ function plot_cumulative_cases(
 end
 
 """
+Headline 3x2 cumulative figure. Rows are cumulative infections, cumulative
+symptom onsets and cumulative deaths. The left column is the modelled
+expected cumulative trajectory over the grid as a median line with a 90%
+ribbon; the right column is the posterior density of the final cut-off
+cumulative. The chain must carry the vector deterministics
+`cumulative_infections`, `cumulative_onsets` and
+`cumulative_expected_deaths` (one per draw). `seeding` is the calendar date
+of grid day 1, so day `d` is `seeding + (d - 1)`. Observed comparators are
+optional points overlaid on the trajectory panels: `obs_onset_days` /
+`obs_onset_counts` are the cumulative reported (ascertained) cases at their
+situation-report days, drawn against the onsets row; `obs_death_days` /
+`obs_death_counts` the observed cumulative deaths against the deaths row.
+The infections row has no observed counterpart, since infections are latent.
+"""
+function plot_cumulative_trajectories(chn;
+        n::Integer, seeding::Date,
+        obs_onset_days::AbstractVector = Int[],
+        obs_onset_counts::AbstractVector = Real[],
+        obs_death_days::AbstractVector = Int[],
+        obs_death_counts::AbstractVector = Real[])
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+
+    ## Each trajectory deterministic is an iter×chain matrix of per-draw
+    ## vectors; flatten to one vector of per-draw trajectories.
+    function _trajectories(key)
+        mat = chn[key]
+        return [collect(v) for v in vec(collect(mat))]
+    end
+    function _ribbon(trajs)
+        q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
+        med = [q(d, 0.5) for d in 1:n]
+        lo = [q(d, 0.05) for d in 1:n]
+        hi = [q(d, 0.95) for d in 1:n]
+        return med, lo, hi
+    end
+
+    rows = (
+        (:cumulative_infections, "infections", :steelblue,
+            Int[], Real[]),
+        (:cumulative_onsets, "symptom onsets", :seagreen,
+            obs_onset_days, obs_onset_counts),
+        (:cumulative_expected_deaths, "deaths", :firebrick,
+            obs_death_days, obs_death_counts)
+    )
+
+    fig = Figure(; size = (940, 1020))
+    for (i, (key, name, colour, odays, ocounts)) in enumerate(rows)
+        trajs = _trajectories(key)
+        med, lo, hi = _ribbon(trajs)
+        ax = Axis(fig[i, 1];
+            xlabel = "Date", ylabel = "Cumulative $name",
+            title = "Modelled cumulative $name over time",
+            xticklabelrotation = pi / 6)
+        band!(ax, x, lo, hi; color = (colour, 0.2))
+        lines!(ax, x, med; color = colour, linewidth = 2)
+        if !isempty(odays)
+            ox = Float64[epoch + (d - 1) for d in odays]
+            scatter!(ax, ox, float.(ocounts); color = :black,
+                markersize = 8)
+        end
+        loax = floor(Int, minimum(x))
+        hiax = ceil(Int, maximum(x))
+        ax.xticks = collect(loax:14:hiax)
+        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                  for v in vals]
+
+        finals = Float64[t[n] for t in trajs]
+        axd = Axis(fig[i, 2];
+            xlabel = "Cumulative $name at the cut-off",
+            ylabel = "Posterior density",
+            title = "Final cumulative $name")
+        density!(axd, finals; color = (colour, 0.5),
+            strokecolor = colour, strokewidth = 2)
+    end
+    return fig
+end
+
+"""
 Overlaid posterior densities of an arbitrary scalar quantity from one
 or more fits, built through AlgebraOfGraphics. Pass each fit as
 `"label" => draws`; `xlabel` and `title` set the axis text.
@@ -600,7 +679,7 @@ non-centred Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 `rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
 ([`interpolate_knots`](@ref)) and shifted by the sampled
 `rt_state.intervention_effect` along a logistic ramp
-([`sigmoid_ramp`](@ref)) anchored at the WHO-response `breakpoint`.
+([`sigmoid_ramp`](@ref)) anchored at the outbreak-response `breakpoint`.
 
 Each draw's `Rt` is masked to days at or after its own establishment day
 (`n - round(T)`, where cumulative infections cross one), so the median
