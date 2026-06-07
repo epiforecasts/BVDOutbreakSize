@@ -55,18 +55,18 @@
     ## headline; the 26 May value uses the revised SitRep 012_v2 (246).
     @test dh.counts == [131, 148, 160, 175, 204, 220, 223, 238, 246]
 
-    ## Confirmed-case history runs to the 3 June cut-off (post-28 May
+    ## Confirmed-case history runs to the 5 June cut-off (post-28 May
     ## vintages have no analysed denominator); its final vintage equals the
     ## cut-off `confirmed_cases` total.
     @test obs.confirmed_history.counts ==
           [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210,
-        263, 282, 321, 344, 363, 381]
+        263, 282, 321, 344, 363, 381, 452, 488]
     @test obs.confirmed_history.counts[end] == obs.confirmed_cases
 
-    ## Confirmed deaths: recorded, growing 17 → 64 over 26 May-3 June.
+    ## Confirmed deaths: recorded, growing 17 → 86 over 26 May-5 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_deaths_history.counts ==
-          [17, 17, 17, 42, 42, 48, 60, 62, 64]
+          [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86]
     @test obs.confirmed_deaths_history.counts[end] == obs.confirmed_deaths
 
     ## Laboratory throughput histories (cumulative national, 23-28 May);

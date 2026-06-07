@@ -7,7 +7,7 @@
 **Last updated:** 5 June 2026. This is a live report, re-run as new
 data arrive, so the estimates change between updates.
 
-**Data as of:** 28 May 2026. DRC counts come from the situation reports
+**Data as of:** 5 June 2026. DRC counts come from the situation reports
 of the Institut National de Santé Publique (INSP); Uganda imports come
 from WHO. Estimates are reported as of this date; it can lag the update
 date above.
