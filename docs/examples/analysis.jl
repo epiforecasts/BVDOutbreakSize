@@ -1957,14 +1957,27 @@ export_pair_fig = plot_pair(chn_joint,
 
 export_pair_fig #hide
 
+# ### Posterior predictive checks
+#
 # A posterior predictive check draws replicated observations from the
-# fitted joint model and compares them to the observed counts. The five
-# dated DRC streams are real per-vintage observations, so each replicated
-# cumulative trajectory is shown across the situation-report dates with the
-# observed series overlaid: suspected cases, confirmed cases, suspected
-# deaths, confirmed deaths and specimens received. The dated Uganda export
-# and export-death streams are summed over their per-day replicates into a
-# cumulative total for the scalar predictive check.
+# fitted joint model and compares them to the observed counts.
+# The checks read in three groups, following the generative order of the
+# model.
+# The first is the infection process, the latent infections, symptom
+# onsets and deaths that drive every stream; these are not observed
+# directly, so they carry no genuine replicate and are shown as the
+# estimated cumulative trajectories in the
+# [joint model estimates](@ref "Joint model estimates") figure rather than
+# checked against data here.
+# The second is the surveillance data, the five dated DRC streams that are
+# real per-vintage observations: suspected cases, confirmed cases,
+# suspected deaths, confirmed deaths and specimens received.
+# The third is the exports, the cross-border imported cases and deaths
+# detected in Uganda.
+#
+# The surveillance group is checked first.
+# Each replicated cumulative trajectory is shown across the
+# situation-report dates with the observed series overlaid.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2089,11 +2102,12 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
 
 joint_vintage_ppc_fig #hide
 
+# The exports group is checked next.
 # The Uganda export and export-death streams are dated per-day series, each
-# import/death scored as a Poisson at its detection day. The scalar
+# import or death scored as a Poisson at its detection day. The scalar
 # posterior predictive sums each replicate's per-day count vector across the
-# dated days, giving the cumulative export/death total to compare with the
-# observed count.
+# dated days, giving the cumulative export and death total to compare with
+# the observed count.
 
 #md # ```@raw html
 #md # <details><summary>Scalar posterior predictive plot</summary>
@@ -2519,6 +2533,223 @@ frozen_streams_table = streams_table(
 #md # ```
 
 frozen_streams_table #hide
+
+# ### Delay sensitivity
+#
+# The second method dates the outbreak from how far deaths lag symptom
+# onset, so the assumed onset-to-death delay sets the implied infection
+# count.
+# We probe it by re-fitting the joint model under a shorter and a longer
+# onset-to-death delay centre either side of the baseline, holding
+# everything else fixed.
+# Each variant is a reduced fit of 500 draws across two chains,
+# illustrative rather than a production result.
+#
+# The infection count to date shifts with the assumed delay, and the
+# table and overlaid densities below show how far.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under shorter and longer onset-to-death delays (reduced)</summary>
+#md # ```
+
+## One reduced joint re-fit on the live data, with hooks to override the
+## genetic-seeding bound and the deaths submodel. The deaths submodel is
+## passed the same way the genetic-seeding override is, as a closure
+## matching the joint's `deaths(history, total, onsets, k; background_re)`
+## call, so an alternative onset-to-death delay can be injected without
+## touching the package.
+function refit_joint_variant(;
+        deaths = deaths_model,
+        tmrca_days = obs.tmrca_days,
+        tmrca_days_sd = 15.0,
+        samples = 500, chains = 2)
+    chn = nuts_sample(
+        bvd_joint(
+            obs.n, obs.exported_cases, obs.total_deaths,
+            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+            obs.tests_analysed;
+            confirmed_deaths = obs.confirmed_deaths,
+            deaths_history = obs.deaths_history,
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            lab_history = obs.lab_history,
+            tests_received_history = obs.tests_received_history,
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = _BREAKPOINT,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            deaths = deaths,
+            genetic = genetic_seeding_model,
+            tmrca_days = tmrca_days,
+            tmrca_days_sd = tmrca_days_sd);
+        samples = samples, chains = chains)
+    return chn
+end
+
+## Shorter and longer onset-to-death delay centres, each a closure that
+## re-injects the onset-to-death delay prior into the deaths submodel while
+## keeping its other defaults.
+deaths_short_delay = (history,
+    total,
+    onsets,
+    k;
+    kwargs...) -> deaths_model(history, total, onsets, k;
+    onset_to_death = censored_delay_model(40;
+        mean_prior = truncated(Normal(7.0, 2.0); lower = 1),
+        sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
+    kwargs...)
+deaths_long_delay = (history,
+    total,
+    onsets,
+    k;
+    kwargs...) -> deaths_model(history, total, onsets, k;
+    onset_to_death = censored_delay_model(40;
+        mean_prior = truncated(Normal(16.0, 2.0); lower = 1),
+        sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
+    kwargs...)
+
+chn_joint_short_delay = refit_joint_variant(deaths = deaths_short_delay)
+chn_joint_long_delay = refit_joint_variant(deaths = deaths_long_delay)
+
+posterior_C_short_delay = vec(Array(chn_joint_short_delay[:C_T]))
+posterior_C_long_delay = vec(Array(chn_joint_long_delay[:C_T]))
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count table</summary>
+#md # ```
+
+delay_sensitivity_table = streams_table(
+    "shorter delay" => posterior_C_short_delay,
+    "baseline delay" => posterior_C_joint,
+    "longer delay" => posterior_C_long_delay);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+delay_sensitivity_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count density plot</summary>
+#md # ```
+
+delay_sensitivity_fig = plot_cumulative_cases(
+    "shorter delay" => posterior_C_short_delay,
+    "baseline delay" => posterior_C_joint,
+    "longer delay" => posterior_C_long_delay;
+    scenarios = []);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+delay_sensitivity_fig #hide
+
+# ### Clock-rate sensitivity
+#
+# The whole outbreak-age estimate rests on the genetic bound, the oldest
+# date the common ancestor of the sequenced cases can sit, which is set by
+# the assumed molecular clock rate.
+# The baseline uses the slower clock rate matching this analysis; the
+# sequencing source also reports a faster early-epidemic rate that dates
+# the common ancestor about two and a half weeks more recently, without
+# favouring either [virological2026](@cite).
+# We re-fit the joint model under the faster clock and compare the
+# infection count to date and the outbreak age.
+# The re-fit is reduced to 500 draws across two chains.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under the faster clock rate (reduced)</summary>
+#md # ```
+
+## The faster early-epidemic clock dates the common ancestor about 17 days
+## more recently, so the bound on the outbreak age sits that many days
+## closer to the cut-off, with a tighter spread from its narrower interval.
+clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
+tmrca_days_alt = obs.tmrca_days - clock_alt_offset
+
+chn_joint_fast_clock = refit_joint_variant(
+    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)
+
+posterior_C_fast_clock = vec(Array(chn_joint_fast_clock[:C_T]))
+T_baseline_clock = vec(Array(chn_joint[:T]))
+T_fast_clock = vec(Array(chn_joint_fast_clock[:T]))
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The infection count to date under the two clock rates, side by side.
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate infection-count table</summary>
+#md # ```
+
+clock_sensitivity_C_table = streams_table(
+    "baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_C_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate infection-count density plot</summary>
+#md # ```
+
+clock_sensitivity_C_fig = plot_cumulative_cases(
+    "baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock;
+    scenarios = []);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_C_fig #hide
+
+# The outbreak age, the number of days from seeding to the cut-off, under
+# the two clock rates.
+# A more recent common ancestor permits a younger outbreak.
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate outbreak-age table</summary>
+#md # ```
+
+clock_sensitivity_T_table = streams_table(
+    "baseline clock" => T_baseline_clock,
+    "faster clock" => T_fast_clock;
+    digits = 0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_T_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate outbreak-age density plot</summary>
+#md # ```
+
+clock_sensitivity_T_fig = plot_density_overlay(
+    "baseline clock" => T_baseline_clock,
+    "faster clock" => T_fast_clock;
+    xlabel = "Outbreak age (days before cut-off)",
+    title = "Posterior outbreak age by clock rate");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_T_fig #hide
 
 # ## Saving results
 #
