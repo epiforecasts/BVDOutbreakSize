@@ -1946,12 +1946,15 @@ end
 
 # ### One-week-ahead forecast
 #
-# The seven-day no-change projection: cumulative and new expected counts
-# per stream by $T + 7$, for the four DRC streams (suspected reported
-# cases, suspected deaths, laboratory-confirmed cases and confirmed
-# deaths). This continues the current growth rate (no interventions, no
-# saturation) and carries both parameter and observation uncertainty.
-# Exports are not forecast: cross-border travel is unlikely to be
+# A seven-day no-change projection of each DRC stream.
+#
+# The cumulative and new expected counts by $T + 7$ are given for the four
+# DRC streams, suspected reported cases, suspected deaths,
+# laboratory-confirmed cases and confirmed deaths.
+# The projection continues the current growth rate, with no interventions
+# and no saturation, and carries both parameter and observation
+# uncertainty.
+# Exports are not forecast, since cross-border travel is unlikely to be
 # continuing at its baseline rate, so the forward travel rate the export
 # model relies on no longer holds.
 

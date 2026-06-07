@@ -137,8 +137,8 @@ a self-contained single-file copy of the report that opens offline
 the same artifacts are
 written to the repository's `output/` directory on each build. Browse
 [all releases](https://github.com/epiforecasts/BVDOutbreakSize/releases)
-for earlier output bundles — major versions of the report are kept as
-GitHub Releases.
+for earlier output bundles.
+Major versions of the report are kept as GitHub Releases.
 
 The rendered report is published from the
 [`gh-pages` branch](https://github.com/epiforecasts/BVDOutbreakSize/tree/gh-pages),
