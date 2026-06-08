@@ -634,8 +634,7 @@ vintage_table #hide
 
 # ##### Infection process
 #
-# The renewal recursion runs from the renewal start to the cut-off, with the
-# observed window the span between them:
+# The renewal start and observed window from the genetic bound above are
 #
 # ```math
 # \text{renewal start} = n - \text{tmrca}_{\text{days}} + 14, \qquad
