@@ -1984,7 +1984,7 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # NUTS [hoffman2014nuts](@cite) with Mooncake [mooncake_jl](@cite)
-# reverse-mode automatic differentiation, two chains, 1500 post-warmup
+# reverse-mode automatic differentiation, two chains, 1000 post-warmup
 # draws each, with a target acceptance probability of 0.9. The relaxed
 # target trades a few accepted divergences for a faster fit. Chains
 # initialise from the prior to keep the sampler away from the boundary

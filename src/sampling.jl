@@ -151,7 +151,7 @@ adaptation steps rather than posterior samples; raise `samples`
 accordingly or drop them before summarising.
 """
 function nuts_sample(model;
-        samples::Integer = 1_500,
+        samples::Integer = 1_000,
         chains::Integer = 2,
         target_accept::Real = 0.9,
         seed::Integer = 20260518,
