@@ -1102,27 +1102,38 @@ cfr_prior_fig #hide
 #
 # Reported suspected cases are the sum of two parts. The first is a
 # BVD-driven component: the daily onsets convolved with the onset-to-report
-# delay $f_{\text{rep}}$ and scaled by the DRC ascertainment
-# $p_{\text{DRC}}$. The convolution of a daily series $x$ with a delay PMF
-# $f$ is the lagged sum $(x * f)_t = \sum_{s \ge 0} x_{t-s}\, f_s$, used for
-# every delay below. We write the BVD onset-to-report series at unit
-# ascertainment as $\text{bvd}_t = \sum_{s \ge 0} \text{onsets}_{t-s}\,
-# f_{\text{rep},s}$. The second part is an additive non-BVD background
-# accruing at $\lambda_{\text{bg}}$ per day, so a suspected case need not be a
-# true BVD infection. We assume this background is a small minority of
-# suspected reports, so the prior on $\lambda_{\text{bg}}$ is an informative
-# half-normal $\mathrm{Normal}^{+}(0, 1)$ per day. The daily expected
-# suspected cases and the per-vintage increments scored with a NegBinomial
-# sharing $k$ are
+# delay $f_{\text{rep}}$ and scaled by the DRC ascertainment $p_{\text{DRC}}$.
+# The convolution of a daily series $x$ with a delay PMF $f$ is the lagged sum
 #
 # ```math
-# c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg}}, \qquad
-# \sum_{t = d_{i-1}+1}^{d_i} c_t = Y_{\text{cases},i} - Y_{\text{cases},i-1}
-# \sim \mathrm{NegBinomial}, \tag{25}
+# (x * f)_t = \sum_{s \ge 0} x_{t-s}\, f_s,
 # ```
 #
-# with the NegBinomial mean the increment $\sum_{t} c_t$ over the days
-# between consecutive vintage dates $d_{i-1}$ and $d_i$ and dispersion $k$.
+# used for every delay below. We write the BVD onset-to-report series at unit
+# ascertainment as
+#
+# ```math
+# \text{bvd}_t = \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{\text{rep},s}.
+# ```
+#
+# The second part is an additive non-BVD background accruing at
+# $\lambda_{\text{bg}}$ per day, so a suspected case need not be a true BVD
+# infection. We assume this background is a small minority of suspected
+# reports, so the prior on $\lambda_{\text{bg}}$ is an informative half-normal
+# $\mathrm{Normal}^{+}(0, 1)$ per day. The daily expected suspected case count
+# is
+#
+# ```math
+# c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg}}.
+# ```
+#
+# The per-vintage increments are scored with a NegBinomial sharing the
+# dispersion $k$:
+#
+# ```math
+# \sum_{t = d_{i-1}+1}^{d_i} c_t = Y_{\text{cases},i} - Y_{\text{cases},i-1}
+# \sim \mathrm{NegBinomial}. \tag{25}
+# ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -1145,17 +1156,19 @@ cfr_prior_fig #hide
 # Suspected deaths are the CFR-weighted convolution of the daily onsets with
 # the onset-to-death PMF $f_d$, modelled on the incidence scale. The death
 # history ends at the cut-off, so the cut-off total is the final increment
-# and is not scored separately. The daily death series and the per-vintage
-# increments scored with a NegBinomial sharing $k$ are
+# and is not scored separately. The daily death series is
 #
 # ```math
-# m_t = \mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{d,s}, \qquad
-# \sum_{t = d_{i-1}+1}^{d_i} m_t = Y_{\text{deaths},i} -
-#     Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}, \tag{26}
+# m_t = \mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{d,s}.
 # ```
 #
-# with the NegBinomial mean the death increment $\sum_t m_t$ over the days
-# between consecutive sitrep dates and dispersion $k$.
+# The per-vintage increments are scored with a NegBinomial sharing the
+# dispersion $k$:
+#
+# ```math
+# \sum_{t = d_{i-1}+1}^{d_i} m_t = Y_{\text{deaths},i} -
+#     Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}. \tag{26}
+# ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: deaths_model</summary>
@@ -1178,14 +1191,18 @@ cfr_prior_fig #hide
 # The laboratory pipeline fits two streams. The received-specimen volume is
 # the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the
 # non-BVD background $\lambda_{\text{bg}}$) carried through the receipt delay
-# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$.
-# The daily modelled laboratory volume and the per-vintage increments scored
-# with a NegBinomial sharing $k$ are
+# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$,
 #
 # ```math
 # v_t = \tau_{\text{test}} \sum_{s \ge 0}
 #     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg}}\bigr)\,
-#     f_{\text{rec},s}, \qquad
+#     f_{\text{rec},s}.
+# ```
+#
+# The per-vintage increments are scored with a NegBinomial sharing the
+# dispersion $k$:
+#
+# ```math
 # \sum_{t = d_{i-1}+1}^{d_i} v_t \sim \mathrm{NegBinomial}. \tag{27}
 # ```
 #
@@ -1194,14 +1211,21 @@ cfr_prior_fig #hide
 # per-window tested-positive probability $p_{\text{pos},v}$. We tie that
 # probability to the composition of the tested pool, so the confirmed data
 # help identify the non-BVD background. The suspect-pool composition
-# $\varphi_v$ is the BVD share among suspected reports in the window,
-# $\varphi_v = (p_{\text{DRC}}\,\text{bvd})_v / ((p_{\text{DRC}}\,
-# \text{bvd})_v + \lambda_{\text{bg},v})$. The tested BVD share $q_v$ raises
-# $\varphi_v$ by the decaying severity enrichment $\delta_0$. A truly BVD
-# specimen then tests positive with the sensitivity $s$, and a non-BVD
-# specimen with the false-positive rate $1 - \mathrm{spec}$, so the
-# false-positive term carries the non-BVD share and the laboratory data
-# identify the background:
+# $\varphi_v$ is the BVD share among the specimens received in the window,
+# carried through the same receipt delay as the volume so composition and
+# volume share one clock:
+#
+# ```math
+# \varphi_v = \frac{(p_{\text{DRC}}\,\text{bvd} * f_{\text{rec}})_v}
+#     {(p_{\text{DRC}}\,\text{bvd} * f_{\text{rec}})_v +
+#      (\lambda_{\text{bg}} * f_{\text{rec}})_v}.
+# ```
+#
+# The tested BVD share $q_v$ raises $\varphi_v$ by the decaying severity
+# enrichment $\delta_0$. A truly BVD specimen then tests positive with the
+# sensitivity $s$, and a non-BVD specimen with the false-positive rate
+# $1 - \mathrm{spec}$, so the false-positive term carries the non-BVD share
+# and the laboratory data identify the background:
 #
 # ```math
 # q_v = \mathrm{logistic}\!\bigl(\mathrm{logit}(\varphi_v) +
@@ -1263,24 +1287,32 @@ cfr_prior_fig #hide
 # because a suspected death may be more or less likely to be
 # laboratory-confirmed than a living suspected case: deaths can be
 # under-swabbed, as post-mortem confirmation is rarer, or preferentially
-# confirmed. The confirmation probability is the suspected-case BVD
-# composition $q_{\text{susp}} = p_{\text{DRC}}\,\text{bvd} /
-# (p_{\text{DRC}}\,\text{bvd} + \lambda_{\text{bg}})$ enriched on the odds
-# scale by $m_{\text{death}}$, which keeps it in $(0, 1)$ without a hard clamp
-# and ties the death-confirmation rate to the same composition that drives
-# the case streams, so a confirmed-death observation informs the background
-# and ascertainment. The daily confirmed-death series and the per-vintage
-# increments scored with a NegBinomial sharing $k$ are
+# confirmed. The confirmation probability builds on the suspected-case BVD
+# composition
 #
 # ```math
-# p_{\text{cd}} =
-#     \mathrm{logistic}\!\bigl(\mathrm{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}}\bigr), \qquad
-# \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t \sim
-#     \mathrm{NegBinomial}, \tag{30}
+# q_{\text{susp}} = \frac{p_{\text{DRC}}\,\text{bvd}}
+#     {p_{\text{DRC}}\,\text{bvd} + \lambda_{\text{bg}}},
 # ```
 #
-# with $m_t$ the daily modelled suspected-death series.
+# enriched on the odds scale by $m_{\text{death}}$, which keeps it in $(0, 1)$
+# without a hard clamp and ties the death-confirmation rate to the same
+# composition that drives the case streams, so a confirmed-death observation
+# informs the background and ascertainment:
+#
+# ```math
+# p_{\text{cd}} = \mathrm{logistic}\!\bigl(\mathrm{logit}(q_{\text{susp}})
+#     + \log m_{\text{death}}\bigr).
+# ```
+#
+# The daily confirmed-death series is $p_{\text{cd}}\, m_t$ with $m_t$ the
+# modelled suspected-death series, and the per-vintage increments are scored
+# with a NegBinomial sharing the dispersion $k$:
+#
+# ```math
+# \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t \sim
+#     \mathrm{NegBinomial}. \tag{30}
+# ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: confirmed_deaths_model</summary>
@@ -1308,10 +1340,16 @@ cfr_prior_fig #hide
 # infected and not yet detected, scaled by the Uganda ascertainment and the
 # travel rate. The infection-to-detection delay is the onset-to-detection
 # delay convolved with the incubation period, so the survival clock runs from
-# infection. With $C_t = \sum_{u \le t} I_u$ the cumulative infections and
-# $\text{det}_t = \sum_{s \ge 0} I_{t-s}\, (f_{\text{inc}} * f_{\text{det}})_s$
-# the infections that have completed the delay, the daily export intensity and
-# its running sum are
+# infection. Write the cumulative infections and the infections that have
+# completed the detection delay as
+#
+# ```math
+# C_t = \sum_{u \le t} I_u, \qquad
+# \text{det}_t = \sum_{s \ge 0} I_{t-s}\,
+#     (f_{\text{inc}} * f_{\text{det}})_s.
+# ```
+#
+# Then the daily export intensity and its running sum are
 #
 # ```math
 # \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
@@ -1358,11 +1396,15 @@ cfr_prior_fig #hide
 # factor $p_{\text{Uganda}}$, because a death among an exported case would be
 # reported whether or not the case itself was ascertained as an import.
 # Writing it $\ell_t = q\,(C_t - \text{det}_t)$, the daily export-death
-# intensity and its running sum are
+# intensity is
 #
 # ```math
-# \mu_t = \mathrm{CFR} \sum_{s \ge 0} \ell_{t-s}\,
-#     (f_{\text{inc}} * f_d)_s, \qquad
+# \mu_t = \mathrm{CFR} \sum_{s \ge 0} \ell_{t-s}\, (f_{\text{inc}} * f_d)_s.
+# ```
+#
+# Its running sum is the cumulative export-death intensity:
+#
+# ```math
 # \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{33}
 # ```
 #
