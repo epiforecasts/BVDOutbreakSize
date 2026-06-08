@@ -2097,29 +2097,6 @@ surveillance_pair_fig = plot_pair(chn_joint,
 
 surveillance_pair_fig #hide
 
-# ### Export parameters
-#
-# The export-stream parameters: the daily outbound traveller volume that
-# sets the cross-border travel rate, and the implied expected exported cases
-# by the cut-off.
-# The table reports their credible intervals.
-# We do not show a pair plot here because these parameters return their
-# priors.
-
-#md # ```@raw html
-#md # <details><summary>Export-parameter summary table</summary>
-#md # ```
-
-export_summary = summary_table(chn_joint,
-    [Symbol("exports_state.travel_state.daily_travellers"), :expected_exports_T];
-    digits = 2);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-export_summary #hide
-
 # ### Posterior predictive checks
 #
 # A posterior predictive check draws replicated observations from the
