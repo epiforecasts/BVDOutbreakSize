@@ -653,10 +653,8 @@ vintage_table #hide
 # The grid days before the renewal start are filled by the cryptic
 # exponential curve at rate $r$ ending at $2^m$, giving the recursion a full
 # generation interval of history. The renewal then grows the trajectory
-# forward under the time-varying reproduction number, so the cut-off size is
-# data-driven while the doubling count sets only the renewal-start scale. The
-# total outbreak age is
-# the cryptic duration plus the observed window:
+# forward under the time-varying reproduction number. The total outbreak age
+# is the cryptic duration plus the observed window:
 #
 # ```math
 # T = m\,\tau + \tau_{\text{obs}}. \tag{12}

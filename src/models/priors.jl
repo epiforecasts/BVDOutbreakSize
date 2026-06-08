@@ -189,14 +189,11 @@ Since `m` now counts only the CRYPTIC doublings (not the cut-off case
 total), its centre is much lower than the integral model's: with the
 ≈20-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
 days, placing the origin in the genetically-plausible window (origin roughly
-Feb–Mar). The spread keeps the cryptic duration wide and prior-dominated
-rather than pinned by a post-hoc crossing.
+Feb–Mar). The spread keeps the cryptic duration wide.
 
-In the renewal, `2^m` is the prior-implied size scale at the renewal start;
-the realized cut-off size is set by the renewal recursion under `R_t` (it
-grows the renewal-start seed forward), so `m`/`T` stay prior-dominated while
-the data
-drive the size through `R_t`. Pass `m_prior` to override (e.g. an `m_prior`
+In the renewal, `2^m` is the prior seed at the renewal start, which the
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override
+(e.g. an `m_prior`
 whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
 Returns `(; τ, r, m, T, C_T)`.
 """
@@ -266,11 +263,9 @@ pulls the origin to sit at or before the MRCA, so the cryptic duration `m·τ`
 cannot be too short. The genetic bound therefore defines the cryptic-phase
 length through `T`.
 
-So the realized cut-off size `C_T = cumulative[n]` is DATA-DRIVEN through
-`R_t`, while `m`/`T`/`τ` stay prior-dominated (`2^m` only sets the
-renewal-start scale). The `breakpoint` is forwarded to the
-reproduction-number submodel. Exposes the daily infections and cumulative
-sum, the total prior
+The realized cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
+forwarded to the reproduction-number submodel. Exposes the daily infections
+and cumulative sum, the total prior
 outbreak age `T`, cryptic doubling count `m`/`τ` and prior size scale
 `C_T_prior`, the realized cut-off size `C_T`, the established reproduction
 number `R0` and its implied cryptic rate `r0` (with

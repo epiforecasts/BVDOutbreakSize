@@ -105,10 +105,8 @@ the renewal-process start): the cryptic duration is `m·τ` and the total
 outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. A centre
 of 3 places the prior cryptic phase at `m·τ ≈ 60 d` at the central 20-day
 doubling and a prior seed of `2^m = 8` infections at the renewal start. The
-seed magnitude only sets the prior scale: the realised outbreak size is
-data-driven through the renewal `R_t`, so `m` is weakly identified and stays
-prior-dominated under the wide SD. The genetic seeding bound pulls the lower
-tail of the outbreak age to sit at or before the most recent common ancestor.
+genetic seeding bound pulls the lower tail of the outbreak age to sit at or
+before the most recent common ancestor.
 """
 const M_PRIOR_BASE = 3.0
 
