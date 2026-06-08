@@ -6,6 +6,53 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.4.0
+
+The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate
+model is replaced by a discrete-time renewal model that is simpler and avoids
+the single-stream-versus-joint size tension of issue #212.
+This is a substantial revision; the changes below are relative to v1.3.0.
+
+### Model
+
+- Replaced the integral exponential-growth model with a discrete-time renewal
+  process on a daily grid.
+  Infections follow the renewal equation under a time-varying reproduction
+  number (a weekly log-scale random walk with an intervention ramp), and every
+  observed stream sits downstream of latent onsets through its own sampled,
+  discretised delay.
+- The prior is placed on the growth rate (the molecular-clock doubling time)
+  and the first reproduction number is derived forward through Euler–Lotka.
+  The generation interval is a Gamma with shape and scale taken from the cited
+  source and its reported uncertainty.
+- Two-phase seeding: a single import grows through an unobserved cryptic
+  exponential phase to the renewal start, with the outbreak age bounded by the
+  genetic time to the most recent common ancestor.
+- Confirmed positivity is tied to the suspect-pool composition through an assay
+  sensitivity and specificity, and exports are travel-gated from infection and
+  scored on their dated detection days.
+- The DRC streams are fitted as cumulative series of between-vintage increments
+  across successive situation reports.
+
+### Report
+
+- Restructured the methods in generative order (infections, epidemiological
+  processes, observation models, the joint model) with the model maths given
+  explicitly.
+- Reworked the figures (reproduction number with credible ribbons and sampled
+  trajectories, cumulative infections, onsets and deaths, outbreak size by data
+  stream, and estimate evolution across releases), restored the delay and
+  clock-rate sensitivity analyses, and compared against the McCabe et al.
+  scenarios with their reported uncertainty.
+- Added a one-week-ahead forecast with a last-week-versus-now validation and a
+  no-onward-transmission counterfactual.
+
+### Data
+
+- Advanced the cut-off to 6 June 2026 (SitRep 023).
+  The laboratory-confirmed streams run to the cut-off while the suspected
+  streams stay frozen at their 26 May values.
+
 ## v1.3.0
 
 !!! warning "Final release of this model formulation"
