@@ -37,16 +37,20 @@ This is a substantial revision; the changes below are relative to v1.3.0.
 
 ### Report
 
+The report was rebuilt around the renewal model; the analyses carried over
+from v1.3.0 (the one-week-ahead forecast and its validation, the
+no-onward-transmission counterfactual, the delay and clock-rate sensitivity
+analyses, and the McCabe et al. comparison) were re-implemented for the new
+model rather than added here.
+
 - Restructured the methods in generative order (infections, epidemiological
   processes, observation models, the joint model) with the model maths given
   explicitly.
 - Reworked the figures (reproduction number with credible ribbons and sampled
   trajectories, cumulative infections, onsets and deaths, outbreak size by data
-  stream, and estimate evolution across releases), restored the delay and
-  clock-rate sensitivity analyses, and compared against the McCabe et al.
-  scenarios with their reported uncertainty.
-- Added a one-week-ahead forecast with a last-week-versus-now validation and a
-  no-onward-transmission counterfactual.
+  stream, and estimate evolution across releases).
+- The McCabe et al. scenario comparison now carries their reported 95%
+  confidence intervals.
 
 ### Data
 
