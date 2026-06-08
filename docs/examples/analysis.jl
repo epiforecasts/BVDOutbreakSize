@@ -696,13 +696,15 @@ vintage_table #hide
 # \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{13}
 # ```
 #
-# The incubation period, and every onset-to-event delay below, is sampled by
-# its mean and SD, moment-matched to a LogNormal, and discretised to a daily
-# PMF over lags $0,\dots,n_{\max}$ by double interval censoring
-# [charniga2024](@cite). The generation interval above is the one exception,
-# a Gamma discretised through the same censoring route. The LogNormal and
-# Gamma CDFs both differentiate cleanly under the reverse-mode automatic
-# differentiation.
+# Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by
+# double interval censoring [charniga2024](@cite). The delays the companion
+# line-list reanalysis reports — onset-to-report, onset-to-hospitalisation
+# and onset-to-death — are carried through on their natural Gamma shape and
+# scale, with the reanalysis's reported uncertainty, like the generation
+# interval above. The incubation period and the laboratory receipt delay are
+# not in the line list, so they keep a mean-and-SD prior moment-matched to a
+# LogNormal. The LogNormal and Gamma CDFs both differentiate cleanly under
+# the reverse-mode automatic differentiation.
 #
 # Both the primary event (the onset, say) and the secondary event (the
 # report) are observed only to the day, so the discretisation censors both.
@@ -752,14 +754,17 @@ vintage_table #hide
 
 # ##### Onset-to-report delay
 #
-# The delay from symptom onset to a suspected case being reported. No data
-# from this outbreak dates onsets, so the prior is centred on a short
-# notification delay consistent with Ebola surveillance reporting (mean 4.5
-# d, SD 3.6 d), with spreads we assign ourselves:
+# The delay from symptom onset to a suspected case being reported.
+# We ground it on the companion line-list reanalysis
+# [bdbv_linelist_analysis_2026](@cite), whose onset-to-notification delay is
+# a Gamma with shape near $0.66$ and scale near $32$ d (a near-exponential
+# delay with a heavy tail, posterior mean about 20 d).
+# We sample the Gamma shape and scale with priors centred on those values,
+# carrying the reanalysis's reported uncertainty:
 #
 # ```math
-# \mu_{\text{rep}} \sim \mathrm{Normal}^{+}(4.5,\ 1.5), \qquad
-# \sigma_{\text{rep}} \sim \mathrm{Normal}^{+}(3.6,\ 1.2). \tag{15}
+# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(0.66,\ 0.14), \qquad
+# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(32.4,\ 9.9). \tag{15}
 # ```
 #
 # This delay drives the suspected-case, laboratory and confirmed-death
@@ -770,29 +775,35 @@ vintage_table #hide
 # McCabe et al. take the onset-to-death delay from the Isiro 2012 point
 # estimate of [rosello2015](@cite), fitting a $t$-distributed delay. We
 # instead ground it on the companion Bayesian reanalysis of the same Isiro
-# 2012 BDBV line list [bdbv_linelist_analysis_2026](@cite), which
-# re-estimates the delay with uncertainty as a Gamma (posterior mean 11.2 d,
-# SD 5.4 d). The mean and SD priors are centred on those values, carrying the
-# uncertainty the reanalysis reports:
+# 2012 BDBV line list [bdbv_linelist_analysis_2026](@cite), which fits the
+# delay as two atomic Gamma components, onset-to-admission and
+# admission-to-death, and convolves them. We do the same: each component is a
+# Gamma sampled on its natural shape and scale, with priors centred on the
+# reanalysis posteriors and carrying its reported uncertainty,
 #
 # ```math
-# \mu_d \sim \mathrm{Normal}^{+}(11.2,\ 2.0), \qquad
-# \sigma_d \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{16}
+# \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
+# \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \quad
+# \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38), \tag{16}
 # ```
 #
-# The source is shown with the deaths submodel below, where the delay is
-# injected.
+# and the onset-to-death PMF is the convolution of the two discretised
+# components (implied mean about 12 d). The source is shown with the deaths
+# submodel below, where the delay is injected.
 #
 # ##### Onset-to-hospitalisation delay
 #
 # The delay from symptom onset to hospitalisation, used in the export model
-# as the onset-to-detection delay at a point of entry abroad. The prior is
-# centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d;
-# WHO Ebola Response Team 2014), with spreads we assign ourselves:
+# as the onset-to-detection delay at a point of entry abroad. We use the
+# line-list reanalysis onset-to-admission delay
+# [bdbv_linelist_analysis_2026](@cite), a Gamma sampled on its natural shape
+# and scale with priors centred on the reanalysis posterior (implied mean
+# about 4 d), carrying its reported uncertainty:
 #
 # ```math
-# \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
-# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{17}
+# \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{17}
 # ```
 #
 # It drives the exports streams; its source is shown with the exports

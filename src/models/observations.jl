@@ -222,9 +222,11 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         cfr = cfr_model(),
         death_background = nothing,
         background_re = nothing,
-        onset_to_death = censored_delay_model(40;
-            mean_prior = truncated(Normal(11.2, 2.0); lower = 1),
-            sd_prior = truncated(Normal(5.4, 1.5); lower = 1)))
+        onset_to_death = onset_to_death_model(40;
+            oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
+            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
+            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)))
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
     CFR = cfr_state.CFR
@@ -296,9 +298,13 @@ sitrep.
         onsets::AbstractVector, k::Real, p_drc::Real;
         positivity = test_positivity_model(),
         background_re = nothing,
-        onset_to_report = censored_delay_model(30;
-            mean_prior = truncated(Normal(4.5, 1.5); lower = 1),
-            sd_prior = truncated(Normal(3.6, 1.2); lower = 1)))
+        ## The line-list onset→notification delay is near-exponential
+        ## (shape ≈ 0.66, mean ≈ 20 d) with a heavy tail, so nmax is raised to
+        ## 90 to capture as much of the tail as the grid can represent; the
+        ## remaining tail past 90 d is truncated and renormalised.
+        onset_to_report = gamma_delay_model(90;
+            alpha_prior = truncated(Normal(0.657, 0.141); lower = 0.01),
+            theta_prior = truncated(Normal(32.35, 9.92); lower = 0.1)))
     pos_state ~ to_submodel(positivity)
     report_state ~ to_submodel(onset_to_report)
     λ_bg = pos_state.λ_bg
@@ -811,9 +817,9 @@ rate and the daily at-risk prevalence for reuse by
         incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model(),
-        onset_to_detection = censored_delay_model(30;
-            mean_prior = truncated(Normal(5.0, 2.0); lower = 1),
-            sd_prior = truncated(Normal(4.7, 1.5); lower = 1)))
+        onset_to_detection = gamma_delay_model(30;
+            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
     travel_state ~ to_submodel(traveller)
     daily_travellers = travel_state.daily_travellers
     q = daily_travellers / source_population

@@ -58,6 +58,49 @@ so an infectee is infected strictly after its infector. Returns
         gi_alpha = α, gi_theta = θ)
 end
 
+"""
+Natural-parameter Gamma delay submodel. Samples a Gamma SHAPE `α` and SCALE
+`θ` directly from the priors, builds `Gamma(α, θ)`, and discretises to a
+daily PMF over lags `0 … nmax` by double interval censoring
+([`discretise_censored`](@ref)), keeping the lag-0 bin (an onset-to-event
+delay can be same-day, unlike the generation interval). This carries a
+line-list delay reanalysis through on its NATURAL parameters with the
+reported posterior uncertainty, rather than moment-matching a LogNormal from
+mean/SD priors. Gamma shape/scale differentiate cleanly under Mooncake.
+Returns `(; pmf, dist, mean, sd, alpha, theta)`.
+"""
+@model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
+    α ~ alpha_prior
+    θ ~ theta_prior
+    dist = Gamma(α, θ)
+    return (; pmf = discretise_censored(dist, nmax), dist,
+        mean = α * θ, sd = sqrt(α) * θ, alpha = α, theta = θ)
+end
+
+"""
+Onset-to-death delay as the CONVOLUTION of two natural-parameter Gamma
+atomic delays — onset→admission (`oa`) and admission→death (`ad`) — each
+sampled through [`gamma_delay_model`](@ref) and combined by convolving their
+PMFs. This matches the companion line-list reanalysis, which fits the atomic
+components and convolves them rather than fitting onset→death directly, so
+no moment-matching is needed: each atomic delay keeps its own Gamma shape
+and scale prior with the reanalysis's reported uncertainty. The convolved
+PMF is truncated back to lags `0 … nmax` and renormalised. Returns
+`(; pmf, mean, sd, oa_mean, ad_mean)`.
+"""
+@model function onset_to_death_model(nmax::Integer;
+        oa_alpha_prior, oa_theta_prior, ad_alpha_prior, ad_theta_prior)
+    oa ~ to_submodel(gamma_delay_model(nmax; alpha_prior = oa_alpha_prior,
+        theta_prior = oa_theta_prior))
+    ad ~ to_submodel(gamma_delay_model(nmax; alpha_prior = ad_alpha_prior,
+        theta_prior = ad_theta_prior))
+    full = convolve_pmf(oa.pmf, ad.pmf)
+    trimmed = full[1:(nmax + 1)]
+    pmf = trimmed ./ sum(trimmed)
+    return (; pmf, mean = oa.mean + ad.mean,
+        sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean)
+end
+
 ## --- Reproduction number ------------------------------------------------
 
 """
