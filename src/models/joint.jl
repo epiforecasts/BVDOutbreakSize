@@ -204,7 +204,7 @@ See [`exports_deaths_model`](@ref).
         source_population))
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(exports_deaths,
-        exports_state.export_prevalence, deaths_state.CFR,
+        exports_state.travelled_prevalence, deaths_state.CFR,
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
     C_T := latent.infection_state.C_T
 end
@@ -343,7 +343,7 @@ death-confirmation probability (`death_confirmation`).
         source_population))
     exports_deaths_state ~ to_submodel(
         exports_deaths_model(exports_deaths,
-        exports_state.export_prevalence, deaths_state.CFR,
+        exports_state.travelled_prevalence, deaths_state.CFR,
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
 
     if genetic !== nothing

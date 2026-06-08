@@ -844,20 +844,30 @@ rate and the daily at-risk prevalence for reuse by
         expected_exports_T := safe_rate(pre + sum(μ_day))
     end
 
+    ## Travel-scaled at-risk prevalence WITHOUT the export-case ascertainment
+    ## `p_uganda`: a death among an exported case would be reported whether or
+    ## not the case itself was ascertained as an import, so the export-death
+    ## model accrues over the travelled person-time `q · prevalence`, not the
+    ## ascertained `export_prevalence = p_uganda · q · prevalence`.
+    travelled_prevalence = q .* prevalence
     return (; p_uganda, daily_travellers, q, prevalence,
-        export_prevalence,
+        export_prevalence, travelled_prevalence,
         expected_exports = expected_exports_T)
 end
 
 """
-Deaths-among-detected-exports likelihood, dated per-day. Deaths accrue
-among the at-risk export person-time of [`exports_model`](@ref): the
-day-`t` expected export-death increment is the CFR-scaled convolution of
-the daily at-risk export prevalence with the infection→death PMF,
+Deaths-among-exported-cases likelihood, dated per-day. Deaths accrue among
+the TRAVELLED at-risk person-time `q · prevalence` from
+[`exports_model`](@ref), BEFORE the export-case ascertainment `p_uganda`: a
+death among an exported case would be reported whether or not the case was
+ascertained as an import, so the death model is not thinned by `p_uganda`
+(unlike the export-case count). The day-`t` expected export-death increment
+is the CFR-scaled convolution of that travelled prevalence with the
+infection→death PMF,
 
 ```math
 \\mathrm{d}\\Lambda_\\text{d}(t) = \\mathrm{CFR}
-    \\sum_{s\\le t} \\text{export\\_prevalence}(s)\\, f_\\text{d}(t-s),
+    \\sum_{s\\le t} q\\,\\text{prevalence}(s)\\, f_\\text{d}(t-s),
 ```
 
 so the cumulative export-death intensity `Λ_d(t)` is its running sum, the
@@ -877,17 +887,17 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 """
 @model function exports_deaths_model(
         exports_deaths::Union{Missing, Integer},
-        export_prevalence::AbstractVector, CFR::Real,
+        travelled_prevalence::AbstractVector, CFR::Real,
         od_pmf::AbstractVector, incubation_pmf::AbstractVector;
         export_death_days::AbstractVector{<:Integer} = Int[],
         pre_death_exports::Union{Missing, Integer} = 0)
-    n = length(export_prevalence)
+    n = length(travelled_prevalence)
     ## Infection→death PMF by age (age 0 = same day).
     fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
     ## Per-day expected export-death increment: CFR-scaled convolution of
     ## the daily at-risk prevalence with the infection→death PMF. Its
     ## running sum is the cumulative export-death intensity `Λ_d`.
-    death_daily = CFR .* convolve_delay(export_prevalence, fd_pmf)
+    death_daily = CFR .* convolve_delay(travelled_prevalence, fd_pmf)
 
     if isempty(export_death_days)
         ## No dated series: cumulative single-total Poisson at the cut-off.

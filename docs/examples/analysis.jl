@@ -1340,13 +1340,17 @@ cfr_prior_fig #hide
 
 # ##### Deaths among exports
 #
-# The expected deaths among detected exports weight the same daily at-risk
-# export prevalence $\lambda_t$ by the infection-to-death delay (the
-# onset-to-death PMF convolved with the incubation period) and scale by the
-# CFR. The daily export-death intensity and its running sum are
+# The expected deaths among exports weight the travelled at-risk prevalence
+# by the infection-to-death delay (the onset-to-death PMF convolved with the
+# incubation period) and scale by the CFR.
+# The travelled prevalence is the export prevalence before the ascertainment
+# factor $p_{\text{Uganda}}$, because a death among an exported case would be
+# reported whether or not the case itself was ascertained as an import.
+# Writing it $\ell_t = q\,(C_t - \text{det}_t)$, the daily export-death
+# intensity and its running sum are
 #
 # ```math
-# \mu_t = \mathrm{CFR} \sum_{s \ge 0} \lambda_{t-s}\,
+# \mu_t = \mathrm{CFR} \sum_{s \ge 0} \ell_{t-s}\,
 #     (f_{\text{inc}} * f_d)_s, \qquad
 # \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{33}
 # ```
