@@ -68,6 +68,21 @@ end
 end
 
 """
+    cdf_nmax(dist; q = 0.98, cap = 120, minlag = 5)
+
+Maximum lag for discretising a delay `dist`: the smallest integer covering
+`q` of its CDF (the `q`th quantile rounded up), clamped to `[minlag, cap]`.
+Sizing the truncation by the distribution rather than a hand-set constant
+keeps a consistent tail mass (98% by default) across every delay. This is a
+deterministic function of the PRIOR-centre distribution, evaluated ONCE
+outside the Turing model when each delay submodel is constructed, so the PMF
+length is fixed and AD-safe.
+"""
+function cdf_nmax(dist; q::Real = 0.98, cap::Integer = 120, minlag::Integer = 5)
+    clamp(ceil(Int, quantile(dist, q)), minlag, cap)
+end
+
+"""
 Exponential growth rate `r` implied by a reproduction number `R` and a
 generation-interval PMF `g` (indexed from lag 1), solving the
 Euler–Lotka identity `R · Σ_s g_s e^{−r s} = 1`. Starts from the

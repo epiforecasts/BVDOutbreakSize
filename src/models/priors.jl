@@ -323,7 +323,7 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
         rt = rt_walk_model,
         gi = generation_interval_model,
         growth = exponential_growth_model,
-        gi_nmax::Integer = 40)
+        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)))
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
     ## ONE growth source: the prior is on the cryptic exponential growth rate
@@ -382,7 +382,7 @@ CV-implied spread (≈ 3.5 d). Returns
         incubation = (nmax) -> censored_delay_model(nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
             sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
-        incubation_nmax::Integer = 30)
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)))
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets = convolve_delay(infections, inc_state.pmf)
     return (; onsets, incubation_pmf = inc_state.pmf,
@@ -604,7 +604,7 @@ on a short turnaround with a heavy right tail allowing for specimen
 shipment to a confirmatory lab; no per-sample outbreak data grounds this
 prior, matching integral `main`. Returns `(; pmf, dist, mean, sd)`.
 """
-@model function lab_delay_model(nmax::Integer = 30;
+@model function lab_delay_model(nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
         mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
         sd_prior = truncated(Normal(4.0, 1.5); lower = 1))
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))

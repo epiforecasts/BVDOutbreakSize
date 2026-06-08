@@ -222,7 +222,9 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         cfr = cfr_model(),
         death_background = nothing,
         background_re = nothing,
-        onset_to_death = onset_to_death_model(40;
+        ## nmax covers 98% of the convolved onset->death sum (the two atomic
+        ## Gammas moment-matched to a single Gamma only for the truncation).
+        onset_to_death = onset_to_death_model(cdf_nmax(Gamma(3.33, 3.83));
             oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
             ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
@@ -298,13 +300,16 @@ sitrep.
         onsets::AbstractVector, k::Real, p_drc::Real;
         positivity = test_positivity_model(),
         background_re = nothing,
-        ## The line-list onset→notification delay is near-exponential
-        ## (shape ≈ 0.66, mean ≈ 20 d) with a heavy tail, so nmax is raised to
-        ## 90 to capture as much of the tail as the grid can represent; the
-        ## remaining tail past 90 d is truncated and renormalised.
-        onset_to_report = gamma_delay_model(90;
-            alpha_prior = truncated(Normal(0.657, 0.141); lower = 0.01),
-            theta_prior = truncated(Normal(32.35, 9.92); lower = 0.1)))
+        ## Onset to a suspected case being detected/reported, from the
+        ## line-list onset→admission delay (d_oa, ~4 d): a case enters
+        ## surveillance when first formally seen, so one delay serves both the
+        ## suspect-case and export streams. The line-list onset→notification
+        ## delay (~20 d) is NOT used — we assume it reflects a longer pathway
+        ## (likely confirmation and administrative processing), though what it
+        ## captures is uncertain.
+        onset_to_report = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
+            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
     pos_state ~ to_submodel(positivity)
     report_state ~ to_submodel(onset_to_report)
     λ_bg = pos_state.λ_bg
@@ -573,7 +578,13 @@ quantities.
         positivity_link::Symbol = :composition,
         severity_enrichment = severity_enrichment_model(),
         sensitivity = test_sensitivity_model(),
-        specificity = test_specificity_model())
+        specificity = test_specificity_model(),
+        ## When false, the early/late windows (confirmed vintages with NO
+        ## observed analysed denominator) are not scored — only the
+        ## observed-denominator Binomial windows contribute, so confirmed
+        ## informs positivity without extrapolating a denominator from
+        ## incidence. Used to probe the no-test-data extrapolation.
+        fit_dark::Bool = true)
     n = length(onsets)
 
     ## Received-specimen volume: the suspected pipeline carried through the
@@ -695,7 +706,8 @@ quantities.
     early_p = p_pos[1:n_early]
     early_volume = bin_increments(received_daily, windows.early_days)
     early_mean = early_p .* early_volume
-    early_obs = (have_data && n_early > 0) ? windows.early_increments : missing
+    early_obs = (have_data && n_early > 0 && fit_dark) ?
+                windows.early_increments : missing
     early_increments ~ to_submodel(
         vintage_increments_model(early_mean, early_obs, k))
 
@@ -722,7 +734,8 @@ quantities.
         late_volume = similar(received_daily, 0)
     end
     late_mean = late_p .* late_volume
-    late_obs = (have_data && n_late > 0) ? windows.late_increments : missing
+    late_obs = (have_data && n_late > 0 && fit_dark) ?
+               windows.late_increments : missing
     late_increments ~ to_submodel(
         vintage_increments_model(late_mean, late_obs, k))
 
@@ -817,7 +830,10 @@ rate and the daily at-risk prevalence for reuse by
         incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
         traveller = traveller_volume_model(),
-        onset_to_detection = gamma_delay_model(30;
+        ## Export detection abroad uses the same line-list onset→admission
+        ## delay (d_oa) as the suspect-case report: a case is detected at a
+        ## point of entry when first formally seen, ~4 days after onset.
+        onset_to_detection = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
     travel_state ~ to_submodel(traveller)

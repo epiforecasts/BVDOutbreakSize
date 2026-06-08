@@ -677,8 +677,8 @@ vintage_table #hide
 # onset incidence. This section gives the delays that map infections to
 # onsets and onsets to each observed endpoint, and the case-fatality ratio
 # that maps onsets to deaths. The incubation period comes first, then the
-# onset-to-report, onset-to-death, onset-to-hospitalisation and
-# onset-to-confirmation delays, then the case-fatality ratio.
+# onset-to-report delay (also used for export detection), the onset-to-death
+# delay and the report-to-receipt delay, then the case-fatality ratio.
 #
 # ##### Incubation period
 #
@@ -698,13 +698,17 @@ vintage_table #hide
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by
 # double interval censoring [charniga2024](@cite). The delays the companion
-# line-list reanalysis reports — onset-to-report, onset-to-hospitalisation
-# and onset-to-death — are carried through on their natural Gamma shape and
-# scale, with the reanalysis's reported uncertainty, like the generation
-# interval above. The incubation period and the laboratory receipt delay are
-# not in the line list, so they keep a mean-and-SD prior moment-matched to a
-# LogNormal. The LogNormal and Gamma CDFs both differentiate cleanly under
-# the reverse-mode automatic differentiation.
+# line-list reanalysis reports — the onset-to-admission delay (used for both
+# suspected-case reporting and export detection) and the two onset-to-death
+# components — are carried through on their natural Gamma shape and scale,
+# with the reanalysis's reported uncertainty, like the generation interval
+# above. The incubation period and the laboratory receipt delay are not in the
+# line list, so they keep a mean-and-SD prior moment-matched to a LogNormal.
+# The LogNormal and Gamma CDFs both differentiate cleanly under the
+# reverse-mode automatic differentiation. The maximum lag $n_{\max}$ is not
+# hand-set: for each delay it is the 98th percentile of the prior-centre
+# distribution, computed once outside the model, so every delay captures a
+# consistent 98% of its mass before the truncated PMF is renormalised.
 #
 # Both the primary event (the onset, say) and the secondary event (the
 # report) are observed only to the day, so the discretisation censors both.
@@ -754,21 +758,27 @@ vintage_table #hide
 
 # ##### Onset-to-report delay
 #
-# The delay from symptom onset to a suspected case being reported.
-# We ground it on the companion line-list reanalysis
-# [bdbv_linelist_analysis_2026](@cite), whose onset-to-notification delay is
-# a Gamma with shape near $0.66$ and scale near $32$ d (a near-exponential
-# delay with a heavy tail, posterior mean about 20 d).
-# We sample the Gamma shape and scale with priors centred on those values,
-# carrying the reanalysis's reported uncertainty:
+# The delay from symptom onset to a suspected case being detected and
+# reported into surveillance. We use the companion line-list reanalysis
+# [bdbv_linelist_analysis_2026](@cite) onset-to-admission delay, a Gamma
+# sampled on its natural shape and scale with priors centred on the
+# reanalysis posterior (implied mean about 4 d), carrying its reported
+# uncertainty:
 #
 # ```math
-# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(0.66,\ 0.14), \qquad
-# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(32.4,\ 9.9). \tag{15}
+# \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
+# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{15}
 # ```
 #
+# We do not use the reanalysis onset-to-notification delay, a near-exponential
+# Gamma with mean about 20 d.
+# We assume that delay reflects a longer notification pathway, likely
+# including laboratory confirmation and administrative processing, rather than
+# the rapid surveillance report we model, though we cannot be certain what it
+# captures.
 # This delay drives the suspected-case, laboratory and confirmed-death
-# streams; its source is shown with the reported-cases submodel below.
+# streams, and the export model uses the same onset-to-admission delay for
+# detection abroad.
 #
 # ##### Onset-to-death delay
 #
@@ -792,14 +802,13 @@ vintage_table #hide
 # components (implied mean about 12 d). The source is shown with the deaths
 # submodel below, where the delay is injected.
 #
-# ##### Onset-to-hospitalisation delay
+# ##### Onset-to-detection delay (exports)
 #
-# The delay from symptom onset to hospitalisation, used in the export model
-# as the onset-to-detection delay at a point of entry abroad. We use the
-# line-list reanalysis onset-to-admission delay
-# [bdbv_linelist_analysis_2026](@cite), a Gamma sampled on its natural shape
-# and scale with priors centred on the reanalysis posterior (implied mean
-# about 4 d), carrying its reported uncertainty:
+# An exported case is detected at a point of entry abroad when it first enters
+# surveillance, the same event as a domestic suspected-case report, so the
+# export model uses the same line-list onset-to-admission delay
+# [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above,
+# with the same natural shape and scale priors:
 #
 # ```math
 # \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
@@ -2088,13 +2097,13 @@ intervention_table #hide
 # ### Observation delays
 #
 # The delays from symptom onset to each observed event: onset to a suspected
-# case being reported, onset to death, onset to hospitalisation abroad (the
-# detection delay used in the export model), and the report-to-laboratory
-# receipt delay.
-# The onset-to-report and onset-to-detection delays are sampled on their
-# natural Gamma shape and scale, and onset-to-death is the convolution of
-# two atomic Gamma delays, onset to admission and admission to death, each
-# with its own shape and scale.
+# case being reported, onset to death, onset to detection abroad (the export
+# model uses the same onset-to-admission delay as the report), and the
+# report-to-laboratory receipt delay.
+# The onset-to-report and onset-to-detection delays are the same line-list
+# onset-to-admission delay, sampled on its natural Gamma shape and scale, and
+# onset-to-death is the convolution of two atomic Gamma delays, onset to
+# admission and admission to death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
