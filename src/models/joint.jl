@@ -44,6 +44,7 @@ exports likelihood only. See [`exports_model`](@ref).
         asc_state.p_uganda; export_case_days,
         incubation_pmf = latent.incubation_pmf,
         source_population))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 
@@ -66,6 +67,7 @@ deaths likelihood only. See [`deaths_model`](@ref).
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, latent.onsets,
         dispersion_state.k))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 
@@ -91,6 +93,7 @@ then conditions on the reported-cases likelihood. See
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, latent.onsets,
         dispersion_state.k, asc_state.p_drc))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 
@@ -132,6 +135,7 @@ positives (a Binomial of the observed analysed denominator in
         cases_state.bvd_reports_daily;
         lab_history, tests_received_history,
         positivity_link = confirmed_positivity_link))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 
@@ -171,6 +175,7 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
         confirmed_deaths_history))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 
@@ -206,6 +211,7 @@ See [`exports_deaths_model`](@ref).
         exports_deaths_model(exports_deaths,
         exports_state.travelled_prevalence, deaths_state.CFR,
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
+    cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
 

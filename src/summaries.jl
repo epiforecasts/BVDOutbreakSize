@@ -45,9 +45,15 @@ _prettify(df::DataFrame) = rename(df, [n => get(_PRETTY_COLS, n, n) for n in nam
 `Quantity, Lower 90%, Lower 60%, Lower 30%, Upper 30%, Upper 60%,
 Upper 90%` giving the lower and upper endpoints of the equal-tailed
 30%, 60% and 90% credible intervals.
+
+`labels` is an optional map from the raw chain symbol to a clean display
+name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
+`Quantity` column only; the model's variable names are unchanged. Symbols
+absent from the map keep their raw name.
 """
 function summary_table(chn, params::AbstractVector{Symbol};
-        digits::Integer = 2)
+        digits::Integer = 2,
+        labels::AbstractDict = Dict{Symbol, String}())
     df = @chain DataFrame(
         quantity = String[],
         lower_90 = Float64[], lower_60 = Float64[],
@@ -58,7 +64,7 @@ function summary_table(chn, params::AbstractVector{Symbol};
             for p in params
                 s = posterior_summary(_draws(chn, p))
                 push!(df,
-                    (string(p),
+                    (get(labels, p, string(p)),
                         round(s.lo90; digits), round(s.lo60; digits),
                         round(s.lo30; digits), round(s.hi30; digits),
                         round(s.hi60; digits), round(s.hi90; digits)))

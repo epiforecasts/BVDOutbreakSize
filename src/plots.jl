@@ -115,6 +115,66 @@ function plot_cumulative_trajectories(chn;
 end
 
 """
+Overlaid cumulative-infection trajectories, one per single-stream fit, each
+projected out to the cut-off on day `n` even when that stream's data stops
+earlier. Each stream is drawn as 50% and 90% credible ribbons only, no
+median line, matching the ribbon style of [`plot_rt`](@ref) and
+[`plot_cumulative_trajectories`](@ref). A dotted vertical rule on each
+stream's colour marks the date that stream's data stops reporting, so the
+projection beyond the data reads apart from the fitted span.
+
+Each `stream` is a `NamedTuple` `(; label, trajs, last_day, colour)`, where
+`trajs` is a vector of per-draw cumulative-infection vectors of length `n`
+(one per posterior draw) and `last_day` the 1-based grid day that stream's
+data last reports (or `nothing` to omit the rule). `seeding` is the
+calendar date of grid day 1, so day `d` is `seeding + (d - 1)`.
+"""
+function plot_stream_trajectories(streams::AbstractVector;
+        n::Integer, seeding::Date,
+        title::AbstractString =
+        "Outbreak size projected to the cut-off by each data stream")
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+
+    fig = Figure(; size = (900, 480))
+    ax = Axis(fig[1, 1];
+        xlabel = "Date", ylabel = "Cumulative infections",
+        title = title, xticklabelrotation = pi / 6)
+
+    handles = Any[]
+    labels = String[]
+    ymax = 0.0
+    for s in streams
+        trajs = s.trajs
+        q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
+        lo90 = [q(d, 0.05) for d in 1:n]
+        hi90 = [q(d, 0.95) for d in 1:n]
+        lo50 = [q(d, 0.25) for d in 1:n]
+        hi50 = [q(d, 0.75) for d in 1:n]
+        ymax = max(ymax, maximum(hi90))
+        colour = s.colour
+        band!(ax, x, lo90, hi90; color = (colour, 0.12))
+        h = band!(ax, x, lo50, hi50; color = (colour, 0.30))
+        push!(handles, h)
+        push!(labels, s.label)
+        ## Dotted rule in the stream's colour where its data stops reporting.
+        ld = get(s, :last_day, nothing)
+        ld === nothing || vlines!(ax, [Float64(epoch + ld - 1)];
+            color = (colour, 0.8), linestyle = :dot, linewidth = 2)
+    end
+
+    loax = floor(Int, minimum(x))
+    hiax = ceil(Int, maximum(x))
+    ax.xticks = collect(loax:14:hiax)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    CairoMakie.ylims!(ax, 0, ymax * 1.05)
+    CairoMakie.axislegend(ax, handles, labels; position = :lt,
+        framevisible = true)
+    return fig
+end
+
+"""
 Overlaid posterior densities of an arbitrary scalar quantity from one
 or more fits, built through AlgebraOfGraphics. Pass each fit as
 `"label" => draws`; `xlabel` and `title` set the axis text.
@@ -434,11 +494,18 @@ PairPlots.jl corner plot over the named posterior parameters,
 thinned by `thin`. Pass `prior` (another chain holding the same
 parameters) to overlay the prior as a second series with a legend,
 so the data's contribution to each marginal is visible.
+
+`labels` is an optional map from the raw chain symbol to a clean display
+name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
+axis labels only; the model's variable names are unchanged. Symbols absent
+from the map keep their raw name.
 """
 function plot_pair(chn, params::AbstractVector{Symbol};
-        thin::Integer = 2, prior = nothing)
+        thin::Integer = 2, prior = nothing,
+        labels::AbstractDict = Dict{Symbol, String}())
+    _name(p) = Symbol(get(labels, p, string(p)))
     _table(c) = DataFrame(
-        NamedTuple(p => _draws(c, p) for p in params))[1:thin:end, :]
+        NamedTuple(_name(p) => _draws(c, p) for p in params))[1:thin:end, :]
     post = _table(chn)
     prior === nothing && return PairPlots.pairplot(post)
     colours = CairoMakie.Makie.wong_colors()
@@ -1064,26 +1131,45 @@ points. Each `panel` is a `NamedTuple`
 of per-draw increment vectors (one entry per vintage, oldest first) and
 `observed` the matching observed cumulative counts used as the
 conditioning baselines. `colour` is optional per panel.
+
+`max_date` (an ISO date string or `Date`) truncates every panel to the
+vintages on or before that date, so streams that keep reporting past the
+others (the laboratory streams run to the cut-off while the suspected
+streams freeze earlier) are cut back to the shared last date. Without
+this the confirmed panel runs further along the date axis than the
+suspected panel and reads as though it overtakes it, when the two are
+simply shown to different end dates.
 """
 function plot_vintage_conditional_ppc(
-        panels::AbstractVector; xlabel = "Sitrep date")
+        panels::AbstractVector; xlabel = "Sitrep date",
+        max_date::Union{Nothing, Date, AbstractString} = nothing)
+    cap = isnothing(max_date) ? nothing :
+          (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
     nrows = npanels > 1 ? 2 : 1
     ncols = cld(npanels, nrows)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
-        n = length(p.dates)
+        ## Drop vintages past the shared cap so every panel ends on the
+        ## same date; the replicates and observed counts are truncated to
+        ## match, keeping the conditional baselines aligned.
+        keep = isnothing(cap) ? eachindex(p.dates) :
+               [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
+        dates = p.dates[keep]
+        observed = p.observed[keep]
+        replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
+        n = length(dates)
         colour = get(p, :colour, :steelblue)
         ## Observed cumulative at the previous vintage is the conditioning
         ## baseline for each step (`y_0 = 0`); `obs_prev[v]` is `y_{v-1}`.
-        obs_cum = float.(p.observed)
+        obs_cum = float.(observed)
         obs_prev = [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n]
-        ## `replicates` may arrive as a draws×chains matrix of per-bin
-        ## vectors (FlexiChains slice); flatten to one vector of draws.
+        ## `replicates` is already flattened to one vector of per-draw
+        ## increment vectors and truncated to the kept vintages above.
         ## Each draw's conditional cumulative at vintage `v` is the
         ## observed previous cumulative plus the drawn increment `Δ_v`.
-        cond = [obs_prev .+ collect(r) for r in vec(collect(p.replicates))]
+        cond = [obs_prev .+ r for r in replicates]
         q(i, pr) = quantile([c[i] for c in cond], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]
@@ -1096,17 +1182,18 @@ function plot_vintage_conditional_ppc(
         ## counts and the 60% band, so a heavy upper tail in any one stream
         ## (the 90% band can run far above the data) does not flatten the
         ## visible detail; the band clips at the axis limit.
-        yupper = 1.6 * max(maximum(obs_cum), maximum(hi60), 1.0)
+        yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
+            isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = col == 1 ? "Cumulative count" : "",
-            xticks = (x, string.(p.dates)),
+            xticks = (x, string.(dates)),
             xticklabelrotation = pi / 4, xticklabelsize = 9,
             limits = (nothing, (0, yupper)))
         ## 30/60/90% credible ribbons over the situation-report dates.
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
-        scatter!(ax, x, float.(p.observed); color = :black, markersize = 9)
+        scatter!(ax, x, float.(observed); color = :black, markersize = 9)
     end
     return fig
 end

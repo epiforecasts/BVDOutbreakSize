@@ -1670,6 +1670,26 @@ posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
 posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
 posterior_C_exports_deaths = vec(Array(chn_exports_deaths[:C_T]));
 
+## Clean display names for the summary tables and pair plots. The submodel
+## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
+## nested submodels stay distinct; this map only relabels them for display.
+display_names = Dict{Symbol, String}(
+    Symbol("rt_state.sigma_rw") => "Rt step size",
+    Symbol("rt_state.intervention_effect") => "intervention effect",
+    Symbol("gi_state.α") => "generation interval shape",
+    Symbol("gi_state.θ") => "generation interval scale",
+    Symbol("inc_state.delay_mean") => "incubation period mean",
+    Symbol("inc_state.delay_sd") => "incubation period SD",
+    Symbol("cases_state.report_state.delay_mean") => "onset-to-report mean",
+    Symbol("cases_state.report_state.delay_sd") => "onset-to-report SD",
+    Symbol("deaths_state.od_state.delay_mean") => "onset-to-death mean",
+    Symbol("deaths_state.od_state.delay_sd") => "onset-to-death SD",
+    Symbol("exports_state.detect_state.delay_mean") => "onset-to-detection mean",
+    Symbol("exports_state.detect_state.delay_sd") => "onset-to-detection SD",
+    Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
+    Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
+    Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
+
 #md # ```@raw html
 #md # </details>
 #md # ```
@@ -1969,7 +1989,7 @@ infection_summary #hide
 infection_pair_fig = plot_pair(chn_joint,
     [:R_T, :r, :T, :CFR,
         Symbol("rt_state.sigma_rw"), Symbol("rt_state.intervention_effect")];
-    prior = prior_chn);
+    prior = prior_chn, labels = display_names);
 
 #md # ```@raw html
 #md # </details>
@@ -1991,7 +2011,7 @@ infection_pair_fig #hide
 infection_delay_summary = summary_table(chn_joint,
     [Symbol("gi_state.α"), Symbol("gi_state.θ"),
         Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
-    digits = 2);
+    digits = 2, labels = display_names);
 
 #md # ```@raw html
 #md # </details>
@@ -2006,7 +2026,7 @@ infection_delay_summary #hide
 infection_delay_pair_fig = plot_pair(chn_joint,
     [Symbol("gi_state.α"), Symbol("gi_state.θ"),
         Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
-    prior = prior_chn);
+    prior = prior_chn, labels = display_names);
 
 #md # ```@raw html
 #md # </details>
@@ -2087,7 +2107,7 @@ obs_delay_summary = summary_table(chn_joint,
         Symbol("exports_state.detect_state.delay_sd"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         Symbol("confirmed_state.receipt_state.d.delay_sd")];
-    digits = 2);
+    digits = 2, labels = display_names);
 
 #md # ```@raw html
 #md # </details>
@@ -2104,7 +2124,7 @@ obs_delay_pair_fig = plot_pair(chn_joint,
         Symbol("deaths_state.od_state.delay_mean"),
         Symbol("exports_state.detect_state.delay_mean"),
         Symbol("confirmed_state.receipt_state.d.delay_mean")];
-    prior = prior_chn);
+    prior = prior_chn, labels = display_names);
 
 #md # ```@raw html
 #md # </details>
@@ -2175,6 +2195,11 @@ surveillance_pair_fig #hide
 # The surveillance group is checked first.
 # Each replicated cumulative trajectory is shown across the
 # situation-report dates with the observed series overlaid.
+# The suspected case and death streams stop at their last stable vintage on
+# 26 May, while the laboratory streams keep reporting to the cut-off.
+# Every panel is shown to that shared 26 May date so the confirmed series is
+# read against the suspected series over the same window, rather than running
+# further along the axis and appearing to overtake it.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2289,9 +2314,19 @@ confirmed_deaths_panel = (;
         pp_joint, "confirmed_deaths_state.cdeath_increments"),
     observed = obs.confirmed_deaths_history.counts, colour = :purple);
 
+## The suspected case and death streams freeze at their last stable
+## vintage (26 May) while the laboratory streams keep reporting to the cut-
+## off. Cap every panel to the shared last suspected date so the confirmed
+## trajectory is read against suspected over the same window rather than
+## running further along the axis and appearing to overtake it.
+_suspected_last_date = string(maximum(obs.reported_history.days)
+                              |>
+                              d -> obs.seeding + Day(d - 1))
+
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, confirmed_panel, deaths_panel,
-    confirmed_deaths_panel, tests_received_panel]);
+        confirmed_deaths_panel, tests_received_panel];
+    max_date = _suspected_last_date);
 
 #md # ```@raw html
 #md # </details>
@@ -2541,16 +2576,63 @@ streams_C_table = streams_table(
 
 streams_C_table #hide
 
-# Overlaid posterior densities of the infection count from each fit.
-# The confirmed-cases-only stream is ill-defined on its own, so its
-# posterior runs far wider than the rest.
+# Each single-stream fit projects its outbreak size out to the cut-off, even
+# for streams whose data stops earlier.
+# The first figure shows each fit's cumulative-infection trajectory over the
+# grid as 50% and 90% credible ribbons, with a dotted vertical rule in each
+# stream's colour where that stream's data stops reporting.
+# The suspected case and death streams freeze at 26 May while the exports and
+# confirmed streams run on, so the part of each ribbon beyond its rule is the
+# model projecting forward from the last data it saw.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream projected-trajectory plot</summary>
+#md # ```
+
+## Per-draw cumulative-infection trajectory carried by each single-stream
+## fit out to the cut-off on day `n`, so streams whose data ends earlier are
+## still projected to today.
+function _cuminf(chn)
+    mat = chn[:cumulative_infections]
+    return [collect(v) for v in vec(collect(mat))]
+end
+## Grid day a stream's data last reports, used for the dotted rule. The
+## suspected case and death histories freeze at 26 May; exports and confirmed
+## run to the cut-off.
+_last_day(days) = isempty(days) ? nothing : maximum(days)
+
+stream_traj_fig = plot_stream_trajectories(
+    [
+        (; label = "exports (cases)", trajs = _cuminf(chn_exports),
+            last_day = _last_day(obs.export_case_days), colour = :seagreen),
+        (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
+            last_day = _last_day(obs.deaths_history.days),
+            colour = :firebrick),
+        (; label = "cases (DRC)", trajs = _cuminf(chn_cases),
+            last_day = _last_day(obs.reported_history.days),
+            colour = :steelblue),
+        (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
+            last_day = _last_day(obs.confirmed_history.days),
+            colour = :goldenrod)];
+    n = obs.n, seeding = obs.seeding);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_traj_fig #hide
+
+# The second figure is the posterior density of each fit's cumulative
+# infection count at the cut-off.
+# The confirmed-cases-only stream is ill-defined on its own, so its posterior
+# runs far wider than the rest.
 # The horizontal axis is scaled to a multiple of the joint-fit 90% upper
 # bound, the estimate that constrains every stream together, so the bulk of
 # the joint and the other streams stays visible rather than being flattened
 # by the confirmed-only tail.
 
 #md # ```@raw html
-#md # <details><summary>Overlaid infection-count density plot</summary>
+#md # <details><summary>Cut-off infection-count density plot</summary>
 #md # ```
 
 ## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
@@ -2690,10 +2772,14 @@ evolution_fig #hide
 # Their back-calculation-from-deaths scenarios differ between the reports,
 # since the 18 May report used 88 reported deaths and the 20 May update 131,
 # with a corrected set of case-fatality ratios.
-# Alongside the McCabe scenarios we show our own outbreak-size estimates at
-# the matched cut-offs, the renewal fit frozen at 20 May and at 23 May, and
-# our earlier released estimates, all with their credible intervals, so the
-# comparison carries our trajectory and not only McCabe's.
+# McCabe's scenarios are estimates made at their report dates, so the
+# like-for-like comparison is our modelled cumulative infections on the same
+# dates, not our current cut-off total.
+# We read our value off the joint fit's cumulative-infection trajectory at
+# the grid day for each report date and show it with its credible interval,
+# the 18 May report against our 18 May value and the 20 May update against
+# our 20 May value, so each scenario sits beside our estimate for the date it
+# was made.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -2705,24 +2791,33 @@ function _ci90row(xs)
         round(Int, quantile(xs, 0.95)))
 end
 
+## Our modelled cumulative infections on a McCabe report date, read off the
+## joint fit's per-draw `cumulative_infections` trajectory. The grid runs to
+## the cut-off on day `n`, so the day-index for a date is `n` minus the days
+## from that date back to the cut-off (`grid_day("2026-06-06") = n`,
+## `"2026-05-20") = n - 17`, `"2026-05-18") = n - 19`).
+_cuminf_trajs = let mat = chn_joint[:cumulative_infections]
+    [collect(v) for v in vec(collect(mat))]
+end
+_grid_day(date) = obs.n - Int(date2epochdays(obs.cutoff) -
+                              date2epochdays(Date(date)))
+function _ours_on(date)
+    d = _grid_day(date)
+    _ci90row(Float64[t[d] for t in _cuminf_trajs])
+end
+
 ## McCabe scenarios with their reported 95% confidence intervals, grouped by
-## report date, then our matched-cut-off renewal fits and earlier released
-## estimates, each as a median with a credible interval.
+## report date, then our modelled cumulative infections on the matching
+## report date with its credible interval.
 mccabe_rows = [(label, mean, lo, hi)
                for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
 mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
                  "McCabe et al. (20 May update)"
                  for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
 
-ours_rows = [("Renewal frozen 20 May", _ci90row(frozen_C_20may)...),
-    ("Renewal frozen 23 May", _ci90row(frozen_C_23may)...),
-    ("Released 18 May (integral)", 925, 438, 2234),
-    ("Released 23 May (integral)", 1364, 656, 3385),
-    ("Current data (renewal)", _ci90row(posterior_C_joint)...)]
-ours_groups = vcat(
-    fill("Our renewal estimate", 2),
-    fill("Our released estimate", 2),
-    ["Our renewal estimate"])
+ours_rows = [("Renewal infections on 18 May", _ours_on("2026-05-18")...),
+    ("Renewal infections on 20 May", _ours_on("2026-05-20")...)]
+ours_groups = fill("Our renewal estimate", 2)
 
 matched_rows = vcat(mccabe_rows, ours_rows)
 matched_groups = vcat(mccabe_groups, ours_groups)
@@ -2732,7 +2827,6 @@ matched_comparison_fig = plot_estimate_comparison(matched_rows;
     groups = matched_groups,
     group_colours = ["McCabe et al. (18 May)" => :grey,
         "McCabe et al. (20 May update)" => :black,
-        "Our released estimate" => :steelblue,
         "Our renewal estimate" => :firebrick]);
 
 #md # ```@raw html
@@ -2770,10 +2864,11 @@ frozen_streams_table #hide
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
 # The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
-# reanalysis (onset to admission then admission to death).
+# reanalysis (onset to admission then admission to death, implied mean about
+# 12 d).
 # We re-fit the joint model under the community-pathway delay from the same
 # reanalysis, the delay for deaths that occur in the community without a
-# recorded admission, which is more dispersed.
+# recorded admission, which is shorter (implied mean about 8 d).
 # Both pathways come from the line list, so this varies the actual delay
 # assumption rather than an arbitrary scenario.
 # The re-fit is reduced to 500 draws across two chains.
@@ -2822,17 +2917,17 @@ function refit_joint_variant(;
 end
 
 ## Community-pathway onset-to-death delay from the Isiro 2012 line-list
-## reanalysis (posterior mean ≈ 11.8 d, SD ≈ 8.5 d), a closure that
-## re-injects this delay prior into the deaths submodel while keeping its
-## other defaults.
+## reanalysis community-death model (a single Gamma, implied mean ≈ 8 d,
+## shape ≈ 5.5), a closure that re-injects this delay on its natural Gamma
+## shape and scale into the deaths submodel while keeping its other defaults.
 deaths_community_delay = (history,
     total,
     onsets,
     k;
     kwargs...) -> deaths_model(history, total, onsets, k;
-    onset_to_death = censored_delay_model(40;
-        mean_prior = truncated(Normal(11.8, 2.0); lower = 1),
-        sd_prior = truncated(Normal(8.5, 2.0); lower = 1)),
+    onset_to_death = gamma_delay_model(40;
+        alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
+        theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
     kwargs...)
 
 chn_joint_community_delay = refit_joint_variant(
