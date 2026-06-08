@@ -2,7 +2,7 @@
 ## The `λ_bg` prior was retuned to a half-normal `Normal+(0, 1)` so the
 ## background non-BVD suspected-case process cannot absorb more cases
 ## than were observed: it is degenerate with outbreak size, so a diffuse
-## prior resolves at the high end where deaths and exports anchor `C_T`.
+## prior resolves at the high end where deaths and exports pin `C_T`.
 
 @testitem "default λ_bg prior matches half-normal SD 1" tags=[:slow] begin
     using Turing: sample, Prior

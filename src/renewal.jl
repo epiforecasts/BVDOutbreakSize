@@ -121,7 +121,7 @@ doubling_time(r) = log(oftype(float(r), 2)) / r
 """
 Seed the first `len` days of the infection trajectory as exponential
 growth `I_t = I0 · e^{r (t − len)}` at the implied growth rate `r` (see
-[`euler_lotka_r`](@ref)), so the seeding window is anchored at `I0` on
+[`euler_lotka_r`](@ref)), so the seeding window is pinned at `I0` on
 its last day and tails off backwards. This is the model-based
 initialisation used by EpiNow2 and EpiAware.jl in place of placing the
 whole seed on a single day, which would otherwise inject a transient the
@@ -138,32 +138,33 @@ function seed_infections(I0, r, len::Integer)
 end
 
 """
-Anchor-day seed magnitude for the two-phase renewal: the cumulative
-infection count reached by the analytic cryptic phase AT the anchor day.
-The renewal is two-phase: an analytic exponential cryptic phase from the
-origin to the anchor (≈ the genetic TMRCA day, off the renewal grid), then
-the renewal recursion on `[anchor, cut-off]`. The doubling count `m`
-counts the doublings DURING the cryptic phase (origin → anchor), so the
-cryptic phase grows a single import to
+Renewal-start seed magnitude for the two-phase renewal: the cumulative
+infection count reached by the analytic cryptic phase AT the renewal-start
+day. The renewal is two-phase: an analytic exponential cryptic phase from
+the origin to the renewal start (≈ the genetic TMRCA day, off the renewal
+grid), then the renewal recursion on `[renewal_start, cut-off]`. The
+doubling count `m` counts the doublings DURING the cryptic phase
+(origin → renewal start), so the cryptic phase grows a single import to
 
 ```math
-\\text{seed\\_at\\_anchor} = 2^m,
+\\text{seed\\_at\\_renewal\\_start} = 2^m,
 ```
 
-at the anchor, INDEPENDENT of the growth rate `r`. The rate `r` shapes the
-cryptic exponential history feeding the recursion just before the anchor
-(see [`seed_infections`](@ref)), but the magnitude at the anchor is fixed
-by `m` alone. This deliberately keeps `r` (hence the single `R0`) OUT of
-the seed magnitude: an earlier formulation back-scaled a cut-off-referenced
-size `2^m e^{-rτ_obs}`, which put `r` into both the seed and the renewal
-growth so the two cancelled for a fixed realised size — a flat ridge along
-which `R0` slid to the edge. With the magnitude `r`-free the renewal grows
-`2^m` forward over the observation window under the time-varying `R_t`, so
-the realised cut-off size is data-driven through `R_t` while the prior
-fixes only the anchor-day scale. The argument is `C_T_prior = 2^m`;
-returned unchanged, kept as a named helper for the seeding call site.
+at the renewal start, INDEPENDENT of the growth rate `r`. The rate `r`
+shapes the cryptic exponential history feeding the recursion just before
+the renewal start (see [`seed_infections`](@ref)), but the magnitude at the
+renewal start is fixed by `m` alone. This deliberately keeps `r` (hence the
+single `R0`) OUT of the seed magnitude: an earlier formulation back-scaled
+a cut-off-referenced size `2^m e^{-rτ_obs}`, which put `r` into both the
+seed and the renewal growth so the two cancelled for a fixed realised
+size — a flat ridge along which `R0` slid to the edge. With the magnitude
+`r`-free the renewal grows `2^m` forward over the observation window under
+the time-varying `R_t`, so the realised cut-off size is data-driven through
+`R_t` while the prior fixes only the renewal-start scale. The argument is
+`C_T_prior = 2^m`; returned unchanged, kept as a named helper for the
+seeding call site.
 """
-@inline function seed_at_anchor(C_T_prior)
+@inline function seed_at_renewal_start(C_T_prior)
     return C_T_prior
 end
 

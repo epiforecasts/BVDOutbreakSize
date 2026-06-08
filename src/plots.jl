@@ -690,10 +690,11 @@ non-centred Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 `rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
 ([`interpolate_knots`](@ref)) and shifted by the sampled
 `rt_state.intervention_effect` along a logistic ramp
-([`sigmoid_ramp`](@ref)) anchored at the outbreak-response `breakpoint`.
+([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 
-The estimated window runs from `rt_start` (the random-walk anchor) to the
-cut-off; only that period is drawn, the median with 50% and 90% ribbons, and
+The estimated window runs from `rt_start` (the renewal start, where the
+random walk begins) to the cut-off; only that period is drawn, the median
+with 50% and 90% ribbons, and
 about `n_traj` thinned sampled trajectories are overlaid thin and faint to
 show the per-draw spread. The intervention breakpoint, the end of the
 intervention scale-up (`breakpoint + ramp`) as a dotted rule, and the cut-off
@@ -716,13 +717,14 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
     ## The innovation vector length is fixed by the model's own `rt_start`
-    ## (the anchor, `n - tmrca_days + SEEDING_ANCHOR_LEAD`). If the caller
-    ## passes a different `rt_start` the knot grid here will not match, so
-    ## fail with a clear message rather than a downstream bounds error.
+    ## (the renewal start, `n - tmrca_days + RENEWAL_START_LEAD`). If the
+    ## caller passes a different `rt_start` the knot grid here will not match,
+    ## so fail with a clear message rather than a downstream bounds error.
     if !isempty(zrows) && length(zrows[1]) != nb - 1
         error("plot_rt: rt_start = $rt_start gives $(nb - 1) random-walk " *
               "steps but the chain has $(length(zrows[1])); pass the same " *
-              "anchor the model used (n - tmrca_days + SEEDING_ANCHOR_LEAD).")
+              "renewal start the model used " *
+              "(n - tmrca_days + RENEWAL_START_LEAD).")
     end
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
     ndraws = length(log_R0)
@@ -735,9 +737,10 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         steps = sigma[i] .* z[1:(nb - 1)]
         log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
         walk = interpolate_knots(log_R, days, n)
-        ## Pre-anchor days clamp to the established R0 (the walk base); they
-        ## are filled by the analytic cryptic exponential in the model and
-        ## are not plotted (masked below from `rt_start` onward).
+        ## Days before the renewal start clamp to the established R0 (the
+        ## walk base); they are filled by the analytic cryptic exponential in
+        ## the model and are not plotted (masked below from `rt_start`
+        ## onward).
         log_Rt = walk .+ effect[i] .* ramp_shape
         ## Only the established R_t, from the genetic bound onward; the
         ## pre-bound seeding window is not plotted.
@@ -1033,7 +1036,7 @@ only the posterior-predictive between-vintage increment,
 ``\\hat{y}_v = y_{v-1} + \\Delta_v`` with ``y_0 = 0``. The increment
 ``\\Delta_v`` is the per-bin replicate draw the model already samples in
 predictive mode, so each step carries the full posterior uncertainty of
-the *new* increment while anchoring on what was actually observed at the
+the *new* increment while grounding on what was actually observed at the
 preceding sitrep. This is the "filtered" one-step-ahead predictive: it
 isolates the model's per-step increment prediction and does not let
 errors compound across the series, unlike a running sum of the modelled

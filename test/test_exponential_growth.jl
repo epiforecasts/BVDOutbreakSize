@@ -1,10 +1,10 @@
 ## Tests for the molecular-clock growth-and-size prior and the two-phase
-## anchor-day renewal seeding it drives in `infection_model`. The growth
+## renewal-start seeding it drives in `infection_model`. The growth
 ## submodel now SAMPLES the cryptic rate `r` (the prior sits on the genetic
 ## doubling time) along with the doubling count `m`, so the cryptic duration
 ## `m·τ` is prior-dominated; the established `R0` is derived FORWARD from `r`
-## in `infection_model`. The anchor seed magnitude is `2^m` DIRECTLY (no
-## back-scaling), and the total age `T = m·τ + τ_obs` carries the genetic
+## in `infection_model`. The renewal-start seed magnitude is `2^m` DIRECTLY
+## (no back-scaling), and the total age `T = m·τ + τ_obs` carries the genetic
 ## bound while the renewal sets the realized size.
 
 @testitem "exponential_growth_model: deterministics T, C_T, τ" begin
@@ -64,22 +64,22 @@ end
     @test std(T) > 30.0
 end
 
-@testitem "infection_model: two-phase anchor seeding" tags=[:slow] begin
+@testitem "infection_model: two-phase renewal-start seeding" tags=[:slow] begin
     using Statistics: mean, std
     using Turing: @model, to_submodel
     import FlexiChains
     using BVDOutbreakSize: infection_model, nuts_sample
 
     n = 101
-    anchor = 38          # genetic-TMRCA day + seeding-anchor lead
-    τ_obs = n - anchor
+    renewal_start = 38   # genetic-TMRCA day + renewal-start lead
+    τ_obs = n - renewal_start
 
     @model function _wrap()
-        st ~ to_submodel(infection_model(n; rt_start = anchor), false)
+        st ~ to_submodel(infection_model(n; rt_start = renewal_start), false)
         T := st.T
         C_T := st.C_T
         m := st.m
-        sa := st.seed_at_anchor
+        sa := st.seed_at_renewal_start
         r0 := st.r0
         return st
     end
@@ -95,8 +95,8 @@ end
     ## and ≥ τ_obs by construction (the cryptic phase adds m·τ ≥ 0).
     @test std(T) > 20.0
     @test all(T .>= τ_obs)
-    @test mean(T) > τ_obs    # origin sits before the anchor (cryptic phase)
-    ## The anchor seed magnitude is `2^m` DIRECTLY, r-independent (no
+    @test mean(T) > τ_obs    # origin sits before the renewal start (cryptic)
+    ## The renewal-start seed magnitude is `2^m` DIRECTLY, r-independent (no
     ## back-scaling): keeps the single R0 out of the seed magnitude.
     @test all(sa .> 0)
     @test all(isapprox.(sa, 2.0 .^ m; rtol = 1e-6))

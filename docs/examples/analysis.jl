@@ -160,7 +160,7 @@
 # - *Inherits McCabe et al.'s epidemiological assumptions.* A single
 #   zoonotic seed, an assumed generation interval, no spatial structure
 #   beyond the Ituri / Nord Kivu split, and no depletion of
-#   susceptibles. The onset-to-death delay is anchored on Isiro 2012 and
+#   susceptibles. The onset-to-death delay is grounded on Isiro 2012 and
 #   the genetic seeding bound on an external clock rate, neither
 #   propagating cross-outbreak or clock uncertainty.
 # - *Intervention ramp is weakly identified.* With only a few sitreps
@@ -418,7 +418,7 @@ vintage_table #hide
 # The reproduction number is assumed to follow a non-centred Gaussian random
 # walk on the log scale, with knots at weekly intervals (day 1, 8, 15, …,
 # $n$). The walk starts from the established reproduction number $R_0$ at the
-# anchor:
+# renewal start:
 #
 # ```math
 # \log R_k = \log R_0 + \sigma_{\text{rw}}
@@ -442,7 +442,7 @@ vintage_table #hide
 # The genetic report gives an established reproduction number of about
 # $1.31$ to $1.55$ under its own generation interval; deriving $R_0$ forward
 # from the shared growth rate under our generation interval is the
-# consistent choice. The same growth rate anchors both the established walk
+# consistent choice. The same growth rate grounds both the established walk
 # and the cryptic seeding phase, so the outbreak has one growth source. The
 # step-size prior assumes a small weekly change in the log reproduction
 # number; we use a tight half-normal so that, over the long unobserved
@@ -536,8 +536,9 @@ vintage_table #hide
 # From that seed the outbreak grew deterministically through an unobserved
 # cryptic exponential phase, doubling $m$ times before sustained
 # transmission was established. The cryptic phase grows the seed to $2^m$
-# infections at the anchor, the day the renewal takes over, over a duration
-# $m\,\tau$ with $\tau$ the doubling time. The doubling count has a wide
+# infections at the renewal start, the day the renewal takes over, over a
+# duration $m\,\tau$ with $\tau$ the doubling time. The doubling count has a
+# wide
 # prior centred on four cryptic doublings:
 #
 # ```math
@@ -615,11 +616,11 @@ vintage_table #hide
 # \qquad \sigma = 15\ \text{d}. \tag{10}
 # ```
 #
-# The anchor is the grid day on which the renewal recursion starts and
-# sustained transmission is treated as established. We place it 14 days after
-# the genetic TMRCA day, past the molecular-clock uncertainty, so the
-# observed window from the anchor to the cut-off is shorter than the TMRCA
-# age. The bound therefore stays informative on the cryptic duration,
+# The renewal starts on the grid day on which the renewal recursion begins
+# and sustained transmission is treated as established. We place it 14 days
+# after the genetic TMRCA day, past the molecular-clock uncertainty, so the
+# observed window from the renewal start to the cut-off is shorter than the
+# TMRCA age. The bound therefore stays informative on the cryptic duration,
 # pulling the origin to sit at or before the most recent common ancestor and
 # bounding the cryptic phase from below. It is one-sided, leaving the age
 # free above the TMRCA. We fix the clock and do not propagate cross-outbreak
@@ -641,19 +642,20 @@ vintage_table #hide
 
 # ##### Infection process
 #
-# The renewal recursion runs from the anchor to the cut-off, with the
+# The renewal recursion runs from the renewal start to the cut-off, with the
 # observed window the span between them:
 #
 # ```math
-# \text{anchor} = n - \text{tmrca}_{\text{days}} + 14, \qquad
-# \tau_{\text{obs}} = n - \text{anchor}. \tag{11}
+# \text{renewal start} = n - \text{tmrca}_{\text{days}} + 14, \qquad
+# \tau_{\text{obs}} = n - \text{renewal start}. \tag{11}
 # ```
 #
-# The pre-anchor grid days are filled by the cryptic exponential curve at
-# rate $r$ ending at $2^m$, giving the recursion a full generation interval
-# of history. The renewal then grows the trajectory forward under the
-# time-varying reproduction number, so the cut-off size is data-driven while
-# the doubling count sets only the anchor scale. The total outbreak age is
+# The grid days before the renewal start are filled by the cryptic
+# exponential curve at rate $r$ ending at $2^m$, giving the recursion a full
+# generation interval of history. The renewal then grows the trajectory
+# forward under the time-varying reproduction number, so the cut-off size is
+# data-driven while the doubling count sets only the renewal-start scale. The
+# total outbreak age is
 # the cryptic duration plus the observed window:
 #
 # ```math
@@ -771,7 +773,7 @@ vintage_table #hide
 #
 # McCabe et al. take the onset-to-death delay from the Isiro 2012 point
 # estimate of [rosello2015](@cite), fitting a $t$-distributed delay. We
-# instead anchor it on the companion Bayesian reanalysis of the same Isiro
+# instead ground it on the companion Bayesian reanalysis of the same Isiro
 # 2012 BDBV line list [bdbv_linelist_analysis_2026](@cite), which
 # re-estimates the delay with uncertainty as a Gamma (posterior mean 11.2 d,
 # SD 5.4 d). The mean and SD priors are centred on those values, carrying the
@@ -805,7 +807,7 @@ vintage_table #hide
 # The delay from a suspected case being reported to its specimen being
 # received by the laboratory, centred on a short turnaround with a heavy
 # right tail allowing for specimen shipment to a confirmatory laboratory. No
-# per-sample outbreak data anchors this, so the prior is our own choice:
+# per-sample outbreak data grounds this, so the prior is our own choice:
 #
 # ```math
 # \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 2.0), \qquad
@@ -1976,7 +1978,7 @@ infection_delay_pair_fig #hide
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
     rt_start = clamp(
-        obs.n - round(Int, obs.tmrca_days) + SEEDING_ANCHOR_LEAD, 1, obs.n),
+        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
     ramp = 21.0);
 
@@ -2191,7 +2193,7 @@ pp_joint = predict(
 ## `predict` stores each stream's per-vintage increments as one
 ## vector-valued variable (`<stream>_increments.increments`); the slice is
 ## an iter×chain matrix of per-draw increment vectors, exactly the
-## `replicates` shape `plot_vintage_conditional_ppc` anchors on each
+## `replicates` shape `plot_vintage_conditional_ppc` grounds on each
 ## vintage's observed previous cumulative for the one-step-ahead
 ## predictive. Find it by its prefix among the predict keys.
 function _vintage_replicates(pp, prefix)
@@ -2231,7 +2233,7 @@ tests_received_panel = (;
 ## windows (a Binomial of the observed analysed denominator). Both groups
 ## produce per-window replicate increments in `predict`, so concatenating
 ## them oldest-first gives the per-vintage cumulative confirmed-case
-## trajectory, anchored on the observed cumulative confirmed at each window
+## trajectory, grounded on the observed cumulative confirmed at each window
 ## end-day. The 24-25 May analysis stall merges into 26 May, so the window
 ## grid is slightly coarser than the raw confirmed history.
 _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(

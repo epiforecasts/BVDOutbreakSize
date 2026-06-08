@@ -109,30 +109,31 @@ end
     end
 end
 
-@testitem "seed_at_anchor: anchor magnitude is 2^m, r-independent" begin
-    using BVDOutbreakSize: seed_at_anchor
+@testitem "seed_at_renewal_start: magnitude is 2^m, r-independent" begin
+    using BVDOutbreakSize: seed_at_renewal_start
 
-    C_T_prior = 512.0    # 2^9, the cryptic-phase realised size at the anchor
+    ## 2^9, the cryptic-phase realised size at the renewal start
+    C_T_prior = 512.0
 
-    ## The anchor seed magnitude is `2^m` DIRECTLY — passed through
+    ## The renewal-start seed magnitude is `2^m` DIRECTLY — passed through
     ## unchanged, no back-scaling by a rate. This keeps `r` (hence the
     ## single R0) out of the seed magnitude.
-    @test seed_at_anchor(C_T_prior) === C_T_prior
-    @test seed_at_anchor(C_T_prior) > 0
+    @test seed_at_renewal_start(C_T_prior) === C_T_prior
+    @test seed_at_renewal_start(C_T_prior) > 0
 end
 
-@testitem "seed_at_anchor: composes with seed_infections at the anchor" begin
-    using BVDOutbreakSize: seed_at_anchor, seed_infections
+@testitem "seed_at_renewal_start: composes with seed_infections" begin
+    using BVDOutbreakSize: seed_at_renewal_start, seed_infections
 
-    C_T_prior = 1000.0   # 2^m, the anchor-day seed magnitude
+    C_T_prior = 1000.0   # 2^m, the renewal-start seed magnitude
     r = 0.04
-    anchor = 38          # genetic-TMRCA day + seeding-anchor lead
+    renewal_start = 38   # genetic-TMRCA day + renewal-start lead
 
-    seed0 = seed_at_anchor(C_T_prior)
-    seed_vec = seed_infections(seed0, r, anchor)
-    ## The anchor magnitude is exactly 2^m, independent of r.
+    seed0 = seed_at_renewal_start(C_T_prior)
+    seed_vec = seed_infections(seed0, r, renewal_start)
+    ## The renewal-start magnitude is exactly 2^m, independent of r.
     @test seed0 == C_T_prior
-    ## The cryptic curve ends at the anchor-day seed and grows at rate r.
+    ## The cryptic curve ends at the renewal-start seed and grows at rate r.
     @test isapprox(seed_vec[end], seed0; rtol = 1e-10)
     @test isapprox(seed_vec[end - 1], seed0 * exp(-r); rtol = 1e-10)
 end

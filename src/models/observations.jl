@@ -404,7 +404,7 @@ them into three non-overlapping groups so all the confirmed data is used:
   confirmed increments are scored against the modelled laboratory volume
   with the pooled positivity. Their day grid carries a `late_start` day
   (the last laboratory day) so the model bins the modelled volume over
-  each late window's *own* day range, anchored at `late_start`, rather
+  each late window's *own* day range, pinned at `late_start`, rather
   than from day 0 (which would double-count the observed window volume).
 
 The three groups partition the confirmed counts at the first and last
@@ -489,7 +489,7 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
     ## are scored against the modelled laboratory volume binned over each
     ## window's own day range, so the running edge must start at the last
     ## laboratory day (`late_start`) — the `bin_increments` running `prev`
-    ## starts at 0, so the model anchors it at `late_start` to avoid
+    ## starts at 0, so the model pins it at `late_start` to avoid
     ## re-counting the observed-window volume already scored above.
     last_lab_day = Int(lab_history.days[end])
     late_days = Int[]
@@ -691,7 +691,7 @@ quantities.
     ## Late windows: confirmed increment ~ NegBinomial(positivity × modelled
     ## analysed volume), like the early windows but for the confirmed-only
     ## vintages after the last laboratory date. The volume is binned over
-    ## each late window's own day range, with the running edge ANCHORED at
+    ## each late window's own day range, with the running edge PINNED at
     ## the last laboratory day (`late_start`): `bin_increments` runs its
     ## running `prev` from day 0, so prepending `late_start` to the late day
     ## edges and dropping the synthetic first bin starts the accumulation at
@@ -945,10 +945,10 @@ bg_death_daily)` collapses to 1 whenever the death background is off (the
 renewal default), which would make a death-side composition link degenerate.
 The renewal confirmed-case lab pipeline ([`confirmed_cases_model`](@ref))
 does now carry sampled PCR sensitivity `s` and specificity `spec` (its
-composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but anchoring
+composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but grounding
 the death-confirmation rate on the case composition `q_susp` is what makes it
 well-defined: the case background `λ_bg` is always on, so `q_susp` is always
-informative. Anchoring the enrichment on `q_susp` reproduces #193's intent —
+informative. Grounding the enrichment on `q_susp` reproduces #193's intent —
 a composition-driven confirmed-death rate that feeds back to `λ_bg` and
 `p_drc` — under the renewal architecture. The substantive half of #193, the
 constant-rate non-BVD suspected-death background `λ_bg_death`, is already

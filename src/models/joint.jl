@@ -278,18 +278,19 @@ death-confirmation probability (`death_confirmation`).
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
-        seeding_anchor_lead::Integer = SEEDING_ANCHOR_LEAD)
+        renewal_start_lead::Integer = RENEWAL_START_LEAD)
     ## Fix R_t at R0 over the pre-establishment seeding window, letting the
-    ## random walk vary R_t only from the anchor onward — before that point
-    ## the outbreak dynamics are unidentified, so a free walk there only adds
-    ## unsupported drift. The anchor sits `seeding_anchor_lead` days AFTER the
-    ## genetic TMRCA day (`n - tmrca_days + lead`), past the TMRCA's
-    ## uncertainty where sustained transmission is confident. The lead keeps
-    ## the observed span `τ_obs = n − anchor` strictly shorter than
-    ## `tmrca_days`, so the genetic bound on the total age `T = m·τ + τ_obs`
-    ## stays informative (it bounds the cryptic duration `m·τ` from below).
+    ## random walk vary R_t only from the renewal start onward — before that
+    ## point the outbreak dynamics are unidentified, so a free walk there only
+    ## adds unsupported drift. The renewal start sits `renewal_start_lead`
+    ## days AFTER the genetic TMRCA day (`n - tmrca_days + lead`), past the
+    ## TMRCA's uncertainty where sustained transmission is confident. The lead
+    ## keeps the observed span `τ_obs = n − renewal_start` strictly shorter
+    ## than `tmrca_days`, so the genetic bound on the total age
+    ## `T = m·τ + τ_obs` stays informative (it bounds the cryptic duration
+    ## `m·τ` from below).
     rt_start = ismissing(tmrca_days) ? 1 :
-               clamp(n - round(Int, tmrca_days) + seeding_anchor_lead, 1, n)
+               clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence; rt_start), false)
     infection_state = latent.infection_state
