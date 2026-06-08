@@ -12,15 +12,19 @@
     import FlexiChains
     using BVDOutbreakSize: rt_walk_model, nuts_sample
 
+    ## `log_R0` is now a DERIVED argument (forward Euler–Lotka from the
+    ## sampled growth rate), not sampled in the walk; inject a fixed value.
     @model function _wrap_rt()
-        st ~ to_submodel(rt_walk_model(40; breakpoint = 30), false)
+        st ~ to_submodel(
+            rt_walk_model(40, log(1.6); breakpoint = 30), false)
+        R_T := st.Rt[end]
         return st
     end
 
     chn = nuts_sample(_wrap_rt(); samples = 12, chains = 1, progress = false)
-    log_R0 = vec(Array(chn[:log_R0]))
-    @test length(log_R0) == 12
-    @test all(isfinite, log_R0)
+    R_T = vec(Array(chn[:R_T]))
+    @test length(R_T) == 12
+    @test all(isfinite, R_T) && all(R_T .> 0)
 end
 
 @testitem "NUTS smoke: generation_interval_model (nmax=40)" tags = [:slow] begin

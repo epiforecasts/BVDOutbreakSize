@@ -92,6 +92,25 @@ function euler_lotka_r(R, g::AbstractVector; steps::Integer = 2)
 end
 
 """
+Reproduction number `R` implied by an exponential growth rate `r` and a
+generation-interval PMF `g` (indexed from lag 1), the FORWARD Euler–Lotka
+relation `R = 1 / Σ_s g_s e^{−r s}`. The inverse of [`euler_lotka_r`](@ref):
+where that solves `R · Σ_s g_s e^{−r s} = 1` for `r` given `R`, this returns
+`R` directly for a given `r`, so the prior can be placed on the growth rate
+and the established reproduction number derived from it under OUR generation
+interval. Uses only arithmetic and `exp`, so it is AD-transparent under
+Mooncake.
+"""
+function r_to_R0(r, g::AbstractVector)
+    Tp = promote_type(typeof(float(r)), eltype(g))
+    G = zero(Tp)
+    @inbounds for i in eachindex(g)
+        G += g[i] * exp(-r * i)
+    end
+    return one(Tp) / G
+end
+
+"""
 Doubling time `log(2) / r` implied by an exponential growth rate `r`,
 the renewal model's reported analogue of the integral model's sampled
 doubling time. Returns a non-finite value as `r` crosses zero, matching

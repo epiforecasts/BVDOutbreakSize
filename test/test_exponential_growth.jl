@@ -1,8 +1,9 @@
 ## Tests for the molecular-clock growth-and-size prior and the two-phase
 ## anchor-day renewal seeding it drives in `infection_model`. The growth
-## submodel takes the cryptic rate `r` from the single `R0` (Euler–Lotka)
-## and samples only the doubling count `m`, so the cryptic duration `m·τ`
-## is prior-dominated; the anchor seed magnitude is `2^m` DIRECTLY (no
+## submodel now SAMPLES the cryptic rate `r` (the prior sits on the genetic
+## doubling time) along with the doubling count `m`, so the cryptic duration
+## `m·τ` is prior-dominated; the established `R0` is derived FORWARD from `r`
+## in `infection_model`. The anchor seed magnitude is `2^m` DIRECTLY (no
 ## back-scaling), and the total age `T = m·τ + τ_obs` carries the genetic
 ## bound while the renewal sets the realized size.
 
@@ -11,12 +12,11 @@
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
-    ## `r` is injected (the R0-implied cryptic rate), not sampled; the
-    ## submodel samples only `m`. `to_submodel(x, false)` re-exposes the
-    ## sampled `m` and the `:=` (`τ`, `T`, `C_T`) names at the parent.
-    r_inj = log(2) / 20      # ≈ the molecular-clock rate (20-day doubling)
+    ## `r` is now SAMPLED (the growth-rate prior), along with `m`.
+    ## `to_submodel(x, false)` re-exposes `r`, `m` and the `:=` (`τ`, `T`,
+    ## `C_T`) names at the parent.
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(r_inj), false)
+        st ~ to_submodel(exponential_growth_model(), false)
         return st
     end
 
@@ -26,25 +26,24 @@
     C_T = vec(Array(chn[:C_T]))
     τ = vec(Array(chn[:τ]))
     m = vec(Array(chn[:m]))
+    r = vec(Array(chn[:r]))
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r is fixed by the injected rate; T = m·τ (cryptic
-    ## duration), C_T = 2^m hold draw-by-draw.
-    @test all(isapprox.(τ, log(2) / r_inj; rtol = 1e-8))
+    ## τ = log(2)/r; T = m·τ (cryptic duration), C_T = 2^m hold draw-by-draw.
+    @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
     @test all(isapprox.(T, m .* τ; rtol = 1e-8))
     @test all(isapprox.(C_T, 2.0 .^ m; rtol = 1e-8))
 end
 
-@testitem "exponential_growth_model: m prior is WIDE" begin
+@testitem "exponential_growth_model: r and m priors are WIDE" begin
     using Statistics: mean, std
     using Turing: @model, to_submodel, sample, Prior
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
-    r_inj = log(2) / 20
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(r_inj), false)
+        st ~ to_submodel(exponential_growth_model(), false)
         return st
     end
 
@@ -52,13 +51,15 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     m = vec(Array(chn[:m]))
     T = vec(Array(chn[:T]))
+    r = vec(Array(chn[:r]))
 
-    ## Centre near 2, SD near 3 (truncated Normal(2, 3); lower 0): `m` now
-    ## counts only the CRYPTIC doublings, so the centre is lower than the
-    ## integral model's. The lower truncation lifts the mean above 2. The
-    ## prior is deliberately wide so the cryptic duration stays uncertain.
-    @test 2.0 < mean(m) < 4.0
-    @test 1.9 < std(m) < 2.7
+    ## Centre near 4, SD near 3 (truncated Normal(4, 3); lower 0): `m` counts
+    ## only the CRYPTIC doublings. The prior is deliberately wide so the
+    ## cryptic duration stays uncertain.
+    @test 3.5 < mean(m) < 4.8
+    @test 2.3 < std(m) < 3.2
+    ## The growth rate is centred on the ≈20-day doubling (r ≈ 0.0347).
+    @test 0.025 < mean(r) < 0.045
     ## The induced cryptic duration T = m·τ is correspondingly wide.
     @test std(T) > 30.0
 end

@@ -53,17 +53,16 @@ Centre of the wide doubling-count prior in
 The doubling count `m` now counts ONLY the CRYPTIC-phase doublings (origin →
 anchor): the cryptic duration is `m·τ` and the total outbreak age is
 `T = m·τ + τ_obs`, with `τ_obs = n − anchor` the observed window. With the
-molecular-clock doubling `τ ≈ 20 d` (from `R0 ≈ 1.6` through Euler–Lotka)
-and the anchor a small lead after the genetic TMRCA (`τ_obs ≈ 63 d`), a
-centre of 2 places the cryptic duration at `m·τ ≈ 40 d`, so the prior
-outbreak age `T ≈ 103 d` lands mid-window in the genetically-plausible span
-(origin roughly Feb–Mar, `T ≈ 70–130 d`). The SD-3 spread keeps `T` wide and
-prior-dominated; the genetic seeding bound pulls the lower tail to sit at or
-before the MRCA. The earlier centre (4) was tied to a `T = m·τ` that
-counted the whole age, so it over-counts now that `τ_obs` is added
-separately.
+molecular-clock doubling `τ ≈ 20 d` (from the sampled growth rate `r`) and
+the anchor a 14-day lead after the genetic TMRCA (`τ_obs ≈ 56 d`), a centre
+of 4 places the cryptic duration at `m·τ ≈ 80 d`, so the prior outbreak age
+`T ≈ 136 d` lands in the upper genetically-plausible span (origin roughly
+Feb–Mar). The SD-3 spread keeps `T` wide and prior-dominated; the genetic
+seeding bound pulls the lower tail to sit at or before the MRCA. The longer
+14-day anchor lead (past the TMRCA's own uncertainty) shortens `τ_obs`, so
+the centre rises to 4 to keep the cryptic duration matched to the lead.
 """
-const M_PRIOR_BASE = 2.0
+const M_PRIOR_BASE = 4.0
 
 """
     SEEDING_ANCHOR_LEAD
@@ -71,14 +70,15 @@ const M_PRIOR_BASE = 2.0
 Days the renewal anchor (the day the reproduction-number walk starts, where
 the analytic cryptic phase hands off to the recursion) sits AFTER the
 genetic TMRCA day, past the TMRCA's molecular-clock uncertainty. Placing the
-anchor a small lead after the TMRCA — rather than exactly on it — leaves the
+anchor a 14-day lead after the TMRCA — rather than exactly on it — leaves the
 observed span `τ_obs = n − anchor` strictly shorter than `tmrca_days`, so the
 genetic censored bound on the total age `T = m·τ + τ_obs` stays informative
 (it pulls the origin to sit at or before the MRCA, bounding the cryptic
-duration `m·τ` from below). A few days past the TMRCA is where sustained
-transmission can be treated as confidently established.
+duration `m·τ` from below). Two weeks past the TMRCA leaves room for the
+TMRCA's own molecular-clock uncertainty before sustained transmission is
+treated as confidently established.
 """
-const SEEDING_ANCHOR_LEAD = 7
+const SEEDING_ANCHOR_LEAD = 14
 
 """
     ITURI_POPULATION

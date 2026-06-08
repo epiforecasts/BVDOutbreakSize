@@ -17,7 +17,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, Poisson,
                      NegativeBinomial, Binomial, Normal, LogNormal, Beta,
-                     truncated, censored, product_distribution
+                     Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
 import CairoMakie
@@ -49,7 +49,7 @@ export REPORT_SCENARIOS,
 # renewal helpers
        renewal_infections, convolve_delay, convolve_pmf,
        discretise_censored,
-       euler_lotka_r, doubling_time, seed_infections, seed_at_anchor,
+       euler_lotka_r, r_to_R0, doubling_time, seed_infections, seed_at_anchor,
        knot_days,
        interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
        safe_rate,

@@ -26,23 +26,36 @@ Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
-Generation-interval submodel. The mean and SD are sampled from priors
-centred on the Ebola virus disease serial interval as a generation-time
-proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), so the
-generation time is estimated around the published value rather than
-fixed. Both the mean and SD are sampled, so the published uncertainty
-propagates into the generation interval. Discretised with
-[`censored_delay_model`](@ref); the lag-0 bin is dropped and the remainder
-renormalised, left-truncating the generation interval at one day so an
-infectee is infected strictly after its infector. Returns
-`(; g, gi_mean, gi_sd)`.
+Generation-interval submodel. Samples a Gamma SHAPE `α` and SCALE `θ`,
+parameterised directly from the source's reported generation-time
+distribution rather than moment-matching a LogNormal from mean/SD priors.
+The source is the Ebola virus disease serial interval as a generation-time
+proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
+maps once to a Gamma shape `α ≈ 2.71` and scale `θ ≈ 5.65`
+(`α = (mean/sd)²`, `θ = sd²/mean`). The priors are centred on those values:
+`α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
+keep the Gamma well defined. The SDs propagate the source's reported
+uncertainty (the NEJM serial-interval mean carries a 95% CI of 13.0–17.6 d,
+an SD on the mean of ≈1.17 d) — this is the source's reported uncertainty,
+NOT a self-assigned spread. Gamma shape/scale differentiate cleanly under
+Mooncake, so this is AD-stable.
+
+Discretised through the same double-interval-censoring route as the other
+delays ([`discretise_censored`](@ref)); the lag-0 bin is dropped and the
+remainder renormalised, left-truncating the generation interval at one day
+so an infectee is infected strictly after its infector. Returns
+`(; g, gi_mean, gi_sd, gi_alpha, gi_theta)`.
 """
 @model function generation_interval_model(nmax::Integer;
-        mean_prior = truncated(Normal(15.3, 3.0); lower = 1),
-        sd_prior = truncated(Normal(9.3, 2.0); lower = 1))
-    d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
-    g = d.pmf[2:end] ./ sum(d.pmf[2:end])
-    return (; g, gi_mean = d.mean, gi_sd = d.sd)
+        alpha_prior = truncated(Normal(2.71, 0.7); lower = 0.1),
+        theta_prior = truncated(Normal(5.65, 1.5); lower = 0.1))
+    α ~ alpha_prior
+    θ ~ theta_prior
+    dist = Gamma(α, θ)
+    pmf = discretise_censored(dist, nmax)
+    g = pmf[2:end] ./ sum(pmf[2:end])
+    return (; g, gi_mean = α * θ, gi_sd = sqrt(α) * θ,
+        gi_alpha = α, gi_theta = θ)
 end
 
 ## --- Reproduction number ------------------------------------------------
@@ -66,24 +79,22 @@ or narrow it.
 `Rt = exp.(log_Rt)`. Returns
 `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 
-The initial reproduction number prior is anchored on the molecular-clock
-growth estimate for this outbreak. Cuomo-Dannenburg & Ghafari's
-phylodynamic reanalysis of the first ten BDBV genomes puts the mean
-epidemic doubling time at 15.2–24.5 d (centre 20 d). With the renewal
-generation interval that 20-day doubling implies `R0 ≈ 1.6`, and the
-15.2–24.5 d range maps to `R0 ≈ 1.47–1.84`, so the prior is
-`Normal(log(1.6), 0.10)`: centred on the molecular-clock doubling with a
-log-SD slightly wider than the genetic spread (≈0.07) to allow for the
-wide per-assumption clock intervals. Sampling on `R0` (with the cryptic
-growth rate `r` derived through Euler–Lotka in [`infection_model`](@ref))
-rather than on `r` directly keeps the renewal seeding consistent; the
-implied doubling-time prior tracks the genetic estimate. This single
-molecular-clock prior anchors the ESTABLISHED reproduction number (the walk
-base at the genetic bound) AND, through Euler–Lotka, the cryptic
-exponential phase, so the outbreak has ONE growth source `R0`. The
-pre-anchor grid days are filled by the analytic cryptic exponential and so
-are unused by the walk; the walk simply clamps to `R0` before its first
-knot.
+The walk base `log_R0` is NOT sampled here. It is passed in as a DERIVED
+quantity: the first reproduction number is derived FORWARD from the sampled
+growth rate `r` and the generation interval through Euler–Lotka
+(`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)). The prior therefore
+sits on the growth rate (see [`exponential_growth_model`](@ref)), anchored
+on Cuomo-Dannenburg & Ghafari's molecular-clock doubling time (centre 20 d,
+range 15.2–24.5 d), and the established reproduction number is whatever that
+growth implies under OUR generation interval rather than a separately
+asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55` under THEIR
+generation interval; deriving `R0` forward from the shared growth rate under
+our generation interval is the consistent thing to do. This single growth
+source anchors the ESTABLISHED reproduction number (the walk base at the
+genetic bound) AND, through the renewal seeding, the cryptic exponential
+phase, so the outbreak has ONE growth source. The pre-anchor grid days are
+filled by the analytic cryptic exponential and so are unused by the walk;
+the walk simply clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a tight half-normal SD 0.05. The
 observed sitrep window is only the final ≈9 days of a ≈90-day inferred
@@ -106,22 +117,24 @@ admitting anything from no effect (mode) to a substantial decline. Because
 the breakpoint is only ≈11 days before the cut-off and the ramp is a
 fortnight, the response damps `R_t` only partially by the cut-off.
 """
-@model function rt_walk_model(n::Integer;
+@model function rt_walk_model(n::Integer, log_R0_base::Real;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         ramp::Real = 21.0,
-        log_r0_prior = Normal(log(1.6), 0.10),
         sigma_prior = truncated(Normal(0, 0.05); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
     ## The established `R0` at the genetic bound is the base the random walk
-    ## grows from. The pre-anchor days (before `rt_start`) are filled by the
-    ## analytic cryptic exponential in `infection_model`, so the walk values
-    ## there are unused; the interpolation clamps to `log_R0` before the
-    ## first knot, which is harmless.
-    log_R0 ~ log_r0_prior
+    ## grows from. It is DERIVED (forward Euler–Lotka from the sampled growth
+    ## rate) and passed in, not sampled here; it is tracked as a deterministic
+    ## so the walk base stays available on the chain. The pre-anchor days
+    ## (before `rt_start`) are filled by the analytic cryptic exponential in
+    ## `infection_model`, so the walk values there are unused; the
+    ## interpolation clamps to `log_R0` before the first knot, which is
+    ## harmless.
+    log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     intervention_effect ~ effect_prior
@@ -136,10 +149,10 @@ end
 ## --- Seeding and the generating infection process -----------------------
 
 """
-Molecular-clock growth-and-size prior for the renewal cryptic phase. Takes
-the exponential growth rate `r` (derived from the single reproduction-number
-prior `R0` through Euler–Lotka in [`infection_model`](@ref), NOT sampled
-here) and samples only the doubling count `m`, then exposes
+Molecular-clock growth-and-size prior for the renewal cryptic phase. SAMPLES
+the exponential growth rate `r` directly (the primary epidemiological
+assumption, placed on the genetic doubling time) and the doubling count `m`,
+then exposes
 
 ```math
 \\tau = \\log 2 / r,\\qquad T_\\text{cryptic} = m\\,\\tau,
@@ -154,30 +167,40 @@ adds the observation span `τ_obs = n − anchor` to get the TOTAL outbreak age
 `T_total = m·τ + τ_obs`, which carries the genetic seeding bound
 ([`genetic_seeding_model`](@ref)).
 
+The growth rate carries the prior `r ~ LogNormal(log(log2 /
+M_PRIOR_DOUBLING_DAYS), 0.15)`, centred on Cuomo-Dannenburg & Ghafari's
+molecular-clock doubling time for this outbreak (mean 15.2–24.5 d across six
+substitution-rate assumptions, centre 20 d), equivalent to a
+`LogNormal(log(20), 0.15)` prior on the doubling time. The log-SD 0.15 reads
+the 15.2–24.5 d spread as roughly a 95% interval (log-SD ≈ 0.12) and inflates
+it a little to allow for the wide per-assumption intervals, so the prior is
+slightly inflated in SD but unbiased relative to the source. The first
+reproduction number is then derived FORWARD from this `r` and OUR generation
+interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
+[`infection_model`](@ref)), so the cryptic exponential phase and the
+established renewal share ONE growth source — the sampled growth rate — and
+the established reproduction number is consistent with the genetic growth
+under our generation interval rather than pinned by a separate `R0` prior.
+
 `m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)` is deliberately WIDE.
 Since `m` now counts only the CRYPTIC doublings (not the cut-off case
 total), its centre is much lower than the integral model's: with the
-≈20-day doubling implied by the molecular-clock `R0`, `M_PRIOR_BASE`
-doublings span `M_PRIOR_BASE · τ` cryptic days, placing the origin in the
-genetically-plausible window (origin roughly Feb–Mar, total age ≈ 70–130 d).
-The spread keeps the cryptic duration wide and prior-dominated rather than
-pinned by a post-hoc crossing.
+≈20-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
+days, placing the origin in the genetically-plausible window (origin roughly
+Feb–Mar). The spread keeps the cryptic duration wide and prior-dominated
+rather than pinned by a post-hoc crossing.
 
-The growth rate `r = euler_lotka_r(R0, g)` is the rate implied by the single
-established reproduction number `R0` and the generation interval, so the
-cryptic exponential phase and the established renewal share ONE growth
-source rather than the cryptic phase carrying a separate clock-rate prior.
-With the `R0` prior anchored on the molecular clock (`Normal(log(1.6),
-0.10)`), the implied doubling time `τ = log(2)/r` tracks the genetic
-≈20-day estimate. In the renewal, `2^m` is the prior-implied size scale at
-the anchor; the realized cut-off size is set by the renewal recursion under
-`R_t` (it grows the anchor seed forward), so `m`/`T` stay prior-dominated
-while the data drive the size through `R_t`. Pass `m_prior` to override
-(e.g. an `m_prior` whose centre advances via [`m_prior_centre`](@ref) for a
-later cut-off). Returns `(; τ, r, m, T, C_T)`.
+In the renewal, `2^m` is the prior-implied size scale at the anchor; the
+realized cut-off size is set by the renewal recursion under `R_t` (it grows
+the anchor seed forward), so `m`/`T` stay prior-dominated while the data
+drive the size through `R_t`. Pass `m_prior` to override (e.g. an `m_prior`
+whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
+Returns `(; τ, r, m, T, C_T)`.
 """
-@model function exponential_growth_model(r;
+@model function exponential_growth_model(;
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.15),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
+    r ~ r_prior
     m ~ m_prior
     τ := log(2) / r
     T := m * τ
@@ -199,14 +222,15 @@ end
 
 """
 Generating infection process for the two-phase renewal seeding. Samples the
-reproduction-number trajectory and the generation interval via injected
-submodels, then derives the cryptic exponential growth rate from the SINGLE
-established reproduction number `R0` (= the first `R_t`) and the generation
-interval through Euler–Lotka (`r = euler_lotka_r(R0, g)`). That single rate
-feeds the molecular-clock growth-and-size prior
-([`exponential_growth_model`](@ref)), so the cryptic phase and the
-established renewal share ONE growth source `R0` rather than the cryptic
-phase carrying a separate clock-rate prior.
+generation interval and the cryptic exponential growth rate `r` (the prior
+sits on `r`, the molecular-clock growth, in
+[`exponential_growth_model`](@ref)), then derives the SINGLE established
+reproduction number `R0` (= the first `R_t`) FORWARD from that `r` and the
+generation interval through Euler–Lotka (`R0 = r_to_R0(r, g)`) and passes
+`log R0` as the walk base to the reproduction-number submodel. The cryptic
+phase and the established renewal therefore share ONE growth source — the
+sampled growth rate `r` — rather than the cryptic phase carrying a separate
+clock-rate prior or the walk asserting a separate `R0` prior.
 
 The renewal runs only over the observation window `[anchor, cut-off]`,
 where the `anchor` is the genetic-TMRCA grid day `rt_start` (the day the
@@ -215,8 +239,9 @@ exponential phase from the origin to the anchor is analytic and off the
 renewal grid except for the days needed as recursion history. The seed AT
 the anchor is the cryptic-phase realised size `2^m` ([`seed_at_anchor`](@ref)),
 where `m` counts the doublings during the cryptic phase: the magnitude is
-`r`-INDEPENDENT, so `r` (hence `R0`) leaves the seed magnitude entirely and
-appears only in the renewal growth. An earlier formulation back-scaled
+`r`-INDEPENDENT, so `r` (hence the derived `R0`) leaves the seed magnitude
+entirely and appears only in the renewal growth. An earlier formulation
+back-scaled
 `2^m e^{−r·τ_obs}`, putting `r` into both the seed and the renewal growth so
 the two cancelled for a fixed realised size — a flat ridge along which `R0`
 slid to 1. The pre-anchor grid days `1 … anchor` are filled smoothly by the
@@ -255,18 +280,18 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = 40)
-    rt_state ~ to_submodel(rt(n; breakpoint, rt_start))
     gi_state ~ to_submodel(gi(gi_nmax))
-    Rt = rt_state.Rt
     g = gi_state.g
-    ## ONE growth source: the cryptic exponential rate is the rate implied
-    ## by the SINGLE established reproduction number `R0` (= the first `R_t`)
-    ## and the generation interval through Euler–Lotka, not a separate
-    ## clock-rate prior. The cryptic phase and the established renewal
-    ## therefore share `R0`.
-    R0 = exp(rt_state.log_R0)
-    r_clock = euler_lotka_r(R0, g)
-    growth_state ~ to_submodel(growth(r_clock))
+    ## ONE growth source: the prior is on the cryptic exponential growth rate
+    ## `r` (sampled in `growth`), and the SINGLE established reproduction
+    ## number `R0` (= the walk base, the first `R_t`) is derived FORWARD from
+    ## that `r` and the generation interval through Euler–Lotka. The cryptic
+    ## phase and the established renewal therefore share `r`.
+    growth_state ~ to_submodel(growth())
+    r_clock = growth_state.r
+    R0 = r_to_R0(r_clock, g)
+    rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start))
+    Rt = rt_state.Rt
     ## Anchor = genetic-TMRCA grid day (`rt_start`); the observation span is
     ## τ_obs = n − anchor. The anchor seed magnitude is `2^m` DIRECTLY (the
     ## cryptic phase grows one import to `2^m` over `m` doublings, `r`-free).
@@ -489,15 +514,20 @@ a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 end
 
 """
-PCR sensitivity prior for the GeneXpert Ebola assay. `Beta(30, 2)` has
-mean 0.94 and 95% interval 0.84–0.99, sitting just below the field whole
-blood clinical sensitivity reported in the Sierra Leone Zaire-ebolavirus
-field evaluation, leaving room for early-infection low-viral-load
-specimens and field handling. Scales the confirmed-case stream so the
-confirmed counts reflect imperfect detection of true BVD infections.
-Matches the integral `main` prior. Returns `(; s_test)`.
+PCR sensitivity prior. `Beta(6, 2)` (mean 0.75, 95% interval 0.39–0.97),
+untruncated. Confirmation runs on the altona RealStar Filovirus Screen
+RT-PCR, which detects Bundibugyo virus at 11–67 RNA copies per reaction; the
+rapid Cepheid GeneXpert Ebola assay is Zaire-ebolavirus-specific and does
+not reliably detect Bundibugyo. The Beta keeps good analytical sensitivity
+plausible while carrying downside mass for early low-viral-load specimens
+and field handling. Under the severe-first backlog model the first vintage's
+analysed batch is near-pure BVD (`q ≈ 1` when selection is strong), so the
+v1 positivity ≈ `s` identifies the sensitivity directly from the early data;
+no lower truncation is imposed. Scales the confirmed-case stream so the
+confirmed counts reflect imperfect detection of true BVD infections. Matches
+the integral `main` prior. Returns `(; s_test)`.
 """
-@model function test_sensitivity_model(; sensitivity_prior = Beta(30.0, 2.0))
+@model function test_sensitivity_model(; sensitivity_prior = Beta(6.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
 end

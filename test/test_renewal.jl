@@ -53,6 +53,24 @@ end
     end
 end
 
+@testitem "r_to_R0: forward inverse of euler_lotka_r" begin
+    using BVDOutbreakSize: euler_lotka_r, r_to_R0
+    using BVDOutbreakSize: lognormal_meansd, discretise_censored
+
+    gi_raw = discretise_censored(lognormal_meansd(15.3, 9.3), 40)
+    g = gi_raw[2:end] ./ sum(gi_raw[2:end])
+
+    ## r_to_R0 is the forward Euler–Lotka map; it should invert euler_lotka_r.
+    for R in (0.8, 1.0, 1.5, 2.0, 3.0)
+        r = euler_lotka_r(R, g; steps = 8)
+        @test isapprox(r_to_R0(r, g), R; rtol = 1e-4)
+    end
+    ## r > 0 implies R0 > 1, r < 0 implies R0 < 1, r = 0 implies R0 = 1.
+    @test r_to_R0(0.05, g) > 1
+    @test r_to_R0(-0.05, g) < 1
+    @test isapprox(r_to_R0(0.0, g), 1.0; rtol = 1e-10)
+end
+
 @testitem "euler_lotka_r: r > 0 when R > 1, r < 0 when R < 1" begin
     using BVDOutbreakSize: euler_lotka_r, lognormal_meansd, discretise_censored
 
