@@ -49,6 +49,15 @@ follows the delay parameters.
 """
 function discretise_censored(dist, nmax::Integer)
     dic = double_interval_censored(dist; interval = 1.0, upper = float(nmax))
+    return _pmf_from_dic(dic, dist, nmax)
+end
+
+## Function barrier: `double_interval_censored` returns a `Union` of solver
+## types, so it is inferred abstractly at the call site above; isolating the
+## PMF loop in its own method lets it specialise on the concrete `dic` type,
+## making the ~`nmax` `pdf` evaluations type-stable under AD. See
+## CensoredDistributions.jl#367 on the Union return.
+@inline function _pmf_from_dic(dic, dist, nmax::Integer)
     raw = [pdf(dic, float(d)) for d in 0:nmax]
     s = sum(raw)
     if !isfinite(s) || s <= zero(s)
