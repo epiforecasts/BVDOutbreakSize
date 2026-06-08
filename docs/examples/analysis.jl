@@ -87,10 +87,11 @@
 #   Uganda export cases and deaths. We add the DRC suspected cases, the
 #   laboratory-confirmed cases, the confirmed deaths and the deaths among
 #   the Uganda exports.
-# - *Per-vintage time-series fitting.* The DRC streams are fitted as
-#   cumulative series of between-vintage increments across successive
-#   sitreps, which sharpens $R_t$. McCabe et al. condition on a single
-#   cumulative total.
+# - *Per-vintage time-series fitting.* The DRC streams are fitted on the
+#   incidence scale, as the between-vintage increments across successive
+#   sitreps (the first vintage being the cumulative count to that date),
+#   which sharpens $R_t$. McCabe et al. condition on a single cumulative
+#   total.
 # - *Ascertainment estimated.* We estimate the fraction of cases each
 #   surveillance system reports jointly with the outbreak size. McCabe et
 #   al. have no ascertainment component.

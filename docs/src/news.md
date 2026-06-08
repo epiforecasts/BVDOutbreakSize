@@ -31,8 +31,9 @@ This is a substantial revision; the changes below are relative to v1.3.0.
 - Confirmed positivity is tied to the suspect-pool composition through an assay
   sensitivity and specificity, and exports are travel-gated from infection and
   scored on their dated detection days.
-- The DRC streams are fitted as cumulative series of between-vintage increments
-  across successive situation reports.
+- The DRC streams are fitted on the incidence scale, as the between-vintage
+  increments across successive situation reports (the first vintage being the
+  cumulative count to that date).
 
 ### Report
 
