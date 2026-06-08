@@ -272,10 +272,10 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
             upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
     end
     streams = Tuple{String, Symbol, Symbol}[
-        (
-            "DRC reported cases", :cases_cum, :cases_new),
-        (
-            "DRC deaths", :deaths_cum, :deaths_new)]
+    (
+        "DRC reported cases", :cases_cum, :cases_new),
+    (
+        "DRC deaths", :deaths_cum, :deaths_new)]
     :confirmed_cum in propertynames(fc) && push!(streams,
         ("DRC confirmed cases", :confirmed_cum, :confirmed_new))
     :confirmed_deaths_cum in propertynames(fc) && push!(streams,

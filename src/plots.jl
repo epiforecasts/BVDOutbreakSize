@@ -911,7 +911,7 @@ counterparts are shown by [`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[
-        (
+    (
         :cases_new, "New reported cases (DRC)", :seagreen)]
     :confirmed_new in propertynames(fc) && push!(count_cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))

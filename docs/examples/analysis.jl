@@ -1780,8 +1780,7 @@ summary_ranges = let
     ## How far the data has moved each estimate from its prior, in prior
     ## interquartile ranges, reusing the prior draws.
     moves = [
-        "cumulative infection count" =>
-            shift(C, vec(Array(prior_chn[:C_T]))),
+        "cumulative infection count" => shift(C, vec(Array(prior_chn[:C_T]))),
         "outbreak age" => shift(Td, vec(Array(prior_chn[:T]))),
         "doubling time" => shift(dt, vec(Array(prior_chn[:doubling_time])))]
     biggest = argmax(p -> abs(p.second), moves)
