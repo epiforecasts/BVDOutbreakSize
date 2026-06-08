@@ -428,27 +428,19 @@ vintage_table #hide
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.05). \tag{2}
 # ```
 #
-# We do not place a prior on $R_0$ directly. The genetic reanalysis of the
-# first ten sequenced genomes reports the outbreak growth, with wide
-# uncertainty, as a doubling time [cuomodannenburg2026](@cite). We put the
-# prior on the initial growth rate $r$ instead, given in the seeding and
-# growth subsection below, and derive the established reproduction number
-# forward from it through the Euler–Lotka relation under our generation
-# interval $g$:
+# We do not place a prior on $R_0$ directly. We put the prior on the initial
+# growth rate $r$ instead, given in the seeding and growth subsection below,
+# and derive the established reproduction number forward from it through the
+# Euler–Lotka relation under our generation interval $g$:
 #
 # ```math
 # R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
 # ```
 #
-# The genetic report gives an established reproduction number of about
-# $1.31$ to $1.55$ under its own generation interval; deriving $R_0$ forward
-# from the shared growth rate under our generation interval is the
-# consistent choice. The same growth rate grounds both the established walk
-# and the cryptic seeding phase, so the outbreak has one growth source. The
-# step-size prior assumes a small weekly change in the log reproduction
-# number; we use a tight half-normal so that, over the long unobserved
-# stretch the sitrep window does not cover, the reproduction number stays
-# near the seeding value rather than drifting.
+# The step-size prior keeps weekly changes in the reproduction number small.
+# We set the half-normal on $\sigma_{\text{rw}}$ so that the reproduction
+# number is unlikely to change by more than about 10% from one week to the
+# next: two standard deviations of the weekly log-step is around $0.10$.
 #
 # Daily $\log R_t$ is the linear interpolation between the weekly knots, so
 # the reproduction number varies piecewise linearly within each week:
@@ -488,13 +480,13 @@ vintage_table #hide
 
 # ##### Generation interval
 #
-# The generation-interval PMF $g$ drives the renewal. It is a Gamma
-# distribution with a sampled shape $\alpha$ and scale $\theta$, taken from
-# the Ebola virus disease serial interval used as a generation-time proxy
-# (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014). That distribution
-# maps once to a Gamma shape near $2.71$ and scale near $5.65$, and the
-# priors are centred on those values, with spreads that carry the source's
-# reported uncertainty on the mean rather than a spread we assign ourselves:
+# We assume the generation interval $g$ is a Gamma distribution with a
+# sampled shape $\alpha$ and scale $\theta$, taken from the Ebola virus
+# disease serial interval used as a generation-time proxy (mean 15.3 d, SD
+# 9.3 d; WHO Ebola Response Team 2014). That distribution maps once to a
+# Gamma shape near $2.71$ and scale near $5.65$, and the priors are centred
+# on those values, with spreads that carry the source's reported uncertainty
+# on the mean rather than a spread we assign ourselves:
 #
 # ```math
 # \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.70), \qquad
@@ -505,10 +497,7 @@ vintage_table #hide
 # as every delay, described with the first epidemiological process model
 # below, and the lag-0 bin is dropped and the remainder renormalised so the
 # generation interval starts at one day and an infectee is infected strictly
-# after its infector. The source reports a serial interval for a different
-# Ebola outbreak, so reading it as the generation time for this outbreak,
-# and the part of its uncertainty we carry through the shape and scale
-# priors, are our own assumptions.
+# after its infector.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: generation_interval_model</summary>
@@ -534,16 +523,15 @@ vintage_table #hide
 # I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
 # ```
 #
-# From that seed the outbreak grew deterministically through an unobserved
-# cryptic exponential phase, doubling $m$ times before sustained
+# From that seed we assume the outbreak grew deterministically through an
+# unobserved cryptic exponential phase, doubling $m$ times before sustained
 # transmission was established. The cryptic phase grows the seed to $2^m$
 # infections at the renewal start, the day the renewal takes over, over a
 # duration $m\,\tau$ with $\tau$ the doubling time. The doubling count has a
-# wide
-# prior centred on four cryptic doublings:
+# wide prior centred on three cryptic doublings:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(4,\ 3), \qquad
+# m \sim \mathrm{Normal}^{+}(3,\ 3), \qquad
 # \tau = \frac{\log 2}{r}, \qquad
 # T_{\text{cryptic}} = m\,\tau. \tag{8}
 # ```
@@ -562,7 +550,10 @@ vintage_table #hide
 #
 # This single growth rate fills the cryptic phase and, through the forward
 # Euler–Lotka derivation above, sets the established reproduction number, so
-# the cryptic phase and the renewal share one growth source.
+# the cryptic phase and the renewal share one growth source. The genetic
+# report's own established reproduction number of about $1.31$ to $1.55$ uses
+# its own generation interval; deriving $R_0$ forward from the shared growth
+# rate under our generation interval is the consistent choice.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: seed_model</summary>
@@ -712,12 +703,19 @@ vintage_table #hide
 # [charniga2024](@cite). The generation interval above is the one exception,
 # a Gamma discretised through the same censoring route. The LogNormal and
 # Gamma CDFs both differentiate cleanly under the reverse-mode automatic
-# differentiation, so this is the discretisation route for every delay:
+# differentiation.
+#
+# Both the primary event (the onset, say) and the secondary event (the
+# report) are observed only to the day, so the discretisation censors both.
+# The primary event is taken uniform over its day and the secondary event is
+# interval-censored to its day, giving the daily PMF
 #
 # ```math
-# f_s = F(s + 1) - F(s), \qquad
-# F = \text{the delay CDF}. \tag{14}
+# f_s = \int_0^1 \big[\, F(s + 1 - u) - F(s - u) \,\big]\, \mathrm{d}u,
+# \qquad F = \text{the delay CDF}, \tag{14}
 # ```
+#
+# which is then renormalised over lags $0,\dots,n_{\max}$.
 #
 # The incubation period also enters the infection-to-detection and
 # infection-to-death delays for the export streams, where the survival clock
@@ -942,9 +940,9 @@ cfr_prior_fig #hide
 
 # ###### Laboratory priors
 #
-# We model the process of confirming cases. The testing fraction
-# $\tau_{\text{test}}$ is the share of suspected cases routed to the
-# laboratory. A truly BVD specimen tests positive with the assay sensitivity
+# We model the process of confirming cases via laboratory testing. The
+# testing fraction $\tau_{\text{test}}$ is the share of suspected cases routed
+# to the laboratory. A truly BVD specimen tests positive with the assay sensitivity
 # $s$, and a non-BVD specimen tests positive with the small false-positive
 # rate $1 - \mathrm{spec}$ set by the assay specificity. We assume more
 # severe, more-likely-Ebola cases are preferentially tested, via an
@@ -952,11 +950,12 @@ cfr_prior_fig #hide
 # suspect-pool composition early on and relaxes towards it as testing
 # broadens. The confirmed-death enrichment $m_{\text{death}}$ scales the
 # death-confirmation odds relative to the case composition. Confirmation runs
-# on the altona RealStar Filovirus Screen RT-PCR, which detects Bundibugyo
-# virus at low copy number, whereas the rapid GeneXpert Ebola assay is
-# Zaire-specific and does not reliably detect it; the sensitivity prior keeps
-# good analytical sensitivity plausible while carrying downside mass for
-# early low-viral-load specimens. The specificity is high but imperfect; the
+# on the altona RealStar Filovirus Screen RT-PCR rather than the
+# Zaire-specific GeneXpert Ebola assay, which does not reliably detect
+# Bundibugyo virus. Sensitivity for Bundibugyo virus is less well
+# characterised than for Zaire ebolavirus, so we centre the sensitivity prior
+# below the values reported for other strains and give it a fairly wide
+# spread. The specificity is high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
 # never down); the confirmed-death enrichment is centred on no enrichment:
 #
