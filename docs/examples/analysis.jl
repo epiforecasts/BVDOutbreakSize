@@ -2553,9 +2553,10 @@ frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
 # The renewal series, in red, is this renewal model re-fit frozen at each
 # release date, the current method evaluated at each past date, so it rises
 # as the outbreak grows rather than sitting flat.
-# The current-data, current-model estimate is drawn in a third colour as a
-# horizontal ribbon across the period, so the latest estimate reads against
-# the earlier ones.
+# The current-data, current-model estimate is drawn in a third colour as the
+# cumulative-infection trajectory over time, rising across the period on the
+# same date axis so the latest estimate reads against the earlier ones.
+# Each release date is marked with a dotted vertical rule.
 # The released intervals are recorded from each release's published summary
 # so the figure builds without refetching the releases.
 
@@ -2591,9 +2592,27 @@ renewal_frozen = [
         _ci369(vec(Array(frozen_28may.chn[:C_T])))...)
 ]
 
+## The current-data, current-model estimate as the cumulative-infection
+## trajectory over the day grid (one calendar date per grid day, day 1 is
+## the seeding date), summarised by per-day 30/60/90% credible bounds. This
+## is the same latent quantity the cumulative-trajectory figure shows, so
+## the current estimate rises over time on the release-date axis instead of
+## sitting flat. Drawn against calendar dates, it lines up with the
+## release and frozen-renewal points.
+infection_trajectory = let
+    mat = chn_joint[:cumulative_infections]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    dates = [obs.seeding + Day(d - 1) for d in 1:obs.n]
+    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
+    (dates,
+        [q(d, 0.35) for d in 1:obs.n], [q(d, 0.65) for d in 1:obs.n],
+        [q(d, 0.20) for d in 1:obs.n], [q(d, 0.80) for d in 1:obs.n],
+        [q(d, 0.05) for d in 1:obs.n], [q(d, 0.95) for d in 1:obs.n])
+end
+
 evolution_fig = plot_estimate_evolution(release_evolution;
     renewal = renewal_frozen,
-    current = _ci369(posterior_C_joint),
+    trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
 #md # ```@raw html

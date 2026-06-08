@@ -52,7 +52,7 @@ end
 Headline 3x2 cumulative figure. Rows are cumulative infections, cumulative
 symptom onsets and cumulative deaths, all modelled latent quantities. The
 left column is the modelled expected cumulative trajectory over the grid as
-a median line with 50% and 90% ribbons; the right column is the posterior
+50% and 90% ribbons; the right column is the posterior
 density of the current cut-off cumulative. The chain must carry the vector
 deterministics `cumulative_infections`, `cumulative_onsets` and
 `cumulative_expected_deaths` (one per draw). `seeding` is the calendar date
@@ -74,12 +74,11 @@ function plot_cumulative_trajectories(chn;
     end
     function _ribbon(trajs)
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
-        med = [q(d, 0.5) for d in 1:n]
         lo90 = [q(d, 0.05) for d in 1:n]
         hi90 = [q(d, 0.95) for d in 1:n]
         lo50 = [q(d, 0.25) for d in 1:n]
         hi50 = [q(d, 0.75) for d in 1:n]
-        return med, lo90, hi90, lo50, hi50
+        return lo90, hi90, lo50, hi50
     end
 
     rows = (
@@ -91,14 +90,13 @@ function plot_cumulative_trajectories(chn;
     fig = Figure(; size = (940, 1020))
     for (i, (key, name, colour)) in enumerate(rows)
         trajs = _trajectories(key)
-        med, lo90, hi90, lo50, hi50 = _ribbon(trajs)
+        lo90, hi90, lo50, hi50 = _ribbon(trajs)
         ax = Axis(fig[i, 1];
             xlabel = "Date", ylabel = "Cumulative $name",
             title = "Modelled cumulative $name over time",
             xticklabelrotation = pi / 6)
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo50, hi50; color = (colour, 0.30))
-        lines!(ax, x, med; color = colour, linewidth = 2)
         loax = floor(Int, minimum(x))
         hiax = ceil(Int, maximum(x))
         ax.xticks = collect(loax:14:hiax)
@@ -453,102 +451,115 @@ end
 
 """
 Estimate-evolution plot: how the outbreak-size estimate moves as the
-data cut-off advances, drawn against the cut-off date.
+data cut-off advances, drawn against the calendar date.
 
 `released` is a vector of `(cutoff_date, median, lo30, hi30, lo60, hi60,
-lo90, hi90)` tuples, one per published project release, drawn in blue as a
-median line through its points with nested 30/60/90% credible-interval
-ribbons along the date axis. `renewal` is a vector of the same tuple shape,
-the current renewal model re-fit frozen at each release date, drawn in red:
-the current method evaluated at each past cut-off, so the series rises as
-the outbreak grows.
+lo90, hi90)` tuples, one per published project release, drawn in blue with
+nested 30/60/90% credible-interval ribbons along the date axis. `renewal`
+is a vector of the same tuple shape, the current renewal model re-fit
+frozen at each release date, drawn in red: the current method evaluated at
+each past cut-off, so the series rises as the outbreak grows. Both are
+summarised by ribbons only, no central line or marker.
 
-`current` is an optional `(median, lo30, hi30, lo60, hi60, lo90, hi90)`
-tuple for the current-data, current-model estimate, drawn as a third-colour
-horizontal ribbon spanning the whole date axis so the latest estimate reads
-across the period.
+`trajectory` is the current-data, current-model cumulative-infection
+trajectory over the day grid, a `(dates, lo30, hi30, lo60, hi60, lo90,
+hi90)` tuple where `dates` is the calendar date of each grid day and the
+remaining entries are the per-day credible bounds. It is drawn in a third
+colour as a time-varying ribbon, so the latest estimate rises across the
+period on the same calendar axis as the release points and lines up with
+them.
+
+Release dates are marked with dotted vertical rules so each release reads
+against the rising trajectory.
 
 `xlabel`/`ylabel`/`title` set the axis text; `released_label`,
-`renewal_label` and `current_label` name the three series.
+`renewal_label` and `trajectory_label` name the three series.
 """
 function plot_estimate_evolution(
         released::AbstractVector;
         renewal::AbstractVector = NamedTuple[],
-        current::Union{Nothing, Tuple} = nothing,
-        xlabel::AbstractString = "Data cut-off date",
+        trajectory::Union{Nothing, Tuple} = nothing,
+        xlabel::AbstractString = "Date",
         ylabel::AbstractString = "Cumulative infections",
         title::AbstractString = "Outbreak-size estimate as data accrued",
         released_label::AbstractString =
         "Released estimates (per project release)",
         renewal_label::AbstractString =
         "Current model re-fit frozen at each release date",
-        current_label::AbstractString =
+        trajectory_label::AbstractString =
         "Current model, current data")
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
-    ## then relabel the ticks with the dates.
+    ## then relabel the ticks with the dates. The released points, the
+    ## frozen renewal points and the current-model trajectory all share
+    ## this single calendar mapping, so they line up on the same axis.
     rdates = [Date(String(r[1])) for r in released]
     ndates = [Date(String(p[1])) for p in renewal]
-    alldates = sort(unique(vcat(rdates, ndates)))
+    tdates = isnothing(trajectory) ? Date[] :
+             [d isa Date ? d : Date(String(d)) for d in trajectory[1]]
+    tickdates = sort(unique(vcat(rdates, ndates)))
+    alldates = sort(unique(vcat(rdates, ndates, tdates)))
     ref = minimum(alldates)
     _x(d) = Float64((d - ref).value)
 
     _hi(tuples) = isempty(tuples) ? 0.0 : maximum(float(t[8]) for t in tuples)
     upper = max(_hi(released), _hi(renewal))
-    isnothing(current) || (upper = max(upper, float(current[7])))
+    isnothing(trajectory) ||
+        (upper = max(upper, maximum(float.(trajectory[7]))))
 
     xlo = _x(ref) - 1
     xhi = _x(maximum(alldates)) + 1
     fig = Figure(; size = (860, 480))
     ax = Axis(fig[1, 1];
         xlabel = xlabel, ylabel = ylabel, title = title,
-        xticks = (_x.(alldates), [string(d) for d in alldates]),
+        xticks = (_x.(tickdates), [string(d) for d in tickdates]),
         xticklabelrotation = pi / 4,
         limits = ((xlo, xhi), (0, upper * 1.08)))
 
-    ## One series: a median line through its points with nested 30/60/90%
-    ## credible-interval ribbons along the date axis.
-    function _series!(dates, tuples, colour, marker)
+    ## One per-vintage series: nested 30/60/90% credible-interval ribbons
+    ## along the date axis, with no central line or marker.
+    function _series!(dates, tuples, colour)
         xs = _x.(dates)
         ord = sortperm(xs)
         xs = xs[ord]
-        c = [float(t[2]) for t in tuples][ord]
         band!(ax, xs, [float(t[7]) for t in tuples][ord],
             [float(t[8]) for t in tuples][ord]; color = (colour, 0.12))
         band!(ax, xs, [float(t[5]) for t in tuples][ord],
             [float(t[6]) for t in tuples][ord]; color = (colour, 0.20))
-        band!(ax, xs, [float(t[3]) for t in tuples][ord],
+        return band!(ax, xs, [float(t[3]) for t in tuples][ord],
             [float(t[4]) for t in tuples][ord]; color = (colour, 0.30))
-        lines!(ax, xs, c; color = colour, linewidth = 2)
-        return scatter!(ax, xs, c; color = colour, markersize = 11,
-            marker = marker)
     end
 
     handles = Any[]
     labels = String[]
-    ## Current-data estimate as a horizontal ribbon across the whole axis.
-    ## `current` is `(median, lo30, hi30, lo60, hi60, lo90, hi90)`.
-    if !isnothing(current)
+    ## Current-data estimate as the cumulative-infection trajectory over the
+    ## grid, a time-varying ribbon on the same calendar axis as the points.
+    ## `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
+    if !isnothing(trajectory)
         cc = :seagreen
-        xspan = [xlo, xhi]
-        band!(ax, xspan, fill(float(current[6]), 2),
-            fill(float(current[7]), 2); color = (cc, 0.10))
-        band!(ax, xspan, fill(float(current[4]), 2),
-            fill(float(current[5]), 2); color = (cc, 0.16))
-        band!(ax, xspan, fill(float(current[2]), 2),
-            fill(float(current[3]), 2); color = (cc, 0.24))
-        ch = lines!(ax, xspan, fill(float(current[1]), 2);
-            color = cc, linewidth = 2, linestyle = :dash)
-        push!(handles, ch)
-        push!(labels, current_label * " (30/60/90% band)")
+        xs = _x.(tdates)
+        ord = sortperm(xs)
+        xs = xs[ord]
+        band!(ax, xs, float.(trajectory[6])[ord], float.(trajectory[7])[ord];
+            color = (cc, 0.10))
+        band!(ax, xs, float.(trajectory[4])[ord], float.(trajectory[5])[ord];
+            color = (cc, 0.16))
+        th = band!(ax, xs, float.(trajectory[2])[ord],
+            float.(trajectory[3])[ord]; color = (cc, 0.24))
+        push!(handles, th)
+        push!(labels, trajectory_label * " (30/60/90% band)")
     end
     if !isempty(renewal)
-        renewal_pts = _series!(ndates, renewal, :firebrick, :diamond)
-        push!(handles, renewal_pts)
+        renewal_band = _series!(ndates, renewal, :firebrick)
+        push!(handles, renewal_band)
         push!(labels, renewal_label * " (30/60/90% bands)")
     end
-    released_pts = _series!(rdates, released, :steelblue, :circle)
-    push!(handles, released_pts)
+    released_band = _series!(rdates, released, :steelblue)
+    push!(handles, released_band)
     push!(labels, released_label * " (30/60/90% bands)")
+
+    ## Dotted vertical rule at each release date.
+    isempty(rdates) || vlines!(ax, _x.(rdates);
+        color = (:grey, 0.55), linestyle = :dot, linewidth = 1)
 
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
@@ -1046,9 +1057,9 @@ the *new* increment while grounding on what was actually observed at the
 preceding sitrep. This is the "filtered" one-step-ahead predictive: it
 isolates the model's per-step increment prediction and does not let
 errors compound across the series, unlike a running sum of the modelled
-increments. The result is summarised by vintage as a median line with
-shaded 50% and 90% predictive ribbons; the observed cumulative counts
-are overlaid as points. Each `panel` is a `NamedTuple`
+increments. The result is summarised by vintage as shaded 30/60/90%
+predictive ribbons; the observed cumulative counts are overlaid as
+points. Each `panel` is a `NamedTuple`
 `(; title, dates, replicates, observed)`, where `replicates` is a vector
 of per-draw increment vectors (one entry per vintage, oldest first) and
 `observed` the matching observed cumulative counts used as the
@@ -1074,7 +1085,6 @@ function plot_vintage_conditional_ppc(
         ## observed previous cumulative plus the drawn increment `Δ_v`.
         cond = [obs_prev .+ collect(r) for r in vec(collect(p.replicates))]
         q(i, pr) = quantile([c[i] for c in cond], pr)
-        med = [q(i, 0.5) for i in 1:n]
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]
         lo60 = [q(i, 0.20) for i in 1:n]
@@ -1096,7 +1106,6 @@ function plot_vintage_conditional_ppc(
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
-        lines!(ax, x, med; color = colour, linewidth = 2)
         scatter!(ax, x, float.(p.observed); color = :black, markersize = 9)
     end
     return fig
