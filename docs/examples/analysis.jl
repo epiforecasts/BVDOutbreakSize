@@ -1,8 +1,15 @@
 #md # ```@eval
-#md # using BVDOutbreakSize, Markdown
+#md # using BVDOutbreakSize, Markdown, Dates
 #md # readme = read(joinpath(pkgdir(BVDOutbreakSize), "README.md"), String)
 #md # body = strip(match(r"^(.*?)<!-- SHARED:END -->"s, readme).captures[1])
+#md # # Keep the dates current automatically: "Last updated" is the build
+#md # # date and "Data as of" is the loaded cut-off, so a rebuild always
+#md # # refreshes them without a manual edit to README.md.
+#md # built = Dates.format(Dates.today(), "d U yyyy")
+#md # asof = Dates.format(load_observations().cutoff, "d U yyyy")
 #md # body = replace(body,
+#md #     r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
+#md #     r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.",
 #md #     r"https://epiforecasts\.io/BVDOutbreakSize/stable/analysis" => "",
 #md #     "https://epiforecasts.io/BVDOutbreakSize/stable/contributing" => "contributing.md")
 #md # Markdown.parse(body)
@@ -19,14 +26,18 @@
 # report, built from the same run, is attached to each results release:
 # [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
 #
-# ## What we do differently from McCabe et al.
+# ## Origins of this work
 #
-# We reimplement the McCabe et al. [mccabe2026](@cite) report as a single
-# Bayesian model fitted jointly to every data stream, recast as a
-# discrete-time renewal process with a time-varying reproduction number.
-# The points below summarise how it differs from the report; the Methods
-# section carries the full treatment and the limitations are listed
-# separately.
+# This work began as a replication of the McCabe et al. [mccabe2026](@cite)
+# report.
+# It has since evolved into a real-time joint Bayesian estimate of the
+# current outbreak size, a discrete-time renewal process with a time-varying
+# reproduction number fitted to more of the available data streams than the
+# original.
+# The points below summarise how it now differs from the report; the Methods
+# section carries the full treatment, and the later
+# [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") sets
+# the current estimates against theirs.
 #
 #md # ```@raw html
 #md # <details><summary>Expand: differences from the report</summary>
@@ -128,7 +139,7 @@
 # - *Fitted to aggregate counts.* The DRC data are situation-report
 #   totals of suspected cases and deaths, laboratory-confirmed cases and
 #   deaths, and specimens received and analysed; the Uganda data are
-#   three export cases with one death. There is no line list and no
+#   three export cases with one death. We do not have a line list or
 #   information on case definitions or reporting completeness. The
 #   laboratory testing series gives partial information on testing
 #   capacity, but it is incomplete and stops at the cut-off. Every

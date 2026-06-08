@@ -1,16 +1,18 @@
-# Estimating the current size of the 2026 DRC Bundibugyo virus outbreak: a joint Bayesian re-analysis of the McCabe et al. report
+# Estimating the current size of the 2026 DRC Bundibugyo virus outbreak
 
 **Authors:** Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk.
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/stable) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/dev) [![Tests](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml/badge.svg)](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/epiforecasts/BVDOutbreakSize/branch/main/graph/badge.svg)](https://codecov.io/gh/epiforecasts/BVDOutbreakSize) [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![Code Style: SciML](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle) [![DOI](https://zenodo.org/badge/1243778099.svg)](https://doi.org/10.5281/zenodo.20312758)
 
-**Last updated:** 5 June 2026. This is a live report, re-run as new
+**Last updated:** on each rebuild. This is a live report, re-run as new
 data arrive, so the estimates change between updates.
 
-**Data as of:** 5 June 2026. DRC counts come from the situation reports
-of the Institut National de Santé Publique (INSP); Uganda imports come
-from WHO. Estimates are reported as of this date; it can lag the update
-date above.
+**Data as of:** the most recent situation report. DRC counts come from the
+situation reports of the Institut National de Santé Publique (INSP); Uganda
+imports come from WHO. The rendered report fills in the build date and the
+exact data cut-off automatically; the suspected-case and suspected-death
+streams, which carry most of the signal, were last published earlier than
+the laboratory-confirmed streams.
 
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
@@ -28,19 +30,19 @@ This is a real-time joint Bayesian estimate of the current size of that
 outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be
 inferred from the surveillance data that are available.
-The model is a discrete-time renewal process on a daily grid, fitting
-every data stream together in a single posterior.
-It estimates the cumulative number of infections to date, the
-reproduction number with the growth rate and doubling time, the
-case-fatality ratio, the ascertainment of each surveillance system, and a
-short-term forecast of the streams over the coming week.
-The data that inform it are the DRC INSP situation-report streams of
-suspected cases, suspected deaths, laboratory-confirmed cases and
-confirmed deaths, fitted across successive report vintages, the cases and
-deaths exported to Uganda taken from the WHO situation reports and Disease
-Outbreak News, a
-genetic bound on the time to the most recent common ancestor, and priors
-taken from the McCabe et al. report.
+The model is a discrete-time renewal process on a daily grid that fits the
+surveillance streams jointly in a single posterior: the DRC suspected
+cases, suspected deaths, laboratory-confirmed cases and confirmed deaths,
+and the cases and deaths exported to Uganda.
+It estimates the latent infections, symptom onsets and deaths over time,
+the reported and confirmed cases, and the time-varying reproduction number
+with its growth rate and doubling time, alongside the case-fatality ratio,
+the ascertainment of each surveillance system, and a short-term forecast of
+each stream over the coming week.
+The DRC data come from the INSP situation reports and the Uganda exports
+from the WHO situation reports and Disease Outbreak News, with a genetic
+bound on the time to the most recent common ancestor and priors taken from
+the McCabe et al. report.
 
 **Scope.** This work is motivated by adding an external view of the
 current situation, based on our understanding of real-time infectious
