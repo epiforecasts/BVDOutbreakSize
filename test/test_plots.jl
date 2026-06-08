@@ -163,15 +163,21 @@ end
     ]
     ## Released series only.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
-    ## With the rising current-model frozen-fit ribbon and a current-data,
-    ## current-model horizontal band.
+    ## With the frozen-fit renewal ribbon and the current-data,
+    ## current-model trajectory ribbon over the date grid.
     renewal = [
         ("2026-05-20", 1666, 1400, 2000, 1100, 2400, 900, 2900),
         ("2026-05-23", 1900, 1600, 2300, 1300, 2700, 1000, 3300),
         ("2026-05-28", 4000, 3500, 4600, 3000, 5200, 2500, 6000)
     ]
-    current = (4200, 3700, 4800, 3200, 5400, 2700, 6300)
-    fig = plot_estimate_evolution(rows; renewal = renewal, current = current)
+    ## `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
+    trajectory = (
+        ["2026-05-20", "2026-05-23", "2026-05-28"],
+        [1500, 1800, 3800], [2100, 2400, 4400],
+        [1200, 1400, 3200], [2500, 2800, 5000],
+        [900, 1000, 2600], [3000, 3400, 5800])
+    fig = plot_estimate_evolution(rows; renewal = renewal,
+        trajectory = trajectory)
     @test fig isa CairoMakie.Makie.Figure
 end
 

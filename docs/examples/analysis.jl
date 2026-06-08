@@ -1680,12 +1680,14 @@ display_names = Dict{Symbol, String}(
     Symbol("gi_state.θ") => "generation interval scale",
     Symbol("inc_state.delay_mean") => "incubation period mean",
     Symbol("inc_state.delay_sd") => "incubation period SD",
-    Symbol("cases_state.report_state.delay_mean") => "onset-to-report mean",
-    Symbol("cases_state.report_state.delay_sd") => "onset-to-report SD",
-    Symbol("deaths_state.od_state.delay_mean") => "onset-to-death mean",
-    Symbol("deaths_state.od_state.delay_sd") => "onset-to-death SD",
-    Symbol("exports_state.detect_state.delay_mean") => "onset-to-detection mean",
-    Symbol("exports_state.detect_state.delay_sd") => "onset-to-detection SD",
+    Symbol("cases_state.report_state.α") => "onset-to-report shape",
+    Symbol("cases_state.report_state.θ") => "onset-to-report scale",
+    Symbol("deaths_state.od_state.oa.α") => "onset-to-admission shape",
+    Symbol("deaths_state.od_state.oa.θ") => "onset-to-admission scale",
+    Symbol("deaths_state.od_state.ad.α") => "admission-to-death shape",
+    Symbol("deaths_state.od_state.ad.θ") => "admission-to-death scale",
+    Symbol("exports_state.detect_state.α") => "onset-to-detection shape",
+    Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
     Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
     Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
     Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
@@ -2089,7 +2091,11 @@ intervention_table #hide
 # case being reported, onset to death, onset to hospitalisation abroad (the
 # detection delay used in the export model), and the report-to-laboratory
 # receipt delay.
-# Each is sampled by its mean and standard deviation.
+# The onset-to-report and onset-to-detection delays are sampled on their
+# natural Gamma shape and scale, and onset-to-death is the convolution of
+# two atomic Gamma delays, onset to admission and admission to death, each
+# with its own shape and scale.
+# The report-to-receipt delay is sampled by its mean and standard deviation.
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
 # each marginal is visible.
@@ -2099,12 +2105,14 @@ intervention_table #hide
 #md # ```
 
 obs_delay_summary = summary_table(chn_joint,
-    [Symbol("cases_state.report_state.delay_mean"),
-        Symbol("cases_state.report_state.delay_sd"),
-        Symbol("deaths_state.od_state.delay_mean"),
-        Symbol("deaths_state.od_state.delay_sd"),
-        Symbol("exports_state.detect_state.delay_mean"),
-        Symbol("exports_state.detect_state.delay_sd"),
+    [Symbol("cases_state.report_state.α"),
+        Symbol("cases_state.report_state.θ"),
+        Symbol("deaths_state.od_state.oa.α"),
+        Symbol("deaths_state.od_state.oa.θ"),
+        Symbol("deaths_state.od_state.ad.α"),
+        Symbol("deaths_state.od_state.ad.θ"),
+        Symbol("exports_state.detect_state.α"),
+        Symbol("exports_state.detect_state.θ"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         Symbol("confirmed_state.receipt_state.d.delay_sd")];
     digits = 2, labels = display_names);
@@ -2120,9 +2128,9 @@ obs_delay_summary #hide
 #md # ```
 
 obs_delay_pair_fig = plot_pair(chn_joint,
-    [Symbol("cases_state.report_state.delay_mean"),
-        Symbol("deaths_state.od_state.delay_mean"),
-        Symbol("exports_state.detect_state.delay_mean"),
+    [Symbol("cases_state.report_state.α"),
+        Symbol("deaths_state.od_state.oa.α"),
+        Symbol("exports_state.detect_state.α"),
         Symbol("confirmed_state.receipt_state.d.delay_mean")];
     prior = prior_chn, labels = display_names);
 
