@@ -328,7 +328,15 @@ end;
 #md # </details>
 #md # ```
 
+#md # ```@raw html
+#md # <details><summary>Per-date situation-report data table</summary>
+#md # ```
+
 vintage_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ### Model
 #
