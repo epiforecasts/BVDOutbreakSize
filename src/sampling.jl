@@ -138,7 +138,7 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
-`target_accept` defaults to 0.90. The earlier integral model needed 0.95
+`target_accept` defaults to 0.85. The earlier integral model needed 0.95
 to keep the multimodal small-outbreak geometry from diverging, but the
 renewal joint conditions the confirmed counts on the observed analysed
 denominator (removing the multiplicative ascertainment ridge) and samples
@@ -147,7 +147,7 @@ posterior geometry is benign (the sanity fit converges with ≈1 divergence).
 A lower target acceptance shortens the average NUTS trajectory, cutting
 leapfrog steps (and so gradient evaluations) per iteration; raise it back
 toward 0.95–0.99 if a model variant reintroduces divergences. The default
-is two longer chains (1500 post-warmup draws each) rather than four shorter
+is two longer chains (1000 post-warmup draws each) rather than four shorter
 ones, mirroring the integral model (#211), which roughly halves the docs
 build at a similar total draw count.
 
@@ -179,9 +179,9 @@ adaptation steps rather than posterior samples; raise `samples`
 accordingly or drop them before summarising.
 """
 function nuts_sample(model;
-        samples::Integer = 1_500,
+        samples::Integer = 1_000,
         chains::Integer = 2,
-        target_accept::Real = 0.90,
+        target_accept::Real = 0.85,
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
