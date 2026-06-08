@@ -961,7 +961,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# s \sim \mathrm{Beta}(6,\ 2), \qquad
+# s \sim \mathrm{Beta}(10,\ 1.76), \qquad
 # \mathrm{spec} \sim \mathrm{Beta}(60,\ 2),
 # ```
 #
