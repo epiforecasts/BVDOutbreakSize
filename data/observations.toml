@@ -39,12 +39,13 @@
 #    before the cut-off, and are missing thereafter;
 #  - the confirmed-case and laboratory streams run to the 28 May cut-off;
 #  - confirmed deaths and the post-cut-off confirmed-case figures (263,
-#    282, 321, 344, 363, 381, 452, 488 on 29 May-5 June) are recorded in
-#    data/insp_sitrep_scanned.csv as data beyond the cut-off, but are
-#    not fitted, because the model anchors confirmed cases through the
-#    laboratory positivity and national testing totals stop after 28 May.
+#    282, 321, 344, 363, 381, 452, 488, 515 on 29 May-6 June) are
+#    recorded in data/insp_sitrep_scanned.csv as data beyond the cut-off,
+#    but are not fitted, because the model anchors confirmed cases through
+#    the laboratory positivity and national testing totals stop after
+#    28 May.
 
-as_of_date = "2026-06-05"
+as_of_date = "2026-06-06"
 
 [exported_cases]
 value  = 3
@@ -130,8 +131,8 @@ source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 L
 # model uses (derived at load time), paired with `tests_analysed_history`
 # for the per-test positivity (210/755 ≈ 28%). The series runs to the
 # cut-off; the confirmed-based format from 29 May (263, 282, 321, 344,
-# 363, 381, 452, 488 on 29 May-5 June; SitReps 015-022) is recorded in
-# data/insp_sitrep_scanned.csv but not added here, since national
+# 363, 381, 452, 488, 515 on 29 May-6 June; SitReps 015-023) is recorded
+# in data/insp_sitrep_scanned.csv but not added here, since national
 # testing stops after 28 May and the model anchors confirmed cases
 # through the laboratory positivity.
 [confirmed_case_history]
@@ -139,28 +140,28 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25",
           "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
-          "2026-06-03", "2026-06-04", "2026-06-05"]
+          "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06"]
 values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
-          282, 321, 344, 363, 381, 452, 488]
-source = "INSP situation reports 18 May - 5 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 5 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
+          282, 321, 344, 363, 381, 452, 488, 515]
+source = "INSP situation reports 18 May - 6 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 6 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
 
 # Cumulative national confirmed-death totals (front-page `Cumul décès
 # parmi les confirmés`). First published in the SitRep 012 revised
 # re-issue (26 May); 17 on 26-28 May. INSP flags these as
 # under-estimated because diagnostic confirmation is delayed. The series
 # is flat over the fitted window (the jump to 42 on 29 May and
-# subsequent values 48, 60, 62, 64, 82, 86 on 31 May-5 June reflect late
-# confirmation; recorded in data/insp_sitrep_scanned.csv as data beyond
-# the cut-off). Recorded for completeness as a time series; the cut-off
-# `confirmed_deaths` scalar (17) is derived from the final vintage at
-# load time. The model does not currently fit a confirmed-death stream
-# (the deaths likelihood uses suspected deaths).
+# subsequent values 48, 60, 62, 64, 82, 86, 91 on 31 May-6 June reflect
+# late confirmation; recorded in data/insp_sitrep_scanned.csv as data
+# beyond the cut-off). Recorded for completeness as a time series; the
+# cut-off `confirmed_deaths` scalar (17) is derived from the final
+# vintage at load time. The model does not currently fit a confirmed-
+# death stream (the deaths likelihood uses suspected deaths).
 [confirmed_death_history]
 dates  = ["2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
-          "2026-06-03", "2026-06-04", "2026-06-05"]
-values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86]
-source = "INSP situation reports 26 May - 5 June 2026 (SitReps 012_v2-022), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June)."
+          "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06"]
+values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91]
+source = "INSP situation reports 26 May - 6 June 2026 (SitReps 012_v2-023), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June), 91 (6 June)."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
