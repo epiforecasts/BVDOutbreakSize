@@ -61,11 +61,12 @@
 #   et al. [mccabe2026](@cite) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.*
 #   A single import grows through an unobserved cryptic exponential phase
-#   to a magnitude set by a wide prior on the doubling count, at a rate
-#   derived from the established reproduction number, before the renewal
-#   process takes over. The genetic time to the most recent common
-#   ancestor floors the cryptic duration from below. McCabe et al. fix the
-#   start from a single seed.
+#   to a magnitude set by a wide prior on the doubling count, at the growth
+#   rate the genetic estimate informs, before the renewal process takes
+#   over. The established reproduction number is derived forward from that
+#   growth rate. The genetic time to the most recent common ancestor floors
+#   the cryptic duration from below. McCabe et al. fix the start from a
+#   single seed.
 #
 # **Delays and convolutions**
 #
@@ -96,8 +97,8 @@
 # - *Comparison against published scenarios.* The model is set beside the
 #   McCabe et al. [mccabe2026](@cite) scenario estimates as an external
 #   sense-check, matched in time at the cut-off each scenario was computed,
-#   while $C_T$ (the latent infection count, summed from the renewal
-#   trajectory) is the headline quantity reported separately.
+#   while the cumulative infection count, the running sum of the daily
+#   infections, is the headline quantity reported separately.
 #
 # **Extensions**
 #
@@ -351,11 +352,14 @@ vintage_table #hide
 # I_t = R_t \sum_{s = 1}^{L} I_{t-s}\, g_s, \tag{1}
 # ```
 #
-# where $g$ is the discretised generation-interval PMF (indexed from
-# lag 1, so an infectee is always infected strictly after its infector)
-# and $R_t$ is the per-day reproduction number. We never observe
-# infections directly. Each data stream observes a thinned, delayed or
-# transformed view of the same latent incidence.
+# where $g$ is the discretised probability mass function (PMF) of the
+# generation interval, indexed from lag 1 so an infectee is always infected
+# strictly after its infector, and $R_t$ is the per-day reproduction
+# number. A PMF gives the probability assigned to each whole-day lag. We
+# never observe infections directly. Each data stream observes a thinned,
+# delayed or transformed view of the same latent incidence. This is the
+# class of time-varying renewal model used in EpiNow2 [epinow2](@cite),
+# with the streams fitted jointly here rather than in a pipeline.
 #
 # The model is assembled from small reusable Turing [ge2018turing](@cite)
 # submodels, each owning the maths and priors for one part of the
@@ -368,7 +372,7 @@ vintage_table #hide
 # for the figures. Each submodel's source is shown in the collapsible
 # block beneath its prose.
 #
-# The table below shows which parameters feed each observation submodel.
+# The table below shows which parameters inform each observation submodel.
 # The *received* column is the received-specimen volume, the laboratory
 # stream fitted as a count; the *confirmed* positives are scored as a
 # Binomial of the observed analysed denominator with a positivity linked to
@@ -402,52 +406,69 @@ vintage_table #hide
 
 # #### Infections
 #
-# The infection process is built in generative order: the reproduction
-# number, the generation interval that drives the renewal, the seeding that
-# sets the initial infection count, the genetic bound on the outbreak age,
-# and the renewal construction that grows the seed forward to the cut-off.
+# The infection process is made up of several processes. There are the
+# reproduction number, the generation interval that drives the renewal, the
+# seeding that sets the initial infection count, the genetic bound on the
+# outbreak age, the growth rate that fills the unobserved cryptic phase, and
+# the renewal construction that grows the seed forward to the cut-off. Each
+# is described in a subsection below.
 #
 # ##### Reproduction number
 #
-# The reproduction number follows a non-centred Gaussian random walk on the
-# log scale, with knots at weekly intervals (day 1, 8, 15, …, $n$):
-#
-# ```math
-# \log R_0 \sim \mathrm{Normal}(\log 1.6,\ 0.10), \qquad
-# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.05), \tag{2}
-# ```
+# The reproduction number is assumed to follow a non-centred Gaussian random
+# walk on the log scale, with knots at weekly intervals (day 1, 8, 15, …,
+# $n$). The walk starts from the established reproduction number $R_0$ at the
+# anchor:
 #
 # ```math
 # \log R_k = \log R_0 + \sigma_{\text{rw}}
 #            \sum_{j=1}^{k} z_j, \quad
-# z_j \sim \mathrm{Normal}(0, 1). \tag{3}
+# z_j \sim \mathrm{Normal}(0, 1), \qquad
+# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.05). \tag{2}
 # ```
 #
-# Here $R_0$ is the established reproduction number at the anchor, the value
-# the walk starts from. Its prior is anchored on the molecular-clock growth
-# estimate for this outbreak: the phylodynamic reanalysis of the first ten
-# sequenced genomes [cuomodannenburg2026](@cite) puts the mean epidemic
-# doubling time at 15.2-24.5 d (centre 20 d), which under the renewal
-# generation interval implies $R_0$ near $1.6$. The single $R_0$ prior
-# anchors both the established walk and, through the cryptic growth rate
-# derived from it, the seeding, so the outbreak has one growth source. The
+# We do not place a prior on $R_0$ directly. The genetic reanalysis of the
+# first ten sequenced genomes reports the outbreak growth, with wide
+# uncertainty, as a doubling time [cuomodannenburg2026](@cite). We put the
+# prior on the initial growth rate $r$ instead, given in the seeding and
+# growth subsection below, and derive the established reproduction number
+# forward from it through the Euler–Lotka relation under our generation
+# interval $g$:
+#
+# ```math
+# R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
+# ```
+#
+# The genetic report gives an established reproduction number of about
+# $1.31$ to $1.55$ under its own generation interval; deriving $R_0$ forward
+# from the shared growth rate under our generation interval is the
+# consistent choice. The same growth rate anchors both the established walk
+# and the cryptic seeding phase, so the outbreak has one growth source. The
 # step-size prior assumes a small weekly change in the log reproduction
 # number; we use a tight half-normal so that, over the long unobserved
 # stretch the sitrep window does not cover, the reproduction number stays
 # near the seeding value rather than drifting.
 #
-# Daily $\log R_t$ is the piecewise-linear interpolation between knots. The
-# outbreak response adds a sampled effect shaped by a logistic ramp at the
-# first WHO situation report on 18 May 2026. We assume the response takes
-# about three weeks (21 days) to take effect, rather than switching at a
-# single date, and that it can only reduce transmission, so the effect is
+# Daily $\log R_t$ is the linear interpolation between the weekly knots, so
+# the reproduction number varies piecewise linearly within each week:
+#
+# ```math
+# \log R_t = \log R_k +
+#     \frac{t - d_k}{d_{k+1} - d_k}\,(\log R_{k+1} - \log R_k),
+# \qquad d_k \le t \le d_{k+1}, \tag{4}
+# ```
+#
+# with $d_k$ the day of knot $k$. The outbreak response adds a sampled
+# effect shaped by a logistic ramp at the first WHO situation report on 18
+# May 2026. We assume the response takes about three weeks (21 days) to take
+# effect, and that it can only reduce transmission, so the effect is
 # constrained to be non-positive:
 #
 # ```math
 # \log R_t \mathrel{+}= \delta \cdot
 #     \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right),
 # \qquad
-# \delta \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{4}
+# \delta \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
 
 #md # ```@raw html
@@ -466,28 +487,27 @@ vintage_table #hide
 
 # ##### Generation interval
 #
-# The generation-interval PMF $g$ drives the renewal and, through the
-# inverse Euler–Lotka relation, the cryptic growth rate used for seeding.
-# It is sampled from a prior centred on the Ebola virus disease serial
-# interval as a generation-time proxy (mean 15.3 d, SD 9.3 d; WHO Ebola
-# Response Team 2014, NEJM). Both the mean and the SD are sampled, so the
-# generation time is estimated around the published value. The lag-0 bin is
-# dropped and the remainder renormalised, so an infectee is always strictly
-# later than its infector:
+# The generation-interval PMF $g$ drives the renewal. It is a Gamma
+# distribution with a sampled shape $\alpha$ and scale $\theta$, taken from
+# the Ebola virus disease serial interval used as a generation-time proxy
+# (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014). That distribution
+# maps once to a Gamma shape near $2.71$ and scale near $5.65$, and the
+# priors are centred on those values, with spreads that carry the source's
+# reported uncertainty on the mean rather than a spread we assign ourselves:
 #
 # ```math
-# \mu_g \sim \mathrm{Normal}^{+}(15.3,\ 3.0), \qquad
-# \sigma_g \sim \mathrm{Normal}^{+}(9.3,\ 2.0). \tag{5}
+# \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.70), \qquad
+# \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{6}
 # ```
 #
-# The generation interval uses the shared double-interval-censored LogNormal
-# discretisation described with the epidemiological process models below,
-# additionally dropping the lag-0 bin so it starts at one day. The source
-# reports a generation-time distribution rather than a mean and SD; sampling
-# the mean and SD with self-assigned spreads, and truncating the
-# discretisation by hand rather than from the source distribution, are
-# limitations flagged in issue
-# [#224](https://github.com/epiforecasts/BVDOutbreakSize/issues/224).
+# The Gamma is discretised through the same double-interval-censoring route
+# as every delay, described with the first epidemiological process model
+# below, and the lag-0 bin is dropped and the remainder renormalised so the
+# generation interval starts at one day and an infectee is infected strictly
+# after its infector. The source reports a serial interval for a different
+# Ebola outbreak, so reading it as the generation time for this outbreak,
+# and the part of its uncertainty we carry through the shape and scale
+# priors, are our own assumptions.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: generation_interval_model</summary>
@@ -503,43 +523,44 @@ vintage_table #hide
 #md # </details>
 #md # ```
 
-# ##### Seeding
+# ##### Seeding and growth
 #
 # We assume the outbreak started from a single seed case introduced by a
 # zoonotic spillover. The initial infection count $I_0$ on the last day of
 # the seeding window has a prior centred on a single seed:
 #
 # ```math
-# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{6}
+# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
 # ```
 #
 # From that seed the outbreak grew deterministically through an unobserved
 # cryptic exponential phase, doubling $m$ times before sustained
-# transmission was established. The cryptic phase therefore grows the seed
-# to $2^m$ infections at the anchor, the day the renewal takes over, over a
-# duration $m\,\tau$ with $\tau$ the doubling time:
+# transmission was established. The cryptic phase grows the seed to $2^m$
+# infections at the anchor, the day the renewal takes over, over a duration
+# $m\,\tau$ with $\tau$ the doubling time. The doubling count has a wide
+# prior centred on four cryptic doublings:
 #
 # ```math
+# m \sim \mathrm{Normal}^{+}(4,\ 3), \qquad
 # \tau = \frac{\log 2}{r}, \qquad
-# T_{\text{cryptic}} = m\,\tau, \qquad
-# \text{anchor seed} = 2^m. \tag{7}
+# T_{\text{cryptic}} = m\,\tau. \tag{8}
 # ```
 #
-# The seed magnitude $2^m$ does not depend on the growth rate $r$, so $r$
-# enters only the renewal that follows. We infer $r$ from the established
-# reproduction number through the inverse Euler–Lotka relation, the same
-# derivation EpiNow2 uses, so the cryptic phase and the renewal share one
-# growth source rather than carrying separate growth rates. We place the
-# prior directly on the doubling count $m$:
+# The growth rate $r$ carries the prior the genetic source informs. The
+# genetic reanalysis reports the epidemic doubling time as 15.2 to 24.5 d
+# across substitution-rate assumptions, with a centre near 20 d. We put a
+# log-normal prior on $r$ equivalent to a log-normal prior on the doubling
+# time centred on 20 d, with its log spread read from that range and
+# inflated a little, so the prior is slightly wider in spread than the
+# source but unbiased relative to it:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(2,\ 3). \tag{8}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{20},\ 0.15\right). \tag{9}
 # ```
 #
-# We place the prior on the doubling count and derive the growth rate from
-# the reproduction number; putting the prior on the growth rate itself is
-# the cleaner formulation, flagged in issue
-# [#223](https://github.com/epiforecasts/BVDOutbreakSize/issues/223).
+# This single growth rate fills the cryptic phase and, through the forward
+# Euler–Lotka derivation above, sets the established reproduction number, so
+# the cryptic phase and the renewal share one growth source.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: seed_model</summary>
@@ -591,15 +612,18 @@ vintage_table #hide
 # \text{tmrca}_{\text{days}} \sim
 #   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
 #   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
-# \qquad \sigma = 15\ \text{d}. \tag{9}
+# \qquad \sigma = 15\ \text{d}. \tag{10}
 # ```
 #
-# The anchor sits seven days after the TMRCA day, so the observed window is
-# shorter than the TMRCA age. The bound therefore stays informative on the
-# cryptic duration, pulling the origin to sit at or before the most recent
-# common ancestor and bounding the cryptic phase from below. It is
-# one-sided, leaving the age free above the TMRCA. We fix the clock and do
-# not propagate cross-outbreak or clock uncertainty.
+# The anchor is the grid day on which the renewal recursion starts and
+# sustained transmission is treated as established. We place it 14 days after
+# the genetic TMRCA day, past the molecular-clock uncertainty, so the
+# observed window from the anchor to the cut-off is shorter than the TMRCA
+# age. The bound therefore stays informative on the cryptic duration,
+# pulling the origin to sit at or before the most recent common ancestor and
+# bounding the cryptic phase from below. It is one-sided, leaving the age
+# free above the TMRCA. We fix the clock and do not propagate cross-outbreak
+# or clock uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -617,14 +641,12 @@ vintage_table #hide
 
 # ##### Infection process
 #
-# The renewal recursion runs from the anchor to the cut-off. The anchor is
-# the grid day seven days after the genetic TMRCA, past the clock
-# uncertainty, where sustained transmission is treated as established; the
-# observed window is the span from the anchor to the cut-off:
+# The renewal recursion runs from the anchor to the cut-off, with the
+# observed window the span between them:
 #
 # ```math
-# \text{anchor} = n - \text{tmrca}_{\text{days}} + 7, \qquad
-# \tau_{\text{obs}} = n - \text{anchor}. \tag{10}
+# \text{anchor} = n - \text{tmrca}_{\text{days}} + 14, \qquad
+# \tau_{\text{obs}} = n - \text{anchor}. \tag{11}
 # ```
 #
 # The pre-anchor grid days are filled by the cryptic exponential curve at
@@ -635,13 +657,14 @@ vintage_table #hide
 # the cryptic duration plus the observed window:
 #
 # ```math
-# T = m\,\tau + \tau_{\text{obs}}. \tag{11}
+# T = m\,\tau + \tau_{\text{obs}}. \tag{12}
 # ```
 #
-# Cumulative infections are the running sum of the daily series. The cut-off
-# cumulative $C_T$ is the headline outbreak size, the current growth rate is
-# the day-over-day log-ratio of infections at the cut-off, and the doubling
-# time is $\log 2$ divided by that rate.
+# Cumulative infections are the running sum of the daily infection series.
+# The cumulative infection count at the cut-off is the headline outbreak
+# size. The current growth rate is the day-over-day log-ratio of infections
+# at the cut-off, and the current doubling time is $\log 2$ divided by that
+# rate.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -657,7 +680,16 @@ vintage_table #hide
 #md # </details>
 #md # ```
 
-# #### Onset incidence
+# #### Epidemiological process models
+#
+# We model each observed stream as a delayed and thinned view of the daily
+# onset incidence. This section gives the delays that map infections to
+# onsets and onsets to each observed endpoint, and the case-fatality ratio
+# that maps onsets to deaths. The incubation period comes first, then the
+# onset-to-report, onset-to-death, onset-to-hospitalisation and
+# onset-to-confirmation delays, then the case-fatality ratio.
+#
+# ##### Incubation period
 #
 # Infections are convolved with the incubation-period PMF to give daily
 # symptom-onset incidence, computed once and consumed by every downstream
@@ -666,17 +698,29 @@ vintage_table #hide
 # estimate from the 2007 Uganda outbreak (mean 6.3 d, 95% CI 5.2-7.3,
 # $n = 24$; [macneil2010](@cite)). The mean prior reproduces that 95% CI;
 # the source reports no interval on the spread, so the SD prior is our own
-# weakly-informative choice:
+# choice:
 #
 # ```math
 # \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{12}
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{13}
 # ```
 #
-# The incubation period uses the same censored discretisation as every
-# delay. Onsets map to each observed endpoint through a stream-specific
-# onset-to-event delay, defined with the epidemiological process models
-# below.
+# The incubation period, and every onset-to-event delay below, is sampled by
+# its mean and SD, moment-matched to a LogNormal, and discretised to a daily
+# PMF over lags $0,\dots,n_{\max}$ by double interval censoring
+# [charniga2024](@cite). The generation interval above is the one exception,
+# a Gamma discretised through the same censoring route. The LogNormal and
+# Gamma CDFs both differentiate cleanly under the reverse-mode automatic
+# differentiation, so this is the discretisation route for every delay:
+#
+# ```math
+# f_s = F(s + 1) - F(s), \qquad
+# F = \text{the delay CDF}. \tag{14}
+# ```
+#
+# The incubation period also enters the infection-to-detection and
+# infection-to-death delays for the export streams, where the survival clock
+# runs from infection rather than onset.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_incidence_model</summary>
@@ -691,25 +735,6 @@ vintage_table #hide
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-# #### Epidemiological process models
-#
-# Onsets map to each observed endpoint through a stream-specific delay, and
-# deaths additionally through the case-fatality ratio. Every delay is sampled
-# by its mean and SD, moment-matched to a LogNormal, and discretised to a
-# daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring
-# [charniga2024](@cite). The LogNormal CDF differentiates cleanly under the
-# reverse-mode automatic differentiation, so this is the discretisation route
-# for every delay in the convolutions:
-#
-# ```math
-# f_s = F(s + 1) - F(s), \qquad
-# F = \text{LogNormal CDF moment-matched to } (\mu, \sigma). \tag{13}
-# ```
-#
-# Whether the censored discretisation is built with CensoredDistributions in
-# every case should be confirmed; this is a verification item only and does
-# not change behaviour here.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: censored_delay_model</summary>
@@ -727,21 +752,16 @@ vintage_table #hide
 #md # </details>
 #md # ```
 
-# ##### Incubation period
-#
-# The incubation period is the infection-to-onset delay defined with the
-# onset incidence above (mean 6.3 d; [macneil2010](@cite)). It enters the
-# infection-to-detection and infection-to-death delays for the export
-# streams, where the survival clock runs from infection.
-#
 # ##### Onset-to-report delay
 #
-# The delay from symptom onset to a suspected case being reported, centred
-# on Ebola surveillance reporting delays:
+# The delay from symptom onset to a suspected case being reported. No data
+# from this outbreak dates onsets, so the prior is centred on a short
+# notification delay consistent with Ebola surveillance reporting (mean 4.5
+# d, SD 3.6 d), with spreads we assign ourselves:
 #
 # ```math
 # \mu_{\text{rep}} \sim \mathrm{Normal}^{+}(4.5,\ 1.5), \qquad
-# \sigma_{\text{rep}} \sim \mathrm{Normal}^{+}(3.6,\ 1.2). \tag{14}
+# \sigma_{\text{rep}} \sim \mathrm{Normal}^{+}(3.6,\ 1.2). \tag{15}
 # ```
 #
 # This delay drives the suspected-case, laboratory and confirmed-death
@@ -749,34 +769,32 @@ vintage_table #hide
 #
 # ##### Onset-to-death delay
 #
-# The McCabe et al. report uses the point estimate of
-# [rosello2015](@cite). We instead anchor the onset-to-death delay on the
-# companion Bayesian reanalysis of the same Isiro 2012 BDBV line list
-# [bdbv_linelist_analysis_2026](@cite), which re-estimates the delay with
-# uncertainty (posterior mean 11.2 d, SD 5.4 d). The mean and SD priors are
-# centred on those values:
+# McCabe et al. take the onset-to-death delay from the Isiro 2012 point
+# estimate of [rosello2015](@cite), fitting a $t$-distributed delay. We
+# instead anchor it on the companion Bayesian reanalysis of the same Isiro
+# 2012 BDBV line list [bdbv_linelist_analysis_2026](@cite), which
+# re-estimates the delay with uncertainty as a Gamma (posterior mean 11.2 d,
+# SD 5.4 d). The mean and SD priors are centred on those values, carrying the
+# uncertainty the reanalysis reports:
 #
 # ```math
 # \mu_d \sim \mathrm{Normal}^{+}(11.2,\ 2.0), \qquad
-# \sigma_d \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{15}
+# \sigma_d \sim \mathrm{Normal}^{+}(5.4,\ 1.5). \tag{16}
 # ```
 #
-# The reanalysis reports a Gamma shape and scale with uncertainty; sampling
-# the mean and SD with self-assigned spreads rather than carrying the source
-# shape, scale and uncertainty is flagged in issue
-# [#224](https://github.com/epiforecasts/BVDOutbreakSize/issues/224). The
-# source is shown with the deaths submodel below, where the delay is
+# The source is shown with the deaths submodel below, where the delay is
 # injected.
 #
-# ##### Onset-to-detection delay
+# ##### Onset-to-hospitalisation delay
 #
-# The delay from symptom onset to detection at a point of entry abroad,
+# The delay from symptom onset to hospitalisation, used in the export model
+# as the onset-to-detection delay at a point of entry abroad. The prior is
 # centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d, SD 4.7 d;
-# WHO Ebola Response Team 2014, NEJM):
+# WHO Ebola Response Team 2014), with spreads we assign ourselves:
 #
 # ```math
 # \mu_{\text{det}} \sim \mathrm{Normal}^{+}(5.0,\ 2.0), \qquad
-# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{16}
+# \sigma_{\text{det}} \sim \mathrm{Normal}^{+}(4.7,\ 1.5). \tag{17}
 # ```
 #
 # It drives the exports streams; its source is shown with the exports
@@ -786,12 +804,12 @@ vintage_table #hide
 #
 # The delay from a suspected case being reported to its specimen being
 # received by the laboratory, centred on a short turnaround with a heavy
-# right tail allowing for specimen shipment to a confirmatory laboratory.
-# No per-sample outbreak data anchors this, so the prior is our own choice:
+# right tail allowing for specimen shipment to a confirmatory laboratory. No
+# per-sample outbreak data anchors this, so the prior is our own choice:
 #
 # ```math
 # \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 2.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 1.5). \tag{17}
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 1.5). \tag{18}
 # ```
 #
 # It drives the laboratory received-specimen stream; its source is shown
@@ -810,7 +828,7 @@ vintage_table #hide
 # prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{18}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{19}
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$. The mean
@@ -848,10 +866,12 @@ cfr_prior_fig #hide
 #
 # ##### Shared observation submodels
 #
-# Several priors are shared across streams. The surveillance dispersion ties
-# the count likelihoods together; the ascertainment fractions scale the DRC
-# and Uganda streams; the laboratory priors govern the confirmation pipeline;
-# and the traveller volume sets the export travel rate.
+# Several parameters are assumed shared across the streams: the surveillance
+# dispersion, the ascertainment fractions, the laboratory testing priors and
+# the traveller volume. We assume the passive-surveillance count datasets are
+# overdispersed and share a common dispersion, and that the laboratory
+# testing priors are shared between the suspected-case and laboratory
+# streams. More detail is given in the subsections below.
 #
 # ###### Surveillance dispersion
 #
@@ -862,7 +882,7 @@ cfr_prior_fig #hide
 # scale:
 #
 # ```math
-# 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0.6,\ 0.2). \tag{19}
+# 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0.6,\ 0.2). \tag{20}
 # ```
 
 #md # ```@raw html
@@ -884,29 +904,26 @@ cfr_prior_fig #hide
 # Two surveillance systems detect cases: DRC passive community
 # surveillance (the reported suspected-case count) and Uganda's
 # point-of-entry / hospital surveillance (the exported-case count). Each
-# captures a fraction of the true cases passing through it, and each
-# fraction is informed by essentially a single aggregate data point. The
-# two ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$
-# share a logit-scale hyperprior with mean $\mu$ and pooling strength
-# $\tau$, centred on a reporting fraction of $75\%$, reflecting the active
-# case-finding of a declared Ebola response rather than baseline passive
-# surveillance:
+# captures a fraction of the true cases passing through it. The two
+# ascertainment fractions $p_{\text{DRC}}$ and $p_{\text{Uganda}}$ share a
+# logit-scale hyperprior with mean $\mu$ and pooling strength $\tau$, centred
+# on a reporting fraction of $75\%$, reflecting the active case-finding of a
+# declared Ebola response rather than baseline passive surveillance:
 #
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{20}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{21}
 # ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{21}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{22}
 # ```
 #
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
-# likelihoods use $p_{\text{Uganda}}$. An independent alternative drops
-# the shared hyperprior and gives each system its own fraction.
+# likelihoods use $p_{\text{Uganda}}$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_ascertainment_model</summary>
@@ -924,37 +941,37 @@ cfr_prior_fig #hide
 
 # ###### Laboratory priors
 #
-# We model the process of confirming cases explicitly. The testing fraction
+# We model the process of confirming cases. The testing fraction
 # $\tau_{\text{test}}$ is the share of suspected cases routed to the
 # laboratory. A truly BVD specimen tests positive with the assay sensitivity
 # $s$, and a non-BVD specimen tests positive with the small false-positive
-# rate $1 - \mathrm{spec}$ set by the assay specificity. The severity
-# enrichment $\delta_0$ raises the tested BVD share above the suspect-pool
-# composition early on (we assume the laboratory is biased towards testing
-# cases thought more likely to be Ebola), and decays as testing broadens. The
-# confirmed-death enrichment $m_{\text{death}}$ scales the death-confirmation
-# odds relative to the case composition. The sensitivity prior sits just below
-# the field whole-blood clinical sensitivity reported for the GeneXpert Ebola
-# assay; the specificity is high but imperfect; the severity enrichment is
-# moderate and one-sided (triage upsamples BVD, never down); the
-# confirmed-death enrichment is centred on no enrichment:
+# rate $1 - \mathrm{spec}$ set by the assay specificity. We assume more
+# severe, more-likely-Ebola cases are preferentially tested, via an
+# enrichment factor $\delta_0$ that raises the tested BVD share above the
+# suspect-pool composition early on and relaxes towards it as testing
+# broadens. The confirmed-death enrichment $m_{\text{death}}$ scales the
+# death-confirmation odds relative to the case composition. Confirmation runs
+# on the altona RealStar Filovirus Screen RT-PCR, which detects Bundibugyo
+# virus at low copy number, whereas the rapid GeneXpert Ebola assay is
+# Zaire-specific and does not reliably detect it; the sensitivity prior keeps
+# good analytical sensitivity plausible while carrying downside mass for
+# early low-viral-load specimens. The specificity is high but imperfect; the
+# severity enrichment is moderate and one-sided (triage upsamples BVD,
+# never down); the confirmed-death enrichment is centred on no enrichment:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# s \sim \mathrm{Beta}(30,\ 2), \qquad
+# s \sim \mathrm{Beta}(6,\ 2), \qquad
 # \mathrm{spec} \sim \mathrm{Beta}(60,\ 2),
 # ```
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{22}
+# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{23}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
-# stream and is described with it below. How the per-window confirmation
-# probability ties to the suspect-pool composition, rather than being a free
-# random effect, is set out with the laboratory submodel below, after the
-# composition is defined.
+# stream and is described with it below.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>
@@ -1054,7 +1071,7 @@ cfr_prior_fig #hide
 # population is kept fixed (census):
 #
 # ```math
-# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{23}
+# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{24}
 # ```
 
 #md # ```@raw html
@@ -1076,20 +1093,26 @@ cfr_prior_fig #hide
 # Reported suspected cases are the sum of two parts. The first is a
 # BVD-driven component: the daily onsets convolved with the onset-to-report
 # delay $f_{\text{rep}}$ and scaled by the DRC ascertainment
-# $p_{\text{DRC}}$. We write the BVD onset-to-report series at unit
-# ascertainment as $\text{bvdrep} = \mathrm{conv}(\text{onsets},
-# f_{\text{rep}})$, where $\mathrm{conv}$ denotes discrete convolution of a
-# daily series with a delay PMF. The second is an additive non-BVD
-# background accruing at $\lambda_{\text{bg}}$ per day, so a suspected case
-# need not be a true BVD infection. We assume this background is a small
-# minority of suspected reports, so the prior on $\lambda_{\text{bg}}$ is an
-# informative half-normal $\mathrm{Normal}^{+}(0, 1)$ per day. The
-# between-vintage increments are scored with a NegBinomial sharing $k$:
+# $p_{\text{DRC}}$. The convolution of a daily series $x$ with a delay PMF
+# $f$ is the lagged sum $(x * f)_t = \sum_{s \ge 0} x_{t-s}\, f_s$, used for
+# every delay below. We write the BVD onset-to-report series at unit
+# ascertainment as $\text{bvd}_t = \sum_{s \ge 0} \text{onsets}_{t-s}\,
+# f_{\text{rep},s}$. The second part is an additive non-BVD background
+# accruing at $\lambda_{\text{bg}}$ per day, so a suspected case need not be a
+# true BVD infection. We assume this background is a small minority of
+# suspected reports, so the prior on $\lambda_{\text{bg}}$ is an informative
+# half-normal $\mathrm{Normal}^{+}(0, 1)$ per day. The daily expected
+# suspected cases and the per-vintage increments scored with a NegBinomial
+# sharing $k$ are
 #
 # ```math
-# Y_{\text{cases}} \sim \mathrm{NegBinomial}\!\bigl(p_{\text{DRC}}\,
-#     \text{bvdrep} + \lambda_{\text{bg}}\, n,\ k\bigr). \tag{24}
+# c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg}}, \qquad
+# \sum_{t = d_{i-1}+1}^{d_i} c_t = Y_{\text{cases},i} - Y_{\text{cases},i-1}
+# \sim \mathrm{NegBinomial}, \tag{25}
 # ```
+#
+# with the NegBinomial mean the increment $\sum_{t} c_t$ over the days
+# between consecutive vintage dates $d_{i-1}$ and $d_i$ and dispersion $k$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -1110,20 +1133,19 @@ cfr_prior_fig #hide
 # ##### Suspected deaths
 #
 # Suspected deaths are the CFR-weighted convolution of the daily onsets with
-# the onset-to-death PMF $f_d$, modelled on the incidence scale. The
-# between-vintage increments are scored at each sitrep date with a NegBinomial
-# sharing $k$. The death history ends at the cut-off, so the cut-off total is
-# the final increment and is not scored separately. Writing the daily death
-# series as $\mathrm{CFR}\,\mathrm{conv}(\text{onsets}, f_d)$, the increment
-# at vintage $i$ is
+# the onset-to-death PMF $f_d$, modelled on the incidence scale. The death
+# history ends at the cut-off, so the cut-off total is the final increment
+# and is not scored separately. The daily death series and the per-vintage
+# increments scored with a NegBinomial sharing $k$ are
 #
 # ```math
-# Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim
-#     \mathrm{NegBinomial}(\mu_i - \mu_{i-1},\ k),
-#     \qquad \mu_0 = 0, \tag{25}
+# m_t = \mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{d,s}, \qquad
+# \sum_{t = d_{i-1}+1}^{d_i} m_t = Y_{\text{deaths},i} -
+#     Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}, \tag{26}
 # ```
 #
-# with $\mu_i$ the modelled daily death series cumulated to sitrep day $d_i$.
+# with the NegBinomial mean the death increment $\sum_t m_t$ over the days
+# between consecutive sitrep dates and dispersion $k$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: deaths_model</summary>
@@ -1144,46 +1166,54 @@ cfr_prior_fig #hide
 # ##### Laboratory pipeline
 #
 # The laboratory pipeline fits two streams. The received-specimen volume is
-# the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvdrep}$ plus the
+# the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the
 # non-BVD background $\lambda_{\text{bg}}$) carried through the receipt delay
-# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$,
-# scored per vintage with the shared $k$:
+# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$.
+# The daily modelled laboratory volume and the per-vintage increments scored
+# with a NegBinomial sharing $k$ are
 #
 # ```math
-# Y_{\text{received}} \sim \mathrm{NegBinomial}\!\bigl(\tau_{\text{test}}\,
-#     \mathrm{conv}(p_{\text{DRC}}\,\text{bvdrep}
-#     + \lambda_{\text{bg}},\, f_{\text{rec}}),\ k\bigr). \tag{26}
+# v_t = \tau_{\text{test}} \sum_{s \ge 0}
+#     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg}}\bigr)\,
+#     f_{\text{rec},s}, \qquad
+# \sum_{t = d_{i-1}+1}^{d_i} v_t \sim \mathrm{NegBinomial}. \tag{27}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
 # Binomial of the observed specimens-analysed denominator $A_v$ with a
 # per-window tested-positive probability $p_{\text{pos},v}$. We tie that
-# probability to the composition of the tested pool rather than leave it as a
-# free random effect, so the confirmed data help identify the non-BVD
-# background. The suspect-pool composition $\varphi_v$ is the BVD share among
-# suspected reports in the window, $\varphi_v = (p_{\text{DRC}}\,\text{bvd})_v
-# / ((p_{\text{DRC}}\,\text{bvd})_v + \lambda_{\text{bg},v})$, which falls as
-# the background grows. The tested BVD share $q_v$ raises $\varphi_v$ by the
-# decaying severity enrichment $\delta_0$. A truly BVD specimen then tests
-# positive with the sensitivity $s$, and a non-BVD specimen with the
-# false-positive rate $1 - \mathrm{spec}$, so the false-positive term carries
-# the non-BVD share and the laboratory data identify the background:
+# probability to the composition of the tested pool, so the confirmed data
+# help identify the non-BVD background. The suspect-pool composition
+# $\varphi_v$ is the BVD share among suspected reports in the window,
+# $\varphi_v = (p_{\text{DRC}}\,\text{bvd})_v / ((p_{\text{DRC}}\,
+# \text{bvd})_v + \lambda_{\text{bg},v})$. The tested BVD share $q_v$ raises
+# $\varphi_v$ by the decaying severity enrichment $\delta_0$. A truly BVD
+# specimen then tests positive with the sensitivity $s$, and a non-BVD
+# specimen with the false-positive rate $1 - \mathrm{spec}$, so the
+# false-positive term carries the non-BVD share and the laboratory data
+# identify the background:
 #
 # ```math
+# q_v = \mathrm{logistic}\!\bigl(\mathrm{logit}(\varphi_v) +
+#     \delta_0\, e^{-c_v / \text{decay}}\bigr), \qquad
 # p_{\text{pos},v} = s\, q_v + (1 - \mathrm{spec})(1 - q_v),
-# \qquad
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}). \tag{27}
 # ```
 #
-# The early confirmed vintages (18-23 May) have no per-vintage analysed
-# denominator, so they are scored as NegBinomial counts against the modelled
-# laboratory volume $V_v$ (the modelled received-specimen volume binned to
-# the window) with the same composition-linked positivity, extending the use
-# of the confirmed data to where no laboratory denominator is observed:
+# ```math
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{28}
+# ```
+#
+# with $c_v$ the cumulative modelled laboratory volume at window $v$, the
+# clock on which the enrichment decays. The confirmed vintages before the
+# first and after the last laboratory date carry no observed analysed
+# denominator. They are scored as NegBinomial counts against the modelled
+# laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the
+# window, with the same composition-linked positivity, so all the confirmed
+# data is used where no laboratory denominator is observed:
 #
 # ```math
-# C_v^{\text{early}} \sim \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k).
-# \tag{28}
+# C_v^{\text{no-denom}} \sim
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{29}
 # ```
 
 #md # ```@raw html
@@ -1218,27 +1248,29 @@ cfr_prior_fig #hide
 
 # ##### Confirmed deaths
 #
-# We currently model confirmed deaths as a thinning of the modelled
-# suspected deaths, not as a cases-like laboratory process. The confirmation
-# probability is the suspected-case BVD composition $q_{\text{susp}} =
-# p_{\text{DRC}}\,\text{bvd} / (p_{\text{DRC}}\,\text{bvd} +
-# \lambda_{\text{bg}})$ enriched on the odds scale by $m_{\text{death}}$, so
-# it stays in $(0, 1)$ without a hard clamp and a confirmed-death observation
-# informs the background and ascertainment. The between-vintage increments
-# are scored with a NegBinomial sharing $k$:
+# Confirmed deaths are a thinning of the modelled suspected deaths by a
+# confirmation probability. We enrich on the odds scale by $m_{\text{death}}$
+# because a suspected death may be more or less likely to be
+# laboratory-confirmed than a living suspected case: deaths can be
+# under-swabbed, as post-mortem confirmation is rarer, or preferentially
+# confirmed. The confirmation probability is the suspected-case BVD
+# composition $q_{\text{susp}} = p_{\text{DRC}}\,\text{bvd} /
+# (p_{\text{DRC}}\,\text{bvd} + \lambda_{\text{bg}})$ enriched on the odds
+# scale by $m_{\text{death}}$, which keeps it in $(0, 1)$ without a hard clamp
+# and ties the death-confirmation rate to the same composition that drives
+# the case streams, so a confirmed-death observation informs the background
+# and ascertainment. The daily confirmed-death series and the per-vintage
+# increments scored with a NegBinomial sharing $k$ are
 #
 # ```math
-# p_{\text{conf-death}} =
-#     \operatorname{logistic}(\operatorname{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}}). \tag{29}
+# p_{\text{cd}} =
+#     \mathrm{logistic}\!\bigl(\mathrm{logit}(q_{\text{susp}})
+#     + \log m_{\text{death}}\bigr), \qquad
+# \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t \sim
+#     \mathrm{NegBinomial}, \tag{30}
 # ```
 #
-# A cases-like laboratory process for confirmed deaths (with windows that
-# carry no testing data) would be the cleaner treatment; that is flagged in
-# issue
-# [#225](https://github.com/epiforecasts/BVDOutbreakSize/issues/225). The
-# thinning ties confirmed deaths to the modelled suspected-death trajectory,
-# so it may only cover deaths up to where suspected deaths exist.
+# with $m_t$ the daily modelled suspected-death series.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: confirmed_deaths_model</summary>
@@ -1260,31 +1292,36 @@ cfr_prior_fig #hide
 #
 # The exports stream is travel-gated, so the at-risk clock runs from
 # infection. An infected person travels to Uganda at the daily per-capita
-# travel rate and stays at risk of being exported and detected only until the
-# infection-to-detection delay has elapsed. The daily at-risk export
-# person-time scales the Uganda ascertainment and the travel rate by the
-# infections that have not yet completed that delay, and accumulates into the
-# cumulative export intensity $\Lambda(t)$. The infection-to-detection delay
-# is the onset-to-detection delay convolved with the incubation period, so
-# the survival clock runs from infection:
+# travel rate $q = N_{\text{travel}} / N_{\text{source}}$ and stays at risk
+# of being exported and detected only until the infection-to-detection delay
+# has elapsed. The daily at-risk export prevalence is the infections still
+# infected and not yet detected, scaled by the Uganda ascertainment and the
+# travel rate. The infection-to-detection delay is the onset-to-detection
+# delay convolved with the incubation period, so the survival clock runs from
+# infection. With $C_t = \sum_{u \le t} I_u$ the cumulative infections and
+# $\text{det}_t = \sum_{s \ge 0} I_{t-s}\, (f_{\text{inc}} * f_{\text{det}})_s$
+# the infections that have completed the delay, the daily export intensity and
+# its running sum are
 #
 # ```math
-# \text{detected} = \mathrm{conv}(\text{infections},\,
-#     \mathrm{conv}(f_{\text{inc}}, f_{\text{det}})). \tag{30}
+# \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{31}
 # ```
 #
-# Each observed Uganda import is fitted at its reported detection date. An
-# import detected on a given day is scored as a Poisson of the rise in
-# cumulative export intensity between consecutive detection dates, with a term
-# before the earliest detection observed at zero, since no export is expected
-# then. We model zero reports after the last detection date, assuming travel
-# across the border beyond this was inconsistent with our assumed travel
-# rates:
+# We model outbound travel only, not return, so this term would overestimate
+# the infections on its own. Each observed Uganda import is fitted at its
+# reported detection date. An import detected on a given day is scored as a
+# Poisson of the rise in cumulative export intensity between consecutive
+# detection dates, with a term before the earliest detection $d_1$ observed
+# at zero, since no export is expected then. We model zero reports after the
+# last detection date, assuming travel across the border beyond this was
+# inconsistent with our assumed travel rates:
 #
 # ```math
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
-# \qquad \Lambda(d_0) = \Lambda(d_1 - 1). \tag{31}
+# \qquad
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{32}
 # ```
 
 #md # ```@raw html
@@ -1305,19 +1342,27 @@ cfr_prior_fig #hide
 # ##### Deaths among exports
 #
 # The expected deaths among detected exports weight the same daily at-risk
-# export person-time by the infection-to-death delay (the onset-to-death PMF
-# convolved with the incubation period) and scale by the CFR. Each dated
-# Uganda export death is scored at its reported date with a per-day Poisson,
-# the same dated-event likelihood the exports use:
+# export prevalence $\lambda_t$ by the infection-to-death delay (the
+# onset-to-death PMF convolved with the incubation period) and scale by the
+# CFR. The daily export-death intensity and its running sum are
+#
+# ```math
+# \mu_t = \mathrm{CFR} \sum_{s \ge 0} \lambda_{t-s}\,
+#     (f_{\text{inc}} * f_d)_s, \qquad
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{33}
+# ```
+#
+# Each dated Uganda export death is scored at its reported date with a
+# per-day Poisson, the same dated-event likelihood the exports use, with a
+# zero term before the first death day $\delta_1$:
 #
 # ```math
 # Y_{\text{exp-deaths},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
-#     - \Lambda_d(\delta_{i-1})\bigr), \tag{32}
+#     - \Lambda_d(\delta_{i-1})\bigr),
+# \qquad
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{34}
 # ```
-#
-# with $\Lambda_d$ the cumulative export-death intensity. We assume the
-# observation follows a Poisson.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: exports_deaths_model</summary>
@@ -1349,8 +1394,8 @@ cfr_prior_fig #hide
 # count-based stream (exported cases, suspected deaths, suspected cases,
 # laboratory-confirmed cases, confirmed deaths and deaths among exports), so
 # each stream's posterior over the outbreak size can be compared with the
-# joint. The frozen and predictive variants reuse the same structure with the
-# data cut to an earlier date or the counts dropped.
+# joint. Other model variants reuse these models with different amounts of
+# data, cutting the data to an earlier date or dropping the counts.
 
 #md # ```@raw html
 #md # <details><summary>Composer: exports-only fit</summary>
