@@ -100,19 +100,17 @@ const M_PRIOR_DOUBLING_DAYS = 20.0
 
 Centre of the wide doubling-count prior in
 [`exponential_growth_model`](@ref).
-The doubling count `m` now counts ONLY the CRYPTIC-phase doublings (origin →
-anchor): the cryptic duration is `m·τ` and the total outbreak age is
-`T = m·τ + τ_obs`, with `τ_obs = n − anchor` the observed window. With the
-molecular-clock doubling `τ ≈ 20 d` (from the sampled growth rate `r`) and
-the anchor a 14-day lead after the genetic TMRCA (`τ_obs ≈ 56 d`), a centre
-of 4 places the cryptic duration at `m·τ ≈ 80 d`, so the prior outbreak age
-`T ≈ 136 d` lands in the upper genetically-plausible span (origin roughly
-Feb–Mar). The SD-3 spread keeps `T` wide and prior-dominated; the genetic
-seeding bound pulls the lower tail to sit at or before the MRCA. The longer
-14-day anchor lead (past the TMRCA's own uncertainty) shortens `τ_obs`, so
-the centre rises to 4 to keep the cryptic duration matched to the lead.
+The doubling count `m` counts ONLY the cryptic-phase doublings (the origin to
+the renewal-process start): the cryptic duration is `m·τ` and the total
+outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. A centre
+of 3 places the prior cryptic phase at `m·τ ≈ 60 d` at the central 20-day
+doubling and a prior seed of `2^m = 8` infections at the renewal start. The
+seed magnitude only sets the prior scale: the realised outbreak size is
+data-driven through the renewal `R_t`, so `m` is weakly identified and stays
+prior-dominated under the wide SD. The genetic seeding bound pulls the lower
+tail of the outbreak age to sit at or before the most recent common ancestor.
 """
-const M_PRIOR_BASE = 4.0
+const M_PRIOR_BASE = 3.0
 
 """
     SEEDING_ANCHOR_LEAD
