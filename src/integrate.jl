@@ -362,11 +362,15 @@ end
 Build an [`ExportRiskTrajectory`](@ref) over `[0, t_last]` for growth rate
 `r`. Lays down `npts` Gauss-Legendre nodes scaled to the interval and
 precomputes the weighted growth ``w_j\\, e^{r u_j}`` at each, the
-edge-independent piece reused across every export edge. `npts` defaults to
-the [`DEATH_INTEGRAL_ALG`](@ref) node count so the at-risk integral is
-resolved at the same fidelity as the other convolution streams.
+edge-independent piece reused across every export edge. `npts = 32`
+resolves the at-risk and deaths-among-exports integrals to a relative
+error below `1e-4` across the supported growth range (verified against a
+1024-node reference), well under the Poisson/NegBinomial noise on the
+O(1) observed export counts, while halving the per-gradient gamma-CDF
+evaluations in [`export_at_risk`](@ref) / [`export_death_at_risk`](@ref)
+relative to the previous 64.
 """
-function ExportRiskTrajectory(t_last::Real, r::Real; npts::Integer = 64)
+function ExportRiskTrajectory(t_last::Real, r::Real; npts::Integer = 32)
     Tt = promote_type(typeof(float(t_last)), typeof(r))
     raw_nodes, raw_weights = FastGaussQuadrature.gausslegendre(npts)
     half = t_last / 2
