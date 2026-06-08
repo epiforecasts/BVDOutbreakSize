@@ -1897,7 +1897,7 @@ start_date_fig #hide
 #md # ```
 
 infection_summary = summary_table(chn_joint,
-    [:r, :r0, :doubling_time, :T, :R_T, :CFR, :C_T]; digits = 2);
+    [:r, :doubling_time, :T, :R_T, :CFR, :C_T]; digits = 2);
 
 #md # ```@raw html
 #md # </details>
@@ -1910,7 +1910,8 @@ infection_summary #hide
 #md # ```
 
 infection_pair_fig = plot_pair(chn_joint,
-    [:R_T, :r, :T, :CFR];
+    [:R_T, :r, :T, :CFR,
+        Symbol("rt_state.sigma_rw"), Symbol("rt_state.intervention_effect")];
     prior = prior_chn);
 
 #md # ```@raw html
@@ -2101,8 +2102,9 @@ surveillance_pair_fig #hide
 # The export-stream parameters: the daily outbound traveller volume that
 # sets the cross-border travel rate, and the implied expected exported cases
 # by the cut-off.
-# The table reports their credible intervals; the pair plot beside it shows
-# their joint posterior with the prior overlaid.
+# The table reports their credible intervals.
+# We do not show a pair plot here because these parameters return their
+# priors.
 
 #md # ```@raw html
 #md # <details><summary>Export-parameter summary table</summary>
@@ -2117,20 +2119,6 @@ export_summary = summary_table(chn_joint,
 #md # ```
 
 export_summary #hide
-
-#md # ```@raw html
-#md # <details><summary>Export-parameter pair plot (prior overlaid)</summary>
-#md # ```
-
-export_pair_fig = plot_pair(chn_joint,
-    [Symbol("exports_state.travel_state.daily_travellers"), :expected_exports_T];
-    prior = prior_chn);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-export_pair_fig #hide
 
 # ### Posterior predictive checks
 #

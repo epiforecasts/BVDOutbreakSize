@@ -769,9 +769,15 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     epoch = date2epochdays(seeding)
     x = [epoch + (d - 1) for d in 1:n]
     xe = x[est]
+    ## Cap the y-axis a little above the upper 90% credible band so a handful
+    ## of high sampled trajectories do not stretch the scale; the thin
+    ## trajectories above the cap are simply clipped.
+    ytop = isempty(est) ? 6.0 :
+           1.2 * maximum(Float64[hi90[d] for d in est])
     fig = Figure(; size = (900, 440))
     ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
         title = "Estimated Rt over the established outbreak",
+        limits = (nothing, (0.0, ytop)),
         xticklabelrotation = pi / 6)
     ## Thin sampled trajectories over the estimated window, faint, so the
     ## per-draw spread reads alongside the ribbons.
