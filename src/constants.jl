@@ -6,7 +6,9 @@
 
 Published point estimates of cumulative cases `C_T` from McCabe et
 al. (Imperial College London, 20 May 2026 update), as `(label, value)`
-tuples in the order they appear in Tables 1 and 2.
+tuples in the order they appear in Tables 1 and 2. These are the scenario
+means; the matching 95% confidence intervals are carried by
+[`REPORT_SCENARIOS_CI`](@ref).
 """
 const REPORT_SCENARIOS = [
     ("Method 1 Ituri, w=10 d", 470),
@@ -24,6 +26,54 @@ const REPORT_SCENARIOS = [
     ("Method 2 τ=21 d, CFR 26%", 730),
     ("Method 2 τ=21 d, CFR 33%", 575),
     ("Method 2 τ=21 d, CFR 40%", 474)
+]
+
+"""
+    REPORT_SCENARIOS_CI
+
+Published McCabe et al. scenario estimates WITH their reported 95%
+confidence intervals, for the two situation-report vintages: the 18 May
+2026 report [mccabe2026](@cite) and the 20 May 2026 update
+[mccabe2026update](@cite). Each entry is a
+`(date, label, mean, lower, upper)` tuple, where `date` is the report's
+own cut-off date. Method 1 (geographic spread from exported cases and
+travel volume) is unchanged between the two reports, so it is recorded
+once under the 20 May vintage. Method 2 (back-calculation from deaths)
+differs between the vintages: the 18 May report used 88 deaths and CFR
+24/30/40%, the 20 May update used 131 deaths and the corrected CFR
+26/33/40%. Confidence intervals are exact negative-binomial (Method 1)
+and Poisson likelihood-profile (Method 2), as reported in Tables 1 and 2
+of each report.
+"""
+const REPORT_SCENARIOS_CI = [
+    ## Method 1 (geographic spread): identical across both reports.
+    ("2026-05-20", "M1 Ituri, w=10 d", 470, 58, 1306),
+    ("2026-05-20", "M1 Ituri, w=15 d", 313, 39, 870),
+    ("2026-05-20", "M1 Ituri, w=20 d", 235, 29, 652),
+    ("2026-05-20", "M1 +N. Kivu, w=10 d", 617, 76, 1718),
+    ("2026-05-20", "M1 +N. Kivu, w=15 d", 412, 51, 1145),
+    ("2026-05-20", "M1 +N. Kivu, w=20 d", 309, 38, 858),
+    ## Method 2 (back-calculation from deaths), 18 May report: 88 deaths,
+    ## CFR 24/30/40%.
+    ("2026-05-18", "M2 τ=14 d, CFR 24%", 626, 503, 765),
+    ("2026-05-18", "M2 τ=14 d, CFR 30%", 501, 402, 612),
+    ("2026-05-18", "M2 τ=14 d, CFR 40%", 376, 302, 459),
+    ("2026-05-18", "M2 τ= 7 d, CFR 24%", 1008, 808, 1230),
+    ("2026-05-18", "M2 τ= 7 d, CFR 30%", 807, 649, 982),
+    ("2026-05-18", "M2 τ= 7 d, CFR 40%", 605, 485, 789),
+    ("2026-05-18", "M2 τ=21 d, CFR 24%", 531, 425, 645),
+    ("2026-05-18", "M2 τ=21 d, CFR 30%", 425, 341, 517),
+    ("2026-05-18", "M2 τ=21 d, CFR 40%", 319, 255, 387),
+    ## Method 2, 20 May update: 131 deaths, corrected CFR 26/33/40%.
+    ("2026-05-20", "M2 τ=14 d, CFR 26%", 860, 721, 1015),
+    ("2026-05-20", "M2 τ=14 d, CFR 33%", 678, 568, 800),
+    ("2026-05-20", "M2 τ=14 d, CFR 40%", 559, 469, 660),
+    ("2026-05-20", "M2 τ= 7 d, CFR 26%", 1386, 1160, 1636),
+    ("2026-05-20", "M2 τ= 7 d, CFR 33%", 1092, 914, 1289),
+    ("2026-05-20", "M2 τ= 7 d, CFR 40%", 901, 754, 1062),
+    ("2026-05-20", "M2 τ=21 d, CFR 26%", 730, 612, 862),
+    ("2026-05-20", "M2 τ=21 d, CFR 33%", 575, 482, 679),
+    ("2026-05-20", "M2 τ=21 d, CFR 40%", 474, 398, 560)
 ]
 
 """

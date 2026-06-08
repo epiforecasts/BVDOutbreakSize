@@ -1646,17 +1646,20 @@ diagnostics_table( #hide
 # To bound the deaths already committed at the cut-off, we project the
 # deaths that would still occur if all transmission stopped on the report
 # date. Every infection present by the cut-off still dies with probability
-# CFR, so the committed future deaths are $\Delta D = \mathrm{CFR}\cdot C_T -
-# \mathbb{E}[D_T]$, the CFR-weighted cumulative infections net of the deaths
-# already expected. The figure is shown in the counterfactual results
-# below.
+# CFR, so the committed future deaths are the CFR-weighted cumulative
+# infection count net of the deaths already expected,
+# $\Delta D = \mathrm{CFR}\cdot I_T - \mathbb{E}[D_T]$, where $I_T$ is the
+# cumulative infection count to the cut-off. The figure is shown in the
+# counterfactual results below.
 #
 # #### One-week-ahead forecast
 #
-# We project each DRC stream seven days beyond the cut-off as a no-change
-# forecast: the current growth rate is carried forward with no further
-# interventions and no saturation, and the projection carries both parameter
-# and observation uncertainty. We forecast the four DRC streams (suspected
+# We project each DRC stream seven days beyond the cut-off, letting the
+# reproduction number keep evolving over the horizon by continuing the
+# recent trend of its trajectory rather than holding it fixed, with no
+# further interventions and no saturation imposed.
+# The projection carries both parameter and observation uncertainty.
+# We forecast the four DRC streams (suspected
 # reported cases, suspected deaths, laboratory-confirmed cases and confirmed
 # deaths) but not exports, since cross-border travel is unlikely to continue
 # at its baseline rate, so the forward travel rate the export model relies on
@@ -1672,14 +1675,11 @@ diagnostics_table( #hide
 # against the counts observed by the current cut-off. The frozen re-fit cuts
 # the data to an earlier cut-off and re-fits the joint model, so a later
 # result can be told apart from a later method. Each frozen re-fit is a
-# reduced fit of 500 draws across two chains, illustrative rather than a
-# production result. The same frozen-refit approach underlies the
-# matched-in-time comparison with McCabe et al., who computed their scenarios
-# at fixed situation-report cut-offs: we freeze the renewal data to the same
-# cut-off and re-fit, with any remaining gap the method read at the date the
-# scenario was computed. It also underlies the estimate-evolution series,
-# where the renewal is re-fit frozen at each release date. The helper below
-# performs one frozen joint re-fit and is reused by the forecast validation,
+# reduced fit of 500 draws across two chains. The same frozen re-fit is
+# reused to compare against McCabe et al. at the cut-offs they used, and to
+# trace how the estimate moved as the situation reports accrued, re-fitting
+# the renewal model frozen at each release date. The helper below performs
+# one frozen joint re-fit and is reused by the forecast validation,
 # estimate-evolution and matched-in-time results.
 
 #md # ```@raw html
@@ -1732,6 +1732,13 @@ end
 #md # ```
 
 summary_ranges = let
+    med(x) = quantile(x, 0.5)
+    iqr(x) = quantile(x, 0.75) - quantile(x, 0.25)
+    ## Posterior-minus-prior shift in units of the parameter's prior IQR,
+    ## reusing the prior draws so nothing is respecified here.
+    shift(post, prior) = round((med(post) - med(prior)) / iqr(prior);
+        digits = 2)
+
     C = posterior_C_joint
     Td = vec(Array(chn_joint[:T]))
     r0d = vec(Array(chn_joint[:r0]))
@@ -1769,24 +1776,43 @@ summary_ranges = let
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
     ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
+    ## How far the data has moved each estimate from its prior, in prior
+    ## interquartile ranges, reusing the prior draws.
+    moves = [
+        "cumulative infection count" =>
+            shift(C, vec(Array(prior_chn[:C_T]))),
+        "outbreak age" => shift(Td, vec(Array(prior_chn[:T]))),
+        "doubling time" => shift(dt, vec(Array(prior_chn[:doubling_time])))]
+    biggest = argmax(p -> abs(p.second), moves)
+
     Markdown.parse("""
-    - **Cumulative infections:** the posterior is $(ints_i(sC))
-      infections.
+    - **Cumulative infections:** the outbreak is estimated to have caused
+      $(ints_i(sC)) infections to date, reported and unreported.
     - Against the $(obs.confirmed_cases) laboratory-confirmed cases by the
       cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
-      confirmed cases capture only a small share of the estimated outbreak.
+      confirmed cases are estimated to capture only a small share of the
+      outbreak.
     - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
       cases by the cut-off, against $(obs.confirmed_cases) observed.
-    - **Outbreak start and age:** the outbreak began on a start date of
-      $(ints_d(sT)), an elapsed age to the cut-off of $(ints_i(sT)) days.
-    - **Growth rate and doubling time:** the initial growth rate was
-      $(ints_f(sr0, 3)) per day, an initial doubling time of
-      $(ints_f(sdt0, 1)) days.
-      The latest growth rate is $(ints_f(sr, 3)) per day, a latest doubling
-      time of $(ints_f(sdt, 1)) days.
-    - **Reproduction number:** the initial reproduction number was
-      $(ints_f(sR0, 2)) and the latest is $(ints_f(sRT, 2)).
-    - **Case-fatality ratio:** the posterior is $(ints_f(scfr, 2)).
+    - **Outbreak start and age:** the outbreak is estimated to have begun on
+      a start date of $(ints_d(sT)), an elapsed age to the cut-off of
+      $(ints_i(sT)) days.
+    - **Growth rate and doubling time:** the initial growth rate is
+      estimated to have been $(ints_f(sr0, 3)) per day, an initial doubling
+      time of $(ints_f(sdt0, 1)) days.
+      The latest growth rate is estimated to be $(ints_f(sr, 3)) per day, a
+      latest doubling time of $(ints_f(sdt, 1)) days.
+    - **Reproduction number:** the initial reproduction number is estimated
+      to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
+    - **Case-fatality ratio:** the case-fatality ratio is estimated to be
+      $(ints_f(scfr, 2)).
+    - **Shift from priors:** how far the data has moved each estimate from
+      its prior, in prior interquartile ranges, where a value of one means
+      the posterior median sits one prior interquartile range from the prior
+      median, zero means unchanged, and the sign gives the direction.
+      The fit moves the cumulative infection count by $(moves[1].second),
+      the outbreak age by $(moves[2].second) and the doubling time by
+      $(moves[3].second); the largest move is in the $(biggest.first).
     """)
 end;
 
@@ -1895,12 +1921,50 @@ infection_pair_fig = plot_pair(chn_joint,
 
 infection_pair_fig #hide
 
+# The infection model carries two delays: the generation interval, the time
+# between an infector's and an infectee's onset that drives the renewal
+# recursion, and the incubation period, the time from infection to symptom
+# onset that turns infections into onsets.
+# The table reports their posterior means and standard deviations; the pair
+# plot beside it shows their joint posterior with the prior overlaid.
+
+#md # ```@raw html
+#md # <details><summary>Infection-delay summary table</summary>
+#md # ```
+
+infection_delay_summary = summary_table(chn_joint,
+    [Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
+    digits = 2);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+infection_delay_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Infection-delay pair plot (prior overlaid)</summary>
+#md # ```
+
+infection_delay_pair_fig = plot_pair(chn_joint,
+    [Symbol("gi_state.α"), Symbol("gi_state.θ"),
+        Symbol("inc_state.delay_mean"), Symbol("inc_state.delay_sd")];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+infection_delay_pair_fig #hide
+
 # ### Reproduction number over time
 #
 # The daily reproduction number over the period we estimate it for, the
 # established outbreak from the genetic bound to the cut-off.
-# The median is shown with 50% and 90% ribbons and about a hundred sampled
-# trajectories.
+# The 30%, 60% and 90% credible ribbons are shown with about a hundred
+# sampled trajectories, and the no-growth threshold at one as a grey dashed
+# line.
 # The first situation report on 18 May 2026 marks the start of the response
 # scale-up (red dashed) and the end of the three-week scale-up is the red
 # dotted line; the data cut-off is grey dashed.
@@ -1942,6 +2006,55 @@ intervention_table = streams_table(
 #md # ```
 
 intervention_table #hide
+
+# ### Observation delays
+#
+# The delays from symptom onset to each observed event: onset to a suspected
+# case being reported, onset to death, onset to hospitalisation abroad (the
+# detection delay used in the export model), and the report-to-laboratory
+# receipt delay.
+# Each is sampled by its mean and standard deviation.
+# The table reports their posteriors; the pair plot beside it shows their
+# joint posterior with the prior overlaid, so the data's contribution to
+# each marginal is visible.
+
+#md # ```@raw html
+#md # <details><summary>Observation-delay summary table</summary>
+#md # ```
+
+obs_delay_summary = summary_table(chn_joint,
+    [Symbol("cases_state.report_state.delay_mean"),
+        Symbol("cases_state.report_state.delay_sd"),
+        Symbol("deaths_state.od_state.delay_mean"),
+        Symbol("deaths_state.od_state.delay_sd"),
+        Symbol("exports_state.detect_state.delay_mean"),
+        Symbol("exports_state.detect_state.delay_sd"),
+        Symbol("confirmed_state.receipt_state.d.delay_mean"),
+        Symbol("confirmed_state.receipt_state.d.delay_sd")];
+    digits = 2);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+obs_delay_summary #hide
+
+#md # ```@raw html
+#md # <details><summary>Observation-delay pair plot (prior overlaid)</summary>
+#md # ```
+
+obs_delay_pair_fig = plot_pair(chn_joint,
+    [Symbol("cases_state.report_state.delay_mean"),
+        Symbol("deaths_state.od_state.delay_mean"),
+        Symbol("exports_state.detect_state.delay_mean"),
+        Symbol("confirmed_state.receipt_state.d.delay_mean")];
+    prior = prior_chn);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+obs_delay_pair_fig #hide
 
 # ### Surveillance parameters
 #
@@ -2271,7 +2384,7 @@ forecast_summary #hide
 # The coming week at a glance, split into the latent quantities and the
 # observations.
 # The latent figure shows the new infections, symptom onsets and deaths over
-# the horizon, with the reproduction number carried forward.
+# the horizon, with the reproduction number left to keep evolving across it.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead latent forecast plot</summary>
@@ -2409,19 +2522,21 @@ streams_C_table = streams_table(
 streams_C_table #hide
 
 # Overlaid posterior densities of the infection count from each fit.
-# The horizontal axis is set to the upper tail of the widest fit so the
-# bulk of every stream's posterior mass is visible.
+# The confirmed-cases-only stream is ill-defined on its own, so its
+# posterior runs far wider than the rest.
+# The horizontal axis is scaled to a multiple of the joint-fit 90% upper
+# bound, the estimate that constrains every stream together, so the bulk of
+# the joint and the other streams stays visible rather than being flattened
+# by the confirmed-only tail.
 
 #md # ```@raw html
 #md # <details><summary>Overlaid infection-count density plot</summary>
 #md # ```
 
-## Set the x-axis to the 95th percentile across the streams so the bulk of
-## each posterior is visible rather than clipping out the upper mass.
-density_xmax = 1.05 * maximum(
-    quantile(s, 0.95)
-for s in (posterior_C_exports, posterior_C_deaths,
-    posterior_C_cases, posterior_C_confirmed, posterior_C_joint))
+## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
+## the streams that track it read clearly while the confirmed-only tail runs
+## off the axis rather than dominating it.
+density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
 
 cumulative_density_fig = plot_cumulative_cases(
     "exports (cases)" => posterior_C_exports,
@@ -2439,8 +2554,8 @@ cumulative_density_fig #hide
 
 # The frozen re-fits below freeze the renewal data to an earlier cut-off
 # and re-fit, so a later result can be told apart from a later method.
-# Each is a reduced fit of 500 draws across two chains, illustrative rather
-# than a production result, reusing the frozen-fit helper defined above.
+# Each is a reduced fit of 500 draws across two chains, reusing the
+# frozen-fit helper defined above.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit (reduced)</summary>
@@ -2454,9 +2569,6 @@ frozen_28may = fit_frozen_joint("2026-05-28")
 frozen_C_20may = vec(Array(frozen_20may.chn[:C_T]))
 frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
 
-frozen_reports_20may = vec(Array(frozen_20may.chn[:expected_reports_T]))
-frozen_reports_23may = vec(Array(frozen_23may.chn[:expected_reports_T]))
-
 #md # ```@raw html
 #md # </details>
 #md # ```
@@ -2469,48 +2581,52 @@ frozen_reports_23may = vec(Array(frozen_23may.chn[:expected_reports_T]))
 # (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
 # the posterior draws and input data.
 # The releases to date are from the earlier closed-form integral model, so
-# the released series is the project's published estimate over time.
-# The current-model series is this renewal model re-fit frozen at each date
-# up to the present cut-off, so it is the current method evaluated at each
-# past date and rises as the outbreak grows rather than sitting flat.
-# Both climb as the suspected-case count grows.
-# The released values are read off the archived posterior draws so the
-# figure builds without refetching the releases.
-# Each estimate is a median with an alpha-shaded 90% credible band.
+# the released series is the project's published estimate over time, shown
+# in blue with 30%, 60% and 90% credible ribbons.
+# The renewal series, in red, is this renewal model re-fit frozen at each
+# release date, the current method evaluated at each past date, so it rises
+# as the outbreak grows rather than sitting flat.
+# The current-data, current-model estimate is drawn in a third colour as a
+# horizontal ribbon across the period, so the latest estimate reads against
+# the earlier ones.
+# The released intervals are recorded from each release's published summary
+# so the figure builds without refetching the releases.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and frozen renewal re-fits</summary>
 #md # ```
 
-## Released median C_T and 90% interval per data cut-off, read from each
-## release's archived `posterior_draws.csv` (one canonical build per
-## cut-off date: builds 241, 350, 470 and 586). These are the integral
-## model's published estimates; see the release page for provenance.
+## Released median and 30/60/90% intervals per data cut-off, recorded from
+## each release's published summary (one canonical build per cut-off date:
+## builds 241, 350, 470 and 586). These are the integral model's published
+## estimates; see the release page for provenance. Each tuple is
+## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
 release_evolution = [
-    ("2026-05-18", 925, 419, 2075),
-    ("2026-05-23", 1364, 680, 3137),
-    ("2026-05-26", 3041, 1961, 5172),
-    ("2026-05-28", 3510, 2196, 6325)
+    ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
+    ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
+    ("2026-05-26", 3041, 2714, 3437, 2364, 4002, 1905, 5144),
+    ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
 ]
 
 ## The current model evaluated at each past date, the renewal re-fit frozen
-## at each cut-off plus the live current-data fit, as a rising series.
-function _ci90(xs)
-    (round(Int, quantile(xs, 0.5)),
-        round(Int, quantile(xs, 0.05)), round(Int, quantile(xs, 0.95)))
+## at each cut-off, as a rising series. Each tuple carries the median and
+## 30/60/90% credible bounds.
+function _ci369(xs)
+    q(p) = round(Int, quantile(xs, p))
+    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
 end
 renewal_frozen = [
-    (string(frozen_20may.cutoff), _ci90(frozen_C_20may)...),
-    (string(frozen_23may.cutoff), _ci90(frozen_C_23may)...),
+    (string(frozen_20may.cutoff), _ci369(frozen_C_20may)...),
+    (string(frozen_23may.cutoff), _ci369(frozen_C_23may)...),
     (string(frozen_26may.cutoff),
-        _ci90(vec(Array(frozen_26may.chn[:C_T])))...),
+        _ci369(vec(Array(frozen_26may.chn[:C_T])))...),
     (string(frozen_28may.cutoff),
-        _ci90(vec(Array(frozen_28may.chn[:C_T])))...),
-    (string(obs.cutoff), _ci90(posterior_C_joint)...)
+        _ci369(vec(Array(frozen_28may.chn[:C_T])))...)
 ]
 
 evolution_fig = plot_estimate_evolution(release_evolution;
     renewal = renewal_frozen,
+    current = _ci369(posterior_C_joint),
     title = "Outbreak-size estimate as data accrued");
 
 #md # ```@raw html
@@ -2525,46 +2641,59 @@ evolution_fig #hide
 # exponential-growth model.
 # This version is a discrete-time renewal model with a time-varying
 # reproduction number and every data stream fitted jointly.
-# McCabe et al. computed their scenarios at fixed situation-report cut-offs,
-# so we match in time, freezing our data to the same cut-off and re-fitting.
-# The McCabe scenarios shown are the 20 May update [mccabe2026update](@cite).
-# They are deterministic point estimates carrying no uncertainty, so they
-# appear as bare points rather than intervals.
-# Alongside them we show our own estimates at the matched cut-offs, the
-# renewal fit frozen at 20 May and at 23 May with their 95% intervals, so
-# the comparison carries our trajectory and not only McCabe's.
-# The 20 May freeze is the earliest matched cut-off with a coherent
-# suspected-case series, since the earliest situation report is 18 May.
-#
-# The expected reported-case count moves sharply with the data.
-# At the 20 May cut-off it sits close to McCabe et al.'s scenarios and well
-# below the current-data fit.
+# McCabe et al. published their estimates as scenarios at fixed
+# situation-report cut-offs, each scenario carrying a 95% confidence
+# interval.
+# We show both their reports, the 18 May report and the 20 May update, with
+# those intervals.
+# The two reports share the same geographic-spread scenarios from exported
+# cases and travel volume, so those appear once.
+# Their back-calculation-from-deaths scenarios differ between the reports,
+# since the 18 May report used 88 reported deaths and the 20 May update 131,
+# with a corrected set of case-fatality ratios.
+# Alongside the McCabe scenarios we show our own outbreak-size estimates at
+# the matched cut-offs, the renewal fit frozen at 20 May and at 23 May, and
+# our earlier released estimates, all with their credible intervals, so the
+# comparison carries our trajectory and not only McCabe's.
 
 #md # ```@raw html
-#md # <details><summary>Matched-in-time reported-case comparison</summary>
+#md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
 #md # ```
 
-function _ci95(xs)
+function _ci90row(xs)
     (round(Int, quantile(xs, 0.5)),
-        round(Int, quantile(xs, 0.025)),
-        round(Int, quantile(xs, 0.975)))
+        round(Int, quantile(xs, 0.05)),
+        round(Int, quantile(xs, 0.95)))
 end
 
-matched_rows = vcat(
-    [(label, val, val, val) for (label, val) in REPORT_SCENARIOS],
-    [("Renewal frozen 20 May", _ci95(frozen_reports_20may)...),
-        ("Renewal frozen 23 May", _ci95(frozen_reports_23may)...)])
+## McCabe scenarios with their reported 95% confidence intervals, grouped by
+## report date, then our matched-cut-off renewal fits and earlier released
+## estimates, each as a median with a credible interval.
+mccabe_rows = [(label, mean, lo, hi)
+               for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
+mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
+                 "McCabe et al. (20 May update)"
+                 for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
 
-## Colour the rows by source so McCabe's deterministic scenarios and our own
-## renewal estimates read apart.
-matched_groups = vcat(
-    fill("McCabe et al. (20 May update)", length(REPORT_SCENARIOS)),
-    ["Our renewal estimate", "Our renewal estimate"])
+ours_rows = [("Renewal frozen 20 May", _ci90row(frozen_C_20may)...),
+    ("Renewal frozen 23 May", _ci90row(frozen_C_23may)...),
+    ("Released 18 May (integral)", 925, 438, 2234),
+    ("Released 23 May (integral)", 1364, 656, 3385),
+    ("Current data (renewal)", _ci90row(posterior_C_joint)...)]
+ours_groups = vcat(
+    fill("Our renewal estimate", 2),
+    fill("Our released estimate", 2),
+    ["Our renewal estimate"])
+
+matched_rows = vcat(mccabe_rows, ours_rows)
+matched_groups = vcat(mccabe_groups, ours_groups)
 
 matched_comparison_fig = plot_estimate_comparison(matched_rows;
-    xlabel = "Cumulative reported cases",
+    xlabel = "Cumulative cases / infections",
     groups = matched_groups,
-    group_colours = ["McCabe et al. (20 May update)" => :grey,
+    group_colours = ["McCabe et al. (18 May)" => :grey,
+        "McCabe et al. (20 May update)" => :black,
+        "Our released estimate" => :steelblue,
         "Our renewal estimate" => :firebrick]);
 
 #md # ```@raw html
@@ -2573,12 +2702,11 @@ matched_comparison_fig = plot_estimate_comparison(matched_rows;
 
 matched_comparison_fig #hide
 
-# The figure is on the reported-case scale, the ascertained quantity McCabe
-# et al. report.
-# The project's released outbreak-size estimates are on the infection scale
-# and are shown in the
-# [estimate evolution](@ref "Estimate evolution across releases") figure
-# above.
+# The McCabe scenarios are outbreak-size estimates, the same quantity our
+# renewal model and the released integral model report.
+# Their 95% confidence intervals come from exact negative-binomial counts
+# for the geographic-spread method and a Poisson likelihood profile for the
+# back-calculation from deaths.
 #
 # Side-by-side outbreak-size intervals for the two frozen fits and the
 # current-data fit, so the shift with the data cut-off reads off directly.
@@ -2600,20 +2728,22 @@ frozen_streams_table #hide
 
 # ### Delay sensitivity
 #
-# The second method dates the outbreak from how far deaths lag symptom
-# onset, so the assumed onset-to-death delay sets the implied infection
-# count.
-# We probe it by re-fitting the joint model under a shorter and a longer
-# onset-to-death delay centre either side of the baseline, holding
-# everything else fixed.
-# Each variant is a reduced fit of 500 draws across two chains,
-# illustrative rather than a production result.
+# The death stream dates the outbreak from how far deaths lag symptom onset,
+# so the assumed onset-to-death delay sets the implied infection count.
+# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
+# reanalysis (onset to admission then admission to death).
+# We re-fit the joint model under the community-pathway delay from the same
+# reanalysis, the delay for deaths that occur in the community without a
+# recorded admission, which is more dispersed.
+# Both pathways come from the line list, so this varies the actual delay
+# assumption rather than an arbitrary scenario.
+# The re-fit is reduced to 500 draws across two chains.
 #
 # The infection count to date shifts with the assumed delay, and the
 # table and overlaid densities below show how far.
 
 #md # ```@raw html
-#md # <details><summary>Re-fit the joint under shorter and longer onset-to-death delays (reduced)</summary>
+#md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay (reduced)</summary>
 #md # ```
 
 ## One reduced joint re-fit on the live data, with hooks to override the
@@ -2652,33 +2782,24 @@ function refit_joint_variant(;
     return chn
 end
 
-## Shorter and longer onset-to-death delay centres, each a closure that
-## re-injects the onset-to-death delay prior into the deaths submodel while
-## keeping its other defaults.
-deaths_short_delay = (history,
+## Community-pathway onset-to-death delay from the Isiro 2012 line-list
+## reanalysis (posterior mean ≈ 11.8 d, SD ≈ 8.5 d), a closure that
+## re-injects this delay prior into the deaths submodel while keeping its
+## other defaults.
+deaths_community_delay = (history,
     total,
     onsets,
     k;
     kwargs...) -> deaths_model(history, total, onsets, k;
     onset_to_death = censored_delay_model(40;
-        mean_prior = truncated(Normal(7.0, 2.0); lower = 1),
-        sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
-    kwargs...)
-deaths_long_delay = (history,
-    total,
-    onsets,
-    k;
-    kwargs...) -> deaths_model(history, total, onsets, k;
-    onset_to_death = censored_delay_model(40;
-        mean_prior = truncated(Normal(16.0, 2.0); lower = 1),
-        sd_prior = truncated(Normal(5.4, 1.5); lower = 1)),
+        mean_prior = truncated(Normal(11.8, 2.0); lower = 1),
+        sd_prior = truncated(Normal(8.5, 2.0); lower = 1)),
     kwargs...)
 
-chn_joint_short_delay = refit_joint_variant(deaths = deaths_short_delay)
-chn_joint_long_delay = refit_joint_variant(deaths = deaths_long_delay)
+chn_joint_community_delay = refit_joint_variant(
+    deaths = deaths_community_delay)
 
-posterior_C_short_delay = vec(Array(chn_joint_short_delay[:C_T]))
-posterior_C_long_delay = vec(Array(chn_joint_long_delay[:C_T]))
+posterior_C_community_delay = vec(Array(chn_joint_community_delay[:C_T]))
 
 #md # ```@raw html
 #md # </details>
@@ -2689,9 +2810,8 @@ posterior_C_long_delay = vec(Array(chn_joint_long_delay[:C_T]))
 #md # ```
 
 delay_sensitivity_table = streams_table(
-    "shorter delay" => posterior_C_short_delay,
-    "baseline delay" => posterior_C_joint,
-    "longer delay" => posterior_C_long_delay);
+    "baseline (hospital pathway)" => posterior_C_joint,
+    "community pathway" => posterior_C_community_delay);
 
 #md # ```@raw html
 #md # </details>
@@ -2704,9 +2824,8 @@ delay_sensitivity_table #hide
 #md # ```
 
 delay_sensitivity_fig = plot_cumulative_cases(
-    "shorter delay" => posterior_C_short_delay,
-    "baseline delay" => posterior_C_joint,
-    "longer delay" => posterior_C_long_delay;
+    "baseline (hospital pathway)" => posterior_C_joint,
+    "community pathway" => posterior_C_community_delay;
     scenarios = []);
 
 #md # ```@raw html
@@ -2720,10 +2839,13 @@ delay_sensitivity_fig #hide
 # The whole outbreak-age estimate rests on the genetic bound, the oldest
 # date the common ancestor of the sequenced cases can sit, which is set by
 # the assumed molecular clock rate.
-# The baseline uses the slower clock rate matching this analysis; the
-# sequencing source also reports a faster early-epidemic rate that dates
-# the common ancestor about two and a half weeks more recently, without
-# favouring either [virological2026](@cite).
+# The baseline uses the slower clock rate of $1.2\times10^{-3}$
+# substitutions per site per year, the rate of the 2013-2016 West African
+# Ebola epidemic, which dates the common ancestor to 25 March 2026.
+# The sequencing source also reports a faster early-epidemic rate of
+# $1.9\times10^{-3}$ substitutions per site per year, which dates the common
+# ancestor about two and a half weeks more recently, to 11 April 2026,
+# without favouring either [virological2026](@cite).
 # We re-fit the joint model under the faster clock and compare the
 # infection count to date and the outbreak age.
 # The re-fit is reduced to 500 draws across two chains.

@@ -12,7 +12,7 @@ function plot_cumulative_cases(
         streams::Pair{String, <:AbstractVector}...;
         scenarios = REPORT_SCENARIOS,
         xmax::Union{Nothing, Real} = nothing,
-        xlabel::AbstractString = "Cumulative infections C_T",
+        xlabel::AbstractString = "Cumulative infections",
         title::AbstractString = "Outbreak size estimated by each data stream")
     upper = isnothing(xmax) ?
             1.05 * maximum(quantile(s.second, 0.995) for s in streams) :
@@ -455,29 +455,35 @@ end
 Estimate-evolution plot: how the outbreak-size estimate moves as the
 data cut-off advances, drawn against the cut-off date.
 
-`released` is a vector of `(cutoff_date, central, lower, upper)` tuples,
-one per published project release, shown as blue points joined by a line
-with vertical whisker bars for their credible intervals.
+`released` is a vector of `(cutoff_date, median, lo30, hi30, lo60, hi60,
+lo90, hi90)` tuples, one per published project release, drawn in blue as a
+median line through its points with nested 30/60/90% credible-interval
+ribbons along the date axis. `renewal` is a vector of the same tuple shape,
+the current renewal model re-fit frozen at each release date, drawn in red:
+the current method evaluated at each past cut-off, so the series rises as
+the outbreak grows.
 
-`renewal` is a vector of the same tuple shape, the current renewal model
-re-fit frozen at each release date. This is the current model evaluated at
-each past cut-off, so the series rises as the outbreak grows. Both series
-are drawn as a median line through their points with an alpha-shaded
-credible-interval ribbon along the date axis.
+`current` is an optional `(median, lo30, hi30, lo60, hi60, lo90, hi90)`
+tuple for the current-data, current-model estimate, drawn as a third-colour
+horizontal ribbon spanning the whole date axis so the latest estimate reads
+across the period.
 
-`xlabel`/`ylabel`/`title` set the axis text; `released_label` and
-`renewal_label` name the two series.
+`xlabel`/`ylabel`/`title` set the axis text; `released_label`,
+`renewal_label` and `current_label` name the three series.
 """
 function plot_estimate_evolution(
         released::AbstractVector;
         renewal::AbstractVector = NamedTuple[],
+        current::Union{Nothing, Tuple} = nothing,
         xlabel::AbstractString = "Data cut-off date",
-        ylabel::AbstractString = "Cumulative infections C(T)",
+        ylabel::AbstractString = "Cumulative infections",
         title::AbstractString = "Outbreak-size estimate as data accrued",
         released_label::AbstractString =
         "Released estimates (per project release)",
         renewal_label::AbstractString =
-        "Current model re-fit frozen at each release date")
+        "Current model re-fit frozen at each release date",
+        current_label::AbstractString =
+        "Current model, current data")
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
     ## then relabel the ticks with the dates.
     rdates = [Date(String(r[1])) for r in released]
@@ -486,14 +492,9 @@ function plot_estimate_evolution(
     ref = minimum(alldates)
     _x(d) = Float64((d - ref).value)
 
-    rx = _x.(rdates)
-    rc = [float(r[2]) for r in released]
-    rlo = [float(r[3]) for r in released]
-    rhi = [float(r[4]) for r in released]
-
-    upper = maximum(rhi)
-    isempty(renewal) ||
-        (upper = max(upper, maximum(float(p[4]) for p in renewal)))
+    _hi(tuples) = isempty(tuples) ? 0.0 : maximum(float(t[8]) for t in tuples)
+    upper = max(_hi(released), _hi(renewal))
+    isnothing(current) || (upper = max(upper, float(current[7])))
 
     xlo = _x(ref) - 1
     xhi = _x(maximum(alldates)) + 1
@@ -504,16 +505,19 @@ function plot_estimate_evolution(
         xticklabelrotation = pi / 4,
         limits = ((xlo, xhi), (0, upper * 1.08)))
 
-    ## Draw one series as a median line through its points with an
-    ## alpha-shaded interval ribbon along the date axis.
+    ## One series: a median line through its points with nested 30/60/90%
+    ## credible-interval ribbons along the date axis.
     function _series!(dates, tuples, colour, marker)
         xs = _x.(dates)
         ord = sortperm(xs)
         xs = xs[ord]
         c = [float(t[2]) for t in tuples][ord]
-        lo = [float(t[3]) for t in tuples][ord]
-        hi = [float(t[4]) for t in tuples][ord]
-        band!(ax, xs, lo, hi; color = (colour, 0.18))
+        band!(ax, xs, [float(t[7]) for t in tuples][ord],
+            [float(t[8]) for t in tuples][ord]; color = (colour, 0.12))
+        band!(ax, xs, [float(t[5]) for t in tuples][ord],
+            [float(t[6]) for t in tuples][ord]; color = (colour, 0.20))
+        band!(ax, xs, [float(t[3]) for t in tuples][ord],
+            [float(t[4]) for t in tuples][ord]; color = (colour, 0.30))
         lines!(ax, xs, c; color = colour, linewidth = 2)
         return scatter!(ax, xs, c; color = colour, markersize = 11,
             marker = marker)
@@ -521,14 +525,30 @@ function plot_estimate_evolution(
 
     handles = Any[]
     labels = String[]
+    ## Current-data estimate as a horizontal ribbon across the whole axis.
+    ## `current` is `(median, lo30, hi30, lo60, hi60, lo90, hi90)`.
+    if !isnothing(current)
+        cc = :seagreen
+        xspan = [xlo, xhi]
+        band!(ax, xspan, fill(float(current[6]), 2),
+            fill(float(current[7]), 2); color = (cc, 0.10))
+        band!(ax, xspan, fill(float(current[4]), 2),
+            fill(float(current[5]), 2); color = (cc, 0.16))
+        band!(ax, xspan, fill(float(current[2]), 2),
+            fill(float(current[3]), 2); color = (cc, 0.24))
+        ch = lines!(ax, xspan, fill(float(current[1]), 2);
+            color = cc, linewidth = 2, linestyle = :dash)
+        push!(handles, ch)
+        push!(labels, current_label * " (30/60/90% band)")
+    end
     if !isempty(renewal)
         renewal_pts = _series!(ndates, renewal, :firebrick, :diamond)
         push!(handles, renewal_pts)
-        push!(labels, renewal_label * " (median + 90% band)")
+        push!(labels, renewal_label * " (30/60/90% bands)")
     end
     released_pts = _series!(rdates, released, :steelblue, :circle)
     push!(handles, released_pts)
-    push!(labels, released_label * " (median + 90% band)")
+    push!(labels, released_label * " (30/60/90% bands)")
 
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
@@ -550,7 +570,7 @@ glance. Without `groups` the rows share a single colour.
 """
 function plot_estimate_comparison(
         rows::AbstractVector;
-        xlabel::AbstractString = "Cumulative cases C(T)",
+        xlabel::AbstractString = "Cumulative cases",
         xmax::Union{Nothing, Real} = nothing,
         groups::Union{Nothing, AbstractVector} = nothing,
         group_colours::AbstractVector = Pair[])
@@ -739,6 +759,10 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     hi50 = [q(d, 0.75) for d in 1:n]
     est = findall(!ismissing, med)
 
+    ## 30% inner band for the third credible level alongside the 50/90.
+    lo30 = [q(d, 0.35) for d in 1:n]
+    hi30 = [q(d, 0.65) for d in 1:n]
+
     epoch = date2epochdays(seeding)
     x = [epoch + (d - 1) for d in 1:n]
     xe = x[est]
@@ -752,16 +776,18 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         step = max(1, fld(ndraws, n_traj))
         for i in 1:step:ndraws
             yi = Float64[rt[i, d] for d in est]
-            lines!(ax, xe, yi; color = (:purple, 0.05), linewidth = 0.5)
+            lines!(ax, xe, yi; color = (:purple, 0.15), linewidth = 0.5)
         end
     end
+    ## 30/60/90% credible ribbons over the established window, no median line.
     band!(ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
         color = (:purple, 0.15))
     band!(ax, xe, Float64[lo50[d] for d in est], Float64[hi50[d] for d in est];
-        color = (:purple, 0.30))
-    lines!(ax, xe, Float64[med[d] for d in est];
-        color = :purple, linewidth = 2)
-    hlines!(ax, [1.0]; color = :black, linestyle = :dot)
+        color = (:purple, 0.28))
+    band!(ax, xe, Float64[lo30[d] for d in est], Float64[hi30[d] for d in est];
+        color = (:purple, 0.42))
+    ## Horizontal grey dashed line at the no-growth threshold Rt = 1.
+    hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash, linewidth = 2)
     vlines!(ax, [Float64(epoch + breakpoint - 1)];
         color = :firebrick, linestyle = :dash, linewidth = 2)
     ## End of the intervention scale-up (breakpoint plus the ramp length).
@@ -774,7 +800,15 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     lo = isempty(xe) ? floor(Int, minimum(x)) : floor(Int, minimum(xe))
     hi = ceil(Int, maximum(x))
     CairoMakie.xlims!(ax, lo, hi)
-    ax.xticks = collect(lo:14:hi)
+    ## Cap the y-axis at roughly twice the 90% upper bound (rounded up to a
+    ## tidy step), so stray trajectories do not stretch the axis into
+    ## whitespace while the Rt = 1 line stays visible.
+    hi90_est = [hi90[d] for d in est if !ismissing(hi90[d])]
+    ytop = isempty(hi90_est) ? 4.0 :
+           max(1.2, ceil(2 * maximum(hi90_est) * 2) / 2)
+    CairoMakie.ylims!(ax, 0, ytop)
+    ## Weekly date ticks across the estimated window.
+    ax.xticks = collect(lo:7:hi)
     ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                               for v in vals]
     return fig
@@ -829,10 +863,11 @@ end
 """
 One-week-ahead forecast of the unobserved (latent) quantities from
 [`forecast_reported`](@ref): new infections, new symptom onsets and new
-deaths over the horizon, with the reproduction number carried over the
-horizon. Each count panel histograms the projected new latent count with
-its 90% predictive interval shaded; the reproduction-number panel shows the
-posterior of the forecast `R_t` with the no-growth line at one marked.
+deaths over the horizon, with the reproduction number left to keep evolving
+over the horizon. Each count panel histograms the projected new latent
+count with its 90% predictive interval shaded; the reproduction-number
+panel shows the posterior of the end-of-horizon forecast `R_t` with the
+no-growth line at one marked.
 These are the latent counterparts of the observed-stream forecast in
 [`plot_forecast`](@ref).
 """
@@ -873,7 +908,7 @@ counterparts are shown by [`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[
-    (
+        (
         :cases_new, "New reported cases (DRC)", :seagreen)]
     :confirmed_new in propertynames(fc) && push!(count_cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
@@ -1033,21 +1068,25 @@ function plot_vintage_conditional_ppc(
         med = [q(i, 0.5) for i in 1:n]
         lo90 = [q(i, 0.05) for i in 1:n]
         hi90 = [q(i, 0.95) for i in 1:n]
-        lo50 = [q(i, 0.25) for i in 1:n]
-        hi50 = [q(i, 0.75) for i in 1:n]
+        lo60 = [q(i, 0.20) for i in 1:n]
+        hi60 = [q(i, 0.80) for i in 1:n]
+        lo30 = [q(i, 0.35) for i in 1:n]
+        hi30 = [q(i, 0.65) for i in 1:n]
         x = collect(1:n)
         ## Truncate the y-axis to a robust ceiling driven by the observed
-        ## counts and the 50% band, so a heavy upper tail in any one stream
+        ## counts and the 60% band, so a heavy upper tail in any one stream
         ## (the 90% band can run far above the data) does not flatten the
         ## visible detail; the band clips at the axis limit.
-        yupper = 1.6 * max(maximum(obs_cum), maximum(hi50), 1.0)
+        yupper = 1.6 * max(maximum(obs_cum), maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = col == 1 ? "Cumulative count" : "",
             xticks = (x, string.(p.dates)),
             xticklabelrotation = pi / 4, xticklabelsize = 9,
             limits = (nothing, (0, yupper)))
+        ## 30/60/90% credible ribbons over the situation-report dates.
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
-        band!(ax, x, lo50, hi50; color = (colour, 0.30))
+        band!(ax, x, lo60, hi60; color = (colour, 0.28))
+        band!(ax, x, lo30, hi30; color = (colour, 0.42))
         lines!(ax, x, med; color = colour, linewidth = 2)
         scatter!(ax, x, float.(p.observed); color = :black, markersize = 9)
     end

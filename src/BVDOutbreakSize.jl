@@ -26,7 +26,7 @@ import PairPlots
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
                   lines!, scatter!, band!
 
-export REPORT_SCENARIOS,
+export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, SEEDING_ANCHOR_LEAD,
        load_observations, freeze_observations, m_prior_centre,

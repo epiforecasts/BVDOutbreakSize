@@ -1,8 +1,9 @@
 # One-week-ahead posterior-predictive forecast. Continues the fitted
-# renewal trajectory `horizon` days past the cut-off at the current growth
-# rate `r` (the daily growth of infections at the cut-off, held constant
-# over the short horizon) and scales the fitted expected counts for each
-# stream, then replicates an integer count per draw so the intervals carry
+# renewal trajectory `horizon` days past the cut-off, letting the
+# reproduction number keep evolving over the horizon (continuing the
+# reconstructed terminal drift of the weekly walk) rather than freezing the
+# cut-off growth rate, then scales the fitted expected counts for each
+# stream and replicates an integer count per draw so the intervals carry
 # both parameter and observation uncertainty.
 
 function _nb_rand(rng, k, μ)
@@ -19,6 +20,81 @@ function _geometric_new(daily_T, r, horizon)
     h = float(horizon)
     return abs(er - 1) < 1e-8 ? daily_T * h :
            daily_T * er * (exp(r * h) - 1) / (er - 1)
+end
+
+## New latent count over the horizon under a per-day evolving growth rate
+## `rs[d]` (one entry per horizon day): the cut-off daily value `daily_T`
+## carried forward as `Σ_{d=1}^{h} daily_T · Π_{j≤d} e^{rs[j]}`. With a
+## constant rate this reduces to `_geometric_new`.
+function _evolving_new(daily_T, rs)
+    total = zero(float(daily_T))
+    fac = one(float(daily_T))
+    @inbounds for r in rs
+        fac *= exp(r)
+        total += daily_T * fac
+    end
+    return total
+end
+
+## Per-draw growth-rate path over the horizon. The reproduction number keeps
+## evolving: the terminal daily drift of the reconstructed log-Rt walk is
+## continued forward, the future Rt converted back to a daily growth rate
+## through the per-draw generation interval (Euler–Lotka). Returns a
+## `Vector{Vector{Float64}}` (one length-`horizon` rate path per draw) and
+## the matching terminal forecast reproduction numbers, or `nothing` when
+## the chain does not carry the walk and generation-interval parameters
+## (single-stream fits), so the caller can fall back to the constant rate.
+function _evolving_rates(chn, horizon::Integer)
+    has(k) =
+        try
+            chn[k]
+            true
+        catch
+            false
+        end
+    (has(Symbol("rt_state.z")) && has(Symbol("gi_state.α")) &&
+     has(Symbol("gi_state.θ")) && has(:R_T)) || return nothing
+
+    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
+    R_T = _draws(chn, :R_T)
+    α = _draws(chn, Symbol("gi_state.α"))
+    θ = _draws(chn, Symbol("gi_state.θ"))
+    zmat = chn[Symbol("rt_state.z")]
+    zrows = [collect(z) for z in vec(collect(zmat))]
+    nd = length(R_T)
+
+    paths = Vector{Vector{Float64}}(undef, nd)
+    rt_term = Vector{Float64}(undef, nd)
+    @inbounds for i in 1:nd
+        ## Terminal weekly drift of the non-centred walk: the last sampled
+        ## innovation scaled by its step SD, converted to a per-day log-Rt
+        ## slope (a week is seven days). This continues the recent trend of
+        ## the walk forward rather than holding Rt flat.
+        z = zrows[i]
+        last_step = isempty(z) ? 0.0 : sigma[i] * z[end]
+        daily_slope = last_step / 7
+        ## Generation-interval PMF for this draw (lag-1 indexed), matching
+        ## the model's discretisation, so Rt maps to a growth rate the same
+        ## way the fit does.
+        g = _gi_pmf(α[i], θ[i])
+        rs = Vector{Float64}(undef, horizon)
+        log_rt = log(max(R_T[i], 1e-6))
+        for d in 1:horizon
+            log_rt += daily_slope
+            rt_d = exp(log_rt)
+            rs[d] = euler_lotka_r(rt_d, g)
+        end
+        paths[i] = rs
+        rt_term[i] = exp(log_rt)
+    end
+    return (; paths, rt_term)
+end
+
+## Generation-interval PMF (lag-1 indexed, renormalised) for a Gamma with
+## shape `α` and scale `θ`, mirroring `generation_interval_model`.
+function _gi_pmf(α, θ; nmax::Integer = 30)
+    pmf = discretise_censored(Gamma(α, θ), nmax)
+    return pmf[2:end] ./ sum(pmf[2:end])
 end
 
 ## Per-draw daily latent value at the cut-off from a cumulative-trajectory
@@ -39,10 +115,11 @@ end
 
 """
 One-week-ahead (default `horizon = 7` days) posterior-predictive
-forecast. For each draw, continue the current growth rate `r` over the
-horizon and scale the fitted expected counts by `exp(r · horizon)`, then
-replicate the cumulative counts. Returns a `DataFrame` with one row per
-draw and columns:
+forecast. For each draw, continue the reproduction number over the horizon
+(letting it keep evolving by carrying the walk's terminal drift forward and
+mapping back to a per-day growth rate), scale the fitted expected counts by
+the resulting horizon growth factor, then replicate the cumulative counts.
+Returns a `DataFrame` with one row per draw and columns:
 
 - `:cases_cum`, `:deaths_cum` — replicated cumulative suspected reported
   cases and deaths by the cut-off plus the horizon.
@@ -53,23 +130,27 @@ draw and columns:
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
 - `:infections_new`, `:onsets_new`, `:deaths_latent_new` — new latent
-  infections, symptom onsets and deaths projected over the horizon at the
-  constant cut-off growth rate (deterministic per-draw quantities, so they
-  carry parameter uncertainty only). These are the unobserved counterparts
-  of the observed-stream forecasts above.
-- `:rt_forecast` — the reproduction number held over the horizon (the
-  terminal `R_T`).
+  infections, symptom onsets and deaths projected over the horizon under the
+  evolving growth rate (deterministic per-draw quantities, so they carry
+  parameter uncertainty only). These are the unobserved counterparts of the
+  observed-stream forecasts above.
+- `:rt_forecast` — the reproduction number at the end of the horizon, the
+  walk's terminal drift continued forward (it evolves rather than freezing
+  at the cut-off `R_T`).
 
 Reads `:r`, `:expected_reports_T`, `:expected_deaths_T`,
-`:expected_infections_T`, `:R_T`, `:k`, the cumulative-onset and
-cumulative-death trajectories (for the latent onset and death forecasts)
-and (for the laboratory streams)
-`:expected_confirmed_T` and `:expected_confirmed_deaths_T` from `chn`.
-Exports are not forecast:
-cross-border travel is unlikely to continue at its baseline rate, so the
-forward travel rate the export model relies on no longer holds. Assumes
-the current growth rate continues unchanged over the horizon (no further
-interventions, no saturation).
+`:expected_infections_T`, `:R_T`, `:k`, the reproduction-number walk and
+generation-interval parameters (to let the reproduction number keep
+evolving over the horizon), the cumulative-onset and cumulative-death
+trajectories (for the latent onset and death forecasts) and (for the
+laboratory streams) `:expected_confirmed_T` and
+`:expected_confirmed_deaths_T` from `chn`. When the walk parameters are
+not carried (single-stream fits) the cut-off growth rate is held constant
+instead. Exports are not forecast: cross-border travel is unlikely to
+continue at its baseline rate, so the forward travel rate the export model
+relies on no longer holds. The reproduction number is allowed to keep
+evolving over the horizon, but no further interventions and no saturation
+are imposed.
 """
 function forecast_reported(chn;
         horizon::Real = 7,
@@ -91,7 +172,12 @@ function forecast_reported(chn;
         _daily_at_cutoff(chn, :cumulative_onsets), cases_T)
     deaths_daily_T = something(
         _daily_at_cutoff(chn, :cumulative_expected_deaths), deaths_T)
-    rt_forecast = _draws(chn, :R_T)
+    ## Per-draw growth-rate path over the horizon, letting the reproduction
+    ## number keep evolving (the walk's terminal drift continued forward).
+    ## When the chain does not carry the walk/generation-interval parameters
+    ## fall back to the constant cut-off rate and the held terminal R_T.
+    evolving = _evolving_rates(chn, Int(horizon))
+    rt_forecast = isnothing(evolving) ? _draws(chn, :R_T) : evolving.rt_term
     k = _draws(chn, :k)
     has_conf = obs_confirmed !== missing
     has_conf_deaths = obs_confirmed_deaths !== missing
@@ -110,18 +196,29 @@ function forecast_reported(chn;
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
 
     @inbounds for i in 1:n
-        grow = exp(r[i] * horizon)
+        ## Growth factor over the whole horizon: the product of the daily
+        ## evolving factors when the reproduction number keeps evolving,
+        ## else the constant cut-off rate compounded over the horizon.
+        rs = isnothing(evolving) ? nothing : evolving.paths[i]
+        grow = isnothing(rs) ? exp(r[i] * horizon) :
+               prod(exp, rs)
         cases_cum[i] = _nb_rand(rng, k[i], cases_T[i] * grow)
         deaths_cum[i] = _nb_rand(rng, k[i], deaths_T[i] * grow)
         ## New latent infections over the horizon, continuing the cut-off
-        ## daily infections `I_T` at the constant daily growth `r`: the
-        ## geometric sum `I_T Σ_{d=1}^{h} e^{r d}`, which tends to `I_T · h`
-        ## as `r → 0`. Latent, so carries parameter (not observation)
-        ## uncertainty across draws.
-        infections_new[i] = _geometric_new(infections_T[i], r[i], horizon)
-        onsets_new[i] = _geometric_new(onsets_T[i], r[i], horizon)
-        deaths_latent_new[i] = _geometric_new(
-            deaths_daily_T[i], r[i], horizon)
+        ## daily infections `I_T` forward. With the reproduction number
+        ## evolving the daily rate drifts across the horizon; otherwise it
+        ## is the constant-rate geometric sum. Latent, so carries parameter
+        ## (not observation) uncertainty across draws.
+        if isnothing(rs)
+            infections_new[i] = _geometric_new(infections_T[i], r[i], horizon)
+            onsets_new[i] = _geometric_new(onsets_T[i], r[i], horizon)
+            deaths_latent_new[i] = _geometric_new(
+                deaths_daily_T[i], r[i], horizon)
+        else
+            infections_new[i] = _evolving_new(infections_T[i], rs)
+            onsets_new[i] = _evolving_new(onsets_T[i], rs)
+            deaths_latent_new[i] = _evolving_new(deaths_daily_T[i], rs)
+        end
         has_conf && (confirmed_cum[i] = _nb_rand(rng, k[i], conf_T[i] * grow))
         ## Confirmed deaths grow with the suspected-death signal but are
         ## bounded by it (a thinning), so cap the replicate at the forecast
@@ -175,10 +272,10 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
             upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
     end
     streams = Tuple{String, Symbol, Symbol}[
-    (
-        "DRC reported cases", :cases_cum, :cases_new),
-    (
-        "DRC deaths", :deaths_cum, :deaths_new)]
+        (
+            "DRC reported cases", :cases_cum, :cases_new),
+        (
+            "DRC deaths", :deaths_cum, :deaths_new)]
     :confirmed_cum in propertynames(fc) && push!(streams,
         ("DRC confirmed cases", :confirmed_cum, :confirmed_new))
     :confirmed_deaths_cum in propertynames(fc) && push!(streams,

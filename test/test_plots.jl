@@ -155,20 +155,23 @@ end
 
 @testitem "plot_estimate_evolution returns a Makie figure" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_estimate_evolution
+    ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
     rows = [
-        ("2026-05-18", 925, 419, 2075),
-        ("2026-05-23", 1364, 680, 3137),
-        ("2026-05-28", 3510, 2196, 6325)
+        ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
+        ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
+        ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
     ]
     ## Released series only.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
-    ## With the rising current-model frozen-fit ribbon.
+    ## With the rising current-model frozen-fit ribbon and a current-data,
+    ## current-model horizontal band.
     renewal = [
-        ("2026-05-20", 1666, 900, 2900),
-        ("2026-05-23", 1900, 1000, 3300),
-        ("2026-05-28", 4000, 2500, 6000)
+        ("2026-05-20", 1666, 1400, 2000, 1100, 2400, 900, 2900),
+        ("2026-05-23", 1900, 1600, 2300, 1300, 2700, 1000, 3300),
+        ("2026-05-28", 4000, 3500, 4600, 3000, 5200, 2500, 6000)
     ]
-    fig = plot_estimate_evolution(rows; renewal = renewal)
+    current = (4200, 3700, 4800, 3200, 5400, 2700, 6300)
+    fig = plot_estimate_evolution(rows; renewal = renewal, current = current)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -232,7 +235,8 @@ end
             FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
                 -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
-            FlexiChains.Parameter(:T) => reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
+            FlexiChains.Parameter(:T) =>
+                reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
     fig = plot_rt(chn; n = n, breakpoint = n - 11,
         as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
     @test fig isa CairoMakie.Makie.Figure
