@@ -631,10 +631,22 @@ quantities.
         spec_state ~ to_submodel(specificity, false)
         s_test = sens_state.s_test
         spec = spec_state.spec
-        ## Suspect-pool composition over each window from the SAME suspected-
-        ## stream series that drive `reported_cases_model`.
-        bvd_window = bin_increments(p_drc .* bvd_reports_daily, window_days)
-        bg_window = bin_increments(bg_daily, window_days)
+        ## Suspect-pool composition over each window, carried through the
+        ## receipt delay so it reflects the composition of the specimens
+        ## actually received and tested in the window, consistent with the
+        ## modelled volume `received_daily`. The `τ_test` factor cancels in the
+        ## ratio φ, so it is omitted here.
+        received_bvd_daily = convolve_delay(p_drc .* bvd_reports_daily,
+            receipt_state.pmf)
+        received_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
+        if eltype(received_bvd_daily) === Any
+            received_bvd_daily = convert(Vector{typeof(τ_test)},
+                received_bvd_daily)
+            received_bg_daily = convert(Vector{typeof(τ_test)},
+                received_bg_daily)
+        end
+        bvd_window = bin_increments(received_bvd_daily, window_days)
+        bg_window = bin_increments(received_bg_daily, window_days)
         Tt = eltype(bvd_window)
         ## Testing clock: cumulative modelled analysed volume at each window.
         vol_window = bin_increments(received_daily, window_days)
