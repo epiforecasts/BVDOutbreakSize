@@ -33,7 +33,7 @@
 
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
-        :lab_history)
+        :lab_history, :lab_daily_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -42,6 +42,12 @@
         @test h.counts isa AbstractVector{<:Integer}
         @test length(h.days) == length(h.counts)
     end
+
+    ## The post-cutoff 24h analysed series carries the trusted dark-window
+    ## denominators (1, 4, 5, 6, 7 June), sorted oldest-first by day index.
+    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67]
+    @test issorted(obs.lab_daily_history.days)
+    @test all(d -> d <= obs.n, obs.lab_daily_history.days)
 
     ## History day indices are in range
     dh = obs.deaths_history
