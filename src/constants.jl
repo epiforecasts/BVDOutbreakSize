@@ -116,15 +116,15 @@ const M_PRIOR_BASE = 3.0
 Days the renewal start (the day the reproduction-number walk starts, where
 the analytic cryptic phase hands off to the recursion) sits AFTER the
 genetic TMRCA day, past the TMRCA's molecular-clock uncertainty. Placing the
-renewal start a 14-day lead after the TMRCA — rather than exactly on it —
+renewal start a 28-day lead after the TMRCA — rather than exactly on it —
 leaves the observed span `τ_obs = n − renewal_start` strictly shorter than
 `tmrca_days`, so the genetic censored bound on the total age
 `T = m·τ + τ_obs` stays informative (it pulls the origin to sit at or before
-the MRCA, bounding the cryptic duration `m·τ` from below). Two weeks past the
+the MRCA, bounding the cryptic duration `m·τ` from below). Four weeks past the
 TMRCA leaves room for the TMRCA's own molecular-clock uncertainty before
 sustained transmission is treated as confidently established.
 """
-const RENEWAL_START_LEAD = 14
+const RENEWAL_START_LEAD = 28
 
 """
     ITURI_POPULATION

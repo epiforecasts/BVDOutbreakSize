@@ -609,7 +609,7 @@ vintage_table #hide
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins
-# and sustained transmission is treated as established. We place it 14 days
+# and sustained transmission is treated as established. We place it 28 days
 # after the genetic TMRCA day, past the molecular-clock uncertainty, so the
 # observed window from the renewal start to the cut-off is shorter than the
 # TMRCA age. The bound therefore stays informative on the cryptic duration,
@@ -637,7 +637,7 @@ vintage_table #hide
 # The renewal start and observed window from the genetic bound above are
 #
 # ```math
-# \text{renewal start} = n - \text{tmrca}_{\text{days}} + 14, \qquad
+# \text{renewal start} = n - \text{tmrca}_{\text{days}} + 28, \qquad
 # \tau_{\text{obs}} = n - \text{renewal start}. \tag{11}
 # ```
 #
