@@ -2324,19 +2324,14 @@ confirmed_deaths_panel = (;
         pp_joint, "confirmed_deaths_state.cdeath_increments"),
     observed = obs.confirmed_deaths_history.counts, colour = :purple);
 
-## The suspected case and death streams freeze at their last stable
-## vintage (26 May) while the laboratory streams keep reporting to the cut-
-## off. Cap every panel to the shared last suspected date so the confirmed
-## trajectory is read against suspected over the same window rather than
-## running further along the axis and appearing to overtake it.
-_suspected_last_date = string(maximum(obs.reported_history.days)
-                              |>
-                              d -> obs.seeding + Day(d - 1))
-
+## Each panel runs to its own last vintage: the suspected case and death
+## streams freeze at 26 May (their last stable vintage) while the
+## laboratory-confirmed streams keep reporting to the cut-off, so the
+## confirmed panels show the full series the model is fitting, not just the
+## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, confirmed_panel, deaths_panel,
-        confirmed_deaths_panel, tests_received_panel];
-    max_date = _suspected_last_date);
+    confirmed_deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
 #md # </details>
