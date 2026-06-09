@@ -1754,8 +1754,8 @@ diagnostics_table( #hide
 # week ahead with the same forecast machinery, then comparing that projection
 # against the counts observed by the current cut-off. The frozen re-fit cuts
 # the data to an earlier cut-off and re-fits the joint model, so a later
-# result can be told apart from a later method. Each frozen re-fit is a
-# reduced fit of 500 draws across two chains. The same frozen re-fit is
+# result can be told apart from a later method. Each frozen re-fit uses the
+# full headline settings (1000 draws across two chains). The same frozen re-fit is
 # reused to compare against McCabe et al. at the cut-offs they used, and to
 # trace how the estimate moved as the situation reports accrued, re-fitting
 # the renewal model frozen at each release date. The helper below performs
@@ -1766,10 +1766,10 @@ diagnostics_table( #hide
 #md # <details><summary>Frozen-fit helper (reused by the forecast validation, evolution and matched-in-time sections)</summary>
 #md # ```
 
-## A reduced joint fit (500 draws × 2 chains) to the data frozen at
-## `cutoff_date`. The frozen named tuple has the same shape as the full
-## `obs`, so the model call mirrors the headline joint fit.
-function fit_frozen_joint(cutoff_date; samples = 500, chains = 2)
+## A joint fit at the full headline settings (1000 draws × 2 chains) to the
+## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
+## the full `obs`, so the model call mirrors the headline joint fit.
+function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
     o = freeze_observations(cutoff_date)
     bp = o.n - o.who_first_sitrep_days
     chn = nuts_sample(
@@ -2661,11 +2661,11 @@ cumulative_density_fig #hide
 
 # The frozen re-fits below freeze the renewal data to an earlier cut-off
 # and re-fit, so a later result can be told apart from a later method.
-# Each is a reduced fit of 500 draws across two chains, reusing the
-# frozen-fit helper defined above.
+# Each uses the full headline settings (1000 draws across two chains),
+# reusing the frozen-fit helper defined above.
 
 #md # ```@raw html
-#md # <details><summary>Freeze the renewal data to a cut-off and re-fit (reduced)</summary>
+#md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
 #md # ```
 
 ## Four independent frozen re-fits (one per release vintage); run in parallel.
@@ -2746,12 +2746,16 @@ renewal_frozen = [
 infection_trajectory = let
     mat = chn_joint[:cumulative_infections]
     trajs = [collect(v) for v in vec(collect(mat))]
-    dates = [obs.seeding + Day(d - 1) for d in 1:obs.n]
+    ## Only over the comparison window — from the earliest release date to the
+    ## cut-off — not back to the seeding date.
+    start_day = obs.n - value(obs.cutoff - Date(release_evolution[1][1]))
+    days = max(start_day, 1):obs.n
+    dates = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(Float64[t[d] for t in trajs], p)
     (dates,
-        [q(d, 0.35) for d in 1:obs.n], [q(d, 0.65) for d in 1:obs.n],
-        [q(d, 0.20) for d in 1:obs.n], [q(d, 0.80) for d in 1:obs.n],
-        [q(d, 0.05) for d in 1:obs.n], [q(d, 0.95) for d in 1:obs.n])
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
 end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
@@ -2781,14 +2785,17 @@ evolution_fig #hide
 # Their back-calculation-from-deaths scenarios differ between the reports,
 # since the 18 May report used 88 reported deaths and the 20 May update 131,
 # with a corrected set of case-fatality ratios.
-# McCabe's scenarios are estimates made at their report dates, so the
-# like-for-like comparison is our modelled cumulative infections on the same
-# dates, not our current cut-off total.
-# We read our value off the joint fit's cumulative-infection trajectory at
-# the grid day for each report date and show it with its credible interval,
-# the 18 May report against our 18 May value and the 20 May update against
-# our 20 May value, so each scenario sits beside our estimate for the date it
-# was made.
+# McCabe's scenarios estimate cumulative cases at their report dates, though
+# their report is not fully explicit about whether this is symptomatic cases
+# or all infections.
+# We take the like-for-like quantity to be our cumulative symptom onsets, the
+# symptomatic cases, on the same dates, rather than the latent infections
+# (which include the not-yet-symptomatic) or our current cut-off total.
+# We read our value off the joint fit's cumulative-onset trajectory at the
+# grid day for each report date and show it with its credible interval, the
+# 18 May report against our 18 May value and the 20 May update against our
+# 20 May value, so each scenario sits beside our estimate for the date it was
+# made.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -2800,12 +2807,12 @@ function _ci90row(xs)
         round(Int, quantile(xs, 0.95)))
 end
 
-## Our modelled cumulative infections on a McCabe report date, read off the
-## joint fit's per-draw `cumulative_infections` trajectory. The grid runs to
+## Our modelled cumulative symptom onsets on a McCabe report date, read off
+## the joint fit's per-draw `cumulative_onsets` trajectory. The grid runs to
 ## the cut-off on day `n`, so the day-index for a date is `n` minus the days
-## from that date back to the cut-off (`grid_day("2026-06-06") = n`,
-## `"2026-05-20") = n - 17`, `"2026-05-18") = n - 19`).
-_cuminf_trajs = let mat = chn_joint[:cumulative_infections]
+## from that date back to the cut-off (`grid_day("2026-06-07") = n`,
+## `"2026-05-20") = n - 18`, `"2026-05-18") = n - 20`).
+_onset_trajs = let mat = chn_joint[:cumulative_onsets]
     [collect(v) for v in vec(collect(mat))]
 end
 ## Inverse of `grid_date(day) = obs.cutoff - Day(obs.n - day)`: the day-index
@@ -2814,11 +2821,11 @@ end
 _grid_day(date) = obs.n - value(obs.cutoff - Date(date))
 function _ours_on(date)
     d = _grid_day(date)
-    _ci90row(Float64[t[d] for t in _cuminf_trajs])
+    _ci90row(Float64[t[d] for t in _onset_trajs])
 end
 
 ## McCabe scenarios with their reported 95% confidence intervals, grouped by
-## report date, then our modelled cumulative infections on the matching
+## report date, then our modelled cumulative onsets on the matching
 ## report date with its credible interval.
 mccabe_rows = [(label, mean, lo, hi)
                for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
@@ -2826,8 +2833,8 @@ mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
                  "McCabe et al. (20 May update)"
                  for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
 
-ours_rows = [("Renewal infections on 18 May", _ours_on("2026-05-18")...),
-    ("Renewal infections on 20 May", _ours_on("2026-05-20")...)]
+ours_rows = [("Renewal onsets on 18 May", _ours_on("2026-05-18")...),
+    ("Renewal onsets on 20 May", _ours_on("2026-05-20")...)]
 ours_groups = fill("Our renewal estimate", 2)
 
 matched_rows = vcat(mccabe_rows, ours_rows)
@@ -2882,26 +2889,26 @@ frozen_streams_table #hide
 # recorded admission, which is shorter (implied mean about 8 d).
 # Both pathways come from the line list, so this varies the actual delay
 # assumption rather than an arbitrary scenario.
-# The re-fit is reduced to 500 draws across two chains.
+# The re-fit uses the full headline settings (1000 draws across two chains).
 #
 # The infection count to date shifts with the assumed delay, and the
 # table and overlaid densities below show how far.
 
 #md # ```@raw html
-#md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay (reduced)</summary>
+#md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
 #md # ```
 
-## One reduced joint re-fit on the live data, with hooks to override the
-## genetic-seeding bound and the deaths submodel. The deaths submodel is
-## passed the same way the genetic-seeding override is, as a closure
-## matching the joint's `deaths(history, total, onsets, k; background_re)`
-## call, so an alternative onset-to-death delay can be injected without
-## touching the package.
+## One joint re-fit on the live data at the full headline settings, with hooks
+## to override the genetic-seeding bound and the deaths submodel. The deaths
+## submodel is passed the same way the genetic-seeding override is, as a
+## closure matching the joint's `deaths(history, total, onsets, k;
+## background_re)` call, so an alternative onset-to-death delay can be injected
+## without touching the package.
 function refit_joint_variant(;
         deaths = deaths_model,
         tmrca_days = obs.tmrca_days,
         tmrca_days_sd = 15.0,
-        samples = 500, chains = 2)
+        samples = 1000, chains = 2)
     chn = nuts_sample(
         bvd_joint(
             obs.n, obs.exported_cases, obs.total_deaths,
@@ -2993,10 +3000,10 @@ delay_sensitivity_fig #hide
 # without favouring either [virological2026](@cite).
 # We re-fit the joint model under the faster clock and compare the
 # infection count to date and the outbreak age.
-# The re-fit is reduced to 500 draws across two chains.
+# The re-fit uses the full headline settings (1000 draws across two chains).
 
 #md # ```@raw html
-#md # <details><summary>Re-fit the joint under the faster clock rate (reduced)</summary>
+#md # <details><summary>Re-fit the joint under the faster clock rate</summary>
 #md # ```
 
 ## The faster early-epidemic clock dates the common ancestor about 17 days
