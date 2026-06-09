@@ -138,7 +138,7 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
-`target_accept` defaults to 0.85. The earlier integral model needed 0.95
+`target_accept` defaults to 0.9. The earlier integral model needed 0.95
 to keep the multimodal small-outbreak geometry from diverging, but the
 renewal joint conditions the confirmed counts on the observed analysed
 denominator (removing the multiplicative ascertainment ridge) and samples
@@ -181,7 +181,7 @@ accordingly or drop them before summarising.
 function nuts_sample(model;
         samples::Integer = 1_000,
         chains::Integer = 2,
-        target_accept::Real = 0.85,
+        target_accept::Real = 0.9,
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),

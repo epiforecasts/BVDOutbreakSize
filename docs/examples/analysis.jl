@@ -1601,7 +1601,7 @@ prior_pair_fig #hide
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake
 # [mooncake_jl](@cite) reverse-mode automatic differentiation, running two
 # chains of 1000 post-warmup draws each after 1000 warmup adaptation steps,
-# at a target acceptance probability of 0.85. Chains initialise from the
+# at a target acceptance probability of 0.9. Chains initialise from the
 # prior. We fit the joint model and each single-stream model so the
 # per-stream posteriors over the outbreak size can be compared with the
 # joint.
