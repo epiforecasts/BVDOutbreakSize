@@ -350,23 +350,20 @@ end
     rng = MersenneTwister(33)
     n = 300
     fc = DataFrame(
-        cases_cum = rand(rng, 50:150, n),
-        deaths_cum = rand(rng, 40:100, n),
-        exports_cum = rand(rng, 2:10, n),
-        cases_new = rand(rng, 0:30, n),
-        deaths_new = rand(rng, 0:20, n),
-        exports_new = rand(rng, 0:5, n)
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_new = rand(rng, 0:5, n)
     )
     fig = plot_forecast_vs_truth(fc;
-        cases = 130, deaths = 80, exports = 7)
+        confirmed = 70, confirmed_deaths = 18)
     @test fig isa CairoMakie.Makie.Figure
-    ## Exports column absent (the DRC-only forecast used by the validation
-    ## section): the exports panel is dropped without error.
-    fc_drc = DataFrame(
-        cases_cum = rand(rng, 50:150, n),
-        deaths_cum = rand(rng, 40:100, n),
-        cases_new = rand(rng, 0:30, n),
-        deaths_new = rand(rng, 0:20, n))
-    fig2 = plot_forecast_vs_truth(fc_drc; cases = 130, deaths = 80)
+    ## Confirmed-deaths column absent: the confirmed-deaths panel is dropped
+    ## without error, leaving the confirmed-cases panel alone.
+    fc_cases = DataFrame(
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_new = rand(rng, 0:15, n))
+    fig2 = plot_forecast_vs_truth(fc_cases;
+        confirmed = 70, confirmed_deaths = 18)
     @test fig2 isa CairoMakie.Makie.Figure
 end

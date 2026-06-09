@@ -986,17 +986,16 @@ function plot_forecast_latent(fc::DataFrame)
 end
 
 """
-One-week-ahead forecast of the observed (reported) quantities from
-[`forecast_reported`](@ref): new reported cases, new confirmed cases and
-new confirmed deaths over the horizon. Each panel histograms the projected
-new count with its 90% predictive interval shaded. The confirmed panels are
-drawn only when the forecast carries the laboratory streams. The latent
+One-week-ahead forecast of the observed confirmed quantities from
+[`forecast_reported`](@ref): new laboratory-confirmed cases and new
+confirmed deaths over the horizon. Each panel histograms the projected new
+count with its 90% predictive interval shaded. The panels are drawn only
+when the forecast carries the laboratory streams. The suspected reported
+streams are no longer reported, so they are not forecast here. The latent
 counterparts are shown by [`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
-    count_cols = Tuple{Symbol, String, Symbol}[
-    (
-        :cases_new, "New reported cases (DRC)", :seagreen)]
+    count_cols = Tuple{Symbol, String, Symbol}[]
     :confirmed_new in propertynames(fc) && push!(count_cols,
         (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
     :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
@@ -1013,47 +1012,36 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
-Observed-stream validation figure for a [`forecast_reported`](@ref)
+Confirmed-stream validation figure for a [`forecast_reported`](@ref)
 projection, laid out as a two-row grid. The top row shows the cumulative
-forecast distribution per stream (DRC reported cases, DRC deaths, and the
-laboratory streams when present); the bottom row shows the new counts
-forecast over the horizon. Each panel is a histogram with the 90%
-predictive interval shaded and the later-observed count drawn as a dashed
-black rule, so the forecast distribution is scored against the count that
-was actually observed. `cases`, `deaths` and `exports` are the observed
-cumulative counts; `baseline_*` are the counts at the forecast origin, so
-the observed new count is the cumulative truth minus the baseline. The
-latent counterparts are scored distribution-versus-distribution by
+forecast distribution per confirmed stream (DRC confirmed cases and
+confirmed deaths); the bottom row shows the new counts forecast over the
+horizon. Each panel is a histogram with the 90% predictive interval shaded
+and the later-observed count drawn as a dashed black rule, so the forecast
+distribution is scored against the count that was actually observed.
+`confirmed` and `confirmed_deaths` are the observed cumulative counts;
+`baseline_*` are the counts at the forecast origin, so the observed new
+count is the cumulative truth minus the baseline. The suspected reported
+streams are no longer reported, so they are not scored here. The latent
+counterparts are scored distribution-versus-distribution by
 [`plot_forecast_vs_truth_latent`](@ref).
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        cases::Real, deaths::Real,
-        exports::Union{Real, Missing} = missing,
-        confirmed::Union{Real, Missing} = missing,
-        tests::Union{Real, Missing} = missing,
-        baseline_cases::Real = 0, baseline_deaths::Real = 0,
-        baseline_exports::Real = 0,
+        confirmed::Real, confirmed_deaths::Real,
         baseline_confirmed::Real = 0,
-        baseline_tests::Real = 0)
-    streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}([
-        (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue,
-            float(cases), float(cases) - float(baseline_cases)),
-        (:deaths_cum, :deaths_new, "deaths (DRC)", :firebrick,
-            float(deaths), float(deaths) - float(baseline_deaths))
-    ])
-    exports !== missing && :exports_cum in propertynames(fc) &&
-        push!(streams,
-            (:exports_cum, :exports_new, "exports (Uganda)", :seagreen,
-                float(exports), float(exports) - float(baseline_exports)))
-    tests !== missing && :tests_cum in propertynames(fc) &&
-        push!(streams,
-            (:tests_cum, :tests_new, "tests analysed (DRC)", :teal,
-                float(tests), float(tests) - float(baseline_tests)))
-    confirmed !== missing && :confirmed_cum in propertynames(fc) &&
+        baseline_confirmed_deaths::Real = 0)
+    streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}()
+    :confirmed_cum in propertynames(fc) &&
         push!(streams,
             (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)",
                 :goldenrod, float(confirmed),
                 float(confirmed) - float(baseline_confirmed)))
+    :confirmed_deaths_cum in propertynames(fc) &&
+        push!(streams,
+            (:confirmed_deaths_cum, :confirmed_deaths_new,
+                "confirmed deaths (DRC)", :darkorange3,
+                float(confirmed_deaths),
+                float(confirmed_deaths) - float(baseline_confirmed_deaths)))
     ncols = length(streams)
     fig = Figure(; size = (370 * ncols, 680))
     function panel!(row, col, v, obs, title, colour)

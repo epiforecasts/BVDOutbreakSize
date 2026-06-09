@@ -55,6 +55,10 @@ model rather than added here.
   stream, and estimate evolution across releases).
 - The McCabe et al. scenario comparison now carries their reported 95%
   confidence intervals.
+- The one-week-ahead forecast and its last-week-versus-now validation now
+  target the laboratory-confirmed cases and confirmed deaths. The suspected
+  reported cases and deaths are no longer reported, so they are dropped as
+  forecast targets.
 
 ### Data
 
