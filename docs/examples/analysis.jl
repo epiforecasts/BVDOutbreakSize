@@ -528,10 +528,10 @@ vintage_table #hide
 # transmission was established. The cryptic phase grows the seed to $2^m$
 # infections at the renewal start, the day the renewal takes over, over a
 # duration $m\,\tau$ with $\tau$ the doubling time. The doubling count has a
-# wide prior centred on three cryptic doublings:
+# wide prior centred on four cryptic doublings:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(3,\ 3), \qquad
+# m \sim \mathrm{Normal}^{+}(4,\ 3), \qquad
 # \tau = \frac{\log 2}{r}, \qquad
 # T_{\text{cryptic}} = m\,\tau. \tag{8}
 # ```

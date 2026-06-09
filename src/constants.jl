@@ -103,12 +103,13 @@ Centre of the wide doubling-count prior in
 The doubling count `m` counts ONLY the cryptic-phase doublings (the origin to
 the renewal-process start): the cryptic duration is `m·τ` and the total
 outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. A centre
-of 3 places the prior cryptic phase at `m·τ ≈ 60 d` at the central 20-day
-doubling and a prior seed of `2^m = 8` infections at the renewal start. The
-genetic seeding bound pulls the lower tail of the outbreak age to sit at or
-before the most recent common ancestor.
+of 4 places the prior cryptic phase at `m·τ ≈ 80 d` at the central 20-day
+doubling and a prior seed of `2^m = 16` infections at the renewal start,
+covering the extra cryptic span left by the lengthened renewal-start lead.
+The genetic seeding bound pulls the lower tail of the outbreak age to sit at
+or before the most recent common ancestor.
 """
-const M_PRIOR_BASE = 3.0
+const M_PRIOR_BASE = 4.0
 
 """
     RENEWAL_START_LEAD
