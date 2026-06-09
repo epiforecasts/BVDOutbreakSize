@@ -2693,7 +2693,9 @@ frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
 # the posterior draws and input data.
 # The releases to date are from the earlier closed-form integral model, so
 # the released series is the project's published estimate over time, shown
-# in blue with 30%, 60% and 90% credible ribbons.
+# in blue with 30%, 60% and 90% credible ribbons; its most recent point is
+# the v1.3.0 release (the final integral-model release, at its 28 May
+# cut-off).
 # The renewal series, in red, is this renewal model re-fit frozen at each
 # release date, the current method evaluated at each past date, so it rises
 # as the outbreak grows rather than sitting flat.
