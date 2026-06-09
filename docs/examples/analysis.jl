@@ -1614,62 +1614,57 @@ prior_pair_fig #hide
 
 const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 
-chn_joint = nuts_sample(
-    bvd_joint(
-    obs.n, obs.exported_cases, obs.total_deaths,
-    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-    obs.tests_analysed;
-    confirmed_deaths = obs.confirmed_deaths,
-    deaths_history = obs.deaths_history,
-    reported_history = obs.reported_history,
-    confirmed_history = obs.confirmed_history,
-    confirmed_deaths_history = obs.confirmed_deaths_history,
-    lab_history = obs.lab_history,
-    tests_received_history = obs.tests_received_history,
-    export_case_days = obs.export_case_days,
-    export_death_days = obs.export_death_days,
-    breakpoint = _BREAKPOINT,
-    background_re = true,
-    confirmed_positivity_link = :composition,
-    genetic = genetic_seeding_model,
-    tmrca_days = obs.tmrca_days));
-
-chn_exports = nuts_sample(
-    exports_only_model(obs.n, obs.exported_cases;
-    export_case_days = obs.export_case_days,
-    breakpoint = _BREAKPOINT));
-
-chn_deaths = nuts_sample(
-    deaths_only_model(obs.n, obs.total_deaths;
-    deaths_history = obs.deaths_history,
-    breakpoint = _BREAKPOINT));
-
-chn_cases = nuts_sample(
-    cases_only_model(obs.n, obs.reported_cases;
-    reported_history = obs.reported_history,
-    breakpoint = _BREAKPOINT));
-
-chn_confirmed = nuts_sample(
-    confirmed_only_model(obs.n, obs.confirmed_cases;
-    confirmed_history = obs.confirmed_history,
-    lab_history = obs.lab_history,
-    tests_received_history = obs.tests_received_history,
-    breakpoint = _BREAKPOINT));
-
-chn_confirmed_deaths = nuts_sample(
-    confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
-    obs.total_deaths;
-    deaths_history = obs.deaths_history,
-    confirmed_deaths_history = obs.confirmed_deaths_history,
-    breakpoint = _BREAKPOINT));
-
-## This composer keeps the deaths and exports submodels only for their
-## CFR, onset-to-death PMF and export onsets, leaving their own counts
-## missing, which leaves two redundant sampled discrete draws; the model
-## check is disabled so NUTS will run (see `nuts_sample`).
-chn_exports_deaths = nuts_sample(
-    exports_deaths_only_model(obs.n, obs.exports_deaths;
-        breakpoint = _BREAKPOINT); check_model = false);
+## The joint and six single-stream fits are independent, so they run through
+## `fit_parallel`: model-level parallelism bounded by the available threads
+## (sequential on CI's two threads, several at once on a many-core machine).
+## The exports-deaths composer keeps the deaths and exports submodels only
+## for their CFR, onset-to-death PMF and export onsets, leaving their own
+## counts missing, which leaves two redundant sampled discrete draws, so its
+## model check is disabled (see `nuts_sample`).
+chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
+chn_confirmed_deaths,
+chn_exports_deaths = fit_parallel([
+    () -> nuts_sample(bvd_joint(
+        obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        breakpoint = _BREAKPOINT,
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)),
+    () -> nuts_sample(exports_only_model(obs.n, obs.exported_cases;
+        export_case_days = obs.export_case_days,
+        breakpoint = _BREAKPOINT)),
+    () -> nuts_sample(deaths_only_model(obs.n, obs.total_deaths;
+        deaths_history = obs.deaths_history,
+        breakpoint = _BREAKPOINT)),
+    () -> nuts_sample(cases_only_model(obs.n, obs.reported_cases;
+        reported_history = obs.reported_history,
+        breakpoint = _BREAKPOINT)),
+    () -> nuts_sample(confirmed_only_model(obs.n, obs.confirmed_cases;
+        confirmed_history = obs.confirmed_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        breakpoint = _BREAKPOINT)),
+    () -> nuts_sample(confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
+        obs.total_deaths;
+        deaths_history = obs.deaths_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        breakpoint = _BREAKPOINT)),
+    () -> nuts_sample(
+        exports_deaths_only_model(obs.n, obs.exports_deaths;
+            breakpoint = _BREAKPOINT);
+        check_model = false)]);
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
 posterior_C_exports = vec(Array(chn_exports[:C_T]));
@@ -2680,10 +2675,14 @@ cumulative_density_fig #hide
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit (reduced)</summary>
 #md # ```
 
-frozen_20may = fit_frozen_joint("2026-05-20")
-frozen_23may = fit_frozen_joint("2026-05-23")
-frozen_26may = fit_frozen_joint("2026-05-26")
-frozen_28may = fit_frozen_joint("2026-05-28")
+## Four independent frozen re-fits (one per release vintage); run in parallel.
+frozen_20may, frozen_23may,
+frozen_26may,
+frozen_28may = fit_parallel([
+    () -> fit_frozen_joint("2026-05-20"),
+    () -> fit_frozen_joint("2026-05-23"),
+    () -> fit_frozen_joint("2026-05-26"),
+    () -> fit_frozen_joint("2026-05-28")])
 
 frozen_C_20may = vec(Array(frozen_20may.chn[:C_T]))
 frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))

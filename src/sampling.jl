@@ -207,3 +207,40 @@ function nuts_sample(model;
         kwargs...
     )
 end
+
+"""
+    fit_parallel(thunks; chains = 2)
+
+Run independent model fits — each a zero-argument `thunk` returning a chain —
+with model-level parallelism bounded by the available threads. At most
+`Threads.nthreads() ÷ chains` fits run at once (so each fit keeps `chains`
+threads for its own chains), clamped to the number of fits. This is
+self-limiting and CI-safe: with two threads (e.g. CI's
+`JULIA_NUM_THREADS=2`, the default `chains`) it runs the fits SEQUENTIALLY,
+identical to a plain loop and with the same peak memory; on a many-core
+machine with more threads it fans the fits out (eight threads → four fits at
+once). Each fit seeds its own RNG, so the results do not depend on the
+schedule. Returns the chains in input order.
+"""
+function fit_parallel(thunks::AbstractVector; chains::Integer = 2)
+    n = length(thunks)
+    maxconc = clamp(Threads.nthreads() ÷ max(chains, 1), 1, n)
+    results = Vector{Any}(undef, n)
+    if maxconc == 1
+        for i in 1:n
+            results[i] = thunks[i]()
+        end
+        return results
+    end
+    next = Threads.Atomic{Int}(1)
+    @sync for _ in 1:maxconc
+        Threads.@spawn begin
+            while true
+                i = Threads.atomic_add!(next, 1)
+                i > n && break
+                results[i] = thunks[i]()
+            end
+        end
+    end
+    return results
+end
