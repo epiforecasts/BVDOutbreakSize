@@ -25,6 +25,10 @@ This is a substantial revision; the changes below are relative to v1.3.0.
   and the first reproduction number is derived forward through Euler–Lotka.
   The generation interval is a Gamma with shape and scale taken from the cited
   source and its reported uncertainty.
+- The onset-to-event delays are taken from a Bayesian reanalysis of the 2012
+  Isiro line list on their natural Gamma parameters, with one onset-to-
+  admission delay serving both suspected-case reporting and export detection
+  and onset-to-death the convolution of two atomic components.
 - Two-phase seeding: a single import grows through an unobserved cryptic
   exponential phase to the renewal start, with the outbreak age bounded by the
   genetic time to the most recent common ancestor.
@@ -54,7 +58,7 @@ model rather than added here.
 
 ### Data
 
-- Advanced the cut-off to 6 June 2026 (SitRep 023).
+- Advanced the cut-off to 7 June 2026 (SitRep 024).
   The laboratory-confirmed streams run to the cut-off while the suspected
   streams stay frozen at their 26 May values.
 

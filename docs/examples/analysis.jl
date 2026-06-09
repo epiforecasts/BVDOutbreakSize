@@ -684,9 +684,8 @@ vintage_table #hide
 #
 # Infections are convolved with the incubation-period PMF to give daily
 # symptom-onset incidence, computed once and consumed by every downstream
-# observation stream. The incubation period cannot be fitted from the BDBV
-# line list, which has no exposure dates, so we use the Bundibugyo virus
-# estimate from the 2007 Uganda outbreak (mean 6.3 d, 95% CI 5.2-7.3,
+# observation stream. We use the Bundibugyo virus incubation-period estimate
+# from the 2007 Uganda outbreak (mean 6.3 d, 95% CI 5.2-7.3,
 # $n = 24$; [macneil2010](@cite)). The mean prior reproduces that 95% CI;
 # the source reports no interval on the spread, so the SD prior is our own
 # choice:
@@ -759,10 +758,11 @@ vintage_table #hide
 # ##### Onset-to-report delay
 #
 # The delay from symptom onset to a suspected case being detected and
-# reported into surveillance. We use the companion line-list reanalysis
-# [bdbv_linelist_analysis_2026](@cite) onset-to-admission delay, a Gamma
-# sampled on its natural shape and scale with priors centred on the
-# reanalysis posterior (implied mean about 4 d), carrying its reported
+# reported into surveillance. We use a Bayesian reanalysis
+# [bdbv_linelist_analysis_2026](@cite) of the 2012 Isiro Bundibugyo virus
+# outbreak line list [rosello2015](@cite), taking its onset-to-admission delay
+# as a Gamma sampled on its natural shape and scale, with priors centred on
+# the reanalysis posterior (implied mean about 4 d) and carrying its reported
 # uncertainty:
 #
 # ```math
@@ -774,28 +774,25 @@ vintage_table #hide
 # Gamma with mean about 20 d.
 # We assume that delay reflects a longer notification pathway, likely
 # including laboratory confirmation and administrative processing, rather than
-# the rapid surveillance report we model, though we cannot be certain what it
-# captures.
+# the rapid surveillance report we model.
 # This delay drives the suspected-case, laboratory and confirmed-death
 # streams, and the export model uses the same onset-to-admission delay for
 # detection abroad.
 #
 # ##### Onset-to-death delay
 #
-# McCabe et al. take the onset-to-death delay from the Isiro 2012 point
-# estimate of [rosello2015](@cite), fitting a $t$-distributed delay. We
-# instead ground it on the companion Bayesian reanalysis of the same Isiro
-# 2012 BDBV line list [bdbv_linelist_analysis_2026](@cite), which fits the
-# delay as two atomic Gamma components, onset-to-admission and
-# admission-to-death, and convolves them. We do the same: each component is a
-# Gamma sampled on its natural shape and scale, with priors centred on the
-# reanalysis posteriors and carrying its reported uncertainty,
+# McCabe et al. take the onset-to-death delay from the same line list as a
+# point estimate [rosello2015](@cite), fitting a $t$-distributed delay. The
+# reanalysis instead fits it as two atomic Gamma components, onset-to-admission
+# and admission-to-death, and convolves them. We do the same: each component is
+# a Gamma sampled on its natural shape and scale, with priors centred on the
+# reanalysis posteriors:
 #
 # ```math
 # \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
-# \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \quad
+# \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
-# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38), \tag{16}
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{16}
 # ```
 #
 # and the onset-to-death PMF is the convolution of the two discretised
@@ -1140,8 +1137,8 @@ cfr_prior_fig #hide
 # dispersion $k$:
 #
 # ```math
-# \sum_{t = d_{i-1}+1}^{d_i} c_t = Y_{\text{cases},i} - Y_{\text{cases},i-1}
-# \sim \mathrm{NegBinomial}. \tag{25}
+# Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{25}
 # ```
 
 #md # ```@raw html
@@ -1175,8 +1172,8 @@ cfr_prior_fig #hide
 # dispersion $k$:
 #
 # ```math
-# \sum_{t = d_{i-1}+1}^{d_i} m_t = Y_{\text{deaths},i} -
-#     Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}. \tag{26}
+# Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{26}
 # ```
 
 #md # ```@raw html
@@ -1212,7 +1209,8 @@ cfr_prior_fig #hide
 # dispersion $k$:
 #
 # ```math
-# \sum_{t = d_{i-1}+1}^{d_i} v_t \sim \mathrm{NegBinomial}. \tag{27}
+# Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{27}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
@@ -1319,8 +1317,8 @@ cfr_prior_fig #hide
 # with a NegBinomial sharing the dispersion $k$:
 #
 # ```math
-# \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t \sim
-#     \mathrm{NegBinomial}. \tag{30}
+# Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t,\ k\Bigr). \tag{30}
 # ```
 
 #md # ```@raw html
