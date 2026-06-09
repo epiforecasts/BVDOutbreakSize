@@ -255,11 +255,12 @@ end
 
 """
 Summarise a [`forecast_reported`](@ref) result into a `DataFrame` with
-one row per stream (suspected cases and deaths, plus confirmed cases and
-confirmed deaths when present) and quantity (cumulative total by the
-cut-off plus the horizon, or new this week), reporting the equal-tailed
-30/60/90% credible interval endpoints (`lower_90 … upper_90`) used by the
-other summary tables.
+one row per confirmed stream (laboratory-confirmed cases and confirmed
+deaths) and quantity (cumulative total by the cut-off plus the horizon, or
+new this week), reporting the equal-tailed 30/60/90% credible interval
+endpoints (`lower_90 … upper_90`) used by the other summary tables. The
+suspected reported-case and suspected-death streams are no longer reported,
+so they are not shown as forecast targets.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
     _row(label,
@@ -271,11 +272,7 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
             upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
     end
-    streams = Tuple{String, Symbol, Symbol}[
-    (
-        "DRC reported cases", :cases_cum, :cases_new),
-    (
-        "DRC deaths", :deaths_cum, :deaths_new)]
+    streams = Tuple{String, Symbol, Symbol}[]
     :confirmed_cum in propertynames(fc) && push!(streams,
         ("DRC confirmed cases", :confirmed_cum, :confirmed_new))
     :confirmed_deaths_cum in propertynames(fc) && push!(streams,
@@ -291,18 +288,16 @@ end
 
 """
 Validate a [`forecast_reported`](@ref) projection against the counts that
-were later observed. `cases` and `deaths` are the observed cumulative DRC
-suspected reported cases and deaths at the forecast target date;
-`confirmed` and `confirmed_deaths` add the laboratory-confirmed streams
-when the forecast carries them. Returns a `DataFrame` with one row per
+were later observed. `confirmed` and `confirmed_deaths` are the observed
+cumulative DRC laboratory-confirmed cases and confirmed deaths at the
+forecast target date. Returns a `DataFrame` with one row per confirmed
 stream giving the observed count, the equal-tailed 30/60/90% predictive
 intervals (the same endpoints as the other summary tables), and whether
-the observed count falls inside the 90% interval.
+the observed count falls inside the 90% interval. The suspected reported
+streams are no longer reported, so they are not scored.
 """
 function forecast_vs_truth(fc::DataFrame;
-        cases::Real, deaths::Real,
-        confirmed::Union{Real, Missing} = missing,
-        confirmed_deaths::Union{Real, Missing} = missing,
+        confirmed::Real, confirmed_deaths::Real,
         digits::Integer = 0)
     _row(label,
         draws,
@@ -316,15 +311,11 @@ function forecast_vs_truth(fc::DataFrame;
             upper_60 = round(s.hi60; digits), upper_90 = hi,
             within_90 = lo <= obs <= hi ? "yes" : "no")
     end
-    rows = [
-        _row("DRC reported cases", fc[!, :cases_cum], cases),
-        _row("DRC deaths", fc[!, :deaths_cum], deaths)
-    ]
-    confirmed !== missing && :confirmed_cum in propertynames(fc) &&
+    rows = NamedTuple[]
+    :confirmed_cum in propertynames(fc) &&
         push!(rows, _row("DRC confirmed cases", fc[!, :confirmed_cum],
             confirmed))
-    confirmed_deaths !== missing &&
-        :confirmed_deaths_cum in propertynames(fc) &&
+    :confirmed_deaths_cum in propertynames(fc) &&
         push!(rows, _row("DRC confirmed deaths", fc[!, :confirmed_deaths_cum],
             confirmed_deaths))
     return _prettify(DataFrame(rows))

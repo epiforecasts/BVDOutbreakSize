@@ -1739,11 +1739,12 @@ diagnostics_table( #hide
 # recent trend of its trajectory rather than holding it fixed, with no
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
-# We forecast the four DRC streams (suspected
-# reported cases, suspected deaths, laboratory-confirmed cases and confirmed
-# deaths) but not exports, since cross-border travel is unlikely to continue
-# at its baseline rate, so the forward travel rate the export model relies on
-# no longer holds. The figure is shown in the
+# We forecast the two confirmed DRC streams (laboratory-confirmed cases and
+# confirmed deaths) as the forecast targets. The suspected reported cases and
+# deaths are no longer reported, so they are not shown as targets. Exports are
+# not forecast either, since cross-border travel is unlikely to continue at
+# its baseline rate, so the forward travel rate the export model relies on no
+# longer holds. The figure is shown in the
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
 #
@@ -2418,10 +2419,12 @@ no_onward_fig #hide
 
 # ### One-week-ahead forecast results
 #
-# The cumulative and new expected counts by $T + 7$ for the four DRC streams
-# (suspected reported cases, suspected deaths, laboratory-confirmed cases and
-# confirmed deaths), from the no-change projection defined in the methods
+# The cumulative and new expected counts by $T + 7$ for the two confirmed DRC
+# streams (laboratory-confirmed cases and confirmed deaths), from the
+# no-change projection defined in the methods
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
+# The suspected reported cases and deaths are no longer reported, so they are
+# not shown as forecast targets.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -2458,8 +2461,8 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 
 forecast_latent_fig #hide
 
-# The observation figure shows the new reported cases, confirmed cases and
-# confirmed deaths over the horizon.
+# The observation figure shows the new confirmed cases and confirmed deaths
+# over the horizon.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
@@ -2495,7 +2498,6 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
 validation_table = forecast_vs_truth(validation_forecast;
-    cases = obs.reported_cases, deaths = obs.total_deaths,
     confirmed = obs.confirmed_cases,
     confirmed_deaths = obs.confirmed_deaths);
 
@@ -2515,11 +2517,10 @@ validation_table #hide
 #md # ```
 
 validation_fig = plot_forecast_vs_truth(validation_forecast;
-    cases = obs.reported_cases, deaths = obs.total_deaths,
     confirmed = obs.confirmed_cases,
-    baseline_cases = frozen_lastweek.o.reported_cases,
-    baseline_deaths = frozen_lastweek.o.total_deaths,
-    baseline_confirmed = frozen_lastweek.o.confirmed_cases);
+    confirmed_deaths = obs.confirmed_deaths,
+    baseline_confirmed = frozen_lastweek.o.confirmed_cases,
+    baseline_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
 #md # ```@raw html
 #md # </details>
