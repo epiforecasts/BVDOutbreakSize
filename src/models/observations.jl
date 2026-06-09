@@ -525,11 +525,17 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     ## daily analysed count (`lab_daily_history`) on a late day becomes that
     ## window's Binomial denominator, 0 leaves it a modelled-volume dark
     ## window. Only days strictly after the last cumulative laboratory date
-    ## are anchored (the cumulative series already covers the rest).
-    daily_lookup = Dict(Int(d) => Int(c)
+    ## are anchored (the cumulative series already covers the rest). Built
+    ## with a plain loop (no Dict/filtered generator) so the AD backend can
+    ## compile a rule for this pure-integer bookkeeping on every Julia
+    ## version.
+    late_analysed = zeros(Int, length(late_days))
     for (d, c) in zip(lab_daily_history.days, lab_daily_history.counts)
-    if Int(d) > last_lab_day)
-    late_analysed = Int[get(daily_lookup, d, 0) for d in late_days]
+        di = Int(d)
+        di > last_lab_day || continue
+        pos = findfirst(==(di), late_days)
+        pos === nothing || (late_analysed[pos] = Int(c))
+    end
 
     return (; obs_days, obs_positives, obs_analysed, early_days,
         early_increments, late_days, late_increments, late_analysed,
