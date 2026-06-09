@@ -1,71 +1,38 @@
-# Future-expected-deaths counterfactual: a lower bound on future deaths
-# under the assumption that every onward transmission stops at time `T`.
-# The cohort already infected by `T` still contributes future expected
-# deaths in the onset-to-death tail; per draw,
-#
-#     ΔD = CFR · ∫_0^T r · exp(r · s) · (1 - F_d(T - s)) ds,
-#
-# with `F_d` the Gamma(α, θ) CDF. Total projected cumulative deaths
-# under the no-onward-transmission counterfactual is `obs_deaths + ΔD`.
-
-function _committed_deaths_one(r, T, α, θ, CFR;
-        onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
-    delay_dist = Gamma(α, θ)
-    scale = _delay_scale(delay_dist)
-    g = let r = r, T = T, delay_dist = delay_dist
-        s -> r * exp(r * s) * ccdf(delay_dist, T - s)
-    end
-    ## `onset_fraction` (the incubation mgf) maps the latent infection
-    ## trajectory onto onsets before the onset-to-death survival tail,
-    ## matching `deaths_model`.
-    return onset_fraction * CFR * integrate(g, zero(T), T, scale; alg)
-end
+# Counterfactual: outbreak size with no onward transmission from the
+# infections already seeded by the cut-off. With the renewal this is the
+# expected eventual deaths from the current cohort: every infection
+# present by the cut-off still dies with probability CFR, so the eventual
+# deaths are `CFR · C_T`. The deaths already expected by the cut-off are
+# `expected_deaths_T`, so the committed future deaths in the
+# onset-to-death tail are `ΔD = CFR · C_T − expected_deaths_T`, and the
+# total projected cumulative deaths under the counterfactual are
+# `obs_deaths + ΔD`.
 
 """
-Per-draw projection of cumulative deaths under the counterfactual
-that every onward transmission stops at time `T`. Reads `:r, :T, :α,
-:θ, :CFR` from the posterior `chn` and integrates
+Per-draw projection of cumulative deaths under the counterfactual that
+every onward transmission stops at the cut-off. Reads `:CFR`, `:C_T` and
+`:expected_deaths_T` from the posterior `chn` and forms the committed
+future deaths
 
 ```math
-\\Delta D = \\mathrm{CFR} \\cdot \\int_0^T r\\,\\exp(r\\,s)
-            \\,\\bigl(1 - F_d(T - s)\\bigr)\\,ds,
+\\Delta D = \\mathrm{CFR} \\cdot C_T - \\mathbb{E}[D_T],
 ```
 
-with `F_d` the Gamma(α, θ) onset-to-death CDF, returning a
-`DataFrame` with one row per draw:
+with `C_T` the cumulative infections and `E[D_T]` the deaths already
+expected by the cut-off, returning a `DataFrame` with one row per draw:
 
 - `:delta_deaths`     additional future expected deaths beyond `obs_deaths`
 - `:total_projected`  `obs_deaths + delta_deaths`
 
-`obs_deaths` is the number of deaths already observed at time `T`
-(e.g. `obs.total_deaths` from the bundled observations). `alg` is the
-quadrature scheme used for ΔD; defaults to `GaussLegendre(n = 64)`,
-matching the rest of the package.
+`obs_deaths` is the number of deaths already observed at the cut-off
+(e.g. `obs.total_deaths` from the bundled observations).
 """
-function predict_no_onward_deaths(chn;
-        obs_deaths::Real,
-        alg = DEATH_INTEGRAL_ALG)
-    r_draws = _draws(chn, :r)
-    T_draws = _draws(chn, :T)
-    α_draws = _draws(chn, :α)
-    θ_draws = _draws(chn, :θ)
-    CFR_draws = _draws(chn, :CFR)
-    ## Incubation draws map the latent infection trajectory onto onsets;
-    ## absent on chains predating the infection layer, where
-    ## `onset_fraction = 1` recovers the previous behaviour.
-    has_incubation = all(haskey_chain(chn, n) for n in (:α_inc, :θ_inc))
-    α_inc = has_incubation ? _draws(chn, :α_inc) : nothing
-    θ_inc = has_incubation ? _draws(chn, :θ_inc) : nothing
+function predict_no_onward_deaths(chn; obs_deaths::Real)
+    CFR = _draws(chn, :CFR)
+    C_T = _draws(chn, :C_T)
+    expected_deaths_T = _draws(chn, :expected_deaths_T)
 
-    n = length(r_draws)
-    delta = Vector{Float64}(undef, n)
-    @inbounds for i in 1:n
-        os = has_incubation ?
-             onset_rescale(Gamma(α_inc[i], θ_inc[i]), r_draws[i]) : 1.0
-        delta[i] = _committed_deaths_one(r_draws[i], T_draws[i],
-            α_draws[i], θ_draws[i],
-            CFR_draws[i]; onset_fraction = os, alg)
-    end
+    delta = max.(CFR .* C_T .- expected_deaths_T, 0.0)
     total = float(obs_deaths) .+ delta
     return DataFrame(delta_deaths = delta, total_projected = total)
 end

@@ -29,3 +29,6 @@ logs/
 # Transient run logs and result dumps from the diagnostic fit scripts
 /scripts/out/*.log
 /scripts/out/*.txt
+
+# Transient docs build logs captured at the repo root
+/docs_build*.log

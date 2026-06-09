@@ -1,6 +1,7 @@
-## Smoke tests for the pooled DRC / Uganda ascertainment submodel.
+## Smoke tests for the per-stream DRC / Uganda ascertainment submodel.
 ## Exercises the real `pooled_ascertainment_model` from
-## `src/models/priors.jl`.
+## `src/models/priors.jl`, which samples each fraction independently from
+## its own Beta prior (the name is retained for API compatibility).
 
 @testsnippet PooledFixtures begin
     using Turing: @model, to_submodel
@@ -14,24 +15,22 @@
     end
 end
 
-@testitem "pooled_ascertainment prior draws produce p ∈ (0, 1)" tags=[:slow] setup=[PooledFixtures] begin
+@testitem "ascertainment prior draws produce p ∈ (0, 1)" tags=[:slow] setup=[PooledFixtures] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(pooled_ascertainment_model(), Prior(), 200;
         chain_type = FlexiChains.VNChain, progress = false)
     p_drc=vec(Array(chn[:p_drc]))
     p_uganda=vec(Array(chn[:p_uganda]))
-    τ_logit=vec(Array(chn[:τ_logit]))
     @test length(p_drc) == 200
     @test length(p_uganda) == 200
     @test all(0 .< p_drc .< 1)
     @test all(0 .< p_uganda .< 1)
-    @test all(τ_logit .>= 0)
     @test all(isfinite, p_drc)
     @test all(isfinite, p_uganda)
 end
 
-@testitem "pooled_ascertainment composes via to_submodel" tags=[:slow] setup=[PooledFixtures] begin
+@testitem "ascertainment composes via to_submodel" tags=[:slow] setup=[PooledFixtures] begin
     using Turing: sample, Prior
     import FlexiChains
     chn=sample(_pooled_test_compose(), Prior(), 100;
@@ -49,23 +48,29 @@ end
     import FlexiChains
 
     obs = load_observations()
-    rep = obs.reported_case_history
-    dh = obs.death_history
-    n_dh = length(dh.values)
-    n_rep = length(rep.values)
-    m = bvd_joint(missing,
-        fill(missing, n_dh), fill(missing, n_rep);
-        reported_offsets = rep.offsets,
-        death_offsets = dh.offsets)
+    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        tests_received_history = obs.tests_received_history,
+        breakpoint = obs.n - obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
     chn = sample(m, Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false)
     ## The composer default is the non-centred two-group pooled
-    ## hierarchy, so the shared hyperparameters `μ_logit` and the
-    ## pooling SD `τ_logit` are sampled parameters of the joint model.
+    ## hierarchy, attached under the `asc_state` submodel prefix, so the
+    ## shared hyperparameters `μ_logit` and the pooling SD `τ_logit` are
+    ## sampled as `asc_state.μ_logit` / `asc_state.τ_logit`.
     params = FlexiChains.parameters(chn)
-    @test @varname(τ_logit) in params
-    @test @varname(μ_logit) in params
-    @test all(vec(Array(chn[:τ_logit])) .>= 0)
+    @test @varname(asc_state.τ_logit) in params
+    @test @varname(asc_state.μ_logit) in params
+    τ_key = FlexiChains.Parameter(@varname(asc_state.τ_logit))
+    @test all(vec(Array(chn[τ_key])) .>= 0)
     @test all(0 .< vec(Array(chn[:p_drc])) .< 1)
     @test all(0 .< vec(Array(chn[:p_uganda])) .< 1)
 end

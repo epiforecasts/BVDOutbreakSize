@@ -43,10 +43,14 @@ end
     # check fails there even at tmax = 60 s. It passes on Linux and Windows
     # and locally, so this is a runner-environment issue, not package code.
     # Keep the real check on the other platforms; raise tmax for the heavy
-    # AD/plotting load.
+    # AD/plotting load. The Enzyme precompile-and-load step is slow on the
+    # Julia 1.11 ubuntu runner (Enzyme alone takes ~3.5 min to build there),
+    # so the load can exceed 120 s and the check then false-positives a
+    # persistent task; it passes on Windows and Julia LTS. Give it a generous
+    # timeout so the slow load is not mistaken for a lingering task.
     if Sys.isapple()
         @test_skip "persistent_tasks: macOS CI runner leaves a graphics task"
     else
-        Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 60)
+        Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 600)
     end
 end

@@ -1,18 +1,16 @@
 using JET: test_opt
 using BVDOutbreakSize
 
-# Type-stability spot check on the gamma CDF rrule plumbing. Kept here
-# (in an isolated env) so JET version constraints do not bleed into
-# the main test environment.
-test_opt(BVDOutbreakSize._gamma_cdf, (Float64, Float64, Float64);
+# Type-stability spot checks on the discrete-time renewal primitives.
+# Kept here (in an isolated env) so JET version constraints do not bleed
+# into the main test environment. These pure, allocation-light helpers
+# back the generating infection process and the delay convolutions, so
+# they must stay type-stable for the model to differentiate cleanly.
+test_opt(BVDOutbreakSize.euler_lotka_r, (Float64, Vector{Float64});
     target_modules = (BVDOutbreakSize,))
-
-# Shared Gauss-Legendre `integrate` must specialise on the integrand and
-# infer a concrete result; the previous SciML `solve` path returned `Any`.
-_jet_integrand(x) = exp(0.013 * x) + 0.5
-test_opt(BVDOutbreakSize.integrate,
-    (typeof(_jet_integrand), Float64, Float64);
+test_opt(BVDOutbreakSize.convolve_delay,
+    (Vector{Float64}, Vector{Float64});
     target_modules = (BVDOutbreakSize,))
-test_opt(BVDOutbreakSize.integrate,
-    (typeof(_jet_integrand), Float64, Float64, Float64);
+test_opt(BVDOutbreakSize.renewal_infections,
+    (Vector{Float64}, Vector{Float64}, Vector{Float64});
     target_modules = (BVDOutbreakSize,))

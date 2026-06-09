@@ -6,6 +6,7 @@ using DocumenterCitations
 using DocumenterVitepress
 using Literate
 using BVDOutbreakSize
+import Dates
 
 const bib = CitationBibliography(
     joinpath(@__DIR__, "src", "refs.bib");
@@ -32,6 +33,14 @@ isdir(LITERATE_OUT) || mkpath(LITERATE_OUT)
 # that recovers the title for `@ref`.
 let readme = read(joinpath(REPO_ROOT, "README.md"), String)
     readme = replace(readme, r"^<!-- SHARED:END -->\n"m => "")
+    ## Fill the live dates on the home page the same way the analysis page
+    ## does: "Last updated" is the build date and "Data as of" is the loaded
+    ## data cut-off, so a rebuild refreshes them without editing README.md.
+    built = Dates.format(Dates.today(), "d U yyyy")
+    asof = Dates.format(load_observations().cutoff, "d U yyyy")
+    readme = replace(readme,
+        r"\*\*Last updated:\*\* [^.]*\." => "**Last updated:** $built.",
+        r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.")
     readme = replace(
         readme,
         r"\(https?://[^)]*?/analysis#([^)]+)\)" => m -> begin

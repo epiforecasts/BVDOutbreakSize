@@ -1,15 +1,18 @@
-# Observation submodels: each ties one data stream to the latent
-# cumulative case count `C(T)`. They consume the growth state and any
-# shared nuisance parameters (dispersion, ascertainment) from the
-# composer above, introduce only the priors they need on top, and add
-# a single likelihood term.
+# Observation submodels: each ties one data stream to the shared daily
+# onset incidence from the generating infection process. A stream
+# convolves the onsets with its own sampled onset-to-event delay, scales
+# by the relevant ascertainment / CFR / positivity / travel factor, and
+# bins the daily series into per-vintage increments (the first bin is the
+# cumulative up to the first vintage, the rest inter-vintage sums), fitting
+# them against the observed increments. Convolutions replace the integral
+# model's continuous onset-to-event integrals while preserving the v1.3.0
+# per-vintage time-series likelihoods.
 
 """
-NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean
-`μ` and dispersion `k`, with clamping on the success probability so
-extreme NUTS proposals during warmup do not trip the distribution
-domain check. Shared by [`deaths_model`](@ref),
-[`reported_cases_model`](@ref) and [`confirmed_cases_model`](@ref).
+NaN / Inf-safe `NegativeBinomial` constructor parameterised by mean `μ`
+and dispersion `k`, with clamping on the success probability so extreme
+NUTS proposals during warmup do not trip the distribution domain check.
+Shared by the count-stream observation submodels.
 """
 function safe_nbinomial(k, μ)
     p_raw = k / (k + max(μ, eps(typeof(μ))))
@@ -20,1113 +23,1012 @@ function safe_nbinomial(k, μ)
 end
 
 """
-Exports likelihood (Method 1, geographic spread). Couples the
-observed exported-case count to `C(T)` through the at-risk
-person-time integral over the detection window, with a Poisson
-likelihood. Samples the detection window and traveller volume
-submodels internally.
+Modelled between-vintage increments of a daily series `daily`, summed
+directly into the bins delimited by the vintage day indices `days` (1-based
+into the grid, ascending). The first increment is the cumulative count up
+to the first vintage day (`sum(daily[1:days[1]])`); each later increment is
+the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
+bin needs the cumulative. This avoids the cumulative-then-difference round
+trip — the daily series is binned once into the quantities the likelihood
+scores. Day indices are clamped to the grid. Pure and AD-transparent; the
+output element type follows `daily`.
+"""
+function bin_increments(daily::AbstractVector,
+        days::AbstractVector{<:Integer})
+    n = length(daily)
+    out = Vector{eltype(daily)}(undef, length(days))
+    ## Concrete zero for empty bins. `zero(first(daily))` dispatches on the
+    ## runtime element type, so it works even when the container has widened
+    ## to `Vector{Any}` in predict mode (`zero(eltype(daily))` would call
+    ## `zero(::Type{Any})` and error).
+    zfill = isempty(daily) ? zero(eltype(daily)) : zero(@inbounds daily[begin])
+    prev = 0
+    @inbounds for (i, d) in enumerate(days)
+        hi = clamp(Int(d), 0, n)
+        lo = clamp(prev, 0, n)
+        out[i] = hi > lo ? sum(@view daily[(lo + 1):hi]) : zfill
+        prev = hi
+    end
+    return out
+end
+
+"""
+Expand a per-vintage rate vector `rate` onto a length-`n` daily grid,
+assigning each day the rate of the vintage window it falls in. The
+windows are delimited by the ascending day indices `days` (1-based into
+the grid); day `t ≤ days[1]` takes `rate[1]`, a day in `(days[i-1],
+days[i]]` takes `rate[i]`, and any day beyond the last vintage takes the
+last rate (a flat carry-forward of the final window). When `days` is
+empty the whole grid takes `rate[1]` if present, else zero, so a scalar
+background is recovered. Pure and AD-transparent; the element type
+follows `rate`. Used to turn the per-vintage background random effect
+([`background_re_model`](@ref)) into the additive daily background the
+suspected-case and suspected-death streams consume.
+"""
+function expand_vintage_rate(rate::AbstractVector,
+        days::AbstractVector{<:Integer}, n::Integer)
+    T = eltype(rate)
+    out = Vector{T}(undef, n)
+    if isempty(days) || isempty(rate)
+        fill!(out, isempty(rate) ? zero(T) : rate[1])
+        return out
+    end
+    nv = length(rate)
+    prev = 0
+    @inbounds for (i, d) in enumerate(days)
+        i > nv && break
+        hi = clamp(Int(d), 0, n)
+        for t in (prev + 1):hi
+            out[t] = rate[i]
+        end
+        prev = hi
+    end
+    ## Carry the final window's rate forward over any tail days beyond the
+    ## last vintage edge.
+    last_rate = rate[min(length(days), nv)]
+    @inbounds for t in (prev + 1):n
+        out[t] = last_rate
+    end
+    return out
+end
+
+"""
+Group a sorted event-day list `event_days` (grid day-indices, ascending,
+one entry per dated event, possibly with repeats) into its unique days and
+the per-day occupancy count, clamped to `[1, n]`. Returns `(days, counts)`
+with `days` the unique detection/death days and `counts[i]` the number of
+events on `days[i]`. Used by [`exports_model`](@ref) and the export-deaths
+likelihood to place one Poisson term per detection/death day with an
+observed count equal to that day's occupancy, so simultaneous imports on
+one day share a single edge. `event_days` must be non-empty.
+"""
+function dated_event_bins(event_days::AbstractVector{<:Integer}, n::Integer)
+    clamped = [clamp(Int(d), 1, Int(n)) for d in event_days]
+    days = unique(clamped)
+    counts = Int[count(==(d), clamped) for d in days]
+    return days, counts
+end
+
+"""
+Per-day Poisson likelihood for a dated event series. Scores the observed
+per-day counts `obs` against the modelled per-day means `means` with one
+Poisson term each, NaN/Inf-safe via [`safe_rate`](@ref). When `obs` is
+`missing` the counts are sampled, the predictive-generator path; the
+indexed `counts[i]` keeps the predict keys (`<prefix>.counts[i]`)
+replicable. Used by [`exports_model`](@ref) and the export-deaths
+likelihood for the dated Uganda export series.
+"""
+@model function dated_poisson_model(means::AbstractVector,
+        counts::Union{Missing, AbstractVector{<:Integer}})
+    n = length(means)
+    ## `counts` is the model argument scored on the LHS of `~`, so a supplied
+    ## vector is observed data DynamicPPL conditions on and a `missing`
+    ## argument is sampled (the predictive-generator path). The indexed
+    ## `counts[i]` keeps the predict keys (`<prefix>.counts[i]`) replicable.
+    if ismissing(counts)
+        counts = Vector{Union{Missing, Int}}(missing, n)
+    end
+    for i in 1:n
+        counts[i] ~ Poisson(safe_rate(means[i]))
+    end
+    return (; means, counts)
+end
+
+"""
+Resolve a stream's per-vintage observation into the vintage day indices
+and the observed between-vintage increment vector to score, given the
+dated cumulative `history` `(; days, counts)`, the cut-off total `total`
+and the grid length `n` (day `n` is the cut-off). When the history is
+non-empty it already ends at the cut-off (the last vintage count equals
+`total`), so the increments are differenced from the history alone and the
+separate cut-off total is not scored again. When the history is empty but
+a cut-off `total` is supplied (e.g. the tests-analysed stream, whose dated
+vintage history is absent), the cut-off becomes a single vintage point at
+day `n` so the total is still scored as one increment. A history with
+`days` but empty `counts` keeps the vintage day grid while leaving the
+increments `missing`, the posterior-predictive generator path that
+`predict` resamples. When both are empty or `total` is `missing`, the
+increments are `missing` over zero days. Returns `(; days, obs_increments)`
+with `obs_increments` either an `Int` vector or `missing`.
+"""
+function vintage_obs(history, total::Union{Missing, Integer}, n::Integer)
+    if !isempty(history.counts)
+        days = history.days
+        obs_increments = diff(vcat(zero(eltype(history.counts)),
+            collect(history.counts)))
+        return (; days, obs_increments)
+    elseif !isempty(history.days)
+        return (; days = collect(history.days), obs_increments = missing)
+    elseif !ismissing(total)
+        return (; days = [Int(n)], obs_increments = [Int(total)])
+    else
+        return (; days = Int[], obs_increments = missing)
+    end
+end
+
+"""
+Per-vintage increment likelihood for one stream, expressed as a proper
+vector likelihood. Given the modelled per-vintage increments `modelled`
+(see [`bin_increments`](@ref)), scores them against the observed
+increments with NegativeBinomials sharing the dispersion `k` (one per
+vintage).
+
+The observed increments are passed as `increments` and scored with a loop
+of scalar `~` so the stream is real observed data that `predict`
+replicates. The increment variable is named `increments`, so under a
+prefixed submodel attachment the predict keys are `<prefix>.increments[i]`.
+When `increments` is `missing` the increments are sampled, making the
+submodel a predictive generator. When it is empty (zero vintages) the
+likelihood is a no-op. Returns the modelled and (when present) observed
+increments for reuse.
+"""
+@model function vintage_increments_model(modelled::AbstractVector,
+        increments::Union{Missing, AbstractVector{<:Integer}},
+        k::Real)
+    n = length(modelled)
+    ## `increments` is the model argument scored on the LHS of `~`, so a
+    ## supplied vector is observed data DynamicPPL conditions on and a
+    ## `missing` argument is sampled (the predictive-generator path). The
+    ## indexed `increments[i]` keeps the predict keys
+    ## (`<prefix>.increments[i]`) replicable.
+    if ismissing(increments)
+        increments = Vector{Union{Missing, Int}}(missing, n)
+    end
+    for i in 1:n
+        increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+    end
+    return (; modelled, increments)
+end
+
+"""
+DRC suspected-deaths likelihood, per-vintage time series. Convolves the
+daily onsets with the sampled onset-to-death delay, scales by the CFR, and
+reads the modelled cumulative deaths at each vintage day off the daily
+series, fitting the between-vintage increments as observed `~` data with a
+NegativeBinomial sharing the surveillance dispersion `k`
+([`surveillance_dispersion_model`](@ref)). The death history ends at the
+cut-off, so the cut-off total is the final increment and is not scored
+separately. Samples the onset-to-death delay
+and the CFR via injected submodels. The onset-to-death prior is centred on
+the Bayesian BDBV line-list reanalysis (mean 11.2 d, SD 5.4 d; the
+`bdbv-linelist-analysis` submodule), the same source the integral model
+used. Returns the cut-off expected count, the daily death series, the
+onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
+"""
+@model function deaths_model(
+        deaths_history,
+        total_deaths::Union{Missing, Integer},
+        onsets::AbstractVector, k::Real;
+        cfr = cfr_model(),
+        death_background = nothing,
+        background_re = nothing,
+        ## nmax covers 98% of the convolved onset->death sum (the two atomic
+        ## Gammas moment-matched to a single Gamma only for the truncation).
+        onset_to_death = onset_to_death_model(cdf_nmax(Gamma(3.33, 3.83));
+            oa_alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            oa_theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1),
+            ad_alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
+            ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)))
+    cfr_state ~ to_submodel(cfr)
+    od_state ~ to_submodel(onset_to_death)
+    CFR = cfr_state.CFR
+    bvd_deaths_daily = CFR .* convolve_delay(onsets, od_state.pmf)
+
+    n = length(bvd_deaths_daily)
+    vobs = vintage_obs(deaths_history, total_deaths, n)
+
+    ## Daily non-BVD background deaths. The renewal default has no
+    ## background (`death_background === nothing`), so the deaths stream is
+    ## pure BVD. With a scalar `death_background` the background is constant
+    ## over the grid; with a per-vintage `background_re` it is the
+    ## regularised time-varying random effect expanded to a daily series,
+    ## sharing the suspected-case background's structure.
+    if background_re !== nothing
+        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        λ_bg_death = bg_state.λ_mu
+        bg_death_sigma = bg_state.σ_bg
+        bg_death_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+    elseif death_background !== nothing
+        dbg_state ~ to_submodel(death_background)
+        λ_bg_death = dbg_state.λ_bg_death
+        bg_death_sigma = zero(λ_bg_death)
+        bg_death_daily = fill(λ_bg_death, n)
+    else
+        λ_bg_death = zero(CFR)
+        bg_death_sigma = zero(CFR)
+        bg_death_daily = fill(zero(CFR), n)
+    end
+
+    deaths_daily = bvd_deaths_daily .+ bg_death_daily
+
+    modelled_increments = bin_increments(deaths_daily, vobs.days)
+    death_increments ~ to_submodel(
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+
+    raw_total = sum(deaths_daily)
+    expected_deaths_T := safe_rate(raw_total)
+    bg_death_total = sum(bg_death_daily)
+
+    return (; CFR, od_pmf = od_state.pmf, deaths_daily, bvd_deaths_daily,
+        expected_deaths_T, λ_bg_death, bg_death_sigma, bg_death_daily,
+        bg_death_total)
+end
+
+"""
+DRC suspected (reported) cases likelihood, per-vintage time series. The
+expected daily suspected cases are a BVD-driven onset-to-report
+convolution scaled by the DRC ascertainment fraction `p_drc`, plus an
+additive non-BVD background rate `λ_bg` per day (so a suspected case need
+not be a true BVD infection). Reads the modelled cumulative suspected
+cases at each vintage day off the daily series and fits the increments
+with a NegativeBinomial sharing `k`. The background and testing fraction
+are sampled by an injected [`test_positivity_model`](@ref), and the
+onset-to-report delay is injected, defaulting to a weakly-informative
+prior on the onset-to-notification delay (mean 4.5 d, SD 3.6 d),
+consistent with Ebola surveillance reporting delays.
+
+Returns the onset-to-report PMF and the BVD onset-to-report daily series
+(unit ascertainment, no background) so [`confirmed_cases_model`](@ref) can
+reuse the same report kernel, the sampled background rate and testing
+fraction, and the implied per-suspected positivity (the BVD share of the
+expected suspected total) as a derived quantity for comparison with the
+sitrep.
+"""
+@model function reported_cases_model(
+        reported_history,
+        reported_cases::Union{Missing, Integer},
+        onsets::AbstractVector, k::Real, p_drc::Real;
+        positivity = test_positivity_model(),
+        background_re = nothing,
+        ## Onset to a suspected case being detected/reported, from the
+        ## line-list onset→admission delay (d_oa, ~4 d): a case enters
+        ## surveillance when first formally seen, so one delay serves both the
+        ## suspect-case and export streams. The line-list onset→notification
+        ## delay (~20 d) is NOT used — we assume it reflects a longer pathway
+        ## (likely confirmation and administrative processing), though what it
+        ## captures is uncertain.
+        onset_to_report = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
+            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
+    pos_state ~ to_submodel(positivity)
+    report_state ~ to_submodel(onset_to_report)
+    λ_bg = pos_state.λ_bg
+    τ_test = pos_state.τ_test
+    report_pmf = report_state.pmf
+
+    ## Unit-ascertainment BVD onset-to-report daily series, reused by the
+    ## confirmed stream.
+    bvd_reports_daily = convolve_delay(onsets, report_pmf)
+
+    n = length(bvd_reports_daily)
+    vobs = vintage_obs(reported_history, reported_cases, n)
+
+    ## Daily non-BVD background. With `background_re === nothing` this is
+    ## the constant scalar `λ_bg` over the grid (the renewal default). When
+    ## a per-vintage random effect is injected, the scalar baseline is
+    ## perturbed window-by-window and expanded to a daily series; the
+    ## baseline `λ_bg` from `positivity` is overridden by the random
+    ## effect's `λ_mu`, and the per-vintage rates are tightly pooled toward
+    ## it so the background stays a regularised minority of suspected cases.
+    if background_re === nothing
+        λ_bg_base = λ_bg
+        bg_sigma = zero(λ_bg)
+        bg_daily = fill(λ_bg, n)
+    else
+        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        λ_bg_base = bg_state.λ_mu
+        bg_sigma = bg_state.σ_bg
+        bg_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+    end
+
+    ## Suspected daily cases add the p_drc-scaled BVD signal and the
+    ## non-BVD background.
+    reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+
+    modelled_increments = bin_increments(reports_daily, vobs.days)
+    reported_increments ~ to_submodel(
+        vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+
+    raw_total = sum(reports_daily)
+    expected_reports := safe_rate(raw_total)
+
+    ## Implied per-suspected positivity at the cut-off: BVD share of the
+    ## expected suspected total.
+    bvd_total = p_drc * sum(bvd_reports_daily)
+    positivity := safe_rate(bvd_total) / expected_reports
+
+    ## Cumulative background suspected cases over the grid, exposed for
+    ## comparison with the observed suspected total.
+    bg_total = sum(bg_daily)
+
+    return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf, bvd_reports_daily,
+        reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
+        bg_total)
+end
+
+"""
+Per-window confirmed-positives likelihood, expressed as a vector
+likelihood scored against the observed analysed denominators. Given the
+per-window analysed counts `analysed` and positivities `p_pos`, scores the
+observed `positives` with one `Binomial(analysed[i], p_pos[i])` per window.
+`positives` is the model argument on the LHS of `~`, so a supplied vector
+is observed data DynamicPPL conditions on (mirroring
+[`vintage_increments_model`](@ref)) and a `missing` argument is sampled,
+making the submodel a predictive generator. Under a prefixed submodel
+attachment the predict keys are `<prefix>.positives[i]`. Returns the
+observed (or sampled) positives.
+"""
+@model function confirmed_positives_model(
+        positives::Union{Missing, AbstractVector{<:Integer}},
+        analysed::AbstractVector{<:Integer}, p_pos::AbstractVector)
+    nv = length(analysed)
+    if ismissing(positives)
+        positives = Vector{Union{Missing, Int}}(missing, nv)
+    end
+    for i in 1:nv
+        positives[i] ~ Binomial(analysed[i], p_pos[i])
+    end
+    return (; positives)
+end
+
+"""
+Align the confirmed-case counts onto the laboratory windows, splitting
+them into three non-overlapping groups so all the confirmed data is used:
+
+- *Observed* windows, where an analysed-specimen increment is available
+  (the laboratory series only differences cleanly from its second vintage
+  onward; the first cumulative value is the baseline). Each window's
+  analysed increment is the `Binomial` denominator and the matching
+  confirmed increment the positives. A zero analysed increment (the
+  24-25 May analysis stall) or a window whose positives exceed its
+  denominator is merged forward, so every observed window has
+  `obs_analysed > 0` and `0 ≤ obs_positives ≤ obs_analysed`.
+- *Early* windows, the confirmed vintages up to and including the first
+  laboratory date (18-23 May), which have no per-vintage analysed
+  denominator. Their confirmed increments are returned so the model can
+  score them against the modelled laboratory volume, with the per-window
+  positivity partially pooled with the observed windows.
+- *Late* windows, the confirmed vintages strictly after the last
+  laboratory date (the days after national testing stops, INSP's
+  confirmed-only format with no national analysed-specimen denominators).
+  Like the early windows, their
+  confirmed increments are scored against the modelled laboratory volume
+  with the pooled positivity. Their day grid carries a `late_start` day
+  (the last laboratory day) so the model bins the modelled volume over
+  each late window's *own* day range, pinned at `late_start`, rather
+  than from day 0 (which would double-count the observed window volume).
+
+The three groups partition the confirmed counts at the first and last
+laboratory dates, so no confirmed case is counted twice. Returns
+`(; obs_days, obs_positives, obs_analysed, early_days, early_increments,
+late_days, late_increments, late_start)` of grid day-indices and
+per-window counts; the observed and late groups are empty when no
+laboratory history is present and every confirmed vintage becomes an
+early window. Pure integer bookkeeping on the observed data, so it
+carries no gradient.
+"""
+function confirmed_positivity_windows(confirmed_history, lab_history)
+    empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
+        early_days = Int[], early_increments = Int[],
+        late_days = Int[], late_increments = Int[], late_start = 0)
+    isempty(confirmed_history.counts) && return empty
+    cdays = confirmed_history.days
+    ccounts = confirmed_history.counts
+    ## Cumulative confirmed at (or most recently before) a grid day.
+    function confirmed_at(day)
+        i = searchsortedlast(cdays, day)
+        return i == 0 ? 0 : Int(ccounts[i])
+    end
+
+    ## No laboratory denominators: every confirmed vintage is an early
+    ## window scored through the modelled laboratory volume.
+    if isempty(lab_history.counts)
+        inc = diff(vcat(zero(eltype(ccounts)), collect(Int.(ccounts))))
+        return (; obs_days = Int[], obs_positives = Int[],
+            obs_analysed = Int[], early_days = collect(Int.(cdays)),
+            early_increments = Int.(inc),
+            late_days = Int[], late_increments = Int[], late_start = 0)
+    end
+
+    first_lab_day = Int(lab_history.days[1])
+    ## Early windows: confirmed vintages up to the first laboratory date.
+    early_days = Int[]
+    early_increments = Int[]
+    prev = 0
+    for (i, d) in enumerate(cdays)
+        Int(d) > first_lab_day && break
+        push!(early_days, Int(d))
+        push!(early_increments, Int(ccounts[i]) - prev)
+        prev = Int(ccounts[i])
+    end
+
+    ## Observed windows: analysed increments between laboratory vintages
+    ## (from the second onward) paired with confirmed increments, merging
+    ## zero-denominator stalls forward.
+    obs_days = Int[]
+    obs_positives = Int[]
+    obs_analysed = Int[]
+    a_acc = 0
+    c_acc = 0
+    prev_conf = confirmed_at(first_lab_day)
+    for j in 2:length(lab_history.days)
+        d = Int(lab_history.days[j])
+        a_inc = Int(lab_history.counts[j]) - Int(lab_history.counts[j - 1])
+        conf_here = confirmed_at(d)
+        a_acc += a_inc
+        c_acc += conf_here - prev_conf
+        prev_conf = conf_here
+        if a_acc > 0 && c_acc <= a_acc
+            push!(obs_days, d)
+            push!(obs_positives, max(c_acc, 0))
+            push!(obs_analysed, a_acc)
+            a_acc = 0
+            c_acc = 0
+        end
+    end
+    if a_acc > 0
+        push!(obs_days, Int(lab_history.days[end]))
+        push!(obs_positives, clamp(c_acc, 0, a_acc))
+        push!(obs_analysed, a_acc)
+    elseif c_acc > 0 && !isempty(obs_analysed)
+        obs_positives[end] = clamp(obs_positives[end] + c_acc, 0,
+            obs_analysed[end])
+    end
+
+    ## Late windows: confirmed vintages strictly after the last laboratory
+    ## date, which carry no analysed-specimen denominator. Their increments
+    ## are scored against the modelled laboratory volume binned over each
+    ## window's own day range, so the running edge must start at the last
+    ## laboratory day (`late_start`) — the `bin_increments` running `prev`
+    ## starts at 0, so the model pins it at `late_start` to avoid
+    ## re-counting the observed-window volume already scored above.
+    last_lab_day = Int(lab_history.days[end])
+    late_days = Int[]
+    late_increments = Int[]
+    prev_conf_late = confirmed_at(last_lab_day)
+    for (i, d) in enumerate(cdays)
+        Int(d) <= last_lab_day && continue
+        push!(late_days, Int(d))
+        push!(late_increments, Int(ccounts[i]) - prev_conf_late)
+        prev_conf_late = Int(ccounts[i])
+    end
+
+    return (; obs_days, obs_positives, obs_analysed, early_days,
+        early_increments, late_days, late_increments,
+        late_start = last_lab_day)
+end
+
+"""
+Laboratory pipeline likelihood. Two streams driven by the shared renewal
+onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
+
+- Specimens received. The suspected daily pipeline (`p_drc`-scaled BVD
+  onset-to-report signal plus the non-BVD background `λ_bg`) is carried
+  through a sampled report-to-laboratory receipt delay and thinned by the
+  tested fraction `τ_test`, giving the expected daily received-specimen
+  volume. Its between-vintage increments are fitted against
+  `tests_received_history` as observed `~` data with a NegativeBinomial
+  sharing the surveillance dispersion `k`, identifying `τ_test` and the
+  receipt delay.
+- Confirmed positives. The confirmed counts are scored as a `Binomial` of
+  the observed specimens-*analysed* denominator in each laboratory window
+  ([`confirmed_positivity_windows`](@ref)), with a partially-pooled
+  per-window positivity ([`confirmed_positivity_model`](@ref)).
+  Conditioning the positives on the observed analysed denominator (rather
+  than a modelled count scaled by `p_drc · s_test · τ_test`) removes the
+  multiplicative ascertainment ridge that basin-split the joint, so the
+  outbreak size is pinned by the deaths and exports streams while the
+  laboratory positivity is free to track the noisy per-vintage data. The
+  early confirmed vintages with no per-vintage analysed denominator
+  (18-23 May) are scored as NegativeBinomial counts against the modelled
+  laboratory volume with the same pooled positivity, so all the confirmed
+  data is used and the early per-vintage shape informs the fit.
+
+The per-window positivity has two links, set by `positivity_link`. The
+default `:composition` ties the tested BVD share to the suspect-pool
+composition `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)`, severity-
+upsampled by a decaying enrichment δ0, then mapped to the tested-positive
+probability through the assay sensitivity and specificity,
+`p = s · q + (1 − spec)(1 − q)`. The false-positive term `(1 − spec)(1 − q)`
+makes the confirmed counts respond to the non-BVD share `1 − q`, so the
+laboratory positivity identifies the background `λ_bg` rather than
+absorbing it into a free curve — the structural link that lets the lab data
+pin `λ_bg`. The alternative `:free` link uses a free partially-pooled
+per-window random effect ([`confirmed_positivity_model`](@ref)) decoupled
+from `λ_bg`; it leaves `λ_bg` weakly identified and is kept for sensitivity
+analysis.
+
+The tested fraction `τ_test` and background rate `λ_bg` come from
+[`reported_cases_model`](@ref) so the suspected and laboratory streams
+share them. Exposes the per-window positivity, the expected received and
+confirmed totals at the cut-off, and the cut-off positivity as derived
+quantities.
+"""
+@model function confirmed_cases_model(
+        confirmed_history,
+        confirmed_cases::Union{Missing, Integer},
+        onsets::AbstractVector, k::Real, p_drc::Real,
+        bg_daily::AbstractVector, τ_test::Real,
+        bvd_reports_daily::AbstractVector;
+        lab_history = (; days = Int[], counts = Int[]),
+        tests_received_history = (; days = Int[], counts = Int[]),
+        tests_received::Union{Missing, Integer} = missing,
+        receipt = lab_delay_model(),
+        positivity = confirmed_positivity_model,
+        positivity_link::Symbol = :composition,
+        severity_enrichment = severity_enrichment_model(),
+        sensitivity = test_sensitivity_model(),
+        specificity = test_specificity_model(),
+        ## When false, the early/late windows (confirmed vintages with NO
+        ## observed analysed denominator) are not scored — only the
+        ## observed-denominator Binomial windows contribute, so confirmed
+        ## informs positivity without extrapolating a denominator from
+        ## incidence. Used to probe the no-test-data extrapolation.
+        fit_dark::Bool = true)
+    n = length(onsets)
+
+    ## Received-specimen volume: the suspected pipeline carried through the
+    ## receipt delay and thinned by the tested fraction, fit as a count.
+    ## `bg_daily` is the per-day non-BVD background from the suspected-case
+    ## stream (a constant series when the scalar background is used, the
+    ## per-vintage random effect when it is on).
+    receipt_state ~ to_submodel(receipt)
+    suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
+    received_daily = τ_test .* convolve_delay(suspected_daily,
+        receipt_state.pmf)
+    ## In predict mode (no AD) the daily series can infer as `Vector{Any}`
+    ## on some Julia versions, which then makes `reduce_empty` / `zero(Any)`
+    ## fail on the empty derived window vectors below. Concretise to the
+    ## working scalar type; this runs only when the element type has widened,
+    ## so the AD/fit path (concrete eltype) is left untouched.
+    if eltype(received_daily) === Any
+        received_daily = convert(Vector{typeof(τ_test)}, received_daily)
+    end
+    rvobs = vintage_obs(tests_received_history, tests_received, n)
+    received_inc = bin_increments(received_daily, rvobs.days)
+    received_increments ~ to_submodel(
+        vintage_increments_model(received_inc, rvobs.obs_increments, k))
+
+    ## Confirmed positives in three groups sharing one partially-pooled
+    ## positivity: early windows (before the first lab date, no observed
+    ## analysed) scored as counts against the modelled laboratory volume,
+    ## observed windows scored as a Binomial of the observed analysed
+    ## denominator, and late windows (after the last lab date, INSP's
+    ## confirmed-only format) scored as counts against the modelled volume
+    ## like the early windows.
+    windows = confirmed_positivity_windows(confirmed_history, lab_history)
+    n_early = length(windows.early_days)
+    n_obs = length(windows.obs_analysed)
+    n_late = length(windows.late_days)
+    nv = n_early + n_obs + n_late
+    have_data = !ismissing(confirmed_cases)
+
+    ## Per-window tested BVD share `p_pos`. Two links:
+    ## `:free` — a free partially-pooled per-window random effect
+    ## ([`confirmed_positivity_model`](@ref)), decoupled from `λ_bg`.
+    ## `:composition` (default) — the tested share is the suspect-pool
+    ## `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)` over each laboratory
+    ## window, upsampled by a decaying severity enrichment δ0 (see
+    ## [`severity_enrichment_model`](@ref)), so the lab positivity identifies
+    ## the background `λ_bg` rather than absorbing it into a free curve.
+    window_days = vcat(windows.early_days, windows.obs_days,
+        windows.late_days)
+    if positivity_link === :composition
+        enrich_state ~ to_submodel(severity_enrichment, false)
+        δ0 = enrich_state.δ0
+        decay_scale = enrich_state.decay_scale
+        ## PCR sensitivity and specificity. The tested-positive probability
+        ## is `p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share:
+        ## the false-positive term `(1 − spec)(1 − q)` makes the confirmed
+        ## counts respond to the non-BVD share `1 − q`, so the laboratory
+        ## data identify the background `λ_bg` through the composition `φ`
+        ## rather than the BVD signal alone. Without it the confirmed
+        ## positivity tracks only `q`, leaving `λ_bg` weakly identified.
+        sens_state ~ to_submodel(sensitivity, false)
+        spec_state ~ to_submodel(specificity, false)
+        s_test = sens_state.s_test
+        spec = spec_state.spec
+        ## Suspect-pool composition over each window, carried through the
+        ## receipt delay so it reflects the composition of the specimens
+        ## actually received and tested in the window, consistent with the
+        ## modelled volume `received_daily`. The `τ_test` factor cancels in the
+        ## ratio φ, so it is omitted here.
+        received_bvd_daily = convolve_delay(p_drc .* bvd_reports_daily,
+            receipt_state.pmf)
+        received_bg_daily = convolve_delay(bg_daily, receipt_state.pmf)
+        if eltype(received_bvd_daily) === Any
+            received_bvd_daily = convert(Vector{typeof(τ_test)},
+                received_bvd_daily)
+            received_bg_daily = convert(Vector{typeof(τ_test)},
+                received_bg_daily)
+        end
+        bvd_window = bin_increments(received_bvd_daily, window_days)
+        bg_window = bin_increments(received_bg_daily, window_days)
+        Tt = eltype(bvd_window)
+        ## Testing clock: cumulative modelled analysed volume at each window.
+        vol_window = bin_increments(received_daily, window_days)
+        c_window = cumsum(vol_window)
+        lo = convert(Tt, 1e-8)
+        hi = one(Tt) - lo
+        ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
+        ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        dscale = max(convert(Tt, decay_scale), one(Tt))
+        s_t = convert(Tt, s_test)
+        sp_t = convert(Tt, spec)
+        p_pos = map(eachindex(window_days)) do i
+            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
+            ## window, guarded against a zero/negative denominator.
+            num = bvd_window[i]
+            den = bvd_window[i] + bg_window[i]
+            ratio = num / (den + lo)
+            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+            ## Severity-enriched tested BVD share, then the assay
+            ## sensitivity/specificity transform to the tested-positive
+            ## probability so the false-positive term identifies `λ_bg`.
+            q = logistic(logit(φ) + δ_i)
+            qf = isfinite(q) ? q : φ
+            qe = clamp(qf, lo, hi)
+            p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
+            ## Final guard: clamp into (0,1) and replace any non-finite value
+            ## with the composition so the confirmed Binomial always sees a
+            ## valid probability even under an AD perturbation.
+            clamp(isfinite(p) ? p : φ, lo, hi)
+        end
+    else
+        pos_state ~ to_submodel(positivity(nv))
+        p_pos = pos_state.p_pos
+    end
+
+    ## Early windows: confirmed increment ~ NegBinomial(positivity ×
+    ## modelled analysed volume), the volume binned from the received
+    ## series so the early counts inform the fit through partial pooling.
+    early_p = p_pos[1:n_early]
+    early_volume = bin_increments(received_daily, windows.early_days)
+    early_mean = early_p .* early_volume
+    early_obs = (have_data && n_early > 0 && fit_dark) ?
+                windows.early_increments : missing
+    early_increments ~ to_submodel(
+        vintage_increments_model(early_mean, early_obs, k))
+
+    ## Observed windows: Binomial of the observed analysed denominator.
+    obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
+    obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
+                    missing
+    confirmed_positives ~ to_submodel(
+        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
+
+    ## Late windows: confirmed increment ~ NegBinomial(positivity × modelled
+    ## analysed volume), like the early windows but for the confirmed-only
+    ## vintages after the last laboratory date. The volume is binned over
+    ## each late window's own day range, with the running edge PINNED at
+    ## the last laboratory day (`late_start`): `bin_increments` runs its
+    ## running `prev` from day 0, so prepending `late_start` to the late day
+    ## edges and dropping the synthetic first bin starts the accumulation at
+    ## `late_start`, avoiding double-counting the observed-window volume.
+    late_p = p_pos[(n_early + n_obs + 1):nv]
+    if n_late > 0
+        late_edges = vcat(windows.late_start, windows.late_days)
+        late_volume = bin_increments(received_daily, late_edges)[2:end]
+    else
+        late_volume = similar(received_daily, 0)
+    end
+    late_mean = late_p .* late_volume
+    late_obs = (have_data && n_late > 0 && fit_dark) ?
+               windows.late_increments : missing
+    late_increments ~ to_submodel(
+        vintage_increments_model(late_mean, late_obs, k))
+
+    expected_received := safe_rate(sum(received_daily))
+    ## Expected confirmed at the cut-off and the overall positivity, over the
+    ## modelled early and late volume and the observed analysed windows. The
+    ## early/late window vectors are empty when a vintage has no such window,
+    ## and in predict mode their element type can widen to `Any`, so each sum
+    ## is given a concrete `init` to skip `reduce_empty`'s `zero(Any)`. The
+    ## init is taken from the scalar `τ_test` (always concrete), NOT from
+    ## `eltype(p_pos)`, which can itself widen to `Any` in predict mode.
+    z = zero(τ_test)
+    denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
+            sum(late_volume; init = z)
+    expected_positives = sum(early_mean; init = z) + sum(late_mean; init = z) +
+                         (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
+    expected_confirmed := safe_rate(expected_positives)
+    p_positive := safe_rate(expected_positives) / safe_rate(denom)
+
+    return (; τ_test, bg_daily, p_pos, windows, received_daily,
+        expected_received, expected_confirmed, p_positive)
+end
+
+"""
+Uganda exports likelihood (geographic spread). The exports stream is
+travel-gated, so the at-risk clock starts at infection: a traveller
+moves and is exported during incubation (pre-symptomatic) and stays at
+risk of being exported and detected abroad only until the
+infection→detection delay has elapsed. The expected detected exports by
+the cut-off therefore accumulate the per-capita travel rate `q =
+daily_travellers / source_population` over the at-risk PERSON-TIME, not
+over single-day onset events:
+
+```math
+\\mathbb{E}[\\text{exports}(T)] = p_\\text{uganda}\\, q
+    \\sum_{s=1}^{T} \\text{prevalence}(s),
+\\qquad
+\\text{prevalence}(s) = C(s) - \\text{detected}(s),
+```
+
+with `C(s)` the cumulative infections and `detected(s)` the cumulative
+infections that have already completed the infection→detection delay by
+day `s`. The infection→detection delay is the sampled onset-to-detection
+delay convolved with the shared incubation PMF (so incubation sits inside
+it, keyed to infection like `C(s)`); `detected` is the running sum of
+`convolve_delay(infections, f_det)`. Summing the daily at-risk
+prevalence is the discrete person-time integral, the discrete analogue of
+the integral model's at-risk person-time export integral; the earlier
+onset-incidence form summed `q · onsets`, charging each case only a
+single day of travel risk and so under-counting exports by roughly the
+mean at-risk dwell time. Samples the traveller volume and the
+onset-to-detection delay via injected submodels. The onset-to-detection
+prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
+SD 4.7 d; WHO Ebola Response Team 2014, NEJM), the delay from symptom
+onset to detection at a point of entry abroad.
+
+## Dated per-day likelihood
+
+The observed Uganda imports are a dated series — `export_case_days` gives
+the grid day-index of each detection (sorted ascending) — fitted as an
+inhomogeneous Poisson process rather than a single cumulative count. The
+cumulative export intensity is `Λ(t) = sum(export_prevalence[1:t])`, so
+the per-day expected export increment `Λ(t) − Λ(t−1)` is just the day-`t`
+at-risk person-time `export_prevalence[t]`. The likelihood places one
+Poisson term per import at its detection day, the increment between
+consecutive detection-day edges (via [`bin_increments`](@ref) on the daily
+prevalence series), with two extra terms:
+
+  - `pre_detection_exports ~ Poisson(Λ(d₁−1))` observed at zero, the
+    first-detection timing bound: no export is expected before the
+    earliest detection day `d₁`. The first import's increment is measured
+    from `Λ(d₁−1)`, so the pre-detection weight and the import increments
+    partition `Λ(t_last)` and the model still conditions on the same total
+    as a cumulative single-Poisson would.
+  - `last_offset` truncation: the travel-gated export clock stops at the
+    last observed import `t_last = day of the most recent detection`. Days
+    after the last import carry no informative zero (cross-border movement
+    shifts over the outbreak and the most recent days are right-truncated
+    by reporting lag), so prevalence past `t_last` does not accrue. With an
+    empty `export_case_days` the model falls back to the cut-off cumulative
+    Poisson `exported_cases ~ Poisson(Λ(T))`.
+
+Returns the expected cumulative count at `t_last`, the per-capita travel
+rate and the daily at-risk prevalence for reuse by
+[`exports_deaths_model`](@ref).
 """
 @model function exports_model(
         exported_cases::Union{Missing, Integer},
-        growth_state, p_uganda::Real;
-        source_population::Real = ITURI_POPULATION,
-        window = detection_window_model(),
-        traveller = traveller_volume_model(),
-        onset_fraction::Real = 1.0)
-    cumulative = growth_state.cumulative
-    T = growth_state.T
-
-    window_state ~ to_submodel(window, false)
-    w = window_state.w
-
-    travel_state ~ to_submodel(traveller, false)
-    daily_travellers = travel_state.daily_travellers
-
-    q = daily_travellers / source_population
-    ## `onset_fraction` defaults to 1.0 so the McCabe-style window path is
-    ## unchanged; pass the incubation mgf to onset-rescale the at-risk
-    ## person-time if the window is interpreted as onset→detection.
-    expected_exports_T := onset_fraction *
-                          expected_exports(cumulative, p_uganda, q, T, w;
-        r = growth_state.r)
-
-    exported_cases ~ Poisson(expected_exports_T)
-
-    return (; w, daily_travellers, p_uganda,
-        expected_exports = expected_exports_T)
-end
-
-"""
-Exports likelihood with an explicit infection→detection delay. The
-delay-convolution counterpart of [`exports_model`](@ref): the at-risk
-export person-time is the infection→detection delay-survival integral
-[`expected_exports_delay`](@ref) rather than the McCabe et al.
-rectangular detection window. The exports stream is travel-gated, so the
-at-risk clock starts at infection (the traveller moves during
-incubation, pre-symptomatic). The infection→detection delay `f_det` is
-passed in rather than sampled here: the export count is a single datum
-and cannot identify its own delay, and entering surveillance is taken to
-be the same process abroad as in the DRC, so the composers pass the
-incubation ⊕ onset-to-report delay (see [`combined_delay`](@ref),
-[`report_delay_model`](@ref) and [`reported_cases_model`](@ref)), letting
-the reported and incubation streams pin it. There is no separate
-incubation rescale here: the incubation period already sits inside
-`f_det`. Samples the traveller volume submodel internally and exposes
-`f_det` and `daily_travellers` for the export-deaths and detection-timing
-delay submodels. Couples to `C(T)` through a Poisson likelihood.
-"""
-@model function exports_delay_model(
-        exported_cases::Union{Missing, Integer},
-        growth_state, p_uganda::Real, f_det;
-        source_population::Real = ITURI_POPULATION,
-        traveller = traveller_volume_model(),
-        last_offset::Real = 0)
-    r = growth_state.r
-    T = growth_state.T
-
-    travel_state ~ to_submodel(traveller, false)
-    daily_travellers = travel_state.daily_travellers
-
-    q = daily_travellers / source_population
-    ## The exports stopped accruing `last_offset` days before the cut-off
-    ## (the last import), so the at-risk export integral runs only to
-    ## `t_last = T - last_offset`. The latent size `growth_state.C_T` is
-    ## still reported at the cut-off `T` by the caller.
-    t_last = T - last_offset
-    expected_exports_T := expected_exports_delay(r, p_uganda, q, t_last,
-        f_det)
-
-    exported_cases ~ Poisson(expected_exports_T)
-
-    return (; f_det, daily_travellers, p_uganda,
-        expected_exports = expected_exports_T)
-end
-
-"""
-Dated exports likelihood with an explicit infection→detection delay. The
-time-resolved counterpart of [`exports_delay_model`](@ref): instead of a
-single cumulative count at the cut-off, the observed Uganda exports are a
-daily series `exported_cases_daily` (index 1 = earliest detection day,
-last index = the cut-off day), modelled as an inhomogeneous Poisson
-process. The cumulative export expectation
-[`expected_exports_delay`](@ref) is placed onto the daily grid through the
-shared between-edge differencing [`daily_increment_kernel`](@ref), the
-same construction as [`exports_deaths_delay_model`](@ref): a continuous
-survival weight over the pre-detection stretch followed by per-day Poisson
-counts.
-
-The pre-detection survival term `pre_detection_exports ~ Poisson(Λ(T-n))`
-observed at zero subsumes the first-export-detection timing bound of
-[`exports_detection_timing_delay_model`](@ref): it asserts that no export
-was expected before the earliest observed detection. The total expected
-(pre-detection weight ⊕ daily increments) equals the cumulative
-expectation `Λ(T)` the scalar single-total likelihood uses, so the daily
-model conditions on the same total while also using the detection timing.
-A single-day series (`length 1`) reduces to that cumulative split.
-
-The exports stream is travel-gated, so the at-risk clock starts at
-infection; `f_det` (the incubation ⊕ onset-to-report delay, see
-[`combined_delay`](@ref)) and the traveller volume submodel carry the
-delay and per-day per-capita travel rate, exactly as in
-[`exports_delay_model`](@ref). Exposes `f_det` and `daily_travellers` for
-the export-deaths delay submodel.
-
-`last_offset` (default 0) places the last series day `last_offset` days
-before the cut-off rather than at the cut-off. Because the export stream
-is travel-gated and cross-border movement patterns likely shift over the
-outbreak (and the most recent days are right-truncated by reporting lag),
-the stream is run only up to the most recent reported import to Uganda;
-the at-risk clock, per-day grid and reported `expected_exports` all anchor
-on that day (`t_last = T - last_offset`) instead of the cut-off.
-"""
-@model function exports_daily_delay_model(
-        exported_cases_daily::AbstractVector,
-        growth_state, p_uganda::Real, f_det;
+        infections::AbstractVector, p_uganda::Real;
+        export_case_days::AbstractVector{<:Integer} = Int[],
         pre_detection_exports::Union{Missing, Integer} = 0,
-        last_offset::Real = 0,
+        incubation_pmf::AbstractVector,
         source_population::Real = ITURI_POPULATION,
-        traveller = traveller_volume_model())
-    r = growth_state.r
-    T = growth_state.T
-
-    travel_state ~ to_submodel(traveller, false)
+        traveller = traveller_volume_model(),
+        ## Export detection abroad uses the same line-list onset→admission
+        ## delay (d_oa) as the suspect-case report: a case is detected at a
+        ## point of entry when first formally seen, ~4 days after onset.
+        onset_to_detection = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
+            alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
+            theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
+    travel_state ~ to_submodel(traveller)
     daily_travellers = travel_state.daily_travellers
-
     q = daily_travellers / source_population
-    n = length(exported_cases_daily)   # earliest detection to last series day
 
-    ## The series ends `last_offset` days before the cut-off (the date of
-    ## the most recent reported import to Uganda). The travel-gated export
-    ## stream is only run up to that day: cross-border movement patterns
-    ## likely shift over the outbreak and the days after the last import
-    ## are right-truncated by reporting lag, so they carry no informative
-    ## zero. The at-risk clock and the per-day grid anchor on this date.
-    t_last = T - last_offset
+    detect_state ~ to_submodel(onset_to_detection)
+    ## Infection→detection delay: onset→detection convolved with the shared
+    ## incubation PMF, so the survival clock runs from infection.
+    f_det = convolve_pmf(incubation_pmf, detect_state.pmf)
+    detected_daily = convolve_delay(infections, f_det)
+    ## At-risk prevalence (person-days): infected but not yet detected.
+    prevalence = cumsum(infections) .- cumsum(detected_daily)
+    export_prevalence = p_uganda .* q .* prevalence
+    n = length(export_prevalence)
 
-    ## One at-risk trajectory over [0, t_last], reused across every edge
-    ## (the pre-detection edge at i = 0 plus the n daily edges), the
-    ## travel-gated analogue of the DRC `DailyBVDTrajectory` convolution.
-    traj = ExportRiskTrajectory(t_last, r)
-    edges = [t_last - n + i for i in 0:n]
-    Λ = p_uganda .* q .* export_at_risk(traj, edges, f_det)
-
-    ## Pre-detection zero stretch as one Poisson observed at 0; `missing`
-    ## generates it for predictive checks. This is the first-detection
-    ## timing bound: no export expected before the earliest detection.
-    pre = max(Λ[1], zero(eltype(Λ)))
-    pre_detection_exports ~ Poisson(pre)
-
-    ## Per-day means via the shared between-edge differencing, starting
-    ## from the pre-detection survival weight `pre`.
-    μ_day = daily_increment_kernel(Λ[2:end], pre)
-    for i in 1:n
-        exported_cases_daily[i] ~ Poisson(μ_day[i])
+    if isempty(export_case_days)
+        ## No dated series: cumulative single-total Poisson at the cut-off.
+        raw_exports = sum(export_prevalence)
+        expected_exports_T := safe_rate(raw_exports)
+        exported_cases ~ Poisson(expected_exports_T)
+    else
+        ## Dated per-day Poisson. The export clock stops at the last import
+        ## `t_last` (the `last_offset` truncation); prevalence past it does
+        ## not accrue. `d₁` is the earliest detection day.
+        days, counts = dated_event_bins(export_case_days, n)
+        d₁ = days[1]
+        ## Pre-detection survival weight Λ(d₁−1): the cumulative export
+        ## intensity up to the day before the earliest detection.
+        pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
+              zero(@inbounds export_prevalence[begin])
+        pre_detection_exports ~ Poisson(safe_rate(pre))
+        ## Per-day-edge increments between consecutive detection days; the
+        ## first is measured from the pre-detection weight `pre`, so the
+        ## pre-detection term and the increments partition Λ(t_last).
+        raw_inc = bin_increments(export_prevalence, days)
+        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                 for i in eachindex(raw_inc)]
+        obs = ismissing(exported_cases) ? missing : counts
+        export_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        ## Reported expected count is the cumulative intensity to `t_last`.
+        expected_exports_T := safe_rate(pre + sum(μ_day))
     end
 
-    expected_exports_T := max(Λ[end], eps(eltype(Λ)))
-    return (; f_det, daily_travellers, p_uganda,
+    ## Travel-scaled at-risk prevalence WITHOUT the export-case ascertainment
+    ## `p_uganda`: a death among an exported case would be reported whether or
+    ## not the case itself was ascertained as an import, so the export-death
+    ## model accrues over the travelled person-time `q · prevalence`, not the
+    ## ascertained `export_prevalence = p_uganda · q · prevalence`.
+    travelled_prevalence = q .* prevalence
+    return (; p_uganda, daily_travellers, q, prevalence,
+        export_prevalence, travelled_prevalence,
         expected_exports = expected_exports_T)
 end
 
 """
-Deaths likelihood (Method 2, back-calculation from deaths). Couples the
-observed DRC suspected deaths to `C(T)` through the CFR-weighted gamma
-convolution. The observation is a per-vintage vector `total_deaths`
-aligned with `t_edges` (elapsed time since seeding to each sitrep date,
-ascending, latest = `T`); the model fits the between-vintage
-cumulative-count increments as independent NegBinomial terms sharing the
-dispersion `k` of [`surveillance_dispersion_model`](@ref). A single
-observation (`length 1`, `t_edges = [T]`) reduces to the cumulative
-single-total NegBinomial likelihood, matching the McCabe et al. Method 2
-configuration. Samples the [`delay_model`](@ref) and [`cfr_model`](@ref)
-submodels internally.
-
-`p_deaths` multiplies the expected-deaths trajectory to allow the
-observed *suspected* deaths to drift around the BVD-driven CFR-weighted
-expectation; pass it from [`deaths_ascertainment_model`](@ref) at the
-joint-composer level. Defaults to `1.0` so the single-stream paths
-reduce to the original likelihood.
-
-`λ_bg_death` adds a constant-rate non-BVD background to the suspected
-deaths, the death analogue of the case background `λ_bg`
-([`death_background_model`](@ref), [`reported_cases_model`](@ref)): the
-cumulative background is `μ_bg_death(s) = λ_bg_death · s`, so each bin's
-background increment is `λ_bg_death · Δt`. The per-bin mean is then
-`Δμ_BVD_death + Δμ_bg`. It defaults to `0.0`, so the single-stream and
-McCabe Method 2 paths reduce to the pure BVD likelihood. The BVD-only and
-total (BVD plus background) cumulative trajectories are returned so
-[`confirmed_deaths_model`](@ref) can build the death-specimen positivity
-from the suspect-death composition.
-"""
-@model function deaths_model(
-        total_deaths::AbstractVector,
-        growth_state, k::Real, t_edges::AbstractVector;
-        delay = delay_model(),
-        cfr = cfr_model(),
-        p_deaths::Real = 1.0,
-        λ_bg_death::Real = 0.0,
-        onset_fraction::Real = 1.0)
-    r = growth_state.r
-
-    delay_state ~ to_submodel(delay, false)
-    cfr_state ~ to_submodel(cfr, false)
-    f_death = delay_state.dist
-    CFR = cfr_state.CFR
-
-    n = length(t_edges)
-    length(total_deaths) == n ||
-        error("total_deaths length must match t_edges (got " *
-              "$(length(total_deaths)) vs $n)")
-
-    ## CFR-weighted cumulative expected BVD deaths at each bin edge. The
-    ## latent trajectory is cumulative *infections*, so `onset_fraction`
-    ## (the incubation mgf) maps it onto onsets before the onset-to-death
-    ## convolution; the drift factor `p_deaths` scales the whole
-    ## trajectory.
-    μ_BVD_at_edges = [s <= zero(s) ? zero(s) :
-                      p_deaths * onset_fraction *
-                      delay_convolution(CFR, r, s, f_death)
-                      for s in t_edges]
-
-    ## Constant-rate non-BVD background, the death analogue of the case
-    ## `λ_bg`: cumulative μ_bg_death(s) = λ_bg_death·s, so the suspect-death
-    ## cumulative is the BVD trajectory plus this linear background. The
-    ## per-bin NegBinomial mean is the between-edge increment of the total
-    ## (with a NaN / Inf-safe positive clamp via `daily_increment_kernel`).
-    Tt = typeof(μ_BVD_at_edges[1] * float(λ_bg_death))
-    Λ_at_edges = Vector{Tt}(undef, n)
-    for i in 1:n
-        s_k = t_edges[i]
-        μ_bg_k = max(convert(Tt, λ_bg_death) * s_k, zero(Tt))
-        Λ_at_edges[i] = convert(Tt, μ_BVD_at_edges[i]) + μ_bg_k
-    end
-    bin_means = daily_increment_kernel(Λ_at_edges)
-
-    for i in 1:n
-        total_deaths[i] ~ safe_nbinomial(k, bin_means[i])
-    end
-
-    expected_deaths_T := Λ_at_edges[end]
-
-    return (; CFR, p_deaths, λ_bg_death, delay_dist = f_death,
-        expected_deaths_T, Λ_at_edges, μ_BVD_at_edges)
-end
-
-"""
-Reported (suspected) cases likelihood. Couples the observed DRC
-suspected-case counts to `C(T)` as the sum of (i) a BVD-driven
-contribution `p_drc · onset_fraction · ∫₀^s exp(r·u) · f_rep(s-u) du` using
-the onset-to-report delay [`report_delay_model`](@ref) and (ii) a non-BVD
-background at the constant rate `λ_bg` (see [`test_positivity_model`](@ref)),
-so each bin's background increment is the cumulative difference
-`λ_bg·s_k − λ_bg·s_{k−1} = λ_bg · Δt`. The latent trajectory is cumulative
-*infections*, so `onset_fraction` (the incubation mgf) maps it onto
-onsets before the onset-to-report convolution; the background term is
-non-BVD and unscaled.
-
-The observation is a per-vintage vector `reported_cases` aligned with
-`t_edges` (elapsed time since seeding to each sitrep date, ascending,
-latest = `T`); the model fits the between-vintage cumulative-count
-increments as independent NegBinomial terms sharing `k` with
-[`deaths_model`](@ref) and [`confirmed_cases_model`](@ref). Each bin
-carries its own ascertainment `p_drc_per_bin[v]` (a per-bin random
-effect from [`daily_ascertainment_model`](@ref)), applied to the
-between-edge BVD increment. The first bin's "increment" is the
-cumulative at the first edge, so a single observation (`length 1`,
-`t_edges = [T]`) reduces to the cumulative single-total likelihood used
-by McCabe et al.
-
-The unit-ascertainment BVD cumulative `μ_BVD,0(s)` is evaluated at every
-edge through the Gamma closed-form [`delay_convolution`](@ref). Returns
-`report_delay_dist = f_rep` so [`confirmed_cases_model`](@ref) can reuse
-the same onset-to-report kernel, and the derived per-suspected
-positivity `μ_BVD / μ_cases` at the cut-off as a diagnostic.
-"""
-@model function reported_cases_model(
-        reported_cases::AbstractVector,
-        growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, t_edges::AbstractVector;
-        report_delay = report_delay_model(),
-        test_positivity = test_positivity_model(),
-        report_onset_offset::Union{Nothing, Real} = nothing,
-        onset_fraction::Real = 1.0)
-    report_state ~ to_submodel(report_delay, false)
-    test_positivity_state ~ to_submodel(test_positivity, false)
-    λ_bg = test_positivity_state.λ_bg
-    τ_forward = test_positivity_state.τ_forward
-    f_rep = report_state.dist
-    r = growth_state.r
-
-    n = length(t_edges)
-    n == length(p_drc_per_bin) ||
-        error("p_drc_per_bin length must match t_edges (got " *
-              "$(length(p_drc_per_bin)) vs $n)")
-    n == length(reported_cases) ||
-        error("reported_cases length must match t_edges (got " *
-              "$(length(reported_cases)) vs $n)")
-
-    ## Unit-ascertainment BVD cumulative onsets at each bin edge (Gamma
-    ## closed form), the infection trajectory mapped onto onsets by
-    ## `onset_fraction` (the incubation mgf). Per-bin ascertainment is
-    ## applied below on the between-edge increment so each bin's mean
-    ## tracks its own random-effect draw.
-    μ_BVD0_at_edges = [s <= zero(s) ? zero(s) :
-                       onset_fraction *
-                       delay_convolution(one(eltype(p_drc_per_bin)),
-                           r, s, f_rep) for s in t_edges]
-    ΔμBVD0 = daily_increment_kernel(μ_BVD0_at_edges)
-
-    Tt = eltype(ΔμBVD0)
-    Λ_at_edges = Vector{Tt}(undef, n)
-    bin_means = Vector{Tt}(undef, n)
-    Λ_prev = zero(Tt)
-    μ_bg_prev = zero(Tt)
-    for i in 1:n
-        s_k = t_edges[i]
-        ## Constant-rate non-BVD background: cumulative μ_bg(s_k) = λ_bg·s_k,
-        ## so the between-edge increment is λ_bg·(s_k − s_{k−1}).
-        μ_bg_k = max(λ_bg * s_k, zero(Tt))
-        Δμ_bg = max(μ_bg_k - μ_bg_prev, zero(Tt))
-        μ_bg_prev = μ_bg_k
-        raw = p_drc_per_bin[i] * ΔμBVD0[i] + Δμ_bg
-        μ_i = isfinite(raw) ? max(raw, eps(typeof(raw))) :
-              eps(typeof(raw))
-        bin_means[i] = μ_i
-        Λ_prev += μ_i
-        Λ_at_edges[i] = Λ_prev
-    end
-
-    for i in 1:n
-        reported_cases[i] ~ safe_nbinomial(k, bin_means[i])
-    end
-
-    ## Implied per-suspected positivity at the cut-off (BVD share of the
-    ## expected suspected total). Exposed for comparison with the sitrep.
-    μ_BVD_cum = sum(p_drc_per_bin[i] * ΔμBVD0[i] for i in 1:n)
-    positivity := μ_BVD_cum / Λ_at_edges[end]
-
-    expected_reports_total := Λ_at_edges[end]
-
-    return (; p_drc_per_bin, λ_bg, τ_forward,
-        expected_reports_total, positivity,
-        report_delay_dist = f_rep,
-        μ_BVD0_at_edges, Λ_at_edges)
-end
-
-"""
-Laboratory pipeline likelihood. Models the lab-confirmed cases over time
-and, where available, the testing volume that gates them.
-
-`confirmed_cases` is a per-vintage vector of confirmed-case *increments*
-(between-vintage differences of `Cumul positifs`) aligned with `t_edges`.
-Each window's new positives are observed on the samples newly analysed in
-that window, the same increment construction as the reported and deaths
-streams (equations (23)-(24)):
+Deaths-among-exported-cases likelihood, dated per-day. Deaths accrue among
+the TRAVELLED at-risk person-time `q · prevalence` from
+[`exports_model`](@ref), BEFORE the export-case ascertainment `p_uganda`: a
+death among an exported case would be reported whether or not the case was
+ascertained as an import, so the death model is not thinned by `p_uganda`
+(unlike the export-case count). The day-`t` expected export-death increment
+is the CFR-scaled convolution of that travelled prevalence with the
+infection→death PMF,
 
 ```math
-\\Delta C_v \\sim \\mathrm{Binomial}(\\Delta A_v,\\ p_{pos,v}),
-\\qquad
-p_{pos,v} = s_{test}\\, q_v + (1 - \\text{spec})\\,(1 - q_v),
+\\mathrm{d}\\Lambda_\\text{d}(t) = \\mathrm{CFR}
+    \\sum_{s\\le t} q\\,\\text{prevalence}(s)\\, f_\\text{d}(t-s),
 ```
 
-where `ΔA_v` is the analysed count newly added in window `v`
-(`samples_analysed`, a known denominator), `q_v` the BVD share of that
-slice, `s_test` the PCR sensitivity and `1 − spec` the false-positive rate
-(see [`test_specificity_model`](@ref)). Conditioning on the slice rather
-than the cumulative total avoids re-using the early analysed samples in
-every later denominator.
+so the cumulative export-death intensity `Λ_d(t)` is its running sum, the
+discrete analogue of the integral model's `∫ C(s)·S_det·F_death ds`. The
+onset-to-death PMF `od_pmf` shared from [`deaths_model`](@ref) is convolved
+with the incubation PMF to give the infection→death distribution `f_d`,
+keyed to infection like the prevalence.
 
-`q_v` is the tested BVD share set by the **composition link**: the lab
-over-tests BVD early (severe cases are triaged first and are more likely
-BVD), the severity enrichment relaxing to the suspect-pool composition
-`φ_v = μ_BVD,v / (μ_BVD,v + μ_bg,v)` as testing widens (see
-[`severity_enrichment_model`](@ref)):
-
-```math
-\\mathrm{logit}(q_v) = \\mathrm{logit}(\\varphi_v)
-    + \\delta_0\\, e^{-c_v / \\text{decay}},
-\\qquad
-c_v = \\frac{\\sum_{j \\le v} \\Delta A_j}{\\text{volume\\_scale}},
-```
-
-with `c_v` the cumulative analysed VOLUME (in units of `volume_scale`
-samples), so a lab stall pauses the relaxation. `δ0` is the early severity
-log-odds enrichment and `decay` its timescale. Tying `q` to `φ` makes the
-confirmed/positivity data identify the non-BVD background `λ_bg` rather
-than a free curve.
-
-`q_random_effect` adds a per-vintage partially-pooled logit-scale offset
-to this baseline share (`q_v = logistic(logit(q_base,v) + σ_q·z_v)`, see
-[`confirmed_q_re_model`](@ref)) so each window's positivity can fit the
-non-monotone wobble while `s` stays fixed. It is on by default because the
-observed positivity is non-monotone; pass `nothing` to recover the smooth
-composition baseline.
-
-The cumulative suspect backlog at each edge is split BVD / background:
-`μ_BVD(s_v) = p_{DRC,v} · onset_fraction · ∫₀^{s_v} e^{r u} f_rep(s_v−u) du`
-(the onset→report Gamma closed form, the same quantity the reported stream
-produces) and `μ_bg(s_v) = λ_bg · s_v` (constant-rate non-BVD). Their sum
-`N_susp,v` is the report-level backlog; their ratio `μ_BVD / N_susp` is the
-count-implied BVD composition, exposed as a diagnostic
-(`q_baseline_count`).
-
-Specimens reach the lab after a transport delay, so the cumulative
-*received* backlog is `N_susp` convolved with the receipt-delay kernel
-`f_receipt` (see [`lab_receipt_delay_model`](@ref)).
-
-`samples_received` is the per-vintage received-count *increment* vector
-(differenced `Cumul échantillons reçus`). When supplied each window is
-observed as `ΔR_v ~ NegBinomial(τ_forward · ΔN_recv,v, k)`, pinning the
-forwarded fraction `τ_forward`. A vector of `missing` entries drops the
-received likelihood (and is generated for predictive checks).
-
-`samples_analysed` is the per-vintage analysed-increment denominator
-vector (`ΔA_v`) aligned with `t_edges`. It both denominates the confirmed
-Binomial and conditions the analysis-capacity random walk (see
-[`lab_capacity_model`](@ref)): for windows 2..n the lab processes
-`μ_A = backlog·(1 − exp(−κ_v·Δt_v/backlog))` of the available received
-backlog, observed as `ΔA_v ~ Poisson(μ_A)`. Window 1's cumulative is the
-initial condition. Pass `missing` entries (with a non-missing
-`tests_analysed` fallback) to generate predictive draws.
-
-`tests_analysed` is the cut-off cumulative analysed count, retained for
-the predictive denominator and the lab-cut-off diagnostic. The per-test
-positivity `p_pos`, tested BVD share `q_cutoff` and baseline `q_baseline`
-are exposed as derived quantities.
-
-The confirmed stream is a coherent lab-throughput queue that fits ALL
-vintages, including the dark windows that lack a published analysed count.
-The capacity-limited drain
-`μ_A_v = backlog·(1 − exp(−κ_v·Δt_v / backlog))` is computed for every
-window (the cumulative analysed advances by the observed increment where
-present, else by `μ_A_v`). Observed-denominator windows condition on the
-real count: `ΔC_v ~ Binomial(ΔA_obs_v, p_pos_v)` and
-`ΔA_obs_v ~ Poisson(μ_A_v)`. Dark windows use the exact marginal of
-`Binomial(Poisson(μ_A_v), p_pos_v)`, namely `ΔC_v ~ Poisson(μ_A_v·p_pos_v)`,
-so the unobserved denominator is integrated out (Poisson thinning) rather
-than carried as a free per-vintage latent. This removes the funnel. The
-predicted dark-window denominators are exposed as `μ_A_pred` /
-`dark_analysed_total`.
-
-`epi_exclusion` (default `nothing`) supplies the queue's forwarded fraction
-`(1 − e)`: with `nothing` the headline fit pins `e = 0` (forward 1); pass
-[`epi_exclusion_model`](@ref) for the opt-in `e ~ Beta(2, 12)` sensitivity.
-In the queue path `τ_forward` is unused (the received asymptote is
-`(1 − e)·N_susp`).
-
-A single observation (`length 1`, `t_edges = [T]`) reduces to the
-cumulative confirmed Binomial.
-"""
-@model function confirmed_cases_model(
-        confirmed_cases::AbstractVector,
-        samples_analysed::AbstractVector,
-        samples_received::AbstractVector,
-        tests_analysed::Union{Missing, Integer},
-        growth_state, k::Real,
-        p_drc_per_bin::AbstractVector, λ_bg::Real, τ_forward::Real, f_rep,
-        t_edges::AbstractVector, tests_edge::Real;
-        test_sensitivity = test_sensitivity_model(),
-        test_specificity = test_specificity_model(),
-        severity_enrichment = severity_enrichment_model(),
-        receipt_delay = lab_receipt_delay_model(),
-        capacity_model = lab_capacity_model,
-        capacity_centre::Real = 150.0,
-        report_onset_offset::Union{Nothing, Real} = nothing,
-        q_random_effect = confirmed_q_re_model,
-        epi_exclusion = nothing,
-        volume_scale::Real = 200.0,
-        onset_fraction::Real = 1.0)
-    sensitivity_state ~ to_submodel(test_sensitivity, false)
-    specificity_state ~ to_submodel(test_specificity, false)
-    ## Composition-linked positivity. The tested BVD share is tied to the
-    ## suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)` upsampled by a
-    ## decaying severity enrichment `δ0` (see [`severity_enrichment_model`]
-    ## (@ref)), so the positivity data identify the background `λ_bg` rather
-    ## than a free curve.
-    enrich_state ~ to_submodel(severity_enrichment, false)
-    δ0 = enrich_state.δ0
-    decay_scale = enrich_state.decay_scale
-    receipt_state ~ to_submodel(receipt_delay, false)
-    ## Epi-exclusion fraction `e` for the throughput queue: the share of
-    ## suspects ruled out by epi follow-up and never sampled, so the
-    ## received backlog asymptotes to `(1 − e)·N_susp`. Default OFF (e = 0,
-    ## forward = 1) for the headline fit; the opt-in Beta(2, 12) prior is a
-    ## sensitivity arm.
-    if epi_exclusion !== nothing
-        epi_state ~ to_submodel(epi_exclusion, false)
-        forward_frac = epi_state.forward
-    else
-        forward_frac = nothing
-    end
-    n_edges_re = length(t_edges)
-    if q_random_effect !== nothing
-        q_re_state ~ to_submodel(q_random_effect(n_edges_re), false)
-        σ_q = q_re_state.σ_q
-        z_q = q_re_state.z_q
-    else
-        σ_q = nothing
-        z_q = nothing
-    end
-    n_edges = length(t_edges)
-    capacity_state ~ to_submodel(
-        capacity_model(n_edges; capacity_centre = capacity_centre), false)
-    s_test = sensitivity_state.s_test
-    spec_test = specificity_state.spec_test
-    ## `δ0`, `decay_scale` are set above by the severity-enrichment submodel.
-    f_receipt = receipt_state.dist
-    κ = capacity_state.capacity
-    r = growth_state.r
-    T = growth_state.T
-
-    n = length(t_edges)
-    n == length(p_drc_per_bin) ||
-        error("p_drc_per_bin length must match t_edges (got " *
-              "$(length(p_drc_per_bin)) vs $n)")
-    n == length(confirmed_cases) ||
-        error("confirmed_cases length must match t_edges (got " *
-              "$(length(confirmed_cases)) vs $n)")
-    n == length(samples_analysed) ||
-        error("samples_analysed length must match t_edges (got " *
-              "$(length(samples_analysed)) vs $n)")
-    n == length(samples_received) ||
-        error("samples_received length must match t_edges (got " *
-              "$(length(samples_received)) vs $n)")
-
-    ## Cumulative suspect backlog at each edge, split BVD / background. The
-    ## BVD-suspected cumulative is `μ_BVD(s) = p_DRC · onset_fraction ·
-    ## ∫₀^s e^{r u} f_rep(s−u) du` (the onset→report Gamma closed form, the
-    ## same quantity the reported stream produces); the non-BVD background
-    ## cumulative is `μ_bg(s) = λ_bg · s` (constant-rate). Their sum
-    ## `N_susp,v` is the backlog the received-count likelihood conditions on
-    ## (below). Their ratio `μ_BVD / N_susp` is the count-implied BVD
-    ## composition `φ`, the plateau the composition link relaxes to.
-    t_report = report_onset_offset === nothing ? zero(T) :
-               max(T - report_onset_offset, zero(T))
-
-    Tt = typeof(float(r) * float(λ_bg) * onset_fraction *
-                float(δ0) * float(decay_scale))
-    ## Per-edge analysed denominator: the observed analysed increment where
-    ## present, else zero (dark windows are owned by the Poisson-thinned
-    ## marginal below). Both the volume clock and the confirmed Binomial use
-    ## this.
-    A_imp = Vector{Tt}(undef, n)
-    for i in 1:n
-        A_imp[i] = samples_analysed[i] === missing ? zero(Tt) :
-                   convert(Tt, samples_analysed[i])
-    end
-    p_pos = Vector{Tt}(undef, n)
-    q_at = Vector{Tt}(undef, n)
-    qinf_count_at = Vector{Tt}(undef, n)
-    Nsusp_at = Vector{Tt}(undef, n)
-    Λ_at_edges = Vector{Tt}(undef, n)
-    ## Composition-linked positivity with modelled specificity. The tested
-    ## BVD share is the suspect-pool composition `φ = μ_BVD/(μ_BVD+μ_bg)`
-    ## upsampled by a severity log-odds enrichment `δ0·exp(−c/decay)` that
-    ## decays as testing widens, so `q → φ` at the plateau. The per-test
-    ## positivity combines true and false positives,
-    ##   p_pos = s·q + (1 − spec)·(1 − q),
-    ## with `1 − spec` the false-positive rate. The binomial conditions on
-    ## the observed analysed denominator.
-    ## Cumulative analysed volume at each edge, for the volume-indexed
-    ## clock. The severe-first share then relaxes with how many samples have
-    ## been processed rather than calendar time, so a lab stall (no new
-    ## analysed) does not advance the curve.
-    analysed_cum_at = Vector{Tt}(undef, n)
-    acc_a = zero(Tt)
-    for i in 1:n
-        acc_a += A_imp[i]
-        analysed_cum_at[i] = acc_a
-    end
-    for i in 1:n
-        s_i = oftype(T, t_edges[i])
-        μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
-                convert(Tt, p_drc_per_bin[i]) * onset_fraction *
-                delay_convolution(one(r), r, s_i, f_rep)
-        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
-        denom = μ_bvd + μ_bg
-        Nsusp_at[i] = denom
-        qinf_count_at[i] = denom > zero(Tt) ?
-                           clamp(μ_bvd / denom, zero(Tt), one(Tt)) :
-                           zero(Tt)
-        ## Volume clock for the severity enrichment: cumulative analysed
-        ## volume in units of `volume_scale` samples, so a lab stall (no new
-        ## analysed) pauses the relaxation.
-        c_i = analysed_cum_at[i] / convert(Tt, volume_scale)
-        ## Composition link: the suspect-pool composition
-        ## φ = μ_BVD/(μ_BVD+μ_bg) upsampled by a decaying severity log-odds
-        ## enrichment δ0·exp(−c/decay), so the lab over-tests BVD early and
-        ## relaxes to the pool composition as testing widens, tying
-        ## positivity to the background μ_bg.
-        φ = clamp(qinf_count_at[i], eps(Tt), one(Tt) - eps(Tt))
-        δ_i = convert(Tt, δ0) * exp(-c_i / convert(Tt, decay_scale))
-        q_base = logistic(logit(φ) + δ_i)
-        ## Optional partially-pooled per-window offset on the tested BVD
-        ## share, logit-scale, so each vintage's positivity can fit the
-        ## non-monotone wobble while `s` stays fixed. `σ_q → 0` recovers the
-        ## smooth baseline curve.
-        if z_q === nothing
-            q = q_base
-        else
-            qb = clamp(q_base, eps(Tt), one(Tt) - eps(Tt))
-            q = clamp(
-                logistic(logit(qb) + convert(Tt, σ_q) * convert(Tt, z_q[i])),
-                zero(Tt), one(Tt))
-        end
-        q_at[i] = q
-        p_raw = s_test * q + (one(Tt) - spec_test) * (one(Tt) - q)
-        p_pos[i] = isfinite(p_raw) ?
-                   clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) : eps(Tt)
-        ## Expected confirmed increment: newly-analysed slice ΔA_v times its
-        ## positivity (a diagnostic). Uses the imputed denominator where the
-        ## analysed count is missing.
-        Λ_at_edges[i] = p_pos[i] * A_imp[i]
-    end
-
-    ## Received queue: the suspect backlog reaches the lab after a transport
-    ## delay, so the cumulative received is the suspect backlog convolved with
-    ## the receipt-delay kernel f_receipt. Confirmed uses a pooled (constant)
-    ## p_drc, so a single representative value drives the continuous backlog.
-    ## Built before the confirmed likelihood because the queue path's
-    ## per-window analysed mean μ_A depends on this received backlog.
-    p_drc_c = convert(Tt, p_drc_per_bin[1])
-    N_susp_fn = let r = r, f_rep = f_rep, p_drc_c = p_drc_c,
-        onset_fraction = onset_fraction, λ_bg = λ_bg
-
-        u -> u <= zero(u) ? zero(Tt) :
-             p_drc_c * onset_fraction *
-             delay_convolution(one(r), r, u, f_rep) +
-             max(convert(Tt, λ_bg) * u, zero(Tt))
-    end
-    N_recv_at = Vector{Tt}(undef, n)
-    for i in 1:n
-        s_i = oftype(T, t_edges[i])
-        raw = s_i <= zero(s_i) ? zero(Tt) :
-              convert(Tt, delay_convolution(N_susp_fn, s_i, f_receipt))
-        N_recv_at[i] = max(raw, zero(Tt))
-    end
-
-    ## Forwarded fraction of the received backlog `(1 − e)` from the
-    ## epi-exclusion submodel (default `e = 0`, forward = 1).
-    fwd = forward_frac === nothing ? one(Tt) : convert(Tt, forward_frac)
-
-    ## Per-window predicted analysed mean μ_A from the capacity-limited drain
-    ## of the received backlog. Computed for ALL windows (the queue path needs
-    ## μ_A for the dark windows that lack an observed denominator). Window 1's
-    ## cumulative analysed (observed or predicted) is the initial condition.
-    μ_A_at = Vector{Tt}(undef, n)
-    let analysed_cum = zero(Tt)
-        for i in 1:n
-            ## Window 1 has no preceding edge. Use the spacing to the next
-            ## vintage as the representative window length, NOT the full
-            ## seeding-to-edge-1 elapsed time: the latter (≈ t_edges[1],
-            ## ~120 days) makes cap ≫ backlog and drains the entire
-            ## pre-window received backlog in one step, blowing up the
-            ## first dark window's μ_A. A single-vintage fit falls back to
-            ## the cumulative.
-            Δt = if i == 1
-                n >= 2 ?
-                max(oftype(T, t_edges[2]) - oftype(T, t_edges[1]),
-                    zero(T)) :
-                max(oftype(T, t_edges[1]), zero(T))
-            else
-                max(oftype(T, t_edges[i]) - oftype(T, t_edges[i - 1]),
-                    zero(T))
-            end
-            recv_cum = fwd * N_recv_at[i]
-            backlog = max(recv_cum - analysed_cum, eps(Tt))
-            cap = max(convert(Tt, κ[i]) * Δt, zero(Tt))
-            μ_A_raw = backlog * (one(Tt) - exp(-cap / backlog))
-            μ_A_at[i] = isfinite(μ_A_raw) ? max(μ_A_raw, eps(Tt)) : eps(Tt)
-            ## Advance the analysed cumulative by the observed increment where
-            ## present, else the predicted mean (carries the queue through the
-            ## dark windows).
-            analysed_cum += samples_analysed[i] === missing ? μ_A_at[i] :
-                            convert(Tt, samples_analysed[i])
-        end
-    end
-
-    ## Coherent lab-throughput queue with a Poisson-thinned denominator.
-    ## OBSERVED-denominator windows condition on the real analysed
-    ## increment: confirmed_v ~ Binomial(ΔA_obs, p_pos) AND
-    ## ΔA_obs ~ Poisson(μ_A) (pins positivity and capacity). DARK windows
-    ## (no published analysed) use the exact marginal of
-    ## Binomial(Poisson(μ_A), p_pos), namely
-    ## confirmed_v ~ Poisson(μ_A · p_pos): the denominator is integrated
-    ## out, NOT a free latent, so there is no per-vintage funnel.
-    for i in 1:n
-        if samples_analysed[i] === missing
-            μ_c = isfinite(μ_A_at[i] * p_pos[i]) ?
-                  max(μ_A_at[i] * p_pos[i], eps(Tt)) : eps(Tt)
-            confirmed_cases[i] ~ Poisson(μ_c)
-        else
-            samples_analysed[i] ~ Poisson(μ_A_at[i])
-            A_i = Int(samples_analysed[i])
-            confirmed_cases[i] ~ Binomial(A_i, p_pos[i])
-        end
-    end
-
-    ## Received increments observed where present, mean (1 − e)·ΔN_recv.
-    ΔN_recv = daily_increment_kernel(N_recv_at)
-    recv_means = Vector{Tt}(undef, n)
-    for i in 1:n
-        raw = fwd * ΔN_recv[i]
-        recv_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-        samples_received[i] === missing && continue
-        samples_received[i] ~ safe_nbinomial(k, recv_means[i])
-    end
-
-    ## Per-test positivity at the lab cut-off (last edge ≤ tests_edge):
-    ## exposed for comparison with the sitrep `Taux de positivité`.
-    te_idx = something(
-        findlast(
-            i -> t_edges[i] <= tests_edge + sqrt(eps(typeof(tests_edge))),
-            1:n), n)
-    p_positive := p_pos[te_idx]
-    q_cutoff := q_at[te_idx]
-    ## Plateau tested share: the severity enrichment relaxes to the pool
-    ## composition, so the plateau is the count-implied composition itself.
-    q_baseline := qinf_count_at[te_idx]
-    q_baseline_count := qinf_count_at[te_idx]
-    δ0_out := δ0
-    τ_forward_out := τ_forward
-    ## Daily analysis capacity at the cut-off vintage (samples/day).
-    capacity_cutoff := κ[te_idx]
-
-    ## Cumulative expected totals at the cut-off: sum the per-window
-    ## increment means (confirmed positives, received samples).
-    expected_confirmed_total := sum(Λ_at_edges)
-    expected_received_total := sum(recv_means)
-
-    ## Queue-path diagnostic: the predicted analysed denominator μ_A summed
-    ## over the dark windows (those without a published analysed count). Lets
-    ## the dark-window denominators be compared against the observed 23-28 May
-    ## anchors.
-    dark_analysed_total := sum(samples_analysed[i] === missing ? μ_A_at[i] :
-                               zero(eltype(μ_A_at)) for i in 1:n)
-    ## Per-window predicted analysed mean and received mean, exposed for the
-    ## dark-window-versus-anchor comparison and the received posterior check.
-    μ_A_pred := copy(μ_A_at)
-    recv_pred := copy(recv_means)
-
-    return (; p_positive, p_pos, q_at, qinf_count_at, Nsusp_at,
-        N_recv_at, recv_means, μ_A_at, dark_analysed_total, capacity = κ,
-        s_test, spec_test, δ0, decay_scale, τ_forward, p_drc_per_bin,
-        expected_confirmed_total, expected_received_total, Λ_at_edges)
-end
-
-"""
-Count-implied BVD composition among suspects at each elapsed-time edge:
-`q(s) = μ_BVD(s) / N_susp(s)`, with `μ_BVD = p_drc · onset_fraction ·
-∫₀^s e^{r u} f_rep(s−u) du` the cumulative BVD-suspect backlog and
-`N_susp = μ_BVD + λ_bg·s` adding the constant-rate non-BVD background. The
-same `q_baseline_count` quantity [`confirmed_cases_model`](@ref) exposes;
-factored out so the confirmed-death stream can evaluate it at the
-suspected-death edges from the shared report delay, ascertainment,
-background and growth state. Returns a vector aligned with `t_edges`.
-"""
-function bvd_count_composition(r, p_drc, λ_bg, f_rep,
-        t_edges::AbstractVector; onset_fraction::Real = 1.0)
-    Tt = typeof(float(r) * float(λ_bg) * float(p_drc) * onset_fraction)
-    q = Vector{Tt}(undef, length(t_edges))
-    for i in eachindex(t_edges)
-        s_i = convert(Tt, t_edges[i])
-        μ_bvd = s_i <= zero(s_i) ? zero(Tt) :
-                convert(Tt, p_drc) * onset_fraction *
-                delay_convolution(one(r), r, s_i, f_rep)
-        μ_bg = max(convert(Tt, λ_bg) * s_i, zero(Tt))
-        denom = μ_bvd + μ_bg
-        ## Guard the ratio: at extreme growth `μ_bvd` can overflow to Inf,
-        ## giving Inf/Inf = NaN. Fall back to zero share when non-finite.
-        ratio = denom > zero(Tt) ? μ_bvd / denom : zero(Tt)
-        q[i] = isfinite(ratio) ? clamp(ratio, zero(Tt), one(Tt)) : zero(Tt)
-    end
-    return q
-end
-
-"""
-Modelled cumulative BVD-death trajectory at each elapsed-time edge:
-`μ_death(s) = CFR · p_deaths · onset_fraction · ∫₀^s e^{r u} f_death(s−u) du`,
-the same CFR-weighted convolution [`deaths_model`](@ref) integrates for the
-suspected-death expectation. Factored out so the confirmed-death stream can
-evaluate the modelled BVD-death expectation at the confirmed-death edges
-from the shared growth, CFR and onset-to-death delay. Returns a vector
-aligned with `t_edges`.
-"""
-function bvd_death_trajectory(r, CFR, f_death, t_edges::AbstractVector;
-        p_deaths::Real = 1.0, onset_fraction::Real = 1.0)
-    return [s <= zero(s) ? zero(float(r) * float(CFR)) :
-            p_deaths * onset_fraction *
-            delay_convolution(CFR, r, s, f_death)
-            for s in t_edges]
-end
-
-"""
-Laboratory-confirmed-deaths likelihood. The DRC sitrep front page reports
-`Cumul décès parmi les confirmés`, the cumulative deaths that have been
-laboratory-confirmed (17 at the 28 May cut-off). This is a genuine
-lab/positivity process on the post-mortem death specimens that reach the
-laboratory, mirroring the confirmed-case pipeline
-([`confirmed_cases_model`](@ref)) rather than the earlier
-`coverage_death · s` thinning of the modelled BVD-death trajectory (issue
-#193): that thinning conditioned directly on the latent BVD-death
-trajectory with no observation/background process, so all the slack sat in
-`coverage_death` at its boundary.
-
-A fraction `τ_death` of the suspect-death backlog is forwarded to and
-analysed by the laboratory; the BVD share of that pool sets the positivity:
-
-```math
-\\Delta D_{conf,v} \\sim
-    \\mathrm{NegBinomial}(
-        \\tau_{death}\\cdot p_{pos,death,v}\\cdot\\Delta N_{death,v},\\ k),
-\\qquad
-p_{pos,death,v} = s\\, q_{death,v} + (1 - \\text{spec})(1 - q_{death,v}),
-```
-
-with `ΔN_death,v` the between-edge increment of `nsusp_death_at_edges` (the
-cumulative suspect-death backlog, BVD plus non-BVD background, that
-[`deaths_model`](@ref) builds), `q_death,v = μ_BVD_death / N_death_susp` the
-BVD share of the suspect-death pool at edge `v` (from `bvd_death_at_edges`
-and `nsusp_death_at_edges`), and `k` the shared count dispersion. The PCR
-sensitivity `s` and specificity `spec` are *imported shared* from the
-confirmed-case lab submodel (assay properties, not re-sampled), so the
-death stream inherits the case lab calibration. `τ_death` is the
-death-specimen forwarding fraction from [`death_forward_model`](@ref); the
-BVD-share signal lives in the composition-driven positivity, not in
-`τ_death`, so it is identified by the 17 confirmed deaths without sitting
-at a boundary. `confirmed_deaths` accepts `missing` entries for
-posterior-predictive generation.
-"""
-@model function confirmed_deaths_model(
-        confirmed_deaths::AbstractVector,
-        bvd_death_at_edges::AbstractVector,
-        nsusp_death_at_edges::AbstractVector,
-        s::Real, spec::Real, k::Real;
-        death_forward = death_forward_model())
-    n = length(nsusp_death_at_edges)
-    n == length(confirmed_deaths) ||
-        error("confirmed_deaths length must match nsusp_death_at_edges " *
-              "(got $(length(confirmed_deaths)) vs $n)")
-    n == length(bvd_death_at_edges) ||
-        error("bvd_death_at_edges length must match nsusp_death_at_edges " *
-              "(got $(length(bvd_death_at_edges)) vs $n)")
-
-    forward_state ~ to_submodel(death_forward, false)
-    τ_death = forward_state.τ_death
-
-    ## Per-edge BVD share of the suspect-death pool (composition), then the
-    ## death-specimen positivity combining true positives at sensitivity `s`
-    ## and false positives at false-positive rate `1 − spec`, the same form
-    ## the confirmed-case stream uses. The expected confirmed increment is
-    ## the forwarded fraction `τ_death` of the suspect-death backlog
-    ## increment `ΔN_death`, weighted by that positivity. Clamped positive
-    ## inside `safe_nbinomial`.
-    Tt = typeof(float(s) * float(spec) * float(τ_death) *
-                float(nsusp_death_at_edges[1]))
-    ΔN = daily_increment_kernel(convert(Vector{Tt}, nsusp_death_at_edges))
-    conf_means = Vector{Tt}(undef, n)
-    q_death_at = Vector{Tt}(undef, n)
-    p_pos_death_at = Vector{Tt}(undef, n)
-    for i in 1:n
-        denom = convert(Tt, nsusp_death_at_edges[i])
-        q_d = denom > zero(Tt) ?
-              clamp(convert(Tt, bvd_death_at_edges[i]) / denom,
-            zero(Tt), one(Tt)) : zero(Tt)
-        q_death_at[i] = q_d
-        p_raw = convert(Tt, s) * q_d +
-                (one(Tt) - convert(Tt, spec)) * (one(Tt) - q_d)
-        p_pos_death_at[i] = isfinite(p_raw) ?
-                            clamp(p_raw, eps(Tt), one(Tt) - eps(Tt)) :
-                            eps(Tt)
-        raw = convert(Tt, τ_death) * p_pos_death_at[i] * ΔN[i]
-        conf_means[i] = isfinite(raw) ? max(raw, eps(Tt)) : eps(Tt)
-    end
-
-    for i in 1:n
-        confirmed_deaths[i] ~ safe_nbinomial(k, conf_means[i])
-    end
-
-    τ_death_out := τ_death
-    q_death_cutoff := q_death_at[end]
-    p_pos_death_cutoff := p_pos_death_at[end]
-    expected_confirmed_deaths_total := sum(conf_means)
-
-    return (; τ_death, s, spec, q_death_at, p_pos_death_at, conf_means,
-        expected_confirmed_deaths_total)
-end
-
-"""
-Bin-mean kernel for the per-bin count likelihoods. For `n`
-cumulative-intensity values ``\\Lambda(t_k)`` at the bin edges, returns
-the `n` between-edge increments `[Λ(t_1) - Λ_0, Λ(t_2)-Λ(t_1), ...]`
-clamped to be strictly positive and finite. Shared by
-[`reported_cases_model`](@ref), [`confirmed_cases_model`](@ref),
-[`deaths_model`](@ref) and [`exports_deaths_model`](@ref) so the
-bin-difference logic lives in one place. `init` is the cumulative value
-the first bin is measured from (`Λ_0`); it defaults to zero, so the
-first element is the cumulative at the first edge and a single edge
-reduces to the cumulative single-total mean. The exported-deaths stream
-passes its pre-death survival weight as `init`.
-"""
-function daily_increment_kernel(Λ_at_edges::AbstractVector, init = nothing)
-    n = length(Λ_at_edges)
-    Tt = eltype(Λ_at_edges)
-    means = Vector{Tt}(undef, n)
-    ## `init` is positional, not a keyword: a keyword bundles it into a
-    ## `(; init)` NamedTuple, and when the caller's `init` is a constant
-    ## (e.g. the pre-death stretch collapses to `zero(T)` for extreme NUTS
-    ## proposals) that single-field struct is wholly inactive, which
-    ## Enzyme's reverse-mode struct rule rejects. A positional argument is
-    ## Const-annotated directly and avoids the mixed-activity struct.
-    Λ_prev = init === nothing ? zero(Tt) : convert(Tt, init)
-    @inbounds for i in 1:n
-        raw = Λ_at_edges[i] - Λ_prev
-        means[i] = isfinite(raw) ? max(raw, eps(typeof(raw))) :
-                   eps(typeof(raw))
-        Λ_prev = Λ_at_edges[i]
-    end
-    return means
-end
-
-"""
-Time-resolved deaths-among-exports likelihood. Models the dated
-Uganda export deaths as an inhomogeneous Poisson process: a
-continuous survival term over the pre-death stretch followed by
-per-day Poisson counts. The detection window and traveller volume
-are supplied by [`exports_model`](@ref) so the two Uganda-side
-likelihoods share person-time.
+The observed Uganda export deaths are a dated series `export_death_days`
+(grid day-indices, ascending), fitted as an inhomogeneous Poisson exactly
+as [`exports_model`](@ref) fits the imports: one Poisson term per death day
+(the increment of `Λ_d` between consecutive death-day edges), a
+`pre_death_exports ~ Poisson(Λ_d(δ₁−1))` zero term bounding the first death
+day `δ₁`, and the `last_offset` truncation that stops the clock at the last
+observed death day. With an empty `export_death_days` the model falls back
+to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 """
 @model function exports_deaths_model(
-        export_deaths_daily::AbstractVector,
-        growth_state, CFR::Real, delay_dist, p_uganda::Real;
-        pre_start_deaths::Union{Missing, Integer} = 0,
-        window::Real,
-        daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION,
-        onset_fraction::Real = 1.0)
-    cumulative = growth_state.cumulative
-    T = growth_state.T
-    q = daily_travellers / source_population
-    n = length(export_deaths_daily)   # days from earliest death to cut-off
+        exports_deaths::Union{Missing, Integer},
+        travelled_prevalence::AbstractVector, CFR::Real,
+        od_pmf::AbstractVector, incubation_pmf::AbstractVector;
+        export_death_days::AbstractVector{<:Integer} = Int[],
+        pre_death_exports::Union{Missing, Integer} = 0)
+    n = length(travelled_prevalence)
+    ## Infection→death PMF by age (age 0 = same day).
+    fd_pmf = convolve_pmf(incubation_pmf, od_pmf)
+    ## Per-day expected export-death increment: CFR-scaled convolution of
+    ## the daily at-risk prevalence with the infection→death PMF. Its
+    ## running sum is the cumulative export-death intensity `Λ_d`.
+    death_daily = CFR .* convolve_delay(travelled_prevalence, fd_pmf)
 
-    ## Precompute the onset-to-death CDF once and reuse it across every
-    ## bin edge below (`T - s ≤ window` over the domain; see
-    ## `ExportDeathDelay`). The latent trajectory is cumulative
-    ## *infections*, so `onset_fraction` (the incubation mgf) maps it onto
-    ## onsets before the onset-to-death convolution.
-    delay = ExportDeathDelay(delay_dist, window)
-    Λ(t) = onset_fraction * expected_exports_deaths(
-        cumulative, delay, CFR, p_uganda, q, t, window)
-
-    ## Pre-death zero stretch as one Poisson observed at 0; `missing`
-    ## generates it for predictive checks (see equation (20)).
-    pre = T - n > zero(T) ? Λ(T - n) : zero(T)
-    pre_start_deaths ~ Poisson(max(pre, zero(pre)))
-
-    ## Per-day means via the shared between-edge differencing
-    ## (`daily_increment_kernel`), the same construction as the DRC
-    ## streams but starting from the pre-death survival weight `pre`
-    ## rather than zero.
-    Λ_at_edges = [Λ(T - n + i) for i in 1:n]
-    μ_day = daily_increment_kernel(Λ_at_edges, pre)
-    for i in 1:n
-        export_deaths_daily[i] ~ Poisson(μ_day[i])
+    if isempty(export_death_days)
+        ## No dated series: cumulative single-total Poisson at the cut-off.
+        expected_exports_deaths_T := safe_rate(sum(death_daily))
+        exports_deaths ~ Poisson(expected_exports_deaths_T)
+    else
+        ## Dated per-day Poisson; the clock stops at the last death day.
+        days, counts = dated_event_bins(export_death_days, n)
+        δ₁ = days[1]
+        pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
+              zero(@inbounds death_daily[begin])
+        pre_death_exports ~ Poisson(safe_rate(pre))
+        raw_inc = bin_increments(death_daily, days)
+        μ_day = [i == 1 ? raw_inc[1] - pre : raw_inc[i]
+                 for i in eachindex(raw_inc)]
+        obs = ismissing(exports_deaths) ? missing : counts
+        death_obs ~ to_submodel(dated_poisson_model(μ_day, obs))
+        expected_exports_deaths_T := safe_rate(pre + sum(μ_day))
     end
 
-    return (;)
+    return (; expected_exports_deaths_T)
 end
 
 """
-Time-resolved deaths-among-exports likelihood with an explicit
-infection→detection delay. The delay-convolution counterpart of
-[`exports_deaths_model`](@ref): the per-edge intensity is the
-infection→detection delay-survival expectation
-[`expected_exports_deaths_delay`](@ref), where the rectangular detection
-window of the McCabe path is replaced by the infection→detection survival
-`f_det`. Because the at-risk clock starts at infection, the detection
-survival is 1 at age 0 (a just-infected traveller is certainly not yet
-detected). The death timing is likewise keyed to infection: `delay_dist`
-is the infection→death delay (incubation ⊕ onset-to-death, see
-[`combined_delay`](@ref)), not the bare onset-to-death delay, so deaths
-are not timed one incubation period too early. The pre-death survival
-stretch and per-day [`daily_increment_kernel`](@ref) structure are
-unchanged. `f_det` (the incubation ⊕ onset-to-report delay) and
-`daily_travellers` are supplied by [`exports_delay_model`](@ref) so the
-two Uganda-side likelihoods share person-time. Incubation enters both
-`f_det` and `delay_dist`, a slight accepted double-count of the shared
-incubation period (better than omitting it on death entirely).
+Laboratory-confirmed-deaths likelihood. Confirmed deaths are a thinning of
+the observed suspected deaths: the cut-off confirmed-death count is scored
+as a `Binomial` of the suspected-death total `total_deaths`, with a
+confirmation probability linked to the suspected-case BVD composition
+`q_susp` (the BVD share of the expected suspected total, from the
+[`reported_cases_model`](@ref) pipeline) and enriched on the odds scale by
+the sampled `m_death` ([`confirmed_death_enrichment_model`](@ref)):
 
-`last_offset` (default 0) anchors the last series day `last_offset` days
-before the cut-off, matching [`exports_daily_delay_model`](@ref): both
-travel-gated streams are run only up to the most recent reported import to
-Uganda, since movement patterns likely shift and the most recent days are
-right-truncated by reporting lag.
+```math
+p = \\operatorname{logistic}(\\operatorname{logit}(q_\\text{susp}) +
+    \\log m_\\text{death}).
+```
+
+The odds-scale enrichment keeps `p` in `(0, 1)` without a hard clamp, and
+ties the death-confirmation rate to the same composition that drives the
+case streams, so a confirmed-death observation informs the background
+`λ_bg` and ascertainment `p_drc` rather than introducing a free rate. The
+confirmed-death series is flat over the fitted window, so a single cut-off
+binomial captures its information; the suspected-death total is the
+denominator. Returns the enrichment, the composition, the confirmation
+probability and the expected confirmed-death count.
+
+This is the renewal analogue of the integral-lineage forwarded-positivity
+lab model (PR #193), which scores per-vintage confirmed-death increments as
+`NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
+`p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
+sensitivity `s` and specificity `spec` and the death-pool BVD share
+`q_death`. A death-side composition link of that form is not portable here:
+the death-pool composition `q_death = bvd_deaths / (bvd_deaths +
+bg_death_daily)` collapses to 1 whenever the death background is off (the
+renewal default), which would make a death-side composition link degenerate.
+The renewal confirmed-case lab pipeline ([`confirmed_cases_model`](@ref))
+does now carry sampled PCR sensitivity `s` and specificity `spec` (its
+composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but grounding
+the death-confirmation rate on the case composition `q_susp` is what makes it
+well-defined: the case background `λ_bg` is always on, so `q_susp` is always
+informative. Grounding the enrichment on `q_susp` reproduces #193's intent —
+a composition-driven confirmed-death rate that feeds back to `λ_bg` and
+`p_drc` — under the renewal architecture. The substantive half of #193, the
+constant-rate non-BVD suspected-death background `λ_bg_death`, is already
+carried by [`deaths_model`](@ref).
 """
-@model function exports_deaths_delay_model(
-        export_deaths_daily::AbstractVector,
-        growth_state, CFR::Real, delay_dist, p_uganda::Real;
-        pre_start_deaths::Union{Missing, Integer} = 0,
-        last_offset::Real = 0,
-        f_det,
-        daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION)
-    r = growth_state.r
-    T = growth_state.T
-    q = daily_travellers / source_population
-    n = length(export_deaths_daily)   # earliest death to last series day
+@model function confirmed_deaths_model(
+        confirmed_deaths::Union{Missing, Integer},
+        total_deaths::Union{Missing, Integer},
+        deaths_daily::AbstractVector,
+        bvd_reports_daily::AbstractVector, p_drc::Real,
+        bg_daily::AbstractVector, k::Real;
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
+        enrichment = confirmed_death_enrichment_model())
+    enr_state ~ to_submodel(enrichment)
+    m_death = enr_state.m_death
 
-    ## The series ends `last_offset` days before the cut-off (the date of
-    ## the most recent reported import to Uganda). Like the export-case
-    ## stream, this travel-gated death stream is only run up to that day:
-    ## movement patterns likely shift and the days after the last import
-    ## are right-truncated by reporting lag. The at-risk clock anchors on
-    ## this date.
-    t_last = T - last_offset
+    bvd_total = p_drc * sum(bvd_reports_daily)
+    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + sum(bg_daily))
+    qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
+    p_death_conf := logistic(logit(qc) + log(m_death))
 
-    ## One at-risk trajectory over [0, t_last] shared across every edge,
-    ## the same engine as the export-case stream. The per-edge intensity
-    ## is the infection-keyed delay-survival weight: the infection→death
-    ## CDF weighted by the infection→detection survival (1 at age 0).
-    traj = ExportRiskTrajectory(t_last, r)
-    edges = [t_last - n + i for i in 0:n]
-    Λ = (CFR * p_uganda * q) .*
-        export_death_at_risk(traj, edges, f_det, delay_dist)
+    ## Confirmed deaths are a thinning of the modelled suspected-death daily
+    ## series by the composition-linked confirmation probability, scored as
+    ## per-vintage between-vintage increments over the confirmed-death
+    ## vintages. The observed suspected-death total is frozen at its last
+    ## stable vintage (well before the cut-off), so the modelled death
+    ## trajectory carries the timing of the later confirmed-death vintages,
+    ## the same modelled-volume route the post-lab confirmed cases use.
+    confirmed_death_daily = p_death_conf .* deaths_daily
+    n = length(deaths_daily)
+    vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
+    modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
+    cdeath_increments ~ to_submodel(
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
 
-    ## Pre-death zero stretch as one Poisson observed at 0; `missing`
-    ## generates it for predictive checks.
-    pre = max(Λ[1], zero(eltype(Λ)))
-    pre_start_deaths ~ Poisson(pre)
+    expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
 
-    ## Per-day means via the shared between-edge differencing, starting
-    ## from the pre-death survival weight `pre`.
-    μ_day = daily_increment_kernel(Λ[2:end], pre)
-    for i in 1:n
-        export_deaths_daily[i] ~ Poisson(μ_day[i])
-    end
-
-    return (;)
-end
-
-"""
-First-export-detection timing survival term. Adds a one-sided
-`Pr(no export detected before t1)` Poisson observation at zero,
-matching the at-risk export person-time intensity. Passing
-`delta = missing` makes the submodel a no-op.
-"""
-@model function exports_detection_timing_model(
-        growth_state, p_uganda::Real;
-        delta::Union{Missing, Real},
-        pre_detection_exports::Union{Missing, Integer} = 0,
-        window::Real,
-        daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION)
-    if !ismissing(delta)
-        cumulative = growth_state.cumulative
-        T = growth_state.T
-        t1 = T - delta
-        q = daily_travellers / source_population
-        survived_exports := t1 <= zero(T) ? zero(T) :
-                            expected_exports(cumulative, p_uganda, q, t1,
-            window; r = growth_state.r)
-        ## No detection before t1 as a Poisson observed at 0; `missing`
-        ## generates it for predictive checks (see equation (22)).
-        pre_detection_exports ~ Poisson(max(survived_exports, zero(T)))
-    end
-
-    return (;)
-end
-
-"""
-First-export-detection timing survival term with an explicit
-infection→detection delay. The delay-convolution counterpart of
-[`exports_detection_timing_model`](@ref): the at-risk export
-person-time uses [`expected_exports_delay`](@ref) with the
-infection→detection survival `f_det` instead of the rectangular window.
-Adds the same one-sided `Pr(no export detected before t1)` Poisson
-observation at zero. `f_det` (the incubation ⊕ onset-to-report delay, see
-[`combined_delay`](@ref)) and `daily_travellers` are supplied by
-[`exports_delay_model`](@ref). Passing `delta = missing` makes the
-submodel a no-op.
-"""
-@model function exports_detection_timing_delay_model(
-        growth_state, p_uganda::Real;
-        delta::Union{Missing, Real},
-        pre_detection_exports::Union{Missing, Integer} = 0,
-        f_det,
-        daily_travellers::Real,
-        source_population::Real = ITURI_POPULATION)
-    if !ismissing(delta)
-        r = growth_state.r
-        T = growth_state.T
-        t1 = T - delta
-        q = daily_travellers / source_population
-        survived_exports := t1 <= zero(T) ? zero(T) :
-                            expected_exports_delay(r, p_uganda, q, t1,
-            f_det)
-        ## No detection before t1 as a Poisson observed at 0; `missing`
-        ## generates it for predictive checks.
-        pre_detection_exports ~ Poisson(max(survived_exports, zero(T)))
-    end
-
-    return (;)
+    return (; m_death, q_susp, p_death_conf, expected_confirmed_deaths)
 end

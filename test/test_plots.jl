@@ -49,7 +49,9 @@ end
     fig = plot_posterior_predictive(
         rand(rng, 0:10, 400), rand(rng, 0:60, 400), 3, 40;
         pp_cases = rand(rng, 0:30, 400), obs_cases = 20,
-        pp_exports_deaths = rand(rng, 0:3, 400), obs_exports_deaths = 1)
+        pp_exports_deaths = rand(rng, 0:3, 400), obs_exports_deaths = 1,
+        pp_confirmed_deaths = rand(rng, 0:30, 400),
+        obs_confirmed_deaths = 17)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -151,6 +153,56 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_estimate_evolution returns a Makie figure" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_estimate_evolution
+    ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
+    rows = [
+        ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
+        ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
+        ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
+    ]
+    ## Released series only.
+    @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
+    ## With the frozen-fit renewal ribbon and the current-data,
+    ## current-model trajectory ribbon over the date grid.
+    renewal = [
+        ("2026-05-20", 1666, 1400, 2000, 1100, 2400, 900, 2900),
+        ("2026-05-23", 1900, 1600, 2300, 1300, 2700, 1000, 3300),
+        ("2026-05-28", 4000, 3500, 4600, 3000, 5200, 2500, 6000)
+    ]
+    ## `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
+    trajectory = (
+        ["2026-05-20", "2026-05-23", "2026-05-28"],
+        [1500, 1800, 3800], [2100, 2400, 4400],
+        [1200, 1400, 3200], [2500, 2800, 5000],
+        [900, 1000, 2600], [3000, 3400, 5800])
+    fig = plot_estimate_evolution(rows; renewal = renewal,
+        trajectory = trajectory)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_cumulative_trajectories
+    rng = MersenneTwister(21)
+    ndraws = 60
+    n = 40
+    ## Each cumulative trajectory deterministic is a draws×chains matrix of
+    ## per-draw monotone vectors.
+    _traj() = reshape(
+        [cumsum(abs.(randn(rng, n))) for _ in 1:ndraws], ndraws, 1)
+    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        Dict(
+            FlexiChains.Parameter(:cumulative_infections) => _traj(),
+            FlexiChains.Parameter(:cumulative_onsets) => _traj(),
+            FlexiChains.Parameter(:cumulative_expected_deaths) => _traj()))
+    fig = plot_cumulative_trajectories(chn; n = n,
+        seeding = Date("2026-02-23"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_start_date_pair returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     import FlexiChains
@@ -158,16 +210,44 @@ end
     rng = MersenneTwister(16)
     n = 200
     vals = hcat(abs.(randn(rng, n)) .+ 7, abs.(randn(rng, n)) .* 30)
+    ## :doubling_time replaces the removed :τ parameter
     chn = FlexiChains.FlexiChain{Symbol}(n,
         1,
         Dict(
-            FlexiChains.Parameter(:τ) => reshape(vals[:, 1], n, 1),
+            FlexiChains.Parameter(:doubling_time) => reshape(vals[:, 1], n, 1),
             FlexiChains.Parameter(:T) => reshape(vals[:, 2], n, 1)))
     fig = plot_start_date_pair(chn; as_of_date = "2026-05-20")
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc figure" setup=[HeadlessMakie] begin
+@testitem "plot_rt reconstructs and returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_rt, knot_days
+    rng = MersenneTwister(17)
+    ndraws = 120
+    n = 95
+    nz = length(knot_days(n; week = 7)) - 1
+    ## Vector-valued `rt_state.z`: one innovation vector per draw, stored as
+    ## a draws×chains matrix of vectors (as the predictive chain returns it).
+    zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
+    chn = FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+        Dict(
+            FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
+                log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
+                abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
+                -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
+            FlexiChains.Parameter(:T) => reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
+    fig = plot_rt(chn; n = n, breakpoint = n - 11,
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(21)
@@ -185,27 +265,108 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "conditional one-step-ahead predictive construction" begin
-    ## The conditional one-step-ahead cumulative at vintage v is the
-    ## observed previous cumulative plus the drawn increment: ŷ_v =
-    ## y_{v-1} + Δ_v with y_0 = 0. We reproduce the construction used by
-    ## `plot_vintage_conditional_ppc` on a tiny synthetic example and
-    ## check it against the closed form, including the bin-1 baseline 0.
-    observed = [18, 27, 39, 46]          # cumulative y_1..y_n
-    n = length(observed)
-    obs_cum = float.(observed)
-    obs_prev = [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n]
-    @test obs_prev == [0.0, 18.0, 27.0, 39.0]   # y_{v-1}, y_0 = 0
+@testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
+    using Distributions: Beta
+    using BVDOutbreakSize: plot_cfr_prior
+    prior = Beta(6.6, 13.4)
+    fig = plot_cfr_prior(prior)
+    @test fig isa CairoMakie.Makie.Figure
+end
 
-    increments = [3.0, 5.0, 8.0, 2.0]    # Δ_1..Δ_n for one draw
-    cond = obs_prev .+ increments
-    ## Bin 1 conditions on baseline 0, the rest on the observed previous
-    ## cumulative; nothing here is a running sum of modelled increments.
-    @test cond[1] == 0.0 + increments[1]
-    for v in 2:n
-        @test cond[v] == observed[v - 1] + increments[v]
-    end
-    ## Sanity: the conditional reconstruction is not the unconditional
-    ## cumulative sum of the increments unless the data matched exactly.
-    @test cond != cumsum(increments)
+@testitem "plot_no_onward_deaths returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_no_onward_deaths
+    rng = MersenneTwister(31)
+    df = DataFrame(
+        delta_deaths = abs.(randn(rng, 300)) .* 5,
+        total_projected = abs.(randn(rng, 300)) .* 5 .+ 55
+    )
+    fig = plot_no_onward_deaths(df; obs_deaths = 55)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast
+    rng = MersenneTwister(32)
+    n = 300
+    fc = DataFrame(
+        cases_cum = rand(rng, 50:150, n),
+        deaths_cum = rand(rng, 40:100, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        cases_new = rand(rng, 0:30, n),
+        deaths_new = rand(rng, 0:20, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_new = rand(rng, 0:5, n),
+        infections_new = abs.(randn(rng, n)) .* 500,
+        rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
+    )
+    fig = plot_forecast(fc)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_latent returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_latent
+    rng = MersenneTwister(34)
+    n = 300
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30,
+        rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
+    )
+    fig = plot_forecast_latent(fc)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_vs_truth_latent
+    rng = MersenneTwister(35)
+    n = 300
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30
+    )
+    now = (;
+        infections_new = abs.(randn(rng, n)) .* 600,
+        onsets_new = abs.(randn(rng, n)) .* 350,
+        deaths_latent_new = abs.(randn(rng, n)) .* 35)
+    fig = plot_forecast_vs_truth_latent(fc; now = now)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_vs_truth returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_vs_truth
+    rng = MersenneTwister(33)
+    n = 300
+    fc = DataFrame(
+        cases_cum = rand(rng, 50:150, n),
+        deaths_cum = rand(rng, 40:100, n),
+        exports_cum = rand(rng, 2:10, n),
+        cases_new = rand(rng, 0:30, n),
+        deaths_new = rand(rng, 0:20, n),
+        exports_new = rand(rng, 0:5, n)
+    )
+    fig = plot_forecast_vs_truth(fc;
+        cases = 130, deaths = 80, exports = 7)
+    @test fig isa CairoMakie.Makie.Figure
+    ## Exports column absent (the DRC-only forecast used by the validation
+    ## section): the exports panel is dropped without error.
+    fc_drc = DataFrame(
+        cases_cum = rand(rng, 50:150, n),
+        deaths_cum = rand(rng, 40:100, n),
+        cases_new = rand(rng, 0:30, n),
+        deaths_new = rand(rng, 0:20, n))
+    fig2 = plot_forecast_vs_truth(fc_drc; cases = 130, deaths = 80)
+    @test fig2 isa CairoMakie.Makie.Figure
 end

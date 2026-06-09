@@ -8,14 +8,19 @@ the NUTS `adtype` keyword.
 default_adtype() = AutoMooncake(; config = Mooncake.Config())
 
 """
-Enzyme reverse-mode AD with runtime activity and `Duplicated` function
-annotation, the configuration the joint model's analytical gamma-CDF
-rule needs (see `ext/BVDOutbreakSizeEnzymeExt.jl`). Returns an
-`ADTypes.AutoEnzyme`; pass to `nuts_sample(model; adtype = ...)`.
+    enzyme_adtype()
 
-`enzyme_adtype` is a stub; loading Enzyme (`using Enzyme`) activates
-the method via `BVDOutbreakSizeEnzymeExt`. Calling `enzyme_adtype`
-without Enzyme loaded raises a `MethodError`.
+Enzyme reverse-mode AD type, an opt-in alternative to the default
+[`default_adtype`](@ref) (Mooncake). Defined by the package's Enzyme
+weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`); calling it
+without `Enzyme` loaded raises a `MethodError`. Load `Enzyme` to activate
+the extension. The `SpecialFunctions.gamma` `EnzymeRule` that the Beta and
+NegativeBinomial normalising constants reach is supplied by
+CensoredDistributions' own Enzyme extension. Enzyme differentiates the
+single-stream composers and matches Mooncake; differentiating the full
+joint is platform-dependent (it can hit an upstream Enzyme/LLVM compile
+failure on some systems, see `test/test_enzyme.jl`), so Mooncake remains
+the package default for fitting.
 """
 function enzyme_adtype end
 
@@ -133,6 +138,29 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
+`target_accept` defaults to 0.85. The earlier integral model needed 0.95
+to keep the multimodal small-outbreak geometry from diverging, but the
+renewal joint conditions the confirmed counts on the observed analysed
+denominator (removing the multiplicative ascertainment ridge) and samples
+the random-walk and ascertainment blocks in non-centred form, so the
+posterior geometry is benign (the sanity fit converges with ≈1 divergence).
+A lower target acceptance shortens the average NUTS trajectory, cutting
+leapfrog steps (and so gradient evaluations) per iteration; raise it back
+toward 0.95–0.99 if a model variant reintroduces divergences. The default
+is two longer chains (1000 post-warmup draws each) rather than four shorter
+ones, mirroring the integral model (#211), which roughly halves the docs
+build at a similar total draw count.
+
+`check_model = false` disables Turing's pre-sampling model check, which
+rejects any model with a sampled discrete variable even when its value
+feeds nothing downstream. The per-vintage DRC streams are now scored as
+observed `~` data, so a composer conditioning on them passes the check
+with the default `check_model = true`. The escape is needed only by
+[`exports_deaths_only_model`](@ref), which runs the exports submodel in
+predictive mode (`exported_cases ~ Poisson` with a `missing` count) purely
+for the export onsets, leaving a sampled discrete `Poisson` draw. The
+continuous parameters are unaffected.
+
 Pass `callback` to stream live fit progress (iteration, log-density,
 divergences) instead of waiting for the whole fit. Use
 [`progress_callback`](@ref) for a dependency-free file/stdout stream,
@@ -153,11 +181,12 @@ accordingly or drop them before summarising.
 function nuts_sample(model;
         samples::Integer = 1_000,
         chains::Integer = 2,
-        target_accept::Real = 0.9,
+        target_accept::Real = 0.85,
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
         init = InitFromPrior(),
+        check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
         kwargs...)
@@ -172,8 +201,46 @@ function nuts_sample(model;
         samples, chains;
         initial_params = fill(init, chains),
         progress = progress,
+        check_model = check_model,
         cb_kwargs...,
         warmup_kwargs...,
         kwargs...
     )
+end
+
+"""
+    fit_parallel(thunks; chains = 2)
+
+Run independent model fits — each a zero-argument `thunk` returning a chain —
+with model-level parallelism bounded by the available threads. At most
+`Threads.nthreads() ÷ chains` fits run at once (so each fit keeps `chains`
+threads for its own chains), clamped to the number of fits. This is
+self-limiting and CI-safe: with two threads (e.g. CI's
+`JULIA_NUM_THREADS=2`, the default `chains`) it runs the fits SEQUENTIALLY,
+identical to a plain loop and with the same peak memory; on a many-core
+machine with more threads it fans the fits out (eight threads → four fits at
+once). Each fit seeds its own RNG, so the results do not depend on the
+schedule. Returns the chains in input order.
+"""
+function fit_parallel(thunks::AbstractVector; chains::Integer = 2)
+    n = length(thunks)
+    maxconc = clamp(Threads.nthreads() ÷ max(chains, 1), 1, n)
+    results = Vector{Any}(undef, n)
+    if maxconc == 1
+        for i in 1:n
+            results[i] = thunks[i]()
+        end
+        return results
+    end
+    next = Threads.Atomic{Int}(1)
+    @sync for _ in 1:maxconc
+        Threads.@spawn begin
+            while true
+                i = Threads.atomic_add!(next, 1)
+                i > n && break
+                results[i] = thunks[i]()
+            end
+        end
+    end
+    return results
 end

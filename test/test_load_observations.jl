@@ -1,300 +1,190 @@
-## Tests for load_observations: returns the documented fields from
+## Tests for load_observations: returns the new grid-based fields from
 ## the bundled data/observations.toml file.
 
 @testitem "load_observations returns the documented fields" begin
     using BVDOutbreakSize: load_observations
+    using Dates: Date
     obs = load_observations()
     @test obs isa NamedTuple
+
+    ## Grid dimensions
+    @test obs.n isa Integer
+    @test obs.n > 0
+    @test obs.cutoff isa Date
+    @test obs.seeding isa Date
+    @test obs.cutoff >= obs.seeding
+    @test obs.who_first_sitrep_days isa Integer
+    @test obs.who_first_sitrep_days >= 1
+
+    ## Cumulative stream totals
     @test obs.exported_cases isa Integer
     @test obs.exports_deaths isa Integer
     @test obs.total_deaths isa Integer
     @test obs.reported_cases isa Integer
     @test obs.confirmed_cases isa Integer
-    @test obs.cumulative_tests_analysed isa Integer
-    @test obs.source_population isa Integer
-    @test obs.daily_outbound_travellers isa Real
-    @test obs.daily_outbound_travellers_sd isa Real
-    @test obs.genetic_tmrca_days isa Real
-    @test obs.genetic_tmrca_days_sd isa Real
-    @test obs.genetic_tmrca_alt_days isa Real
-    @test obs.genetic_tmrca_alt_days_sd isa Real
-
     @test obs.exported_cases >= 0
     @test obs.exports_deaths >= 0
     @test obs.total_deaths >= 0
     @test obs.reported_cases >= 0
     @test obs.confirmed_cases >= 0
-    @test obs.confirmed_cases <= obs.reported_cases
-    @test obs.cumulative_tests_analysed >= obs.confirmed_cases
-    @test obs.cumulative_tests_analysed <= obs.reported_cases
-    @test obs.daily_outbound_travellers > 0
-    @test obs.daily_outbound_travellers_sd > 0
-    @test obs.source_population > 0
-    @test obs.genetic_tmrca_days > 0
-    @test obs.genetic_tmrca_days_sd > 0
-    @test obs.genetic_tmrca_alt_days > 0
-    @test obs.genetic_tmrca_alt_days_sd > 0
-    ## The alternative (faster) clock dates the TMRCA more recently, so
-    ## fewer days before the cut-off than the baseline estimate.
-    @test obs.genetic_tmrca_alt_days < obs.genetic_tmrca_days
+    ## Tests-analysed is an optional scalar laboratory stream.
+    @test ismissing(obs.tests_analysed) ||
+          (obs.tests_analysed isa Integer && obs.tests_analysed >= 0)
 
-    @test obs.sources isa NamedTuple
-    @test obs.sources.exported_cases isa String
-    @test obs.sources.exports_deaths isa String
-    @test obs.sources.total_deaths isa String
-    @test obs.sources.reported_cases isa String
-    @test obs.sources.confirmed_cases isa String
-    @test obs.sources.cumulative_tests_analysed isa String
-    @test obs.sources.daily_outbound_travellers isa String
-    @test obs.sources.daily_outbound_travellers_sd isa String
-    @test obs.sources.source_population isa String
-    @test obs.sources.genetic_tmrca isa String
+    ## Per-vintage histories: named tuples with `days` and `counts`
+    for key in (:deaths_history, :reported_history, :confirmed_history,
+        :lab_history)
+        h = getproperty(obs, key)
+        @test h isa NamedTuple
+        @test hasproperty(h, :days)
+        @test hasproperty(h, :counts)
+        @test h.days isa AbstractVector{<:Integer}
+        @test h.counts isa AbstractVector{<:Integer}
+        @test length(h.days) == length(h.counts)
+    end
 
-    @test !isempty(obs.sources.exported_cases)
-    @test !isempty(obs.sources.genetic_tmrca)
+    ## History day indices are in range
+    dh = obs.deaths_history
+    if !isempty(dh.days)
+        @test all(1 .<= dh.days .<= obs.n)
+        @test issorted(dh.days)
+    end
 
-    ## death_history: per-vintage cumulative suspected deaths.
-    dh = obs.death_history
-    @test dh isa NamedTuple
-    @test hasproperty(dh, :dates)
-    @test hasproperty(dh, :offsets)
-    @test hasproperty(dh, :values)
-    @test dh.values isa AbstractVector{<:Integer}
-    @test dh.offsets isa AbstractVector{<:Integer}
-    ## 18-26 May vintages: nine entries. The 23 May deaths use the
-    ## SitRep 009 zone-row sum (220), not the erroneous 119 headline.
-    ## The 26 May value uses the revised re-issue SitRep 012_v2 (246),
-    ## correcting the original SitRep 012 headline of 238.
-    @test dh.values == [131, 148, 160, 175, 204, 220, 223, 238, 246]
-    @test length(dh.offsets) == 9
-    ## Offsets are days before cut-off, sorted ascending (oldest first,
-    ## largest offset first), so edges = T - offset are ascending.
-    @test issorted(dh.offsets; rev = true)
-    @test obs.sources.death_history isa String
-    @test !isempty(obs.sources.death_history)
+    ## Suspected-death history, 18-26 May (nine vintages). The 23 May
+    ## deaths use the SitRep 009 zone-row sum (220), not the erroneous 119
+    ## headline; the 26 May value uses the revised SitRep 012_v2 (246).
+    @test dh.counts == [131, 148, 160, 175, 204, 220, 223, 238, 246]
 
-    ## confirmed-case history runs to the 7 June cut-off; its final
-    ## vintage equals the cut-off `confirmed_cases` total.
-    @test obs.confirmed_case_history.values ==
-          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
-        282, 321, 344, 363, 381, 452, 488, 515, 550]
-    @test obs.confirmed_case_history.values[end] == obs.confirmed_cases
+    ## Confirmed-case history runs to the 7 June cut-off (post-28 May
+    ## vintages have no analysed denominator); its final vintage equals the
+    ## cut-off `confirmed_cases` total.
+    @test obs.confirmed_history.counts ==
+          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210,
+        263, 282, 321, 344, 363, 381, 452, 488, 515, 550]
+    @test obs.confirmed_history.counts[end] == obs.confirmed_cases
 
-    ## confirmed deaths: flat at 17 through 28 May, then the late-
-    ## confirmation catch-up to 101 on 7 June.
+    ## Confirmed deaths: recorded, growing 17 → 101 over 26 May-7 June.
     @test obs.confirmed_deaths isa Integer
-    @test obs.confirmed_death_history isa NamedTuple
-    @test obs.confirmed_death_history.values ==
+    @test obs.confirmed_deaths_history.counts ==
           [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101]
-    @test obs.confirmed_death_history.values[end] == obs.confirmed_deaths
-    @test obs.sources.confirmed_death_history isa String
+    @test obs.confirmed_deaths_history.counts[end] == obs.confirmed_deaths
 
-    ## laboratory throughput histories (cumulative national, 23-28 May);
-    ## the analysed series ends at the cut-off `cumulative_tests_analysed`.
-    @test obs.tests_received_history.values ==
+    ## Laboratory throughput histories (cumulative national, 23-28 May);
+    ## the analysed series (`lab_history`) ends at the cut-off
+    ## `tests_analysed` total and is the per-test positivity denominator.
+    @test obs.tests_received_history.counts ==
           [418, 431, 431, 662, 774, 883]
-    @test obs.tests_analysed_history.values ==
-          [211, 295, 295, 403, 648, 755]
-    @test obs.tests_analysed_history.values[end] ==
-          obs.cumulative_tests_analysed
-    @test obs.sources.tests_received_history isa String
-    @test obs.sources.tests_analysed_history isa String
+    @test obs.lab_history.counts == [211, 295, 295, 403, 648, 755]
+    @test obs.lab_history.counts[end] == obs.tests_analysed
+
+    ## Dated Uganda export series: grid day-indices of the three imports
+    ## (11, 16, 23 May) and the single export death (14 May), sorted
+    ## ascending and within the grid. Their lengths match the scalar totals.
+    @test obs.export_case_days isa AbstractVector{<:Integer}
+    @test obs.export_death_days isa AbstractVector{<:Integer}
+    @test issorted(obs.export_case_days)
+    @test issorted(obs.export_death_days)
+    @test all(1 .<= obs.export_case_days .<= obs.n)
+    @test all(1 .<= obs.export_death_days .<= obs.n)
+    @test length(obs.export_case_days) == 3
+    @test length(obs.export_death_days) == 1
+    ## Detection days are spaced 5 (11→16 May) then 7 (16→23 May) apart.
+    @test diff(obs.export_case_days) == [5, 7]
+    ## The export death (14 May) falls between imports #1 (11 May) and #2.
+    @test obs.export_case_days[1] < obs.export_death_days[1] <
+          obs.export_case_days[2]
+
+    ## Genetic TMRCA bound
+    @test !ismissing(obs.tmrca_days)
+    @test obs.tmrca_days isa Real
+    @test obs.tmrca_days > 0
+
+    ## Breakpoint day is consistent: n - who_first_sitrep_days
+    breakpoint = obs.n - obs.who_first_sitrep_days
+    @test breakpoint >= 1
+    @test breakpoint <= obs.n
 end
 
-@testitem "load_observations returns the lab-throughput histories" begin
+@testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()
 
-    ## tests received / analysed span the six 23-28 May vintages whose
-    ## lab Tableau IV is present, aligned with the tail of the confirmed
-    ## history so the binomial denominator and numerator share dates.
-    for h in (obs.tests_received_history, obs.tests_analysed_history)
-        @test h isa NamedTuple
-        @test hasproperty(h, :dates)
-        @test hasproperty(h, :offsets)
-        @test hasproperty(h, :values)
-        @test h.values isa AbstractVector{<:Integer}
-        @test length(h.values) == 6
-        ## Oldest first, so edges = T - offset are ascending.
-        @test issorted(h.offsets; rev = true)
+    ## Cumulative counts in histories should be non-decreasing and bounded
+    ## by the cut-off total
+    dh = obs.deaths_history
+    if length(dh.counts) > 1
+        @test issorted(dh.counts)
+    end
+    if !isempty(dh.counts)
+        @test dh.counts[end] <= obs.total_deaths
     end
 
-    @test obs.tests_received_history.values ==
-          [418, 431, 431, 662, 774, 883]
-    @test obs.tests_analysed_history.values ==
-          [211, 295, 295, 403, 648, 755]
-    ## Analysed never exceeds received; both align with the lab cut-off.
-    @test all(obs.tests_analysed_history.values .<=
-              obs.tests_received_history.values)
-    @test obs.tests_analysed_history.values[end] ==
-          obs.cumulative_tests_analysed
-    @test obs.tests_received_history.dates ==
-          obs.tests_analysed_history.dates
-    ## Per-vintage confirmed positives never exceed tests analysed (the
-    ## binomial denominator), checked on the shared 23-28 May lab dates
-    ## (the confirmed history now runs past them to 3 June).
-    ch = obs.confirmed_case_history
-    aidx = [findfirst(==(d), ch.dates)
-            for d in obs.tests_analysed_history.dates]
-    @test all(ch.values[aidx] .<= obs.tests_analysed_history.values)
-
-    @test obs.sources.tests_received_history isa String
-    @test obs.sources.tests_analysed_history isa String
-    @test !isempty(obs.sources.tests_analysed_history)
-end
-
-@testitem "export_deaths_daily is a daily series to the cut-off" begin
-    using BVDOutbreakSize: load_observations
-
-    function _write_obs(io; as_of, death_dates = nothing)
-        write(io, "as_of_date = \"$as_of\"\n")
-        death_dates === nothing || begin
-            quoted = join(("\"$d\"" for d in death_dates), ", ")
-            write(io, "[export_death_dates]\nvalue = [$quoted]\n",
-                "source = \"x\"\n")
-        end
-        for k in ("exported_cases", "exports_deaths", "total_deaths",
-            "reported_cases", "daily_outbound_travellers",
-            "daily_outbound_travellers_sd", "source_population")
-            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
-        end
+    rh = obs.reported_history
+    if length(rh.counts) > 1
+        @test issorted(rh.counts)
     end
-
-    mktempdir() do dir
-        path = joinpath(dir, "obs.toml")
-        open(
-            io -> _write_obs(io; as_of = "2026-05-18",
-                death_dates = ["2026-05-04", "2026-05-14"]),
-            path, "w")
-        daily = load_observations(path).export_deaths_daily
-        ## Offsets 14 (2026-05-04) and 4 (2026-05-14); earliest = 14, so
-        ## the series spans offsets 14..0 (length 15), with one death at
-        ## index 1 (offset 14) and one at index 11 (offset 4).
-        @test length(daily) == 15
-        @test sum(daily) == 2
-        @test daily[1] == 1
-        @test daily[11] == 1
+    if !isempty(rh.counts)
+        @test rh.counts[end] <= obs.reported_cases
     end
 end
 
-@testitem "export_deaths_daily is empty when no dates are present" begin
-    using BVDOutbreakSize: load_observations
+@testitem "freeze_observations truncates to a past cut-off" begin
+    using BVDOutbreakSize: load_observations, freeze_observations
+    using Dates: Date
 
-    function _write_obs(io; as_of, death_dates = nothing)
-        write(io, "as_of_date = \"$as_of\"\n")
-        death_dates === nothing || begin
-            quoted = join(("\"$d\"" for d in death_dates), ", ")
-            write(io, "[export_death_dates]\nvalue = [$quoted]\n",
-                "source = \"x\"\n")
-        end
-        for k in ("exported_cases", "exports_deaths", "total_deaths",
-            "reported_cases", "daily_outbound_travellers",
-            "daily_outbound_travellers_sd", "source_population")
-            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
-        end
-    end
-
-    mktempdir() do dir
-        path = joinpath(dir, "obs.toml")
-        open(io -> _write_obs(io; as_of = "2026-05-18"), path, "w")
-        @test load_observations(path).export_deaths_daily == Int[]
-    end
-end
-
-@testitem "exported_cases_daily is a daily series to the cut-off" begin
-    using BVDOutbreakSize: load_observations
-
-    function _write_obs(io; as_of, case_dates = nothing)
-        write(io, "as_of_date = \"$as_of\"\n")
-        case_dates === nothing || begin
-            quoted = join(("\"$d\"" for d in case_dates), ", ")
-            write(io, "[export_case_dates]\nvalue = [$quoted]\n",
-                "source = \"x\"\n")
-        end
-        for k in ("exported_cases", "exports_deaths", "total_deaths",
-            "reported_cases", "daily_outbound_travellers",
-            "daily_outbound_travellers_sd", "source_population")
-            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
-        end
-    end
-
-    mktempdir() do dir
-        path = joinpath(dir, "obs.toml")
-        open(
-            io -> _write_obs(io; as_of = "2026-05-26",
-                case_dates = ["2026-05-11", "2026-05-16", "2026-05-23"]),
-            path, "w")
-        daily = load_observations(path).exported_cases_daily
-        ## Offsets 15 (11 May), 10 (16 May), 3 (23 May); earliest = 15, so
-        ## the series spans offsets 15..0 (length 16), with detections at
-        ## index 1 (offset 15), index 6 (offset 10) and index 13 (offset 3).
-        @test length(daily) == 16
-        @test sum(daily) == 3
-        @test daily[1] == 1
-        @test daily[6] == 1
-        @test daily[13] == 1
-    end
-end
-
-@testitem "exported_cases_daily is empty when no dates are present" begin
-    using BVDOutbreakSize: load_observations
-
-    function _write_obs(io; as_of)
-        write(io, "as_of_date = \"$as_of\"\n")
-        for k in ("exported_cases", "exports_deaths", "total_deaths",
-            "reported_cases", "daily_outbound_travellers",
-            "daily_outbound_travellers_sd", "source_population")
-            write(io, "[$k]\nvalue = 1\nsource = \"x\"\n")
-        end
-    end
-
-    mktempdir() do dir
-        path = joinpath(dir, "obs.toml")
-        open(io -> _write_obs(io; as_of = "2026-05-26"), path, "w")
-        @test load_observations(path).exported_cases_daily == Int[]
-    end
-end
-
-@testitem "as_of_override truncates to the earlier cut-off" begin
-    using BVDOutbreakSize: load_observations
-    using Dates: Date, value
-
-    ## The committed data file's own cut-off (7 June) and an earlier
-    ## as-of (28 May). The 28 May totals are the known
-    ## INSP/WHO values: confirmed cases 210, confirmed deaths 17, samples
-    ## analysed 755; the frozen suspected totals stay at their 26 May
-    ## values (reported cases 1077, suspected deaths 246) and the dated
-    ## exports are 3 cases / 1 death detected by 28 May.
     full = load_observations()
-    cut = load_observations(; as_of_override = "2026-05-28")
+    frozen = freeze_observations("2026-05-23")
 
-    @test cut.as_of_date == "2026-05-28"
-    @test cut.confirmed_cases == 210
-    @test cut.confirmed_deaths == 17
-    @test cut.cumulative_tests_analysed == 755
-    @test cut.reported_cases == 1077
-    @test cut.total_deaths == 246
-    @test cut.exported_cases == 3
-    @test cut.exports_deaths == 1
+    ## The cut-off moves to the freeze date; the grid shrinks by the
+    ## number of days dropped.
+    @test frozen.cutoff == Date("2026-05-23")
+    @test frozen.n < full.n
+    @test frozen.n == full.n - (Date(full.cutoff) - Date("2026-05-23")).value
 
-    ## Histories are truncated to entries on or before the cut-off.
-    @test cut.confirmed_case_history.dates[end] == "2026-05-28"
-    @test all(Date.(cut.confirmed_case_history.dates) .<= Date("2026-05-28"))
-    @test cut.confirmed_death_history.dates[end] == "2026-05-28"
-    @test cut.confirmed_case_history.values[end] == cut.confirmed_cases
+    ## Every retained vintage is dated on or before the freeze date, so
+    ## no history extends past the cut-off grid.
+    for key in (:reported_history, :deaths_history, :confirmed_history,
+        :lab_history)
+        h = getproperty(frozen, key)
+        isempty(h.days) && continue
+        @test all(1 .<= h.days .<= frozen.n)
+        @test maximum(h.days) <= frozen.n
+    end
 
-    ## Elapsed-time offsets are recomputed relative to the new cut-off, so
-    ## the genetic floor is closer than under the 7 June file.
-    @test cut.genetic_tmrca_days ==
-          full.genetic_tmrca_days -
-          value(Date("2026-06-07") - Date("2026-05-28"))
+    ## The 23 May suspected streams: six vintages (18-23 May) of the
+    ## nine in the full manifest, ending at the frozen totals.
+    @test frozen.reported_history.counts == [516, 575, 672, 745, 872, 904]
+    @test frozen.deaths_history.counts == [131, 148, 160, 175, 204, 220]
+    @test frozen.reported_cases == 904
+    @test frozen.total_deaths == 220
 
-    ## A `Date` argument is equivalent to the ISO string.
-    @test load_observations(; as_of_override = Date("2026-05-28")).as_of_date ==
-          "2026-05-28"
+    ## The cut-off scalars come from the truncated history, not the
+    ## manifest's full-data totals.
+    @test frozen.reported_cases < full.reported_cases
+    @test frozen.total_deaths < full.total_deaths
+    @test frozen.confirmed_cases == frozen.confirmed_history.counts[end]
 
-    ## The default (no override) loads the file's own cut-off unchanged.
-    @test full.as_of_date == "2026-06-07"
-    @test full.confirmed_cases == 550
-    @test full.confirmed_deaths == 101
+    ## The dated export series are truncated to detections on or before the
+    ## freeze date. 23 May keeps all three imports (last detection 23 May)
+    ## and the single export death (14 May); the export scalars come from
+    ## the truncated dated count.
+    @test length(frozen.export_case_days) == 3
+    @test length(frozen.export_death_days) == 1
+    @test frozen.exported_cases == 3
+    @test frozen.exports_deaths == 1
+    @test all(1 .<= frozen.export_case_days .<= frozen.n)
+    @test frozen.export_case_days[end] == frozen.n   # last import = cut-off
+
+    ## Freezing before the last import drops the post-cut-off detection.
+    ## 18 May keeps imports #1 (11 May) and #2 (16 May) plus the death
+    ## (14 May), but not import #3 (23 May).
+    early = freeze_observations("2026-05-18")
+    @test length(early.export_case_days) == 2        # 11 and 16 May imports
+    @test early.exported_cases == 2
+    @test length(early.export_death_days) == 1        # 14 May ≤ 18 May
+    @test early.exports_deaths == 1
+    @test all(1 .<= early.export_death_days .<= early.n)
+
+    ## A Date argument is equivalent to the ISO string.
+    @test freeze_observations(Date("2026-05-23")).n == frozen.n
 end
