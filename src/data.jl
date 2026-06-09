@@ -27,7 +27,9 @@ list of detection/death days on or before the cut-off, fitted with a
 per-day Poisson likelihood), the per-vintage histories as
 `(; days, counts)` with `days` the grid day-indices (`reported_history`,
 `confirmed_history`, `confirmed_deaths_history`, `deaths_history`,
-`lab_history` from the analysed-specimen series, `tests_received_history`),
+`lab_history` from the cumulative analysed-specimen series,
+`lab_daily_history` from the post-cutoff 24h analysed counts on the
+trusted dark-window days, `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
 earliest reported-case vintage, to the cut-off). The intervention
@@ -100,6 +102,10 @@ function load_observations(
     ## received series is recorded for the pipeline view but not fitted.
     lab_history = history("tests_analysed_history")
     tests_received_history = history("tests_received_history")
+    ## Post-cutoff 24h analysed counts (daily increments, not cumulative)
+    ## on the trusted dark-window days; the confirmed model pairs each with
+    ## that day's confirmed increment as a Binomial-denominator window.
+    lab_daily_history = history("tests_analysed_daily_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -141,6 +147,7 @@ function load_observations(
         confirmed_deaths_history = confirmed_deaths_history,
         deaths_history = deaths_history,
         lab_history = lab_history,
+        lab_daily_history = lab_daily_history,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

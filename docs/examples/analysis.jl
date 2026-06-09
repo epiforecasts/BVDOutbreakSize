@@ -1632,6 +1632,7 @@ chn_exports_deaths = fit_parallel([
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = obs.tests_received_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -1652,6 +1653,7 @@ chn_exports_deaths = fit_parallel([
     () -> nuts_sample(confirmed_only_model(obs.n, obs.confirmed_cases;
         confirmed_history = obs.confirmed_history,
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = obs.tests_received_history,
         breakpoint = _BREAKPOINT)),
     () -> nuts_sample(confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
@@ -1784,6 +1786,7 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_history = o.confirmed_history,
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
+            lab_daily_history = o.lab_daily_history,
             tests_received_history = o.tests_received_history,
             export_case_days = o.export_case_days,
             export_death_days = o.export_death_days,
@@ -2234,6 +2237,7 @@ pp_joint = predict(
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -2291,9 +2295,10 @@ tests_received_panel = (;
 ## end-day. The 24-25 May analysis stall merges into 26 May, so the window
 ## grid is slightly coarser than the raw confirmed history.
 _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
-    obs.confirmed_history, obs.lab_history);
+    obs.confirmed_history, obs.lab_history, obs.lab_daily_history);
 ## Oldest-first: early (no denominator) → observed (analysed Binomial) →
-## late (post-28 May, no denominator, modelled volume).
+## late (post-28 May; trusted 24h-analysed days are Binomial windows, the
+## rest dark windows scored against the modelled volume).
 _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
     _conf_windows.late_days);
 function _confirmed_at(day)
@@ -2923,6 +2928,7 @@ function refit_joint_variant(;
             confirmed_history = obs.confirmed_history,
             confirmed_deaths_history = obs.confirmed_deaths_history,
             lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
             tests_received_history = obs.tests_received_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
