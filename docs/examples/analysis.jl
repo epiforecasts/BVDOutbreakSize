@@ -2816,8 +2816,10 @@ end
 _cuminf_trajs = let mat = chn_joint[:cumulative_infections]
     [collect(v) for v in vec(collect(mat))]
 end
-_grid_day(date) = obs.n - Int(date2epochdays(obs.cutoff) -
-                              date2epochdays(Date(date)))
+## Inverse of `grid_date(day) = obs.cutoff - Day(obs.n - day)`: the day-index
+## whose calendar date is `date`, using `value` (imported above) for the
+## day count rather than the non-exported `Dates.date2epochdays`.
+_grid_day(date) = obs.n - value(obs.cutoff - Date(date))
 function _ours_on(date)
     d = _grid_day(date)
     _ci90row(Float64[t[d] for t in _cuminf_trajs])
