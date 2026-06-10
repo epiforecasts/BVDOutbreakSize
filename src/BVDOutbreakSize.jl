@@ -47,6 +47,8 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_forecast_latent,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
+       delay_corrected_cfr, delay_corrected_confirmed_cfr,
+       confirmed_cfr_table, plot_confirmed_cfr,
 # renewal helpers
        renewal_infections, convolve_delay, convolve_pmf,
        discretise_censored,
@@ -86,6 +88,7 @@ include("renewal.jl")
 include("summaries.jl")
 include("counterfactual.jl")
 include("forecast.jl")
+include("confirmed_cfr.jl")
 include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")

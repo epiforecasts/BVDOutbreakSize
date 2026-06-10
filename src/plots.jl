@@ -756,6 +756,47 @@ function plot_cfr_prior(prior::Distribution)
 end
 
 """
+Posterior densities of the delay-corrected confirmed case-fatality ratio
+and the structural (infection-based) CFR from a
+[`delay_corrected_confirmed_cfr`](@ref) result `res`, with the naive observed
+confirmed ratio drawn as a solid vertical rule and the median uncorrected
+modelled confirmed ratio as a dashed rule. The gap between the naive rule and
+the corrected density shows the real-time delay debiasing; the gap to the
+structural density shows the residual case/death ascertainment difference.
+Plotted on the CFR percentage scale.
+"""
+function plot_confirmed_cfr(res)
+    colours = CairoMakie.Makie.wong_colors()
+    corrected = 100 .* filter(isfinite, res.corrected)
+    structural = 100 .* filter(isfinite, res.structural)
+    naive = 100 * res.naive_observed
+    modelled_naive = 100 * quantile(filter(isfinite, res.modelled_naive), 0.5)
+
+    hi = max(maximum(corrected), maximum(structural), naive) * 1.05
+    fig = Figure(; size = (760, 420))
+    ax = Axis(fig[1, 1];
+        xlabel = "Case-fatality ratio (%)",
+        ylabel = "Posterior density",
+        title = "Delay-corrected confirmed CFR versus the structural CFR",
+        limits = ((0, hi), nothing)
+    )
+    h_corr = density!(ax, corrected; color = (colours[1], 0.5),
+        strokecolor = colours[1], strokewidth = 2)
+    h_struct = density!(ax, structural; color = (colours[2], 0.4),
+        strokecolor = colours[2], strokewidth = 2)
+    h_naive = vlines!(ax, [naive]; color = :firebrick, linewidth = 2)
+    h_mod = vlines!(ax, [modelled_naive];
+        color = (:grey, 0.7), linestyle = :dash, linewidth = 2)
+    CairoMakie.axislegend(ax,
+        [h_corr, h_struct, h_naive, h_mod],
+        ["Delay-corrected confirmed CFR", "Structural CFR",
+            "Naive observed confirmed ratio",
+            "Uncorrected modelled confirmed ratio (median)"];
+        position = :rt, framevisible = true)
+    return fig
+end
+
+"""
 One-row, two-panel figure summarising when the outbreak began. The
 left panel is the posterior density of the outbreak start date, the
 calendar date of the import that started the outbreak, obtained by
