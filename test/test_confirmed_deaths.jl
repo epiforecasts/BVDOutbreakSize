@@ -72,6 +72,30 @@ end
     @test st.expected_confirmed_deaths >= 0
 end
 
+@testitem "confirmed_deaths_model lags the series by the receipt delay" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    bvd = fill(1.0, 40)
+    bg_daily = fill(0.5, 40)
+    deaths_daily = fill(6.0, 40)
+    seed = 7
+    ## Same args, one with no delay (identity PMF) and one with all mass at a
+    ## five-day lag. The confirmation probability is unchanged (it depends on
+    ## the composition, not the delay), but the delay pushes five of the forty
+    ## flat days off the end of the grid, so the windowed expected confirmed
+    ## deaths fall to 35/40 of the undelayed total.
+    base = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
+    delayed = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily,
+        5.0; receipt_pmf = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+    sb = returned(base, rand(MersenneTwister(seed), base))
+    sd = returned(delayed, rand(MersenneTwister(seed), delayed))
+    @test sd.p_death_conf ≈ sb.p_death_conf
+    @test sd.expected_confirmed_deaths < sb.expected_confirmed_deaths
+    @test sd.expected_confirmed_deaths ≈ (35 / 40) * sb.expected_confirmed_deaths rtol=1e-6
+end
+
 @testitem "confirmed_deaths_only_model conditions and stays finite" begin
     using BVDOutbreakSize: confirmed_deaths_only_model
     using Turing.DynamicPPL: logjoint
