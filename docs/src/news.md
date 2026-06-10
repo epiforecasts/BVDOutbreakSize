@@ -6,6 +6,22 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+### Model
+
+- Added an optional daily new-suspect inflow stream ("nouveaux cas suspects
+  du jour") to the suspected-case likelihood.
+  The post-26 May per-day counts are scored against the modelled daily
+  suspected series at each report day, continuing the suspected signal where
+  the frozen cumulative series stops, on days disjoint from it (#222).
+
+### Data
+
+- Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
+  structured `new_daily_suspects` column in the scanned situation-report CSV
+  and a `suspected_daily_history` block in the observation manifest.
+
 ## v1.4.0
 
 The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate
