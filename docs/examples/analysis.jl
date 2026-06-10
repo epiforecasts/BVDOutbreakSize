@@ -1871,8 +1871,9 @@ summary_ranges = let
       cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
       confirmed cases are estimated to capture only a small share of the
       outbreak.
-    - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
-      cases by the cut-off, against $(obs.confirmed_cases) observed.
+    - **Confirmed-case fit:** the model projects $(ints_i(ec)) cumulative
+      confirmed cases by the cut-off, the last date with confirmed data,
+      against the $(obs.confirmed_cases) confirmed by that same date.
     - **Outbreak start and age:** the outbreak is estimated to have begun on
       a start date of $(ints_d(sT)), an elapsed age to the cut-off of
       $(ints_i(sT)) days.
