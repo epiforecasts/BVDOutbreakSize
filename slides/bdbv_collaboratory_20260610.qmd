@@ -52,6 +52,10 @@ Delay estimates from [2012 Isiro outbreak](https://epiforecasts.io/bdbv-linelist
 
 Counts come from INSP situation reports (DRC). Suspected cases and deaths include non-BVD, which the model accounts for.
 
+## Fit to the data
+
+![](figures/validation-ppc.png){fig-alt="Posterior predictive check: modelled cumulative counts against observed, by stream"}
+
 ## Transmission dynamics
 
 ![](figures/rt-over-time.png){fig-alt="Reproduction number over the established outbreak"}
