@@ -2,27 +2,27 @@
 # cumulative confirmed deaths over cumulative confirmed cases, is biased low
 # in real time because recently-confirmed cases have not yet had time to die.
 # We debias it by shrinking the denominator to the confirmed cases expected
-# to have had a fatal outcome resolve by the cut-off, using the
-# confirmation-to-death residual delay (onset-to-death minus
-# onset-to-confirmation). This is the standard real-time CFR correction
-# (Nishiura et al. 2009) computed per posterior draw on the model's own
+# to have had a fatal outcome confirmed by the cut-off, using the residual
+# delay between a confirmed case and its confirmed death (the onset-to-death-
+# confirmation lag minus the onset-to-confirmation lag). The correction
+# (Nishiura et al. 2009) is computed per posterior draw on the model's own
 # confirmed-case trajectory and sampled delays, so it propagates the joint
 # uncertainty and sits alongside the structural (infection-based) CFR the
 # model already reports, which is harder to identify because case and death
 # ascertainment differ.
 
 # Probability a case confirmed `δ` days before the cut-off has, if fatal,
-# already died by the cut-off: `P(X_d − X_c ≤ δ)` with the onset-to-death lag
-# `X_d ~ Kd` and the onset-to-confirmation lag `X_c ~ Kc` assumed
-# independent, computed as `Σ_xc Kc[xc] · Fd(xc + δ)` from the onset-to-death
-# CDF `Fd` (cumulative `Kd`). `δ` may be negative (a case confirmed after the
-# cut-off horizon contributes no resolved outcome), in which case `Fd` is read
-# at a negative lag and returns zero.
+# had its death confirmed by the cut-off: `P(X_d − X_c ≤ δ)` with the onset-
+# to-death-confirmation lag `X_d ~ Kd` and the onset-to-confirmation lag
+# `X_c ~ Kc` assumed independent, computed as `Σ_xc Kc[xc] · Fd(xc + δ)` from
+# the onset-to-death-confirmation CDF `Fd` (cumulative `Kd`). `δ` may be
+# negative (a case confirmed after the cut-off horizon contributes no resolved
+# outcome), in which case `Fd` is read at a negative lag and returns zero.
 function _residual_outcome_cdf(Kc::AbstractVector, Fd::AbstractVector, δ::Integer)
     Ld = length(Fd)
     acc = 0.0
     @inbounds for j in eachindex(Kc)
-        m = (j - 1) + δ                       # onset-to-death lag threshold
+        m = (j - 1) + δ                  # onset-to-death-confirmation threshold
         f = m < 0 ? 0.0 : (m >= Ld ? Fd[Ld] : Fd[m + 1])
         acc += Kc[j] * f
     end
@@ -34,7 +34,7 @@ Delay-corrected confirmed case-fatality ratio for one posterior draw.
 
 `c_daily` is the modelled daily confirmed-case incidence over the day grid
 (day `length(c_daily)` is the cut-off), `Kc` the onset-to-confirmation delay
-PMF (lag 0 at index 1), `Kd` the onset-to-death delay PMF, and
+PMF (lag 0 at index 1), `Kd` the onset-to-death-confirmation delay PMF, and
 `deaths_total` the cumulative confirmed deaths at the cut-off. The corrected
 denominator is `Σ_t c_daily[t] · P(outcome resolved by the cut-off | confirmed
 at t)`, smaller than the raw cumulative confirmed cases, so the corrected
@@ -77,8 +77,8 @@ end
 Delay-corrected confirmed case-fatality ratio across the posterior, read off
 a joint `bvd_joint` chain. For each draw the modelled daily confirmed-case
 incidence (rescaled so its total matches the scored expected confirmed cases),
-the onset-to-confirmation and onset-to-death delay PMFs, and the cumulative
-confirmed deaths give the corrected ratio
+the onset-to-confirmation and onset-to-death-confirmation delay PMFs, and the
+cumulative confirmed deaths give the corrected ratio
 ([`delay_corrected_cfr`](@ref)).
 
 `obs_confirmed` and `obs_confirmed_deaths` are the observed cumulative
@@ -94,7 +94,7 @@ function delay_corrected_confirmed_cfr(chn;
         obs_confirmed::Real, obs_confirmed_deaths::Real)
     cum_conf = _draw_vectors(chn, :cumulative_confirmed)
     Kc = _draw_vectors(chn, :onset_to_confirmation_pmf)
-    Kd = _draw_vectors(chn, :onset_to_death_pmf)
+    Kd = _draw_vectors(chn, :onset_to_death_confirmation_pmf)
     deaths_T = _draws(chn, :expected_confirmed_deaths_T)
     cases_T = _draws(chn, :expected_confirmed_T)
     structural = _draws(chn, :CFR)
