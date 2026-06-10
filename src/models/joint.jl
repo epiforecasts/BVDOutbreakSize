@@ -370,6 +370,21 @@ death-confirmation probability (`death_confirmation`).
     cumulative_infections := cumsum(infection_state.infections)
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
+    ## Modelled daily laboratory-confirmed cases: the per-window tested-positive
+    ## probability expanded onto the daily grid and applied to the modelled
+    ## analysed volume, so the cumulative trajectory carries the confirmed-case
+    ## timing for the delay-corrected confirmed-CFR reconstruction. The onset-
+    ## to-confirmation kernel (onset-to-report ⊕ receipt) and the onset-to-death
+    ## kernel are exposed alongside so the confirmation-to-death residual delay
+    ## that debiases the confirmed CFR can be rebuilt per draw off the chain.
+    _conf_windows = confirmed_state.windows
+    _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
+        _conf_windows.late_days)
+    _conf_daily_positivity = expand_vintage_rate(confirmed_state.p_pos,
+        _conf_window_days, n)
+    cumulative_confirmed := cumsum(_conf_daily_positivity .* confirmed_state.received_daily)
+    onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+    onset_to_death_pmf := deaths_state.od_pmf
     C_T := infection_state.C_T
     R0 := infection_state.R0
     r := infection_state.r
