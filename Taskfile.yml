@@ -1,0 +1,32 @@
+version: "3"
+
+# Common development tasks. Run `task --list` to see them.
+
+tasks:
+  refresh-releases:
+    desc: >
+      Pull the published per-release outbreak-size estimates from the
+      tagged results releases into data/released_estimates.csv. Needs the
+      `gh` CLI authenticated against the repo.
+    cmds:
+      - julia --project=scripts scripts/refresh_releases.jl {{.CLI_ARGS}}
+
+  format:
+    desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.
+    cmds:
+      - ./scripts/run_formatter.sh
+
+  lint:
+    desc: Alias for format.
+    cmds:
+      - task: format
+
+  test:
+    desc: Run the full test suite.
+    cmds:
+      - julia --project=. -e 'using Pkg; Pkg.test()'
+
+  test-quick:
+    desc: Run the test suite without the quality (Aqua/JET/format) checks.
+    cmds:
+      - julia --project=. -e 'using Pkg; Pkg.test(; test_args = ["skip_quality"])'
