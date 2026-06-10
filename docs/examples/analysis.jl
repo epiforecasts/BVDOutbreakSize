@@ -1757,24 +1757,27 @@ diagnostics_table( #hide
 # enters the denominator before it can enter the numerator.
 #
 # We report a delay-corrected confirmed CFR that debiases the real-time ratio
-# in the standard way [nishiura2009](@cite).
+# following [nishiura2009](@cite).
 # The denominator is shrunk from all confirmed cases to those expected to have
-# had a fatal outcome resolve by the cut-off, weighting each day of
+# had their death confirmed by the cut-off, weighting each day of
 # confirmed-case incidence by the probability that a case confirmed that day,
-# if it is going to die, has died by the cut-off:
+# if it is going to die, has had its death confirmed by the cut-off:
 #
 # ```math
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{30}
+#         \Pr(X_d - X_c \le T - t)}, \tag{35}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$
-# the modelled daily confirmed-case incidence, and $X_d - X_c$ the
-# confirmation-to-death residual delay, the onset-to-death lag $X_d$ minus the
-# onset-to-confirmation lag $X_c$ (the onset-to-report delay convolved with the
-# laboratory receipt delay).
+# the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual
+# delay between a confirmed case and its confirmed death.
+# $X_d$ is the onset-to-death-confirmation lag (onset-to-death convolved with
+# the report-to-receipt laboratory delay) and $X_c$ the onset-to-confirmation
+# lag (onset-to-report convolved with the same laboratory delay), so the common
+# receipt delay cancels in the mean and the residual centres on onset-to-death
+# minus onset-to-report.
 # Both lags and the confirmed trajectories are taken per posterior draw from
 # the joint fit, so the corrected ratio carries the joint uncertainty.
 # As the outbreak matures and recent incidence resolves the correction shrinks

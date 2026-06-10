@@ -65,12 +65,12 @@ end
         ## Rising daily confirmed-case incidence over a 30-day grid.
         daily = collect(range(1.0, 6.0; length = 30))
         cumulative_confirmed := cumsum(daily)
-        ## Onset-to-confirmation concentrated early, onset-to-death spread
-        ## later, both normalised PMFs from lag 0.
+        ## Onset-to-confirmation concentrated early, onset-to-death-
+        ## confirmation spread later, both normalised PMFs from lag 0.
         kc = [0.2, 0.5, 0.3]
         onset_to_confirmation_pmf := kc ./ sum(kc)
         kd = [0.0, 0.05, 0.1, 0.2, 0.3, 0.2, 0.15]
-        onset_to_death_pmf := kd ./ sum(kd)
+        onset_to_death_confirmation_pmf := kd ./ sum(kd)
         return nothing
     end
 
