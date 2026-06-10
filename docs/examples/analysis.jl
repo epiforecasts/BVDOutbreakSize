@@ -2713,31 +2713,27 @@ frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
 # The project publishes a tagged results release at each data cut-off
 # (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
 # the posterior draws and input data.
-# `scripts/refresh_releases.jl` pulls each release's published headline
-# outbreak size into `data/released_estimates.csv`, so adding a release is
-# a refresh rather than a hand edit.
 # The released series, in blue, is the project's published estimate at each
-# release: the earlier closed-form integral model up to v1.3.0, then the
-# renewal model from v1.4.0 on.
-# Each release is an independent fit, so it is drawn as a discrete estimate,
-# a median with nested 30/60/90% interval bars, not a ribbon.
-# The renewal series, in red, is this renewal model re-fit frozen at each
-# integral-era release cut-off, the current method evaluated at a past date.
-# The renewal-era releases already are renewal fits, so they need no frozen
-# re-fit; each frozen fit is its own discrete estimate, drawn the same way.
-# The current-data, current-model estimate is a single fit, drawn in green
-# as the cumulative-infection trajectory over time, rising across the period
-# so the latest estimate reads against the earlier ones.
+# release: the closed-form integral model up to v1.3.0, then the renewal
+# model from v1.4.0 on.
+# Each release is its own fit, so it is drawn as a discrete estimate, a
+# median with nested 30/60/90% interval bars, rather than a ribbon.
+# The renewal series, in red, is the renewal model re-fit frozen at each
+# integral-era release cut-off.
+# The renewal-era releases already are renewal fits, so they carry no frozen
+# re-fit.
+# The current-data, current-model estimate is drawn in green as the
+# cumulative-infection trajectory over time, a single fit shown across the
+# period so the latest estimate reads against the earlier ones.
 # Each release date is marked with a dotted vertical rule.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and frozen renewal re-fits</summary>
 #md # ```
 
-## Released median and 30/60/90% intervals per data cut-off, taken from
-## `data/released_estimates.csv` (refreshed by
-## `scripts/refresh_releases.jl` from the tagged results releases). Each
-## tuple is `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
+## Released median and 30/60/90% intervals per release, from
+## `data/released_estimates.csv`. Each tuple is
+## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
 release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
                          r.lo90, r.hi90) for r in eachrow(released_df)]
 
