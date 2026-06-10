@@ -380,9 +380,21 @@ death-confirmation probability (`death_confirmation`).
     _conf_windows = confirmed_state.windows
     _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
         _conf_windows.late_days)
-    _conf_daily_positivity = expand_vintage_rate(confirmed_state.p_pos,
+    ## In predict / check-model mode the per-window positivity can widen to
+    ## `Vector{Any}` (and is empty when there is no confirmed history), so
+    ## `expand_vintage_rate` would call `zero(Any)`. Pin it to the modelled
+    ## analysed volume's (always-concrete) element type, leaving the
+    ## AD/fit path (concrete dual eltype) untouched, matching the guards in
+    ## `confirmed_cases_model`.
+    _conf_received = confirmed_state.received_daily
+    _conf_positivity = confirmed_state.p_pos
+    if eltype(_conf_positivity) === Any
+        _conf_positivity = convert(Vector{eltype(_conf_received)},
+            _conf_positivity)
+    end
+    _conf_daily_positivity = expand_vintage_rate(_conf_positivity,
         _conf_window_days, n)
-    cumulative_confirmed := cumsum(_conf_daily_positivity .* confirmed_state.received_daily)
+    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_received)
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_pmf := deaths_state.od_pmf
     C_T := infection_state.C_T
