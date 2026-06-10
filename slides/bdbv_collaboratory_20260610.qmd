@@ -72,6 +72,10 @@ Estimated true burden ≈ 3,500 infections (90% 2,100 – 9,000)
 
 ![](figures/validation-mccabe.png){fig-alt="Comparison with McCabe et al., matched in time"}
 
+## Comparison to earlier versions
+
+![](figures/validation-earlier.png){fig-alt="Comparison with earlier versions of our report"}
+
 ## Reconciling different data streams
 
 ![](figures/outbreak_streams.png){fig-alt="Comparison of estimates from different data streams vs. joint"}
@@ -90,7 +94,6 @@ With thanks to INSP and the DRC response teams, clinicians and surveillance staf
 
 - Data from: <https://insp.cd/category/actualites/>
 - Report and code at: <https://epiforecasts.io/BVDOutbreakSize> (updated regularly)
-- More CMMID modelling work at: <https://cmmid.github.io/topics/ebola-bvd/>
 
 Slides at
 
