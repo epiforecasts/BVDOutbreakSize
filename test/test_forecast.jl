@@ -83,11 +83,13 @@ end
 
     tbl=forecast_table(fc)
     @test tbl isa DataFrame
-    ## Four streams x two quantities (cumulative, new this week).
-    @test nrow(tbl) == 8
+    ## Two confirmed streams x two quantities (cumulative, new this week).
+    @test nrow(tbl) == 4
     @test names(tbl) ==
           ["Stream", "Quantity", "Lower 90%", "Lower 60%", "Lower 30%",
         "Upper 30%", "Upper 60%", "Upper 90%"]
+    @test Set(tbl[!, "Stream"]) ==
+          Set(["DRC confirmed cases", "DRC confirmed deaths"])
     @test Set(tbl[!, "Quantity"]) ==
           Set(["cumulative by T+7", "new this week"])
 end
@@ -105,16 +107,15 @@ end
         obs_confirmed_deaths = 17)
 
     tbl=forecast_vs_truth(fc;
-        cases = 1000, deaths = 25, confirmed = 260, confirmed_deaths = 20)
+        confirmed = 260, confirmed_deaths = 20)
 
     @test tbl isa DataFrame
-    @test nrow(tbl) == 4
+    @test nrow(tbl) == 2
     @test names(tbl) ==
           ["Stream", "Observed", "Lower 90%", "Lower 60%", "Lower 30%",
         "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
     @test Set(tbl[!, "Stream"]) ==
-          Set(["DRC reported cases", "DRC deaths",
-        "DRC confirmed cases", "DRC confirmed deaths"])
+          Set(["DRC confirmed cases", "DRC confirmed deaths"])
 
     for row in eachrow(tbl)
         covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]

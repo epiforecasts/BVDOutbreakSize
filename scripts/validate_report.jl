@@ -26,6 +26,7 @@ pp = predict(
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -42,7 +43,8 @@ _srep(name) = vec(Array(first(pp[k] for k in keys(pp)
 if occursin(name, string(k)))))
 
 # --- Confirmed-case per-vintage cumulative ---
-w = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history)
+w = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history,
+    obs.lab_daily_history)
 win_days = vcat(w.early_days, w.obs_days)
 # observed cumulative confirmed at each window end-day
 function _conf_at(day)

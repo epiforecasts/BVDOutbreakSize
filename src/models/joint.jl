@@ -111,6 +111,7 @@ positives (a Binomial of the observed analysed denominator in
         n::Integer, confirmed_cases::Union{Missing, Integer};
         confirmed_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
         tests_received_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
@@ -133,7 +134,7 @@ positives (a Binomial of the observed analysed denominator in
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history,
+        lab_history, lab_daily_history, tests_received_history,
         positivity_link = confirmed_positivity_link))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
@@ -232,7 +233,11 @@ specimens are fit through a receipt delay and the tested fraction; the
 confirmed positives are scored as a Binomial of the observed
 specimens-analysed denominator (`lab_history`) with a partially-pooled
 per-window positivity, so the confirmed counts no longer pass through the
-multiplicative ascertainment ridge. The confirmed deaths are a thinning of
+multiplicative ascertainment ridge. Post-cutoff dark-window days that
+publish a 24h analysed count (`lab_daily_history`) are likewise scored as
+a Binomial of that observed denominator rather than against the modelled
+laboratory volume, anchoring the positivity (hence `λ_bg`) where the
+cumulative analysed series stops. The confirmed deaths are a thinning of
 the suspected deaths whose confirmation probability is the suspected-case
 BVD composition enriched on the odds scale (`confirmed_deaths`,
 `total_deaths` the denominator).
@@ -265,6 +270,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
         tests_received_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
@@ -336,7 +342,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, tests_received_history,
+        lab_history, lab_daily_history, tests_received_history,
         positivity_link = confirmed_positivity_link))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,

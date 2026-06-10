@@ -122,6 +122,31 @@ dates  = ["2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26",
 values = [211, 295, 295, 403, 648, 755]
 source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 LABORATOIRE Tableau IV `Nbre d'échantillons analysés` (cumul), read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Analysis stalled 24-25 May (flat at 295; SitRep 011: `Aucun échantillon n'a été analysé en Ituri`)."
 
+# Post-cutoff 24h laboratory volume: per-day samples *analysed* in the
+# preceding 24h (not cumulative), read from the SitRep 24h laboratory
+# block once national reporting switched to the confirmed-only format on
+# 29 May. These are the analysed *denominators* the dark windows lack: the
+# model pairs each with the same day's confirmed-case increment and scores
+# it as `Binomial(analysed_24h, positivity)`, anchoring the laboratory
+# positivity (hence the non-BVD background λ_bg) where the cumulative
+# `tests_analysed_history` stops at 28 May. The 24h positives are NOT
+# added as a separate numerator: they are the same events as the confirmed
+# increments already fitted, so using them again would double-count (#235).
+# Trusted days only: a day is populated when every reporting province
+# gives an analysed count, so the national 24h total is a clean
+# denominator. Nord-Kivu "pending for reagents" is legitimately excluded
+# (received-but-not-yet-analysed, outside an analysed-that-day flow). Days
+# with ambiguous scope (Bunia-only 29 May, per-zone 3 June) or partial
+# coverage (Ituri-only 2 June) are left out rather than treated as a lower
+# bound, which would need a free latent denominator and risks the funnel
+# the earlier free-denominator experiments hit. A coverage-fraction lower
+# bound is the v2 follow-up.
+[tests_analysed_daily_history]
+dates  = ["2026-06-01", "2026-06-04", "2026-06-05", "2026-06-06",
+          "2026-06-07"]
+values = [76, 256, 126, 106, 67]
+source = "INSP situation reports 1-7 June 2026 (SitReps 018, 021-024) 24h LABORATOIRE block, read from the PDFs; recorded in the notes column of data/insp_sitrep_scanned.csv. 1 Jun (018) 76 national; 4 Jun (021) Ituri 199 + Nord-Kivu 57 = 256 (Nord-Kivu 118 pending excluded); 5 Jun (022) Ituri 109 + Nord-Kivu 11 + Sud-Kivu 6 = 126; 6 Jun (023) Ituri 94 + Nord-Kivu 6 + Sud-Kivu 6 = 106 (Nord-Kivu 193 pending excluded); 7 Jun (024) Ituri 63 + Sud-Kivu 4 = 67 (Nord-Kivu 183 pending for reagents excluded). 29-31 May (015-017), 2 Jun (019, Ituri-only) and 3 Jun (020, per-zone) left out: ambiguous or partial scope."
+
 # Cumulative national confirmed-case totals across INSP situation-report
 # vintages (the lab-section `Cumul positifs`, equal to the front-page
 # `Cumul cas confirmés`). Same caveats as `reported_case_history`: the

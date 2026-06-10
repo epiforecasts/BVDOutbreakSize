@@ -1632,6 +1632,7 @@ chn_exports_deaths = fit_parallel([
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = obs.tests_received_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -1652,6 +1653,7 @@ chn_exports_deaths = fit_parallel([
     () -> nuts_sample(confirmed_only_model(obs.n, obs.confirmed_cases;
         confirmed_history = obs.confirmed_history,
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = obs.tests_received_history,
         breakpoint = _BREAKPOINT)),
     () -> nuts_sample(confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
@@ -1739,11 +1741,12 @@ diagnostics_table( #hide
 # recent trend of its trajectory rather than holding it fixed, with no
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
-# We forecast the four DRC streams (suspected
-# reported cases, suspected deaths, laboratory-confirmed cases and confirmed
-# deaths) but not exports, since cross-border travel is unlikely to continue
-# at its baseline rate, so the forward travel rate the export model relies on
-# no longer holds. The figure is shown in the
+# We forecast the two confirmed DRC streams (laboratory-confirmed cases and
+# confirmed deaths) as the forecast targets. The suspected reported cases and
+# deaths are no longer reported, so they are not shown as targets. Exports are
+# not forecast either, since cross-border travel is unlikely to continue at
+# its baseline rate, so the forward travel rate the export model relies on no
+# longer holds. The figure is shown in the
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
 #
@@ -1783,6 +1786,7 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_history = o.confirmed_history,
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
+            lab_daily_history = o.lab_daily_history,
             tests_received_history = o.tests_received_history,
             export_case_days = o.export_case_days,
             export_death_days = o.export_death_days,
@@ -2233,6 +2237,7 @@ pp_joint = predict(
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
         tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -2290,9 +2295,10 @@ tests_received_panel = (;
 ## end-day. The 24-25 May analysis stall merges into 26 May, so the window
 ## grid is slightly coarser than the raw confirmed history.
 _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
-    obs.confirmed_history, obs.lab_history);
+    obs.confirmed_history, obs.lab_history, obs.lab_daily_history);
 ## Oldest-first: early (no denominator) → observed (analysed Binomial) →
-## late (post-28 May, no denominator, modelled volume).
+## late (post-28 May; trusted 24h-analysed days are Binomial windows, the
+## rest dark windows scored against the modelled volume).
 _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
     _conf_windows.late_days);
 function _confirmed_at(day)
@@ -2418,10 +2424,12 @@ no_onward_fig #hide
 
 # ### One-week-ahead forecast results
 #
-# The cumulative and new expected counts by $T + 7$ for the four DRC streams
-# (suspected reported cases, suspected deaths, laboratory-confirmed cases and
-# confirmed deaths), from the no-change projection defined in the methods
+# The cumulative and new expected counts by $T + 7$ for the two confirmed DRC
+# streams (laboratory-confirmed cases and confirmed deaths), from the
+# no-change projection defined in the methods
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
+# The suspected reported cases and deaths are no longer reported, so they are
+# not shown as forecast targets.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -2458,8 +2466,8 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 
 forecast_latent_fig #hide
 
-# The observation figure shows the new reported cases, confirmed cases and
-# confirmed deaths over the horizon.
+# The observation figure shows the new confirmed cases and confirmed deaths
+# over the horizon.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
@@ -2495,7 +2503,6 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
 validation_table = forecast_vs_truth(validation_forecast;
-    cases = obs.reported_cases, deaths = obs.total_deaths,
     confirmed = obs.confirmed_cases,
     confirmed_deaths = obs.confirmed_deaths);
 
@@ -2515,11 +2522,10 @@ validation_table #hide
 #md # ```
 
 validation_fig = plot_forecast_vs_truth(validation_forecast;
-    cases = obs.reported_cases, deaths = obs.total_deaths,
     confirmed = obs.confirmed_cases,
-    baseline_cases = frozen_lastweek.o.reported_cases,
-    baseline_deaths = frozen_lastweek.o.total_deaths,
-    baseline_confirmed = frozen_lastweek.o.confirmed_cases);
+    confirmed_deaths = obs.confirmed_deaths,
+    baseline_confirmed = frozen_lastweek.o.confirmed_cases,
+    baseline_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
 #md # ```@raw html
 #md # </details>
@@ -2922,6 +2928,7 @@ function refit_joint_variant(;
             confirmed_history = obs.confirmed_history,
             confirmed_deaths_history = obs.confirmed_deaths_history,
             lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
             tests_received_history = obs.tests_received_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,

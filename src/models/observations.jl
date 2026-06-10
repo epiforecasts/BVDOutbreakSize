@@ -392,6 +392,43 @@ observed (or sampled) positives.
 end
 
 """
+Late confirmed-vintage likelihood, one per-window confirmed increment over
+the days after the last cumulative laboratory date. Each window scores its
+increment two ways depending on whether a 24h analysed denominator was
+published for that day (`analysed[i] > 0`): an anchored day is a
+`Binomial(analysed[i], p_pos[i])` of the observed denominator (like an
+observed window), a dark day a `NegativeBinomial` of the modelled
+laboratory volume `modelled[i]` sharing the surveillance dispersion `k`.
+Keeping both in one submodel preserves a single per-window predict-key
+vector (`<prefix>.increments[i]`) over all late days in order, so the
+posterior-predictive trajectory reconstructs without interleaving.
+
+`increments` is the model argument on the LHS of `~`: a supplied vector is
+observed data DynamicPPL conditions on and a `missing` argument is sampled
+(the predictive-generator path). A `Vector{Union{Missing, Int}}` with some
+entries `missing` scores only the present ones, used to observe the
+anchored days while leaving the dark days latent under the
+no-extrapolation probe.
+"""
+@model function late_confirmed_model(
+        increments::Union{Missing, AbstractVector},
+        modelled::AbstractVector, analysed::AbstractVector{<:Integer},
+        p_pos::AbstractVector, k::Real)
+    n = length(modelled)
+    if ismissing(increments)
+        increments = Vector{Union{Missing, Int}}(missing, n)
+    end
+    for i in 1:n
+        if analysed[i] > 0
+            increments[i] ~ Binomial(analysed[i], p_pos[i])
+        else
+            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+        end
+    end
+    return (; modelled, increments)
+end
+
+"""
 Align the confirmed-case counts onto the laboratory windows, splitting
 them into three non-overlapping groups so all the confirmed data is used:
 
@@ -417,20 +454,27 @@ them into three non-overlapping groups so all the confirmed data is used:
   (the last laboratory day) so the model bins the modelled volume over
   each late window's *own* day range, pinned at `late_start`, rather
   than from day 0 (which would double-count the observed window volume).
+  A late day that publishes a 24h analysed count (`lab_daily_history`,
+  the post-cutoff daily denominators the dark windows otherwise lack) is
+  flagged in `late_analysed` so the model can score it as a Binomial of
+  that observed denominator instead, anchoring its positivity to data.
 
 The three groups partition the confirmed counts at the first and last
 laboratory dates, so no confirmed case is counted twice. Returns
 `(; obs_days, obs_positives, obs_analysed, early_days, early_increments,
-late_days, late_increments, late_start)` of grid day-indices and
-per-window counts; the observed and late groups are empty when no
-laboratory history is present and every confirmed vintage becomes an
-early window. Pure integer bookkeeping on the observed data, so it
-carries no gradient.
+late_days, late_increments, late_analysed, late_start)` of grid
+day-indices and per-window counts; `late_analysed[i]` is the observed 24h
+analysed denominator for late day `i` (0 when none was published). The
+observed and late groups are empty when no laboratory history is present
+and every confirmed vintage becomes an early window. Pure integer
+bookkeeping on the observed data, so it carries no gradient.
 """
-function confirmed_positivity_windows(confirmed_history, lab_history)
+function confirmed_positivity_windows(confirmed_history, lab_history,
+        lab_daily_history = (; days = Int[], counts = Int[]))
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[],
-        late_days = Int[], late_increments = Int[], late_start = 0)
+        late_days = Int[], late_increments = Int[], late_analysed = Int[],
+        late_start = 0)
     isempty(confirmed_history.counts) && return empty
     cdays = confirmed_history.days
     ccounts = confirmed_history.counts
@@ -447,7 +491,8 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         return (; obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = collect(Int.(cdays)),
             early_increments = Int.(inc),
-            late_days = Int[], late_increments = Int[], late_start = 0)
+            late_days = Int[], late_increments = Int[], late_analysed = Int[],
+            late_start = 0)
     end
 
     first_lab_day = Int(lab_history.days[1])
@@ -513,8 +558,24 @@ function confirmed_positivity_windows(confirmed_history, lab_history)
         prev_conf_late = Int(ccounts[i])
     end
 
+    ## Observed 24h analysed denominators on the late days: a published
+    ## daily analysed count (`lab_daily_history`) on a late day becomes that
+    ## window's Binomial denominator, 0 leaves it a modelled-volume dark
+    ## window. Only days strictly after the last cumulative laboratory date
+    ## are anchored (the cumulative series already covers the rest). Built
+    ## with a plain loop (no Dict/filtered generator) so the AD backend can
+    ## compile a rule for this pure-integer bookkeeping on every Julia
+    ## version.
+    late_analysed = zeros(Int, length(late_days))
+    for (d, c) in zip(lab_daily_history.days, lab_daily_history.counts)
+        di = Int(d)
+        di > last_lab_day || continue
+        pos = findfirst(==(di), late_days)
+        pos === nothing || (late_analysed[pos] = Int(c))
+    end
+
     return (; obs_days, obs_positives, obs_analysed, early_days,
-        early_increments, late_days, late_increments,
+        early_increments, late_days, late_increments, late_analysed,
         late_start = last_lab_day)
 end
 
@@ -571,6 +632,7 @@ quantities.
         bg_daily::AbstractVector, τ_test::Real,
         bvd_reports_daily::AbstractVector;
         lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
         tests_received_history = (; days = Int[], counts = Int[]),
         tests_received::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
@@ -616,7 +678,8 @@ quantities.
     ## denominator, and late windows (after the last lab date, INSP's
     ## confirmed-only format) scored as counts against the modelled volume
     ## like the early windows.
-    windows = confirmed_positivity_windows(confirmed_history, lab_history)
+    windows = confirmed_positivity_windows(confirmed_history, lab_history,
+        lab_daily_history)
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
     n_late = length(windows.late_days)
@@ -718,14 +781,17 @@ quantities.
     confirmed_positives ~ to_submodel(
         confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
 
-    ## Late windows: confirmed increment ~ NegBinomial(positivity × modelled
-    ## analysed volume), like the early windows but for the confirmed-only
-    ## vintages after the last laboratory date. The volume is binned over
-    ## each late window's own day range, with the running edge PINNED at
-    ## the last laboratory day (`late_start`): `bin_increments` runs its
-    ## running `prev` from day 0, so prepending `late_start` to the late day
-    ## edges and dropping the synthetic first bin starts the accumulation at
-    ## `late_start`, avoiding double-counting the observed-window volume.
+    ## Late windows: confirmed-only vintages after the last laboratory date.
+    ## A day that publishes a 24h analysed count (`late_analysed > 0`) is
+    ## scored as a Binomial of that observed denominator — like an observed
+    ## window, anchoring its positivity to data — and each remaining dark day
+    ## as NegBinomial(positivity × modelled volume). The modelled volume is
+    ## binned over each late window's own day range, with the running edge
+    ## PINNED at the last laboratory day (`late_start`): `bin_increments`
+    ## runs its running `prev` from day 0, so prepending `late_start` to the
+    ## late day edges and dropping the synthetic first bin starts the
+    ## accumulation at `late_start`, avoiding double-counting the
+    ## observed-window volume.
     late_p = p_pos[(n_early + n_obs + 1):nv]
     if n_late > 0
         late_edges = vcat(windows.late_start, windows.late_days)
@@ -734,23 +800,50 @@ quantities.
         late_volume = similar(received_daily, 0)
     end
     late_mean = late_p .* late_volume
-    late_obs = (have_data && n_late > 0 && fit_dark) ?
-               windows.late_increments : missing
+    ## Observed late increments: anchored days (24h denominator) carry the
+    ## confirmed increment clamped into the Binomial support and are always
+    ## scored; dark days are scored only when `fit_dark` (the
+    ## no-extrapolation probe leaves them latent). A per-entry
+    ## `missing`/value vector lets the one submodel observe each accordingly.
+    if have_data && n_late > 0
+        late_obs = Vector{Union{Missing, Int}}(undef, n_late)
+        for i in 1:n_late
+            a = windows.late_analysed[i]
+            if a > 0
+                late_obs[i] = clamp(windows.late_increments[i], 0, a)
+            elseif fit_dark
+                late_obs[i] = windows.late_increments[i]
+            else
+                late_obs[i] = missing
+            end
+        end
+    else
+        late_obs = missing
+    end
     late_increments ~ to_submodel(
-        vintage_increments_model(late_mean, late_obs, k))
+        late_confirmed_model(late_obs, late_mean, windows.late_analysed,
+        late_p, k))
 
     expected_received := safe_rate(sum(received_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
-    ## modelled early and late volume and the observed analysed windows. The
-    ## early/late window vectors are empty when a vintage has no such window,
-    ## and in predict mode their element type can widen to `Any`, so each sum
-    ## is given a concrete `init` to skip `reduce_empty`'s `zero(Any)`. The
-    ## init is taken from the scalar `τ_test` (always concrete), NOT from
-    ## `eltype(p_pos)`, which can itself widen to `Any` in predict mode.
+    ## modelled early volume, the observed cumulative analysed windows and the
+    ## late windows (anchored days contribute `p · analysed`, dark days the
+    ## modelled `p · volume`). The window vectors are empty when a vintage has
+    ## no such window, and in predict mode their element type can widen to
+    ## `Any`, so each sum is given a concrete `init` to skip `reduce_empty`'s
+    ## `zero(Any)`. The init is taken from the scalar `τ_test` (always
+    ## concrete), NOT from `eltype(p_pos)`, which can widen to `Any`.
     z = zero(τ_test)
+    amask = windows.late_analysed .> 0
+    late_den_a = float.(windows.late_analysed)
+    late_den = n_late > 0 ? ifelse.(amask, late_den_a, late_volume) :
+               similar(late_volume, 0)
+    late_expected = n_late > 0 ? ifelse.(amask, late_p .* late_den_a, late_mean) :
+                    similar(late_mean, 0)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
-            sum(late_volume; init = z)
-    expected_positives = sum(early_mean; init = z) + sum(late_mean; init = z) +
+            sum(late_den; init = z)
+    expected_positives = sum(early_mean; init = z) +
+                         sum(late_expected; init = z) +
                          (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
     expected_confirmed := safe_rate(expected_positives)
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
