@@ -348,7 +348,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
-        confirmed_deaths_history))
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,

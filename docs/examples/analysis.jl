@@ -390,7 +390,7 @@ vintage_table #hide
 # | Onset-to-death delay |  | ● |  |  |  |  | ● |
 # | Case-fatality ratio |  | ● |  |  |  |  | ● |
 # | Onset-to-report delay |  |  | ● | ● | ● | ● |  |
-# | Receipt delay |  |  |  | ● | ● |  |  |
+# | Receipt delay |  |  |  | ● | ● | ● |  |
 # | Onset-to-detection delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● |  |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
@@ -1312,13 +1312,23 @@ cfr_prior_fig #hide
 #     + \log m_{\text{death}}\bigr).
 # ```
 #
-# The daily confirmed-death series is $p_{\text{cd}}\, m_t$ with $m_t$ the
-# modelled suspected-death series, and the per-vintage increments are scored
-# with a NegBinomial sharing the dispersion $k$:
+# A suspected death is dated at the death event, so the only step left to
+# laboratory confirmation is the report-to-receipt delay $f_{\text{rec}}$ the
+# suspected specimens carry to the laboratory, so confirmed cases and confirmed
+# deaths pay a consistent laboratory delay.
+# The daily confirmed-death series is the thinned suspected-death series
+# carried through that delay,
+#
+# ```math
+# \text{cd}_t = p_{\text{cd}} \sum_{s \ge 0} m_{t-s}\, f_{\text{rec},s},
+# ```
+#
+# with $m_t$ the modelled suspected-death series, and the per-vintage
+# increments are scored with a NegBinomial sharing the dispersion $k$:
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t,\ k\Bigr). \tag{30}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{30}
 # ```
 
 #md # ```@raw html

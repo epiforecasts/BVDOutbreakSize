@@ -12,6 +12,13 @@ In development.
 Changes landing on `main` since v1.4.0 are recorded here ahead of the next
 release.
 
+### Model
+
+- Confirmed deaths now carry the report-to-receipt laboratory delay, so the
+  laboratory-confirmed-death series lags the death event rather than tracking
+  it instantaneously and the confirmed case and death streams pay a consistent
+  laboratory delay.
+
 ## v1.4.0
 
 The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate

@@ -849,6 +849,7 @@ quantities.
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
 
     return (; τ_test, bg_daily, p_pos, windows, received_daily,
+        receipt_pmf = receipt_state.pmf,
         expected_received, expected_confirmed, p_positive)
 end
 
@@ -1066,10 +1067,13 @@ The odds-scale enrichment keeps `p` in `(0, 1)` without a hard clamp, and
 ties the death-confirmation rate to the same composition that drives the
 case streams, so a confirmed-death observation informs the background
 `λ_bg` and ascertainment `p_drc` rather than introducing a free rate. The
-confirmed-death series is flat over the fitted window, so a single cut-off
-binomial captures its information; the suspected-death total is the
-denominator. Returns the enrichment, the composition, the confirmation
-probability and the expected confirmed-death count.
+thinned daily series is carried through the report-to-receipt laboratory
+delay `receipt_pmf` before scoring, so the laboratory-confirmed deaths lag
+the death event by the same laboratory delay the suspected specimens carry
+from report to laboratory receipt; the default identity PMF leaves it
+instantaneous. The suspected-death total is the denominator. Returns the
+enrichment, the composition, the confirmation probability and the expected
+confirmed-death count.
 
 This is the renewal analogue of the integral-lineage forwarded-positivity
 lab model (PR #193), which scores per-vintage confirmed-death increments as
@@ -1098,6 +1102,7 @@ carried by [`deaths_model`](@ref).
         bvd_reports_daily::AbstractVector, p_drc::Real,
         bg_daily::AbstractVector, k::Real;
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
+        receipt_pmf::AbstractVector = [1.0],
         enrichment = confirmed_death_enrichment_model())
     enr_state ~ to_submodel(enrichment)
     m_death = enr_state.m_death
@@ -1108,13 +1113,20 @@ carried by [`deaths_model`](@ref).
     p_death_conf := logistic(logit(qc) + log(m_death))
 
     ## Confirmed deaths are a thinning of the modelled suspected-death daily
-    ## series by the composition-linked confirmation probability, scored as
-    ## per-vintage between-vintage increments over the confirmed-death
-    ## vintages. The observed suspected-death total is frozen at its last
-    ## stable vintage (well before the cut-off), so the modelled death
-    ## trajectory carries the timing of the later confirmed-death vintages,
-    ## the same modelled-volume route the post-lab confirmed cases use.
-    confirmed_death_daily = p_death_conf .* deaths_daily
+    ## series by the composition-linked confirmation probability, then carried
+    ## through the report-to-receipt laboratory delay so the laboratory-
+    ## confirmed series lags the death event rather than tracking it
+    ## instantaneously. A suspected death is dated at the death event, so the
+    ## only step left to confirmation is the same `receipt_pmf` laboratory delay
+    ## the suspected specimens carry from report to laboratory receipt, so
+    ## confirmed cases and confirmed deaths pay a consistent laboratory delay.
+    ## The default identity PMF leaves the series instantaneous when no delay is
+    ## injected. The observed suspected-death total is frozen at its last stable
+    ## vintage (well before the cut-off), so the modelled death trajectory
+    ## carries the timing of the later confirmed-death vintages, the same
+    ## modelled-volume route the post-lab confirmed cases use.
+    confirmed_death_daily = p_death_conf .* convolve_delay(deaths_daily,
+        receipt_pmf)
     n = length(deaths_daily)
     vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
     modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
