@@ -392,6 +392,43 @@ observed (or sampled) positives.
 end
 
 """
+Late confirmed-vintage likelihood, one per-window confirmed increment over
+the days after the last cumulative laboratory date. Each window scores its
+increment two ways depending on whether a 24h analysed denominator was
+published for that day (`analysed[i] > 0`): an anchored day is a
+`Binomial(analysed[i], p_pos[i])` of the observed denominator (like an
+observed window), a dark day a `NegativeBinomial` of the modelled
+laboratory volume `modelled[i]` sharing the surveillance dispersion `k`.
+Keeping both in one submodel preserves a single per-window predict-key
+vector (`<prefix>.increments[i]`) over all late days in order, so the
+posterior-predictive trajectory reconstructs without interleaving.
+
+`increments` is the model argument on the LHS of `~`: a supplied vector is
+observed data DynamicPPL conditions on and a `missing` argument is sampled
+(the predictive-generator path). A `Vector{Union{Missing, Int}}` with some
+entries `missing` scores only the present ones, used to observe the
+anchored days while leaving the dark days latent under the
+no-extrapolation probe.
+"""
+@model function late_confirmed_model(
+        increments::Union{Missing, AbstractVector},
+        modelled::AbstractVector, analysed::AbstractVector{<:Integer},
+        p_pos::AbstractVector, k::Real)
+    n = length(modelled)
+    if ismissing(increments)
+        increments = Vector{Union{Missing, Int}}(missing, n)
+    end
+    for i in 1:n
+        if analysed[i] > 0
+            increments[i] ~ Binomial(analysed[i], p_pos[i])
+        else
+            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
+        end
+    end
+    return (; modelled, increments)
+end
+
+"""
 Align the confirmed-case counts onto the laboratory windows, splitting
 them into three non-overlapping groups so all the confirmed data is used:
 
@@ -762,44 +799,51 @@ quantities.
     else
         late_volume = similar(received_daily, 0)
     end
-    ## Split the late windows into analysed-anchored days (observed 24h
-    ## denominator) and dark days (modelled volume only).
-    anchored = findall(>(0), windows.late_analysed)
-    dark = findall(iszero, windows.late_analysed)
-    dark_mean = late_p[dark] .* late_volume[dark]
-    dark_obs = (have_data && fit_dark && !isempty(dark)) ?
-               windows.late_increments[dark] : missing
+    late_mean = late_p .* late_volume
+    ## Observed late increments: anchored days (24h denominator) carry the
+    ## confirmed increment clamped into the Binomial support and are always
+    ## scored; dark days are scored only when `fit_dark` (the
+    ## no-extrapolation probe leaves them latent). A per-entry
+    ## `missing`/value vector lets the one submodel observe each accordingly.
+    if have_data && n_late > 0
+        late_obs = Vector{Union{Missing, Int}}(undef, n_late)
+        for i in 1:n_late
+            a = windows.late_analysed[i]
+            if a > 0
+                late_obs[i] = clamp(windows.late_increments[i], 0, a)
+            elseif fit_dark
+                late_obs[i] = windows.late_increments[i]
+            else
+                late_obs[i] = missing
+            end
+        end
+    else
+        late_obs = missing
+    end
     late_increments ~ to_submodel(
-        vintage_increments_model(dark_mean, dark_obs, k))
-    ## Anchored late windows: Binomial of the observed 24h analysed
-    ## denominator, positives the day's confirmed increment clamped into the
-    ## denominator so the Binomial is always valid. Not gated by `fit_dark`:
-    ## these days carry a real denominator, so they are observed windows.
-    late_analysed_obs = windows.late_analysed[anchored]
-    late_anchored_pos = (have_data && !isempty(anchored)) ?
-                        Int[clamp(windows.late_increments[anchored[j]], 0,
-                                late_analysed_obs[j]) for j in eachindex(anchored)] :
-                        missing
-    late_confirmed_positives ~ to_submodel(
-        confirmed_positives_model(late_anchored_pos, late_analysed_obs,
-        late_p[anchored]))
+        late_confirmed_model(late_obs, late_mean, windows.late_analysed,
+        late_p, k))
 
     expected_received := safe_rate(sum(received_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
-    ## modelled early/dark-late volume, the observed cumulative analysed
-    ## windows and the anchored 24h analysed windows. The window vectors are
-    ## empty when a vintage has no such window, and in predict mode their
-    ## element type can widen to `Any`, so each sum is given a concrete
-    ## `init` to skip `reduce_empty`'s `zero(Any)`. The init is taken from
-    ## the scalar `τ_test` (always concrete), NOT from `eltype(p_pos)`,
-    ## which can itself widen to `Any` in predict mode.
+    ## modelled early volume, the observed cumulative analysed windows and the
+    ## late windows (anchored days contribute `p · analysed`, dark days the
+    ## modelled `p · volume`). The window vectors are empty when a vintage has
+    ## no such window, and in predict mode their element type can widen to
+    ## `Any`, so each sum is given a concrete `init` to skip `reduce_empty`'s
+    ## `zero(Any)`. The init is taken from the scalar `τ_test` (always
+    ## concrete), NOT from `eltype(p_pos)`, which can widen to `Any`.
     z = zero(τ_test)
-    anchored_mean = late_p[anchored] .* late_analysed_obs
+    amask = windows.late_analysed .> 0
+    late_den_a = float.(windows.late_analysed)
+    late_den = n_late > 0 ? ifelse.(amask, late_den_a, late_volume) :
+               similar(late_volume, 0)
+    late_expected = n_late > 0 ? ifelse.(amask, late_p .* late_den_a, late_mean) :
+                    similar(late_mean, 0)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
-            sum(late_volume[dark]; init = z) + float(sum(late_analysed_obs))
+            sum(late_den; init = z)
     expected_positives = sum(early_mean; init = z) +
-                         sum(dark_mean; init = z) +
-                         sum(anchored_mean; init = z) +
+                         sum(late_expected; init = z) +
                          (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
     expected_confirmed := safe_rate(expected_positives)
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
