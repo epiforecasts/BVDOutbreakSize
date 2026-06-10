@@ -1,14 +1,11 @@
 ---
 title: "Estimating the current size of the 2026 DRC Bundibugyo virus outbreak"
 author: Sam Abbott, Kath Sherratt, Samuel Brand and Sebastian Funk
-subtitle: "WHO collaboratory call, 10 June 2026{{< qrcode https://epiforecasts.io/slides/bdbv_collaboratory_20260610.html >}}"
+subtitle: "WHO collaboratory call, 10 June 2026"
 institute: <https://epiforecasts.io>
 format:
   revealjs:
     slide-level: 2
-    template-partials:
-      - title-slide.html
-    theme: sbfnk.scss
     embed-resources: true
     preview-links: auto
     center: true
@@ -96,8 +93,6 @@ With thanks to INSP and the DRC response teams, clinicians and surveillance staf
 - Report and code at: <https://epiforecasts.io/BVDOutbreakSize> (updated regularly)
 
 Slides at
-
-{{< qrcode https://epiforecasts.io/slides/bdbv_collaboratory_20260610.html >}}
 
 <https://epiforecasts.io/slides/bdbv_collaboratory_20260610.html>
 
