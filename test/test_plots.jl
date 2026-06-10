@@ -161,9 +161,9 @@ end
         ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
         ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
     ]
-    ## Released series only.
+    ## Released series only, drawn as discrete per-date marks.
     @test plot_estimate_evolution(rows) isa CairoMakie.Makie.Figure
-    ## With the frozen-fit renewal ribbon and the current-data,
+    ## With the discrete frozen-fit renewal marks and the current-data,
     ## current-model trajectory ribbon over the date grid.
     renewal = [
         ("2026-05-20", 1666, 1400, 2000, 1100, 2400, 900, 2900),
@@ -179,6 +179,20 @@ end
     fig = plot_estimate_evolution(rows; renewal = renewal,
         trajectory = trajectory)
     @test fig isa CairoMakie.Makie.Figure
+
+    ## Marks sharing a date (two released estimates at one cut-off, and a
+    ## release plus its frozen re-fit) must dodge without error.
+    same_date = [
+        ("2026-05-18", 972, 813, 1170, 668, 1510, 478, 2437),
+        ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
+        ("2026-06-07", 4509, 4250, 5176, 3845, 5931, 3213, 7665),
+        ("2026-06-07", 4161, 3498, 5018, 2958, 6822, 2345, 12421)
+    ]
+    same_date_renewal = [
+        ("2026-05-18", 1100, 900, 1300, 750, 1500, 600, 1900)
+    ]
+    @test plot_estimate_evolution(same_date; renewal = same_date_renewal) isa
+          CairoMakie.Makie.Figure
 end
 
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin

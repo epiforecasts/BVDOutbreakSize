@@ -24,7 +24,7 @@ import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
-                  lines!, scatter!, band!
+                  lines!, scatter!, band!, linesegments!
 
 export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
