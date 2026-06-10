@@ -521,23 +521,24 @@ Estimate-evolution plot: how the outbreak-size estimate moves as the
 data cut-off advances, drawn against the calendar date.
 
 `released` is a vector of `(cutoff_date, median, lo30, hi30, lo60, hi60,
-lo90, hi90)` tuples, one per published project release, drawn in blue with
-nested 30/60/90% credible-interval ribbons along the date axis. `renewal`
-is a vector of the same tuple shape, the current renewal model re-fit
-frozen at each release date, drawn in red: the current method evaluated at
-each past cut-off, so the series rises as the outbreak grows. Both are
-summarised by ribbons only, no central line or marker.
+lo90, hi90)` tuples, one per published project release, drawn in blue.
+`renewal` is the same tuple shape, the current renewal model re-fit
+frozen at each release date, drawn in red: the current method evaluated
+at a past cut-off. Each release and each frozen re-fit is its own
+independent fit, so both are drawn as discrete per-date estimates — a
+median marker with nested 30/60/90% vertical interval bars — rather than
+a connected ribbon. Marks sharing a date (an integral and a renewal
+release at one cut-off, or a release and its frozen re-fit) are dodged
+horizontally so each reads as a separate estimate.
 
 `trajectory` is the current-data, current-model cumulative-infection
 trajectory over the day grid, a `(dates, lo30, hi30, lo60, hi60, lo90,
 hi90)` tuple where `dates` is the calendar date of each grid day and the
-remaining entries are the per-day credible bounds. It is drawn in a third
-colour as a time-varying ribbon, so the latest estimate rises across the
-period on the same calendar axis as the release points and lines up with
-them.
+remaining entries are the per-day credible bounds. It is a single fit
+shown over time, so it is drawn in a third colour as one continuous
+time-varying ribbon on the same calendar axis as the discrete marks.
 
-Release dates are marked with dotted vertical rules so each release reads
-against the rising trajectory.
+Release dates are marked with dotted vertical rules.
 
 `xlabel`/`ylabel`/`title` set the axis text; `released_label`,
 `renewal_label` and `trajectory_label` name the three series.
@@ -556,8 +557,8 @@ function plot_estimate_evolution(
         trajectory_label::AbstractString =
         "Current model, current data")
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
-    ## then relabel the ticks with the dates. The released points, the
-    ## frozen renewal points and the current-model trajectory all share
+    ## then relabel the ticks with the dates. The released marks, the
+    ## frozen renewal marks and the current-model trajectory all share
     ## this single calendar mapping, so they line up on the same axis.
     rdates = [Date(String(r[1])) for r in released]
     ndates = [Date(String(p[1])) for p in renewal]
@@ -582,25 +583,61 @@ function plot_estimate_evolution(
         xticklabelrotation = pi / 4,
         limits = ((xlo, xhi), (0, upper * 1.08)))
 
-    ## One per-vintage series: nested 30/60/90% credible-interval ribbons
-    ## along the date axis, with no central line or marker.
-    function _series!(dates, tuples, colour)
-        xs = _x.(dates)
-        ord = sortperm(xs)
-        xs = xs[ord]
-        band!(ax, xs, [float(t[7]) for t in tuples][ord],
-            [float(t[8]) for t in tuples][ord]; color = (colour, 0.12))
-        band!(ax, xs, [float(t[5]) for t in tuples][ord],
-            [float(t[6]) for t in tuples][ord]; color = (colour, 0.20))
-        return band!(ax, xs, [float(t[3]) for t in tuples][ord],
-            [float(t[4]) for t in tuples][ord]; color = (colour, 0.30))
+    ## Each release and each frozen re-fit is its own fit, so collect them
+    ## as discrete marks and dodge any that share a date so they read
+    ## apart rather than overplotting.
+    marks = NamedTuple[]
+    for (d, t) in zip(rdates, released)
+        push!(marks, (; date = d, colour = :steelblue, t = t))
+    end
+    for (d, t) in zip(ndates, renewal)
+        push!(marks, (; date = d, colour = :firebrick, t = t))
+    end
+    dodge = 0.7
+    bydate = Dict{Date, Vector{Int}}()
+    for (i, m) in enumerate(marks)
+        push!(get!(bydate, m.date, Int[]), i)
+    end
+    markx = zeros(Float64, length(marks))
+    for (d, idxs) in bydate, (k, i) in enumerate(idxs)
+
+        markx[i] = _x(d) + (k - (length(idxs) + 1) / 2) * dodge
+    end
+
+    ## Vertical interval bars at one x: 90% (thin), 60%, 30% (thick).
+    function _bars!(xs, los, his, colour, lw, alpha)
+        bx = Float64[]
+        by = Float64[]
+        for (x, lo, hi) in zip(xs, los, his)
+            append!(bx, (x, x))
+            append!(by, (lo, hi))
+        end
+        return linesegments!(ax, bx, by;
+            color = (colour, alpha), linewidth = lw)
+    end
+
+    ## One discrete series: nested 30/60/90% bars topped by a median dot.
+    function _series!(colour)
+        sel = [i for i in eachindex(marks) if marks[i].colour == colour]
+        isempty(sel) && return nothing
+        xs = markx[sel]
+        ts = [marks[i].t for i in sel]
+        _bars!(xs, [float(t[7]) for t in ts], [float(t[8]) for t in ts],
+            colour, 1.4, 0.45)
+        _bars!(xs, [float(t[5]) for t in ts], [float(t[6]) for t in ts],
+            colour, 3.2, 0.55)
+        _bars!(xs, [float(t[3]) for t in ts], [float(t[4]) for t in ts],
+            colour, 6.5, 0.70)
+        return scatter!(ax, xs, [float(t[2]) for t in ts];
+            color = colour, markersize = 9,
+            strokecolor = :white, strokewidth = 1)
     end
 
     handles = Any[]
     labels = String[]
     ## Current-data estimate as the cumulative-infection trajectory over the
-    ## grid, a time-varying ribbon on the same calendar axis as the points.
-    ## `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
+    ## grid: a single fit, so one continuous ribbon on the same calendar
+    ## axis. `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
     if !isnothing(trajectory)
         cc = :seagreen
         xs = _x.(tdates)
@@ -615,14 +652,16 @@ function plot_estimate_evolution(
         push!(handles, th)
         push!(labels, trajectory_label * " (30/60/90% band)")
     end
-    if !isempty(renewal)
-        renewal_band = _series!(ndates, renewal, :firebrick)
-        push!(handles, renewal_band)
-        push!(labels, renewal_label * " (30/60/90% bands)")
+    renewal_mark = _series!(:firebrick)
+    if !isnothing(renewal_mark)
+        push!(handles, renewal_mark)
+        push!(labels, renewal_label * " (median, 30/60/90% bars)")
     end
-    released_band = _series!(rdates, released, :steelblue)
-    push!(handles, released_band)
-    push!(labels, released_label * " (30/60/90% bands)")
+    released_mark = _series!(:steelblue)
+    if !isnothing(released_mark)
+        push!(handles, released_mark)
+        push!(labels, released_label * " (median, 30/60/90% bars)")
+    end
 
     ## Dotted vertical rule at each release date.
     isempty(rdates) || vlines!(ax, _x.(rdates);

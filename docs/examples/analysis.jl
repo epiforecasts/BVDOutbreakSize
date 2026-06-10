@@ -187,7 +187,7 @@
 using Turing
 using Distributions
 using StatsFuns: logistic
-using DataFrames: DataFrame
+using DataFrames: DataFrame, eachrow
 import CSV
 using Random
 using Markdown
@@ -2676,17 +2676,33 @@ cumulative_density_fig #hide
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
 #md # ```
 
-## Four independent frozen re-fits (one per release vintage); run in parallel.
-frozen_20may, frozen_23may,
-frozen_26may,
-frozen_28may = fit_parallel([
-    () -> fit_frozen_joint("2026-05-20"),
-    () -> fit_frozen_joint("2026-05-23"),
-    () -> fit_frozen_joint("2026-05-26"),
-    () -> fit_frozen_joint("2026-05-28")])
+## Published per-release estimates, pulled from the tagged results
+## releases by `scripts/refresh_releases.jl` into
+## `data/released_estimates.csv`. Columns: tag, date, model (integral or
+## renewal), median and the 30/60/90% bounds.
+released_df = CSV.read(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
+    DataFrame)
 
-frozen_C_20may = vec(Array(frozen_20may.chn[:C_T]))
-frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
+## Integral-era release cut-offs for the frozen renewal overlay: a
+## release whose data cut-off already has a renewal release needs no
+## re-fit, since that release already is the renewal estimate. 20 and
+## 23 May are additionally fit for the matched-cutoff comparison further
+## down.
+renewal_release_dates = Set(string(r.date)
+for r in eachrow(released_df) if r.model == "renewal")
+frozen_evolution_cutoffs = sort(unique(string(r.date)
+for r in eachrow(released_df)
+if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
+frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
+    ["2026-05-20", "2026-05-23"]))
+
+## Independent frozen re-fits (one per cut-off); run in parallel and keyed
+## by the requested cut-off so each reads as its own estimate.
+frozen_results = fit_parallel(
+    [() -> fit_frozen_joint(c) for c in frozen_cutoffs])
+frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
+frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
 
 #md # ```@raw html
 #md # </details>
@@ -2696,55 +2712,41 @@ frozen_C_23may = vec(Array(frozen_23may.chn[:C_T]))
 #
 # How the outbreak-size estimate moved as the situation reports accrued.
 #
-# The project has published a tagged results release at each data cut-off
+# The project publishes a tagged results release at each data cut-off
 # (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
 # the posterior draws and input data.
-# The releases to date are from the earlier closed-form integral model, so
-# the released series is the project's published estimate over time, shown
-# in blue with 30%, 60% and 90% credible ribbons; its most recent point is
-# the v1.3.0 release (the final integral-model release, at its 28 May
-# cut-off).
-# The renewal series, in red, is this renewal model re-fit frozen at each
-# release date, the current method evaluated at each past date, so it rises
-# as the outbreak grows rather than sitting flat.
-# The current-data, current-model estimate is drawn in a third colour as the
-# cumulative-infection trajectory over time, rising across the period on the
-# same date axis so the latest estimate reads against the earlier ones.
+# The released series, in blue, is the project's published estimate at each
+# release: the closed-form integral model up to v1.3.0, then the renewal
+# model from v1.4.0 on.
+# Each release is its own fit, so it is drawn as a discrete estimate, a
+# median with nested 30/60/90% interval bars, rather than a ribbon.
+# The renewal series, in red, is the renewal model re-fit frozen at each
+# integral-era release cut-off.
+# The renewal-era releases already are renewal fits, so they carry no frozen
+# re-fit.
+# The current-data, current-model estimate is drawn in green as the
+# cumulative-infection trajectory over time, a single fit shown across the
+# period so the latest estimate reads against the earlier ones.
 # Each release date is marked with a dotted vertical rule.
-# The released intervals are recorded from each release's published summary
-# so the figure builds without refetching the releases.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and frozen renewal re-fits</summary>
 #md # ```
 
-## Released median and 30/60/90% intervals per data cut-off, recorded from
-## each release's published summary (one canonical build per cut-off date:
-## builds 241, 350, 470 and 586). These are the integral model's published
-## estimates; see the release page for provenance. Each tuple is
+## Released median and 30/60/90% intervals per release, from
+## `data/released_estimates.csv`. Each tuple is
 ## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
-release_evolution = [
-    ("2026-05-18", 925, 765, 1095, 628, 1378, 438, 2234),
-    ("2026-05-23", 1364, 1142, 1688, 915, 2128, 656, 3385),
-    ("2026-05-26", 3041, 2714, 3437, 2364, 4002, 1905, 5144),
-    ("2026-05-28", 3510, 3135, 3969, 2750, 4602, 2231, 6103)
-]
+release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                         r.lo90, r.hi90) for r in eachrow(released_df)]
 
-## The current model evaluated at each past date, the renewal re-fit frozen
-## at each cut-off, as a rising series. Each tuple carries the median and
-## 30/60/90% credible bounds.
+## The current renewal model re-fit frozen at each integral-era release
+## cut-off, each its own discrete estimate. Each tuple carries the median
+## and 30/60/90% credible bounds.
 function _ci369(xs)
     q(p) = round(Int, quantile(xs, p))
     (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
 end
-renewal_frozen = [
-    (string(frozen_20may.cutoff), _ci369(frozen_C_20may)...),
-    (string(frozen_23may.cutoff), _ci369(frozen_C_23may)...),
-    (string(frozen_26may.cutoff),
-        _ci369(vec(Array(frozen_26may.chn[:C_T])))...),
-    (string(frozen_28may.cutoff),
-        _ci369(vec(Array(frozen_28may.chn[:C_T])))...)
-]
+renewal_frozen = [(c, _ci369(frozen_C(c))...) for c in frozen_evolution_cutoffs]
 
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
@@ -2877,8 +2879,8 @@ matched_comparison_fig #hide
 #md # ```
 
 frozen_streams_table = streams_table(
-    "frozen 20 May" => frozen_C_20may,
-    "frozen 23 May" => frozen_C_23may,
+    "frozen 20 May" => frozen_C("2026-05-20"),
+    "frozen 23 May" => frozen_C("2026-05-23"),
     "current data" => posterior_C_joint);
 
 #md # ```@raw html

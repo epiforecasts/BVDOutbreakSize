@@ -6,7 +6,11 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v1.5.0
+
+In development.
+Changes landing on `main` since v1.4.0 are recorded here ahead of the next
+release.
 
 ### Model
 
