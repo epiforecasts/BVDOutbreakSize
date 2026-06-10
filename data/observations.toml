@@ -94,6 +94,28 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
 values = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
 source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://github.com/INRB-UMIE/Ebola_DRC_2026, data/insp_sitrep/raw; recorded in data/insp_sitrep_scanned.csv). National cumulative suspected cases from each report's headline; the 18-22 May points use the WHO AFRO / early-report baseline."
 
+# Daily new suspected cases ("nouveaux cas suspects du jour"): the per-day
+# count of newly reported suspects in the preceding 24h, published in the
+# confirmed-based SitReps from 4 June (SitReps 021-024). This is the
+# post-26 May continuation of the suspected-case signal. The national
+# CUMULATIVE suspected total was frozen at 26 May (see `reported_case_history`)
+# once INSP began reclassifying suspects downward (the cumulative fell, which
+# a count likelihood cannot represent), but the daily new-suspect inflow is a
+# genuine per-day incidence that never falls, so it can be fitted directly.
+# The model scores each count against the modelled daily suspected series
+# (the p_drc-scaled BVD onset-to-report signal plus the non-BVD background)
+# on its report day, sharing the suspect pipeline and surveillance dispersion
+# with the frozen cumulative stream, the same daily-anchor route the post-
+# cutoff lab volume uses (`tests_analysed_daily_history`). The days (4-7 June)
+# fall strictly after the cumulative series ends (26 May), so the two
+# suspected likelihoods cover disjoint days and do not double-count. Earlier
+# confirmed-based reports (SitReps 015-020, 29 May-3 June) do not print a
+# national new-suspect-of-the-day figure, so the series begins on 4 June.
+[suspected_daily_history]
+dates  = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+values = [153, 119, 117, 94]
+source = "INSP situation reports 4-7 June 2026 (SitReps 021-024), front-page `Nouveaux cas suspects du jour`, read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h). SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June."
+
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
 # `cumulative_tests_analysed`) are derived from the final vintage of the

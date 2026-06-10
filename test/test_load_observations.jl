@@ -33,7 +33,7 @@
 
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
-        :lab_history, :lab_daily_history)
+        :lab_history, :lab_daily_history, :suspected_daily_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -48,6 +48,18 @@
     @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67]
     @test issorted(obs.lab_daily_history.days)
     @test all(d -> d <= obs.n, obs.lab_daily_history.days)
+
+    ## The post-cutoff daily new-suspect inflow ("nouveaux cas suspects du
+    ## jour", 4-7 June), sorted oldest-first by day index and within the grid.
+    ## A per-day incidence (never cumulative), so it begins where the frozen
+    ## cumulative suspected series stops.
+    @test obs.suspected_daily_history.counts == [153, 119, 117, 94]
+    @test issorted(obs.suspected_daily_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.suspected_daily_history.days)
+    ## Strictly after the last cumulative suspected vintage (26 May): the two
+    ## suspected likelihoods cover disjoint days.
+    @test minimum(obs.suspected_daily_history.days) >
+          maximum(obs.reported_history.days)
 
     ## History day indices are in range
     dh = obs.deaths_history
