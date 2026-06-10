@@ -87,6 +87,7 @@ With thanks to INSP and the DRC response teams, clinicians and surveillance staf
 
 - Data from: <https://insp.cd/category/actualites/>
 - Report and code at: <https://epiforecasts.io/BVDOutbreakSize> (updated regularly)
+- More CMMID modelling work at: <https://cmmid.github.io/topics/ebola-bvd/>
 
 Slides at
 
