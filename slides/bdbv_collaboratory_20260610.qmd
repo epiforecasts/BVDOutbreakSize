@@ -50,7 +50,7 @@ Delay estimates from [2012 Isiro outbreak](https://epiforecasts.io/bdbv-linelist
 | specimens analysed | 755 | 28 May |
 | genetic TMRCA | 25 March | bound on age |
 
-Counts come from INSP situation reports (DRC). Suspected cases and deaths include non-BVD, which the model accounts for.
+Counts come from INSP situation reports (DRC). Suspected cases and deaths include non-BVD, which the model aims to account for.
 
 ## Fit to the data
 
@@ -72,11 +72,15 @@ Estimated true burden ≈ 3,500 infections (90% 2,100 – 9,000)
 
 ![](figures/validation-mccabe.png){fig-alt="Comparison with McCabe et al., matched in time"}
 
+## Reconciling different data streams
+
+![](figures/outbreak_streams.png){fig-alt="Comparison of estimates from different data streams vs. joint"}
+
 ## Limitations
 
 - Only 9 days of data for an outbreak that started much earlier
 - With so little data, the size estimate is very sensitive to assumptions
-- Several priors (delays, incubation, CFR, ascertainment) are imported from other outbreaks/contexts (e.g. 2012 Isiro)
+- Several priors (delays, incubation, CFR, ascertainment) are poorely informed or imported from other outbreaks/contexts (e.g. 2012 Isiro)
 - Aggregated model for the national level
 - An external view of the SitReps data
 - Work in progress; model and analysis drafted with an LLM under human oversight
