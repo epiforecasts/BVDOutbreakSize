@@ -39,10 +39,13 @@ end
     rh = (; days = [13, 18, 40], counts = [340, 516, 905])
     ch = (; days = [13, 18, 40], counts = [9, 17, 27])
     lh = (; days = [18, 40], counts = [30, 50])
+    ## Daily new-suspect inflow on days after the cumulative series: per-day
+    ## counts, scored single-day, not cumulated.
+    sdh = (; days = [35, 36, 37], counts = [12, 9, 7])
     fitted = bvd_joint(n, 2, 18, 905, 0, 27;
         confirmed_deaths = 5,
         deaths_history = dh, reported_history = rh, confirmed_history = ch,
-        lab_history = lh, breakpoint = 30)
+        lab_history = lh, suspected_daily_history = sdh, breakpoint = 30)
     chn = nuts_sample(fitted; samples = 12, chains = 1, progress = false)
 
     ## Keep the reported and death vintage day grids but drop their counts,
@@ -55,8 +58,18 @@ end
         reported_history = _days_only(rh),
         confirmed_history = ch,
         lab_history = lh,
+        suspected_daily_history = _days_only(sdh),
         breakpoint = 30)
     pp = predict(gen, chn)
+
+    ## The daily inflow replicates as one per-day count vector under
+    ## `cases_state.suspected_daily.increments`, one entry per report day, all
+    ## finite and non-negative — the vector the docs PPC daily panel plots.
+    sd = vec(pp[FlexiChains.Parameter(
+        @varname(cases_state.suspected_daily.increments))])
+    @test !isempty(sd)
+    @test all(d -> length(d) == length(sdh.days), sd)
+    @test all(d -> all(isfinite, d) && all(>=(0), d), sd)
 
     ## `predict` replicates each stream's per-vintage variable under its
     ## prefixed submodel name. The confirmed stream splits into early

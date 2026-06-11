@@ -18,6 +18,17 @@ release.
   laboratory-confirmed-death series lags the death event rather than tracking
   it instantaneously and the confirmed case and death streams pay a consistent
   laboratory delay.
+- Added an optional daily new-suspect inflow stream ("nouveaux cas suspects
+  du jour") to the suspected-case likelihood.
+  The post-26 May per-day counts are scored against the modelled daily
+  suspected series at each report day, continuing the suspected signal where
+  the frozen cumulative series stops, on days disjoint from it (#222).
+
+### Data
+
+- Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
+  structured `new_daily_suspects` column in the scanned situation-report CSV
+  and a `suspected_daily_history` block in the observation manifest.
 
 ## v1.4.0
 

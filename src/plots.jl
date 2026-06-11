@@ -1199,10 +1199,11 @@ points. Each `panel` is a `NamedTuple`
 of per-draw increment vectors (one entry per vintage, oldest first) and
 `observed` the matching observed cumulative counts used as the
 conditioning baselines. `colour` is optional per panel. A panel may set
-`cumulative = false` to plot standalone per-day counts (e.g. the 24h
-analysed volume) instead: there is no previous-vintage baseline, each
-replicate is the modelled per-day count directly, and the y-axis reads
-"Daily count".
+`cumulative = false` to plot standalone per-day counts instead of a
+cumulative series (e.g. the post-26 May daily new-suspect inflow, or the 24h
+analysed volume): there is no previous-vintage baseline, so each replicate is
+plotted as its own daily count against the observed daily count, and the
+y-axis reads "Daily count".
 
 `max_date` (an ISO date string or `Date`) truncates every panel to the
 vintages on or before that date, so streams that keep reporting past the
@@ -1233,10 +1234,11 @@ function plot_vintage_conditional_ppc(
         replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
         n = length(dates)
         colour = get(p, :colour, :steelblue)
-        ## A panel with `cumulative = false` (e.g. the 24h analysed volume)
-        ## carries standalone per-day counts rather than a cumulative series,
-        ## so there is no previous-vintage baseline to condition on: each
-        ## replicate is the modelled per-day count directly.
+        ## A panel with `cumulative = false` (the post-26 May daily
+        ## new-suspect inflow, or the 24h analysed volume) carries standalone
+        ## per-day counts rather than a cumulative series, so there is no
+        ## previous-vintage baseline to condition on: each replicate is its
+        ## own per-day count directly.
         cumulative = get(p, :cumulative, true)
         ## Observed cumulative at the previous vintage is the conditioning
         ## baseline for each step (`y_0 = 0`); `obs_prev[v]` is `y_{v-1}`.

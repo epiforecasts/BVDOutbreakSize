@@ -80,6 +80,7 @@ then conditions on the reported-cases likelihood. See
 @model function cases_only_model(
         n::Integer, reported_cases::Union{Missing, Integer};
         reported_history = (; days = Int[], counts = Int[]),
+        suspected_daily_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -92,7 +93,7 @@ then conditions on the reported-cases likelihood. See
     asc_state ~ to_submodel(ascertainment)
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, latent.onsets,
-        dispersion_state.k, asc_state.p_drc))
+        dispersion_state.k, asc_state.p_drc; suspected_daily_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -228,7 +229,6 @@ and deaths-among-exports, and the optional genetic seeding bound on the
 outbreak age. Each stream argument may be `missing` to drop it, so the
 model doubles as a prior- and posterior-predictive generator.
 
-The laboratory pipeline shares the testing fraction, background rate and
 onset-to-report kernel with the suspected-case stream. A single
 analysed-specimen volume is fit through a report-to-analysed delay and the
 tested fraction; the confirmed positives are scored as a Binomial of the
@@ -242,7 +242,10 @@ Binomial of the observed denominator. The early and unanchored windows
 (days with no published denominator) use the modelled analysed volume as
 the denominator, with the positivity (hence `λ_bg`) carried over from the
 windows that do have data (see [`confirmed_cases_model`](@ref)). The
-confirmed deaths are a thinning of
+optional `suspected_daily_history` adds the post-26 May daily new-suspect
+inflow ("nouveaux cas suspects du jour"), scored against the modelled daily
+suspected series at each report day where the frozen cumulative suspected
+stream stops, on days disjoint from it. The confirmed deaths are a thinning of
 the suspected deaths whose confirmation probability is the suspected-case
 BVD composition enriched on the odds scale (`confirmed_deaths`,
 `total_deaths` the denominator).
@@ -276,6 +279,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
+        suspected_daily_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -341,7 +345,7 @@ death-confirmation probability (`death_confirmation`).
         background_re = death_bg_re))
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k, p_drc;
-        background_re = case_bg_re))
+        suspected_daily_history, background_re = case_bg_re))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,

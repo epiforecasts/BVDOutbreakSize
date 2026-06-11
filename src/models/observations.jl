@@ -281,7 +281,21 @@ convolution scaled by the DRC ascertainment fraction `p_drc`, plus an
 additive non-BVD background rate `λ_bg` per day (so a suspected case need
 not be a true BVD infection). Reads the modelled cumulative suspected
 cases at each vintage day off the daily series and fits the increments
-with a NegativeBinomial sharing `k`. The background and testing fraction
+with a NegativeBinomial sharing `k`.
+
+An optional `suspected_daily_history` adds the post-26 May daily new-suspect
+inflow ("nouveaux cas suspects du jour"): per-day counts of newly reported
+suspects scored against the modelled daily suspected series `reports_daily`
+at each report day (a single-day mean, not a between-vintage increment) with
+NegativeBinomials sharing `k`. This continues the suspected signal where the
+cumulative `reported_history` stops, once INSP began reclassifying suspects
+downward and the cumulative total fell. The inflow is a genuine per-day
+incidence that never falls, so it fits directly; it shares the suspect
+pipeline and dispersion with the cumulative stream and is empty by default.
+Its days fall strictly after the cumulative series ends, so the two suspected
+likelihoods cover disjoint days.
+
+The background and testing fraction
 are sampled by an injected [`test_positivity_model`](@ref), and the
 onset-to-report delay is injected, defaulting to a weakly-informative
 prior on the onset-to-notification delay (mean 4.5 d, SD 3.6 d),
@@ -298,6 +312,7 @@ sitrep.
         reported_history,
         reported_cases::Union{Missing, Integer},
         onsets::AbstractVector, k::Real, p_drc::Real;
+        suspected_daily_history = (; days = Int[], counts = Int[]),
         positivity = test_positivity_model(),
         background_re = nothing,
         ## Onset to a suspected case being detected/reported, from the
@@ -348,6 +363,19 @@ sitrep.
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
         vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+
+    ## Daily new-suspect inflow ("nouveaux cas suspects du jour"): per-day
+    ## counts scored against the modelled daily series at each report day. The
+    ## mean for day `d` is the single-day `reports_daily[d]` (clamped into the
+    ## grid), NOT a between-vintage increment — this is a genuine daily
+    ## incidence, so it never differences a falling cumulative. Empty by
+    ## default; a `missing` count vector samples (the predictive path).
+    sd_days = suspected_daily_history.days
+    sd_modelled = [reports_daily[clamp(Int(d), 1, n)] for d in sd_days]
+    sd_obs = isempty(suspected_daily_history.counts) ? missing :
+             collect(Int.(suspected_daily_history.counts))
+    suspected_daily ~ to_submodel(
+        vintage_increments_model(sd_modelled, sd_obs, k))
 
     raw_total = sum(reports_daily)
     expected_reports := safe_rate(raw_total)

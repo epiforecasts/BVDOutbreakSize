@@ -279,6 +279,23 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_vintage_conditional_ppc draws a daily (non-cumulative) panel" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_conditional_ppc
+    rng = MersenneTwister(22)
+    ## The daily new-suspect inflow: per-day counts, NOT cumulated. With
+    ## `cumulative = false` the observed are the raw daily counts and each
+    ## replicate is its own daily count (no running baseline).
+    dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+    reps = [rand(rng, 80:180, length(dates)) for _ in 1:150]
+    observed = [153, 119, 117, 94]
+    fig = plot_vintage_conditional_ppc([
+        (; title = "New suspects/day", dates = dates,
+        replicates = reps, observed = observed,
+        colour = :slateblue, cumulative = false)])
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
     using Distributions: Beta
     using BVDOutbreakSize: plot_cfr_prior
