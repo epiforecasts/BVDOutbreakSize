@@ -44,17 +44,17 @@
     end
 
     ## The post-cutoff 24h analysed series carries the trusted dark-window
-    ## denominators (1, 4, 5, 6, 7, 8 June), sorted oldest-first by day
+    ## denominators (1, 4, 5, 6, 7, 8, 9 June), sorted oldest-first by day
     ## index.
-    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121]
+    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68]
     @test issorted(obs.lab_daily_history.days)
     @test all(d -> d <= obs.n, obs.lab_daily_history.days)
 
     ## The post-cutoff daily new-suspect inflow ("nouveaux cas suspects du
-    ## jour", 4-7 June), sorted oldest-first by day index and within the grid.
-    ## A per-day incidence (never cumulative), so it begins where the frozen
-    ## cumulative suspected series stops.
-    @test obs.suspected_daily_history.counts == [153, 119, 117, 94]
+    ## jour", 4-7 and 9 June; 8 June prints no figure), sorted oldest-first by
+    ## day index and within the grid. A per-day incidence (never cumulative),
+    ## so it begins where the frozen cumulative suspected series stops.
+    @test obs.suspected_daily_history.counts == [153, 119, 117, 94, 119]
     @test issorted(obs.suspected_daily_history.days)
     @test all(d -> 1 <= d <= obs.n, obs.suspected_daily_history.days)
     ## Strictly after the last cumulative suspected vintage (26 May): the two
@@ -74,18 +74,18 @@
     ## headline; the 26 May value uses the revised SitRep 012_v2 (246).
     @test dh.counts == [131, 148, 160, 175, 204, 220, 223, 238, 246]
 
-    ## Confirmed-case history runs to the 8 June recorded point (post-28
+    ## Confirmed-case history runs to the 9 June recorded point (post-28
     ## May vintages have no analysed denominator); its final vintage equals
     ## the `confirmed_cases` total.
     @test obs.confirmed_history.counts ==
           [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210,
-        263, 282, 321, 344, 363, 381, 452, 488, 515, 550, 598]
+        263, 282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635]
     @test obs.confirmed_history.counts[end] == obs.confirmed_cases
 
-    ## Confirmed deaths: recorded, growing 17 → 115 over 26 May-8 June.
+    ## Confirmed deaths: recorded, growing 17 → 127 over 26 May-9 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_deaths_history.counts ==
-          [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115]
+          [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115, 127]
     @test obs.confirmed_deaths_history.counts[end] == obs.confirmed_deaths
 
     ## Laboratory throughput histories (cumulative national, 23-28 May);
