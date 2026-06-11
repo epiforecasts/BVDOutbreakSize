@@ -212,7 +212,13 @@ Random.seed!(20260518)
 # de Santé Publique [insp_sitrep_2026](@cite). Each report gives the
 # national cumulative suspected cases and deaths, laboratory-confirmed
 # cases and deaths, and the specimens received and analysed by the
-# laboratory, at the report date. We extracted these figures from the
+# laboratory, at the report date. From SitRep 013 (27 May) INSP began
+# reclassifying suspects, so the cumulative suspected count falls; we freeze
+# it at its last stable vintage (26 May) and instead read the daily
+# new-suspect count ("nouveaux cas suspects du jour") that the
+# confirmed-based reports publish from 4 June, fitting it as a daily
+# incidence where the cumulative series stops. We extracted these figures
+# from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
 # re-read them, rather than the published per-zone CSVs. The zone sums in
@@ -294,8 +300,11 @@ observations_table #hide
 # The per-date cumulative history of the DRC situation-report streams,
 # the national totals at each report date. The joint model fits the
 # between-report increments of these series, so a single date reduces to
-# the cut-off total. See `data/observations.toml` for the per-stream
-# sources.
+# the cut-off total. The `suspected_new_daily` column is the exception: it
+# is a per-day new-suspect count (not a cumulative total), fitted directly
+# as a daily incidence, and it picks up where the cumulative
+# `suspected_cases` column freezes on 26 May. See `data/observations.toml`
+# for the per-stream sources.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>
@@ -307,6 +316,7 @@ vintage_table = let
     bydate(h) = Dict(grid_date(d) => c for (d, c) in zip(h.days, h.counts))
     streams = (
         suspected_cases = bydate(obs.reported_history),
+        suspected_new_daily = bydate(obs.suspected_daily_history),
         suspected_deaths = bydate(obs.deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
@@ -318,6 +328,7 @@ vintage_table = let
     DataFrame(
         date = dates,
         suspected_cases = at(streams.suspected_cases),
+        suspected_new_daily = at(streams.suspected_new_daily),
         suspected_deaths = at(streams.suspected_deaths),
         confirmed_cases = at(streams.confirmed_cases),
         confirmed_deaths = at(streams.confirmed_deaths),
@@ -1140,6 +1151,21 @@ cfr_prior_fig #hide
 # Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
 #     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{25}
 # ```
+#
+# From SitRep 013 (27 May) INSP reclassifies suspects, so the national
+# cumulative suspected total falls; we freeze it at 26 May and instead fit the
+# daily new-suspect count the confirmed-based reports publish (the "nouveaux
+# cas suspects du jour" $a_j$ on report day $t_j$, 4-7 June). This is a genuine
+# daily incidence, not a cumulative total, so it is scored against the modelled
+# daily suspected count $c_{t_j}$ on that day directly (a single-day mean, not
+# a between-vintage sum) with a NegBinomial sharing $k$:
+#
+# ```math
+# a_j \sim \mathrm{NegBinomial}(c_{t_j},\ k).
+# ```
+#
+# The daily report days fall strictly after the frozen cumulative series ends,
+# so the two suspected likelihoods cover disjoint days and do not double-count.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -2202,20 +2228,21 @@ surveillance_pair_fig #hide
 # estimated cumulative trajectories in the
 # [joint model estimates](@ref "Joint model estimates") figure rather than
 # checked against data here.
-# The second is the surveillance data, the five dated DRC streams that are
-# real per-vintage observations: suspected cases, confirmed cases,
-# suspected deaths, confirmed deaths and specimens received.
+# The second is the surveillance data, the dated DRC streams that are real
+# per-vintage observations: cumulative suspected cases, the daily new-suspect
+# inflow, confirmed cases, suspected deaths, confirmed deaths and specimens
+# received.
 # The third is the exports, the cross-border imported cases and deaths
 # detected in Uganda.
 #
 # The surveillance group is checked first.
-# Each replicated cumulative trajectory is shown across the
-# situation-report dates with the observed series overlaid.
-# The suspected case and death streams stop at their last stable vintage on
-# 26 May, while the laboratory streams keep reporting to the cut-off.
-# Every panel is shown to that shared 26 May date so the confirmed series is
-# read against the suspected series over the same window, rather than running
-# further along the axis and appearing to overtake it.
+# Each panel is shown over its own reporting dates with the observed series
+# overlaid: the cumulative streams as replicated cumulative trajectories, and
+# the daily new-suspect inflow on a daily scale (each day's replicated count
+# against the observed count). The cumulative suspected case and death streams
+# stop at their last stable vintage on 26 May; the daily new-suspect inflow
+# then runs 4-7 June, where the cumulative suspected series freezes; and the
+# laboratory-confirmed streams keep reporting to the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2236,6 +2263,7 @@ pp_joint = predict(
         confirmed_deaths = missing,
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
+        suspected_daily_history = _days_only(obs.suspected_daily_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
@@ -2271,6 +2299,18 @@ reported_panel = (;
     replicates = _vintage_replicates(
         pp_joint, "cases_state.reported_increments"),
     observed = obs.reported_history.counts, colour = :steelblue);
+## Daily new-suspect inflow: a per-day count (not cumulative), so the panel
+## is drawn with `cumulative = false` — each replicate is its own daily
+## count against the observed daily count rather than a running total. Its
+## days (4-7 June) pick up where the cumulative suspected panel freezes on
+## 26 May.
+suspected_daily_panel = (;
+    title = "New suspects/day",
+    dates = _vintage_dates(obs.suspected_daily_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "cases_state.suspected_daily"),
+    observed = obs.suspected_daily_history.counts,
+    colour = :slateblue, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -2338,7 +2378,7 @@ confirmed_deaths_panel = (;
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, confirmed_panel, deaths_panel,
+    [reported_panel, suspected_daily_panel, confirmed_panel, deaths_panel,
     confirmed_deaths_panel, tests_received_panel]);
 
 #md # ```@raw html
