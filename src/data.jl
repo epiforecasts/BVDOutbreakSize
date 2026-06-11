@@ -29,7 +29,7 @@ per-day Poisson likelihood), the per-vintage histories as
 `confirmed_history`, `confirmed_deaths_history`, `deaths_history`,
 `lab_history` from the cumulative analysed-specimen series,
 `lab_daily_history` from the post-cutoff 24h analysed counts on the
-trusted dark-window days, `suspected_daily_history` from the post-cutoff
+trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
@@ -105,7 +105,7 @@ function load_observations(
     lab_history = history("tests_analysed_history")
     tests_received_history = history("tests_received_history")
     ## Post-cutoff 24h analysed counts (daily increments, not cumulative)
-    ## on the trusted dark-window days; the confirmed model pairs each with
+    ## on the trusted post-cutoff days; the confirmed model pairs each with
     ## that day's confirmed increment as a Binomial-denominator window.
     lab_daily_history = history("tests_analysed_daily_history")
     ## Post-cutoff daily new-suspect inflow ("nouveaux cas suspects du jour"):

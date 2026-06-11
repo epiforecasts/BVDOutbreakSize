@@ -43,7 +43,7 @@
         @test length(h.days) == length(h.counts)
     end
 
-    ## The post-cutoff 24h analysed series carries the trusted dark-window
+    ## The post-cutoff 24h analysed series carries the trusted unanchored
     ## denominators (1, 4, 5, 6, 7, 8, 9 June), sorted oldest-first by day
     ## index.
     @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68]

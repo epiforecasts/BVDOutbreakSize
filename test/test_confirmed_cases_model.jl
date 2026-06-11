@@ -30,9 +30,7 @@
             confirmed_cases_model(
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
-                lab_history = (; days = [20, 40], counts = [5, 9]),
-                tests_received_history =
-                (; days = [20, 40], counts = [6, 11])),
+                lab_history = (; days = [20, 40], counts = [5, 9])),
             false)
         return st
     end
@@ -40,7 +38,7 @@
     st = returned(m, rand(MersenneTwister(4), m))
     @test 0 <= st.p_positive <= 1
     @test st.expected_confirmed >= 0
-    @test st.expected_received >= 0
+    @test st.expected_analysed >= 0
     @test all(0 .<= st.p_pos .<= 1)
 end
 
@@ -76,8 +74,6 @@ end
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
-                tests_received_history =
-                (; days = [20, 40], counts = [6, 11]),
                 positivity_link = :composition),
             false)
         return st
@@ -147,8 +143,6 @@ end
                 (; days = [20, 40], counts = [3, 8]), 8, onsets, 5.0, 0.3,
                 rep.bg_daily, rep.τ_test, rep.bvd_reports_daily;
                 lab_history = (; days = [20, 40], counts = [5, 9]),
-                tests_received_history =
-                (; days = [20, 40], counts = [6, 11]),
                 positivity_link = :composition,
                 specificity = test_specificity_model(;
                     specificity_prior = Beta(700.0, 300.0))),

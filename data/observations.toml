@@ -150,8 +150,9 @@ source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 L
 # Post-cutoff 24h laboratory volume: per-day samples *analysed* in the
 # preceding 24h (not cumulative), read from the SitRep 24h laboratory
 # block once national reporting switched to the confirmed-only format on
-# 29 May. These are the analysed *denominators* the dark windows lack: the
-# model pairs each with the same day's confirmed-case increment and scores
+# 29 May. These are the analysed *denominators* the unanchored windows
+# lack: the model pairs each with the same day's confirmed-case increment
+# and scores
 # it as `Binomial(analysed_24h, positivity)`, anchoring the laboratory
 # positivity (hence the non-BVD background λ_bg) where the cumulative
 # `tests_analysed_history` stops at 28 May. The 24h positives are NOT
@@ -194,7 +195,7 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"]
 values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
           282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676]
-source = "INSP situation reports 18 May - 10 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 10 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
+source = "INSP situation reports 18 May - 10 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 10 June points have no published national analysed denominator, so they are fitted as unanchored windows via the laboratory-throughput queue (Poisson-thinned)."
 
 # Cumulative national confirmed-death totals (front-page `Cumul décès
 # parmi les confirmés`). First published in the SitRep 012 revised

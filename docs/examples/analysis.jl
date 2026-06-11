@@ -385,14 +385,14 @@ vintage_table #hide
 # block beneath its prose.
 #
 # The table below shows which parameters inform each observation submodel.
-# The *received* column is the received-specimen volume, the laboratory
-# stream fitted as a count; the *confirmed* positives are scored as a
-# Binomial of the observed analysed denominator with a positivity linked to
-# the composition of the suspected pool, so the laboratory data help
-# identify the non-BVD background. The *conf. deaths* column thins the
+# The *analysed* column is the analysed-specimen volume, the single
+# laboratory stream fitted as a count; the *confirmed* positives are scored
+# as a Binomial of the observed analysed denominator with a positivity
+# linked to the composition of the suspected pool, so the laboratory data
+# help identify the non-BVD background. The *conf. deaths* column thins the
 # suspected deaths by the case composition:
 #
-# | Parameter | Exports | Deaths | Cases | Received | Confirmed | Conf. deaths | Export deaths |
+# | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 # | Reproduction number $R_t$ | ● | ● | ● | ● | ● | ● | ● |
 # | Generation interval | ● | ● | ● | ● | ● | ● | ● |
@@ -826,19 +826,20 @@ vintage_table #hide
 # It drives the exports streams; its source is shown with the exports
 # submodel below.
 #
-# ##### Receipt delay
+# ##### Report-to-analysed delay
 #
 # The delay from a suspected case being reported to its specimen being
-# received by the laboratory, centred on a short turnaround with a heavy
-# right tail allowing for specimen shipment to a confirmatory laboratory. No
-# per-sample outbreak data grounds this, so the prior is our own choice:
+# analysed by the laboratory, centred on a short turnaround with a heavy
+# right tail allowing for specimen shipment to a confirmatory laboratory and
+# the analysis queue. No per-sample outbreak data grounds this, so the prior
+# is our own choice:
 #
 # ```math
 # \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 2.0), \qquad
 # \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 1.5). \tag{18}
 # ```
 #
-# It drives the laboratory received-specimen stream; its source is shown
+# It drives the laboratory analysed-specimen volume; its source is shown
 # with the laboratory submodel below.
 #
 # ##### Case-fatality ratio
@@ -902,7 +903,7 @@ cfr_prior_fig #hide
 # ###### Surveillance dispersion
 #
 # Passive-surveillance counts (DRC suspected deaths, reported cases and
-# received specimens) are modelled with negative-binomial observation error
+# analysed specimens) are modelled with negative-binomial observation error
 # sharing one dispersion $k$. Following Stan prior-choice recommendations
 # [stan_prior_choice](@cite), the dispersion is sampled on the $1/\sqrt{k}$
 # scale:
@@ -1220,10 +1221,11 @@ cfr_prior_fig #hide
 
 # ##### Laboratory pipeline
 #
-# The laboratory pipeline fits two streams. The received-specimen volume is
-# the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the
-# non-BVD background $\lambda_{\text{bg}}$) carried through the receipt delay
-# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$,
+# The laboratory pipeline fits a single analysed-specimen volume. This
+# volume is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus
+# the non-BVD background $\lambda_{\text{bg}}$) carried through the
+# report-to-analysed delay $f_{\text{rec}}$ and thinned by the testing
+# fraction $\tau_{\text{test}}$,
 #
 # ```math
 # v_t = \tau_{\text{test}} \sum_{s \ge 0}
@@ -1231,22 +1233,24 @@ cfr_prior_fig #hide
 #     f_{\text{rec},s}.
 # ```
 #
-# The per-vintage increments are scored with a NegBinomial sharing the
-# dispersion $k$:
+# The per-vintage increments are scored against the cumulative analysed
+# series with a NegBinomial sharing the dispersion $k$:
 #
 # ```math
-# Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+# Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
 #     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{27}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
 # Binomial of the observed specimens-analysed denominator $A_v$ with a
-# per-window tested-positive probability $p_{\text{pos},v}$. We tie that
-# probability to the composition of the tested pool, so the confirmed data
-# help identify the non-BVD background. The suspect-pool composition
-# $\varphi_v$ is the BVD share among the specimens received in the window,
-# carried through the same receipt delay as the volume so composition and
-# volume share one clock:
+# per-window tested-positive probability $p_{\text{pos},v}$, and where no
+# analysed count is observed (the early and unanchored windows) the modelled
+# volume $v_t$ is the denominator instead, so the fitted volume and the
+# proxy denominator are the same quantity. We tie that probability to the
+# composition of the tested pool, so the confirmed data help identify the
+# non-BVD background. The suspect-pool composition $\varphi_v$ is the BVD
+# share among the specimens analysed in the window, carried through the same
+# delay as the volume so composition and volume share one clock:
 #
 # ```math
 # \varphi_v = \frac{(p_{\text{DRC}}\,\text{bvd} * f_{\text{rec}})_v}
@@ -1670,7 +1674,6 @@ chn_exports_deaths = fit_parallel([
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
-        tests_received_history = obs.tests_received_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
@@ -1692,7 +1695,6 @@ chn_exports_deaths = fit_parallel([
         confirmed_history = obs.confirmed_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = obs.tests_received_history,
         breakpoint = _BREAKPOINT)),
     () -> nuts_sample(confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
         obs.total_deaths;
@@ -1871,7 +1873,6 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
             lab_daily_history = o.lab_daily_history,
-            tests_received_history = o.tests_received_history,
             export_case_days = o.export_case_days,
             export_death_days = o.export_death_days,
             breakpoint = bp,
@@ -2247,7 +2248,7 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
-        :expected_received_T, :m_death, :death_composition,
+        :expected_analysed_T, :m_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T];
     digits = 3);
 
@@ -2287,7 +2288,7 @@ surveillance_pair_fig #hide
 # The second is the surveillance data, the dated DRC streams that are real
 # per-vintage observations: cumulative suspected cases, the daily new-suspect
 # inflow, confirmed cases, suspected deaths, confirmed deaths and specimens
-# received.
+# analysed.
 # The third is the exports, the cross-border imported cases and deaths
 # detected in Uganda.
 #
@@ -2297,7 +2298,7 @@ surveillance_pair_fig #hide
 # the daily new-suspect inflow on a daily scale (each day's replicated count
 # against the observed count). The cumulative suspected case and death streams
 # stop at their last stable vintage on 26 May; the daily new-suspect inflow
-# then runs 4-7 June, where the cumulative suspected series freezes; and the
+# then runs 4-10 June, where the cumulative suspected series freezes; and the
 # laboratory-confirmed streams keep reporting to the cut-off.
 
 #md # ```@raw html
@@ -2324,7 +2325,6 @@ pp_joint = predict(
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
@@ -2373,15 +2373,29 @@ deaths_panel = (;
     replicates = _vintage_replicates(
         pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
-## Specimens received is also a per-vintage time series (the receipt-delay
-## and tested-fraction throughput), so it gets the same cumulative
-## conditional check as the suspected streams.
-tests_received_panel = (;
-    title = "Specimens received",
-    dates = _vintage_dates(obs.tests_received_history.days),
+## Specimens analysed is the single modelled laboratory volume (the
+## report-to-analysed delay and tested-fraction throughput), fit to the
+## cumulative analysed series, so it gets the same cumulative conditional
+## check as the suspected streams. This is the testing volume the
+## confirmed-positivity denominator is built from.
+tests_analysed_panel = (;
+    title = "Specimens analysed (cumulative)",
+    dates = _vintage_dates(obs.lab_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.received_increments"),
-    observed = obs.tests_received_history.counts, colour = :seagreen);
+        pp_joint, "confirmed_state.analysed_increments"),
+    observed = obs.lab_history.counts, colour = :seagreen);
+## Post-cutoff 24h analysed volume: once the cumulative series stops, INSP
+## reports a 24h analysed count on some days. These are fitted as per-day
+## volumes (not cumulative), so the panel is a standalone daily check
+## (`cumulative = false`): the modelled daily analysed volume against the
+## observed 24h count on each reported day.
+tests_analysed_daily_panel = (;
+    title = "Specimens analysed (24h)",
+    dates = _vintage_dates(obs.lab_daily_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "confirmed_state.analysed_daily_increments"),
+    observed = obs.lab_daily_history.counts, colour = :teal,
+    cumulative = false);
 
 ## Confirmed cases are scored over two groups of laboratory windows: the
 ## early confirmed vintages (no per-vintage analysed denominator, scored
@@ -2396,7 +2410,7 @@ _conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
     obs.confirmed_history, obs.lab_history, obs.lab_daily_history);
 ## Oldest-first: early (no denominator) → observed (analysed Binomial) →
 ## late (post-28 May; trusted 24h-analysed days are Binomial windows, the
-## rest dark windows scored against the modelled volume).
+## rest unanchored windows scored against the modelled volume).
 _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
     _conf_windows.late_days);
 function _confirmed_at(day)
@@ -2435,7 +2449,8 @@ confirmed_deaths_panel = (;
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, suspected_daily_panel, confirmed_panel, deaths_panel,
-    confirmed_deaths_panel, tests_received_panel]);
+    confirmed_deaths_panel, tests_analysed_panel,
+    tests_analysed_daily_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -3101,7 +3116,6 @@ function refit_joint_variant(;
             lab_history = obs.lab_history,
             lab_daily_history = obs.lab_daily_history,
             suspected_daily_history = obs.suspected_daily_history,
-            tests_received_history = obs.tests_received_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,

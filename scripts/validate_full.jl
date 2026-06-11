@@ -21,7 +21,6 @@ function mk(; kw...)
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = obs.tests_received_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = BP, background_re = true,
@@ -42,7 +41,6 @@ pp = predict(
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = BP, background_re = true,
@@ -88,10 +86,10 @@ panels = [
         dates = _dates(obs.confirmed_deaths_history.days),
         replicates = _vrep("confirmed_deaths_state.cdeath_increments"),
         observed = obs.confirmed_deaths_history.counts, colour = :purple),
-    (; title = "Specimens received",
-        dates = _dates(obs.tests_received_history.days),
-        replicates = _vrep("confirmed_state.received_increments"),
-        observed = obs.tests_received_history.counts, colour = :seagreen)
+    (; title = "Specimens analysed",
+        dates = _dates(obs.lab_history.days),
+        replicates = _vrep("confirmed_state.analysed_increments"),
+        observed = obs.lab_history.counts, colour = :seagreen)
 ]
 fig = plot_vintage_conditional_ppc(panels)
 println("5-panel vintage PPC built OK (incl. confirmed-case late windows + ",

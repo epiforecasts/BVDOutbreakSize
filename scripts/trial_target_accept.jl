@@ -27,7 +27,6 @@ function build_joint()
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = obs.tests_received_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = BREAKPOINT,
