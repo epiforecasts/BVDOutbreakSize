@@ -23,7 +23,6 @@ pp_joint = predict(
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = _days_only(obs.tests_received_history),
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
@@ -46,14 +45,14 @@ deaths_panel = (; title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick)
-tests_received_panel = (; title = "Specimens received",
-    dates = _vintage_dates(obs.tests_received_history.days),
+tests_analysed_panel = (; title = "Specimens analysed",
+    dates = _vintage_dates(obs.lab_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.received_increments"),
-    observed = obs.tests_received_history.counts, colour = :seagreen)
+        pp_joint, "confirmed_state.analysed_increments"),
+    observed = obs.lab_history.counts, colour = :seagreen)
 
 fig = plot_vintage_conditional_ppc(
-    [reported_panel, deaths_panel, tests_received_panel])
+    [reported_panel, deaths_panel, tests_analysed_panel])
 println("panel figure built OK: ", typeof(fig))
 import CairoMakie
 CairoMakie.save("logs/validate_ppc.png", fig)
