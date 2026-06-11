@@ -34,8 +34,7 @@ end
 
     m = confirmed_only_model(40, 27;
         confirmed_history = (; days = [18, 40], counts = [17, 27]),
-        lab_history = (; days = [18, 40], counts = [12, 28]),
-        tests_received_history = (; days = [18, 40], counts = [15, 33]))
+        lab_history = (; days = [18, 40], counts = [12, 28]))
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
 end
@@ -56,11 +55,10 @@ end
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = obs.tests_received_history,
         breakpoint = obs.n - obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days)
     chn = nuts_sample(m; samples = 25, chains = 1, progress = false)
-    for key in (:expected_confirmed_T, :expected_received_T,
+    for key in (:expected_confirmed_T, :expected_analysed_T,
         :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
         :m_death, :death_composition, :death_confirmation,
         :expected_confirmed_deaths_T)

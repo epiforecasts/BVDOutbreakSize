@@ -104,7 +104,7 @@ ascertainment, then runs the suspected-case stream (in predictive mode,
 to draw the shared background rate, testing fraction and onset-to-report
 kernel) and conditions on the laboratory pipeline alone: the confirmed
 positives (a Binomial of the observed analysed denominator in
-`lab_history`) and, when present, the received-specimen stream. See
+`lab_history`) and the modelled analysed-specimen volume. See
 [`confirmed_cases_model`](@ref) and [`reported_cases_model`](@ref).
 """
 @model function confirmed_only_model(
@@ -112,7 +112,7 @@ positives (a Binomial of the observed analysed denominator in
         confirmed_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
-        tests_received_history = (; days = Int[], counts = Int[]),
+        tests_analysed::Union{Missing, Integer} = missing,
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -134,7 +134,8 @@ positives (a Binomial of the observed analysed denominator in
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, lab_daily_history, tests_received_history,
+        lab_history, lab_daily_history,
+        tests_analysed,
         positivity_link = confirmed_positivity_link))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
@@ -220,7 +221,7 @@ end
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
 stages it to daily onset incidence, then conditions on the DRC suspected
-cases, deaths and the laboratory pipeline (the received-specimen volume as
+cases, deaths and the laboratory pipeline (the analysed-specimen volume as
 a per-vintage time series and the confirmed positives as a Binomial of the
 observed analysed denominator), the confirmed deaths, the Uganda exports
 and deaths-among-exports, and the optional genetic seeding bound on the
@@ -228,16 +229,20 @@ outbreak age. Each stream argument may be `missing` to drop it, so the
 model doubles as a prior- and posterior-predictive generator.
 
 The laboratory pipeline shares the testing fraction, background rate and
-onset-to-report kernel with the suspected-case stream. The received
-specimens are fit through a receipt delay and the tested fraction; the
-confirmed positives are scored as a Binomial of the observed
-specimens-analysed denominator (`lab_history`) with a partially-pooled
-per-window positivity, so the confirmed counts no longer pass through the
-multiplicative ascertainment ridge. Post-cutoff dark-window days that
-publish a 24h analysed count (`lab_daily_history`) are likewise scored as
-a Binomial of that observed denominator rather than against the modelled
-laboratory volume, anchoring the positivity (hence `λ_bg`) where the
-cumulative analysed series stops. The confirmed deaths are a thinning of
+onset-to-report kernel with the suspected-case stream. A single
+analysed-specimen volume is fit through a report-to-analysed delay and the
+tested fraction; the confirmed positives are scored as a Binomial of the
+observed specimens-analysed denominator (`lab_history`) with a
+partially-pooled per-window positivity, so the confirmed counts no longer
+pass through the multiplicative ascertainment ridge. After the national
+cumulative analysed series stops, the reporting format gives a 24h analysed
+count on some days (`lab_daily_history`); these are fitted as per-day
+analysed volumes and also anchor that day's confirmed positives as a
+Binomial of the observed denominator. The early and unanchored windows
+(days with no published denominator) use the modelled analysed volume as
+the denominator, with the positivity (hence `λ_bg`) carried over from the
+windows that do have data (see [`confirmed_cases_model`](@ref)). The
+confirmed deaths are a thinning of
 the suspected deaths whose confirmation probability is the suspected-case
 BVD composition enriched on the odds scale (`confirmed_deaths`,
 `total_deaths` the denominator).
@@ -271,7 +276,6 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
-        tests_received_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -342,7 +346,8 @@ death-confirmation probability (`death_confirmation`).
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, lab_daily_history, tests_received_history,
+        lab_history, lab_daily_history,
+        tests_analysed,
         positivity_link = confirmed_positivity_link))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
@@ -388,15 +393,15 @@ death-confirmation probability (`death_confirmation`).
     ## analysed volume's (always-concrete) element type, leaving the
     ## AD/fit path (concrete dual eltype) untouched, matching the guards in
     ## `confirmed_cases_model`.
-    _conf_received = confirmed_state.received_daily
+    _conf_analysed = confirmed_state.analysed_daily
     _conf_positivity = confirmed_state.p_pos
     if eltype(_conf_positivity) === Any
-        _conf_positivity = convert(Vector{eltype(_conf_received)},
+        _conf_positivity = convert(Vector{eltype(_conf_analysed)},
             _conf_positivity)
     end
     _conf_daily_positivity = expand_vintage_rate(_conf_positivity,
         _conf_window_days, n)
-    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_received)
+    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_analysed)
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     C_T := infection_state.C_T
@@ -414,7 +419,7 @@ death-confirmation probability (`death_confirmation`).
     expected_deaths_T := deaths_state.expected_deaths_T
     expected_reports_T := cases_state.expected_reports
     expected_confirmed_T := confirmed_state.expected_confirmed
-    expected_received_T := confirmed_state.expected_received
+    expected_analysed_T := confirmed_state.expected_analysed
     _ecd = confirmed_deaths_state.expected_confirmed_deaths
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports

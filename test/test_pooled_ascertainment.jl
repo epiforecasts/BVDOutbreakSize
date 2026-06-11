@@ -58,7 +58,6 @@ end
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
-        tests_received_history = obs.tests_received_history,
         breakpoint = obs.n - obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days)
     chn = sample(m, Prior(), 50;

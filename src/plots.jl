@@ -1198,7 +1198,11 @@ points. Each `panel` is a `NamedTuple`
 `(; title, dates, replicates, observed)`, where `replicates` is a vector
 of per-draw increment vectors (one entry per vintage, oldest first) and
 `observed` the matching observed cumulative counts used as the
-conditioning baselines. `colour` is optional per panel.
+conditioning baselines. `colour` is optional per panel. A panel may set
+`cumulative = false` to plot standalone per-day counts (e.g. the 24h
+analysed volume) instead: there is no previous-vintage baseline, each
+replicate is the modelled per-day count directly, and the y-axis reads
+"Daily count".
 
 `max_date` (an ISO date string or `Date`) truncates every panel to the
 vintages on or before that date, so streams that keep reporting past the
@@ -1229,14 +1233,21 @@ function plot_vintage_conditional_ppc(
         replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
         n = length(dates)
         colour = get(p, :colour, :steelblue)
+        ## A panel with `cumulative = false` (e.g. the 24h analysed volume)
+        ## carries standalone per-day counts rather than a cumulative series,
+        ## so there is no previous-vintage baseline to condition on: each
+        ## replicate is the modelled per-day count directly.
+        cumulative = get(p, :cumulative, true)
         ## Observed cumulative at the previous vintage is the conditioning
         ## baseline for each step (`y_0 = 0`); `obs_prev[v]` is `y_{v-1}`.
         obs_cum = float.(observed)
-        obs_prev = [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n]
+        obs_prev = cumulative ?
+                   [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
         ## `replicates` is already flattened to one vector of per-draw
         ## increment vectors and truncated to the kept vintages above.
         ## Each draw's conditional cumulative at vintage `v` is the
-        ## observed previous cumulative plus the drawn increment `Δ_v`.
+        ## observed previous cumulative plus the drawn increment `Δ_v` (the
+        ## baseline is zero for a non-cumulative panel).
         cond = [obs_prev .+ r for r in replicates]
         q(i, pr) = quantile([c[i] for c in cond], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
@@ -1253,7 +1264,8 @@ function plot_vintage_conditional_ppc(
         yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
-            ylabel = col == 1 ? "Cumulative count" : "",
+            ylabel = cumulative ? (col == 1 ? "Cumulative count" : "") :
+                     "Daily count",
             xticks = (x, string.(dates)),
             xticklabelrotation = pi / 4, xticklabelsize = 9,
             limits = (nothing, (0, yupper)))
