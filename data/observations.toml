@@ -39,14 +39,14 @@
 #    before the cut-off, and are missing thereafter;
 #  - the confirmed-case and laboratory streams run to the 28 May cut-off;
 #  - confirmed deaths and the post-cut-off confirmed-case figures (263,
-#    282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635 on 29 May-9
+#    282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676 on 29 May-10
 #    June) are recorded in data/insp_sitrep_scanned.csv as data beyond
 #    the cut-off,
 #    but are not fitted, because the model anchors confirmed cases through
 #    the laboratory positivity and national testing totals stop after
 #    28 May.
 
-as_of_date = "2026-06-09"
+as_of_date = "2026-06-10"
 
 [exported_cases]
 value  = 3
@@ -95,10 +95,10 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
 values = [516, 575, 672, 745, 872, 904, 906, 998, 1077]
 source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://github.com/INRB-UMIE/Ebola_DRC_2026, data/insp_sitrep/raw; recorded in data/insp_sitrep_scanned.csv). National cumulative suspected cases from each report's headline; the 18-22 May points use the WHO AFRO / early-report baseline."
 
-# Daily new suspected cases ("nouveaux cas suspects du jour"): the per-day
-# count of newly reported suspects in the preceding 24h, published in the
-# confirmed-based SitReps from 4 June (SitReps 021-024 and 026; SitRep 025,
-# 8 June, prints no such figure). This is the
+# Daily new suspected cases ("nouveaux cas suspects du jour", later
+# "cas suspects du jour"): the per-day count of newly reported suspects in
+# the preceding 24h, published in the confirmed-based SitReps from 4 June
+# (SitReps 021-027, 4-10 June). This is the
 # post-26 May continuation of the suspected-case signal. The national
 # CUMULATIVE suspected total was frozen at 26 May (see `reported_case_history`)
 # once INSP began reclassifying suspects downward (the cumulative fell, which
@@ -108,17 +108,16 @@ source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://git
 # (the p_drc-scaled BVD onset-to-report signal plus the non-BVD background)
 # on its report day, sharing the suspect pipeline and surveillance dispersion
 # with the frozen cumulative stream, the same daily-anchor route the post-
-# cutoff lab volume uses (`tests_analysed_daily_history`). The days (4-7 and
-# 9 June) fall strictly after the cumulative series ends (26 May), so the two
+# cutoff lab volume uses (`tests_analysed_daily_history`). The days (4-10
+# June) fall strictly after the cumulative series ends (26 May), so the two
 # suspected likelihoods cover disjoint days and do not double-count. Earlier
-# confirmed-based reports (SitReps 015-020, 29 May-3 June) and SitRep 025
-# (8 June) do not print a national new-suspect-of-the-day figure, so the
-# series begins on 4 June and skips 8 June.
+# confirmed-based reports (SitReps 015-020, 29 May-3 June) do not print a
+# national new-suspect-of-the-day figure, so the series begins on 4 June.
 [suspected_daily_history]
 dates  = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07",
-          "2026-06-09"]
-values = [153, 119, 117, 94, 119]
-source = "INSP situation reports 4-9 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitRep 026 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h). SitReps 015-020 (29 May-3 June) and 025 (8 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June and skips 8 June."
+          "2026-06-08", "2026-06-09", "2026-06-10"]
+values = [153, 119, 117, 94, 138, 119, 119]
+source = "INSP situation reports 4-10 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitReps 025-027 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h): 153, 119, 117, 94, 138, 119, 119 on 4-10 June. SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June."
 
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
@@ -182,8 +181,8 @@ source = "INSP situation reports 1-9 June 2026 (SitReps 018, 021-026) 24h LABORA
 # model uses (derived at load time), paired with `tests_analysed_history`
 # for the per-test positivity (210/755 ≈ 28%). The series runs to the
 # cut-off; the confirmed-based format from 29 May (263, 282, 321, 344,
-# 363, 381, 452, 488, 515, 550, 598, 635 on 29 May-9 June; SitReps
-# 015-026) is recorded in data/insp_sitrep_scanned.csv but not added
+# 363, 381, 452, 488, 515, 550, 598, 635, 676 on 29 May-10 June; SitReps
+# 015-027) is recorded in data/insp_sitrep_scanned.csv but not added
 # here, since national testing stops after 28 May and the model anchors
 # confirmed cases through the laboratory positivity.
 [confirmed_case_history]
@@ -192,10 +191,10 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
           "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06",
-          "2026-06-07", "2026-06-08", "2026-06-09"]
+          "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"]
 values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
-          282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635]
-source = "INSP situation reports 18 May - 9 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 9 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
+          282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676]
+source = "INSP situation reports 18 May - 10 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 10 June points have no published national analysed denominator, so they are fitted as dark windows via the laboratory-throughput queue (Poisson-thinned)."
 
 # Cumulative national confirmed-death totals (front-page `Cumul décès
 # parmi les confirmés`). First published in the SitRep 012 revised
@@ -213,9 +212,9 @@ source = "INSP situation reports 18 May - 9 June 2026, read from the PDFs (recor
 dates  = ["2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
           "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06",
-          "2026-06-07", "2026-06-08", "2026-06-09"]
-values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115, 127]
-source = "INSP situation reports 26 May - 9 June 2026 (SitReps 012_v2-026), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June), 91 (6 June), 101 (7 June), 115 (8 June), 127 (9 June)."
+          "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"]
+values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115, 127, 136]
+source = "INSP situation reports 26 May - 10 June 2026 (SitReps 012_v2-027), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June), 91 (6 June), 101 (7 June), 115 (8 June), 127 (9 June), 136 (10 June)."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
