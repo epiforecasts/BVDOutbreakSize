@@ -401,7 +401,7 @@ vintage_table #hide
 # | Onset-to-death delay |  | ● |  |  |  |  | ● |
 # | Case-fatality ratio |  | ● |  |  |  |  | ● |
 # | Onset-to-report delay |  |  | ● | ● | ● | ● |  |
-# | Receipt delay |  |  |  | ● | ● |  |  |
+# | Receipt delay |  |  |  | ● | ● | ● |  |
 # | Onset-to-detection delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● |  |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
@@ -1338,13 +1338,23 @@ cfr_prior_fig #hide
 #     + \log m_{\text{death}}\bigr).
 # ```
 #
-# The daily confirmed-death series is $p_{\text{cd}}\, m_t$ with $m_t$ the
-# modelled suspected-death series, and the per-vintage increments are scored
-# with a NegBinomial sharing the dispersion $k$:
+# A suspected death is dated at the death event, so the only step left to
+# laboratory confirmation is the report-to-receipt delay $f_{\text{rec}}$ the
+# suspected specimens carry to the laboratory, so confirmed cases and confirmed
+# deaths pay a consistent laboratory delay.
+# The daily confirmed-death series is the thinned suspected-death series
+# carried through that delay,
+#
+# ```math
+# \text{cd}_t = p_{\text{cd}} \sum_{s \ge 0} m_{t-s}\, f_{\text{rec},s},
+# ```
+#
+# with $m_t$ the modelled suspected-death series, and the per-vintage
+# increments are scored with a NegBinomial sharing the dispersion $k$:
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} p_{\text{cd}}\, m_t,\ k\Bigr). \tag{30}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{30}
 # ```
 
 #md # ```@raw html
@@ -1761,6 +1771,52 @@ diagnostics_table( #hide
 # $\Delta D = \mathrm{CFR}\cdot I_T - \mathbb{E}[D_T]$, where $I_T$ is the
 # cumulative infection count to the cut-off. The figure is shown in the
 # counterfactual results below.
+#
+# #### Delay-corrected confirmed case-fatality ratio
+#
+# The case-fatality ratio above is the onset-level CFR, the share of
+# symptomatic infections that die.
+# It is hard to read directly off the data because the case and death streams
+# are ascertained differently, so a reader who wants a figure anchored in the
+# observed counts is left with the naive confirmed ratio, the cumulative
+# confirmed deaths over the cumulative confirmed cases.
+# That naive ratio is biased low in real time.
+# A case confirmed close to the cut-off has not yet had time to die, so it
+# enters the denominator before it can enter the numerator.
+#
+# We report a delay-corrected confirmed CFR that debiases the real-time ratio
+# following [nishiura2009](@cite).
+# The denominator is shrunk from all confirmed cases to those expected to have
+# had their death confirmed by the cut-off, weighting each day of
+# confirmed-case incidence by the probability that a case confirmed that day,
+# if it is going to die, has had its death confirmed by the cut-off:
+#
+# ```math
+# \mathrm{cCFR}_{\text{corr}}(T) =
+#   \frac{D_{\text{conf}}(T)}
+#        {\sum_{t} c_{\text{conf}}(t)\,
+#         \Pr(X_d - X_c \le T - t)}, \tag{35}
+# ```
+#
+# with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$
+# the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual
+# delay between a confirmed case and its confirmed death.
+# $X_d$ is the onset-to-death-confirmation lag (onset-to-death convolved with
+# the report-to-receipt laboratory delay) and $X_c$ the onset-to-confirmation
+# lag (onset-to-report convolved with the same laboratory delay), so the common
+# receipt delay cancels in the mean and the residual centres on onset-to-death
+# minus onset-to-report.
+# Both lags and the confirmed trajectories are taken per posterior draw from
+# the joint fit, so the corrected ratio carries the joint uncertainty.
+# As the outbreak matures and recent incidence resolves the correction shrinks
+# and the corrected ratio approaches the eventual confirmed CFR.
+# It is the confirmed-case counterpart of the structural CFR, anchored in the
+# confirmed counts rather than the latent infections, and the gap between the
+# two reflects the difference in case and death ascertainment the structural
+# CFR has to absorb.
+# The result is shown in the
+# [confirmed case-fatality ratio results](@ref "Confirmed case-fatality ratio")
+# below.
 #
 # #### One-week-ahead forecast
 #
@@ -2463,6 +2519,77 @@ no_onward_fig = plot_no_onward_deaths(
 #md # ```
 
 no_onward_fig #hide
+
+# ### Confirmed case-fatality ratio
+#
+# The delay-corrected confirmed CFR defined in the methods
+# [delay-corrected confirmed CFR](@ref "Delay-corrected confirmed case-fatality ratio"),
+# set against the structural (infection-based) CFR and the naive confirmed
+# ratio.
+# The corrected ratio debiases the naive confirmed ratio for the real-time
+# delay between a case being confirmed and a death being confirmed; the
+# structural CFR is the onset-level estimate the joint model fits.
+# Reading the three together separates the real-time delay bias (naive versus
+# corrected) from the case/death ascertainment difference (corrected versus
+# structural).
+
+#md # ```@raw html
+#md # <details><summary>Compute the confirmed-CFR comparison</summary>
+#md # ```
+
+confirmed_cfr = delay_corrected_confirmed_cfr(chn_joint;
+    obs_confirmed = obs.confirmed_cases,
+    obs_confirmed_deaths = obs.confirmed_deaths);
+
+confirmed_cfr_summary = confirmed_cfr_table(confirmed_cfr);
+
+## Summary line carrying the data-anchored corrected estimate alongside the
+## infection-based structural CFR, so both can be quoted together.
+confirmed_cfr_line = let r = confirmed_cfr
+    pct(x) = round(100 * x; digits = 1)
+    corr = filter(isfinite, r.corrected)
+    struc = filter(isfinite, r.structural)
+    cs = posterior_summary(corr)
+    ss = posterior_summary(struc)
+    Markdown.parse(string(
+        "**Delay-corrected confirmed CFR:** ",
+        pct(quantile(corr, 0.5)), "% (90% CrI ",
+        pct(cs.lo90), "–", pct(cs.hi90), "%), versus a naive confirmed ratio ",
+        "of ", pct(r.naive_observed), "% and a structural (infection-based) ",
+        "CFR of ", pct(quantile(struc, 0.5)), "% (90% CrI ",
+        pct(ss.lo90), "–", pct(ss.hi90), "%)."))
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+confirmed_cfr_line
+
+# The four quantities side by side: the delay-corrected confirmed CFR, the
+# structural CFR, the uncorrected modelled confirmed ratio and the naive
+# observed confirmed ratio.
+
+confirmed_cfr_summary #hide
+
+# The posterior densities of the delay-corrected confirmed CFR and the
+# structural CFR, with the naive observed confirmed ratio drawn as a solid
+# vertical rule and the median uncorrected modelled confirmed ratio as a
+# dashed rule. The gap from the naive rule to the corrected density is the
+# real-time delay debiasing; the gap to the structural density is the residual
+# case/death ascertainment difference.
+
+#md # ```@raw html
+#md # <details><summary>Confirmed-CFR density plot</summary>
+#md # ```
+
+confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+confirmed_cfr_fig #hide
 
 # ### One-week-ahead forecast results
 #
@@ -3173,6 +3300,8 @@ joint_summary = summary_table(chn_joint,
         :p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         Symbol("exports_state.travel_state.daily_travellers")]; digits = 2)
 CSV.write(joinpath(output_dir, "posterior_summary.csv"), joint_summary)
+CSV.write(joinpath(output_dir, "confirmed_cfr_summary.csv"),
+    confirmed_cfr_summary)
 CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
     streams_C_table)
 CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
@@ -3194,7 +3323,8 @@ posterior_draws = DataFrame(
     CFR = vec(Array(chn_joint[:CFR])),
     p_drc = vec(Array(chn_joint[:p_drc])),
     p_uganda = vec(Array(chn_joint[:p_uganda])),
-    C_T = vec(Array(chn_joint[:C_T]))
+    C_T = vec(Array(chn_joint[:C_T])),
+    confirmed_cfr_corrected = confirmed_cfr.corrected
 )[1:10:end, :]
 CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 

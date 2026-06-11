@@ -354,7 +354,7 @@ death-confirmation probability (`death_confirmation`).
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
-        confirmed_deaths_history))
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
@@ -376,6 +376,35 @@ death-confirmation probability (`death_confirmation`).
     cumulative_infections := cumsum(infection_state.infections)
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
+    ## Modelled daily laboratory-confirmed cases: the per-window tested-positive
+    ## probability expanded onto the daily grid and applied to the modelled
+    ## analysed volume, so the cumulative trajectory carries the confirmed-case
+    ## timing for the delay-corrected confirmed-CFR reconstruction. The onset-
+    ## to-confirmation kernel (onset-to-report ⊕ receipt) and the onset-to-
+    ## death-confirmation kernel (onset-to-death ⊕ receipt, the death carrying
+    ## the same report-to-receipt laboratory delay) are exposed alongside so the
+    ## residual delay between a confirmed case and its confirmed death can be
+    ## rebuilt per draw off the chain.
+    _conf_windows = confirmed_state.windows
+    _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
+        _conf_windows.late_days)
+    ## In predict / check-model mode the per-window positivity can widen to
+    ## `Vector{Any}` (and is empty when there is no confirmed history), so
+    ## `expand_vintage_rate` would call `zero(Any)`. Pin it to the modelled
+    ## analysed volume's (always-concrete) element type, leaving the
+    ## AD/fit path (concrete dual eltype) untouched, matching the guards in
+    ## `confirmed_cases_model`.
+    _conf_received = confirmed_state.received_daily
+    _conf_positivity = confirmed_state.p_pos
+    if eltype(_conf_positivity) === Any
+        _conf_positivity = convert(Vector{eltype(_conf_received)},
+            _conf_positivity)
+    end
+    _conf_daily_positivity = expand_vintage_rate(_conf_positivity,
+        _conf_window_days, n)
+    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_received)
+    onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+    onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     C_T := infection_state.C_T
     R0 := infection_state.R0
     r := infection_state.r
