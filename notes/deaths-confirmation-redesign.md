@@ -155,4 +155,42 @@ Reading:
 
 ### 1000x4 headline fit
 
-(appended after the longer fit completes.)
+With a proper warmup (500 steps) the fit converges far better than the 300x2
+exploratory fits:
+
+| Quantity | Median | 90% interval |
+|---|---|---|
+| max R-hat | 1.26 | — |
+| min bulk ESS | 12.4 | — |
+| divergences (of 4000) | 11 | — |
+| C_T | 4991 | [2858, 12016] |
+| CFR | 0.393 | [0.243, 0.554] |
+| p_drc | 0.61 | [0.29, 0.91] |
+| death_ascertainment | 0.904 | [0.81, 0.95] |
+| background_cfr | 0.081 | [0.013, 0.31] |
+| tau_death | 0.453 | [0.27, 0.70] |
+| death_composition (q_death) | 0.79 | [0.48, 0.96] |
+| death_confirmation | 0.679 | [0.42, 0.88] |
+| expected_deaths_T | 1134 | [656, 6090] |
+| expected_confirmed_deaths_T | 201 | [136, 321] |
+
+Reading:
+
+- The death parameters are stable and identical in character to the 300x2 fit;
+  the median death pathway is sensible (90% ascertainment, ~8% background CFR,
+  ~79% BVD share of suspected deaths, ~45% death testing fraction).
+- Convergence improves markedly with the longer warmup (R-hat 2.13 → 1.26),
+  confirming the short-fit numbers were under-warmup, not a structural problem.
+- KNOWN SIDE EFFECT: tying the death background to the case background
+  propagates the case background's heavy upper tail into the death stream.
+  `expected_deaths_T` widens from the baseline's [527, 1582] to [656, 6090] and
+  `lambda_bg_death` runs to ~50 in the tail. This is the same cryptic-phase
+  background over-accrual that inflates the case stream (`expected_reports_T`
+  runs to ~50000 in BOTH the baseline and the redesign), surfacing on the death
+  side because the death background is now scaled from it. The min-ESS
+  parameter is one of these heavy-tailed background quantities. The fix is the
+  first-vintage / cryptic-background work tracked separately; once the case
+  background stops accruing over the pre-surveillance span, the death tail
+  shrinks automatically. The legacy tight scalar `death_background` remains
+  available as a lower-variance alternative if a self-contained death
+  background is preferred in the interim.
