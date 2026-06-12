@@ -93,6 +93,37 @@ function expand_vintage_rate(rate::AbstractVector,
 end
 
 """
+Gate a daily non-BVD background series `bg_daily` so it only accrues from
+the surveillance start day `start` onward, zeroing every day strictly
+before `start`. The first per-vintage likelihood bin spans grid day 1 to
+the first vintage day, which on this grid is ~84 days of pre-surveillance
+cryptic phase; a constant background rate accrued over that whole span
+inflates the first bin with non-BVD "suspected cases" that no surveillance
+system could have reported before the outbreak was recognised. Gating the
+background at the first vintage day (the first situation report) restricts
+the accrual to the window where surveillance actually existed, so the first
+bin carries `λ_bg × (window)` rather than `λ_bg × days[1]`. The BVD signal
+is NOT gated — those are real infections that legitimately accrue from the
+seeding day. A `start ≤ 1` recovers the ungated series unchanged. Pure and
+AD-transparent; the element type follows `bg_daily`.
+"""
+function gate_background(bg_daily::AbstractVector, start::Integer)
+    start <= 1 && return bg_daily
+    n = length(bg_daily)
+    z = isempty(bg_daily) ? zero(eltype(bg_daily)) :
+        zero(@inbounds bg_daily[begin])
+    cut = clamp(Int(start) - 1, 0, n)
+    out = similar(bg_daily)
+    @inbounds for t in 1:cut
+        out[t] = z
+    end
+    @inbounds for t in (cut + 1):n
+        out[t] = bg_daily[t]
+    end
+    return out
+end
+
+"""
 Group a sorted event-day list `event_days` (grid day-indices, ascending,
 one entry per dated event, possibly with repeats) into its unique days and
 the per-day occupancy count, clamped to `[1, n]`. Returns `(days, counts)`
@@ -222,6 +253,13 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         cfr = cfr_model(),
         death_background = nothing,
         background_re = nothing,
+        ## Grid day the non-BVD death background starts accruing from (the
+        ## surveillance start), mirroring [`reported_cases_model`](@ref). The
+        ## background is zeroed before this day so the first death bin does
+        ## not accumulate it over the pre-surveillance span. `0` (or `1`)
+        ## leaves it ungated (legacy). The composer passes the first
+        ## suspected-death vintage day.
+        background_start::Integer = 0,
         ## nmax covers 98% of the convolved onset->death sum (the two atomic
         ## Gammas moment-matched to a single Gamma only for the truncation).
         onset_to_death = onset_to_death_model(cdf_nmax(Gamma(3.33, 3.83));
@@ -258,6 +296,10 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
         bg_death_sigma = zero(CFR)
         bg_death_daily = fill(zero(CFR), n)
     end
+
+    ## Gate the death background to the surveillance window, as for the
+    ## suspected-case background.
+    bg_death_daily = gate_background(bg_death_daily, background_start)
 
     deaths_daily = bvd_deaths_daily .+ bg_death_daily
 
@@ -315,6 +357,14 @@ sitrep.
         suspected_daily_history = (; days = Int[], counts = Int[]),
         positivity = test_positivity_model(),
         background_re = nothing,
+        ## Grid day the non-BVD background starts accruing from (the
+        ## surveillance start). The background is zeroed before this day, so
+        ## the first per-vintage bin does not accumulate a constant
+        ## background over the long pre-surveillance cryptic span (see
+        ## [`gate_background`](@ref)). `0` (or `1`) leaves the background
+        ## ungated over the whole grid (the legacy behaviour). The composer
+        ## passes the first suspected-case vintage day.
+        background_start::Integer = 0,
         ## Onset to a suspected case being detected/reported, from the
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
@@ -355,6 +405,13 @@ sitrep.
         bg_sigma = bg_state.σ_bg
         bg_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
     end
+
+    ## Gate the background to the surveillance window: zero it before the
+    ## surveillance start day so the first bin does not accumulate a constant
+    ## non-BVD background over the long pre-surveillance cryptic span. The
+    ## gated series is what the confirmed pipeline reuses, so the lab streams
+    ## inherit the same restriction.
+    bg_daily = gate_background(bg_daily, background_start)
 
     ## Suspected daily cases add the p_drc-scaled BVD signal and the
     ## non-BVD background.
