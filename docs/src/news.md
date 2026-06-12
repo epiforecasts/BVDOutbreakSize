@@ -23,12 +23,53 @@ release.
   The post-26 May per-day counts are scored against the modelled daily
   suspected series at each report day, continuing the suspected signal where
   the frozen cumulative series stops, on days disjoint from it (#222).
+- Collapsed the laboratory pipeline onto a single suspected-to-analysed
+  volume, fit to the specimens-analysed series through one report-to-analysed
+  delay.
+  The received stream is still recorded but no longer fitted, and the
+  post-cut-off 24-hour analysed volume is now fit directly.
+- Late reporting windows, where the cumulative national analysed denominator
+  stops, are scored in one submodel.
+  A day with a published 24-hour analysed count anchors its positivity as a
+  binomial on that count, and the remaining days are scored against the
+  modelled laboratory volume.
+  These are a reporting-format change rather than data blackouts, so the
+  earlier "dark window" framing is dropped.
+- Added the delay-corrected confirmed case-fatality ratio, the Nishiura et al.
+  (2009) real-time correction computed per posterior draw on the modelled
+  confirmed trajectory and sampled confirmation-to-death delay.
+  The denominator shrinks from all confirmed cases to those expected to have
+  had a fatal outcome resolve by the cut-off, debiasing the naive confirmed
+  ratio.
+
+### Forecast
+
+- The one-week-ahead forecast and its validation now target the
+  laboratory-confirmed case and confirmed death streams.
+  The suspected reported cases and deaths are no longer published, so they no
+  longer serve as forecast targets or as the last-week-versus-now comparison.
+
+### Report
+
+- Added a confirmed case-fatality ratio section, setting the delay-corrected
+  confirmed CFR against the structural infection-based CFR and the naive
+  confirmed ratio, with a comparison table and posterior-density plot.
+- The estimate-evolution figure now draws each release as a discrete per-fit
+  estimate with nested 30/60/90% intervals, read from
+  `data/released_estimates.csv` rather than a hand-maintained literal.
+  Frozen renewal re-fits are restricted to the integral-era release cut-offs,
+  since renewal-era releases already are renewal fits.
+  A new `scripts/refresh_releases.jl` pulls the per-release estimates from the
+  tagged results releases.
 
 ### Data
 
 - Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
   structured `new_daily_suspects` column in the scanned situation-report CSV
   and a `suspected_daily_history` block in the observation manifest.
+- Extended the confirmed case and death series to SitRep 025 (8 June).
+- Added the trusted-day 24-hour analysed laboratory counts (1, 4-7 June) as a
+  `tests_analysed_daily_history` block to anchor late-window positivity.
 
 ## v1.4.0
 
