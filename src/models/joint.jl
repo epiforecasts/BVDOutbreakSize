@@ -86,15 +86,20 @@ then conditions on the reported-cases likelihood. See
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model())
+        ascertainment = pooled_ascertainment_model(),
+        background_window::Bool = true)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
+    bg_start = (background_window && !isempty(reported_history.days)) ?
+               Int(reported_history.days[1]) : 0
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, latent.onsets,
-        dispersion_state.k, asc_state.p_drc; suspected_daily_history))
+        dispersion_state.k, asc_state.p_drc; suspected_daily_history,
+        background_start = bg_start))
     cumulative_infections := cumsum(latent.infection_state.infections)
+    background_total := cases_state.bg_total
     C_T := latent.infection_state.C_T
 end
 
@@ -294,6 +299,13 @@ death-confirmation probability (`death_confirmation`).
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        ## Gate the non-BVD background to the surveillance window: each
+        ## stream's background accrues only from its first situation-report
+        ## vintage onward, not over the long pre-surveillance cryptic span.
+        ## This removes the systematic first-bin overestimate the constant
+        ## background otherwise injects (see [`gate_background`](@ref)). Set
+        ## `false` to recover the legacy ungated behaviour for sensitivity.
+        background_window::Bool = true,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
@@ -340,12 +352,22 @@ death-confirmation probability (`death_confirmation`).
         death_bg_re = nothing
     end
 
+    ## Surveillance start per stream: the first vintage day of each
+    ## cumulative history (the first situation report for that stream). The
+    ## background is gated to accrue only from this day. `0` (ungated) when
+    ## the window is off or the history is empty.
+    case_bg_start = (background_window && !isempty(reported_history.days)) ?
+                    Int(reported_history.days[1]) : 0
+    death_bg_start = (background_window && !isempty(deaths_history.days)) ?
+                     Int(deaths_history.days[1]) : 0
+
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k;
-        background_re = death_bg_re))
+        background_re = death_bg_re, background_start = death_bg_start))
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k, p_drc;
-        suspected_daily_history, background_re = case_bg_re))
+        suspected_daily_history, background_re = case_bg_re,
+        background_start = case_bg_start))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
