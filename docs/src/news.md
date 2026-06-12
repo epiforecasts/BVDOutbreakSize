@@ -6,6 +6,28 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+Changes since v1.5.0.
+
+### Model
+
+- Gated the non-BVD background to the surveillance window.
+  The per-vintage likelihoods bin the first point as the cumulative from the
+  seeding day to the first situation report, ~84 days of pre-surveillance
+  cryptic phase, so a constant background rate accrued over that span and
+  inflated the first suspected-case bin with non-BVD cases no surveillance
+  could have reported.
+  Each stream's background now accrues only from its first vintage day
+  (`background_window`, on by default; set false to recover the legacy ungated
+  behaviour).
+  This removes about half of the first suspected-case bin's modelled count and
+  cuts its over-prediction from ~1.2x to ~1.1x without disturbing the later
+  bins, C_T, CFR or convergence.
+  The residual first-bin over-prediction in the deaths and confirmed streams
+  is driven by the renewal BVD-signal accumulation rather than the background,
+  and is left for a follow-up.
+
 ## v1.5.0
 
 Changes since v1.4.0.
