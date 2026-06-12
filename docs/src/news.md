@@ -8,9 +8,7 @@ each push to `main` also republishes the rendered analysis and the
 
 ## v1.5.0
 
-In development.
-Changes landing on `main` since v1.4.0 are recorded here ahead of the next
-release.
+Changes since v1.4.0.
 
 ### Model
 
