@@ -1943,7 +1943,6 @@ summary_ranges = let
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
-    ec = posterior_summary(vec(Array(chn_joint[:expected_confirmed_T])))
 
     ## How far the data has moved each estimate from its prior, in prior
     ## interquartile ranges, reusing the prior draws.
@@ -1960,8 +1959,6 @@ summary_ranges = let
       cut-off that is roughly $(f_lo)–$(f_hi)× as many infections, so
       confirmed cases are estimated to capture only a small share of the
       outbreak.
-    - **Confirmed-case fit:** the model expects $(ints_i(ec)) confirmed
-      cases by the cut-off, against $(obs.confirmed_cases) observed.
     - **Outbreak start and age:** the outbreak is estimated to have begun on
       a start date of $(ints_d(sT)), an elapsed age to the cut-off of
       $(ints_i(sT)) days.
@@ -2579,7 +2576,7 @@ end;
 #md # </details>
 #md # ```
 
-confirmed_cfr_line
+confirmed_cfr_line #hide
 
 # The four quantities side by side: the delay-corrected confirmed CFR, the
 # structural CFR, the uncorrected modelled confirmed ratio and the naive

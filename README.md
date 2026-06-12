@@ -10,9 +10,7 @@ data arrive, so the estimates change between updates.
 **Data as of:** the most recent situation report. DRC counts come from the
 situation reports of the Institut National de Santé Publique (INSP); Uganda
 imports come from WHO. The rendered report fills in the build date and the
-exact data cut-off automatically; the suspected-case and suspected-death
-streams, which carry most of the signal, were last published earlier than
-the laboratory-confirmed streams.
+exact data cut-off automatically.
 
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
