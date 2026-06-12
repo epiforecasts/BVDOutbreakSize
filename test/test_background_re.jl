@@ -20,6 +20,51 @@
           [1.0, 1.0, 2.0, 2.0, 2.0]
 end
 
+@testitem "gate_background zeros the pre-surveillance span" begin
+    using BVDOutbreakSize: gate_background
+    bg = fill(2.0, 10)
+    ## A start of 4 zeros days 1-3 and keeps days 4-10.
+    @test gate_background(bg, 4) == [0, 0, 0, 2, 2, 2, 2, 2, 2, 2]
+    ## start ≤ 1 leaves the series unchanged (legacy ungated behaviour).
+    @test gate_background(bg, 1) == bg
+    @test gate_background(bg, 0) == bg
+    ## A start past the grid zeros everything.
+    @test all(iszero, gate_background(bg, 20))
+    ## The element type follows the input and the BVD signal is untouched
+    ## because gating only the background leaves the first bin's signal.
+    @test eltype(gate_background(fill(1.5f0, 4), 2)) == Float32
+    ## Cumulative over a gated window is strictly less than the ungated one
+    ## whenever the start day is interior, the first-bin reduction.
+    @test sum(gate_background(bg, 5)) < sum(bg)
+end
+
+@testitem "background_window gates the cumulative background lower" tags=[:slow] begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: median
+    import FlexiChains
+    using BVDOutbreakSize: cases_only_model
+
+    ## The first vintage sits well into the grid (day 30 of 40), so the
+    ## ungated background accrues over 30 pre-surveillance days the gated
+    ## one drops. Over matched prior draws the windowed background total is
+    ## a strict reduction, the first-bin fix.
+    history = (; days = [30, 35, 40], counts = [516, 905, 1077])
+    common = (; reported_history = history, breakpoint = 10)
+
+    gated = sample(
+        cases_only_model(40, missing; common..., background_window = true),
+        Prior(), 300; chain_type = FlexiChains.VNChain, progress = false)
+    ungated = sample(
+        cases_only_model(40, missing; common..., background_window = false),
+        Prior(), 300; chain_type = FlexiChains.VNChain, progress = false)
+
+    bg_g = vec(Array(gated[:background_total]))
+    bg_u = vec(Array(ungated[:background_total]))
+    @test all(isfinite, bg_g) && all(bg_g .>= 0)
+    @test median(bg_g) < median(bg_u)
+end
+
 @testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags=[:slow] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
