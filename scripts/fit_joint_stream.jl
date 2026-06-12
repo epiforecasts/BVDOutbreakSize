@@ -73,9 +73,11 @@ println("  min bulk ESS               : ", round(d.min_ess_bulk; digits = 1))
 println("\n=== Headline posteriors  (median [5%, 95%]) ===")
 for sym in (:C_T, :CFR, :r, :R_T, :T, :p_drc, :p_uganda,
     :lambda_bg, :bg_sigma, :lambda_bg_death,
+    :death_ascertainment, :background_cfr, :tau_death,
+    :death_composition, :death_confirmation,
     :suspected_positivity, :test_positivity,
     :expected_reports_T, :expected_deaths_T, :expected_exports_T,
-    :expected_confirmed_T)
+    :expected_confirmed_T, :expected_confirmed_deaths_T)
     try
         m, lo, hi = q(sym)
         println("  ", rpad(string(sym), 20),
@@ -91,4 +93,5 @@ println("\n=== Observed (cut-off) for comparison ===")
 println("  suspected cases  : ", obs.reported_cases)
 println("  suspected deaths : ", obs.total_deaths)
 println("  confirmed cases  : ", obs.confirmed_cases)
+println("  confirmed deaths : ", obs.confirmed_deaths)
 println("  exports          : ", obs.exported_cases)

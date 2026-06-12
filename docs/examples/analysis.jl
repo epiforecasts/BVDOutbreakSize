@@ -389,8 +389,9 @@ vintage_table #hide
 # laboratory stream fitted as a count; the *confirmed* positives are scored
 # as a Binomial of the observed analysed denominator with a positivity
 # linked to the composition of the suspected pool, so the laboratory data
-# help identify the non-BVD background. The *conf. deaths* column thins the
-# suspected deaths by the case composition:
+# help identify the non-BVD background. The *conf. deaths* column mirrors the
+# laboratory pipeline on the death side: a death testing fraction and a
+# death-pool composition positivity built from the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -398,18 +399,20 @@ vintage_table #hide
 # | Generation interval | ● | ● | ● | ● | ● | ● | ● |
 # | Incubation period | ● | ● | ● | ● | ● | ● | ● |
 # | Seed $I_0$ | ● | ● | ● | ● | ● | ● | ● |
-# | Onset-to-death delay |  | ● |  |  |  |  | ● |
-# | Case-fatality ratio |  | ● |  |  |  |  | ● |
-# | Onset-to-report delay |  |  | ● | ● | ● | ● |  |
+# | Onset-to-death delay |  | ● |  |  |  | ● | ● |
+# | Case-fatality ratio |  | ● |  |  |  | ● | ● |
+# | Death ascertainment $p_{\text{death}}$ |  | ● |  |  |  | ● |  |
+# | Background CFR $\mathrm{cfr}_{\text{bg}}$ |  | ● |  |  |  | ● |  |
+# | Onset-to-report delay |  |  | ● | ● | ● |  |  |
 # | Receipt delay |  |  |  | ● | ● | ● |  |
 # | Onset-to-detection delay | ● |  |  |  |  |  |  |
-# | Assay sensitivity / specificity |  |  |  |  | ● |  |  |
+# | Assay sensitivity / specificity |  |  |  |  | ● | ● |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
-# | Confirmed-death enrichment $m_{\text{death}}$ |  |  |  |  |  | ● |  |
+# | Death testing fraction $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
 # | Testing fraction $\tau_{\text{test}}$ |  |  |  | ● | ● |  |  |
-# | Background rate $\lambda_{\text{bg}}$ |  |  | ● | ● | ● | ● |  |
+# | Background rate $\lambda_{\text{bg}}$ |  | ● | ● | ● | ● | ● |  |
 # | Surveillance dispersion |  | ● | ● | ● |  |  |  |
-# | Ascertainment | ● |  | ● | ● | ● | ● | ● |
+# | Ascertainment | ● |  | ● | ● | ● |  | ● |
 # | Traveller volume | ● |  |  |  |  |  | ● |
 
 #md # ```@setup main
@@ -976,8 +979,12 @@ cfr_prior_fig #hide
 # severe, more-likely-Ebola cases are preferentially tested, via an
 # enrichment factor $\delta_0$ that raises the tested BVD share above the
 # suspect-pool composition early on and relaxes towards it as testing
-# broadens. The confirmed-death enrichment $m_{\text{death}}$ scales the
-# death-confirmation odds relative to the case composition. Confirmation runs
+# broadens. The confirmed deaths mirror this laboratory pipeline rather than
+# enriching the case composition: a fraction $\tau_{\text{death}}$ of suspected
+# deaths reach the laboratory, and they confirm at the assay positivity
+# $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$ built from
+# the SAME sensitivity and specificity but the death-pool BVD share
+# $q_{\text{death}}$. Confirmation runs
 # on the altona RealStar Filovirus Screen RT-PCR rather than the
 # Zaire-specific GeneXpert Ebola assay, which does not reliably detect
 # Bundibugyo virus. Sensitivity for Bundibugyo virus is less well
@@ -985,7 +992,8 @@ cfr_prior_fig #hide
 # below the values reported for other strains and give it a fairly wide
 # spread. The specificity is high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
-# never down); the confirmed-death enrichment is centred on no enrichment:
+# never down); the death testing fraction is centred well below the case
+# testing fraction (post-mortem swabbing is rarer):
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
@@ -995,11 +1003,15 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# m_{\text{death}} \sim \mathrm{LogNormal}(0,\ 1). \tag{23}
+# \tau_{\text{death}} \sim \mathrm{Beta}(2,\ 4). \tag{23}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
-# stream and is described with it below.
+# stream and is described with it below; the suspected deaths carry a death
+# ascertainment $p_{\text{death}} \sim \mathrm{logit}^{-1}\mathrm{Normal}
+# (\mathrm{logit}\,0.9,\ 0.5)$ and a non-BVD death background tied to the case
+# background by a background CFR $\mathrm{cfr}_{\text{bg}} \sim
+# \mathrm{Beta}(2,\ 6)$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: test_positivity_model</summary>
@@ -1072,13 +1084,43 @@ cfr_prior_fig #hide
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Submodel: confirmed_death_enrichment_model</summary>
+#md # <details><summary>Submodel: death_testing_fraction_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.confirmed_death_enrichment_model()),
+#md #     (@code_string BVDOutbreakSize.death_testing_fraction_model()),
+#md #     "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: death_ascertainment_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.death_ascertainment_model()),
+#md #     "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: background_cfr_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.background_cfr_model()),
 #md #     "\n```"))
 #md # ```
 
@@ -1186,13 +1228,23 @@ cfr_prior_fig #hide
 
 # ##### Suspected deaths
 #
-# Suspected deaths are the CFR-weighted convolution of the daily onsets with
-# the onset-to-death PMF $f_d$, modelled on the incidence scale. The death
-# history ends at the cut-off, so the cut-off total is the final increment
-# and is not scored separately. The daily death series is
+# Suspected deaths are the ascertained, CFR-weighted convolution of the daily
+# onsets with the onset-to-death PMF $f_d$, plus a non-BVD background, modelled
+# on the incidence scale. The death history ends at the cut-off, so the cut-off
+# total is the final increment and is not scored separately. A fatal BVD
+# infection enters the suspected-death count only when ascertained, so the BVD
+# deaths carry a death ascertainment $p_{\text{death}}$, the death analogue of
+# the case ascertainment $p_{\text{DRC}}$, with an informative prior centred
+# high (a death is more reliably reported than a living suspect). The non-BVD
+# background suspected deaths are a background CFR $\mathrm{cfr}_{\text{bg}}$
+# applied to the per-day non-BVD suspected-CASE background
+# $\lambda_{\text{bg},t}$, so the death background tracks the already-identified
+# case background rather than a second free, outbreak-size-degenerate rate. The
+# daily death series is
 #
 # ```math
-# m_t = \mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{d,s}.
+# m_t = p_{\text{death}}\,\mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\,
+#     f_{d,s} \; + \; \mathrm{cfr}_{\text{bg}}\,\lambda_{\text{bg},t}.
 # ```
 #
 # The per-vintage increments are scored with a NegBinomial sharing the
@@ -1221,17 +1273,26 @@ cfr_prior_fig #hide
 
 # ##### Laboratory pipeline
 #
-# The laboratory pipeline fits a single analysed-specimen volume. This
-# volume is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus
-# the non-BVD background $\lambda_{\text{bg}}$) carried through the
-# report-to-analysed delay $f_{\text{rec}}$ and thinned by the testing
-# fraction $\tau_{\text{test}}$,
+# The laboratory pipeline fits a single analysed-specimen *volume*. There is no
+# separately-modelled testing capacity: the analysed volume is a deterministic
+# function of the suspected-case incidence. It is the suspected daily pipeline
+# ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background
+# $\lambda_{\text{bg}}$) carried through the report-to-analysed delay
+# $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$ (the
+# share of suspected cases routed to the laboratory),
 #
 # ```math
 # v_t = \tau_{\text{test}} \sum_{s \ge 0}
 #     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg}}\bigr)\,
 #     f_{\text{rec},s}.
 # ```
+#
+# This same construction — a testing fraction times the suspected pipeline
+# carried to laboratory receipt — is reused on the death side to give a death
+# "analysed" volume (replacing $\tau_{\text{test}}$ with the death testing
+# fraction $\tau_{\text{death}}$ and the suspected cases with the suspected
+# deaths), so the confirmed deaths share the confirmed cases' volume logic
+# (see the confirmed-deaths section below).
 #
 # The per-vintage increments are scored against the cumulative analysed
 # series with a NegBinomial sharing the dispersion $k$:
@@ -1319,42 +1380,44 @@ cfr_prior_fig #hide
 
 # ##### Confirmed deaths
 #
-# Confirmed deaths are a thinning of the modelled suspected deaths by a
-# confirmation probability. We enrich on the odds scale by $m_{\text{death}}$
-# because a suspected death may be more or less likely to be
-# laboratory-confirmed than a living suspected case: deaths can be
-# under-swabbed, as post-mortem confirmation is rarer, or preferentially
-# confirmed. The confirmation probability builds on the suspected-case BVD
-# composition
+# The confirmed deaths mirror the confirmed-case laboratory pipeline rather
+# than thinning the observed suspected-death total. The confirmed cases fit a
+# modelled analysed-specimen volume and score the positives as that volume
+# times a composition-linked positivity; the death side has no published
+# analysed denominator (post-mortem swabbing is rare and uncounted), so we
+# build the death analogue of that volume and score the confirmed-death
+# increments as NegBinomial counts of it.
+#
+# A fraction $\tau_{\text{death}}$ of the suspected deaths reach the
+# laboratory, carried to receipt by the same report-to-receipt delay
+# $f_{\text{rec}}$ the confirmed cases use, giving a death "analysed" volume
+# $\tau_{\text{death}}\sum_{s\ge 0} m_{t-s}\,f_{\text{rec},s}$ with $m_t$ the
+# modelled suspected-death series. Those specimens confirm at the assay
+# positivity built from the death-pool BVD share
 #
 # ```math
-# q_{\text{susp}} = \frac{p_{\text{DRC}}\,\text{bvd}}
-#     {p_{\text{DRC}}\,\text{bvd} + \lambda_{\text{bg}}},
+# q_{\text{death},t} = \frac{\text{bvd}^{\text{d}}_t}
+#     {\text{bvd}^{\text{d}}_t + \text{bg}^{\text{d}}_t}, \qquad
+# p_t = s\,q_{\text{death},t} + (1-\mathrm{spec})(1-q_{\text{death},t}),
 # ```
 #
-# enriched on the odds scale by $m_{\text{death}}$, which keeps it in $(0, 1)$
-# without a hard clamp and ties the death-confirmation rate to the same
-# composition that drives the case streams, so a confirmed-death observation
-# informs the background and ascertainment:
+# with $\text{bvd}^{\text{d}}$ and $\text{bg}^{\text{d}}$ the BVD and non-BVD
+# components of the suspected deaths (both at receipt) and $s$, $\mathrm{spec}$
+# the same assay sensitivity and specificity as the confirmed cases. The
+# false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the
+# confirmed deaths respond to the non-BVD death share, the same structural link
+# the confirmed cases use; the composition is well-defined because the death
+# background is switched on (tied to the case background by the background CFR).
+# The daily confirmed deaths are the positivity times the death analysed
+# volume,
 #
 # ```math
-# p_{\text{cd}} = \mathrm{logistic}\!\bigl(\mathrm{logit}(q_{\text{susp}})
-#     + \log m_{\text{death}}\bigr).
+# \text{cd}_t = \tau_{\text{death}}\, p_t \sum_{s \ge 0} m_{t-s}\,
+#     f_{\text{rec},s},
 # ```
 #
-# A suspected death is dated at the death event, so the only step left to
-# laboratory confirmation is the report-to-receipt delay $f_{\text{rec}}$ the
-# suspected specimens carry to the laboratory, so confirmed cases and confirmed
-# deaths pay a consistent laboratory delay.
-# The daily confirmed-death series is the thinned suspected-death series
-# carried through that delay,
-#
-# ```math
-# \text{cd}_t = p_{\text{cd}} \sum_{s \ge 0} m_{t-s}\, f_{\text{rec},s},
-# ```
-#
-# with $m_t$ the modelled suspected-death series, and the per-vintage
-# increments are scored with a NegBinomial sharing the dispersion $k$:
+# and the per-vintage increments are scored with a NegBinomial sharing the
+# dispersion $k$:
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
@@ -1369,7 +1432,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.confirmed_deaths_model(
-#md #         missing, missing, Float64[], Float64[], 1.0, Float64[], 1.0)),
+#md #         missing, missing, Float64[], Float64[], Float64[], 1.0)),
 #md #     "\n```"))
 #md # ```
 
@@ -2245,7 +2308,8 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
-        :expected_analysed_T, :m_death, :death_composition,
+        :expected_analysed_T, :death_ascertainment, :background_cfr,
+        :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T];
     digits = 3);
 

@@ -54,21 +54,19 @@ end
     using Turing: returned
     using Random: MersenneTwister
 
-    ## 246 suspected deaths, 17 confirmed. The composition q_susp is built
-    ## from a flat unit BVD report series and a small background, and the
-    ## confirmation probability is the odds-enriched composition.
-    bvd = fill(1.0, 40)
-    ## Per-day non-BVD background series (was a scalar λ_bg); sum is the
-    ## background total entering the composition q_susp.
-    bg_daily = fill(0.5, 40)
-    ## Modelled suspected-death daily series (was a scalar expected total);
-    ## confirmed deaths thin it per-vintage. k is the dispersion.
-    deaths_daily = fill(6.0, 40)
-    m = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
+    ## 246 suspected deaths, 17 confirmed. The death-pool composition q_death
+    ## is built from the death series' own BVD and background components, and
+    ## the confirmation positivity is the assay transform of that composition.
+    ## Modelled BVD and background suspected-death daily series; the suspected-
+    ## death total is their sum. k is the dispersion.
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    m = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
     st = returned(m, rand(MersenneTwister(2), m))
-    @test 0 < st.q_susp < 1
+    @test 0 < st.q_death < 1
     @test 0 < st.p_death_conf < 1
-    @test st.m_death > 0
+    @test 0 < st.τ_death < 1
     @test st.expected_confirmed_deaths >= 0
 end
 
@@ -77,18 +75,19 @@ end
     using Turing: returned
     using Random: MersenneTwister
 
-    bvd = fill(1.0, 40)
-    bg_daily = fill(0.5, 40)
-    deaths_daily = fill(6.0, 40)
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
     seed = 7
     ## Same args, one with no delay (identity PMF) and one with all mass at a
-    ## five-day lag. The confirmation probability is unchanged (it depends on
-    ## the composition, not the delay), but the delay pushes five of the forty
-    ## flat days off the end of the grid, so the windowed expected confirmed
-    ## deaths fall to 35/40 of the undelayed total.
-    base = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
-    delayed = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily,
-        5.0; receipt_pmf = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+    ## five-day lag. The confirmation positivity is unchanged (the composition
+    ## is flat, so a uniform delay leaves the BVD share fixed), but the delay
+    ## pushes five of the forty flat days off the end of the grid, so the
+    ## windowed expected confirmed deaths fall to 35/40 of the undelayed total.
+    base = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0)
+    delayed = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths,
+        bg_death, 5.0; receipt_pmf = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
     sb = returned(base, rand(MersenneTwister(seed), base))
     sd = returned(delayed, rand(MersenneTwister(seed), delayed))
     @test sd.p_death_conf ≈ sb.p_death_conf
