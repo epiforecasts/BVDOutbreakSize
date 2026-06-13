@@ -43,10 +43,12 @@
         @test length(h.days) == length(h.counts)
     end
 
-    ## The post-cutoff 24h analysed series carries the trusted unanchored
-    ## denominators (1, 4, 5, 6, 7, 8, 9 June), sorted oldest-first by day
-    ## index.
-    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68]
+    ## The post-cutoff 24h analysed series carries the unanchored
+    ## denominators (1, 4, 5, 6, 7, 8, 9, 10, 11 June), sorted oldest-first
+    ## by day index. A day is included when its national confirmed increment
+    ## does not exceed the reported 24h analysed total (a valid Binomial
+    ## denominator); 10-11 June are the Ituri-dominated late points (109, 35).
+    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68, 109, 35]
     @test issorted(obs.lab_daily_history.days)
     @test all(d -> d <= obs.n, obs.lab_daily_history.days)
 
