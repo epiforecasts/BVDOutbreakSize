@@ -51,11 +51,11 @@
     @test all(d -> d <= obs.n, obs.lab_daily_history.days)
 
     ## The post-cutoff daily new-suspect inflow ("nouveaux cas suspects du
-    ## jour" / "cas suspects du jour", 4-10 June), sorted oldest-first by day
+    ## jour" / "cas suspects du jour", 4-11 June), sorted oldest-first by day
     ## index and within the grid. A per-day incidence (never cumulative), so
     ## it begins where the frozen cumulative suspected series stops.
     @test obs.suspected_daily_history.counts ==
-          [153, 119, 117, 94, 138, 119, 119]
+          [153, 119, 117, 94, 138, 119, 119, 168]
     @test issorted(obs.suspected_daily_history.days)
     @test all(d -> 1 <= d <= obs.n, obs.suspected_daily_history.days)
     ## Strictly after the last cumulative suspected vintage (26 May): the two
@@ -75,19 +75,20 @@
     ## headline; the 26 May value uses the revised SitRep 012_v2 (246).
     @test dh.counts == [131, 148, 160, 175, 204, 220, 223, 238, 246]
 
-    ## Confirmed-case history runs to the 10 June recorded point (post-28
+    ## Confirmed-case history runs to the 11 June recorded point (post-28
     ## May vintages have no analysed denominator); its final vintage equals
     ## the `confirmed_cases` total.
     @test obs.confirmed_history.counts ==
           [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210,
-        263, 282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676]
+        263, 282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676,
+        689]
     @test obs.confirmed_history.counts[end] == obs.confirmed_cases
 
-    ## Confirmed deaths: recorded, growing 17 → 136 over 26 May-10 June.
+    ## Confirmed deaths: recorded, growing 17 → 139 over 26 May-11 June.
     @test obs.confirmed_deaths isa Integer
     @test obs.confirmed_deaths_history.counts ==
           [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115,
-        127, 136]
+        127, 136, 139]
     @test obs.confirmed_deaths_history.counts[end] == obs.confirmed_deaths
 
     ## Laboratory throughput histories (cumulative national, 23-28 May);
