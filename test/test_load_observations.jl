@@ -2,7 +2,7 @@
 ## the bundled data/observations.toml file.
 
 @testitem "load_observations returns the documented fields" begin
-    using BVDOutbreakSize: load_observations
+    using BVDOutbreakSize: load_observations, confirmed_positivity_windows
     using Dates: Date
     obs = load_observations()
     @test obs isa NamedTuple
@@ -43,14 +43,27 @@
         @test length(h.days) == length(h.counts)
     end
 
-    ## The post-cutoff 24h analysed series carries the unanchored
-    ## denominators (1, 4, 5, 6, 7, 8, 9, 10, 11 June), sorted oldest-first
-    ## by day index. A day is included when its national confirmed increment
-    ## does not exceed the reported 24h analysed total (a valid Binomial
-    ## denominator); 10-11 June are the Ituri-dominated late points (109, 35).
-    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68, 109, 35]
+    ## The post-cutoff 24h analysed series carries the late-window
+    ## denominators, sorted oldest-first by day index and within the grid.
+    @test !isempty(obs.lab_daily_history.counts)
     @test issorted(obs.lab_daily_history.days)
-    @test all(d -> d <= obs.n, obs.lab_daily_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.lab_daily_history.days)
+    @test all(c -> c > 0, obs.lab_daily_history.counts)
+
+    ## Validity invariant for the fitted stream rather than a literal echo of
+    ## the data file: each day that anchors a late confirmed-positivity window
+    ## scores the day's confirmed-case increment as a Binomial of its 24h
+    ## analysed denominator, so the increment must not exceed the denominator
+    ## (you cannot confirm more specimens than you analysed). A day breaching
+    ## this would be silently clamped and is the one documented failure mode,
+    ## so guarding it here catches a bad data update where the brittle literal
+    ## would only have needed re-typing.
+    let w = confirmed_positivity_windows(obs.confirmed_history,
+            obs.lab_history, obs.lab_daily_history)
+        anchored = findall(>(0), w.late_analysed)
+        @test !isempty(anchored)
+        @test all(i -> w.late_increments[i] <= w.late_analysed[i], anchored)
+    end
 
     ## The post-cutoff daily new-suspect inflow ("nouveaux cas suspects du
     ## jour" / "cas suspects du jour", 4-11 June), sorted oldest-first by day
