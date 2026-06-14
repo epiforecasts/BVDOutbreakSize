@@ -1954,11 +1954,16 @@ diagnostics_table( #hide
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
 # We forecast the two confirmed DRC streams (laboratory-confirmed cases and
-# confirmed deaths) as the forecast targets. The suspected reported cases and
-# deaths are no longer reported, so they are not shown as targets. Exports are
-# not forecast either, since cross-border travel is unlikely to continue at
-# its baseline rate, so the forward travel rate the export model relies on no
-# longer holds. The figure is shown in the
+# confirmed deaths) as the forecast targets, and also the isolation/treatment-
+# bed occupancy (the expected level of bed use a week ahead) and the
+# cumulative recovered total. The bed occupancy is a stock rather than a
+# cumulative count, but under the same exponential-growth continuation every
+# quantity, the stock included, grows by the horizon factor, so the projected
+# occupancy is the cut-off occupancy scaled by that factor. The suspected
+# reported cases and deaths are no longer reported, so they are not shown as
+# targets. Exports are not forecast either, since cross-border travel is
+# unlikely to continue at its baseline rate, so the forward travel rate the
+# export model relies on no longer holds. The figure is shown in the
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
 #
@@ -2778,6 +2783,11 @@ confirmed_cfr_fig #hide
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
 # The suspected reported cases and deaths are no longer reported, so they are
 # not shown as forecast targets.
+# The forecast also projects the isolation/treatment-bed occupancy (the
+# expected level of use a week ahead) and the cumulative recovered total.
+# The bed occupancy is a stock, so under the same exponential-growth
+# continuation it grows by the horizon factor like the inflow, and is
+# reported as the projected occupancy at $T + 7$ rather than a cumulative.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -2788,7 +2798,8 @@ forecast = forecast_reported(chn_joint;
     obs_cases = obs.reported_cases,
     obs_deaths = obs.total_deaths,
     obs_confirmed = obs.confirmed_cases,
-    obs_confirmed_deaths = obs.confirmed_deaths);
+    obs_confirmed_deaths = obs.confirmed_deaths,
+    obs_recovered = obs.recovered_cases);
 forecast_summary = forecast_table(forecast);
 
 #md # ```@raw html

@@ -40,6 +40,11 @@ Changes since v1.5.0.
   cases and deaths together over the one travel-gated at-risk prevalence. The
   single-stream comparison in the walkthrough now shows one joint "exports"
   fit instead of separate export-case and export-death fits.
+- The one-week-ahead forecast now also projects the isolation/treatment-bed
+  occupancy (the expected level of bed use a week ahead) and the cumulative
+  recovered total, each replicated with its own dispersion. The bed occupancy
+  is a stock, so it is reported as the projected occupancy at the horizon
+  rather than a cumulative.
 
 ### Data
 
