@@ -119,25 +119,24 @@ dates  = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07",
 values = [153, 119, 117, 94, 138, 119, 119, 168]
 source = "INSP situation reports 4-11 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitReps 025-028 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h): 153, 119, 117, 94, 138, 119, 119, 168 on 4-11 June. SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June."
 
-# Patients currently in isolation/hospitalisation: a daily STOCK (point
-# prevalence), not a cumulative count. This is the headline "Patients en
-# isolement - hospitalisation" figure on page 1 of the confirmed-based
-# SitReps (SitReps 018-028, 1-11 June), the count of patients (confirmed
-# plus suspected) physically in an isolation/treatment bed at the end of
-# the reporting day, cross-checked against the Tableau IV "Patients en
-# isolement (Fin J)" provincial totals. A patient enters the bed when
-# reported as a suspect and leaves on discharge (recovery, death or
-# rule-out), so the stock is the admission inflow convolved with a
-# length-of-stay survival rather than a cumulative sum. The model fits it
-# with the prevalence/length-of-stay observation submodel
-# (`treatment_admission_model`): the modelled occupancy is the BVD suspect
-# inflow (long sampled treatment stay) plus the non-BVD background inflow
-# (short fixed rule-out stay), so the bed occupancy is a BVD/background
-# mixture, dominated by the BVD-treatment component, and its day-by-day level
-# and lag identify the admission fraction and the treatment stay. It is
-# scored as a per-day count against the modelled occupancy on each report
-# day (never differenced), the same daily-anchor route the new-suspect
-# inflow uses. SitReps 016-017 (30-31 May) print a DIFFERENT column, "Cas
+# Patients currently in isolation/hospitalisation: a daily count of how many
+# patients are in a bed. This is the headline "Patients en isolement -
+# hospitalisation" figure on page 1 of the confirmed-based SitReps (SitReps
+# 018-028, 1-11 June), the count of patients (confirmed plus suspected)
+# physically in an isolation/treatment bed at the end of the reporting day,
+# cross-checked against the Tableau IV "Patients en isolement (Fin J)"
+# provincial totals. A patient enters the bed when reported as a suspect and
+# leaves on discharge (recovery, death or rule-out), so the count is the
+# admission inflow convolved with a length-of-stay survival. The model fits
+# it with the length-of-stay observation submodel
+# (`treatment_admission_model`): a proportion of the reported suspects are
+# admitted, the BVD ones staying for a sampled treatment length-of-stay and
+# the non-BVD ones leaving once their negative result returns (after the
+# report-to-receipt laboratory delay), so the bed count is a BVD/background
+# mixture and its day-by-day level and lag identify the admission proportion
+# and the treatment stay. It is scored as a per-day count against the
+# modelled count on each report day (never differenced), with its own
+# dispersion. SitReps 016-017 (30-31 May) print a DIFFERENT column, "Cas
 # suspects en isolement" (suspects only, 101 then 104), relabelled to the
 # all-patients "Patients en isolement" from SitRep 018; the two are not the
 # same quantity, so the fitted series begins 1 June (SitRep 018) where the

@@ -158,6 +158,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
         treatment = treatment_admission_model,
+        receipt = lab_delay_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model())
     latent ~ to_submodel(
@@ -169,9 +170,12 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
+    ## Report-to-receipt laboratory delay for the non-BVD rule-out stay (the
+    ## confirmed pipeline that supplies it in the joint is not run here).
+    receipt_state ~ to_submodel(receipt)
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, k))
+        cases_state.bg_daily, p_drc, receipt_state.pmf))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -410,13 +414,13 @@ death-confirmation probability (`death_confirmation`).
     ## survival into a daily stock (see [`treatment_admission_model`](@ref)).
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, k))
+        cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases, scaled by the recovery probability and lagged by
     ## a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(
         recovered(recovered_history, recovered_cases,
-        confirmed_state.confirmed_daily, k))
+        confirmed_state.confirmed_daily))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
@@ -474,9 +478,11 @@ death-confirmation probability (`death_confirmation`).
     expected_isolation_T := treatment_state.expected_isolation
     isolation_admission := treatment_state.p_iso
     isolation_bvd_los_mean := treatment_state.bvd_los_mean
+    isolation_dispersion := treatment_state.k_isolation
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean
+    recovered_dispersion := recovered_state.k_recovered
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma

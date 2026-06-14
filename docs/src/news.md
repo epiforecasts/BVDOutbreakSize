@@ -13,22 +13,25 @@ Changes since v1.5.0.
 ### Model
 
 - Added an isolation/treatment-bed occupancy stream ("Patients en
-  isolement"), the renewal analogue of EpiNow2's `estimate_secondary`
-  prevalence model.
-  The daily bed occupancy is a STOCK, fitted as the suspect inflow carried
-  through a length-of-stay survival rather than a cumulative sum: the
-  ascertained BVD inflow with a long sampled treatment stay plus the non-BVD
-  background inflow with a short fixed rule-out stay, so the bed occupancy is
-  a BVD/background mixture (dominated by the BVD-treatment component) whose
-  level and lag inform the admission fraction and the treatment stay.
-  Added `convolve_survival` (the prevalence analogue of `convolve_delay`),
-  the `treatment_admission_model` observation submodel, the
+  isolement"), the renewal analogue of the convolution-and-scaling
+  secondary-observation model of EpiNow2.
+  The daily bed count is fitted as the suspect inflow carried through a
+  length-of-stay survival: a proportion of reported suspects are admitted,
+  the BVD ones staying for a sampled treatment length-of-stay and the non-BVD
+  ones leaving once their negative result returns (after the report-to-receipt
+  laboratory delay), so the bed count is a BVD/background mixture whose level
+  and lag inform the admission proportion and the treatment stay. It carries
+  its own observation dispersion rather than sharing the surveillance
+  dispersion.
+  Added `convolve_survival` (the survival-weighted analogue of
+  `convolve_delay`), the `treatment_admission_model` observation submodel, the
   `isolation_admission_model` prior and the `treatment_only_model`
   single-stream composer.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
-  `estimate_secondary` incidence analogue: survivors among the modelled daily
-  confirmed cases, scaled by a recovery probability (the confirmed-case
-  survival fraction) and convolved with a confirmation-to-recovery delay.
+  secondary-observation incidence analogue: survivors among the modelled
+  daily confirmed cases, scaled by a recovery probability (the confirmed-case
+  survival fraction) and convolved with a confirmation-to-recovery delay, with
+  its own observation dispersion.
   The confirmed model now exposes one daily confirmed-case series
   (`confirmed_daily`) that both the recovered stream and the cumulative-
   confirmed trajectory reuse. Added the `recovered_model` submodel and the

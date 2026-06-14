@@ -15,7 +15,7 @@
     confirmed_daily = fill(8.0, 33)
     recovered_history = (; days = [30, 31, 32, 33], counts = [12, 19, 22, 30])
     chn = sample(
-        recovered_model(recovered_history, 30, confirmed_daily, 5.0),
+        recovered_model(recovered_history, 30, confirmed_daily),
         Prior(), 100;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -40,7 +40,7 @@ end
     confirmed_daily = fill(8.0, 33)
     recovered_history = (; days = [30, 31, 32, 33], counts = Int[])
     chn = sample(
-        recovered_model(recovered_history, missing, confirmed_daily, 5.0),
+        recovered_model(recovered_history, missing, confirmed_daily),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )
@@ -56,7 +56,7 @@ end
     confirmed_daily = fill(8.0, 33)
     chn = sample(
         recovered_model((; days = Int[], counts = Int[]), missing,
-            confirmed_daily, 5.0),
+            confirmed_daily),
         Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false
     )

@@ -1208,88 +1208,73 @@ carried by [`deaths_model`](@ref).
 end
 
 """
-DRC isolation / treatment-bed occupancy likelihood — a prevalence
-(length-of-stay) stream, the renewal analogue of EpiNow2's
-`estimate_secondary` prevalence model. The headline "Patients en isolement"
-count is a daily STOCK: patients (confirmed plus suspected) physically in an
-isolation/treatment bed at the end of the reporting day. A patient enters a
-bed when reported as a suspect and leaves on discharge (recovery, death or
-rule-out), so the occupancy is the admission INFLOW convolved with a
-length-of-stay survival `S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)),
-not a cumulative sum.
+DRC isolation / treatment-bed occupancy likelihood. The "Patients en
+isolement" figure is a daily count of how many patients are in an
+isolation/treatment bed. A patient enters a bed when reported as a suspect
+and leaves on discharge (recovery, death or rule-out), so the daily
+occupancy is the admission inflow convolved with a length-of-stay survival
+`S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)). This is the renewal
+analogue of the convolution-and-scaling secondary-observation model of
+EpiNow2 [epinow2](@cite), applied to a bed-occupancy (prevalence) signal.
 
-The inflow is the suspect pipeline from [`reported_cases_model`](@ref),
-itself a BVD/background MIXTURE, and the two components are kept separate
-because they leave the bed on very different clocks:
+A proportion `p_iso` of the reported suspects ([`reported_cases_model`](@ref))
+are admitted to a bed; the suspect pipeline is a BVD/background mixture and
+the two populations leave the bed on different clocks, so the occupancy is
+the sum of two survival convolutions sharing the one admission proportion:
 
-- BVD component: the ascertained BVD suspect inflow `p_drc · bvd_reports`,
-  thinned by a treatment-admission probability `p_iso`
-  ([`isolation_admission_model`](@ref)) and convolved with a LONG treatment
-  length-of-stay (sampled) — a confirmed case occupies a bed until recovery
-  or death.
-- Background component: the non-BVD background inflow `bg_daily`, convolved
-  with a SHORT rule-out length-of-stay — a non-BVD suspect is isolated on
-  report and discharged once excluded. Its length-of-stay is a FIXED short
-  delay rather than a sampled one, and it carries no separate admission
-  probability: the background occupancy is a small, `λ_bg`-driven minority of
-  the bed (`λ_bg` is an informative-prior quantity shared with the case
-  stream), so its stay and admission fraction are not identifiable from ~11
-  daily points and would only track their priors.
+- BVD admissions `p_iso · p_drc · bvd_reports` stay for a sampled treatment
+  length-of-stay — a confirmed case occupies a bed until recovery or death.
+- non-BVD admissions `p_iso · bg_daily` leave once their negative result
+  returns, so their length-of-stay is the report-to-receipt laboratory delay
+  `receipt_pmf` (shared from [`confirmed_cases_model`](@ref)) rather than a
+  separate sampled stay.
 
-The modelled occupancy is the sum, so the bed occupancy is a BVD/background
-mixture, dominated by the BVD-treatment component, whose level and
-day-to-day shape inform the admission fraction `p_iso` and the BVD treatment
-stay. The exposed `isolation_bvd_share` is the fraction of the modelled bed
-that is true BVD (BVD-confirmed plus BVD-suspect); it is NOT the report's
-"dont confirmés / dont suspects" split, since most of the report's
-"suspects in isolation" are true BVD cases awaiting confirmation and so sit
-in the BVD component, not the non-BVD background. Each observed day's count
-is scored against the modelled occupancy on that day with a NegativeBinomial
-sharing the surveillance dispersion `k` (a single-day stock, never a
-between-vintage increment), mirroring the daily-anchor route of the
-new-suspect inflow. Empty by default; a `missing` count vector samples (the
-predictive path).
-
-The BVD treatment length-of-stay is injected (default mean 12 d); the
-background rule-out stay is a fixed short delay (default mean 2.5 d).
-Returns the admission probability, the BVD stay mean, the daily occupancy
-and its BVD/background split for reuse and posterior-predictive replication.
+Each observed day's count is scored against the modelled occupancy on that
+day with a NegativeBinomial whose dispersion `k` is sampled here, NOT shared
+with the other streams (the isolation signal has its own observation noise).
+The exposed `isolation_bvd_share` is the fraction of the modelled bed that is
+true BVD (BVD-confirmed plus BVD-suspect); it is not the report's "dont
+confirmés / dont suspects" split, since most of the report's "suspects in
+isolation" are true BVD cases awaiting confirmation and so sit in the BVD
+component. Empty by default; a `missing` count vector samples (the
+predictive path). Returns the admission proportion, the BVD stay mean, the
+dispersion, the daily occupancy and its BVD/background split for reuse and
+posterior-predictive replication.
 """
 @model function treatment_admission_model(
         isolation_history,
         bvd_reports_daily::AbstractVector,
         bg_daily::AbstractVector,
-        p_drc::Real, k::Real;
+        p_drc::Real, receipt_pmf::AbstractVector;
         admission = isolation_admission_model(),
-        ## Long, sampled BVD treatment stay. The truncation covers the 99th
+        dispersion = surveillance_dispersion_model(),
+        ## Sampled BVD treatment stay. The truncation covers the 99th
         ## percentile of the prior-centre distribution (a longer reach than
         ## the 98% default) so the long-stay survival tail is not clipped.
         bvd_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(12.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
-        ## Fixed short rule-out stay: not sampled, since the background
-        ## occupancy it shapes is a `λ_bg`-driven minority of the bed and its
-        ## stay is unidentifiable from the daily occupancy.
-        background_los_pmf = discretise_censored(
-            lognormal_meansd(2.5, 2.0),
-            cdf_nmax(lognormal_meansd(2.5, 2.0))))
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
+    disp_state ~ to_submodel(dispersion)
+    k = disp_state.k
     bvd_los_state ~ to_submodel(bvd_los)
 
-    ## BVD-treatment occupancy (long sampled stay) plus non-BVD rule-out
-    ## occupancy (fixed short stay): the bed occupancy is the BVD/background
-    ## mixture, dominated by the BVD-treatment component.
+    ## A proportion `p_iso` of both BVD and non-BVD suspects are admitted. BVD
+    ## patients stay for the sampled treatment length-of-stay; non-BVD
+    ## suspects leave once their negative result returns, after the
+    ## report-to-receipt laboratory delay.
     bvd_admissions = p_iso .* p_drc .* bvd_reports_daily
+    bg_admissions = p_iso .* bg_daily
     occupancy_bvd = convolve_survival(bvd_admissions, bvd_los_state.pmf)
-    occupancy_bg = convolve_survival(bg_daily, background_los_pmf)
+    occupancy_bg = convolve_survival(bg_admissions, receipt_pmf)
     occupancy = occupancy_bvd .+ occupancy_bg
 
-    ## Per-day stock scored against the modelled occupancy on each report
-    ## day (a single-day mean, NOT a between-vintage increment). Day indices
-    ## are clamped into the grid. Empty history is a no-op; a `missing`
-    ## count vector samples (the predictive path).
+    ## Each report day's count scored against the modelled occupancy on that
+    ## day (a single-day mean). Day indices are clamped into the grid. Empty
+    ## history is a no-op; a `missing` count vector samples (the predictive
+    ## path).
     n = length(bvd_reports_daily)
     iso_days = isolation_history.days
     iso_modelled = [occupancy[clamp(Int(d), 1, n)] for d in iso_days]
@@ -1306,16 +1291,17 @@ and its BVD/background split for reuse and posterior-predictive replication.
     expected_isolation := safe_rate(occ_T)
     isolation_bvd_share := safe_rate(occ_bvd_T) / safe_rate(occ_T)
 
-    return (; p_iso, bvd_los_mean = bvd_los_state.mean, occupancy,
-        occupancy_bvd, occupancy_bg, expected_isolation)
+    return (; p_iso, bvd_los_mean = bvd_los_state.mean, k_isolation = k,
+        occupancy, occupancy_bvd, occupancy_bg, expected_isolation)
 end
 
 """
 DRC recovered-among-confirmed likelihood ("cumul guéris"), an incidence
-(scaled-convolution) stream — the renewal analogue of EpiNow2's
-`estimate_secondary` incidence model. Recoveries are the survivors among
-laboratory-confirmed cases: the modelled daily confirmed-case incidence
-`confirmed_daily` (from [`confirmed_cases_model`](@ref)) is scaled by the
+(scaled-convolution) stream — the renewal analogue of the convolution-and-
+scaling secondary-observation model of EpiNow2 [epinow2](@cite). Recoveries
+are the survivors among laboratory-confirmed cases: the modelled daily
+confirmed-case incidence `confirmed_daily` (from
+[`confirmed_cases_model`](@ref)) is scaled by the
 recovery probability `p_recover` (the confirmed-case survival fraction,
 [`recovery_probability_model`](@ref)) and convolved with a sampled
 confirmation-to-recovery delay,
@@ -1326,20 +1312,22 @@ confirmation-to-recovery delay,
 ```
 
 The cumulative recovered series ends at the cut-off, so its between-vintage
-increments are scored as observed `~` data with a NegativeBinomial sharing
-the surveillance dispersion `k` (the same per-vintage route as the confirmed
-and confirmed-death streams). The convolution right-censors recoveries that
-have not yet resolved by the cut-off, so a small observed recovered count is
-consistent with a high eventual survival fraction and a long recovery delay.
-Empty by default; a `missing` cut-off total leaves the increments missing
-(the predictive-generator path). Returns the recovery probability, the
-recovery-delay mean, the daily recovered series and the cut-off total.
+increments are scored as observed `~` data with a NegativeBinomial whose
+dispersion is sampled here, NOT shared with the other streams (the recovered
+signal has its own observation noise). The convolution right-censors
+recoveries that have not yet resolved by the cut-off, so a small observed
+recovered count is consistent with a high eventual survival fraction and a
+long recovery delay. Empty by default; a `missing` cut-off total leaves the
+increments missing (the predictive-generator path). Returns the recovery
+probability, the recovery-delay mean, the dispersion, the daily recovered
+series and the cut-off total.
 """
 @model function recovered_model(
         recovered_history,
         recovered_total::Union{Missing, Integer},
-        confirmed_daily::AbstractVector, k::Real;
+        confirmed_daily::AbstractVector;
         recovery = recovery_probability_model(),
+        dispersion = surveillance_dispersion_model(),
         ## Confirmation-to-recovery (discharge) delay; an Ebola survivor is
         ## discharged a couple of weeks after confirmation, so the default is
         ## a mean ~14 d stay before recovery is recorded.
@@ -1349,6 +1337,8 @@ recovery-delay mean, the daily recovered series and the cut-off total.
             sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
     rec_state ~ to_submodel(recovery)
     p_recover = rec_state.p_recover
+    disp_state ~ to_submodel(dispersion)
+    k = disp_state.k
     delay_state ~ to_submodel(confirmation_to_recovery)
 
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
@@ -1365,5 +1355,5 @@ recovery-delay mean, the daily recovered series and the cut-off total.
     expected_recovered := safe_rate(sum(recovered_daily))
 
     return (; p_recover, recovery_delay_mean = delay_state.mean,
-        recovered_daily, expected_recovered)
+        k_recovered = k, recovered_daily, expected_recovered)
 end

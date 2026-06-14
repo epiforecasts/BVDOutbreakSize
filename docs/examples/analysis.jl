@@ -220,9 +220,8 @@ Random.seed!(20260518)
 # incidence where the cumulative series stops. The confirmed-based reports
 # also publish a daily "Patients en isolement" count, the number of patients
 # (confirmed plus suspected) in an isolation/treatment bed at the end of the
-# day; this is a STOCK, not a cumulative total, so we fit it as the suspect
-# inflow carried through a length-of-stay survival into a daily bed
-# occupancy (the prevalence analogue of the incidence streams). The fitted
+# day; we fit it as the suspect inflow carried through a length-of-stay
+# survival into a daily bed count. The fitted
 # series runs from 1 June (SitRep 018), where the column is relabelled to the
 # all-patients "Patients en isolement - hospitalisation"; the narrower
 # suspects-only count in SitReps 016-017 is a different quantity and is left
@@ -316,10 +315,9 @@ observations_table #hide
 # is a per-day new-suspect count (not a cumulative total), fitted directly
 # as a daily incidence, and it picks up where the cumulative
 # `suspected_cases` column freezes on 26 May. `patients_isolated` is a
-# daily STOCK (point prevalence of patients in an isolation/treatment bed),
-# fitted as the suspect inflow carried through a length-of-stay survival
-# rather than as a cumulative sum. See `data/observations.toml` for the
-# per-stream sources.
+# daily count of patients in an isolation/treatment bed, fitted as the
+# suspect inflow carried through a length-of-stay survival. See
+# `data/observations.toml` for the per-stream sources.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>
@@ -1205,42 +1203,38 @@ cfr_prior_fig #hide
 
 # ##### Isolation occupancy
 #
-# The "Patients en isolement" count is a daily STOCK: the number of patients
-# in an isolation/treatment bed at the end of the report day (the renewal
-# analogue of EpiNow2's `estimate_secondary` prevalence model). A patient
-# enters a bed when reported as a suspect and leaves on discharge, so the
-# occupancy is the admission inflow convolved with a length-of-stay survival
-# $S(\tau) = P(\text{LOS} \ge \tau)$ (with $S(0) = 1$, the reverse-cumulative
-# tail sum of the length-of-stay PMF) rather than a cumulative sum. The bed
-# holds a BVD/background mixture, and the two populations leave on different
-# clocks, so the occupancy is the sum of two survival convolutions: the
-# ascertained BVD inflow thinned by a treatment-admission probability
-# $p_{\text{iso}}$ with a long, sampled treatment stay $S_{\text{BVD}}$, and
-# the non-BVD background inflow with a short, fixed rule-out stay
-# $S_{\text{bg}}$,
+# The "Patients en isolement" figure is a daily count of how many patients
+# are in an isolation/treatment bed. A patient enters a bed when reported as
+# a suspect and leaves on discharge, so the count is the admission inflow
+# convolved with a length-of-stay survival $S(\tau) = P(\text{LOS} \ge \tau)$
+# (with $S(0) = 1$). This is the renewal analogue of the convolution-and-
+# scaling secondary-observation model of EpiNow2 [epinow2](@cite), applied to
+# a bed-occupancy signal. A proportion $p_{\text{iso}}$ of the reported
+# suspects are admitted; the suspects are a BVD/background mixture that leaves
+# the bed on different clocks, so the count is the sum of two survival
+# convolutions sharing the one admission proportion: the BVD admissions stay
+# for a sampled treatment length-of-stay $S_{\text{BVD}}$, and the non-BVD
+# admissions leave once their negative result returns, after the
+# report-to-receipt laboratory delay $S_{\text{rec}}$,
 #
 # ```math
-# O_t = p_{\text{iso}} \sum_{s \ge 0} p_{\text{DRC}}\, \text{bvd}_{t-s}\,
-#       S_{\text{BVD}}(s) + \sum_{s \ge 0} \lambda_{\text{bg},\,t-s}\,
-#       S_{\text{bg}}(s).
+# O_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
+#       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
+#       \lambda_{\text{bg},\,t-s}\, S_{\text{rec}}(s) \right].
 # ```
 #
-# It is a per-day stock, not a cumulative total, so each report day's count
-# $O_j$ is scored against the modelled occupancy on that day directly (a
-# single-day mean, not a between-vintage sum) with a NegBinomial sharing $k$:
+# Each report day's count $O_j$ is scored against the modelled count on that
+# day directly (a single-day mean) with a NegBinomial whose dispersion is its
+# own, not shared with the other streams:
 #
 # ```math
-# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k).
+# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k_{\text{iso}}).
 # ```
 #
-# The occupancy is dominated by the BVD-treatment component (the background
-# is a small $\lambda_{\text{bg}}$-driven minority with a fixed stay), so the
-# daily series informs the admission fraction $p_{\text{iso}}$ and the BVD
-# treatment stay. The exposed BVD share of the bed is the true-BVD fraction
-# (BVD-confirmed plus BVD-suspect), not the report's confirmed/suspect split,
-# since most "suspects in isolation" are true BVD cases awaiting
-# confirmation. The fitted series is the all-patients column from 1 June
-# (SitRep 018) onward.
+# The exposed BVD share of the bed is the true-BVD fraction (BVD-confirmed
+# plus BVD-suspect), not the report's confirmed/suspect split, since most
+# "suspects in isolation" are true BVD cases awaiting confirmation. The
+# fitted series is the all-patients column from 1 June (SitRep 018) onward.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_admission_model</summary>
@@ -1251,7 +1245,7 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.treatment_admission_model(
 #md #         (; days = Int[], counts = Int[]),
-#md #         Float64[], Float64[], 0.25, 1.0)), "\n```"))
+#md #         Float64[], Float64[], 0.25, [1.0])), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1469,12 +1463,13 @@ cfr_prior_fig #hide
 # ```
 #
 # The cumulative recovered series ends at the cut-off, so its per-vintage
-# increments are scored with a NegBinomial sharing $k$, the same route as the
-# confirmed and confirmed-death streams:
+# increments are scored, like the confirmed and confirmed-death streams, with
+# a NegBinomial whose dispersion $k_{\text{rec}}$ is its own rather than
+# shared with the other streams:
 #
 # ```math
 # Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{recovered}_t,\ k\Bigr).
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{recovered}_t,\ k_{\text{rec}}\Bigr).
 # ```
 #
 # The convolution right-censors recoveries that have not yet resolved by the
@@ -1490,7 +1485,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.recovered_model(
-#md #         (; days = Int[], counts = Int[]), missing, Float64[], 1.0)),
+#md #         (; days = Int[], counts = Int[]), missing, Float64[])),
 #md #     "\n```"))
 #md # ```
 
@@ -2498,12 +2493,11 @@ suspected_daily_panel = (;
         pp_joint, "cases_state.suspected_daily"),
     observed = obs.suspected_daily_history.counts,
     colour = :slateblue, cumulative = false);
-## Isolation/treatment-bed occupancy: a daily STOCK (point prevalence), so
-## the panel is drawn with `cumulative = false` — each replicate is the
-## modelled bed occupancy on a report day against the observed "Patients en
-## isolement" count, never a cumulative sum. The occupancy is the suspect
-## inflow carried through a length-of-stay survival, so its level and lag
-## reflect the admission fraction and the BVD/background stays.
+## Isolation/treatment-bed occupancy: a daily count, so the panel is drawn
+## with `cumulative = false` — each replicate is the modelled bed count on a
+## report day against the observed "Patients en isolement" count. The count
+## is the suspect inflow carried through a length-of-stay survival, so its
+## level and lag reflect the admission proportion and the stays.
 isolation_panel = (;
     title = "Patients in isolation",
     dates = _vintage_dates(obs.isolation_history.days),
