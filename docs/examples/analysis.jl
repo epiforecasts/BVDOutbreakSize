@@ -217,8 +217,16 @@ Random.seed!(20260518)
 # it at its last stable vintage (26 May) and instead read the daily
 # new-suspect count ("nouveaux cas suspects du jour") that the
 # confirmed-based reports publish from 4 June, fitting it as a daily
-# incidence where the cumulative series stops. We extracted these figures
-# from the
+# incidence where the cumulative series stops. The confirmed-based reports
+# also publish a daily "Patients en isolement" count, the number of patients
+# (confirmed plus suspected) in an isolation/treatment bed at the end of the
+# day; this is a STOCK, not a cumulative total, so we fit it as the suspect
+# inflow carried through a length-of-stay survival into a daily bed
+# occupancy (the prevalence analogue of the incidence streams). The fitted
+# series runs from 1 June (SitRep 018), where the column is relabelled to the
+# all-patients "Patients en isolement - hospitalisation"; the narrower
+# suspects-only count in SitReps 016-017 is a different quantity and is left
+# out. We extracted these figures from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
 # re-read them, rather than the published per-zone CSVs. The zone sums in
@@ -300,11 +308,14 @@ observations_table #hide
 # The per-date cumulative history of the DRC situation-report streams,
 # the national totals at each report date. The joint model fits the
 # between-report increments of these series, so a single date reduces to
-# the cut-off total. The `suspected_new_daily` column is the exception: it
+# the cut-off total. Two columns are the exception. `suspected_new_daily`
 # is a per-day new-suspect count (not a cumulative total), fitted directly
 # as a daily incidence, and it picks up where the cumulative
-# `suspected_cases` column freezes on 26 May. See `data/observations.toml`
-# for the per-stream sources.
+# `suspected_cases` column freezes on 26 May. `patients_isolated` is a
+# daily STOCK (point prevalence of patients in an isolation/treatment bed),
+# fitted as the suspect inflow carried through a length-of-stay survival
+# rather than as a cumulative sum. See `data/observations.toml` for the
+# per-stream sources.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>
@@ -317,6 +328,7 @@ vintage_table = let
     streams = (
         suspected_cases = bydate(obs.reported_history),
         suspected_new_daily = bydate(obs.suspected_daily_history),
+        patients_isolated = bydate(obs.isolation_history),
         suspected_deaths = bydate(obs.deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
@@ -329,6 +341,7 @@ vintage_table = let
         date = dates,
         suspected_cases = at(streams.suspected_cases),
         suspected_new_daily = at(streams.suspected_new_daily),
+        patients_isolated = at(streams.patients_isolated),
         suspected_deaths = at(streams.suspected_deaths),
         confirmed_cases = at(streams.confirmed_cases),
         confirmed_deaths = at(streams.confirmed_deaths),
@@ -1184,6 +1197,56 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ##### Isolation occupancy
+#
+# The "Patients en isolement" count is a daily STOCK: the number of patients
+# in an isolation/treatment bed at the end of the report day (the renewal
+# analogue of EpiNow2's `estimate_secondary` prevalence model). A patient
+# enters a bed when reported as a suspect and leaves on discharge, so the
+# occupancy is the admission inflow convolved with a length-of-stay survival
+# $S(\tau) = P(\text{LOS} \ge \tau)$ (with $S(0) = 1$, the reverse-cumulative
+# tail sum of the length-of-stay PMF) rather than a cumulative sum. The bed
+# holds a BVD/background mixture, and the two populations leave on different
+# clocks, so the occupancy is the sum of two survival convolutions: the
+# ascertained BVD inflow thinned by a treatment-admission probability
+# $p_{\text{iso}}$ with a long treatment stay $S_{\text{BVD}}$, and the
+# non-BVD background inflow with a short rule-out stay $S_{\text{bg}}$,
+#
+# ```math
+# O_t = p_{\text{iso}} \sum_{s \ge 0} p_{\text{DRC}}\, \text{bvd}_{t-s}\,
+#       S_{\text{BVD}}(s) + \sum_{s \ge 0} \lambda_{\text{bg},\,t-s}\,
+#       S_{\text{bg}}(s).
+# ```
+#
+# It is a per-day stock, not a cumulative total, so each report day's count
+# $O_j$ is scored against the modelled occupancy on that day directly (a
+# single-day mean, not a between-vintage sum) with a NegBinomial sharing $k$:
+#
+# ```math
+# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k).
+# ```
+#
+# The bed occupancy mixes BVD and background, so its level and lag inform the
+# admission fraction and the two stays, and the BVD share of the bed feeds
+# back weakly to $p_{\text{DRC}}$ and $\lambda_{\text{bg}}$. The fitted series
+# is the all-patients column from 1 June (SitRep 018) onward.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: treatment_admission_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.treatment_admission_model(
+#md #         (; days = Int[], counts = Int[]),
+#md #         Float64[], Float64[], 0.25, 1.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Suspected deaths
 #
 # Suspected deaths are the CFR-weighted convolution of the daily onsets with
@@ -1674,6 +1737,7 @@ chn_exports_deaths = fit_parallel([
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
+        isolation_history = obs.isolation_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
@@ -2284,19 +2348,20 @@ surveillance_pair_fig #hide
 # checked against data here.
 # The second is the surveillance data, the dated DRC streams that are real
 # per-vintage observations: cumulative suspected cases, the daily new-suspect
-# inflow, confirmed cases, suspected deaths, confirmed deaths and specimens
-# analysed.
+# inflow, the daily isolation-bed occupancy, confirmed cases, suspected
+# deaths, confirmed deaths and specimens analysed.
 # The third is the exports, the cross-border imported cases and deaths
 # detected in Uganda.
 #
 # The surveillance group is checked first.
 # Each panel is shown over its own reporting dates with the observed series
 # overlaid: the cumulative streams as replicated cumulative trajectories, and
-# the daily new-suspect inflow on a daily scale (each day's replicated count
-# against the observed count). The cumulative suspected case and death streams
-# stop at their last stable vintage on 26 May; the daily new-suspect inflow
-# then runs 4-10 June, where the cumulative suspected series freezes; and the
-# laboratory-confirmed streams keep reporting to the cut-off.
+# the daily new-suspect inflow and the daily isolation-bed occupancy on a
+# daily scale (each day's replicated count against the observed count). The
+# cumulative suspected case and death streams stop at their last stable
+# vintage on 26 May; the daily new-suspect inflow then runs 4-11 June, where
+# the cumulative suspected series freezes, and the isolation occupancy runs
+# 1-11 June; the laboratory-confirmed streams keep reporting to the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2318,6 +2383,7 @@ pp_joint = predict(
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
         suspected_daily_history = _days_only(obs.suspected_daily_history),
+        isolation_history = _days_only(obs.isolation_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
@@ -2364,6 +2430,19 @@ suspected_daily_panel = (;
         pp_joint, "cases_state.suspected_daily"),
     observed = obs.suspected_daily_history.counts,
     colour = :slateblue, cumulative = false);
+## Isolation/treatment-bed occupancy: a daily STOCK (point prevalence), so
+## the panel is drawn with `cumulative = false` — each replicate is the
+## modelled bed occupancy on a report day against the observed "Patients en
+## isolement" count, never a cumulative sum. The occupancy is the suspect
+## inflow carried through a length-of-stay survival, so its level and lag
+## reflect the admission fraction and the BVD/background stays.
+isolation_panel = (;
+    title = "Patients in isolation",
+    dates = _vintage_dates(obs.isolation_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "treatment_state.isolation"),
+    observed = obs.isolation_history.counts,
+    colour = :darkorange, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -2445,8 +2524,8 @@ confirmed_deaths_panel = (;
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, suspected_daily_panel, confirmed_panel, deaths_panel,
-    confirmed_deaths_panel, tests_analysed_panel,
+    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+    deaths_panel, confirmed_deaths_panel, tests_analysed_panel,
     tests_analysed_daily_panel]);
 
 #md # ```@raw html
@@ -3113,6 +3192,7 @@ function refit_joint_variant(;
             lab_history = obs.lab_history,
             lab_daily_history = obs.lab_daily_history,
             suspected_daily_history = obs.suspected_daily_history,
+            isolation_history = obs.isolation_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,

@@ -6,6 +6,35 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+### Model
+
+- Added an isolation/treatment-bed occupancy stream ("Patients en
+  isolement"), the renewal analogue of EpiNow2's `estimate_secondary`
+  prevalence model.
+  The daily bed occupancy is a STOCK, fitted as the suspect inflow carried
+  through a length-of-stay survival rather than a cumulative sum: the
+  ascertained BVD inflow with a long treatment stay plus the non-BVD
+  background inflow with a short rule-out stay, so the bed occupancy is a
+  BVD/background mixture whose level and lag inform the admission fraction
+  and the two stays.
+  Added `convolve_survival` (the prevalence analogue of `convolve_delay`),
+  the `treatment_admission_model` observation submodel, the
+  `isolation_admission_model` prior and the `treatment_only_model`
+  single-stream composer.
+
+### Data
+
+- Added the daily "Patients en isolement" occupancy for 1-11 June (SitReps
+  018-028) as a structured `patients_isolated` column and the
+  `[isolation_history]` manifest block.
+  The fitted series begins 1 June where the all-patients column definition
+  is stable; the narrower suspects-only count in SitReps 016-017 is a
+  different quantity and is excluded.
+  Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the
+  173 the note claimed).
+
 ## v1.5.0
 
 Changes since v1.4.0.
