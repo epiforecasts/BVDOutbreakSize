@@ -1204,6 +1204,7 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
         bg_death_daily::AbstractVector, k::Real;
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         receipt_pmf::AbstractVector = [1.0],
+        capacity_start::Integer = 0,
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model())
@@ -1213,6 +1214,7 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
     τ_death = test_state.τ_death
     s = sens_state.s_test
     spec = spec_state.spec
+    n = length(deaths_daily)
 
     ## Specimens carried from the death event to laboratory receipt by the same
     ## report-to-receipt delay the confirmed cases use, for the suspected-death
@@ -1227,7 +1229,22 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
             analysed_susp_death)
         analysed_bvd_death = convert(Vector{typeof(τ_death)}, analysed_bvd_death)
     end
-    n = length(deaths_daily)
+    ## Gate the death laboratory CAPACITY to the testing window: no deaths are
+    ## confirmed before testing began, so the death "analysed" volume is zeroed
+    ## before `capacity_start` (the case testing onset, passed from the joint).
+    ## The suspected-death series feeding it is NOT gated — suspected deaths did
+    ## accumulate over the cryptic phase. `capacity_start ≤ 1` leaves it ungated
+    ## (the single-stream composer default). This mirrors the confirmed-case
+    ## analysed-volume gating; a shared helper is intentionally avoided so the
+    ## death stream stays independent of the confirmed-case capacity change.
+    cap = clamp(Int(capacity_start), 1, n)
+    if cap > 1
+        Td = eltype(analysed_susp_death)
+        analysed_susp_death = Td[i < cap ? zero(Td) : analysed_susp_death[i]
+                                 for i in eachindex(analysed_susp_death)]
+        analysed_bvd_death = Td[i < cap ? zero(Td) : analysed_bvd_death[i]
+                                for i in eachindex(analysed_bvd_death)]
+    end
 
     ## Death-pool BVD composition per day, `q = bvd / (bvd + bg)`, and the assay
     ## tested-positive probability `p = s·q + (1−spec)(1−q)`. The `(1−spec)(1−q)`

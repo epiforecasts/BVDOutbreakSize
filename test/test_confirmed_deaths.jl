@@ -95,6 +95,28 @@ end
     @test sd.expected_confirmed_deaths ≈ (35 / 40) * sb.expected_confirmed_deaths rtol=1e-6
 end
 
+@testitem "confirmed_deaths_model gates the capacity before the testing onset" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## No deaths are confirmed before testing began: with a flat death series,
+    ## gating the death "analysed" volume at day 21 of 40 zeroes the first 20
+    ## days, so the expected confirmed deaths fall to 20/40 of the ungated total.
+    ## The default `capacity_start = 0` leaves it ungated.
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    seed = 4
+    ung = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
+    gat = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; capacity_start = 21)
+    su = returned(ung, rand(MersenneTwister(seed), ung))
+    sg = returned(gat, rand(MersenneTwister(seed), gat))
+    @test sg.expected_confirmed_deaths < su.expected_confirmed_deaths
+    @test sg.expected_confirmed_deaths ≈ (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
+end
+
 @testitem "confirmed_deaths_only_model conditions and stays finite" begin
     using BVDOutbreakSize: confirmed_deaths_only_model
     using Turing.DynamicPPL: logjoint

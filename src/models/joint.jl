@@ -364,12 +364,18 @@ death-confirmation positivity (`death_confirmation`).
     ## "analysed" volume (suspected deaths carried to receipt by the confirmed
     ## cases' `receipt_pmf`, thinned by `τ_death`) scored through a death-pool
     ## composition positivity. Self-contained — it takes the death series'
-    ## own BVD and background components, not the case-pool composition.
+    ## own BVD and background components, not the case-pool composition. The
+    ## death capacity is gated to the same testing onset as the confirmed cases
+    ## (the first confirmed-case vintage), so no deaths are confirmed before
+    ## testing existed.
+    cap_start = isempty(confirmed_history.days) ? 0 :
+                Int(confirmed_history.days[1])
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
-        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        capacity_start = cap_start))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
