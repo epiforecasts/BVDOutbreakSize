@@ -149,6 +149,25 @@ dates  = ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04",
 values = [173, 206, 233, 258, 267, 283, 309, 297, 260, 262, 315]
 source = "INSP situation reports 1-11 June 2026 (SitReps 018-028) page-1 headline `Patients en isolement - hospitalisation`, read from the PDFs and cross-checked against the Tableau IV `Patients en isolement (Fin J)` provincial totals; recorded in the patients_isolated column of data/insp_sitrep_scanned.csv. Daily isolation/hospitalisation occupancy (stock): 173, 206, 233, 258, 267, 283, 309, 297, 260, 262, 315 on 1-11 June. SitReps 016-017 (30-31 May) report the narrower `Cas suspects en isolement` (suspects only, 101, 104), a different quantity, so the all-patients series begins 1 June."
 
+# Cumulative recovered among laboratory-confirmed cases ("cumul guéris"):
+# the running total of confirmed cases recorded as recovered/discharged,
+# printed on page 1 of the confirmed-based SitReps from 6 June (SitReps
+# 023-028). This is a CUMULATIVE count (non-decreasing), fitted as survivors
+# among the modelled confirmed cases: the daily confirmed incidence scaled by
+# a recovery probability (the confirmed-case survival fraction) and convolved
+# with a confirmation-to-recovery delay, an estimate_secondary incidence
+# stream (`recovered_model`). Its between-vintage increments are scored like
+# the confirmed and confirmed-death series. The confirmation-to-recovery
+# convolution right-censors recoveries not yet resolved by the cut-off, so the
+# small observed totals (12 -> 32 over 6-11 June) are consistent with a high
+# eventual survival fraction. SitReps 021-022 (4-5 June) do not yet print a
+# cumul guéris total, so the series begins 6 June.
+[recovered_history]
+dates  = ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09",
+          "2026-06-10", "2026-06-11"]
+values = [12, 19, 22, 30, 32, 32]
+source = "INSP situation reports 6-11 June 2026 (SitReps 023-028) page-1 headline `Cumul guéris`, read from the PDFs; recorded in the cumul_recovered column of data/insp_sitrep_scanned.csv. Cumulative recovered among confirmed cases: 12, 19, 22, 30, 32, 32 on 6-11 June. SitReps 021-022 (4-5 June) do not print a cumul guéris total, so the series begins 6 June."
+
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
 # `cumulative_tests_analysed`) are derived from the final vintage of the

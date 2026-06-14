@@ -226,7 +226,11 @@ Random.seed!(20260518)
 # series runs from 1 June (SitRep 018), where the column is relabelled to the
 # all-patients "Patients en isolement - hospitalisation"; the narrower
 # suspects-only count in SitReps 016-017 is a different quantity and is left
-# out. We extracted these figures from the
+# out. The reports also print a cumulative "cumul guéris" total of confirmed
+# cases recorded as recovered, from 6 June; we fit it as survivors among the
+# modelled confirmed cases (a scaled confirmation-to-recovery convolution,
+# the incidence analogue of the isolation prevalence stream). We extracted
+# these figures from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
 # re-read them, rather than the published per-zone CSVs. The zone sums in
@@ -332,6 +336,7 @@ vintage_table = let
         suspected_deaths = bydate(obs.deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
+        recovered_confirmed = bydate(obs.recovered_history),
         specimens_received = bydate(obs.tests_received_history),
         specimens_analysed = bydate(obs.lab_history)
     )
@@ -345,6 +350,7 @@ vintage_table = let
         suspected_deaths = at(streams.suspected_deaths),
         confirmed_cases = at(streams.confirmed_cases),
         confirmed_deaths = at(streams.confirmed_deaths),
+        recovered_confirmed = at(streams.recovered_confirmed),
         specimens_received = at(streams.specimens_received),
         specimens_analysed = at(streams.specimens_analysed)
     )
@@ -1445,6 +1451,53 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ##### Recovered among confirmed
+#
+# Recoveries ("cumul guéris") are the survivors among laboratory-confirmed
+# cases (the renewal analogue of EpiNow2's `estimate_secondary` incidence
+# model). The modelled daily confirmed incidence
+# $\text{confirmed}_t$ (the per-window tested-positive probability on the
+# modelled analysed volume, the same daily series the cumulative-confirmed
+# trajectory uses) is scaled by the recovery probability $p_{\text{rec}}$ —
+# the confirmed-case survival fraction, complement of the confirmed
+# case-fatality ratio — and convolved with a sampled confirmation-to-recovery
+# delay $f_{\text{rec}}$,
+#
+# ```math
+# \text{recovered}_t = p_{\text{rec}} \sum_{s \ge 0}
+#     \text{confirmed}_{t-s}\, f_{\text{rec},s}.
+# ```
+#
+# The cumulative recovered series ends at the cut-off, so its per-vintage
+# increments are scored with a NegBinomial sharing $k$, the same route as the
+# confirmed and confirmed-death streams:
+#
+# ```math
+# Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{recovered}_t,\ k\Bigr).
+# ```
+#
+# The convolution right-censors recoveries that have not yet resolved by the
+# cut-off, so the small observed totals (12 to 32 over 6-11 June) are
+# consistent with a high eventual survival fraction and a multi-week recovery
+# delay.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: recovered_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.recovered_model(
+#md #         (; days = Int[], counts = Int[]), missing, Float64[], 1.0)),
+#md #     "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Exported cases
 #
 # The exports stream is travel-gated, so the at-risk clock runs from
@@ -1736,6 +1789,7 @@ chn_treatment = fit_parallel([
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
         obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
+        recovered_cases = obs.recovered_cases,
         deaths_history = obs.deaths_history,
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
@@ -1744,6 +1798,7 @@ chn_treatment = fit_parallel([
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
         isolation_history = obs.isolation_history,
+        recovered_history = obs.recovered_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
@@ -2360,7 +2415,7 @@ surveillance_pair_fig #hide
 # The second is the surveillance data, the dated DRC streams that are real
 # per-vintage observations: cumulative suspected cases, the daily new-suspect
 # inflow, the daily isolation-bed occupancy, confirmed cases, suspected
-# deaths, confirmed deaths and specimens analysed.
+# deaths, confirmed deaths, recovered-among-confirmed and specimens analysed.
 # The third is the exports, the cross-border imported cases and deaths
 # detected in Uganda.
 #
@@ -2391,10 +2446,12 @@ pp_joint = predict(
     bvd_joint(
         obs.n, missing, missing, missing, missing, missing, missing;
         confirmed_deaths = missing,
+        recovered_cases = missing,
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
         suspected_daily_history = _days_only(obs.suspected_daily_history),
         isolation_history = _days_only(obs.isolation_history),
+        recovered_history = _days_only(obs.recovered_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
@@ -2529,6 +2586,17 @@ confirmed_deaths_panel = (;
         pp_joint, "confirmed_deaths_state.cdeath_increments"),
     observed = obs.confirmed_deaths_history.counts, colour = :purple);
 
+## Recovered among confirmed ("cumul guéris") is a cumulative per-vintage
+## stream, scored as increments of the modelled recovered trajectory (the
+## confirmation-to-recovery convolution of the daily confirmed cases) up to
+## the cut-off, so it gets the same cumulative conditional check.
+recovered_panel = (;
+    title = "Recovered (confirmed)",
+    dates = _vintage_dates(obs.recovered_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "recovered_state.recovered_increments"),
+    observed = obs.recovered_history.counts, colour = :mediumseagreen);
+
 ## Each panel runs to its own last vintage: the suspected case and death
 ## streams freeze at 26 May (their last stable vintage) while the
 ## laboratory-confirmed streams keep reporting to the cut-off, so the
@@ -2536,8 +2604,8 @@ confirmed_deaths_panel = (;
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
-    deaths_panel, confirmed_deaths_panel, tests_analysed_panel,
-    tests_analysed_daily_panel]);
+    deaths_panel, confirmed_deaths_panel, recovered_panel,
+    tests_analysed_panel, tests_analysed_daily_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -3201,6 +3269,7 @@ function refit_joint_variant(;
             obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
             obs.tests_analysed;
             confirmed_deaths = obs.confirmed_deaths,
+            recovered_cases = obs.recovered_cases,
             deaths_history = obs.deaths_history,
             reported_history = obs.reported_history,
             confirmed_history = obs.confirmed_history,
@@ -3209,6 +3278,7 @@ function refit_joint_variant(;
             lab_daily_history = obs.lab_daily_history,
             suspected_daily_history = obs.suspected_daily_history,
             isolation_history = obs.isolation_history,
+            recovered_history = obs.recovered_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,

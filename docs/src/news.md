@@ -25,6 +25,14 @@ Changes since v1.5.0.
   the `treatment_admission_model` observation submodel, the
   `isolation_admission_model` prior and the `treatment_only_model`
   single-stream composer.
+- Added a recovered-among-confirmed stream ("cumul guéris"), the
+  `estimate_secondary` incidence analogue: survivors among the modelled daily
+  confirmed cases, scaled by a recovery probability (the confirmed-case
+  survival fraction) and convolved with a confirmation-to-recovery delay.
+  The confirmed model now exposes one daily confirmed-case series
+  (`confirmed_daily`) that both the recovered stream and the cumulative-
+  confirmed trajectory reuse. Added the `recovered_model` submodel and the
+  `recovery_probability_model` prior.
 
 ### Data
 
@@ -36,6 +44,9 @@ Changes since v1.5.0.
   different quantity and is excluded.
   Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the
   173 the note claimed).
+- Added the cumulative "cumul guéris" recovered-among-confirmed total for
+  6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
+  the `[recovered_history]` manifest block.
 
 ## v1.5.0
 

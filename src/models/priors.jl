@@ -524,6 +524,27 @@ override. Returns `(; p_iso)`.
 end
 
 """
+Recovery probability for the recovered-among-confirmed stream
+([`recovered_model`](@ref)). Samples `p_recover`, the fraction of confirmed
+cases whose outcome is recovery rather than death, so the modelled recovered
+incidence is `p_recover` times the confirmation-to-recovery convolution of
+the daily confirmed cases. It is the confirmed-case survival fraction, the
+complement of the confirmed case-fatality ratio.
+
+The default `Beta(6, 2)` is weakly informative on `(0, 1)` with mean ¾,
+consistent with the ≈20% confirmed lethality the situation reports print
+(so ≈80% recover). `p_recover` is partially confounded with the
+confirmation-to-recovery delay for the count of recoveries observed by the
+cut-off (a long delay right-censors recoveries that have not yet resolved),
+so the delay carries the timing and `p_recover` the eventual survival
+fraction. Pass `p_prior` to override. Returns `(; p_recover)`.
+"""
+@model function recovery_probability_model(; p_prior = Beta(6.0, 2.0))
+    p_recover ~ p_prior
+    return (; p_recover)
+end
+
+"""
 Per-vintage non-BVD background rate as a partially-pooled, non-centred
 random effect, the time-varying generalisation of the scalar `λ_bg` /
 `λ_bg_death`. Used by the suspected-case ([`reported_cases_model`](@ref))

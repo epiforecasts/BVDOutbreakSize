@@ -902,7 +902,22 @@ quantities.
     expected_confirmed := safe_rate(expected_positives)
     p_positive := safe_rate(expected_positives) / safe_rate(denom)
 
+    ## Modelled daily confirmed-case incidence: the per-window tested-positive
+    ## probability expanded onto the daily grid times the modelled analysed
+    ## volume. Exposed so the composer's cumulative-confirmed trajectory and a
+    ## survivors-among-confirmed (recovered) stream can reuse one consistent
+    ## daily series. In predict / check-model mode `p_pos` can widen to
+    ## `Vector{Any}`, so pin it to the analysed volume's (always-concrete)
+    ## element type before expanding, matching the other guards here.
+    p_pos_daily = p_pos
+    if eltype(p_pos_daily) === Any
+        p_pos_daily = convert(Vector{eltype(analysed_daily)}, p_pos_daily)
+    end
+    confirmed_daily = expand_vintage_rate(p_pos_daily, window_days, n) .*
+                      analysed_daily
+
     return (; τ_test, bg_daily, p_pos, windows, analysed_daily,
+        confirmed_daily,
         receipt_pmf = receipt_state.pmf,
         expected_analysed, expected_confirmed, p_positive)
 end
@@ -1293,4 +1308,62 @@ and its BVD/background split for reuse and posterior-predictive replication.
 
     return (; p_iso, bvd_los_mean = bvd_los_state.mean, occupancy,
         occupancy_bvd, occupancy_bg, expected_isolation)
+end
+
+"""
+DRC recovered-among-confirmed likelihood ("cumul guéris"), an incidence
+(scaled-convolution) stream — the renewal analogue of EpiNow2's
+`estimate_secondary` incidence model. Recoveries are the survivors among
+laboratory-confirmed cases: the modelled daily confirmed-case incidence
+`confirmed_daily` (from [`confirmed_cases_model`](@ref)) is scaled by the
+recovery probability `p_recover` (the confirmed-case survival fraction,
+[`recovery_probability_model`](@ref)) and convolved with a sampled
+confirmation-to-recovery delay,
+
+```math
+\\text{recovered}_t = p_\\text{recover} \\sum_{s \\ge 0}
+    \\text{confirmed}_{t-s}\\, f_{\\text{rec},s}.
+```
+
+The cumulative recovered series ends at the cut-off, so its between-vintage
+increments are scored as observed `~` data with a NegativeBinomial sharing
+the surveillance dispersion `k` (the same per-vintage route as the confirmed
+and confirmed-death streams). The convolution right-censors recoveries that
+have not yet resolved by the cut-off, so a small observed recovered count is
+consistent with a high eventual survival fraction and a long recovery delay.
+Empty by default; a `missing` cut-off total leaves the increments missing
+(the predictive-generator path). Returns the recovery probability, the
+recovery-delay mean, the daily recovered series and the cut-off total.
+"""
+@model function recovered_model(
+        recovered_history,
+        recovered_total::Union{Missing, Integer},
+        confirmed_daily::AbstractVector, k::Real;
+        recovery = recovery_probability_model(),
+        ## Confirmation-to-recovery (discharge) delay; an Ebola survivor is
+        ## discharged a couple of weeks after confirmation, so the default is
+        ## a mean ~14 d stay before recovery is recorded.
+        confirmation_to_recovery = censored_delay_model(
+            cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
+            mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
+    rec_state ~ to_submodel(recovery)
+    p_recover = rec_state.p_recover
+    delay_state ~ to_submodel(confirmation_to_recovery)
+
+    ## Survivors among confirmed cases, lagged by the confirmation-to-recovery
+    ## delay: a scaled convolution of the modelled daily confirmed incidence.
+    recovered_daily = p_recover .* convolve_delay(confirmed_daily,
+        delay_state.pmf)
+
+    n = length(confirmed_daily)
+    vobs = vintage_obs(recovered_history, recovered_total, n)
+    modelled_inc = bin_increments(recovered_daily, vobs.days)
+    recovered_increments ~ to_submodel(
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
+
+    expected_recovered := safe_rate(sum(recovered_daily))
+
+    return (; p_recover, recovery_delay_mean = delay_state.mean,
+        recovered_daily, expected_recovered)
 end
