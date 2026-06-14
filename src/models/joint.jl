@@ -405,7 +405,20 @@ death-confirmation probability (`death_confirmation`).
     end
     _conf_daily_positivity = expand_vintage_rate(_conf_positivity,
         _conf_window_days, n)
-    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_analysed)
+    ## Re-add the testing-onset baseline: the laboratory capacity is gated to
+    ## zero before testing began and the first confirmed vintage is treated as
+    ## the initial condition (a baseline the early windows do not score), so the
+    ## reconstructed cumulative counts only the fitted increments. Adding the
+    ## first observed confirmed count back from the testing onset onward makes
+    ## the trajectory comparable to the observed confirmed total (and keeps the
+    ## delay-corrected confirmed-CFR denominator on the right level).
+    _conf_inc_cum = cumsum(_conf_daily_positivity .* _conf_analysed)
+    _conf_base = isempty(confirmed_history.counts) ? 0 :
+                 Int(confirmed_history.counts[1])
+    _conf_cap = isempty(confirmed_history.days) ? 1 :
+                clamp(Int(confirmed_history.days[1]), 1, n)
+    _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
+    cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     C_T := infection_state.C_T
