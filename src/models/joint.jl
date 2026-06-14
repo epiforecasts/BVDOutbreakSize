@@ -143,6 +143,40 @@ positives (a Binomial of the observed analysed denominator in
 end
 
 """
+Isolation-occupancy-only composer (treatment-bed prevalence in isolation).
+Runs the infection process and onset staging, samples dispersion and pooled
+ascertainment, then runs the suspected-case stream in predictive mode (to
+draw the shared background rate, testing fraction and onset-to-report
+kernel) and conditions on the isolation/treatment-bed occupancy alone. See
+[`treatment_admission_model`](@ref) and [`reported_cases_model`](@ref).
+"""
+@model function treatment_only_model(
+        n::Integer;
+        isolation_history = (; days = Int[], counts = Int[]),
+        breakpoint::Union{Missing, Real} = missing,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        cases = reported_cases_model,
+        treatment = treatment_admission_model,
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model())
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    dispersion_state ~ to_submodel(dispersion)
+    asc_state ~ to_submodel(ascertainment)
+    k = dispersion_state.k
+    p_drc = asc_state.p_drc
+    cases_state ~ to_submodel(
+        cases((; days = Int[], counts = Int[]), missing, latent.onsets,
+        k, p_drc))
+    treatment_state ~ to_submodel(
+        treatment(isolation_history, cases_state.bvd_reports_daily,
+        cases_state.bg_daily, p_drc, k))
+    cumulative_infections := cumsum(latent.infection_state.infections)
+    C_T := latent.infection_state.C_T
+end
+
+"""
 Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the suspected
 deaths and reported-cases streams (the latter in predictive mode for the
@@ -248,7 +282,11 @@ suspected series at each report day where the frozen cumulative suspected
 stream stops, on days disjoint from it. The confirmed deaths are a thinning of
 the suspected deaths whose confirmation probability is the suspected-case
 BVD composition enriched on the odds scale (`confirmed_deaths`,
-`total_deaths` the denominator).
+`total_deaths` the denominator). The optional `isolation_history` adds the
+daily isolation/treatment-bed occupancy ("Patients en isolement"), a
+prevalence stream fitted as the suspect inflow (BVD treatment stay plus
+non-BVD rule-out stay) carried through a length-of-stay survival into a
+daily stock (see [`treatment_admission_model`](@ref)).
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
@@ -280,6 +318,7 @@ death-confirmation probability (`death_confirmation`).
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
+        isolation_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -291,6 +330,7 @@ death-confirmation probability (`death_confirmation`).
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        treatment = treatment_admission_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
@@ -358,6 +398,12 @@ death-confirmation probability (`death_confirmation`).
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
+    ## Isolation/treatment-bed occupancy: the suspect inflow (BVD treatment
+    ## stay plus non-BVD rule-out stay) carried through a length-of-stay
+    ## survival into a daily stock (see [`treatment_admission_model`](@ref)).
+    treatment_state ~ to_submodel(
+        treatment(isolation_history, cases_state.bvd_reports_daily,
+        cases_state.bg_daily, p_drc, k))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
@@ -428,6 +474,10 @@ death-confirmation probability (`death_confirmation`).
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
+    expected_isolation_T := treatment_state.expected_isolation
+    isolation_admission := treatment_state.p_iso
+    isolation_bvd_los_mean := treatment_state.bvd_los_mean
+    isolation_bg_los_mean := treatment_state.bg_los_mean
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma

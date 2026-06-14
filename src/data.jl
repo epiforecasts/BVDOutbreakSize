@@ -31,7 +31,9 @@ per-day Poisson likelihood), the per-vintage histories as
 `lab_daily_history` from the post-cutoff 24h analysed counts on the
 trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
-`tests_received_history`),
+`isolation_history` from the post-cutoff daily isolation/hospitalisation
+occupancy ("Patients en isolement", a stock fitted by the prevalence/
+length-of-stay submodel), `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
 earliest reported-case vintage, to the cut-off). The intervention
@@ -113,6 +115,13 @@ function load_observations(
     ## a daily incidence against the modelled suspected series where the
     ## frozen cumulative suspected stream stops at 26 May.
     suspected_daily_history = history("suspected_daily_history")
+    ## Post-cutoff daily isolation/hospitalisation occupancy ("Patients en
+    ## isolement"): a per-day STOCK (point prevalence, not cumulative) of
+    ## patients in an isolation/treatment bed, scored against the modelled
+    ## bed occupancy on each report day by the prevalence/length-of-stay
+    ## observation submodel. Begins 1 June where the all-patients column
+    ## definition is stable (see the manifest note).
+    isolation_history = history("isolation_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -156,6 +165,7 @@ function load_observations(
         lab_history = lab_history,
         lab_daily_history = lab_daily_history,
         suspected_daily_history = suspected_daily_history,
+        isolation_history = isolation_history,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

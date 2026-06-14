@@ -33,7 +33,8 @@
 
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
-        :lab_history, :lab_daily_history, :suspected_daily_history)
+        :lab_history, :lab_daily_history, :suspected_daily_history,
+        :isolation_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -77,6 +78,20 @@
     ## Strictly after the last cumulative suspected vintage (26 May): the two
     ## suspected likelihoods cover disjoint days, so they do not double-count.
     @test minimum(obs.suspected_daily_history.days) >
+          maximum(obs.reported_history.days)
+
+    ## The daily isolation/treatment-bed occupancy ("Patients en isolement"):
+    ## a per-day STOCK (point prevalence, never cumulative), so every count is
+    ## a positive occupancy, sorted oldest-first and within the grid. An
+    ## invariant rather than a literal echo, which would break on every
+    ## SitRep advance. The fitted series starts at the all-patients column
+    ## (1 June, SitRep 018), strictly after the frozen cumulative suspected
+    ## vintages, so it shares no day with the cumulative reported series.
+    @test !isempty(obs.isolation_history.counts)
+    @test all(c -> c > 0, obs.isolation_history.counts)
+    @test issorted(obs.isolation_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.isolation_history.days)
+    @test minimum(obs.isolation_history.days) >
           maximum(obs.reported_history.days)
 
     ## History day indices are in range

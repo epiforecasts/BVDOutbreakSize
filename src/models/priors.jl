@@ -499,6 +499,31 @@ The derived per-suspected positivity is exposed inside
 end
 
 """
+Treatment-admission probability for the isolation-occupancy stream
+([`treatment_admission_model`](@ref)). Samples `p_iso`, the fraction of
+ascertained BVD suspected cases that are admitted to and retained in an
+isolation/treatment bed, so the modelled BVD bed occupancy is `p_iso` times
+the survival-convolution of the BVD admission inflow. The non-BVD
+background suspects are taken to be isolated on report (admission
+probability one) and leave quickly under their own short rule-out
+length-of-stay, so a separate background admission probability would be
+degenerate with the background rate `λ_bg` and is not sampled.
+
+The default `Beta(2, 2)` is weakly informative on `(0, 1)` with mean ½ and
+no mass piled at the bounds. `p_iso` is partially confounded with the BVD
+length-of-stay mean for the occupancy LEVEL (Little's law: mean occupancy
+≈ `p_iso · admissions · (E[LOS] + 1)`), so the length-of-stay prior carries
+the duration and `p_iso` absorbs the admission/retention fraction; the
+length-of-stay also sets the lag and smoothing of occupancy relative to the
+inflow, which the daily occupancy series identifies. Pass `p_prior` to
+override. Returns `(; p_iso)`.
+"""
+@model function isolation_admission_model(; p_prior = Beta(2.0, 2.0))
+    p_iso ~ p_prior
+    return (; p_iso)
+end
+
+"""
 Per-vintage non-BVD background rate as a partially-pooled, non-centred
 random effect, the time-varying generalisation of the scalar `λ_bg` /
 `λ_bg_death`. Used by the suspected-case ([`reported_cases_model`](@ref))
