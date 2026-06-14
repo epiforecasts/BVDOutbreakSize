@@ -1210,25 +1210,35 @@ because they leave the bed on very different clocks:
 - BVD component: the ascertained BVD suspect inflow `p_drc · bvd_reports`,
   thinned by a treatment-admission probability `p_iso`
   ([`isolation_admission_model`](@ref)) and convolved with a LONG treatment
-  length-of-stay — a confirmed case occupies a bed until recovery or death.
+  length-of-stay (sampled) — a confirmed case occupies a bed until recovery
+  or death.
 - Background component: the non-BVD background inflow `bg_daily`, convolved
   with a SHORT rule-out length-of-stay — a non-BVD suspect is isolated on
-  report and discharged once excluded. It carries no separate admission
-  probability, which would be degenerate with the background rate `λ_bg`.
+  report and discharged once excluded. Its length-of-stay is a FIXED short
+  delay rather than a sampled one, and it carries no separate admission
+  probability: the background occupancy is a small, `λ_bg`-driven minority of
+  the bed (`λ_bg` is an informative-prior quantity shared with the case
+  stream), so its stay and admission fraction are not identifiable from ~11
+  daily points and would only track their priors.
 
-The modelled occupancy is the sum, so the bed occupancy is genuinely a
-BVD/background mixture whose level and day-to-day shape inform the
-admission fraction and the two stays (and, weakly, `p_drc` / `λ_bg` through
-the BVD share of the bed). Each observed day's count is scored against the
-modelled occupancy on that day with a NegativeBinomial sharing the
-surveillance dispersion `k` (a single-day stock, never a between-vintage
-increment), mirroring the daily-anchor route of the new-suspect inflow.
-Empty by default; a `missing` count vector samples (the predictive path).
+The modelled occupancy is the sum, so the bed occupancy is a BVD/background
+mixture, dominated by the BVD-treatment component, whose level and
+day-to-day shape inform the admission fraction `p_iso` and the BVD treatment
+stay. The exposed `isolation_bvd_share` is the fraction of the modelled bed
+that is true BVD (BVD-confirmed plus BVD-suspect); it is NOT the report's
+"dont confirmés / dont suspects" split, since most of the report's
+"suspects in isolation" are true BVD cases awaiting confirmation and so sit
+in the BVD component, not the non-BVD background. Each observed day's count
+is scored against the modelled occupancy on that day with a NegativeBinomial
+sharing the surveillance dispersion `k` (a single-day stock, never a
+between-vintage increment), mirroring the daily-anchor route of the
+new-suspect inflow. Empty by default; a `missing` count vector samples (the
+predictive path).
 
-The two length-of-stay distributions are injected, defaulting to a long
-treatment stay (mean 12 d) and a short rule-out stay (mean 2.5 d). Returns
-the admission probability, the two stay means, the daily occupancy and its
-BVD/background split for reuse and posterior-predictive replication.
+The BVD treatment length-of-stay is injected (default mean 12 d); the
+background rule-out stay is a fixed short delay (default mean 2.5 d).
+Returns the admission probability, the BVD stay mean, the daily occupancy
+and its BVD/background split for reuse and posterior-predictive replication.
 """
 @model function treatment_admission_model(
         isolation_history,
@@ -1236,24 +1246,29 @@ BVD/background split for reuse and posterior-predictive replication.
         bg_daily::AbstractVector,
         p_drc::Real, k::Real;
         admission = isolation_admission_model(),
+        ## Long, sampled BVD treatment stay. The truncation covers the 99th
+        ## percentile of the prior-centre distribution (a longer reach than
+        ## the 98% default) so the long-stay survival tail is not clipped.
         bvd_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(12.0, 8.0));
+            cdf_nmax(lognormal_meansd(12.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
             sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
-        background_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(2.5, 2.0));
-            mean_prior = truncated(Normal(2.5, 1.5); lower = 0.5),
-            sd_prior = truncated(Normal(2.0, 1.0); lower = 0.5)))
+        ## Fixed short rule-out stay: not sampled, since the background
+        ## occupancy it shapes is a `λ_bg`-driven minority of the bed and its
+        ## stay is unidentifiable from the daily occupancy.
+        background_los_pmf = discretise_censored(
+            lognormal_meansd(2.5, 2.0),
+            cdf_nmax(lognormal_meansd(2.5, 2.0))))
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
     bvd_los_state ~ to_submodel(bvd_los)
-    bg_los_state ~ to_submodel(background_los)
 
-    ## BVD-treatment occupancy (long stay) plus non-BVD rule-out occupancy
-    ## (short stay): the bed occupancy is the BVD/background mixture.
+    ## BVD-treatment occupancy (long sampled stay) plus non-BVD rule-out
+    ## occupancy (fixed short stay): the bed occupancy is the BVD/background
+    ## mixture, dominated by the BVD-treatment component.
     bvd_admissions = p_iso .* p_drc .* bvd_reports_daily
     occupancy_bvd = convolve_survival(bvd_admissions, bvd_los_state.pmf)
-    occupancy_bg = convolve_survival(bg_daily, bg_los_state.pmf)
+    occupancy_bg = convolve_survival(bg_daily, background_los_pmf)
     occupancy = occupancy_bvd .+ occupancy_bg
 
     ## Per-day stock scored against the modelled occupancy on each report
@@ -1268,14 +1283,14 @@ BVD/background split for reuse and posterior-predictive replication.
     isolation ~ to_submodel(
         vintage_increments_model(iso_modelled, iso_obs, k))
 
-    ## Cut-off occupancy and the BVD share of the bed at the cut-off, the
-    ## latter comparable with the sitrep `dont confirmés / suspects` split.
+    ## Cut-off occupancy and the true-BVD share of the bed at the cut-off
+    ## (BVD-confirmed plus BVD-suspect; NOT the report's confirmed/suspect
+    ## split, see the docstring).
     occ_T = isempty(occupancy) ? zero(p_iso) : occupancy[end]
     occ_bvd_T = isempty(occupancy_bvd) ? zero(p_iso) : occupancy_bvd[end]
     expected_isolation := safe_rate(occ_T)
     isolation_bvd_share := safe_rate(occ_bvd_T) / safe_rate(occ_T)
 
-    return (; p_iso, bvd_los_mean = bvd_los_state.mean,
-        bg_los_mean = bg_los_state.mean, occupancy, occupancy_bvd,
-        occupancy_bg, expected_isolation)
+    return (; p_iso, bvd_los_mean = bvd_los_state.mean, occupancy,
+        occupancy_bvd, occupancy_bg, expected_isolation)
 end

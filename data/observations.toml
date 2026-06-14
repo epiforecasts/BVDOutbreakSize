@@ -131,9 +131,10 @@ source = "INSP situation reports 4-11 June 2026 (SitReps 021-024 `Nouveaux cas s
 # length-of-stay survival rather than a cumulative sum. The model fits it
 # with the prevalence/length-of-stay observation submodel
 # (`treatment_admission_model`): the modelled occupancy is the BVD suspect
-# inflow (long treatment stay) plus the non-BVD background inflow (short
-# rule-out stay), so the bed occupancy is a BVD/background mixture and its
-# day-by-day level and lag identify the admission fraction and stays. It is
+# inflow (long sampled treatment stay) plus the non-BVD background inflow
+# (short fixed rule-out stay), so the bed occupancy is a BVD/background
+# mixture, dominated by the BVD-treatment component, and its day-by-day level
+# and lag identify the admission fraction and the treatment stay. It is
 # scored as a per-day count against the modelled occupancy on each report
 # day (never differenced), the same daily-anchor route the new-suspect
 # inflow uses. SitReps 016-017 (30-31 May) print a DIFFERENT column, "Cas

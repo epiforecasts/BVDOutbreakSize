@@ -17,10 +17,10 @@ Changes since v1.5.0.
   prevalence model.
   The daily bed occupancy is a STOCK, fitted as the suspect inflow carried
   through a length-of-stay survival rather than a cumulative sum: the
-  ascertained BVD inflow with a long treatment stay plus the non-BVD
-  background inflow with a short rule-out stay, so the bed occupancy is a
-  BVD/background mixture whose level and lag inform the admission fraction
-  and the two stays.
+  ascertained BVD inflow with a long sampled treatment stay plus the non-BVD
+  background inflow with a short fixed rule-out stay, so the bed occupancy is
+  a BVD/background mixture (dominated by the BVD-treatment component) whose
+  level and lag inform the admission fraction and the treatment stay.
   Added `convolve_survival` (the prevalence analogue of `convolve_delay`),
   the `treatment_admission_model` observation submodel, the
   `isolation_admission_model` prior and the `treatment_only_model`

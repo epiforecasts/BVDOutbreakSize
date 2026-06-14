@@ -477,7 +477,6 @@ death-confirmation probability (`death_confirmation`).
     expected_isolation_T := treatment_state.expected_isolation
     isolation_admission := treatment_state.p_iso
     isolation_bvd_los_mean := treatment_state.bvd_los_mean
-    isolation_bg_los_mean := treatment_state.bg_los_mean
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma

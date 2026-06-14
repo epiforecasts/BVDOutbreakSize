@@ -1209,8 +1209,9 @@ cfr_prior_fig #hide
 # holds a BVD/background mixture, and the two populations leave on different
 # clocks, so the occupancy is the sum of two survival convolutions: the
 # ascertained BVD inflow thinned by a treatment-admission probability
-# $p_{\text{iso}}$ with a long treatment stay $S_{\text{BVD}}$, and the
-# non-BVD background inflow with a short rule-out stay $S_{\text{bg}}$,
+# $p_{\text{iso}}$ with a long, sampled treatment stay $S_{\text{BVD}}$, and
+# the non-BVD background inflow with a short, fixed rule-out stay
+# $S_{\text{bg}}$,
 #
 # ```math
 # O_t = p_{\text{iso}} \sum_{s \ge 0} p_{\text{DRC}}\, \text{bvd}_{t-s}\,
@@ -1226,10 +1227,14 @@ cfr_prior_fig #hide
 # O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k).
 # ```
 #
-# The bed occupancy mixes BVD and background, so its level and lag inform the
-# admission fraction and the two stays, and the BVD share of the bed feeds
-# back weakly to $p_{\text{DRC}}$ and $\lambda_{\text{bg}}$. The fitted series
-# is the all-patients column from 1 June (SitRep 018) onward.
+# The occupancy is dominated by the BVD-treatment component (the background
+# is a small $\lambda_{\text{bg}}$-driven minority with a fixed stay), so the
+# daily series informs the admission fraction $p_{\text{iso}}$ and the BVD
+# treatment stay. The exposed BVD share of the bed is the true-BVD fraction
+# (BVD-confirmed plus BVD-suspect), not the report's confirmed/suspect split,
+# since most "suspects in isolation" are true BVD cases awaiting
+# confirmation. The fitted series is the all-patients column from 1 June
+# (SitRep 018) onward.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_admission_model</summary>
