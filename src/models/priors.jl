@@ -312,8 +312,10 @@ and cumulative sum, the total prior
 outbreak age `T`, cryptic doubling count `m`/`τ` and prior size scale
 `C_T_prior`, the realized cut-off size `C_T`, the established reproduction
 number `R0` and its implied cryptic rate `r0` (with
-`doubling_time_initial`), the realized current growth `r`/`doubling_time`
-(last two days), and the diagnostic-only `seeding_age`. Returns
+`doubling_time_initial`), the current growth `r`/`doubling_time` derived
+from the cut-off reproduction number `Rt[n]` through forward Euler–Lotka
+(so `r` is sign-consistent with `R_T := Rt[n]` by construction), and the
+diagnostic-only `seeding_age`. Returns
 `(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ, R0, r0, r,
 doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
 """
@@ -350,11 +352,17 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     cumulative = cumsum(infections)
     ## Total outbreak age: cryptic duration (m·τ) plus the observation span.
     T_total = growth_state.T + τ_obs
-    ## Realized current growth rate from the last two days; n ≥ 2 in
-    ## practice, with a zero-growth fallback on a degenerate single-day grid.
-    r = n >= 2 ?
-        log(safe_rate(infections[n])) - log(safe_rate(infections[n - 1])) :
-        zero(@inbounds infections[begin])
+    ## Current growth rate at the cut-off, derived from the cut-off
+    ## reproduction number `Rt[n]` and the generation interval through forward
+    ## Euler–Lotka (the inverse of the `r_to_R0` that derives `R0` from the
+    ## clock growth above). This makes the reported current growth rate
+    ## consistent with `R_T := Rt[n]` BY CONSTRUCTION: `r < 0` iff `R_T < 1`.
+    ## An earlier formulation read `r` off the realised last-two-days slope
+    ## `log I[n] − log I[n-1]`, but the intervention ramp depresses the final
+    ## renewal step (`I[n] < I[n-1]` while `Rt[n] ≥ 1`), so that realised
+    ## slope disagreed in sign with `R_T` at the cut-off — an end-of-
+    ## trajectory edge artifact rather than the instantaneous growth.
+    r = euler_lotka_r(@inbounds(Rt[n]), g)
     return (; infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
         doubling_time_initial = doubling_time(r_clock),
