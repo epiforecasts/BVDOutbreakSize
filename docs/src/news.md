@@ -36,6 +36,10 @@ Changes since v1.5.0.
   (`confirmed_daily`) that both the recovered stream and the cumulative-
   confirmed trajectory reuse. Added the `recovered_model` submodel and the
   `recovery_probability_model` prior.
+- Added the `exports_joint_only_model` composer, which fits the Uganda export
+  cases and deaths together over the one travel-gated at-risk prevalence. The
+  single-stream comparison in the walkthrough now shows one joint "exports"
+  fit instead of separate export-case and export-death fits.
 
 ### Data
 
@@ -50,6 +54,18 @@ Changes since v1.5.0.
 - Added the cumulative "cumul guéris" recovered-among-confirmed total for
   6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
   the `[recovered_history]` manifest block.
+
+### Analysis
+
+- The walkthrough adds posterior-predictive panels for the isolation
+  occupancy and recovered streams, a single-stream "in isolation" fit for the
+  isolation occupancy, and surfaces the isolation length-of-stay and
+  confirmation-to-recovery delays in the observation-delay table and pair
+  plot, and the admission proportion, recovery probability and the two new
+  per-stream dispersions in the surveillance-parameter table.
+- Cite EpiNow2 [epinow2](@cite) for the convolution-and-scaling
+  secondary-observation analogy, and fix the `epinow2` bibliography entry so
+  the documentation build no longer warns about a missing field.
 
 ## v1.5.0
 

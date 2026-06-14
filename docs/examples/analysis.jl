@@ -1777,7 +1777,6 @@ const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 ## model check is disabled (see `nuts_sample`).
 chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
 chn_confirmed_deaths,
-chn_exports_deaths,
 chn_treatment = fit_parallel([
     () -> nuts_sample(bvd_joint(
         obs.n, obs.exported_cases, obs.total_deaths,
@@ -1801,9 +1800,15 @@ chn_treatment = fit_parallel([
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)),
-    () -> nuts_sample(exports_only_model(obs.n, obs.exported_cases;
-        export_case_days = obs.export_case_days,
-        breakpoint = _BREAKPOINT)),
+    ## Exports fit cases and deaths jointly as one "exports" stream, sharing
+    ## the travel-gated at-risk prevalence, rather than as two separate fits.
+    () -> nuts_sample(
+        exports_joint_only_model(obs.n, obs.exported_cases,
+            obs.exports_deaths;
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = _BREAKPOINT);
+        check_model = false),
     () -> nuts_sample(deaths_only_model(obs.n, obs.total_deaths;
         deaths_history = obs.deaths_history,
         breakpoint = _BREAKPOINT)),
@@ -1821,10 +1826,6 @@ chn_treatment = fit_parallel([
         deaths_history = obs.deaths_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(
-        exports_deaths_only_model(obs.n, obs.exports_deaths;
-            breakpoint = _BREAKPOINT);
-        check_model = false),
     () -> nuts_sample(treatment_only_model(obs.n;
         isolation_history = obs.isolation_history,
         breakpoint = _BREAKPOINT))]);
@@ -1835,7 +1836,6 @@ posterior_C_deaths = vec(Array(chn_deaths[:C_T]));
 posterior_C_cases = vec(Array(chn_cases[:C_T]));
 posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
 posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
-posterior_C_exports_deaths = vec(Array(chn_exports_deaths[:C_T]));
 posterior_C_treatment = vec(Array(chn_treatment[:C_T]));
 
 ## Clean display names for the summary tables and pair plots. The submodel
@@ -1858,6 +1858,8 @@ display_names = Dict{Symbol, String}(
     Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
     Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
     Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
+    :isolation_bvd_los_mean => "isolation length-of-stay mean",
+    :recovery_delay_mean => "confirmation-to-recovery mean",
     Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
 
 #md # ```@raw html
@@ -1876,8 +1878,7 @@ display_names = Dict{Symbol, String}(
 
 diagnostics_table( #hide
     "joint" => chn_joint, #hide
-    "exports (cases)" => chn_exports, #hide
-    "exports (deaths)" => chn_exports_deaths, #hide
+    "exports" => chn_exports, #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
     "confirmed (DRC)" => chn_confirmed, #hide
@@ -2309,6 +2310,10 @@ intervention_table #hide
 # onset-to-death is the convolution of two atomic Gamma delays, onset to
 # admission and admission to death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
+# The two new length-of-stay delays are also shown: the isolation-bed
+# treatment length-of-stay (how long a BVD patient occupies a bed) and the
+# confirmation-to-recovery delay (how long after confirmation a case is
+# recorded as recovered).
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
 # each marginal is visible.
@@ -2327,7 +2332,9 @@ obs_delay_summary = summary_table(chn_joint,
         Symbol("exports_state.detect_state.α"),
         Symbol("exports_state.detect_state.θ"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
-        Symbol("confirmed_state.receipt_state.d.delay_sd")];
+        Symbol("confirmed_state.receipt_state.d.delay_sd"),
+        :isolation_bvd_los_mean,
+        :recovery_delay_mean];
     digits = 2, labels = display_names);
 
 #md # ```@raw html
@@ -2344,7 +2351,9 @@ obs_delay_pair_fig = plot_pair(chn_joint,
     [Symbol("cases_state.report_state.α"),
         Symbol("deaths_state.od_state.oa.α"),
         Symbol("exports_state.detect_state.α"),
-        Symbol("confirmed_state.receipt_state.d.delay_mean")];
+        Symbol("confirmed_state.receipt_state.d.delay_mean"),
+        :isolation_bvd_los_mean,
+        :recovery_delay_mean];
     prior = prior_chn, labels = display_names);
 
 #md # ```@raw html
@@ -2359,7 +2368,11 @@ obs_delay_pair_fig #hide
 # Uganda, the surveillance dispersion, and the laboratory pipeline (the
 # testing fraction and receipt delay, the per-suspected and per-test
 # positivity, the non-BVD background rate, and the death-confirmation
-# probability).
+# probability). The isolation and recovered streams add the proportion of
+# suspects admitted to a bed, the recovery probability among confirmed cases,
+# and their own observation dispersions (these two streams do not share the
+# surveillance dispersion; see the length-of-stay delays in the
+# observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
 
@@ -2371,7 +2384,9 @@ surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :m_death, :death_composition,
-        :death_confirmation, :expected_confirmed_deaths_T];
+        :death_confirmation, :expected_confirmed_deaths_T,
+        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);
 
 #md # ```@raw html
@@ -2908,7 +2923,7 @@ validation_latent_fig #hide
 #md # ```
 
 streams_C_table = streams_table(
-    "exports (cases)" => posterior_C_exports,
+    "exports" => posterior_C_exports,
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
@@ -2948,8 +2963,9 @@ _last_day(days) = isempty(days) ? nothing : maximum(days)
 
 stream_traj_fig = plot_stream_trajectories(
     [
-        (; label = "exports (cases)", trajs = _cuminf(chn_exports),
-            last_day = _last_day(obs.export_case_days), colour = :seagreen),
+        (; label = "exports", trajs = _cuminf(chn_exports),
+            last_day = _last_day(vcat(obs.export_case_days,
+                obs.export_death_days)), colour = :seagreen),
         (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
             last_day = _last_day(obs.deaths_history.days),
             colour = :firebrick),
@@ -2989,7 +3005,7 @@ stream_traj_fig #hide
 density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
 
 cumulative_density_fig = plot_cumulative_cases(
-    "exports (cases)" => posterior_C_exports,
+    "exports" => posterior_C_exports,
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,

@@ -257,6 +257,48 @@ See [`exports_deaths_model`](@ref).
 end
 
 """
+Exports-joint composer: the Uganda export CASES and DEATHS fit together as
+one geographic-spread stream. Runs the infection process and onset staging,
+samples ascertainment and the deaths submodel (for the CFR and
+onset-to-death delay), then conditions on BOTH the export-case and
+export-death likelihoods over the one travel-gated at-risk prevalence, so
+the imports and the import deaths inform the outbreak size jointly rather
+than as two separate single-stream fits. Either count may be `missing` to
+drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
+"""
+@model function exports_joint_only_model(
+        n::Integer, exported_cases::Union{Missing, Integer},
+        exports_deaths::Union{Missing, Integer};
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        export_death_days::AbstractVector{<:Integer} = Int[],
+        breakpoint::Union{Missing, Real} = missing,
+        source_population::Real = ITURI_POPULATION,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        deaths = deaths_model,
+        exports = exports_model,
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model())
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    dispersion_state ~ to_submodel(dispersion)
+    asc_state ~ to_submodel(ascertainment)
+    deaths_state ~ to_submodel(
+        deaths((; days = Int[], counts = Int[]), missing, latent.onsets,
+        dispersion_state.k))
+    exports_state ~ to_submodel(
+        exports(exported_cases, latent.infection_state.infections,
+        asc_state.p_uganda; export_case_days,
+        incubation_pmf = latent.incubation_pmf, source_population))
+    exports_deaths_state ~ to_submodel(
+        exports_deaths_model(exports_deaths,
+        exports_state.travelled_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
+    cumulative_infections := cumsum(latent.infection_state.infections)
+    C_T := latent.infection_state.C_T
+end
+
+"""
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
 stages it to daily onset incidence, then conditions on the DRC suspected

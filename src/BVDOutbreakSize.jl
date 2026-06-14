@@ -81,7 +81,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        exports_only_model, deaths_only_model, cases_only_model,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
-       exports_deaths_only_model, bvd_joint
+       exports_deaths_only_model, exports_joint_only_model, bvd_joint
 
 include("docstrings.jl")
 include("constants.jl")
