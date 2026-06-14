@@ -1729,7 +1729,8 @@ const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 ## model check is disabled (see `nuts_sample`).
 chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
 chn_confirmed_deaths,
-chn_exports_deaths = fit_parallel([
+chn_exports_deaths,
+chn_treatment = fit_parallel([
     () -> nuts_sample(bvd_joint(
         obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
@@ -1773,7 +1774,10 @@ chn_exports_deaths = fit_parallel([
     () -> nuts_sample(
         exports_deaths_only_model(obs.n, obs.exports_deaths;
             breakpoint = _BREAKPOINT);
-        check_model = false)]);
+        check_model = false),
+    () -> nuts_sample(treatment_only_model(obs.n;
+        isolation_history = obs.isolation_history,
+        breakpoint = _BREAKPOINT))]);
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
 posterior_C_exports = vec(Array(chn_exports[:C_T]));
@@ -1782,6 +1786,7 @@ posterior_C_cases = vec(Array(chn_cases[:C_T]));
 posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
 posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
 posterior_C_exports_deaths = vec(Array(chn_exports_deaths[:C_T]));
+posterior_C_treatment = vec(Array(chn_treatment[:C_T]));
 
 ## Clean display names for the summary tables and pair plots. The submodel
 ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
@@ -1826,7 +1831,8 @@ diagnostics_table( #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
     "confirmed (DRC)" => chn_confirmed, #hide
-    "confirmed deaths (DRC)" => chn_confirmed_deaths) #hide
+    "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
+    "isolation (DRC)" => chn_treatment) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -2844,6 +2850,7 @@ streams_C_table = streams_table(
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
     "joint" => posterior_C_joint);
 
 #md # ```@raw html
@@ -2889,7 +2896,10 @@ stream_traj_fig = plot_stream_trajectories(
             colour = :steelblue),
         (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
             last_day = _last_day(obs.confirmed_history.days),
-            colour = :goldenrod)];
+            colour = :goldenrod),
+        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
+            last_day = _last_day(obs.isolation_history.days),
+            colour = :darkorange)];
     n = obs.n, seeding = obs.seeding);
 
 #md # ```@raw html
@@ -2921,6 +2931,7 @@ cumulative_density_fig = plot_cumulative_cases(
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
     "joint" => posterior_C_joint;
     scenarios = [], xmax = density_xmax);
 
