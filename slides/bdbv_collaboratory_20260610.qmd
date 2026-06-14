@@ -57,13 +57,13 @@ Counts come from INSP situation reports (DRC). Suspected cases and deaths includ
 
 ![](figures/rt-over-time.png){fig-alt="Reproduction number over the established outbreak"}
 
-Doubling time ~16 d, but very uncertain (90% 5–53) — Rₜ ≈ 1.7 (90% 1.2–2.9)
+Doubling time 13–20 d, but very uncertain (90% 6–52) — Rₜ 1.6–1.9 (90% 1.2–2.8)
 
 ## Current size
 
 ![](figures/size-trajectory.png){fig-alt="Cumulative infections, onsets and deaths over time with cut-off densities"}
 
-Estimated true burden ≈ 3,500 infections (90% 2,100 – 9,000)
+Estimated true burden 2,900–3,800 infections (90% 2,000 – 7,400)
 
 ## Consistency with McCabe et al. {.center}
 
