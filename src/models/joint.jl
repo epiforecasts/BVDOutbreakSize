@@ -344,7 +344,7 @@ death-confirmation probability (`death_confirmation`).
             onset = bg_onset)
         death_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
             onset = bg_onset,
-            baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
+            baseline_prior = truncated(Normal(0.0, 2.0); lower = 0))
     else
         case_bg_re = nothing
         death_bg_re = nothing

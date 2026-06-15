@@ -44,14 +44,15 @@ end
     using Statistics: median
     using BVDOutbreakSize: background_pooling_model
 
-    ## The shared random-walk innovation SD is a tight half-normal SD 0.05, so
-    ## its median is very small (well under 0.1) and it is non-negative — the
-    ## daily background walk is a gentle drift, not per-day noise.
+    ## The shared random-walk innovation SD is a half-normal SD 0.1, so its
+    ## median is small (well under 0.2) and it is non-negative — the daily
+    ## background walk is a gentle drift rather than per-day noise, though the
+    ## data can pull it up to a modest rise over the surveillance window.
     chn = sample(MersenneTwister(20260604), background_pooling_model(),
         Prior(), 4_000; progress = false)
     σ = vec(Array(chn[:σ_bg]))
     @test all(>=(0), σ)
-    @test median(σ) < 0.1
+    @test median(σ) < 0.2
 end
 
 @testitem "background_walk_model is smooth, gated and bounded" begin

@@ -552,7 +552,7 @@ suspected cases. Regularising `σ_bg` toward zero keeps the time variation
 a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 """
 @model function background_pooling_model(;
-        pooling_prior = truncated(Normal(0.0, 0.05); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 0.1); lower = 0))
     σ_bg ~ pooling_prior
     return (; σ_bg)
 end
@@ -585,7 +585,7 @@ with `λ` the length-`n` daily series (zero before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
         onset::Integer = 1,
-        baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
     m = max(nw, 1)
