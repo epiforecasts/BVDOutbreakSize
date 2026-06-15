@@ -125,14 +125,15 @@ end
     @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
     @test all(st.λ[onset:end] .> 0)                 # positive after it
     @test st.σ_bg == σ_rw
-    ## The day-to-day multiplicative change is small (tight drift), so the log
-    ## series has no large jumps.
-    logλ = log.(st.λ[onset:end])
+    ## After the onset ramp (default 7 days) the walk is a tight gentle drift,
+    ## so the log series has no large jumps over that stretch.
+    logλ = log.(st.λ[(onset + 7):end])
     @test maximum(abs.(diff(logλ))) < 0.5
-    ## σ_rw = 0 recovers a flat background at the baseline over the window.
+    ## σ_rw = 0 recovers a flat background at the baseline over the window once
+    ## the onset ramp has completed.
     flat = returned(background_walk_model(n, 0.0; onset = onset),
         rand(MersenneTwister(11), background_walk_model(n, 0.0; onset = onset)))
-    @test all(flat.λ[onset:end] .≈ flat.λ_mu)
+    @test all(flat.λ[(onset + 7):end] .≈ flat.λ_mu)
 end
 
 @testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin
