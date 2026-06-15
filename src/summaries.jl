@@ -165,6 +165,44 @@ function streams_table(streams::Pair{String, <:AbstractVector}...;
 end
 
 """
+Per-date posterior summary of the latent symptom-onset trajectory, the
+"symptomatic cases" curve plotted to show the outbreak over time. One row
+per grid day from `seeding` (grid day 1) to the cut-off (grid day `n`),
+giving the equal-tailed 30%, 60% and 90% credible intervals (the same
+intervals as [`summary_table`](@ref) and [`streams_table`](@ref)) of both
+the daily new symptom onsets and the cumulative symptom onsets to that date.
+The chain must carry the vector deterministic `cumulative_onsets` (one
+trajectory per draw), as the joint fit does.
+
+Columns: `date`, then for each of `new_onsets` and `cumulative_onsets` the
+six endpoints `_lower_90, _lower_60, _lower_30, _upper_30, _upper_60,
+_upper_90`.
+"""
+function onsets_over_time(chn; n::Integer, seeding::Date)
+    ## Per-draw cumulative-onset trajectories (the plotted ribbons), then the
+    ## per-draw daily new onsets: the first grid day carries the seed
+    ## cumulative, later days the day-on-day increment.
+    cumulative = [collect(v) for v in vec(collect(chn[:cumulative_onsets]))]
+    daily = [vcat(c[1], diff(c)) for c in cumulative]
+    ## Prefix a `posterior_summary` NamedTuple's fields with the quantity name
+    ## so each day's row carries both onset series side by side.
+    function _bounds(prefix, xs)
+        s = posterior_summary(xs)
+        cols = (Symbol(prefix, "_lower_90"), Symbol(prefix, "_lower_60"),
+            Symbol(prefix, "_lower_30"), Symbol(prefix, "_upper_30"),
+            Symbol(prefix, "_upper_60"), Symbol(prefix, "_upper_90"))
+        return NamedTuple{cols}((s.lo90, s.lo60, s.lo30, s.hi30, s.hi60, s.hi90))
+    end
+    function _row(d)
+        new = Float64[v[d] for v in daily]
+        cum = Float64[c[d] for c in cumulative]
+        merge((date = seeding + Day(d - 1),),
+            _bounds("new_onsets", new), _bounds("cumulative_onsets", cum))
+    end
+    return DataFrame([_row(d) for d in 1:n])
+end
+
+"""
 For each published `C_T` scenario, the narrowest joint posterior
 credible interval (30, 60 or 90%) that contains it, or "outside
 90%".

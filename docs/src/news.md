@@ -116,6 +116,17 @@ Changes since v1.5.0.
   27 May, with a frozen re-fit at the 27 May cut-off added to the
   frozen-fit outbreak-size table.
 
+### Outputs
+
+- Added the latent symptom onsets (the "symptomatic cases" outcome) to the
+  shared posterior outputs.
+  `posterior_draws.csv` gains a `cumulative_onsets_T` column, the cumulative
+  symptom onsets by the cut-off per draw (the onset analogue of `C_T`), and a
+  new `onsets_over_time.csv` records the daily new and cumulative onset
+  trajectory over time with 30/60/90% credible intervals, the curve plotted
+  to show the outbreak grow.
+  Exposed through `onsets_over_time`.
+
 ## v1.5.0
 
 Changes since v1.4.0.
