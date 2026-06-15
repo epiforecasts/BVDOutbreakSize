@@ -254,6 +254,37 @@ function convolve_delay(x::AbstractVector, delay::AbstractVector)
 end
 
 """
+Survival-weighted convolution for an occupancy (prevalence) stream. Given a
+daily admission series `x` and a length-of-stay PMF `los` (indexed from lag
+0, so `los[1] = P(LOS = 0)`), return the daily occupancy
+
+```math
+\\text{occupancy}(t) = \\sum_{\\tau \\ge 0} x_{t-\\tau}\\, S(\\tau),
+\\qquad S(\\tau) = P(\\text{LOS} \\ge \\tau),
+```
+
+so an admission on day `s` occupies a bed on days `s, s+1, …` until it is
+discharged: the admission day is always counted (`S(0) = 1`) and a stay of
+`LOS` days contributes to `LOS + 1` daily occupancies. This is the
+prevalence analogue of [`convolve_delay`](@ref)'s incidence convolution —
+the length-of-stay survival replaces the onset-to-event delay PMF, turning
+an inflow into a stock. The survival weights are the reverse-cumulative
+tail sums of the PMF (`S(τ) = Σ_{j ≥ τ} los[j]`), so for a normalised PMF
+`S(0) = 1`, and the occupancy is `convolve_delay(x, S)`. Type-stable and
+AD-transparent; the element type follows the inputs.
+"""
+function convolve_survival(x::AbstractVector, los::AbstractVector)
+    L = length(los)
+    surv = similar(los)
+    acc = zero(eltype(los))
+    @inbounds for i in L:-1:1
+        acc += los[i]
+        surv[i] = acc
+    end
+    return convolve_delay(x, surv)
+end
+
+"""
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from
 delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
 result has length `length(a) + length(b) - 1`; its mass equals

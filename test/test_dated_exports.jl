@@ -63,6 +63,26 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "exports_joint_only fits cases and deaths together" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: exports_joint_only_model
+
+    ## Conditions on both the dated import series and the dated import-death
+    ## series over the one travel-gated prevalence; check_model is off (the
+    ## predictive deaths/exports leave redundant discrete draws).
+    chn = sample(
+        exports_joint_only_model(40, 3, 1; export_case_days = [28, 33, 40],
+            export_death_days = [30]),
+        Prior(), 100;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    C_T = vec(Array(chn[:C_T]))
+    @test length(C_T) == 100
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
+end
+
 @testitem "exports_only last_offset stops the clock before the cut-off" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains

@@ -6,10 +6,49 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v1.6.0
+
+Changes since v1.5.0.
 
 ### Model
 
+- Added an isolation/treatment-bed occupancy stream ("Patients en
+  isolement"), the renewal analogue of the convolution-and-scaling
+  secondary-observation model of EpiNow2.
+  The daily bed count is fitted as the suspect inflow carried through a
+  length-of-stay survival: a proportion of reported suspects are admitted,
+  the BVD ones staying for a sampled treatment length-of-stay and the non-BVD
+  ones leaving once their negative result returns (after the report-to-receipt
+  laboratory delay), so the bed count is a BVD/background mixture whose level
+  and lag inform the admission proportion and the treatment stay. It carries
+  its own observation dispersion rather than sharing the surveillance
+  dispersion.
+  Added `convolve_survival` (the survival-weighted analogue of
+  `convolve_delay`), the `treatment_admission_model` observation submodel, the
+  `isolation_admission_model` prior and the `treatment_only_model`
+  single-stream composer.
+  The admission proportion is constant, so this assumes demand-driven (not
+  supply-limited) occupancy; a capacity-constrained version is left as
+  follow-up work (#265).
+- Added a recovered-among-confirmed stream ("cumul guéris"), the
+  secondary-observation incidence analogue: survivors among the modelled
+  daily confirmed cases, scaled by a recovery proportion and convolved with a
+  confirmation-to-recovery delay, with its own observation dispersion. The
+  recovery proportion is grounded on the case-fatality ratio (a recovered
+  case is one that did not die) with a log-odds adjustment for the confirmed
+  population, rather than estimated from scratch.
+  The confirmed model now exposes one daily confirmed-case series
+  (`confirmed_daily`) that both the recovered stream and the cumulative-
+  confirmed trajectory reuse. Added the `recovered_model` submodel and the
+  `recovery_probability_model` prior.
+- Added the `exports_joint_only_model` composer, which fits the Uganda export
+  cases and deaths together over the one travel-gated at-risk prevalence. The
+  single-stream comparison in the walkthrough now shows one joint "exports"
+  fit instead of separate export-case and export-death fits.
+- The one-week-ahead forecast now also projects the isolation/treatment-bed
+  occupancy (the expected level of bed use a week ahead) and the cumulative
+  recovered total, each replicated with its own dispersion. The bed occupancy
+  is reported as the projected number of beds in use at the horizon.
 - Replaced the per-vintage step background random effect with a smooth daily
   lognormal random walk (`background_walk_model`), fixing the joint convergence
   failure on the current data (the per-vintage effect opened a second
@@ -35,6 +74,33 @@ each push to `main` also republishes the rendered analysis and the
   This removes a large over-prediction of the early confirmed-case counts (the
   modelled cumulative confirmed previously ran several-fold above the observed
   early values).
+
+
+### Data
+
+- Added the daily "Patients en isolement" occupancy for 1-11 June (SitReps
+  018-028) as a structured `patients_isolated` column and the
+  `[isolation_history]` manifest block.
+  The fitted series begins 1 June where the all-patients column definition
+  is stable; the narrower suspects-only count in SitReps 016-017 is a
+  different quantity and is excluded.
+  Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the
+  173 the note claimed).
+- Added the cumulative "cumul guéris" recovered-among-confirmed total for
+  6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
+  the `[recovered_history]` manifest block.
+
+### Analysis
+
+- The walkthrough adds posterior-predictive panels for the isolation
+  occupancy and recovered streams, a single-stream "in isolation" fit for the
+  isolation occupancy, and surfaces the isolation length-of-stay and
+  confirmation-to-recovery delays in the observation-delay table and pair
+  plot, and the admission proportion, recovery probability and the two new
+  per-stream dispersions in the surveillance-parameter table.
+- Cite EpiNow2 [epinow2](@cite) for the convolution-and-scaling
+  secondary-observation analogy, and fix the `epinow2` bibliography entry so
+  the documentation build no longer warns about a missing field.
 
 ## v1.5.0
 
