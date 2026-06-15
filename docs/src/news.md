@@ -63,6 +63,16 @@ Changes since v1.5.0.
 - Added the cumulative "cumul guéris" recovered-among-confirmed total for
   6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
   the `[recovered_history]` manifest block.
+- Added the peer-reviewed McCabe et al. Lancet Infectious Diseases publication
+  (online first 9 June 2026, DOI 10.1016/S1473-3099(26)00299-9) as a third
+  scenario vintage in `REPORT_SCENARIOS_CI`, with inputs as of 27 May 2026
+  (1031 DRC cases, 240 deaths, three Uganda imports).
+  Both methods now vary the epidemic doubling time (7/10/14 d); the
+  back-calculation assumes 30% of deaths are attributable to Ebola.
+  The published paper swaps the method numbers relative to the Imperial
+  reports, which the noted convention reconciles.
+  Recorded the matching frozen-data snapshot in
+  `data/report-snapshot-27may.toml`.
 
 ### Analysis
 
@@ -75,6 +85,10 @@ Changes since v1.5.0.
 - Cite EpiNow2 [epinow2](@cite) for the convolution-and-scaling
   secondary-observation analogy, and fix the `epinow2` bibliography entry so
   the documentation build no longer warns about a missing field.
+- The McCabe et al. scenario comparison now carries a third vintage, the
+  27 May 2026 Lancet publication, plotted beside our renewal estimate on
+  27 May, with a frozen re-fit at the 27 May cut-off added to the
+  frozen-fit outbreak-size table.
 
 ## v1.5.0
 

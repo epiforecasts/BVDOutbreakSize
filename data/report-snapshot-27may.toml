@@ -1,0 +1,52 @@
+# Observation snapshot as used by the McCabe et al. peer-reviewed
+# Lancet Infectious Diseases publication (online first 9 June 2026,
+# DOI 10.1016/S1473-3099(26)00299-9), whose inputs are as of 27 May
+# 2026. This vintage advances the DRC deaths used (131 -> 240) and the
+# Uganda imports (2 -> 3), and varies the epidemic doubling time
+# (7/10/14 d) for both methods. The geographic-spread method's main
+# scenario takes Ituri as the source population; its sensitivity adds
+# Nord Kivu (combined population 12 593 600, i.e. Nord Kivu 8 201 400),
+# which our joint model does not use. The exported-case death and
+# detection timing (14 and 11 May, which the paper does not model) are
+# included from the WHO data available by the cut-off, since our joint
+# model conditions on them. Fitting our joint model to this snapshot
+# isolates the effect of our method from the effect of newer data.
+# Update this file if McCabe et al. release a further revised report.
+
+as_of_date = "2026-05-27"
+
+[exported_cases]
+value  = 3
+source = "McCabe et al. Lancet (2026) — three confirmed imported BVD cases in Uganda from DRC as of 27 May 2026"
+
+[exports_deaths]
+value  = 1
+source = "One death among the Uganda imports known by the cut-off (WHO DON 2026-DON602, died 14 May 2026). The paper does not model exported-case deaths; our joint model conditions on it. No further import death is reported in the paper for the 27 May cut-off."
+
+[first_export_detection_date]
+value  = "2026-05-11"
+source = "WHO DON 2026-DON602 — first Uganda import hospital-admitted 11 May 2026 (detection date). One-sided timing bound on T."
+
+[export_death_dates]
+value  = ["2026-05-14"]
+source = "WHO DON 2026-DON602 — the fatal Uganda import died 14 May 2026 (before the 27 May cut-off). Loaded as a daily series bounding T; the paper does not use it."
+
+[total_deaths]
+value  = 240
+source = "McCabe et al. Lancet (2026) — 240 suspected or confirmed deaths in DRC as of 27 May 2026"
+
+[reported_cases]
+value  = 1031
+source = "McCabe et al. Lancet (2026) — 1031 suspected or confirmed cases in DRC as of 27 May 2026"
+
+[daily_outbound_travellers]
+value  = 1871
+source = "McCabe et al. — mean daily PoE flow, Ituri side (16 May 2026 snapshot; unchanged input)"
+
+[daily_outbound_travellers_sd]
+value  = 200
+source = "PoE-to-PoE variation and sitrep sampling uncertainty; ~10% CV"
+
+[source_population]
+value  = 4392200
+source = "McCabe et al. Lancet (2026) Table 2 — Ituri Province population (main geographic-spread scenario)"
