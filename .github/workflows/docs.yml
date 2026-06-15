@@ -148,7 +148,9 @@ jobs:
             Model outputs and input data for commit ${{ github.sha }}.
 
             Bundles the posterior summary tables, thinned posterior
-            draws, a copy of the input `observations.toml`, a
+            draws, the latent symptom-onset ("symptomatic cases")
+            trajectory over time (`onsets_over_time.csv`), a copy of the
+            input `observations.toml`, a
             `site.zip` snapshot of the rendered report site, and
             `analysis.html` — a self-contained single-file copy of the
             report that opens offline.
