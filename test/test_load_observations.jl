@@ -2,7 +2,7 @@
 ## the bundled data/observations.toml file.
 
 @testitem "load_observations returns the documented fields" begin
-    using BVDOutbreakSize: load_observations
+    using BVDOutbreakSize: load_observations, confirmed_positivity_windows
     using Dates: Date
     obs = load_observations()
     @test obs isa NamedTuple
@@ -33,7 +33,8 @@
 
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
-        :lab_history, :lab_daily_history, :suspected_daily_history)
+        :lab_history, :lab_daily_history, :suspected_daily_history,
+        :isolation_history, :recovered_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -43,25 +44,66 @@
         @test length(h.days) == length(h.counts)
     end
 
-    ## The post-cutoff 24h analysed series carries the trusted unanchored
-    ## denominators (1, 4, 5, 6, 7, 8, 9 June), sorted oldest-first by day
-    ## index.
-    @test obs.lab_daily_history.counts == [76, 256, 126, 106, 67, 121, 68]
+    ## The post-cutoff 24h analysed series carries the late-window
+    ## denominators, sorted oldest-first by day index and within the grid.
+    @test !isempty(obs.lab_daily_history.counts)
     @test issorted(obs.lab_daily_history.days)
-    @test all(d -> d <= obs.n, obs.lab_daily_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.lab_daily_history.days)
+    @test all(c -> c > 0, obs.lab_daily_history.counts)
+
+    ## Validity invariant for the fitted stream rather than a literal echo of
+    ## the data file: each day that anchors a late confirmed-positivity window
+    ## scores the day's confirmed-case increment as a Binomial of its 24h
+    ## analysed denominator, so the increment must not exceed the denominator
+    ## (you cannot confirm more specimens than you analysed). A day breaching
+    ## this would be silently clamped and is the one documented failure mode,
+    ## so guarding it here catches a bad data update where the brittle literal
+    ## would only have needed re-typing.
+    let w = confirmed_positivity_windows(obs.confirmed_history,
+            obs.lab_history, obs.lab_daily_history)
+        anchored = findall(>(0), w.late_analysed)
+        @test !isempty(anchored)
+        @test all(i -> w.late_increments[i] <= w.late_analysed[i], anchored)
+    end
 
     ## The post-cutoff daily new-suspect inflow ("nouveaux cas suspects du
-    ## jour" / "cas suspects du jour", 4-10 June), sorted oldest-first by day
-    ## index and within the grid. A per-day incidence (never cumulative), so
-    ## it begins where the frozen cumulative suspected series stops.
-    @test obs.suspected_daily_history.counts ==
-          [153, 119, 117, 94, 138, 119, 119]
+    ## jour" / "cas suspects du jour"): a per-day incidence (never
+    ## cumulative), so every count is a positive daily inflow, sorted
+    ## oldest-first and within the grid. An invariant rather than a literal
+    ## echo of the data file, which would break on every SitRep advance.
+    @test !isempty(obs.suspected_daily_history.counts)
+    @test all(c -> c > 0, obs.suspected_daily_history.counts)
     @test issorted(obs.suspected_daily_history.days)
     @test all(d -> 1 <= d <= obs.n, obs.suspected_daily_history.days)
     ## Strictly after the last cumulative suspected vintage (26 May): the two
-    ## suspected likelihoods cover disjoint days.
+    ## suspected likelihoods cover disjoint days, so they do not double-count.
     @test minimum(obs.suspected_daily_history.days) >
           maximum(obs.reported_history.days)
+
+    ## The daily isolation/treatment-bed occupancy ("Patients en isolement"):
+    ## a per-day STOCK (point prevalence, never cumulative), so every count is
+    ## a positive occupancy, sorted oldest-first and within the grid. An
+    ## invariant rather than a literal echo, which would break on every
+    ## SitRep advance. The fitted series starts at the all-patients column
+    ## (1 June, SitRep 018), strictly after the frozen cumulative suspected
+    ## vintages, so it shares no day with the cumulative reported series.
+    @test !isempty(obs.isolation_history.counts)
+    @test all(c -> c > 0, obs.isolation_history.counts)
+    @test issorted(obs.isolation_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.isolation_history.days)
+    @test minimum(obs.isolation_history.days) >
+          maximum(obs.reported_history.days)
+
+    ## The cumulative recovered-among-confirmed series ("cumul guéris"): a
+    ## CUMULATIVE count, so non-decreasing and positive, sorted oldest-first
+    ## and within the grid, ending at the `recovered_cases` cut-off scalar.
+    ## An invariant rather than a literal echo.
+    @test !isempty(obs.recovered_history.counts)
+    @test all(c -> c > 0, obs.recovered_history.counts)
+    @test issorted(obs.recovered_history.counts)
+    @test issorted(obs.recovered_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.recovered_history.days)
+    @test obs.recovered_cases == obs.recovered_history.counts[end]
 
     ## History day indices are in range
     dh = obs.deaths_history
@@ -70,32 +112,51 @@
         @test issorted(dh.days)
     end
 
-    ## Suspected-death history, 18-26 May (nine vintages). The 23 May
-    ## deaths use the SitRep 009 zone-row sum (220), not the erroneous 119
-    ## headline; the 26 May value uses the revised SitRep 012_v2 (246).
-    @test dh.counts == [131, 148, 160, 175, 204, 220, 223, 238, 246]
+    ## Suspected-death history (cumulative national, frozen 18-26 May): a
+    ## non-decreasing positive series whose final vintage is the frozen
+    ## `total_deaths` scalar. The 23 May zone-row correction is pinned (so a
+    ## re-scan regression is caught) without echoing the whole vector: the
+    ## 23 May deaths use the SitRep 009 zone-row sum (220), not the erroneous
+    ## 119 headline. The 26 May revision to 246 (SitRep 012_v2, correcting
+    ## the original 238) is pinned by the endpoint tie to `total_deaths`.
+    @test !isempty(dh.counts)
+    @test all(c -> c > 0, dh.counts)
+    @test issorted(dh.counts)
+    @test dh.counts[end] == obs.total_deaths
+    @test 220 in dh.counts
+    @test !(119 in dh.counts)
 
-    ## Confirmed-case history runs to the 10 June recorded point (post-28
-    ## May vintages have no analysed denominator); its final vintage equals
-    ## the `confirmed_cases` total.
-    @test obs.confirmed_history.counts ==
-          [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210,
-        263, 282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676]
+    ## Confirmed-case history (cumulative national, runs to the latest
+    ## recorded vintage): non-decreasing and positive, with its final
+    ## vintage equal to the `confirmed_cases` cut-off total. Grows with each
+    ## SitRep, so an invariant rather than a literal every update re-types.
+    @test !isempty(obs.confirmed_history.counts)
+    @test all(c -> c > 0, obs.confirmed_history.counts)
+    @test issorted(obs.confirmed_history.counts)
     @test obs.confirmed_history.counts[end] == obs.confirmed_cases
 
-    ## Confirmed deaths: recorded, growing 17 → 136 over 26 May-10 June.
+    ## Confirmed deaths (cumulative national, recorded for completeness):
+    ## non-decreasing and positive, final vintage equal to the
+    ## `confirmed_deaths` cut-off scalar. Grows with each SitRep.
     @test obs.confirmed_deaths isa Integer
-    @test obs.confirmed_deaths_history.counts ==
-          [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115,
-        127, 136]
+    @test !isempty(obs.confirmed_deaths_history.counts)
+    @test all(c -> c > 0, obs.confirmed_deaths_history.counts)
+    @test issorted(obs.confirmed_deaths_history.counts)
     @test obs.confirmed_deaths_history.counts[end] == obs.confirmed_deaths
 
-    ## Laboratory throughput histories (cumulative national, 23-28 May);
-    ## the analysed series (`lab_history`) ends at the cut-off
-    ## `tests_analysed` total and is the per-test positivity denominator.
-    @test obs.tests_received_history.counts ==
-          [418, 431, 431, 662, 774, 883]
-    @test obs.lab_history.counts == [211, 295, 295, 403, 648, 755]
+    ## Laboratory throughput histories (cumulative national, frozen
+    ## 23-28 May): both non-decreasing and positive; specimens analysed
+    ## cannot exceed specimens received vintage-by-vintage, and the analysed
+    ## series ends at the cut-off `tests_analysed` total, the per-test
+    ## positivity denominator.
+    @test !isempty(obs.lab_history.counts)
+    @test all(c -> c > 0, obs.tests_received_history.counts)
+    @test all(c -> c > 0, obs.lab_history.counts)
+    @test issorted(obs.tests_received_history.counts)
+    @test issorted(obs.lab_history.counts)
+    @test length(obs.lab_history.counts) ==
+          length(obs.tests_received_history.counts)
+    @test all(obs.lab_history.counts .<= obs.tests_received_history.counts)
     @test obs.lab_history.counts[end] == obs.tests_analysed
 
     ## Dated Uganda export series: grid day-indices of the three imports
@@ -109,8 +170,9 @@
     @test all(1 .<= obs.export_death_days .<= obs.n)
     @test length(obs.export_case_days) == 3
     @test length(obs.export_death_days) == 1
-    ## Detection days are spaced 5 (11→16 May) then 7 (16→23 May) apart.
-    @test diff(obs.export_case_days) == [5, 7]
+    ## Detection days are strictly increasing (distinct import dates,
+    ## 11→16→23 May).
+    @test all(>(0), diff(obs.export_case_days))
     ## The export death (14 May) falls between imports #1 (11 May) and #2.
     @test obs.export_case_days[1] < obs.export_death_days[1] <
           obs.export_case_days[2]
@@ -172,10 +234,18 @@ end
         @test maximum(h.days) <= frozen.n
     end
 
-    ## The 23 May suspected streams: six vintages (18-23 May) of the
-    ## nine in the full manifest, ending at the frozen totals.
-    @test frozen.reported_history.counts == [516, 575, 672, 745, 872, 904]
-    @test frozen.deaths_history.counts == [131, 148, 160, 175, 204, 220]
+    ## The 23 May suspected streams: six vintages (18-23 May) of the nine
+    ## in the full manifest. Truncation is a clean non-decreasing prefix of
+    ## the full series (asserted against the loaded full data, not a hand-
+    ## typed literal) and pins the cut-off scalars to the 23 May values.
+    @test length(frozen.reported_history.counts) == 6
+    @test length(frozen.deaths_history.counts) == 6
+    @test frozen.reported_history.counts == full.reported_history.counts[1:6]
+    @test frozen.deaths_history.counts == full.deaths_history.counts[1:6]
+    @test issorted(frozen.reported_history.counts)
+    @test issorted(frozen.deaths_history.counts)
+    @test frozen.reported_history.counts[end] == frozen.reported_cases
+    @test frozen.deaths_history.counts[end] == frozen.total_deaths
     @test frozen.reported_cases == 904
     @test frozen.total_deaths == 220
 

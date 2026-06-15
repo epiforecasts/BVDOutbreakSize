@@ -32,18 +32,29 @@ const REPORT_SCENARIOS = [
     REPORT_SCENARIOS_CI
 
 Published McCabe et al. scenario estimates WITH their reported 95%
-confidence intervals, for the two situation-report vintages: the 18 May
-2026 report [mccabe2026](@cite) and the 20 May 2026 update
-[mccabe2026update](@cite). Each entry is a
-`(date, label, mean, lower, upper)` tuple, where `date` is the report's
-own cut-off date. Method 1 (geographic spread from exported cases and
-travel volume) is unchanged between the two reports, so it is recorded
-once under the 20 May vintage. Method 2 (back-calculation from deaths)
-differs between the vintages: the 18 May report used 88 deaths and CFR
-24/30/40%, the 20 May update used 131 deaths and the corrected CFR
-26/33/40%. Confidence intervals are exact negative-binomial (Method 1)
-and Poisson likelihood-profile (Method 2), as reported in Tables 1 and 2
-of each report.
+confidence intervals, for three vintages: the 18 May 2026 report
+[mccabe2026](@cite), the 20 May 2026 update [mccabe2026update](@cite) and
+the peer-reviewed Lancet Infectious Diseases publication
+[mccabe2026lancet](@cite), whose inputs are as of 27 May 2026. Each entry
+is a `(date, label, mean, lower, upper)` tuple, where `date` is that
+vintage's own cut-off date. Method 1 (geographic spread from exported
+cases and travel volume) is unchanged between the two Imperial reports,
+so it is recorded once under the 20 May vintage. Method 2
+(back-calculation from deaths) differs between the vintages: the 18 May
+report used 88 deaths and CFR 24/30/40%, the 20 May update used 131
+deaths and the corrected CFR 26/33/40%. Confidence intervals are exact
+negative-binomial (Method 1) and Poisson likelihood-profile (Method 2),
+as reported in Tables 1 and 2 of each report.
+
+The 27 May Lancet vintage uses 240 deaths and three Uganda imports, and
+varies the epidemic doubling time `T_d` (7/10/14 d) for both methods
+rather than the earlier geographic window `w` / onset-to-death `τ`; its
+back-calculation fixes the onset-to-death gamma (mean 11.37 d, SD 5.41)
+and assumes 30% of deaths are attributable to Ebola. The published paper
+SWAPS the method numbers (its "method 1" is the back-calculation and its
+"method 2" the geographic spread); we keep this package's convention
+(M1 = geographic spread, negative-binomial CIs; M2 = back-calculation,
+Poisson CIs), which the paper's reported CI types confirm.
 """
 const REPORT_SCENARIOS_CI = [
     ## Method 1 (geographic spread): identical across both reports.
@@ -73,7 +84,27 @@ const REPORT_SCENARIOS_CI = [
     ("2026-05-20", "M2 τ= 7 d, CFR 40%", 901, 754, 1062),
     ("2026-05-20", "M2 τ=21 d, CFR 26%", 730, 612, 862),
     ("2026-05-20", "M2 τ=21 d, CFR 33%", 575, 482, 679),
-    ("2026-05-20", "M2 τ=21 d, CFR 40%", 474, 398, 560)
+    ("2026-05-20", "M2 τ=21 d, CFR 40%", 474, 398, 560),
+    ## 27 May 2026 Lancet publication: geographic spread (Method 1 here =
+    ## the paper's "method 2"), Table 2; doubling time T_d, source pop.
+    ("2026-05-27", "M1 Ituri, T_d=10 d", 945, 196, 2274),
+    ("2026-05-27", "M1 Ituri, T_d= 7 d", 1100, 228, 2647),
+    ("2026-05-27", "M1 Ituri, T_d=14 d", 847, 176, 2037),
+    ("2026-05-27", "M1 +N. Kivu, T_d=10 d", 1164, 241, 2800),
+    ("2026-05-27", "M1 +N. Kivu, T_d= 7 d", 1354, 281, 3260),
+    ("2026-05-27", "M1 +N. Kivu, T_d=14 d", 1042, 216, 2508),
+    ## 27 May 2026 Lancet publication: back-calculation from 240 deaths
+    ## (Method 2 here = the paper's "method 1"), Table 1; 30% of deaths
+    ## attributable to Ebola, doubling time T_d, CFR 26/33/40%.
+    ("2026-05-27", "M2 T_d=10 d, CFR 26%", 573, 502, 648),
+    ("2026-05-27", "M2 T_d=10 d, CFR 33%", 451, 396, 511),
+    ("2026-05-27", "M2 T_d=10 d, CFR 40%", 372, 327, 421),
+    ("2026-05-27", "M2 T_d= 7 d, CFR 26%", 756, 664, 855),
+    ("2026-05-27", "M2 T_d= 7 d, CFR 33%", 596, 523, 674),
+    ("2026-05-27", "M2 T_d= 7 d, CFR 40%", 491, 432, 556),
+    ("2026-05-27", "M2 T_d=14 d, CFR 26%", 471, 413, 533),
+    ("2026-05-27", "M2 T_d=14 d, CFR 33%", 371, 326, 420),
+    ("2026-05-27", "M2 T_d=14 d, CFR 40%", 306, 269, 346)
 ]
 
 """

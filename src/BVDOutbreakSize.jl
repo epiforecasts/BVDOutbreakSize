@@ -50,7 +50,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        delay_corrected_cfr, delay_corrected_confirmed_cfr,
        confirmed_cfr_table, plot_confirmed_cfr,
 # renewal helpers
-       renewal_infections, convolve_delay, convolve_pmf,
+       renewal_infections, convolve_delay, convolve_survival, convolve_pmf,
        discretise_censored,
        euler_lotka_r, r_to_R0, doubling_time, seed_infections,
        seed_at_renewal_start,
@@ -64,6 +64,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        onset_incidence_model,
        genetic_seeding_model,
        cfr_model, traveller_volume_model, test_positivity_model,
+       isolation_admission_model, recovery_probability_model,
        death_background_model, death_ascertainment_model, background_cfr_model,
        background_re_model, background_pooling_model,
        expand_vintage_rate,
@@ -75,11 +76,13 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
 # observation models
        deaths_model, reported_cases_model, confirmed_cases_model,
        confirmed_positivity_windows, confirmed_deaths_model,
+       treatment_admission_model, recovered_model,
        exports_model, exports_deaths_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
        confirmed_only_model, confirmed_deaths_only_model,
-       exports_deaths_only_model, bvd_joint
+       treatment_only_model,
+       exports_deaths_only_model, exports_joint_only_model, bvd_joint
 
 include("docstrings.jl")
 include("constants.jl")

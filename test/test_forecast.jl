@@ -69,6 +69,50 @@ end
     @test all(fc.confirmed_deaths_cum .<= fc.deaths_cum)
 end
 
+@testitem "forecast_reported projects isolation beds and recovered" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    import FlexiChains
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_reported, forecast_table
+
+    ## Synthetic chain that also carries the isolation and recovered
+    ## deterministics, so the forecast projects the bed occupancy and the
+    ## cumulative recovered using their own dispersions.
+    @model function _forecast_iso_test()
+        r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
+        expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
+        expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
+        expected_isolation_T ~ truncated(Normal(280.0, 40.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        expected_recovered_T ~ truncated(Normal(32.0, 8.0); lower = 1.0)
+        recovered_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        return nothing
+    end
+    chn = sample(_forecast_iso_test(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false)
+    fc = forecast_reported(chn; horizon = 7,
+        obs_cases = 905, obs_deaths = 18,
+        obs_confirmed = 210, obs_confirmed_deaths = 17,
+        obs_recovered = 32)
+    @test :isolation_level in propertynames(fc)
+    @test :recovered_cum in propertynames(fc)
+    @test :recovered_new in propertynames(fc)
+    @test all(fc.isolation_level .>= 0)
+    @test all(fc.recovered_cum .>= 0)
+    @test all(fc.recovered_new .<= fc.recovered_cum)
+    tbl = forecast_table(fc)
+    @test "DRC isolation beds" in tbl[!, "Stream"]
+    @test "DRC recovered" in tbl[!, "Stream"]
+    @test "occupancy at T+7" in tbl[!, "Quantity"]
+end
+
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported, forecast_table

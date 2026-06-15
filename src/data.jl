@@ -31,6 +31,10 @@ per-day Poisson likelihood), the per-vintage histories as
 `lab_daily_history` from the post-cutoff 24h analysed counts on the
 trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
+`isolation_history` from the post-cutoff daily isolation/hospitalisation
+occupancy ("Patients en isolement", a daily bed count fitted by the
+length-of-stay submodel), `recovered_history` from the cumulative
+recovered-among-confirmed series ("cumul guéris"),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
@@ -113,6 +117,20 @@ function load_observations(
     ## a daily incidence against the modelled suspected series where the
     ## frozen cumulative suspected stream stops at 26 May.
     suspected_daily_history = history("suspected_daily_history")
+    ## Post-cutoff daily isolation/hospitalisation occupancy ("Patients en
+    ## isolement"): a per-day count of patients in an isolation/treatment bed,
+    ## fitted against the modelled bed count on each report day by the
+    ## length-of-stay observation submodel. Begins 1 June where the
+    ## all-patients column
+    ## definition is stable (see the manifest note).
+    isolation_history = history("isolation_history")
+    ## Post-cutoff cumulative recovered-among-confirmed ("cumul guéris"):
+    ## a cumulative count of laboratory-confirmed cases recorded as recovered,
+    ## fitted as survivors among the modelled confirmed cases (a scaled
+    ## confirmation-to-recovery convolution) by the recovered observation
+    ## submodel. Begins 6 June, where the confirmed-based reports first print
+    ## the running total.
+    recovered_history = history("recovered_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -156,6 +174,9 @@ function load_observations(
         lab_history = lab_history,
         lab_daily_history = lab_daily_history,
         suspected_daily_history = suspected_daily_history,
+        isolation_history = isolation_history,
+        recovered_history = recovered_history,
+        recovered_cases = _scalar("recovered_cases", recovered_history),
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

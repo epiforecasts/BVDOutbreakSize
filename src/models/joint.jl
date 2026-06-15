@@ -143,6 +143,44 @@ positives (a Binomial of the observed analysed denominator in
 end
 
 """
+Isolation-occupancy-only composer (treatment-bed prevalence in isolation).
+Runs the infection process and onset staging, samples dispersion and pooled
+ascertainment, then runs the suspected-case stream in predictive mode (to
+draw the shared background rate, testing fraction and onset-to-report
+kernel) and conditions on the isolation/treatment-bed occupancy alone. See
+[`treatment_admission_model`](@ref) and [`reported_cases_model`](@ref).
+"""
+@model function treatment_only_model(
+        n::Integer;
+        isolation_history = (; days = Int[], counts = Int[]),
+        breakpoint::Union{Missing, Real} = missing,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        cases = reported_cases_model,
+        treatment = treatment_admission_model,
+        receipt = lab_delay_model(),
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model())
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    dispersion_state ~ to_submodel(dispersion)
+    asc_state ~ to_submodel(ascertainment)
+    k = dispersion_state.k
+    p_drc = asc_state.p_drc
+    cases_state ~ to_submodel(
+        cases((; days = Int[], counts = Int[]), missing, latent.onsets,
+        k, p_drc))
+    ## Report-to-receipt laboratory delay for the non-BVD rule-out stay (the
+    ## confirmed pipeline that supplies it in the joint is not run here).
+    receipt_state ~ to_submodel(receipt)
+    treatment_state ~ to_submodel(
+        treatment(isolation_history, cases_state.bvd_reports_daily,
+        cases_state.bg_daily, p_drc, receipt_state.pmf))
+    cumulative_infections := cumsum(latent.infection_state.infections)
+    C_T := latent.infection_state.C_T
+end
+
+"""
 Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the reported-
 cases stream (in predictive mode, to supply the non-BVD background the death
@@ -221,6 +259,48 @@ See [`exports_deaths_model`](@ref).
 end
 
 """
+Exports-joint composer: the Uganda export CASES and DEATHS fit together as
+one geographic-spread stream. Runs the infection process and onset staging,
+samples ascertainment and the deaths submodel (for the CFR and
+onset-to-death delay), then conditions on BOTH the export-case and
+export-death likelihoods over the one travel-gated at-risk prevalence, so
+the imports and the import deaths inform the outbreak size jointly rather
+than as two separate single-stream fits. Either count may be `missing` to
+drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
+"""
+@model function exports_joint_only_model(
+        n::Integer, exported_cases::Union{Missing, Integer},
+        exports_deaths::Union{Missing, Integer};
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        export_death_days::AbstractVector{<:Integer} = Int[],
+        breakpoint::Union{Missing, Real} = missing,
+        source_population::Real = ITURI_POPULATION,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        deaths = deaths_model,
+        exports = exports_model,
+        dispersion = surveillance_dispersion_model(),
+        ascertainment = pooled_ascertainment_model())
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    dispersion_state ~ to_submodel(dispersion)
+    asc_state ~ to_submodel(ascertainment)
+    deaths_state ~ to_submodel(
+        deaths((; days = Int[], counts = Int[]), missing, latent.onsets,
+        dispersion_state.k))
+    exports_state ~ to_submodel(
+        exports(exported_cases, latent.infection_state.infections,
+        asc_state.p_uganda; export_case_days,
+        incubation_pmf = latent.incubation_pmf, source_population))
+    exports_deaths_state ~ to_submodel(
+        exports_deaths_model(exports_deaths,
+        exports_state.travelled_prevalence, deaths_state.CFR,
+        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
+    cumulative_infections := cumsum(latent.infection_state.infections)
+    C_T := latent.infection_state.C_T
+end
+
+"""
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
 stages it to daily onset incidence, then conditions on the DRC suspected
@@ -254,7 +334,16 @@ fraction `tau_death`) scored through a death-pool composition positivity
 `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
 suspected deaths (see [`confirmed_deaths_model`](@ref)). The suspected deaths
 carry a death ascertainment `p_death` and a non-BVD background tied to the
-case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)).
+case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)). The
+optional `isolation_history` adds the
+daily isolation/treatment-bed occupancy ("Patients en isolement"), a
+prevalence stream fitted as the suspect inflow (BVD treatment stay plus
+non-BVD rule-out stay) carried through a length-of-stay survival into a
+daily stock (see [`treatment_admission_model`](@ref)). The optional
+`recovered_history` adds the recovered-among-confirmed stream ("cumul
+guéris"), survivors among the modelled daily confirmed cases scaled by the
+recovery probability and lagged by a confirmation-to-recovery delay (see
+[`recovered_model`](@ref)).
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
@@ -280,6 +369,7 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
         confirmed_deaths::Union{Missing, Integer} = missing,
+        recovered_cases::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),
         reported_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
@@ -287,6 +377,8 @@ death-confirmation positivity (`death_confirmation`).
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
+        isolation_history = (; days = Int[], counts = Int[]),
+        recovered_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -298,6 +390,8 @@ death-confirmation positivity (`death_confirmation`).
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
+        treatment = treatment_admission_model,
+        recovered = recovered_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
@@ -376,6 +470,18 @@ death-confirmation positivity (`death_confirmation`).
         deaths_state.bg_death_daily, k;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         capacity_start = cap_start))
+    ## Isolation/treatment-bed occupancy: the suspect inflow (BVD treatment
+    ## stay plus non-BVD rule-out stay) carried through a length-of-stay
+    ## survival into a daily stock (see [`treatment_admission_model`](@ref)).
+    treatment_state ~ to_submodel(
+        treatment(isolation_history, cases_state.bvd_reports_daily,
+        cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf))
+    ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
+    ## daily confirmed cases, with a recovery fraction grounded on the CFR and
+    ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
+    recovered_state ~ to_submodel(
+        recovered(recovered_history, recovered_cases,
+        confirmed_state.confirmed_daily, deaths_state.CFR))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
@@ -397,33 +503,17 @@ death-confirmation positivity (`death_confirmation`).
     cumulative_infections := cumsum(infection_state.infections)
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
-    ## Modelled daily laboratory-confirmed cases: the per-window tested-positive
-    ## probability expanded onto the daily grid and applied to the modelled
-    ## analysed volume, so the cumulative trajectory carries the confirmed-case
-    ## timing for the delay-corrected confirmed-CFR reconstruction. The onset-
-    ## to-confirmation kernel (onset-to-report ⊕ receipt) and the onset-to-
-    ## death-confirmation kernel (onset-to-death ⊕ receipt, the death carrying
-    ## the same report-to-receipt laboratory delay) are exposed alongside so the
-    ## residual delay between a confirmed case and its confirmed death can be
-    ## rebuilt per draw off the chain.
-    _conf_windows = confirmed_state.windows
-    _conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
-        _conf_windows.late_days)
-    ## In predict / check-model mode the per-window positivity can widen to
-    ## `Vector{Any}` (and is empty when there is no confirmed history), so
-    ## `expand_vintage_rate` would call `zero(Any)`. Pin it to the modelled
-    ## analysed volume's (always-concrete) element type, leaving the
-    ## AD/fit path (concrete dual eltype) untouched, matching the guards in
-    ## `confirmed_cases_model`.
-    _conf_analysed = confirmed_state.analysed_daily
-    _conf_positivity = confirmed_state.p_pos
-    if eltype(_conf_positivity) === Any
-        _conf_positivity = convert(Vector{eltype(_conf_analysed)},
-            _conf_positivity)
-    end
-    _conf_daily_positivity = expand_vintage_rate(_conf_positivity,
-        _conf_window_days, n)
-    cumulative_confirmed := cumsum(_conf_daily_positivity .* _conf_analysed)
+    ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
+    ## the per-window tested-positive probability expanded onto the daily grid
+    ## and applied to the modelled analysed volume), so the cumulative
+    ## trajectory carries the confirmed-case timing for the delay-corrected
+    ## confirmed-CFR reconstruction. The onset-to-confirmation kernel
+    ## (onset-to-report ⊕ receipt) and the onset-to-death-confirmation kernel
+    ## (onset-to-death ⊕ receipt, the death carrying the same report-to-receipt
+    ## laboratory delay) are exposed alongside so the residual delay between a
+    ## confirmed case and its confirmed death can be rebuilt per draw off the
+    ## chain.
+    cumulative_confirmed := cumsum(confirmed_state.confirmed_daily)
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     C_T := infection_state.C_T
@@ -446,6 +536,14 @@ death-confirmation positivity (`death_confirmation`).
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
+    expected_isolation_T := treatment_state.expected_isolation
+    isolation_admission := treatment_state.p_iso
+    isolation_bvd_los_mean := treatment_state.bvd_los_mean
+    isolation_dispersion := treatment_state.k_isolation
+    expected_recovered_T := recovered_state.expected_recovered
+    recovery_probability := recovered_state.p_recover
+    recovery_delay_mean := recovered_state.recovery_delay_mean
+    recovered_dispersion := recovered_state.k_recovered
     tau_test := cases_state.τ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
