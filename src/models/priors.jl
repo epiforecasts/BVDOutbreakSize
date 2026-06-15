@@ -507,6 +507,65 @@ The derived per-suspected positivity is exposed inside
 end
 
 """
+Treatment-admission probability for the isolation-occupancy stream
+([`treatment_admission_model`](@ref)). Samples `p_iso`, the fraction of
+ascertained BVD suspected cases that are admitted to and retained in an
+isolation/treatment bed, so the modelled BVD bed occupancy is `p_iso` times
+the survival-convolution of the BVD admission inflow. The non-BVD
+background suspects are taken to be isolated on report (admission
+probability one) and leave quickly under their own short rule-out
+length-of-stay, so a separate background admission probability would be
+degenerate with the background rate `λ_bg` and is not sampled.
+
+The default `Beta(2, 2)` is weakly informative on `(0, 1)` with mean ½ and
+no mass piled at the bounds. `p_iso` is partially confounded with the BVD
+length-of-stay mean for the occupancy LEVEL (Little's law: mean occupancy
+≈ `p_iso · admissions · (E[LOS] + 1)`), so the length-of-stay prior carries
+the duration and `p_iso` absorbs the admission/retention fraction; the
+length-of-stay also sets the lag and smoothing of occupancy relative to the
+inflow, which the daily occupancy series identifies. Pass `p_prior` to
+override. Returns `(; p_iso)`.
+"""
+@model function isolation_admission_model(; p_prior = Beta(2.0, 2.0))
+    p_iso ~ p_prior
+    return (; p_iso)
+end
+
+"""
+Recovery probability for the recovered-among-confirmed stream
+([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
+is recovery rather than death is the confirmed-case survival fraction, the
+complement of the case-fatality ratio, so it is GROUNDED on the model's CFR
+rather than estimated from scratch. The confirmed cases are a slightly
+different population from the one the CFR is defined over (they have been
+laboratory-confirmed and brought into care), so the survival fraction is the
+complement of the CFR adjusted on the log-odds scale by a sampled offset,
+
+```math
+p_\\text{recover} = \\operatorname{logistic}\\!\\bigl(
+    \\operatorname{logit}(1 - \\mathrm{CFR}) + \\delta_\\text{rec}\\bigr),
+```
+
+with `δ_rec ~ Normal(0, 0.5)` centred at zero, so the default recovery
+fraction is exactly `1 − CFR` and the data move it only as far as they
+support. The offset keeps `p_recover` in `(0, 1)` without a hard clamp and
+lets the confirmed-population survival differ modestly from the CFR
+complement. `p_recover` is partially confounded with the
+confirmation-to-recovery delay for the count of recoveries observed by the
+cut-off (a long delay right-censors recoveries that have not yet resolved),
+so the delay carries the timing and `p_recover` the eventual survival
+fraction. Pass `offset_prior` to override. Returns
+`(; p_recover, recovery_offset)`.
+"""
+@model function recovery_probability_model(CFR::Real;
+        offset_prior = Normal(0.0, 0.5))
+    recovery_offset ~ offset_prior
+    base = clamp(1 - CFR, eps(typeof(CFR)), one(CFR) - eps(typeof(CFR)))
+    p_recover := logistic(logit(base) + recovery_offset)
+    return (; p_recover, recovery_offset)
+end
+
+"""
 Per-vintage non-BVD background rate as a partially-pooled, non-centred
 random effect, the time-varying generalisation of the scalar `λ_bg` /
 `λ_bg_death`. Used by the suspected-case ([`reported_cases_model`](@ref))

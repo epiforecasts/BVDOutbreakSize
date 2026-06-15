@@ -129,6 +129,14 @@ Returns a `DataFrame` with one row per draw and columns:
 - `:cases_new`, … `:confirmed_deaths_new` — new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
+- `:isolation_level` — projected isolation/treatment-bed occupancy at the
+  horizon, present when the chain carries `expected_isolation_T`. A stock
+  (a level, not a cumulative), replicated with the isolation stream's own
+  dispersion; under the exponential-growth continuation the occupancy grows
+  by the same horizon factor as the inflow.
+- `:recovered_cum`, `:recovered_new` — cumulative recovered-among-confirmed
+  by the horizon (and new this week when `obs_recovered` is supplied),
+  present when the chain carries `expected_recovered_T`.
 - `:infections_new`, `:onsets_new`, `:deaths_latent_new` — new latent
   infections, symptom onsets and deaths projected over the horizon under the
   evolving growth rate (deterministic per-draw quantities, so they carry
@@ -158,6 +166,7 @@ function forecast_reported(chn;
         obs_deaths::Real,
         obs_confirmed::Union{Real, Missing} = missing,
         obs_confirmed_deaths::Union{Real, Missing} = missing,
+        obs_recovered::Union{Real, Missing} = missing,
         seed::Integer = 20260520)
     r = _draws(chn, :r)
     cases_T = _draws(chn, :expected_reports_T)
@@ -184,6 +193,25 @@ function forecast_reported(chn;
     conf_T = has_conf ? _draws(chn, :expected_confirmed_T) : nothing
     conf_deaths_T = has_conf_deaths ?
                     _draws(chn, :expected_confirmed_deaths_T) : nothing
+    ## Isolation bed occupancy (a stock) and recovered-among-confirmed (a
+    ## cumulative), forecast when the chain carries them and using each
+    ## stream's OWN dispersion. Under the forecast's exponential-growth
+    ## continuation every quantity, including the bed-occupancy stock, grows by
+    ## the same horizon factor, so the projected occupancy is the cut-off
+    ## occupancy scaled by `grow`.
+    _has(key) =
+        try
+            chn[key]
+            true
+        catch
+            false
+        end
+    has_iso = _has(:expected_isolation_T) && _has(:isolation_dispersion)
+    has_rec = _has(:expected_recovered_T) && _has(:recovered_dispersion)
+    iso_T = has_iso ? _draws(chn, :expected_isolation_T) : nothing
+    k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
+    rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
+    k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
 
     rng = MersenneTwister(seed)
     n = length(r)
@@ -194,6 +222,8 @@ function forecast_reported(chn;
     deaths_latent_new = Vector{Float64}(undef, n)
     confirmed_cum = has_conf ? Vector{Int}(undef, n) : nothing
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
+    isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
+    recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
 
     @inbounds for i in 1:n
         ## Growth factor over the whole horizon: the product of the daily
@@ -228,6 +258,12 @@ function forecast_reported(chn;
             confirmed_deaths_cum[i] = min(deaths_cum[i],
                 _nb_rand(rng, k[i], μ))
         end
+        ## Projected bed occupancy and cumulative recovered at T+horizon, each
+        ## with its own dispersion.
+        has_iso && (isolation_level[i] = _nb_rand(rng, k_iso[i],
+            iso_T[i] * grow))
+        has_rec && (recovered_cum[i] = _nb_rand(rng, k_rec[i],
+            rec_T[i] * grow))
     end
 
     _new(cum, obs) = max.(cum .- round(Int, obs), 0)
@@ -249,6 +285,14 @@ function forecast_reported(chn;
         df.confirmed_deaths_cum = confirmed_deaths_cum
         df.confirmed_deaths_new = _new(confirmed_deaths_cum,
             obs_confirmed_deaths)
+    end
+    if has_iso
+        df.isolation_level = isolation_level
+    end
+    if has_rec
+        df.recovered_cum = recovered_cum
+        obs_recovered !== missing &&
+            (df.recovered_new = _new(recovered_cum, obs_recovered))
     end
     return df
 end
@@ -282,6 +326,17 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
     for (label, cum, new) in streams
         push!(rows, _row(label, "cumulative by T+7", fc[!, cum]))
         push!(rows, _row(label, "new this week", fc[!, new]))
+    end
+    ## Isolation bed occupancy is a stock (a level, not a cumulative), so it
+    ## is reported as the projected occupancy at the horizon. Recovered is
+    ## cumulative, like the confirmed streams.
+    :isolation_level in propertynames(fc) && push!(rows,
+        _row("DRC isolation beds", "occupancy at T+7", fc[!, :isolation_level]))
+    if :recovered_cum in propertynames(fc)
+        push!(rows,
+            _row("DRC recovered", "cumulative by T+7", fc[!, :recovered_cum]))
+        :recovered_new in propertynames(fc) && push!(rows,
+            _row("DRC recovered", "new this week", fc[!, :recovered_new]))
     end
     return _prettify(DataFrame(rows))
 end
