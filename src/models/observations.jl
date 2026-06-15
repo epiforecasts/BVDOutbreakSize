@@ -1240,6 +1240,12 @@ component. Empty by default; a `missing` count vector samples (the
 predictive path). Returns the admission proportion, the BVD stay mean, the
 dispersion, the daily occupancy and its BVD/background split for reuse and
 posterior-predictive replication.
+
+The admission proportion is constant, so this assumes the occupancy is
+demand-driven rather than supply-limited. The reported occupancy is in fact
+approaching capacity (national 83%, Ituri 94% on 13 June), so a
+capacity-constrained version (latent demand and supply-limited occupancy) is
+left as follow-up work (epiforecasts/BVDOutbreakSize#265).
 """
 @model function treatment_admission_model(
         isolation_history,

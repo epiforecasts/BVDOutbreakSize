@@ -1237,6 +1237,16 @@ cfr_prior_fig #hide
 # plus BVD-suspect), not the report's confirmed/suspect split, since most
 # "suspects in isolation" are true BVD cases awaiting confirmation. The
 # fitted series is the all-patients column from 1 June (SitRep 018) onward.
+#
+# This treats the admission proportion as constant, so it assumes the bed
+# occupancy is demand-driven rather than supply-limited. In the data the
+# occupancy is in fact approaching capacity (the reported "Taux d'occupation"
+# is 82.9% nationally and 93.9% in Ituri on 13 June, with the situation
+# reports flagging potential saturation), so once beds saturate the occupancy
+# tracks capacity rather than the modelled demand. A capacity-constrained
+# version — a latent bed demand and a supply-limited occupancy, with a
+# forecast of need under unconstrained supply — is left as follow-up work
+# (epiforecasts/BVDOutbreakSize#265).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_admission_model</summary>
@@ -1976,7 +1986,11 @@ diagnostics_table( #hide
 # cumulative recovered total. The bed occupancy is the number of beds in use
 # on a day, and under the same exponential-growth continuation it grows by
 # the horizon factor like the case inflow, so the projected occupancy is the
-# cut-off occupancy carried forward by that factor. The suspected reported
+# cut-off occupancy carried forward by that factor. This projection takes the
+# admission proportion as fixed and so assumes supply is unconstrained, which
+# overstates realisable occupancy once beds saturate (the bed model's known
+# limitation, epiforecasts/BVDOutbreakSize#265); read it as projected demand
+# for beds rather than occupancy the supply can meet. The suspected reported
 # cases and deaths are no longer reported, so they are not shown as
 # targets. Exports are not forecast either, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the

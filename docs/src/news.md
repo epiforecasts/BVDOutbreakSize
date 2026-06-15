@@ -27,6 +27,9 @@ Changes since v1.5.0.
   `convolve_delay`), the `treatment_admission_model` observation submodel, the
   `isolation_admission_model` prior and the `treatment_only_model`
   single-stream composer.
+  The admission proportion is constant, so this assumes demand-driven (not
+  supply-limited) occupancy; a capacity-constrained version is left as
+  follow-up work (#265).
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
   daily confirmed cases, scaled by a recovery proportion and convolved with a
