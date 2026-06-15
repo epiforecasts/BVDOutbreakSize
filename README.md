@@ -181,8 +181,9 @@ repository depends on:
   of the Congo and Uganda (DON602, DON603).* Source of the first
   Uganda import hospital-admission date (11 May 2026) and the fatal
   import death date (14 May 2026).
-- **Imperial reports** that this work re-implements and compares
-  against, in both released versions —
+- **McCabe et al. estimates** that this work re-implements and compares
+  against, in all three released versions (the two Imperial reports and
+  the peer-reviewed Lancet publication) —
   McCabe, R., Ebbarnezh, L., Okware, S., Fotsing, R., Koua, E.,
   Mbaka, P., Lofungola, A., van Elsland, S. L., McMenamin, M.,
   Ferguson, N., le Polain de Waroux, O., Cori, A. (2026).
@@ -196,6 +197,14 @@ repository depends on:
   20 May 2026.
   DOI: [10.25560/13005307](https://doi.org/10.25560/13005307).
   [Report PDF](https://www.imperial.ac.uk/media/imperial-college/medicine/mrc-gida/Report-ebola-update-20-05-2026.pdf).
+  McCabe, R., Ebbarnezh, L., Okware, S., Fotsing, R., Koua, E.,
+  Mbaka, P., Lofungola, A., Ebengo, D. M., Mbala, P. K., Bishola, T. T.,
+  Ibolobolo, C. M., Matondo, H. M., Sibo, J.-C. M., van Elsland, S. L.,
+  McMenamin, M., Ferguson, N., le Polain de Waroux, O., Cori, A. (2026).
+  *Estimation of the Ebola outbreak size in the Democratic Republic
+  of the Congo.* The Lancet Infectious Diseases, correspondence,
+  online first 9 June 2026; estimates as of 27 May 2026.
+  DOI: [10.1016/S1473-3099(26)00299-9](https://doi.org/10.1016/S1473-3099(26)00299-9).
 - **Onset-to-death delay reanalysis** that this work uses for
   delay priors — Funk, S. (2026). *bdbv-linelist-analysis:
   Bayesian reanalysis of the 2012 Isiro Bundibugyo line list.*

@@ -3080,16 +3080,16 @@ released_df = CSV.read(
 
 ## Integral-era release cut-offs for the frozen renewal overlay: a
 ## release whose data cut-off already has a renewal release needs no
-## re-fit, since that release already is the renewal estimate. 20 and
-## 23 May are additionally fit for the matched-cutoff comparison further
-## down.
+## re-fit, since that release already is the renewal estimate. 20, 23 and
+## 27 May are additionally fit for the matched-cutoff comparison further
+## down (27 May matches the Lancet publication's cut-off).
 renewal_release_dates = Set(string(r.date)
 for r in eachrow(released_df) if r.model == "renewal")
 frozen_evolution_cutoffs = sort(unique(string(r.date)
 for r in eachrow(released_df)
 if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
 frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
-    ["2026-05-20", "2026-05-23"]))
+    ["2026-05-20", "2026-05-23", "2026-05-27"]))
 
 ## Independent frozen re-fits (one per cut-off); run in parallel and keyed
 ## by the requested cut-off so each reads as its own estimate.
@@ -3199,9 +3199,9 @@ evolution_fig #hide
 # (which include the not-yet-symptomatic) or our current cut-off total.
 # We read our value off the joint fit's cumulative-onset trajectory at the
 # grid day for each report date and show it with its credible interval, the
-# 18 May report against our 18 May value and the 20 May update against our
-# 20 May value, so each scenario sits beside our estimate for the date it was
-# made.
+# 18 May report against our 18 May value, the 20 May update against our
+# 20 May value, and the 27 May Lancet publication against our 27 May value,
+# so each scenario sits beside our estimate for the date it was made.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -3236,12 +3236,14 @@ end
 mccabe_rows = [(label, mean, lo, hi)
                for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
 mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
-                 "McCabe et al. (20 May update)"
+                 date == "2026-05-20" ? "McCabe et al. (20 May update)" :
+                 "McCabe et al. (27 May, Lancet)"
                  for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
 
 ours_rows = [("Renewal onsets on 18 May", _ours_on("2026-05-18")...),
-    ("Renewal onsets on 20 May", _ours_on("2026-05-20")...)]
-ours_groups = fill("Our renewal estimate", 2)
+    ("Renewal onsets on 20 May", _ours_on("2026-05-20")...),
+    ("Renewal onsets on 27 May", _ours_on("2026-05-27")...)]
+ours_groups = fill("Our renewal estimate", 3)
 
 matched_rows = vcat(mccabe_rows, ours_rows)
 matched_groups = vcat(mccabe_groups, ours_groups)
@@ -3251,6 +3253,7 @@ matched_comparison_fig = plot_estimate_comparison(matched_rows;
     groups = matched_groups,
     group_colours = ["McCabe et al. (18 May)" => :grey,
         "McCabe et al. (20 May update)" => :black,
+        "McCabe et al. (27 May, Lancet)" => :steelblue,
         "Our renewal estimate" => :firebrick]);
 
 #md # ```@raw html
@@ -3275,6 +3278,7 @@ matched_comparison_fig #hide
 frozen_streams_table = streams_table(
     "frozen 20 May" => frozen_C("2026-05-20"),
     "frozen 23 May" => frozen_C("2026-05-23"),
+    "frozen 27 May" => frozen_C("2026-05-27"),
     "current data" => posterior_C_joint);
 
 #md # ```@raw html
