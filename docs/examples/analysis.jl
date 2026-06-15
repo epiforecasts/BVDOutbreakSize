@@ -3606,8 +3606,9 @@ clock_sensitivity_T_fig #hide
 # as a GitHub Release, downloadable from the repository's releases
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
 # The release bundles the summary tables, a thinned set of
-# posterior draws, and a copy of the input `observations.toml` so the
-# exact data that produced each result is recorded alongside it.
+# posterior draws, the latent symptom-onset ("symptomatic cases")
+# trajectory over time, and a copy of the input `observations.toml` so
+# the exact data that produced each result is recorded alongside it.
 
 #md # ```@raw html
 #md # <details><summary>Write outputs to output/</summary>
@@ -3642,6 +3643,11 @@ cp(joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
 
 ## Thinned posterior draws of the key joint parameters (every 10th
 ## draw) so downstream users can recompute their own summaries.
+## `cumulative_onsets_T` is the cumulative symptom onsets by the cut-off,
+## the latent "symptomatic cases" outcome (the onset analogue of `C_T`),
+## read off the last day of each draw's `cumulative_onsets` trajectory.
+_cum_onset_draws = vec(collect(chn_joint[:cumulative_onsets]))
+cumulative_onsets_T = Float64[v[end] for v in _cum_onset_draws]
 posterior_draws = DataFrame(
     r = vec(Array(chn_joint[:r])),
     r0 = vec(Array(chn_joint[:r0])),
@@ -3652,9 +3658,18 @@ posterior_draws = DataFrame(
     p_drc = vec(Array(chn_joint[:p_drc])),
     p_uganda = vec(Array(chn_joint[:p_uganda])),
     C_T = vec(Array(chn_joint[:C_T])),
+    cumulative_onsets_T = cumulative_onsets_T,
     confirmed_cfr_corrected = confirmed_cfr.corrected
 )[1:10:end, :]
 CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
+
+## Latent symptom-onset trajectory over time, the "symptomatic cases" curve
+## plotted to show the outbreak grow: one row per grid day with the 30/60/90%
+## credible intervals of both the daily new and cumulative onsets.
+onsets_over_time_table = onsets_over_time(chn_joint;
+    n = obs.n, seeding = obs.seeding)
+CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
+    onsets_over_time_table);
 
 #md # ```@raw html
 #md # </details>
