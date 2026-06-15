@@ -580,11 +580,24 @@ background/outbreak-size degeneracy (closing the high-background second
 posterior mode that breaks convergence) and keeps the series smooth (so a
 death background scaled from it carries no steps). The walk runs only over the
 surveillance window `[onset, n]`, so the number of innovations is small.
-`onset ≤ 1` runs it over the whole grid. Returns `(; λ, λ_mu, σ_bg, log_λ0)`
-with `λ` the length-`n` daily series (zero before `onset`).
+`onset ≤ 1` runs it over the whole grid.
+
+To avoid a hard discontinuity at the gating boundary, the level RAMPS in from
+zero over the first `onset_ramp` days of the window rather than appearing at
+the full baseline on the onset day: gating the level to zero before the onset
+and then anchoring the walk at the full `λ_mu` on the onset day would jump the
+series `0 → λ_mu` in one day, which shows as a step in the latent suspected-
+and death-series (the death background dominates the small cryptic-phase BVD
+death signal at the onset, so the step is visible in the latent cumulative
+deaths trajectory). A short linear ramp keeps the onset continuous while still
+having no background before surveillance began; `onset_ramp ≤ 1` keeps the
+old hard onset.
+
+Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero before
+`onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
-        onset::Integer = 1,
+        onset::Integer = 1, onset_ramp::Integer = 7,
         baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
@@ -603,6 +616,15 @@ with `λ` the length-`n` daily series (zero before `onset`).
     ## keeps the walk a gentle drift around the bounded baseline.
     walk = vcat(zero(σ_rw), cumsum((σ_rw .* z)[1:(nw - 1)]))
     λ_window = λ_mu .* exp.(walk)
+    ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the window,
+    ## so the gated background grows in from zero instead of stepping straight
+    ## to `λ_mu` at the boundary. The ramp factor reaches 1 within the window
+    ## (capped at the window length), so the level is continuous at the onset
+    ## and the walk drifts around the baseline thereafter. `onset_ramp ≤ 1`
+    ## recovers the old hard onset (factor 1 from the first day).
+    r = clamp(Int(onset_ramp), 1, nw)
+    ramp = [min(i, r) / r for i in 1:nw]
+    λ_window = ramp .* λ_window
     T = eltype(λ_window)
     λ = vcat(zeros(T, t0 - 1), λ_window)
     return (; λ, λ_mu, σ_bg = σ_rw)

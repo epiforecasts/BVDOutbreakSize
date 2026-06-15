@@ -78,11 +78,38 @@ end
         rand(MersenneTwister(2), background_walk_model(10, 0.03; onset = 1)))
     @test length(s.λ) == 10
     @test all(s.λ .> 0)
-    ## a single-day window is just the baseline.
+    ## a single-day window is just the baseline (the ramp collapses to 1).
     s1 = returned(background_walk_model(5, 0.03; onset = 5),
         rand(MersenneTwister(2), background_walk_model(5, 0.03; onset = 5)))
     @test all(s1.λ[1:4] .== 0)
     @test s1.λ[5] ≈ s1.λ_mu
+end
+
+@testitem "background_walk_model ramps in from zero at the onset" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    ## The gated background must not jump 0 -> λ_mu in one day at the onset:
+    ## with σ_rw = 0 the level ramps linearly over `onset_ramp` days, so the
+    ## first active day sits at λ_mu / onset_ramp and the level reaches λ_mu
+    ## only at the end of the ramp. This keeps the latent suspected- and
+    ## death-series continuous across the surveillance boundary.
+    n, onset, ramp = 40, 10, 7
+    s = returned(background_walk_model(n, 0.0; onset = onset, onset_ramp = ramp),
+        rand(MersenneTwister(3),
+            background_walk_model(n, 0.0; onset = onset, onset_ramp = ramp)))
+    @test all(s.λ[1:(onset - 1)] .== 0)
+    @test s.λ[onset] ≈ s.λ_mu / ramp                  # first active day, ramped
+    @test s.λ[onset + ramp - 1] ≈ s.λ_mu              # ramp complete
+    @test all(s.λ[(onset + ramp - 1):end] .≈ s.λ_mu)  # flat thereafter
+    ## The onset step (0 -> first active level) is at most one ramp increment,
+    ## so it is bounded well below the full baseline rather than a jump to λ_mu.
+    @test s.λ[onset] <= s.λ_mu / ramp + 1e-9
+    ## onset_ramp = 1 recovers the old hard onset (full baseline on day one).
+    h = returned(background_walk_model(n, 0.0; onset = onset, onset_ramp = 1),
+        rand(MersenneTwister(3),
+            background_walk_model(n, 0.0; onset = onset, onset_ramp = 1)))
+    @test h.λ[onset] ≈ h.λ_mu
 end
 
 @testitem "background_walk_model is smooth, gated and bounded" begin
@@ -102,14 +129,16 @@ end
     @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
     @test all(st.λ[onset:end] .> 0)                 # positive after it
     @test st.σ_bg == σ_rw
-    ## The day-to-day multiplicative change is small (tight drift), so the log
-    ## series has no large jumps.
-    logλ = log.(st.λ[onset:end])
+    ## The day-to-day multiplicative change is small (tight drift) once the
+    ## onset ramp (default 7 days) has completed, so the post-ramp log series
+    ## has no large jumps.
+    logλ = log.(st.λ[(onset + 6):end])
     @test maximum(abs.(diff(logλ))) < 0.5
-    ## σ_rw = 0 recovers a flat background at the baseline over the window.
+    ## σ_rw = 0 recovers a flat background at the baseline once the onset ramp
+    ## (default 7 days) has completed.
     flat = returned(background_walk_model(n, 0.0; onset = onset),
         rand(MersenneTwister(11), background_walk_model(n, 0.0; onset = onset)))
-    @test all(flat.λ[onset:end] .≈ flat.λ_mu)
+    @test all(flat.λ[(onset + 6):end] .≈ flat.λ_mu)
 end
 
 @testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin
