@@ -263,14 +263,15 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
     ## Daily non-BVD background deaths. The renewal default has no
     ## background (`death_background === nothing`), so the deaths stream is
     ## pure BVD. With a scalar `death_background` the background is constant
-    ## over the grid; with a per-vintage `background_re` it is the
-    ## regularised time-varying random effect expanded to a daily series,
-    ## sharing the suspected-case background's structure.
+    ## over the grid; with `background_re` it is the smooth daily random-walk
+    ## background ([`background_walk_model`](@ref)), already a length-`n` daily
+    ## series gated to the surveillance onset, sharing the suspected-case
+    ## background's innovation SD and onset.
     if background_re !== nothing
-        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        bg_state ~ to_submodel(background_re(n))
         λ_bg_death = bg_state.λ_mu
         bg_death_sigma = bg_state.σ_bg
-        bg_death_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+        bg_death_daily = bg_state.λ
     elseif death_background !== nothing
         dbg_state ~ to_submodel(death_background)
         λ_bg_death = dbg_state.λ_bg_death
@@ -363,20 +364,21 @@ sitrep.
 
     ## Daily non-BVD background. With `background_re === nothing` this is
     ## the constant scalar `λ_bg` over the grid (the renewal default). When
-    ## a per-vintage random effect is injected, the scalar baseline is
-    ## perturbed window-by-window and expanded to a daily series; the
-    ## baseline `λ_bg` from `positivity` is overridden by the random
-    ## effect's `λ_mu`, and the per-vintage rates are tightly pooled toward
-    ## it so the background stays a regularised minority of suspected cases.
+    ## `background_re` is injected it is the smooth daily random-walk
+    ## background ([`background_walk_model`](@ref)): a length-`n` daily series
+    ## that is zero before the surveillance onset and follows a tight lognormal
+    ## random walk after it, so the baseline `λ_bg` from `positivity` is
+    ## overridden by the walk's level `λ_mu` and the background varies smoothly
+    ## day-to-day rather than in per-vintage steps.
     if background_re === nothing
         λ_bg_base = λ_bg
         bg_sigma = zero(λ_bg)
         bg_daily = fill(λ_bg, n)
     else
-        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        bg_state ~ to_submodel(background_re(n))
         λ_bg_base = bg_state.λ_mu
         bg_sigma = bg_state.σ_bg
-        bg_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+        bg_daily = bg_state.λ
     end
 
     ## Suspected daily cases add the p_drc-scaled BVD signal and the

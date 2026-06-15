@@ -322,18 +322,28 @@ death-confirmation probability (`death_confirmation`).
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    ## Per-vintage background random effect, with ONE pooling SD `σ_bg`
-    ## shared between the suspected-case and suspected-death streams (the
-    ## same non-BVD reporting environment drives both). With `background_re
-    ## = false` (the renewal default) the case stream keeps its scalar
-    ## `λ_bg` and the death stream has no background. Each stream still
-    ## samples its own baseline; the death baseline prior is tighter (deaths
-    ## are far fewer than suspected cases).
+    ## Non-BVD background as a SMOOTH daily lognormal random walk over the
+    ## surveillance window ([`background_walk_model`](@ref)), with ONE tight
+    ## innovation SD `σ_rw` shared between the suspected-case and suspected-
+    ## death streams (the same non-BVD reporting environment drives both). The
+    ## background is gated to zero before the surveillance onset (the first
+    ## suspected-case report vintage) — it does not exist before surveillance
+    ## began — and is the SAME onset for every stream, since it is intrinsic to
+    ## the suspected pool. The tight innovation SD keeps it fairly constant,
+    ## which regularises the background/outbreak-size degeneracy (the prior used
+    ## a per-vintage STEP random effect whose multiplicative blow-up opened a
+    ## second posterior mode that broke convergence). With `background_re =
+    ## false` the case stream keeps its scalar `λ_bg` and the death stream has
+    ## no background.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
-        σ_bg_shared = bg_pool.σ_bg
-        case_bg_re = nv -> background_re_model(nv, σ_bg_shared)
-        death_bg_re = nv -> background_re_model(nv, σ_bg_shared;
+        σ_rw_shared = bg_pool.σ_bg
+        bg_onset = isempty(reported_history.days) ? 1 :
+                   clamp(Int(reported_history.days[1]), 1, n)
+        case_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
+            onset = bg_onset)
+        death_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
+            onset = bg_onset,
             baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
     else
         case_bg_re = nothing

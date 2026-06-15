@@ -44,13 +44,41 @@ end
     using Statistics: median
     using BVDOutbreakSize: background_pooling_model
 
-    ## The shared pooling SD is a half-normal SD 0.3, so its median is
-    ## modest (well under 0.3) and it is non-negative.
+    ## The shared random-walk innovation SD is a tight half-normal SD 0.05, so
+    ## its median is very small (well under 0.1) and it is non-negative — the
+    ## daily background walk is a gentle drift, not per-day noise.
     chn = sample(MersenneTwister(20260604), background_pooling_model(),
         Prior(), 4_000; progress = false)
     σ = vec(Array(chn[:σ_bg]))
     @test all(>=(0), σ)
-    @test median(σ) < 0.3
+    @test median(σ) < 0.1
+end
+
+@testitem "background_walk_model is smooth, gated and bounded" begin
+    using Turing: returned
+    using Random: MersenneTwister
+    using Statistics: mean
+    using BVDOutbreakSize: background_walk_model
+
+    ## Daily lognormal random walk over the surveillance window: zero before
+    ## the onset, strictly positive after it, and (with a tight σ_rw) a smooth
+    ## gentle drift around the half-normal baseline rather than per-vintage
+    ## steps.
+    n, onset, σ_rw = 30, 8, 0.04
+    st = returned(background_walk_model(n, σ_rw; onset = onset),
+        rand(MersenneTwister(11), background_walk_model(n, σ_rw; onset = onset)))
+    @test length(st.λ) == n
+    @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
+    @test all(st.λ[onset:end] .> 0)                 # positive after it
+    @test st.σ_bg == σ_rw
+    ## The day-to-day multiplicative change is small (tight drift), so the log
+    ## series has no large jumps.
+    logλ = log.(st.λ[onset:end])
+    @test maximum(abs.(diff(logλ))) < 0.5
+    ## σ_rw = 0 recovers a flat background at the baseline over the window.
+    flat = returned(background_walk_model(n, 0.0; onset = onset),
+        rand(MersenneTwister(11), background_walk_model(n, 0.0; onset = onset)))
+    @test all(flat.λ[onset:end] .≈ flat.λ_mu)
 end
 
 @testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin
