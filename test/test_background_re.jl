@@ -55,6 +55,36 @@ end
     @test median(σ) < 0.2
 end
 
+@testitem "gate_before zeroes a series before the onset day" begin
+    using BVDOutbreakSize: gate_before
+    v = collect(1.0:6.0)
+    ## start ≤ 1 returns the series unchanged (no gating).
+    @test gate_before(v, 1) == v
+    @test gate_before(v, 0) == v
+    ## start > 1 zeroes the entries before `start` and keeps the rest.
+    @test gate_before(v, 4) == [0.0, 0.0, 0.0, 4.0, 5.0, 6.0]
+    ## element type is preserved; the tail is untouched.
+    g = gate_before(v, 3)
+    @test eltype(g) == eltype(v)
+    @test g[3:end] == v[3:end] && all(g[1:2] .== 0)
+end
+
+@testitem "background_walk_model edge cases (ungated, single day)" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    ## onset = 1 runs the walk over the whole grid (no leading zeros).
+    s = returned(background_walk_model(10, 0.03; onset = 1),
+        rand(MersenneTwister(2), background_walk_model(10, 0.03; onset = 1)))
+    @test length(s.λ) == 10
+    @test all(s.λ .> 0)
+    ## a single-day window is just the baseline.
+    s1 = returned(background_walk_model(5, 0.03; onset = 5),
+        rand(MersenneTwister(2), background_walk_model(5, 0.03; onset = 5)))
+    @test all(s1.λ[1:4] .== 0)
+    @test s1.λ[5] ≈ s1.λ_mu
+end
+
 @testitem "background_walk_model is smooth, gated and bounded" begin
     using Turing: returned
     using Random: MersenneTwister
