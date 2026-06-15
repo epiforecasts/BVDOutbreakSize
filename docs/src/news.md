@@ -29,9 +29,11 @@ Changes since v1.5.0.
   single-stream composer.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
-  daily confirmed cases, scaled by a recovery probability (the confirmed-case
-  survival fraction) and convolved with a confirmation-to-recovery delay, with
-  its own observation dispersion.
+  daily confirmed cases, scaled by a recovery proportion and convolved with a
+  confirmation-to-recovery delay, with its own observation dispersion. The
+  recovery proportion is grounded on the case-fatality ratio (a recovered
+  case is one that did not die) with a log-odds adjustment for the confirmed
+  population, rather than estimated from scratch.
   The confirmed model now exposes one daily confirmed-case series
   (`confirmed_daily`) that both the recovered stream and the cumulative-
   confirmed trajectory reuse. Added the `recovered_model` submodel and the
@@ -43,8 +45,7 @@ Changes since v1.5.0.
 - The one-week-ahead forecast now also projects the isolation/treatment-bed
   occupancy (the expected level of bed use a week ahead) and the cumulative
   recovered total, each replicated with its own dispersion. The bed occupancy
-  is a stock, so it is reported as the projected occupancy at the horizon
-  rather than a cumulative.
+  is reported as the projected number of beds in use at the horizon.
 
 ### Data
 

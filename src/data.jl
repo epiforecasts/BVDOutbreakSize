@@ -32,7 +32,7 @@ per-day Poisson likelihood), the per-vintage histories as
 trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
 `isolation_history` from the post-cutoff daily isolation/hospitalisation
-occupancy ("Patients en isolement", a stock fitted by the prevalence/
+occupancy ("Patients en isolement", a daily bed count fitted by the
 length-of-stay submodel), `recovered_history` from the cumulative
 recovered-among-confirmed series ("cumul guéris"),
 `tests_received_history`),
@@ -118,10 +118,10 @@ function load_observations(
     ## frozen cumulative suspected stream stops at 26 May.
     suspected_daily_history = history("suspected_daily_history")
     ## Post-cutoff daily isolation/hospitalisation occupancy ("Patients en
-    ## isolement"): a per-day STOCK (point prevalence, not cumulative) of
-    ## patients in an isolation/treatment bed, scored against the modelled
-    ## bed occupancy on each report day by the prevalence/length-of-stay
-    ## observation submodel. Begins 1 June where the all-patients column
+    ## isolement"): a per-day count of patients in an isolation/treatment bed,
+    ## fitted against the modelled bed count on each report day by the
+    ## length-of-stay observation submodel. Begins 1 June where the
+    ## all-patients column
     ## definition is stable (see the manifest note).
     isolation_history = history("isolation_history")
     ## Post-cutoff cumulative recovered-among-confirmed ("cumul guéris"):

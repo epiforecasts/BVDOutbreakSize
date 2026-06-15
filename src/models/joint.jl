@@ -458,11 +458,11 @@ death-confirmation probability (`death_confirmation`).
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
-    ## daily confirmed cases, scaled by the recovery probability and lagged by
-    ## a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
+    ## daily confirmed cases, with a recovery fraction grounded on the CFR and
+    ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(
         recovered(recovered_history, recovered_cases,
-        confirmed_state.confirmed_daily))
+        confirmed_state.confirmed_daily, deaths_state.CFR))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,

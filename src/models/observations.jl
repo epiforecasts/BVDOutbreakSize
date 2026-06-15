@@ -1229,9 +1229,9 @@ the sum of two survival convolutions sharing the one admission proportion:
   `receipt_pmf` (shared from [`confirmed_cases_model`](@ref)) rather than a
   separate sampled stay.
 
-Each observed day's count is scored against the modelled occupancy on that
-day with a NegativeBinomial whose dispersion `k` is sampled here, NOT shared
-with the other streams (the isolation signal has its own observation noise).
+Each observed day's count follows a NegativeBinomial around the modelled
+occupancy on that day, with a dispersion `k` sampled here, NOT shared with
+the other streams (the isolation signal has its own observation noise).
 The exposed `isolation_bvd_share` is the fraction of the modelled bed that is
 true BVD (BVD-confirmed plus BVD-suspect); it is not the report's "dont
 confirmés / dont suspects" split, since most of the report's "suspects in
@@ -1271,10 +1271,10 @@ posterior-predictive replication.
     occupancy_bg = convolve_survival(bg_admissions, receipt_pmf)
     occupancy = occupancy_bvd .+ occupancy_bg
 
-    ## Each report day's count scored against the modelled occupancy on that
-    ## day (a single-day mean). Day indices are clamped into the grid. Empty
-    ## history is a no-op; a `missing` count vector samples (the predictive
-    ## path).
+    ## Each report day's count follows a NegBinomial around the modelled
+    ## occupancy on that day (a single-day mean). Day indices are clamped into
+    ## the grid. Empty history is a no-op; a `missing` count vector samples
+    ## (the predictive path).
     n = length(bvd_reports_daily)
     iso_days = isolation_history.days
     iso_modelled = [occupancy[clamp(Int(d), 1, n)] for d in iso_days]
@@ -1311,8 +1311,19 @@ confirmation-to-recovery delay,
     \\text{confirmed}_{t-s}\\, f_{\\text{rec},s}.
 ```
 
+The recovery fraction `p_recover` is grounded on the case-fatality ratio
+`CFR` (a recovered case is one that did not die), adjusted for the confirmed
+population by a sampled log-odds offset (see
+[`recovery_probability_model`](@ref)). A case is taken to be confirmed
+BEFORE it is recorded as recovered: the report's "cumul guéris" counts
+recoveries among confirmed cases, so the recovery follows confirmation by
+the confirmation-to-recovery delay. In principle a positive result could
+return after a patient has already recovered and been discharged, but we
+assume the reported total reflects confirmed cases carefully recorded as
+recovered, so the confirmation-then-recovery ordering holds.
+
 The cumulative recovered series ends at the cut-off, so its between-vintage
-increments are scored as observed `~` data with a NegativeBinomial whose
+increments are fitted as observed `~` data with a NegativeBinomial whose
 dispersion is sampled here, NOT shared with the other streams (the recovered
 signal has its own observation noise). The convolution right-censors
 recoveries that have not yet resolved by the cut-off, so a small observed
@@ -1325,8 +1336,8 @@ series and the cut-off total.
 @model function recovered_model(
         recovered_history,
         recovered_total::Union{Missing, Integer},
-        confirmed_daily::AbstractVector;
-        recovery = recovery_probability_model(),
+        confirmed_daily::AbstractVector, CFR::Real;
+        recovery = recovery_probability_model,
         dispersion = surveillance_dispersion_model(),
         ## Confirmation-to-recovery (discharge) delay; an Ebola survivor is
         ## discharged a couple of weeks after confirmation, so the default is
@@ -1335,7 +1346,9 @@ series and the cut-off total.
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
             sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
-    rec_state ~ to_submodel(recovery)
+    ## Recovery fraction grounded on the CFR complement (see
+    ## `recovery_probability_model`), adjusted for the confirmed population.
+    rec_state ~ to_submodel(recovery(CFR))
     p_recover = rec_state.p_recover
     disp_state ~ to_submodel(dispersion)
     k = disp_state.k

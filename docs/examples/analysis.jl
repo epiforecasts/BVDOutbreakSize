@@ -1223,8 +1223,8 @@ cfr_prior_fig #hide
 #       \lambda_{\text{bg},\,t-s}\, S_{\text{rec}}(s) \right].
 # ```
 #
-# Each report day's count $O_j$ is scored against the modelled count on that
-# day directly (a single-day mean) with a NegBinomial whose dispersion is its
+# Each report day's observed count $O_j$ follows a NegBinomial around the
+# modelled count on that day (a single-day mean), with a dispersion of its
 # own, not shared with the other streams:
 #
 # ```math
@@ -1448,13 +1448,12 @@ cfr_prior_fig #hide
 # ##### Recovered among confirmed
 #
 # Recoveries ("cumul guéris") are the survivors among laboratory-confirmed
-# cases (the renewal analogue of EpiNow2's `estimate_secondary` incidence
-# model). The modelled daily confirmed incidence
-# $\text{confirmed}_t$ (the per-window tested-positive probability on the
-# modelled analysed volume, the same daily series the cumulative-confirmed
-# trajectory uses) is scaled by the recovery probability $p_{\text{rec}}$ —
-# the confirmed-case survival fraction, complement of the confirmed
-# case-fatality ratio — and convolved with a sampled confirmation-to-recovery
+# cases, the incidence analogue of the convolution-and-scaling
+# secondary-observation model of EpiNow2 [epinow2](@cite). The modelled daily
+# confirmed incidence $\text{confirmed}_t$ (the per-window tested-positive
+# probability on the modelled analysed volume, the same daily series the
+# cumulative-confirmed trajectory uses) is scaled by the recovery proportion
+# $p_{\text{rec}}$ and convolved with a sampled confirmation-to-recovery
 # delay $f_{\text{rec}}$,
 #
 # ```math
@@ -1462,8 +1461,24 @@ cfr_prior_fig #hide
 #     \text{confirmed}_{t-s}\, f_{\text{rec},s}.
 # ```
 #
+# A recovered case is one that did not die, so the recovery proportion is
+# grounded on the case-fatality ratio rather than estimated from scratch: it
+# is the complement $1 - \mathrm{CFR}$ adjusted on the log-odds scale by a
+# sampled offset $\delta_{\text{rec}} \sim \mathrm{Normal}(0, 0.5)$, since the
+# confirmed cases are a slightly different population from the one the CFR is
+# defined over,
+#
+# ```math
+# p_{\text{rec}} = \operatorname{logistic}\!\bigl(
+#     \operatorname{logit}(1 - \mathrm{CFR}) + \delta_{\text{rec}}\bigr).
+# ```
+#
+# A case is taken to be confirmed before it is recorded as recovered (the
+# report counts recoveries among confirmed cases); a positive result could in
+# principle return after a patient has already recovered, but we assume the
+# reported total reflects confirmed cases carefully recorded as recovered.
 # The cumulative recovered series ends at the cut-off, so its per-vintage
-# increments are scored, like the confirmed and confirmed-death streams, with
+# increments are fitted, like the confirmed and confirmed-death streams, with
 # a NegBinomial whose dispersion $k_{\text{rec}}$ is its own rather than
 # shared with the other streams:
 #
@@ -1473,7 +1488,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The convolution right-censors recoveries that have not yet resolved by the
-# cut-off, so the small observed totals (12 to 32 over 6-11 June) are
+# cut-off, so the small observed totals (12 to 40 over 6-13 June) are
 # consistent with a high eventual survival fraction and a multi-week recovery
 # delay.
 
@@ -1485,7 +1500,7 @@ cfr_prior_fig #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.recovered_model(
-#md #         (; days = Int[], counts = Int[]), missing, Float64[])),
+#md #         (; days = Int[], counts = Int[]), missing, Float64[], 0.3)),
 #md #     "\n```"))
 #md # ```
 
@@ -1955,12 +1970,12 @@ diagnostics_table( #hide
 # The projection carries both parameter and observation uncertainty.
 # We forecast the two confirmed DRC streams (laboratory-confirmed cases and
 # confirmed deaths) as the forecast targets, and also the isolation/treatment-
-# bed occupancy (the expected level of bed use a week ahead) and the
-# cumulative recovered total. The bed occupancy is a stock rather than a
-# cumulative count, but under the same exponential-growth continuation every
-# quantity, the stock included, grows by the horizon factor, so the projected
-# occupancy is the cut-off occupancy scaled by that factor. The suspected
-# reported cases and deaths are no longer reported, so they are not shown as
+# bed occupancy (the expected number of beds in use a week ahead) and the
+# cumulative recovered total. The bed occupancy is the number of beds in use
+# on a day, and under the same exponential-growth continuation it grows by
+# the horizon factor like the case inflow, so the projected occupancy is the
+# cut-off occupancy carried forward by that factor. The suspected reported
+# cases and deaths are no longer reported, so they are not shown as
 # targets. Exports are not forecast either, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the
 # export model relies on no longer holds. The figure is shown in the
@@ -2601,9 +2616,9 @@ confirmed_deaths_panel = (;
     observed = obs.confirmed_deaths_history.counts, colour = :purple);
 
 ## Recovered among confirmed ("cumul guéris") is a cumulative per-vintage
-## stream, scored as increments of the modelled recovered trajectory (the
-## confirmation-to-recovery convolution of the daily confirmed cases) up to
-## the cut-off, so it gets the same cumulative conditional check.
+## stream fitted through the increments of the modelled recovered trajectory
+## (the confirmation-to-recovery convolution of the daily confirmed cases) up
+## to the cut-off, so it gets the same cumulative conditional check.
 recovered_panel = (;
     title = "Recovered (confirmed)",
     dates = _vintage_dates(obs.recovered_history.days),
@@ -2784,10 +2799,10 @@ confirmed_cfr_fig #hide
 # The suspected reported cases and deaths are no longer reported, so they are
 # not shown as forecast targets.
 # The forecast also projects the isolation/treatment-bed occupancy (the
-# expected level of use a week ahead) and the cumulative recovered total.
-# The bed occupancy is a stock, so under the same exponential-growth
-# continuation it grows by the horizon factor like the inflow, and is
-# reported as the projected occupancy at $T + 7$ rather than a cumulative.
+# expected number of beds in use a week ahead) and the cumulative recovered
+# total. The bed occupancy grows by the horizon factor like the case inflow
+# under the same exponential-growth continuation, so it is reported as the
+# projected number of beds in use at $T + 7$.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
