@@ -6,17 +6,157 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## v1.3.0
+## v1.5.0
+
+Changes since v1.4.0.
+
+### Model
+
+- Confirmed deaths now carry the report-to-receipt laboratory delay, so the
+  laboratory-confirmed-death series lags the death event rather than tracking
+  it instantaneously and the confirmed case and death streams pay a consistent
+  laboratory delay.
+- Added an optional daily new-suspect inflow stream ("nouveaux cas suspects
+  du jour") to the suspected-case likelihood.
+  The post-26 May per-day counts are scored against the modelled daily
+  suspected series at each report day, continuing the suspected signal where
+  the frozen cumulative series stops, on days disjoint from it (#222).
+- Collapsed the laboratory pipeline onto a single suspected-to-analysed
+  volume, fit to the specimens-analysed series through one report-to-analysed
+  delay.
+  The received stream is still recorded but no longer fitted, and the
+  post-cut-off 24-hour analysed volume is now fit directly.
+- Late reporting windows, where the cumulative national analysed denominator
+  stops, are scored in one submodel.
+  A day with a published 24-hour analysed count anchors its positivity as a
+  binomial on that count, and the remaining days are scored against the
+  modelled laboratory volume.
+  These are a reporting-format change rather than data blackouts, so the
+  earlier "dark window" framing is dropped.
+- Added the delay-corrected confirmed case-fatality ratio, the Nishiura et al.
+  (2009) real-time correction computed per posterior draw on the modelled
+  confirmed trajectory and sampled confirmation-to-death delay.
+  The denominator shrinks from all confirmed cases to those expected to have
+  had a fatal outcome resolve by the cut-off, debiasing the naive confirmed
+  ratio.
+
+### Forecast
+
+- The one-week-ahead forecast and its validation now target the
+  laboratory-confirmed case and confirmed death streams.
+  The suspected reported cases and deaths are no longer published, so they no
+  longer serve as forecast targets or as the last-week-versus-now comparison.
+
+### Report
+
+- Added a confirmed case-fatality ratio section, setting the delay-corrected
+  confirmed CFR against the structural infection-based CFR and the naive
+  confirmed ratio, with a comparison table and posterior-density plot.
+- The estimate-evolution figure now draws each release as a discrete per-fit
+  estimate with nested 30/60/90% intervals, read from
+  `data/released_estimates.csv` rather than a hand-maintained literal.
+  Frozen renewal re-fits are restricted to the integral-era release cut-offs,
+  since renewal-era releases already are renewal fits.
+  A new `scripts/refresh_releases.jl` pulls the per-release estimates from the
+  tagged results releases.
 
 ### Data
 
-- Advanced the cut-off to 3 June 2026 and switched the DRC streams to the
-  INSP national cumulative totals from the situation-report PDFs
-  (SitReps 009-020), rather than the per-zone CSVs whose zone sums drop
-  cases not yet attributed to a zone.
+- Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
+  structured `new_daily_suspects` column in the scanned situation-report CSV
+  and a `suspected_daily_history` block in the observation manifest.
+- Extended the confirmed case and death series to SitRep 025 (8 June).
+- Added the trusted-day 24-hour analysed laboratory counts (1, 4-7 June) as a
+  `tests_analysed_daily_history` block to anchor late-window positivity.
+
+## v1.4.0
+
+The methods switch flagged in v1.3.0: the continuous-time, fixed-growth-rate
+model is replaced by a discrete-time renewal model that is simpler and avoids
+the single-stream-versus-joint size tension of issue #212.
+This is a substantial revision; the changes below are relative to v1.3.0.
+
+### Model
+
+- Replaced the integral exponential-growth model with a discrete-time renewal
+  process on a daily grid.
+  Infections follow the renewal equation under a time-varying reproduction
+  number (a weekly log-scale random walk with an intervention ramp), and every
+  observed stream sits downstream of latent onsets through its own sampled,
+  discretised delay.
+- The prior is placed on the growth rate (the molecular-clock doubling time)
+  and the first reproduction number is derived forward through Euler–Lotka.
+  The generation interval is a Gamma with shape and scale taken from the cited
+  source and its reported uncertainty.
+- The onset-to-event delays are taken from a Bayesian reanalysis of the 2012
+  Isiro line list on their natural Gamma parameters, with one onset-to-
+  admission delay serving both suspected-case reporting and export detection
+  and onset-to-death the convolution of two atomic components.
+- Two-phase seeding: a single import grows through an unobserved cryptic
+  exponential phase to the renewal start, with the outbreak age bounded by the
+  genetic time to the most recent common ancestor.
+- Confirmed positivity is tied to the suspect-pool composition through an assay
+  sensitivity and specificity, and exports are travel-gated from infection and
+  scored on their dated detection days.
+- The DRC streams are fitted on the incidence scale, as the between-vintage
+  increments across successive situation reports (the first vintage being the
+  cumulative count to that date).
+
+### Report
+
+The report was rebuilt around the renewal model; the analyses carried over
+from v1.3.0 (the one-week-ahead forecast and its validation, the
+no-onward-transmission counterfactual, the delay and clock-rate sensitivity
+analyses, and the McCabe et al. comparison) were re-implemented for the new
+model rather than added here.
+
+- Restructured the methods in generative order (infections, epidemiological
+  processes, observation models, the joint model) with the model maths given
+  explicitly.
+- Reworked the figures (reproduction number with credible ribbons and sampled
+  trajectories, cumulative infections, onsets and deaths, outbreak size by data
+  stream, and estimate evolution across releases).
+- The McCabe et al. scenario comparison now carries their reported 95%
+  confidence intervals.
+- The one-week-ahead forecast and its last-week-versus-now validation now
+  target the laboratory-confirmed cases and confirmed deaths. The suspected
+  reported cases and deaths are no longer reported, so they are dropped as
+  forecast targets.
+
+### Data
+
+- Advanced the cut-off to 7 June 2026 (SitRep 024).
+  The laboratory-confirmed streams run to the cut-off while the suspected
+  streams stay frozen at their 26 May values.
+
+## v1.3.0
+
+!!! warning "Final release of this model formulation"
+
+    This is the last planned release of the continuous-time,
+    fixed-growth-rate model. The laboratory and testing observation
+    model has outgrown the available data, and the joint fit now implies
+    a larger outbreak than any single data stream does on its own
+    (issue #212). We are replacing this model with a discrete-time
+    renewal model, which is simpler and avoids these problems, in a
+    follow-up release that will note the methods switch. Treat the
+    estimates here as provisional.
+
+Changes since v1.2.0.
+
+### Data
+
+- Advanced the model cut-off to 28 May 2026 and switched the DRC streams
+  to the INSP national cumulative totals read from the situation-report
+  PDFs, rather than the per-zone CSVs whose zone sums drop cases not yet
+  attributed to a zone. The suspected streams are frozen at their 26 May
+  values, after which INSP stopped publishing a national suspected total;
+  the confirmed and laboratory streams run to 28 May.
 - Added per-sitrep-vintage confirmed cases, confirmed deaths and
   laboratory throughput (samples received and analysed) to
   `data/observations.toml`, alongside the suspected cases and deaths.
+- Extended the observed series through 5 June 2026 to validate the
+  forecast out of sample.
 
 ### Modelling
 
@@ -25,72 +165,43 @@ each push to `main` also republishes the rendered analysis and the
   laboratory-confirmed deaths) by conditioning on the between-vintage
   increments, alongside the Uganda exports and export deaths. A
   single-vintage stream reduces to the cumulative likelihood.
-- Confirmed cases are fitted through a laboratory-throughput queue.
-  Suspects enter a received backlog after a report-to-receipt delay prior,
-  a capacity-limited drain (a log random walk on daily capacity, centred
-  on the external ~150/day figure) sets the samples analysed, and the new
-  positives in each window are a Binomial on the samples newly analysed
-  (`ΔC ~ Binomial(ΔA, p_pos)`). Windows with no published analysed count
-  use the queue's expected throughput and the Poisson-thinned marginal
-  `ΔC ~ Poisson(μ_A · p_pos)`, so no free per-window denominator is
-  introduced.
+- Confirmed cases are fitted through a laboratory-throughput queue:
+  suspects enter a received backlog after a report-to-receipt delay, a
+  capacity-limited drain sets the samples analysed, and the new positives
+  in each window are a Binomial on the samples newly analysed. Windows
+  with no published analysed count fall back to the queue's expected
+  throughput, so no free per-window denominator is introduced.
 - Test positivity is severity-first: early specimens skew toward severe
-  presentations and relax toward the latent case composition as cumulative
-  analysed volume accrues (`severity_enrichment_model`).
-- Suspected cases are a BVD onset-to-report convolution plus an additive
-  non-BVD background rate `λ_bg`.
-- Confirmed deaths are a laboratory process matching the cases: suspected
-  deaths carry a non-BVD background `λ_bg_death`, and confirmed deaths are
-  positives among the forwarded death specimens, sharing the case-lab PCR
-  sensitivity and specificity (issue #193).
-- Ascertainment is split into independent DRC and Uganda reporting
-  fractions, with the DRC centre at 0.75: under active case finding most
-  cases reach the suspected count, so the under-counting that matters is at
-  laboratory confirmation.
-- The growth prior is recentred on the molecular clock,
-  `r ~ LogNormal(log(log(2)/20), 0.15)` (20-day doubling time from the BDBV
-  phylodynamic reanalysis, [cuomodannenburg2026](@cite)), and the
-  doubling-count base advances with the cut-off.
+  presentations and relax toward the latent case composition as analysed
+  volume accrues.
+- Suspected cases and deaths are BVD onset-to-report convolutions plus
+  additive non-BVD background rates; confirmed deaths share the case-lab
+  PCR sensitivity and specificity.
+- Split ascertainment into independent DRC and Uganda reporting fractions
+  (DRC centre 0.75), and recentred the growth prior on the molecular-clock
+  20-day doubling time ([cuomodannenburg2026](@cite)).
 - Exports and export deaths are timed from infection via an
-  infection→detection delay convolution (incubation ⊕ onset-to-report)
-  rather than a rectangular detection window; both reduce to the McCabe et
-  al. window as the delay collapses to a point mass, which stays available
-  for comparison.
+  infection→detection delay convolution rather than a rectangular
+  detection window, reducing to the McCabe et al. window as the delay
+  collapses to a point mass.
 - The headline estimand is cumulative infections (`2^m`), with the
   under-ascertainment multiplier anchored on the laboratory-confirmed
   cases.
-- Noted that the fatality ratio is applied per infection: with no
-  asymptomatic fraction and no case-ascertainment on the death denominator
-  it multiplies the latent infection trajectory directly, so it coincides
-  with the infection-fatality ratio (IFR); the conventional CFR label is
-  kept.
 
 ### Outputs
 
-- Posterior summary table and a laboratory-pipeline pair plot over the
-  report and lab delays, PCR sensitivity, positivity and background rate.
-- Posterior-predictive panels for the confirmed-case and confirmed-death
+- Posterior summary table, a laboratory-pipeline pair plot, and
+  posterior-predictive panels for the confirmed-case and confirmed-death
   streams in the per-stream-versus-joint grid.
-- Recast the forecast around the four trusted quantities (infections, true
-  BVD deaths, confirmed cases, confirmed deaths) over two horizons: a
-  one-week-ahead `forecast_reported` and a counterfactual-year
-  `predict_committed` (committed totals under no onward transmission). The
-  untrusted suspected cases, suspected deaths and tests-analysed streams are
-  dropped from the forecast.
+- Recast the forecast around the four trusted quantities (infections,
+  true BVD deaths, confirmed cases, confirmed deaths) over a
+  one-week-ahead and a counterfactual-year horizon, dropping the
+  untrusted suspected and tests-analysed streams.
 - Restored the forecast validation as a last-week-vs-now out-of-sample
-  check on the two observable targets: fit the joint to the data through 28
-  May (via the new `load_observations` `as_of_override` truncation),
-  forecast six days, and score the predicted confirmed cases and confirmed
-  deaths against the 3 June counts (`forecast_vs_truth`,
-  `forecast_vs_truth_trajectory`, `plot_forecast_vs_truth`). Latent
-  infections and all-BVD deaths are not directly validatable.
-- The per-stream C(T) overlay fits the exports streams only up to their last
-  data (the at-risk integral runs to the last import) while still reporting
-  the implied C(T) at the cut-off.
-- `plot_vintage_conditional_ppc`: a conditional one-step-ahead predictive
-  across the sitrep series, each vintage conditioning on the observed
-  previous cumulative and predicting only the new increment, replacing the
-  unconditional version whose running sum compounded errors.
+  check: fit the joint through 28 May, forecast forward, and score the
+  predicted confirmed cases and deaths against the observed counts.
+- Added a conditional one-step-ahead predictive across the sitrep series,
+  each vintage predicting only its new increment.
 
 ### Documentation
 
@@ -101,11 +212,9 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Infrastructure
 
-- Added streaming progress to `nuts_sample` via an optional `callback`:
-  `progress_callback` writes a dependency-free file stream and
-  `tensorboard_callback` streams step statistics to TensorBoard.
-- Added optional Enzyme reverse-mode AD alongside the default Mooncake
-  backend, with matching gradients across every model.
+- Added streaming progress to `nuts_sample` via an optional callback
+  (a dependency-free file stream or TensorBoard), and optional Enzyme
+  reverse-mode AD alongside the default Mooncake backend.
 
 ## v1.2.0
 

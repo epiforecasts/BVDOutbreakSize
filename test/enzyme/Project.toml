@@ -1,0 +1,15 @@
+[deps]
+ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+BVDOutbreakSize = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
+Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+LogDensityProblems = "6fdf6af0-433a-55f7-b3ed-c6c6e0b8df7c"
+Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
+
+[compat]
+Enzyme = "0.13"
+
+[sources]
+BVDOutbreakSize = {path = "../.."}

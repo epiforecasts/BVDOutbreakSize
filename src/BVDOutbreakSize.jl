@@ -1,99 +1,94 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, std
+using Statistics: quantile
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
 using Random: MersenneTwister
-using Dates: Date, date2epochdays, epochdays2date
+using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
-using ChainRulesCore: ChainRulesCore, NoTangent
-using SpecialFunctions: digamma, loggamma
-import SpecialFunctions
-using Turing: @model, MCMCThreads, NUTS, sample, to_submodel, filldist
+using ChainRulesCore: ChainRulesCore
+using Turing: @model, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
-using Distributions: Distribution, Gamma, cdf, ccdf, mgf, pdf, Poisson,
-                     NegativeBinomial, Binomial, Normal,
-                     LogNormal, Beta, truncated, censored
+using Distributions: Distribution, pdf, Poisson,
+                     NegativeBinomial, Binomial, Normal, LogNormal, Beta,
+                     Gamma, truncated, censored, product_distribution
+using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
-import FastGaussQuadrature
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
-using CairoMakie: Figure, Axis, hist!, density!, vlines!, vspan!,
-                  lines!, scatter!, band!
+using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
+                  lines!, scatter!, band!, linesegments!
 
-export REPORT_SCENARIOS,
+export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
-       ITURI_DAILY_TRAVEL_SD,
-       load_observations, m_prior_centre, report_onset_offset,
+       ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD,
+       load_observations, freeze_observations, m_prior_centre,
        summary_table, posterior_summary,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
-       nuts_sample, default_adtype, enzyme_adtype,
+       nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
-       DEATH_INTEGRAL_ALG, CUMULATIVE_INTEGRAL_ALG,
-       integrate, delay_convolution, onset_rescale,
-       integrate_cumulative, integrate_exports_deaths,
-       expected_exports, expected_exports_deaths,
-       expected_exports_delay, expected_exports_deaths_delay,
-       combined_delay,
-       ExportDeathDelay, EXPORT_DELAY_GRID_POINTS,
-       DailyBVDTrajectory, daily_increment_kernel,
-       ExportRiskTrajectory, export_at_risk, export_death_at_risk,
-       plot_cumulative_cases, plot_density_overlay, plot_prior_predictive,
+       plot_cumulative_cases, plot_cumulative_trajectories,
+       plot_stream_trajectories,
+       plot_density_overlay, plot_prior_predictive,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
-       plot_cfr_prior, plot_vintage_conditional_ppc,
+       plot_estimate_evolution,
+       plot_cfr_prior, plot_vintage_conditional_ppc, plot_rt,
        predict_no_onward_deaths, plot_no_onward_deaths,
-       predict_committed, plot_committed,
        forecast_reported, forecast_table, plot_forecast,
+       plot_forecast_latent,
        forecast_vs_truth, forecast_vs_truth_trajectory,
-       plot_forecast_vs_truth,
-# prior submodels
-       exponential_growth_model, genetic_seeding_model, delay_model,
-       report_delay_model, test_sensitivity_model,
-       test_positivity_model, test_specificity_model,
-       severity_enrichment_model, confirmed_q_re_model,
-       epi_exclusion_model,
-       reported_dispersion_model,
-       lab_receipt_delay_model, lab_capacity_model,
-       incubation_model,
-       cfr_model, death_background_model, death_forward_model,
-       detection_window_model, traveller_volume_model,
-       surveillance_dispersion_model, pooled_ascertainment_model,
-       independent_ascertainment_model,
-       daily_ascertainment_model, deaths_ascertainment_model,
+       plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
+       delay_corrected_cfr, delay_corrected_confirmed_cfr,
+       confirmed_cfr_table, plot_confirmed_cfr,
+# renewal helpers
+       renewal_infections, convolve_delay, convolve_pmf,
+       discretise_censored,
+       euler_lotka_r, r_to_R0, doubling_time, seed_infections,
+       seed_at_renewal_start,
+       knot_days,
+       interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
+       safe_rate,
+# prior / latent submodels
+       censored_delay_model, gamma_delay_model, onset_to_death_model,
+       generation_interval_model, rt_walk_model,
+       seed_model, exponential_growth_model, infection_model,
+       onset_incidence_model,
+       genetic_seeding_model,
+       cfr_model, traveller_volume_model, test_positivity_model,
+       death_background_model, background_re_model, background_pooling_model,
+       expand_vintage_rate,
+       test_sensitivity_model, test_specificity_model, lab_delay_model,
+       confirmed_positivity_model, severity_enrichment_model,
+       confirmed_death_enrichment_model,
+       surveillance_dispersion_model,
+       independent_ascertainment_model, pooled_ascertainment_model,
 # observation models
-       exports_model, exports_delay_model, exports_daily_delay_model,
-       deaths_model,
-       reported_cases_model, confirmed_cases_model,
-       confirmed_deaths_model, bvd_count_composition,
-       bvd_death_trajectory,
-       exports_deaths_model, exports_deaths_delay_model,
-       exports_detection_timing_model,
-       exports_detection_timing_delay_model,
+       deaths_model, reported_cases_model, confirmed_cases_model,
+       confirmed_positivity_windows, confirmed_deaths_model,
+       exports_model, exports_deaths_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
        confirmed_only_model, confirmed_deaths_only_model,
-       exports_deaths_only_model, bvd_joint,
-       imperial_only_model
+       exports_deaths_only_model, bvd_joint
 
 include("docstrings.jl")
 include("constants.jl")
 include("data.jl")
 include("sampling.jl")
-include("gamma_cdf.jl")
-include("integrate.jl")
-include("expectations.jl")
+include("renewal.jl")
 include("summaries.jl")
 include("counterfactual.jl")
 include("forecast.jl")
+include("confirmed_cfr.jl")
 include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")

@@ -1,71 +1,69 @@
-## Smoke tests for the per-vintage (per-sitrep) confirmed-cases
-## likelihood. The base `confirmed_cases_model` is now per-vintage:
-## a cumulative-count vector + edge times; a length-1 vector reduces
-## to the cumulative single-total likelihood. Tiny fits exercise the
-## real `bvd_joint` composer with the full history.
+@testitem "lab pipeline daily likelihood runs and is finite" begin
+    using BVDOutbreakSize: confirmed_only_model
+    using Turing: logjoint
+    using Random: MersenneTwister
 
-@testitem "confirmed_cases: prior draws are finite, non-negative" tags=[:slow] begin
-    using BVDOutbreakSize: bvd_joint, load_observations
-    using Turing: sample, Prior
-    import FlexiChains
-
-    obs = load_observations()
-    rep = obs.reported_case_history
-    conf = obs.confirmed_case_history
-    dh = obs.death_history
-    n_rep = length(rep.values)
-    n_conf = length(conf.values)
-    n_dh = length(dh.values)
-    ## Prior-predictive: pass missing vectors with matching offsets.
-    m = bvd_joint(missing,
-        fill(missing, n_dh), fill(missing, n_rep);
-        reported_offsets = rep.offsets,
-        death_offsets = dh.offsets,
-        confirmed_cases = fill(missing, n_conf),
-        confirmed_offsets = conf.offsets)
-    chn = sample(m, Prior(), 200;
-        chain_type = FlexiChains.VNChain, progress = false)
-    raw = vec(Array(chn[:confirmed_cases]))
-    flat = reduce(vcat, raw)
-    @test all(isfinite, flat)
-    @test all(flat .>= 0)
-    ## Per-vintage increments reconstruct a monotone cumulative series.
-    @test all(issorted(cumsum(v)) for v in raw)
+    ## The confirmed-cases likelihood is exercised end to end through
+    ## confirmed_only_model, which draws the shared report kernel, fits the
+    ## analysed-specimen volume and scores the confirmed positives as a
+    ## Binomial of the observed analysed denominator.
+    m = confirmed_only_model(40, 8;
+        confirmed_history = (; days = [20, 40], counts = [3, 8]),
+        lab_history = (; days = [20, 40], counts = [5, 9]))
+    lp = logjoint(m, rand(MersenneTwister(1), m))
+    @test isfinite(lp)
 end
 
-@testitem "confirmed_cases: tiny fit stays positive" tags=[:slow] begin
-    using BVDOutbreakSize: bvd_joint, load_observations
-    using Turing: sample, Prior
-    import FlexiChains
+@testitem "confirmed_positivity_windows anchors late days on 24h analysed" begin
+    using BVDOutbreakSize: confirmed_positivity_windows
 
-    obs = load_observations()
-    rep = obs.reported_case_history
-    conf = obs.confirmed_case_history
-    dh = obs.death_history
-    ## Models observe between-vintage increments, not cumulative totals.
-    function _increments(values)
-        out = similar(values, Int)
-        prev = 0
-        for i in eachindex(values)
-            out[i] = values[i] - prev
-            prev = values[i]
-        end
-        return out
-    end
-    m = bvd_joint(obs.exported_cases,
-        _increments(dh.values), _increments(rep.values),
-        obs.export_deaths_daily;
-        reported_offsets = rep.offsets,
-        death_offsets = dh.offsets,
-        confirmed_cases = _increments(conf.values),
-        confirmed_offsets = conf.offsets,
-        tests_analysed = obs.cumulative_tests_analysed,
-        tests_offset = 0,
-        first_export_detection_delta = obs.first_export_detection_delta)
-    chn = sample(m, Prior(), 50;
-        chain_type = FlexiChains.VNChain, progress = false)
-    C = vec(Array(chn[:cumulative_cases]))
-    @test length(C) == 50
-    @test all(isfinite, C)
-    @test all(C .> 0)
+    ## Last cumulative laboratory date is day 20, so days 21-23 are late
+    ## late windows. A published 24h analysed count on day 22 flags that
+    ## window for the observed-denominator Binomial; the others stay unanchored.
+    confirmed = (; days = [5, 20, 21, 22, 23], counts = [10, 50, 60, 75, 90])
+    lab = (; days = [10, 20], counts = [100, 300])
+    daily = (; days = [22], counts = [40])
+    w = confirmed_positivity_windows(confirmed, lab, daily)
+    @test w.late_days == [21, 22, 23]
+    @test w.late_increments == [10, 15, 15]
+    @test w.late_analysed == [0, 40, 0]
+
+    ## With no daily series every late day is unanchored (no 24h count), and the
+    ## field is present and aligned with `late_days`.
+    w0 = confirmed_positivity_windows(confirmed, lab)
+    @test length(w0.late_analysed) == length(w0.late_days)
+    @test all(==(0), w0.late_analysed)
+
+    ## A daily count on or before the last laboratory date is ignored: the
+    ## cumulative series already covers it.
+    w1 = confirmed_positivity_windows(confirmed, lab,
+        (; days = [15, 22], counts = [99, 40]))
+    @test w1.late_analysed == [0, 40, 0]
+end
+
+@testitem "lab pipeline daily anchor scores the 24h day as Binomial" begin
+    using BVDOutbreakSize: confirmed_only_model
+    using Turing: logjoint
+    using Random: MersenneTwister
+
+    ## Post-cutoff late vintages (days 30, 35, 40 after the last lab date
+    ## 20) where day 35 publishes a 24h analysed count: it is scored as a
+    ## Binomial of that observed denominator, the others as modelled-volume
+    ## unanchored windows.
+    m = confirmed_only_model(40, 20;
+        confirmed_history =
+        (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
+        lab_history = (; days = [10, 20], counts = [12, 28]),
+        lab_daily_history = (; days = [35], counts = [30]))
+    lp = logjoint(m, rand(MersenneTwister(1), m))
+    @test isfinite(lp)
+
+    ## When the confirmed increment exceeds the observed denominator it is
+    ## clamped into the Binomial support, so the likelihood stays finite.
+    m2 = confirmed_only_model(40, 20;
+        confirmed_history =
+        (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
+        lab_history = (; days = [10, 20], counts = [12, 28]),
+        lab_daily_history = (; days = [35], counts = [3]))
+    @test isfinite(logjoint(m2, rand(MersenneTwister(2), m2)))
 end
