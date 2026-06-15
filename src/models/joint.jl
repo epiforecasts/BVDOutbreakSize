@@ -338,8 +338,18 @@ death-confirmation probability (`death_confirmation`).
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
+        ## Onset of the suspected pool's non-BVD background: a report-to-receipt
+        ## lead BEFORE the first suspected-case report, not exactly at it. The
+        ## suspects in the first report were already in the pipeline, and the
+        ## background feeds the laboratory analysed volume through the report-to-
+        ## receipt convolution, so it must begin early enough for that
+        ## convolution to be fully formed by the first report. The lead is the
+        ## MAX lag of the report-to-receipt kernel (its truncation `nmax`, the
+        ## default `lab_delay_model` support), not its mean, so no tail
+        ## contribution is cut off at the onset.
+        bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
         bg_onset = isempty(reported_history.days) ? 1 :
-                   clamp(Int(reported_history.days[1]), 1, n)
+                   clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
         case_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
             onset = bg_onset)
         death_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
