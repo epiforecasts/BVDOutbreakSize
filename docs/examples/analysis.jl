@@ -681,8 +681,10 @@ vintage_table #hide
 #
 # Cumulative infections are the running sum of the daily infection series.
 # The cumulative infection count at the cut-off is the headline outbreak
-# size. The current growth rate is the day-over-day log-ratio of infections
-# at the cut-off, and the current doubling time is $\log 2$ divided by that
+# size. The current growth rate is the exponential growth implied by the
+# cut-off reproduction number and the generation interval through forward
+# Euler–Lotka, so it is sign-consistent with the cut-off reproduction number
+# by construction, and the current doubling time is $\log 2$ divided by that
 # rate.
 
 #md # ```@raw html

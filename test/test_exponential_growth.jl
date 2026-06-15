@@ -101,3 +101,40 @@ end
     @test all(sa .> 0)
     @test all(isapprox.(sa, 2.0 .^ m; rtol = 1e-6))
 end
+
+@testitem "infection_model: current r and R_T agree in sign per draw" begin
+    using Turing: returned
+    using Random: default_rng, seed!
+    using BVDOutbreakSize: infection_model, doubling_time, euler_lotka_r
+
+    ## The reported CURRENT growth rate `r` and the cut-off reproduction
+    ## number `R_T = Rt[n]` describe the SAME instant, so they must never
+    ## disagree in sign: `r < 0` must imply `R_T < 1` and `r >= 0` must imply
+    ## `R_T >= 1`. The realised last-two-days slope `log I[n] - log I[n-1]`
+    ## did NOT satisfy this — the intervention ramp depresses the final
+    ## renewal step so `I[n] < I[n-1]` while `Rt[n] >= 1` — so the reported
+    ## `r` is derived from `R_T` and the generation interval via Euler–Lotka
+    ## instead, making the relationship exact by construction.
+    n = 109
+    rt_start = 45       # genetic-TMRCA day + renewal-start lead
+    breakpoint = 84     # intervention ramp near the cut-off
+
+    seed!(11)
+    m = infection_model(n; breakpoint, rt_start)
+    rng = default_rng()
+    ndraws = 1500
+    disagree = 0
+    for _ in 1:ndraws
+        s = returned(m, rand(rng, m))
+        r = s.r
+        R_T = s.Rt[n]
+        ## Sign agreement at the cut-off.
+        ((r < 0) && (R_T >= 1)) && (disagree += 1)
+        ((r >= 0) && (R_T < 1)) && (disagree += 1)
+        ## `r` is the Euler–Lotka growth implied by `R_T` and `g`, and the
+        ## reported doubling time is `log 2 / r`, both consistent with `R_T`.
+        @test isapprox(r, euler_lotka_r(R_T, s.g); atol = 1e-8)
+        @test isapprox(s.doubling_time, doubling_time(r); rtol = 1e-8)
+    end
+    @test disagree == 0
+end
