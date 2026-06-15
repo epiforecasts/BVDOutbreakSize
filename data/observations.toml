@@ -39,14 +39,15 @@
 #    before the cut-off, and are missing thereafter;
 #  - the confirmed-case and laboratory streams run to the 28 May cut-off;
 #  - confirmed deaths and the post-cut-off confirmed-case figures (263,
-#    282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676, 689 on
-#    29 May-11 June) are recorded in data/insp_sitrep_scanned.csv as data beyond
-#    the cut-off,
+#    282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676, 689, 782
+#    on 29 May-13 June; SitRep 029 / 12 June was not published upstream, so
+#    the series steps 11 June -> 13 June) are recorded in
+#    data/insp_sitrep_scanned.csv as data beyond the cut-off,
 #    but are not fitted, because the model anchors confirmed cases through
 #    the laboratory positivity and national testing totals stop after
 #    28 May.
 
-as_of_date = "2026-06-11"
+as_of_date = "2026-06-13"
 
 [exported_cases]
 value  = 3
@@ -113,11 +114,14 @@ source = "INSP situation reports 18-26 May 2026, read from the PDFs (https://git
 # suspected likelihoods cover disjoint days and do not double-count. Earlier
 # confirmed-based reports (SitReps 015-020, 29 May-3 June) do not print a
 # national new-suspect-of-the-day figure, so the series begins on 4 June.
+# SitRep 029 (12 June) was not published upstream, so the series steps from
+# 11 June straight to 13 June (SitRep 030).
 [suspected_daily_history]
 dates  = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07",
-          "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11"]
-values = [153, 119, 117, 94, 138, 119, 119, 168]
-source = "INSP situation reports 4-11 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitReps 025-028 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h): 153, 119, 117, 94, 138, 119, 119, 168 on 4-11 June. SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June."
+          "2026-06-08", "2026-06-09", "2026-06-10", "2026-06-11",
+          "2026-06-13"]
+values = [153, 119, 117, 94, 138, 119, 119, 168, 136]
+source = "INSP situation reports 4-13 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitReps 025-028, 030 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h): 153, 119, 117, 94, 138, 119, 119, 168 on 4-11 June and 136 on 13 June. SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
@@ -180,9 +184,9 @@ source = "INSP situation reports 23-28 May 2026 (SitReps 009-014) section IV.3 L
 [tests_analysed_daily_history]
 dates  = ["2026-06-01", "2026-06-04", "2026-06-05", "2026-06-06",
           "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
-          "2026-06-11"]
-values = [76, 256, 126, 106, 67, 121, 68, 109, 35]
-source = "INSP situation reports 1-11 June 2026 (SitReps 018, 021-028) 24h LABORATOIRE block, read from the PDFs; recorded in the notes column of data/insp_sitrep_scanned.csv. 1 Jun (018) 76 national; 4 Jun (021) Ituri 199 + Nord-Kivu 57 = 256 (Nord-Kivu 118 pending excluded); 5 Jun (022) Ituri 109 + Nord-Kivu 11 + Sud-Kivu 6 = 126; 6 Jun (023) Ituri 94 + Nord-Kivu 6 + Sud-Kivu 6 = 106 (Nord-Kivu 193 pending excluded); 7 Jun (024) Ituri 63 + Sud-Kivu 4 = 67 (Nord-Kivu 183 pending for reagents excluded); 8 Jun (025) Ituri 115 + Sud-Kivu 6 = 121 (Nord-Kivu 146 pending for reagents excluded); 9 Jun (026) Ituri 54 + Nord-Kivu 12 + Sud-Kivu 2 = 68 (Nord-Kivu 182 pending for reagents excluded); 10 Jun (027) Ituri 109 (24h block Ituri-only; national confirmed increment 41 ≤ 109); 11 Jun (028) Ituri 35 (Nord-Kivu 172 pending >5 days and Sud-Kivu none, so 35 is the complete national analysed-that-day; confirmed increment 13 ≤ 35). 29-31 May (015-017), 2 Jun (019, Ituri-only) and 3 Jun (020, per-zone) left out: ambiguous or partial scope."
+          "2026-06-11", "2026-06-13"]
+values = [76, 256, 126, 106, 67, 121, 68, 109, 35, 181]
+source = "INSP situation reports 1-13 June 2026 (SitReps 018, 021-028, 030) 24h LABORATOIRE block, read from the PDFs; recorded in the notes column of data/insp_sitrep_scanned.csv. 1 Jun (018) 76 national; 4 Jun (021) Ituri 199 + Nord-Kivu 57 = 256 (Nord-Kivu 118 pending excluded); 5 Jun (022) Ituri 109 + Nord-Kivu 11 + Sud-Kivu 6 = 126; 6 Jun (023) Ituri 94 + Nord-Kivu 6 + Sud-Kivu 6 = 106 (Nord-Kivu 193 pending excluded); 7 Jun (024) Ituri 63 + Sud-Kivu 4 = 67 (Nord-Kivu 183 pending for reagents excluded); 8 Jun (025) Ituri 115 + Sud-Kivu 6 = 121 (Nord-Kivu 146 pending for reagents excluded); 9 Jun (026) Ituri 54 + Nord-Kivu 12 + Sud-Kivu 2 = 68 (Nord-Kivu 182 pending for reagents excluded); 10 Jun (027) Ituri 109 (24h block Ituri-only; national confirmed increment 41 ≤ 109); 11 Jun (028) Ituri 35 (Nord-Kivu 172 pending >5 days and Sud-Kivu none, so 35 is the complete national analysed-that-day; confirmed increment 13 ≤ 35); 13 Jun (030) Ituri 139 + Sud-Kivu 8 + Nord-Kivu 34 = 181 (clean national total — every reporting province gives an analysed count, no pending caveat; confirmed increment 72 ≤ 181). SitRep 029 (12 June) was not published upstream. 29-31 May (015-017), 2 Jun (019, Ituri-only) and 3 Jun (020, per-zone) left out: ambiguous or partial scope."
 
 # Cumulative national confirmed-case totals across INSP situation-report
 # vintages (the lab-section `Cumul positifs`, equal to the front-page
@@ -193,8 +197,9 @@ source = "INSP situation reports 1-11 June 2026 (SitReps 018, 021-028) 24h LABOR
 # model uses (derived at load time), paired with `tests_analysed_history`
 # for the per-test positivity (210/755 ≈ 28%). The series runs to the
 # cut-off; the confirmed-based format from 29 May (263, 282, 321, 344,
-# 363, 381, 452, 488, 515, 550, 598, 635, 676, 689 on 29 May-11 June;
-# SitReps 015-028) is recorded in data/insp_sitrep_scanned.csv but not added
+# 363, 381, 452, 488, 515, 550, 598, 635, 676, 689, 782 on 29 May-13 June;
+# SitReps 015-028, 030 — SitRep 029 / 12 June was not published upstream)
+# is recorded in data/insp_sitrep_scanned.csv but not added
 # here, since national testing stops after 28 May and the model anchors
 # confirmed cases through the laboratory positivity.
 [confirmed_case_history]
@@ -204,19 +209,19 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
           "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06",
           "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
-          "2026-06-11"]
+          "2026-06-11", "2026-06-13"]
 values = [33, 51, 57, 79, 83, 101, 105, 106, 121, 125, 210, 263,
           282, 321, 344, 363, 381, 452, 488, 515, 550, 598, 635, 676,
-          689]
-source = "INSP situation reports 18 May - 11 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`); the 18-22 May points use the early-report baseline. The 29 May - 11 June points have no published national analysed denominator, so they are fitted as unanchored windows via the laboratory-throughput queue (Poisson-thinned). The 11 June headline (689) is `donnees en cours d'harmonisation`; its +13 net rise over 10 June (676) reflects 17 new Ituri confirmations less a Nord-Kivu downward revision (44->40)."
+          689, 782]
+source = "INSP situation reports 18 May - 13 June 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative laboratory-confirmed cases (lab `Cumul positifs` / `Nbre total des cas positifs`; from the confirmed-based format the front-page `Cumul cas confirmés` / section 3.1 spatial-table total); the 18-22 May points use the early-report baseline. The 29 May - 13 June points have no published national cumulative analysed denominator, so they are fitted as unanchored windows via the laboratory-throughput queue (Poisson-thinned). The 11 June headline (689) is `donnees en cours d'harmonisation`; its +13 net rise over 10 June (676) reflects 17 new Ituri confirmations less a Nord-Kivu downward revision (44->40). SitRep 029 (12 June) was not published upstream, so the series steps 11 June (689) -> 13 June (782); the 13 June headline (782, also `donnees en cours d'harmonisation`) records 72 new confirmed on 13 June (Ituri 56, Nord-Kivu 16) on top of the unobserved 12 June increment, with the section 3.1 table giving Ituri 717, Nord-Kivu 62, Sud-Kivu 3."
 
 # Cumulative national confirmed-death totals (front-page `Cumul décès
 # parmi les confirmés`). First published in the SitRep 012 revised
 # re-issue (26 May); 17 on 26-28 May. INSP flags these as
 # under-estimated because diagnostic confirmation is delayed. The series
 # is flat over the fitted window (the jump to 42 on 29 May and
-# subsequent values 48, 60, 62, 64, 82, 86, 91, 101, 115, 127, 136, 139
-# on 31 May-11 June reflect late confirmation; recorded in
+# subsequent values 48, 60, 62, 64, 82, 86, 91, 101, 115, 127, 136, 139,
+# 181 on 31 May-13 June reflect late confirmation; recorded in
 # data/insp_sitrep_scanned.csv as data beyond the cut-off). Recorded for
 # completeness as a time series;
 # the cut-off `confirmed_deaths` scalar (17) is derived from the final
@@ -227,9 +232,9 @@ dates  = ["2026-05-26", "2026-05-27", "2026-05-28", "2026-05-29",
           "2026-05-30", "2026-05-31", "2026-06-01", "2026-06-02",
           "2026-06-03", "2026-06-04", "2026-06-05", "2026-06-06",
           "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
-          "2026-06-11"]
-values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115, 127, 136, 139]
-source = "INSP situation reports 26 May - 11 June 2026 (SitReps 012_v2-028), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June), 91 (6 June), 101 (7 June), 115 (8 June), 127 (9 June), 136 (10 June), 139 (11 June, 20.2% lethality)."
+          "2026-06-11", "2026-06-13"]
+values = [17, 17, 17, 42, 42, 48, 60, 62, 64, 82, 86, 91, 101, 115, 127, 136, 139, 181]
+source = "INSP situation reports 26 May - 13 June 2026 (SitReps 012_v2-028, 030), front-page `Cumul décès parmi les confirmés`, read from the PDFs; recorded in data/insp_sitrep_scanned.csv. Flat at 17 through 28 May, then late-confirmation catch-up: 42 (29-30 May), 48 (31 May), 60 (1 June), 62 (2 June), 64 (3 June), 82 (4 June), 86 (5 June), 91 (6 June), 101 (7 June), 115 (8 June), 127 (9 June), 136 (10 June), 139 (11 June, 20.2% lethality), 181 (13 June, 23.1% lethality). SitRep 029 (12 June) was not published upstream, so the series steps 11 June (139) -> 13 June (181); the +42 jump reflects late confirmation over the unobserved 12 June plus 29 confirmed deaths reported on 13 June."
 
 # Cumulative national suspected-death totals across INSP situation-report
 # vintages. Same caveats as `reported_case_history`: the daily
