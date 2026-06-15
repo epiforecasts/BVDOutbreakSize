@@ -1266,12 +1266,22 @@ cfr_prior_fig #hide
 #
 # The model exposes the cut-off occupancy, the cut-off bed demand (the need
 # under unconstrained supply), their difference (the bed shortfall) and the
-# utilisation $O_T / C$. Capacity is a single national quantity here; its
-# growth (beds are being added) and the per-province split (Ituri at 93.9% on
-# 13 June against Sud-Kivu 21.9%) are left as extensions. The exposed BVD
-# share is the true-BVD fraction of demand (BVD-confirmed plus BVD-suspect),
-# not the report's confirmed/suspect split. The fitted occupancy series is the
-# all-patients column from 1 June (SitRep 018) onward.
+# utilisation $O_T / C$.
+#
+# A key limitation is that this is a single national model, with one national
+# bed capacity and one national demand, so it cannot represent LOCAL
+# saturation: on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at
+# 21.9%, so beds free in one province cannot serve patients who need them in
+# another, and the national capacity averages over a saturated epicentre and
+# slack elsewhere. The national shortfall therefore understates the local
+# unmet need. A per-province model (each province with its own bed capacity
+# and inflow) is the faithful extension; it needs per-province inflow, which
+# the renewal model does not currently carry. National capacity is also
+# treated as a single (slowly varying) quantity, though beds are being added.
+#
+# The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
+# BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
+# series is the all-patients column from 1 June (SitRep 018) onward.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_admission_model</summary>
@@ -2904,6 +2914,31 @@ forecast_fig = plot_forecast(forecast);
 #md # ```
 
 forecast_fig #hide
+
+# The bed figure shows the projected isolation/treatment-bed DEMAND (the need
+# a week ahead, under unconstrained supply) against the supply-limited
+# occupancy the beds can actually meet; the gap between the two is the
+# projected bed shortfall, shown in the right panel. The reported "Patients en
+# isolement" count IS the occupied-bed count (the report computes the "Taux
+# d'occupation" as that count over the bed capacity), so isolation is bed
+# usage, gated by supply; the demand is its unobserved counterpart, the number
+# who need a bed. Because the model carries a single national bed capacity it
+# cannot represent local saturation — Ituri was at 93.9% occupancy on 13 June
+# while Sud-Kivu was at 21.9% — so the national shortfall understates the
+# local unmet need, since beds free in one province cannot serve patients who
+# need them in another.
+
+#md # ```@raw html
+#md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
+#md # ```
+
+forecast_beds_fig = plot_forecast_beds(forecast);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_beds_fig #hide
 
 # ### Forecast validation (last week versus now)
 #

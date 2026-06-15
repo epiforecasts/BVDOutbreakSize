@@ -27,6 +27,10 @@ Changes since v1.5.0.
   `convolve_survival`, the `treatment_admission_model` observation submodel,
   the `isolation_admission_model` and `bed_capacity_model` priors and the
   `treatment_only_model` single-stream composer (resolves #265).
+  This is a single national model, so it cannot represent local bed
+  saturation (Ituri at 93.9% occupancy on 13 June against Sud-Kivu 21.9%); the
+  national shortfall understates the local unmet need, and a per-province
+  capacity model is the faithful extension.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
   daily confirmed cases, scaled by a recovery proportion and convolved with a
@@ -46,7 +50,9 @@ Changes since v1.5.0.
   — both the bed demand a week ahead (need under unconstrained supply) and the
   supply-limited occupancy it produces, whose gap is the projected bed
   shortfall — and the cumulative recovered total, each replicated with its
-  own dispersion.
+  own dispersion. Added `plot_forecast_beds`, which shows the projected bed
+  need against the supply-limited occupancy and the shortfall in the
+  walkthrough's forecast section.
 - Replaced the per-vintage step background random effect with a smooth daily
   lognormal random walk (`background_walk_model`), fixing the joint convergence
   failure on the current data (the per-vintage effect opened a second
