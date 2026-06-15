@@ -5,8 +5,10 @@
     using BVDOutbreakSize: confirmed_positivity_windows
 
     ## The 28 May data: analysed cumulative stalls 24-25 May (flat at 295).
-    ## Confirmed vintages up to the first lab date (18-23 May) become early
-    ## windows scored against the modelled volume; the observed windows
+    ## The first confirmed vintage (day 1, count 33) is the testing-onset
+    ## BASELINE and is NOT scored, so the early windows are the vintages AFTER
+    ## it up to the first lab date; `early_start` carries that baseline day so
+    ## the model pins the early-window volume there. The observed windows
     ## (24-28 May) merge the zero-denominator stall to positives
     ## [4, 16, 4, 85] of analysed [84, 108, 245, 107].
     confirmed = (; days = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -14,14 +16,16 @@
     lab = (; days = [6, 7, 8, 9, 10, 11],
         counts = [211, 295, 295, 403, 648, 755])
     w = confirmed_positivity_windows(confirmed, lab)
-    @test w.early_days == [1, 2, 3, 4, 5, 6]
-    @test w.early_increments == [33, 18, 6, 22, 4, 18]
+    @test w.early_start == 1
+    @test w.early_days == [2, 3, 4, 5, 6]
+    @test w.early_increments == [18, 6, 22, 4, 18]
     @test w.obs_positives == [4, 16, 4, 85]
     @test w.obs_analysed == [84, 108, 245, 107]
     @test all(0 .<= w.obs_positives .<= w.obs_analysed)
-    ## Early + observed partition the confirmed total, no double-count.
-    @test sum(w.early_increments) + sum(w.obs_positives) ==
-          confirmed.counts[end]
+    ## The baseline (33) plus the fitted early increments and observed
+    ## positives partition the confirmed total, no double-count.
+    @test confirmed.counts[1] + sum(w.early_increments) +
+          sum(w.obs_positives) == confirmed.counts[end]
 end
 
 @testitem "confirmed_positivity_windows handles missing histories" begin
@@ -31,12 +35,14 @@ end
     ## No confirmed history: everything empty.
     w0 = confirmed_positivity_windows(empty, lab)
     @test isempty(w0.obs_analysed) && isempty(w0.early_increments)
-    ## No lab history: every confirmed vintage is an early window.
+    ## No lab history: the first confirmed vintage is the baseline and every
+    ## vintage AFTER it is an early window.
     conf = (; days = [3, 5], counts = [2, 6])
     w1 = confirmed_positivity_windows(conf, empty)
     @test isempty(w1.obs_analysed)
-    @test w1.early_days == [3, 5]
-    @test w1.early_increments == [2, 4]
+    @test w1.early_start == 3
+    @test w1.early_days == [5]
+    @test w1.early_increments == [4]
 end
 
 @testitem "confirmed_positivity_model draws per-window probabilities" begin
@@ -125,4 +131,39 @@ end
         deaths_history = (; days = [20, 40], counts = [120, 246]))
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
+end
+
+@testitem "deaths_model background is cfr_bg times the case background" begin
+    using BVDOutbreakSize: deaths_model, background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## The joint passes the suspected-CASE background `case_bg_daily` (the
+    ## smooth, gated, ramped daily random walk) into `deaths_model`; the death
+    ## background must be exactly `cfr_bg .* case_bg_daily`, so it inherits the
+    ## case background's gating (zero before the surveillance onset) and its
+    ## smoothness (no per-vintage or onset step).
+    n = 60
+    onset = 20
+    seed = 5
+    bgm = background_walk_model(n, 0.1; onset = onset)
+    case_bg = returned(bgm, rand(MersenneTwister(seed), bgm)).λ
+    onsets = [40.0 * exp(-((t - 35) / 10)^2) for t in 1:n]
+    m = deaths_model((; days = Int[], counts = Int[]), missing, onsets, 5.0;
+        case_bg_daily = case_bg)
+    st = returned(m, rand(MersenneTwister(seed), m))
+
+    ## The death background equals the scaled case background, pointwise.
+    @test st.bg_death_daily ≈ st.cfr_bg .* case_bg
+    ## Gated: zero before the case-background onset (the case background is too).
+    @test all(st.bg_death_daily[1:(onset - 1)] .== 0)
+    ## Smooth: no day-to-day jump in the background exceeds the tight random-walk
+    ## innovation scale (a per-vintage step background would jump abruptly).
+    Δ = diff(st.bg_death_daily[onset:end])
+    level = maximum(st.bg_death_daily)
+    @test maximum(abs.(Δ)) <= 0.3 * level
+    ## A positive case background gives a positive death background (when cfr_bg
+    ## is non-trivial); both totals are finite.
+    @test st.bg_death_total >= 0
+    @test isfinite(st.bg_death_total)
 end

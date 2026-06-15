@@ -44,13 +44,96 @@ end
     using Statistics: median
     using BVDOutbreakSize: background_pooling_model
 
-    ## The shared pooling SD is a half-normal SD 0.3, so its median is
-    ## modest (well under 0.3) and it is non-negative.
+    ## The shared random-walk innovation SD is a half-normal SD 0.1, so its
+    ## median is small (well under 0.2) and it is non-negative — the daily
+    ## background walk is a gentle drift rather than per-day noise, though the
+    ## data can pull it up to a modest rise over the surveillance window.
     chn = sample(MersenneTwister(20260604), background_pooling_model(),
         Prior(), 4_000; progress = false)
     σ = vec(Array(chn[:σ_bg]))
     @test all(>=(0), σ)
-    @test median(σ) < 0.3
+    @test median(σ) < 0.2
+end
+
+@testitem "gate_before zeroes a series before the onset day" begin
+    using BVDOutbreakSize: gate_before
+    v = collect(1.0:6.0)
+    ## start ≤ 1 returns the series unchanged (no gating).
+    @test gate_before(v, 1) == v
+    @test gate_before(v, 0) == v
+    ## start > 1 zeroes the entries before `start` and keeps the rest.
+    @test gate_before(v, 4) == [0.0, 0.0, 0.0, 4.0, 5.0, 6.0]
+    ## element type is preserved; the tail is untouched.
+    g = gate_before(v, 3)
+    @test eltype(g) == eltype(v)
+    @test g[3:end] == v[3:end] && all(g[1:2] .== 0)
+end
+
+@testitem "background_walk_model edge cases (ungated, single day)" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    ## onset = 1 runs the walk over the whole grid (no leading zeros).
+    s = returned(background_walk_model(10, 0.03; onset = 1),
+        rand(MersenneTwister(2), background_walk_model(10, 0.03; onset = 1)))
+    @test length(s.λ) == 10
+    @test all(s.λ .> 0)
+    ## a single-day window is just the baseline.
+    s1 = returned(background_walk_model(5, 0.03; onset = 5),
+        rand(MersenneTwister(2), background_walk_model(5, 0.03; onset = 5)))
+    @test all(s1.λ[1:4] .== 0)
+    @test s1.λ[5] ≈ s1.λ_mu
+end
+
+@testitem "background_walk_model ramps in across the onset boundary" begin
+    using BVDOutbreakSize: background_walk_model
+    using Turing: returned
+    using Random: MersenneTwister
+    ## With the default onset ramp the gated background grows in from zero
+    ## rather than stepping straight to the baseline at the onset, so the first
+    ## non-zero day is a small fraction of the baseline and the day-to-day rise
+    ## across the boundary is gradual (no one-day jump to the full level).
+    n, onset, σ_rw = 40, 18, 0.0
+    st = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
+        rand(MersenneTwister(5),
+            background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7)))
+    @test all(st.λ[1:(onset - 1)] .== 0)
+    @test st.λ[onset] ≈ st.λ_mu / 7         # first window day is 1/ramp of level
+    @test st.λ[onset + 6] ≈ st.λ_mu          # reaches the level after the ramp
+    @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]   # monotone ramp-in
+    ## onset_ramp = 1 recovers the old hard onset (full level on day one).
+    hard = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
+        rand(MersenneTwister(5),
+            background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1)))
+    @test hard.λ[onset] ≈ hard.λ_mu
+end
+
+@testitem "background_walk_model is smooth, gated and bounded" begin
+    using Turing: returned
+    using Random: MersenneTwister
+    using Statistics: mean
+    using BVDOutbreakSize: background_walk_model
+
+    ## Daily lognormal random walk over the surveillance window: zero before
+    ## the onset, strictly positive after it, and (with a tight σ_rw) a smooth
+    ## gentle drift around the half-normal baseline rather than per-vintage
+    ## steps.
+    n, onset, σ_rw = 30, 8, 0.04
+    st = returned(background_walk_model(n, σ_rw; onset = onset),
+        rand(MersenneTwister(11), background_walk_model(n, σ_rw; onset = onset)))
+    @test length(st.λ) == n
+    @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
+    @test all(st.λ[onset:end] .> 0)                 # positive after it
+    @test st.σ_bg == σ_rw
+    ## After the onset ramp (default 7 days) the walk is a tight gentle drift,
+    ## so the log series has no large jumps over that stretch.
+    logλ = log.(st.λ[(onset + 7):end])
+    @test maximum(abs.(diff(logλ))) < 0.5
+    ## σ_rw = 0 recovers a flat background at the baseline over the window once
+    ## the onset ramp has completed.
+    flat = returned(background_walk_model(n, 0.0; onset = onset),
+        rand(MersenneTwister(11), background_walk_model(n, 0.0; onset = onset)))
+    @test all(flat.λ[(onset + 7):end] .≈ flat.λ_mu)
 end
 
 @testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin

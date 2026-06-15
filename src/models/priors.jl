@@ -673,9 +673,68 @@ suspected cases. Regularising `σ_bg` toward zero keeps the time variation
 a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 """
 @model function background_pooling_model(;
-        pooling_prior = truncated(Normal(0.0, 0.3); lower = 0))
+        pooling_prior = truncated(Normal(0.0, 0.1); lower = 0))
     σ_bg ~ pooling_prior
     return (; σ_bg)
+end
+
+"""
+Non-BVD background rate as a SMOOTH daily lognormal random walk over the
+surveillance window, the replacement for the per-vintage step random effect
+([`background_re_model`](@ref)). The background is a property of the suspected
+pool, so it is defined per DAY (no reporting-vintage steps) and gated to zero
+before the surveillance `onset` — the non-BVD background does not exist before
+surveillance began. From the onset the daily log-rate follows a non-centred
+random walk anchored at a sampled level,
+
+```math
+\\log \\lambda_t = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < t} z_s,
+\\qquad z_s \\sim \\mathcal N(0, 1), \\quad t \\ge \\text{onset},
+\\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
+```
+
+`σ_rw` (passed in, shared across the suspected-case and suspected-death
+streams via [`background_pooling_model`](@ref)) is the daily innovation SD on
+the log scale; a TIGHT prior keeps the background fairly CONSTANT (a gentle
+drift, not per-day noise), which both regularises the well-known
+background/outbreak-size degeneracy (closing the high-background second
+posterior mode that breaks convergence) and keeps the series smooth (so a
+death background scaled from it carries no steps). The walk runs only over the
+surveillance window `[onset, n]`, so the number of innovations is small.
+`onset ≤ 1` runs it over the whole grid. Returns `(; λ, λ_mu, σ_bg, log_λ0)`
+with `λ` the length-`n` daily series (zero before `onset`).
+"""
+@model function background_walk_model(n::Integer, σ_rw::Real;
+        onset::Integer = 1, onset_ramp::Integer = 7,
+        baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
+    t0 = clamp(Int(onset), 1, n)
+    nw = n - t0 + 1
+    m = max(nw, 1)
+    ## Half-normal baseline on the NATURAL scale, the SAME informative prior as
+    ## the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
+    ## background level tightly (a lognormal/log-scale level has a heavy right
+    ## tail the background/outbreak-size degeneracy exploits to run away), so
+    ## the background cannot blow up to explain the suspected stream.
+    λ_mu ~ baseline_prior
+    z ~ product_distribution(fill(Normal(0, 1), m))
+    ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
+    ## log-deviation from the baseline, anchored at the baseline on the onset
+    ## day. With independent per-vintage `z` this would be the step random
+    ## effect; the cumulative sum makes it smooth day-to-day. A tight `σ_rw`
+    ## keeps the walk a gentle drift around the bounded baseline.
+    walk = vcat(zero(σ_rw), cumsum((σ_rw .* z)[1:(nw - 1)]))
+    λ_window = λ_mu .* exp.(walk)
+    ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the window,
+    ## so the gated background grows in from zero instead of stepping straight to
+    ## `λ_mu` at the surveillance boundary (which would put a one-day jump into
+    ## the suspected-death trajectory scaled from it). The ramp reaches 1 within
+    ## the window; `onset_ramp ≤ 1` recovers the old hard onset.
+    rr = clamp(Int(onset_ramp), 1, nw)
+    ramp = [min(i, rr) / rr for i in 1:nw]
+    λ_window = ramp .* λ_window
+    T = eltype(λ_window)
+    λ = vcat(zeros(T, t0 - 1), λ_window)
+    return (; λ, λ_mu, σ_bg = σ_rw)
 end
 
 """

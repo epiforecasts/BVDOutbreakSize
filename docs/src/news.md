@@ -49,6 +49,54 @@ Changes since v1.5.0.
   occupancy (the expected level of bed use a week ahead) and the cumulative
   recovered total, each replicated with its own dispersion. The bed occupancy
   is reported as the projected number of beds in use at the horizon.
+- Replaced the per-vintage step background random effect with a smooth daily
+  lognormal random walk (`background_walk_model`), fixing the joint convergence
+  failure on the current data (the per-vintage effect opened a second
+  "background explains the majority of suspected cases" posterior mode that
+  split the chains; the published dev joint had max R-hat 2.5).
+  The background is now per day with no reporting-vintage steps, gated to begin
+  a report-to-receipt lead before the first suspected-case report (it does not
+  exist before surveillance began), shared across the suspected-case and
+  suspected-death streams, with a half-normal baseline and a tight random-walk
+  innovation SD.
+  This also removes the per-vintage step in the modelled cumulative-death
+  trajectory.
+- Widened the non-BVD background level prior so the laboratory positivity
+  identifies it.
+  The previous prior, calibrated for the un-gated full-grid background, forced
+  the background to a tiny fraction of the suspect pool, inconsistent with the
+  observed per-test positivity (210/755 ≈ 0.28).
+  The suspect pool is now inferred to be a minority BVD, raising the non-BVD
+  background substantially and lowering the cumulative-infection estimate
+  (C_T) accordingly, with a wider credible interval.
+- Gated the laboratory analysed-specimen capacity to the testing onset, so no
+  specimens are modelled as analysed before testing existed.
+  This removes a large over-prediction of the early confirmed-case counts (the
+  modelled cumulative confirmed previously ran several-fold above the observed
+  early values).
+- Redesigned the death pathway.
+  Suspected deaths now carry a death ascertainment `p_death` (the death analogue
+  of the case ascertainment, with an informative prior centred high) and a
+  non-BVD death background tied to the suspected-case background by a background
+  CFR (`cfr_bg`), so the death background is a fixed share of the already-
+  identified case background rather than a second free, outbreak-size-degenerate
+  rate.
+  With the case background now the smooth, gated daily random walk, the death
+  background inherits that shape, so the modelled cumulative-death trajectory is
+  smooth with no onset or per-vintage step.
+  Added the `death_ascertainment_model` and `background_cfr_model` priors.
+- Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the
+  confirmed cases.
+  A death "analysed" volume (the suspected deaths carried to laboratory receipt
+  by the confirmed cases' report-to-receipt delay and thinned by a death testing
+  fraction `tau_death`) is scored through a death-pool composition positivity
+  `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
+  suspected deaths, replacing the previous `m_death`/`q_susp` multiplier.
+  The death "analysed" volume is gated to the same testing onset as the
+  confirmed cases, so no deaths are confirmed before testing existed.
+  The joint exposes the `death_ascertainment`, `background_cfr`, `tau_death` and
+  `death_composition` deterministics and drops `m_death`.
+
 
 ### Data
 
