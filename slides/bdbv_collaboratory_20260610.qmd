@@ -22,7 +22,7 @@ format:
 
 What can we learn from the SitReps about transmission dynamics?
 
-## 
+##
 
 An external view aiming to support interpretation of the data provided by INSP and DRC authorities.
 
