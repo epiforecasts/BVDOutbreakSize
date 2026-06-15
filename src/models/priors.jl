@@ -544,9 +544,10 @@ The default `truncated(Normal(450, 200); lower = 1)` is weakly informative,
 centred on the bed count implied by the reported occupancy rates (the
 "Taux d'occupation" gives `capacity = occupancy / rate ≈ 400–452` over
 9–13 June). The capacity is identified by the implied-capacity series the
-isolation submodel fits, so the prior only has to bracket it. Capacity is
-treated as a single (slowly varying) national quantity here; modelling its
-growth and the per-province split is left as an extension. Pass
+isolation submodel fits, so the prior only has to bracket it. A single
+national capacity is a limitation: it cannot represent local saturation (one
+province full while another has slack), which is the level the supply
+constraint operates at, and it averages over a growing capacity. Pass
 `capacity_prior` to override. Returns `(; capacity)`.
 """
 @model function bed_capacity_model(;

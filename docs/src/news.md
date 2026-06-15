@@ -27,10 +27,12 @@ Changes since v1.5.0.
   `convolve_survival`, the `treatment_admission_model` observation submodel,
   the `isolation_admission_model` and `bed_capacity_model` priors and the
   `treatment_only_model` single-stream composer (resolves #265).
-  This is a single national model, so it cannot represent local bed
-  saturation (Ituri at 93.9% occupancy on 13 June against Sud-Kivu 21.9%); the
-  national shortfall understates the local unmet need, and a per-province
-  capacity model is the faithful extension.
+  A key limitation is that this is a single national model: it cannot
+  represent local bed saturation (Ituri at 93.9% occupancy on 13 June against
+  Sud-Kivu 21.9%), which is the level the supply constraint operates at, so
+  the national shortfall understates the local unmet need. The renewal model
+  does not carry per-province inflow, so it cannot be split to the
+  per-province bed model the constraint needs.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
   daily confirmed cases, scaled by a recovery proportion and convolved with a

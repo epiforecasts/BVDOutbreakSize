@@ -1274,10 +1274,11 @@ cfr_prior_fig #hide
 # 21.9%, so beds free in one province cannot serve patients who need them in
 # another, and the national capacity averages over a saturated epicentre and
 # slack elsewhere. The national shortfall therefore understates the local
-# unmet need. A per-province model (each province with its own bed capacity
-# and inflow) is the faithful extension; it needs per-province inflow, which
-# the renewal model does not currently carry. National capacity is also
-# treated as a single (slowly varying) quantity, though beds are being added.
+# unmet need. This is a limitation, not a refinement: the renewal model does
+# not carry per-province inflow, so it cannot be split into the per-province
+# bed model that the supply constraint actually operates at. A second
+# limitation is that capacity is taken as a single (slowly varying) national
+# quantity even though beds are being added.
 #
 # The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
 # BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy

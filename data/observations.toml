@@ -160,9 +160,12 @@ source = "INSP situation reports 1-13 June 2026 (SitReps 018-028, 030) page-1 he
 # (`treatment_admission_model`) treats these as noisy observations of a
 # single national bed capacity `C`, the ceiling the latent bed demand
 # saturates against. Capacity is being expanded (SitRep 030 records 164
-# mattresses, 140 beds received and new treatment centres opening), so this
-# is approximate; modelling its growth and the per-province split (Ituri at
-# 93.9% on 13 June vs Sud-Kivu 21.9%) is left as an extension.
+# mattresses, 140 beds received and new treatment centres opening), so a
+# single constant `C` is approximate. A single national capacity is also a
+# limitation rather than just an approximation: it cannot represent the local
+# saturation the supply constraint actually operates at (Ituri at 93.9% on
+# 13 June vs Sud-Kivu 21.9%), which the model does not currently carry the
+# per-province inflow to split.
 [bed_capacity_history]
 dates  = ["2026-06-09", "2026-06-10", "2026-06-11", "2026-06-13"]
 values = [400, 410, 452, 433]
