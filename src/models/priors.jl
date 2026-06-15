@@ -651,7 +651,7 @@ surveillance window `[onset, n]`, so the number of innovations is small.
 with `λ` the length-`n` daily series (zero before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
-        onset::Integer = 1,
+        onset::Integer = 1, onset_ramp::Integer = 7,
         baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
@@ -670,6 +670,14 @@ with `λ` the length-`n` daily series (zero before `onset`).
     ## keeps the walk a gentle drift around the bounded baseline.
     walk = vcat(zero(σ_rw), cumsum((σ_rw .* z)[1:(nw - 1)]))
     λ_window = λ_mu .* exp.(walk)
+    ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the window,
+    ## so the gated background grows in from zero instead of stepping straight to
+    ## `λ_mu` at the surveillance boundary (which would put a one-day jump into
+    ## the suspected-death trajectory scaled from it). The ramp reaches 1 within
+    ## the window; `onset_ramp ≤ 1` recovers the old hard onset.
+    rr = clamp(Int(onset_ramp), 1, nw)
+    ramp = [min(i, rr) / rr for i in 1:nw]
+    λ_window = ramp .* λ_window
     T = eltype(λ_window)
     λ = vcat(zeros(T, t0 - 1), λ_window)
     return (; λ, λ_mu, σ_bg = σ_rw)
