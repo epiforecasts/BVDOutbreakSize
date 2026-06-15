@@ -5,8 +5,10 @@
     using BVDOutbreakSize: confirmed_positivity_windows
 
     ## The 28 May data: analysed cumulative stalls 24-25 May (flat at 295).
-    ## Confirmed vintages up to the first lab date (18-23 May) become early
-    ## windows scored against the modelled volume; the observed windows
+    ## The first confirmed vintage (day 1, count 33) is the testing-onset
+    ## BASELINE and is NOT scored, so the early windows are the vintages AFTER
+    ## it up to the first lab date; `early_start` carries that baseline day so
+    ## the model pins the early-window volume there. The observed windows
     ## (24-28 May) merge the zero-denominator stall to positives
     ## [4, 16, 4, 85] of analysed [84, 108, 245, 107].
     confirmed = (; days = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -14,14 +16,16 @@
     lab = (; days = [6, 7, 8, 9, 10, 11],
         counts = [211, 295, 295, 403, 648, 755])
     w = confirmed_positivity_windows(confirmed, lab)
-    @test w.early_days == [1, 2, 3, 4, 5, 6]
-    @test w.early_increments == [33, 18, 6, 22, 4, 18]
+    @test w.early_start == 1
+    @test w.early_days == [2, 3, 4, 5, 6]
+    @test w.early_increments == [18, 6, 22, 4, 18]
     @test w.obs_positives == [4, 16, 4, 85]
     @test w.obs_analysed == [84, 108, 245, 107]
     @test all(0 .<= w.obs_positives .<= w.obs_analysed)
-    ## Early + observed partition the confirmed total, no double-count.
-    @test sum(w.early_increments) + sum(w.obs_positives) ==
-          confirmed.counts[end]
+    ## The baseline (33) plus the fitted early increments and observed
+    ## positives partition the confirmed total, no double-count.
+    @test confirmed.counts[1] + sum(w.early_increments) +
+          sum(w.obs_positives) == confirmed.counts[end]
 end
 
 @testitem "confirmed_positivity_windows handles missing histories" begin
@@ -31,12 +35,14 @@ end
     ## No confirmed history: everything empty.
     w0 = confirmed_positivity_windows(empty, lab)
     @test isempty(w0.obs_analysed) && isempty(w0.early_increments)
-    ## No lab history: every confirmed vintage is an early window.
+    ## No lab history: the first confirmed vintage is the baseline and every
+    ## vintage AFTER it is an early window.
     conf = (; days = [3, 5], counts = [2, 6])
     w1 = confirmed_positivity_windows(conf, empty)
     @test isempty(w1.obs_analysed)
-    @test w1.early_days == [3, 5]
-    @test w1.early_increments == [2, 4]
+    @test w1.early_start == 3
+    @test w1.early_days == [5]
+    @test w1.early_increments == [4]
 end
 
 @testitem "confirmed_positivity_model draws per-window probabilities" begin

@@ -53,6 +53,29 @@ function bin_increments(daily::AbstractVector,
 end
 
 """
+Zero a daily series `v` before grid day `start` (1-based), modelling a
+process that did not exist before `start`. Used to gate the laboratory
+analysed-specimen CAPACITY before testing began: no specimens are analysed
+before the testing system exists, so the modelled analysed volume (and the
+confirmed counts derived from it) must not accrue over the pre-surveillance
+cryptic phase. The suspected-case and suspected-death streams are NOT gated —
+those counts did accumulate over the cryptic phase, so their first per-vintage
+bin legitimately rolls from grid day 1. `start ≤ 1` returns `v` unchanged.
+Pure and AD-transparent; the element type follows `v`. Callers concretise any
+`Vector{Any}` (predict mode) before gating, so `zero(eltype(v))` is well
+defined.
+"""
+function gate_before(v::AbstractVector, start::Integer)
+    start <= 1 && return v
+    T = eltype(v)
+    out = Vector{T}(undef, length(v))
+    @inbounds for i in eachindex(v)
+        out[i] = i < start ? zero(T) : v[i]
+    end
+    return out
+end
+
+"""
 Expand a per-vintage rate vector `rate` onto a length-`n` daily grid,
 assigning each day the rate of the vintage window it falls in. The
 windows are delimited by the ascending day indices `days` (1-based into
@@ -240,14 +263,15 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
     ## Daily non-BVD background deaths. The renewal default has no
     ## background (`death_background === nothing`), so the deaths stream is
     ## pure BVD. With a scalar `death_background` the background is constant
-    ## over the grid; with a per-vintage `background_re` it is the
-    ## regularised time-varying random effect expanded to a daily series,
-    ## sharing the suspected-case background's structure.
+    ## over the grid; with `background_re` it is the smooth daily random-walk
+    ## background ([`background_walk_model`](@ref)), already a length-`n` daily
+    ## series gated to the surveillance onset, sharing the suspected-case
+    ## background's innovation SD and onset.
     if background_re !== nothing
-        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        bg_state ~ to_submodel(background_re(n))
         λ_bg_death = bg_state.λ_mu
         bg_death_sigma = bg_state.σ_bg
-        bg_death_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+        bg_death_daily = bg_state.λ
     elseif death_background !== nothing
         dbg_state ~ to_submodel(death_background)
         λ_bg_death = dbg_state.λ_bg_death
@@ -340,20 +364,21 @@ sitrep.
 
     ## Daily non-BVD background. With `background_re === nothing` this is
     ## the constant scalar `λ_bg` over the grid (the renewal default). When
-    ## a per-vintage random effect is injected, the scalar baseline is
-    ## perturbed window-by-window and expanded to a daily series; the
-    ## baseline `λ_bg` from `positivity` is overridden by the random
-    ## effect's `λ_mu`, and the per-vintage rates are tightly pooled toward
-    ## it so the background stays a regularised minority of suspected cases.
+    ## `background_re` is injected it is the smooth daily random-walk
+    ## background ([`background_walk_model`](@ref)): a length-`n` daily series
+    ## that is zero before the surveillance onset and follows a tight lognormal
+    ## random walk after it, so the baseline `λ_bg` from `positivity` is
+    ## overridden by the walk's level `λ_mu` and the background varies smoothly
+    ## day-to-day rather than in per-vintage steps.
     if background_re === nothing
         λ_bg_base = λ_bg
         bg_sigma = zero(λ_bg)
         bg_daily = fill(λ_bg, n)
     else
-        bg_state ~ to_submodel(background_re(length(vobs.days)))
+        bg_state ~ to_submodel(background_re(n))
         λ_bg_base = bg_state.λ_mu
         bg_sigma = bg_state.σ_bg
-        bg_daily = expand_vintage_rate(bg_state.λ, vobs.days, n)
+        bg_daily = bg_state.λ
     end
 
     ## Suspected daily cases add the p_drc-scaled BVD signal and the
@@ -500,7 +525,7 @@ bookkeeping on the observed data, so it carries no gradient.
 function confirmed_positivity_windows(confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]))
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
-        early_days = Int[], early_increments = Int[],
+        early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
         late_start = 0)
     isempty(confirmed_history.counts) && return empty
@@ -512,23 +537,36 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         return i == 0 ? 0 : Int(ccounts[i])
     end
 
-    ## No laboratory denominators: every confirmed vintage is an early
-    ## window scored through the modelled laboratory volume.
+    ## The first confirmed vintage is the BASELINE (the initial cumulative
+    ## level the surveillance system was at when reporting began); it is not
+    ## scored. The vintaging "starts with the data" from there, so no window's
+    ## modelled volume rolls over the pre-surveillance cryptic phase. This
+    ## matches how the observed and late laboratory windows already treat their
+    ## first value as a baseline. `early_start` is that first confirmed day; the
+    ## early windows pin their modelled-volume accumulation at it.
+    early_start = Int(cdays[1])
+
+    ## No laboratory denominators: every confirmed vintage AFTER the baseline is
+    ## an early window scored through the modelled laboratory volume, binned
+    ## from `early_start`.
     if isempty(lab_history.counts)
-        inc = diff(vcat(zero(eltype(ccounts)), collect(Int.(ccounts))))
+        ed = Int[Int(d) for d in cdays[2:end]]
+        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1]) for i in 2:length(ccounts)]
         return (; obs_days = Int[], obs_positives = Int[],
-            obs_analysed = Int[], early_days = collect(Int.(cdays)),
-            early_increments = Int.(inc),
-            late_days = Int[], late_increments = Int[], late_analysed = Int[],
-            late_start = 0)
+            obs_analysed = Int[], early_days = ed, early_increments = inc,
+            early_start, late_days = Int[], late_increments = Int[],
+            late_analysed = Int[], late_start = 0)
     end
 
     first_lab_day = Int(lab_history.days[1])
-    ## Early windows: confirmed vintages up to the first laboratory date.
+    ## Early windows: confirmed vintages AFTER the first confirmed (baseline) up
+    ## to and including the first laboratory date, scored against the modelled
+    ## laboratory volume binned over each window's own range from `early_start`.
     early_days = Int[]
     early_increments = Int[]
-    prev = 0
+    prev = Int(ccounts[1])
     for (i, d) in enumerate(cdays)
+        i == 1 && continue
         Int(d) > first_lab_day && break
         push!(early_days, Int(d))
         push!(early_increments, Int(ccounts[i]) - prev)
@@ -603,8 +641,8 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     end
 
     return (; obs_days, obs_positives, obs_analysed, early_days,
-        early_increments, late_days, late_increments, late_analysed,
-        late_start = last_lab_day)
+        early_increments, early_start, late_days, late_increments,
+        late_analysed, late_start = last_lab_day)
 end
 
 """
@@ -689,6 +727,19 @@ quantities.
     ## left missing so `predict` resamples them.
     have_data = !ismissing(confirmed_cases)
 
+    ## Laboratory capacity onset. No specimens are analysed before testing
+    ## existed, so the modelled analysed volume is gated to zero before the
+    ## first confirmed-case vintage (the earliest evidence of testing; the
+    ## first laboratory date is the fallback). Modelling a pre-testing analysed
+    ## volume would invent capacity that did not exist AND roll it into the
+    ## first laboratory and early-confirmed bins, vastly over-predicting the
+    ## early confirmed counts. The suspected-case pipeline feeding the volume is
+    ## NOT gated — suspected cases did accumulate over the cryptic phase.
+    cap_start = !isempty(confirmed_history.days) ?
+                clamp(Int(confirmed_history.days[1]), 1, n) :
+                (!isempty(lab_history.days) ?
+                 clamp(Int(lab_history.days[1]), 1, n) : 1)
+
     ## Analysed-specimen volume: the suspected pipeline carried through the
     ## report-to-analysed delay and thinned by the tested fraction, fit to the
     ## analysed series and reused as the denominator in the early and unanchored late
@@ -705,6 +756,8 @@ quantities.
     if eltype(analysed_daily) === Any
         analysed_daily = convert(Vector{typeof(τ_test)}, analysed_daily)
     end
+    ## Gate the capacity to the testing window: zero before `cap_start`.
+    analysed_daily = gate_before(analysed_daily, cap_start)
     rvobs = vintage_obs(lab_history, tests_analysed, n)
     analysed_inc = bin_increments(analysed_daily, rvobs.days)
     ## Generator mode leaves the volume increments missing so `predict`
@@ -779,6 +832,11 @@ quantities.
             analysed_bg_daily = convert(Vector{typeof(τ_test)},
                 analysed_bg_daily)
         end
+        ## Gate the tested composition to the testing window too, so the
+        ## composition clock and the per-window BVD share start at the testing
+        ## onset rather than rolling the cryptic phase.
+        analysed_bvd_daily = gate_before(analysed_bvd_daily, cap_start)
+        analysed_bg_daily = gate_before(analysed_bg_daily, cap_start)
         bvd_window = bin_increments(analysed_bvd_daily, window_days)
         bg_window = bin_increments(analysed_bg_daily, window_days)
         Tt = eltype(bvd_window)
@@ -818,10 +876,16 @@ quantities.
     end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
-    ## modelled analysed volume), the volume binned from the analysed
-    ## series so the early counts inform the fit through partial pooling.
+    ## modelled analysed volume), the volume binned over each window's OWN day
+    ## range pinned at `early_start` (the first confirmed vintage, the testing-
+    ## onset baseline), so the first early increment is scored from the data
+    ## start rather than rolling the (now-gated) pre-testing volume. Mirrors the
+    ## late-window pinning at `late_start`.
     early_p = p_pos[1:n_early]
-    early_volume = bin_increments(analysed_daily, windows.early_days)
+    early_volume = n_early > 0 ?
+                   bin_increments(analysed_daily,
+        vcat(windows.early_start, windows.early_days))[2:end] :
+                   similar(analysed_daily, 0)
     early_mean = early_p .* early_volume
     early_obs = (have_data && n_early > 0 && fit_unanchored) ?
                 windows.early_increments : missing

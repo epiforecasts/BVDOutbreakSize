@@ -49,6 +49,32 @@ Changes since v1.5.0.
   occupancy (the expected level of bed use a week ahead) and the cumulative
   recovered total, each replicated with its own dispersion. The bed occupancy
   is reported as the projected number of beds in use at the horizon.
+- Replaced the per-vintage step background random effect with a smooth daily
+  lognormal random walk (`background_walk_model`), fixing the joint convergence
+  failure on the current data (the per-vintage effect opened a second
+  "background explains the majority of suspected cases" posterior mode that
+  split the chains; the published dev joint had max R-hat 2.5).
+  The background is now per day with no reporting-vintage steps, gated to begin
+  a report-to-receipt lead before the first suspected-case report (it does not
+  exist before surveillance began), shared across the suspected-case and
+  suspected-death streams, with a half-normal baseline and a tight random-walk
+  innovation SD.
+  This also removes the per-vintage step in the modelled cumulative-death
+  trajectory.
+- Widened the non-BVD background level prior so the laboratory positivity
+  identifies it.
+  The previous prior, calibrated for the un-gated full-grid background, forced
+  the background to a tiny fraction of the suspect pool, inconsistent with the
+  observed per-test positivity (210/755 ≈ 0.28).
+  The suspect pool is now inferred to be a minority BVD, raising the non-BVD
+  background substantially and lowering the cumulative-infection estimate
+  (C_T) accordingly, with a wider credible interval.
+- Gated the laboratory analysed-specimen capacity to the testing onset, so no
+  specimens are modelled as analysed before testing existed.
+  This removes a large over-prediction of the early confirmed-case counts (the
+  modelled cumulative confirmed previously ran several-fold above the observed
+  early values).
+
 
 ### Data
 

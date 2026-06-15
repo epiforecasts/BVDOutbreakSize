@@ -415,19 +415,39 @@ death-confirmation probability (`death_confirmation`).
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    ## Per-vintage background random effect, with ONE pooling SD `σ_bg`
-    ## shared between the suspected-case and suspected-death streams (the
-    ## same non-BVD reporting environment drives both). With `background_re
-    ## = false` (the renewal default) the case stream keeps its scalar
-    ## `λ_bg` and the death stream has no background. Each stream still
-    ## samples its own baseline; the death baseline prior is tighter (deaths
-    ## are far fewer than suspected cases).
+    ## Non-BVD background as a SMOOTH daily lognormal random walk over the
+    ## surveillance window ([`background_walk_model`](@ref)), with ONE tight
+    ## innovation SD `σ_rw` shared between the suspected-case and suspected-
+    ## death streams (the same non-BVD reporting environment drives both). The
+    ## background is gated to zero before the surveillance onset (the first
+    ## suspected-case report vintage) — it does not exist before surveillance
+    ## began — and is the SAME onset for every stream, since it is intrinsic to
+    ## the suspected pool. The tight innovation SD keeps it fairly constant,
+    ## which regularises the background/outbreak-size degeneracy (the prior used
+    ## a per-vintage STEP random effect whose multiplicative blow-up opened a
+    ## second posterior mode that broke convergence). With `background_re =
+    ## false` the case stream keeps its scalar `λ_bg` and the death stream has
+    ## no background.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
-        σ_bg_shared = bg_pool.σ_bg
-        case_bg_re = nv -> background_re_model(nv, σ_bg_shared)
-        death_bg_re = nv -> background_re_model(nv, σ_bg_shared;
-            baseline_prior = truncated(Normal(0.0, 0.25); lower = 0))
+        σ_rw_shared = bg_pool.σ_bg
+        ## Onset of the suspected pool's non-BVD background: a report-to-receipt
+        ## lead BEFORE the first suspected-case report, not exactly at it. The
+        ## suspects in the first report were already in the pipeline, and the
+        ## background feeds the laboratory analysed volume through the report-to-
+        ## receipt convolution, so it must begin early enough for that
+        ## convolution to be fully formed by the first report. The lead is the
+        ## MAX lag of the report-to-receipt kernel (its truncation `nmax`, the
+        ## default `lab_delay_model` support), not its mean, so no tail
+        ## contribution is cut off at the onset.
+        bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
+        bg_onset = isempty(reported_history.days) ? 1 :
+                   clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
+        case_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
+            onset = bg_onset)
+        death_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
+            onset = bg_onset,
+            baseline_prior = truncated(Normal(0.0, 2.0); lower = 0))
     else
         case_bg_re = nothing
         death_bg_re = nothing
@@ -485,16 +505,27 @@ death-confirmation probability (`death_confirmation`).
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
     ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
-    ## the per-window tested-positive probability expanded onto the daily grid
-    ## and applied to the modelled analysed volume), so the cumulative
-    ## trajectory carries the confirmed-case timing for the delay-corrected
-    ## confirmed-CFR reconstruction. The onset-to-confirmation kernel
-    ## (onset-to-report ⊕ receipt) and the onset-to-death-confirmation kernel
-    ## (onset-to-death ⊕ receipt, the death carrying the same report-to-receipt
-    ## laboratory delay) are exposed alongside so the residual delay between a
-    ## confirmed case and its confirmed death can be rebuilt per draw off the
-    ## chain.
-    cumulative_confirmed := cumsum(confirmed_state.confirmed_daily)
+    ## the per-window tested-positive probability applied to the modelled,
+    ## testing-onset-gated analysed volume), so the cumulative trajectory carries
+    ## the confirmed-case timing for the delay-corrected confirmed-CFR
+    ## reconstruction. The onset-to-confirmation kernel (onset-to-report ⊕
+    ## receipt) and the onset-to-death-confirmation kernel (onset-to-death ⊕
+    ## receipt) are exposed alongside so the residual delay between a confirmed
+    ## case and its confirmed death can be rebuilt per draw off the chain.
+    ## Re-add the testing-onset baseline: the laboratory capacity is gated to
+    ## zero before testing began and the first confirmed vintage is treated as
+    ## the initial condition (a baseline the early windows do not score), so the
+    ## reconstructed cumulative counts only the fitted increments. Adding the
+    ## first observed confirmed count back from the testing onset onward makes
+    ## the trajectory comparable to the observed confirmed total (and keeps the
+    ## delay-corrected confirmed-CFR denominator on the right level).
+    _conf_inc_cum = cumsum(confirmed_state.confirmed_daily)
+    _conf_base = isempty(confirmed_history.counts) ? 0 :
+                 Int(confirmed_history.counts[1])
+    _conf_cap = isempty(confirmed_history.days) ? 1 :
+                clamp(Int(confirmed_history.days[1]), 1, n)
+    _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
+    cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     C_T := infection_state.C_T

@@ -1153,15 +1153,31 @@ cfr_prior_fig #hide
 # \text{bvd}_t = \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{\text{rep},s}.
 # ```
 #
-# The second part is an additive non-BVD background accruing at
-# $\lambda_{\text{bg}}$ per day, so a suspected case need not be a true BVD
-# infection. We assume this background is a small minority of suspected
-# reports, so the prior on $\lambda_{\text{bg}}$ is an informative half-normal
-# $\mathrm{Normal}^{+}(0, 1)$ per day. The daily expected suspected case count
-# is
+# The second part is an additive non-BVD background, so a suspected case need
+# not be a true BVD infection. It is a per-day rate $\lambda_{\text{bg},t}$ that
+# follows a smooth daily lognormal random walk around a baseline $\lambda_\mu$,
 #
 # ```math
-# c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg}}.
+# \lambda_{\text{bg},t} = \lambda_\mu \exp\!\Bigl(\sigma_{\text{rw}}
+#     \sum_{s < t} z_s\Bigr), \qquad z_s \sim \mathcal N(0, 1),
+# ```
+#
+# gated to zero before the surveillance onset (a report-to-receipt lead before
+# the first suspected-case report — the background does not exist before
+# surveillance began) and shared, with one tight innovation SD
+# $\sigma_{\text{rw}}$, between the suspected-case and suspected-death streams.
+# The walk is per day, so the background varies smoothly rather than in
+# reporting-vintage steps, and the tight $\sigma_{\text{rw}}$ keeps it a gentle
+# drift. The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 8)$ prior on
+# the natural scale: a log-scale level would have a heavy right tail the
+# background/outbreak-size degeneracy could exploit, while the natural-scale
+# half-normal bounds it but is wide enough that the laboratory positivity (only
+# $210/755 \approx 0.28$ of analysed specimens are positive) identifies the
+# background, which is inferred to be the majority of the suspect pool. The
+# daily expected suspected case count is
+#
+# ```math
+# c_t = p_{\text{DRC}}\, \text{bvd}_t + \lambda_{\text{bg},t}.
 # ```
 #
 # The per-vintage increments are scored with a NegBinomial sharing the
@@ -1309,9 +1325,18 @@ cfr_prior_fig #hide
 #
 # ```math
 # v_t = \tau_{\text{test}} \sum_{s \ge 0}
-#     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg}}\bigr)\,
+#     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg},t-s}\bigr)\,
 #     f_{\text{rec},s}.
 # ```
+#
+# This analysed volume is **gated to zero before the testing onset**: no
+# specimens are analysed before the laboratory existed, so $v_t$ does not accrue
+# over the pre-surveillance cryptic phase (modelling a pre-testing volume would
+# both invent capacity and roll it into the first laboratory and early-confirmed
+# bins, vastly over-predicting the early confirmed counts). The first confirmed
+# vintage is treated as the baseline and the early confirmed increments are
+# scored from it. The suspected-case count itself is not gated — those cases did
+# accumulate over the cryptic phase.
 #
 # The per-vintage increments are scored against the cumulative analysed
 # series with a NegBinomial sharing the dispersion $k$:
