@@ -1221,48 +1221,57 @@ cfr_prior_fig #hide
 
 # ##### Isolation occupancy
 #
-# The "Patients en isolement" figure is a daily count of how many patients
-# are in an isolation/treatment bed. A patient enters a bed when reported as
-# a suspect and leaves on discharge, so the count is the admission inflow
-# convolved with a length-of-stay survival $S(\tau) = P(\text{LOS} \ge \tau)$
-# (with $S(0) = 1$). This is the renewal analogue of the convolution-and-
-# scaling secondary-observation model of EpiNow2 [epinow2](@cite), applied to
-# a bed-occupancy signal. A proportion $p_{\text{iso}}$ of the reported
-# suspects are admitted; the suspects are a BVD/background mixture that leaves
-# the bed on different clocks, so the count is the sum of two survival
-# convolutions sharing the one admission proportion: the BVD admissions stay
-# for a sampled treatment length-of-stay $S_{\text{BVD}}$, and the non-BVD
-# admissions leave once their negative result returns, after the
-# report-to-receipt laboratory delay $S_{\text{rec}}$,
+# The "Patients en isolement" figure is the daily count of occupied
+# isolation/treatment beds. Bed occupancy has been supply-driven — demand for
+# beds has outstripped supply, with occupancy catching up as capacity is
+# expanded — so we model a latent bed DEMAND and the supply-limited occupancy
+# it produces, rather than occupancy directly.
+#
+# The latent demand is the suspect inflow carried through a length-of-stay
+# survival $S(\tau) = P(\text{LOS} \ge \tau)$ (the renewal analogue of the
+# convolution secondary-observation model of EpiNow2 [epinow2](@cite)). A
+# proportion $p_{\text{iso}}$ of the reported suspects need a bed; the
+# suspects are a BVD/background mixture leaving on different clocks, so the
+# demand is the sum of two survival convolutions: the BVD demand with a
+# sampled treatment length-of-stay $S_{\text{BVD}}$, and the non-BVD demand
+# leaving after the report-to-receipt laboratory delay $S_{\text{rec}}$,
 #
 # ```math
-# O_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
+# D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
 #       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
 #       \lambda_{\text{bg},\,t-s}\, S_{\text{rec}}(s) \right].
 # ```
 #
-# Each report day's observed count $O_j$ follows a NegBinomial around the
-# modelled count on that day (a single-day mean), with a dispersion of its
-# own, not shared with the other streams:
+# The occupancy is the demand soft-capped at the bed capacity $C$, so it
+# approaches $C$ under excess demand and tracks the demand when beds are
+# slack, making the admitted fraction availability-driven rather than
+# constant:
 #
 # ```math
-# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k_{\text{iso}}).
+# O_t = C\left(1 - e^{-D_t / C}\right).
 # ```
 #
-# The exposed BVD share of the bed is the true-BVD fraction (BVD-confirmed
-# plus BVD-suspect), not the report's confirmed/suspect split, since most
-# "suspects in isolation" are true BVD cases awaiting confirmation. The
-# fitted series is the all-patients column from 1 June (SitRep 018) onward.
+# Each report day's occupied-bed count $O_j$ follows a NegBinomial around the
+# modelled occupancy, with a dispersion of its own (not shared with the other
+# streams). The capacity $C$ is pinned by the implied bed count, the reported
+# occupancy (the "Patients en isolement" count) divided by the reported
+# "Taux d'occupation" rate ($\approx 400 \to 452$ beds over 9–13 June), fitted
+# as noisy observations of $C$:
 #
-# This treats the admission proportion as constant, so it assumes the bed
-# occupancy is demand-driven rather than supply-limited. In the data the
-# occupancy is in fact approaching capacity (the reported "Taux d'occupation"
-# is 82.9% nationally and 93.9% in Ituri on 13 June, with the situation
-# reports flagging potential saturation), so once beds saturate the occupancy
-# tracks capacity rather than the modelled demand. A capacity-constrained
-# version — a latent bed demand and a supply-limited occupancy, with a
-# forecast of need under unconstrained supply — is left as follow-up work
-# (epiforecasts/BVDOutbreakSize#265).
+# ```math
+# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k_{\text{iso}}),
+# \qquad
+# C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C,\ k_{\text{iso}}).
+# ```
+#
+# The model exposes the cut-off occupancy, the cut-off bed demand (the need
+# under unconstrained supply), their difference (the bed shortfall) and the
+# utilisation $O_T / C$. Capacity is a single national quantity here; its
+# growth (beds are being added) and the per-province split (Ituri at 93.9% on
+# 13 June against Sud-Kivu 21.9%) are left as extensions. The exposed BVD
+# share is the true-BVD fraction of demand (BVD-confirmed plus BVD-suspect),
+# not the report's confirmed/suspect split. The fitted occupancy series is the
+# all-patients column from 1 June (SitRep 018) onward.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_admission_model</summary>
@@ -1844,6 +1853,7 @@ chn_treatment = fit_parallel([
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
         isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
         recovered_history = obs.recovered_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
@@ -1880,6 +1890,7 @@ chn_treatment = fit_parallel([
         breakpoint = _BREAKPOINT)),
     () -> nuts_sample(treatment_only_model(obs.n;
         isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
         breakpoint = _BREAKPOINT))]);
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
@@ -2006,16 +2017,13 @@ diagnostics_table( #hide
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
 # We forecast the two confirmed DRC streams (laboratory-confirmed cases and
-# confirmed deaths) as the forecast targets, and also the isolation/treatment-
-# bed occupancy (the expected number of beds in use a week ahead) and the
-# cumulative recovered total. The bed occupancy is the number of beds in use
-# on a day, and under the same exponential-growth continuation it grows by
-# the horizon factor like the case inflow, so the projected occupancy is the
-# cut-off occupancy carried forward by that factor. This projection takes the
-# admission proportion as fixed and so assumes supply is unconstrained, which
-# overstates realisable occupancy once beds saturate (the bed model's known
-# limitation, epiforecasts/BVDOutbreakSize#265); read it as projected demand
-# for beds rather than occupancy the supply can meet. The suspected reported
+# confirmed deaths) as the forecast targets, and also the isolation/treatment
+# beds and the cumulative recovered total. For the beds we project both the
+# bed DEMAND (the need a week ahead, under unconstrained supply: the cut-off
+# demand grown by the horizon factor like the case inflow) and the
+# supply-limited occupancy that demand produces against the bed capacity. The
+# gap between them is the projected bed shortfall — the policy-relevant
+# quantity, since bed occupancy has been supply-driven. The suspected reported
 # cases and deaths are no longer reported, so they are not shown as
 # targets. Exports are not forecast either, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the
@@ -2447,6 +2455,7 @@ surveillance_summary = summary_table(chn_joint,
         :expected_analysed_T, :m_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
         :isolation_admission, :isolation_dispersion, :expected_isolation_T,
+        :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);
 
@@ -2522,6 +2531,7 @@ pp_joint = predict(
         reported_history = _days_only(obs.reported_history),
         suspected_daily_history = _days_only(obs.suspected_daily_history),
         isolation_history = _days_only(obs.isolation_history),
+        bed_capacity_history = _days_only(obs.bed_capacity_history),
         recovered_history = _days_only(obs.recovered_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
@@ -2839,11 +2849,10 @@ confirmed_cfr_fig #hide
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
 # The suspected reported cases and deaths are no longer reported, so they are
 # not shown as forecast targets.
-# The forecast also projects the isolation/treatment-bed occupancy (the
-# expected number of beds in use a week ahead) and the cumulative recovered
-# total. The bed occupancy grows by the horizon factor like the case inflow
-# under the same exponential-growth continuation, so it is reported as the
-# projected number of beds in use at $T + 7$.
+# The forecast also projects the isolation/treatment beds — both the bed
+# demand a week ahead (the need under unconstrained supply) and the
+# supply-limited occupancy it produces, whose gap is the projected bed
+# shortfall — and the cumulative recovered total.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3359,6 +3368,7 @@ function refit_joint_variant(;
             lab_daily_history = obs.lab_daily_history,
             suspected_daily_history = obs.suspected_daily_history,
             isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
             recovered_history = obs.recovered_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,

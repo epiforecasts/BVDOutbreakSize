@@ -150,6 +150,24 @@ dates  = ["2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04",
 values = [173, 206, 233, 258, 267, 283, 309, 297, 260, 262, 315, 359]
 source = "INSP situation reports 1-13 June 2026 (SitReps 018-028, 030) page-1 headline `Patients en isolement - hospitalisation`, read from the PDFs and cross-checked against the Tableau IV `Patients en isolement (Fin J)` provincial totals; recorded in the patients_isolated column of data/insp_sitrep_scanned.csv. Daily isolation/hospitalisation occupancy (count): 173, 206, 233, 258, 267, 283, 309, 297, 260, 262, 315 on 1-11 June and 359 on 13 June (Tableau IV Fin J Ituri 310 + Nord-Kivu 42 + Sud-Kivu 7 = 359). SitReps 016-017 (30-31 May) report the narrower `Cas suspects en isolement` (suspects only, 101, 104), a different quantity, so the all-patients series begins 1 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
+# Implied bed capacity: the number of isolation/treatment beds available,
+# derived from the reported occupancy rate as `capacity = occupancy / rate`.
+# The confirmed-based SitReps print a "Taux d'occupation" (% bed occupancy)
+# from 9 June (SitReps 026-028, 030): 65.0%, 63.9%, 69.7%, 82.9% on 9, 10, 11
+# and 13 June, recorded in the notes column of data/insp_sitrep_scanned.csv.
+# Dividing the same-day occupancy (260, 262, 315, 359) by the rate gives the
+# bed count: 400, 410, 452, 433. The isolation submodel
+# (`treatment_admission_model`) treats these as noisy observations of a
+# single national bed capacity `C`, the ceiling the latent bed demand
+# saturates against. Capacity is being expanded (SitRep 030 records 164
+# mattresses, 140 beds received and new treatment centres opening), so this
+# is approximate; modelling its growth and the per-province split (Ituri at
+# 93.9% on 13 June vs Sud-Kivu 21.9%) is left as an extension.
+[bed_capacity_history]
+dates  = ["2026-06-09", "2026-06-10", "2026-06-11", "2026-06-13"]
+values = [400, 410, 452, 433]
+source = "Derived from the INSP situation-report `Taux d'occupation` (SitReps 026-028, 030): capacity = occupancy / rate = 260/0.650, 262/0.639, 315/0.697, 359/0.829 = 400, 410, 452, 433 beds on 9, 10, 11, 13 June. The rates are recorded in the notes column of data/insp_sitrep_scanned.csv. SitRep 029 (12 June) was not published upstream. SitReps 021-025 (4-8 June) do not print an occupancy rate, so the series begins 9 June."
+
 # Cumulative recovered among laboratory-confirmed cases ("cumul guéris"):
 # the running total of confirmed cases recorded as recovered/discharged,
 # printed on page 1 of the confirmed-based SitReps from 6 June (SitReps

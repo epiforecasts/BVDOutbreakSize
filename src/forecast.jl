@@ -129,11 +129,14 @@ Returns a `DataFrame` with one row per draw and columns:
 - `:cases_new`, … `:confirmed_deaths_new` — new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
-- `:isolation_level` — projected isolation/treatment-bed occupancy at the
-  horizon, present when the chain carries `expected_isolation_T`. A stock
-  (a level, not a cumulative), replicated with the isolation stream's own
-  dispersion; under the exponential-growth continuation the occupancy grows
-  by the same horizon factor as the inflow.
+- `:bed_demand`, `:isolation_level` — the projected isolation/treatment-bed
+  DEMAND (need under unconstrained supply) and the supply-limited occupancy
+  it produces against the bed capacity, both at the horizon, present when the
+  chain carries `expected_bed_demand_T` and `bed_capacity`. The demand grows
+  by the horizon factor like the inflow; the occupancy is that demand
+  soft-capped at the capacity, so `bed_demand − isolation_level` is the
+  projected bed shortfall. Replicated with the isolation stream's own
+  dispersion.
 - `:recovered_cum`, `:recovered_new` — cumulative recovered-among-confirmed
   by the horizon (and new this week when `obs_recovered` is supplied),
   present when the chain carries `expected_recovered_T`.
@@ -193,12 +196,12 @@ function forecast_reported(chn;
     conf_T = has_conf ? _draws(chn, :expected_confirmed_T) : nothing
     conf_deaths_T = has_conf_deaths ?
                     _draws(chn, :expected_confirmed_deaths_T) : nothing
-    ## Isolation bed occupancy (a stock) and recovered-among-confirmed (a
-    ## cumulative), forecast when the chain carries them and using each
-    ## stream's OWN dispersion. Under the forecast's exponential-growth
-    ## continuation every quantity, including the bed-occupancy stock, grows by
-    ## the same horizon factor, so the projected occupancy is the cut-off
-    ## occupancy scaled by `grow`.
+    ## Isolation beds and recovered-among-confirmed, forecast when the chain
+    ## carries them and using each stream's OWN dispersion. The isolation
+    ## stream projects the latent bed DEMAND under unconstrained supply (the
+    ## cut-off demand grown by the horizon factor) — the need a week ahead —
+    ## and the supply-limited occupancy that demand produces against the bed
+    ## capacity, so the forecast quantifies both the need and the shortfall.
     _has(key) =
         try
             chn[key]
@@ -206,9 +209,11 @@ function forecast_reported(chn;
         catch
             false
         end
-    has_iso = _has(:expected_isolation_T) && _has(:isolation_dispersion)
+    has_iso = _has(:expected_bed_demand_T) && _has(:bed_capacity) &&
+              _has(:isolation_dispersion)
     has_rec = _has(:expected_recovered_T) && _has(:recovered_dispersion)
-    iso_T = has_iso ? _draws(chn, :expected_isolation_T) : nothing
+    demand_T = has_iso ? _draws(chn, :expected_bed_demand_T) : nothing
+    cap = has_iso ? _draws(chn, :bed_capacity) : nothing
     k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
     rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
     k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
@@ -222,6 +227,7 @@ function forecast_reported(chn;
     deaths_latent_new = Vector{Float64}(undef, n)
     confirmed_cum = has_conf ? Vector{Int}(undef, n) : nothing
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
+    bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
     isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
     recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
 
@@ -258,10 +264,17 @@ function forecast_reported(chn;
             confirmed_deaths_cum[i] = min(deaths_cum[i],
                 _nb_rand(rng, k[i], μ))
         end
-        ## Projected bed occupancy and cumulative recovered at T+horizon, each
-        ## with its own dispersion.
-        has_iso && (isolation_level[i] = _nb_rand(rng, k_iso[i],
-            iso_T[i] * grow))
+        ## Projected bed demand (need under unconstrained supply) and the
+        ## supply-limited occupancy it produces against the bed capacity, plus
+        ## cumulative recovered. The demand replicate carries the dispersion;
+        ## the occupancy is that same replicate soft-capped at the capacity, so
+        ## per draw the occupancy never exceeds the demand or the capacity.
+        if has_iso
+            d = _nb_rand(rng, k_iso[i], demand_T[i] * grow)
+            bed_demand[i] = d
+            isolation_level[i] = round(Int,
+                cap[i] * (1 - exp(-d / max(cap[i], eps()))))
+        end
         has_rec && (recovered_cum[i] = _nb_rand(rng, k_rec[i],
             rec_T[i] * grow))
     end
@@ -287,6 +300,7 @@ function forecast_reported(chn;
             obs_confirmed_deaths)
     end
     if has_iso
+        df.bed_demand = bed_demand
         df.isolation_level = isolation_level
     end
     if has_rec
@@ -327,9 +341,11 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
         push!(rows, _row(label, "cumulative by T+7", fc[!, cum]))
         push!(rows, _row(label, "new this week", fc[!, new]))
     end
-    ## Isolation bed occupancy is a stock (a level, not a cumulative), so it
-    ## is reported as the projected occupancy at the horizon. Recovered is
-    ## cumulative, like the confirmed streams.
+    ## Isolation beds: the projected bed DEMAND (need under unconstrained
+    ## supply) and the supply-limited occupancy that demand produces, both
+    ## levels at the horizon. The gap between them is the bed shortfall.
+    :bed_demand in propertynames(fc) && push!(rows,
+        _row("DRC isolation beds", "demand at T+7", fc[!, :bed_demand]))
     :isolation_level in propertynames(fc) && push!(rows,
         _row("DRC isolation beds", "occupancy at T+7", fc[!, :isolation_level]))
     if :recovered_cum in propertynames(fc)
