@@ -21,10 +21,11 @@ tasks:
 
   confirm-data:
     desc: >
-      Cross-check the hand-scanned confirmed-case and confirmed-death
-      totals in data/insp_sitrep_scanned.csv against the INRB-UMIE
-      national cumulative series, flagging mismatches and report dates
-      not yet scanned. Exits non-zero on any disagreement.
+      Regenerate the [confirmed_case_history] and [confirmed_death_history]
+      blocks for data/observations.toml from the INRB-UMIE national
+      cumulative series (upstream-primary), and confirm them against the
+      hand-scanned headline totals in data/insp_sitrep_scanned.csv. Prints
+      the ready-to-paste blocks and exits non-zero on any disagreement.
     cmds:
       - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
 

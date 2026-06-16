@@ -1,30 +1,27 @@
 #!/usr/bin/env julia
 #
-# Confirm the hand-scanned DRC confirmed-case and confirmed-death totals
-# in `data/insp_sitrep_scanned.csv` against the INRB-UMIE national
-# cumulative series, the independent transcription of the same INSP
-# situation reports (https://github.com/INRB-UMIE/BDBV2026-Data,
-# data/insp_sitrep/processed). This is a cross-check, not a generator:
-# we scan the situation-report PDFs directly (the headline national
-# totals) and use the upstream `national_*` CSVs only to confirm those
-# numbers and to flag report dates we have not yet scanned.
+# Regenerate the cumulative confirmed-case and confirmed-death series for
+# data/observations.toml from the INRB-UMIE national cumulative CSVs (the
+# clean national transcription of the INSP situation reports,
+# https://github.com/INRB-UMIE/BDBV2026-Data, data/insp_sitrep/processed),
+# and confirm them against our own directly scanned headline figures in
+# data/insp_sitrep_scanned.csv.
+#
+# These two streams are upstream-primary: the upstream national_* series
+# are the source of truth and this script prints the ready-to-paste TOML
+# blocks. The scan is the cross-check. Every other stream in the manifest
+# (suspected, laboratory cumulatives, 24h analysed volume, daily new
+# suspects, isolation, beds, recoveries) is scanned directly and is not
+# handled here.
 #
 # Usage:
 #
 #   julia --project=scripts scripts/confirm_insp_data.jl
 #
-# Prints a per-date reconciliation for cumulative confirmed cases and
-# confirmed deaths over the dates present in both sources, lists any
-# upstream report dates missing from the scan (new data to add), and
-# exits non-zero if any overlapping date disagrees.
-#
-# Only the cumulative confirmed-case and confirmed-death series are
-# cross-checked: upstream publishes those as clean national daily CSVs
-# that match our scanned headlines. The suspected, laboratory cumulative
-# and 24h-analysed streams have no comparable clean national column
-# upstream (suspected is reclassified downward; the 24h analysed volume
-# is a per-province sum read from the report's laboratory block), so they
-# stay scan-only and are not reconciled here.
+# Prints the regenerated [confirmed_case_history] and
+# [confirmed_death_history] blocks, a per-date scan-vs-upstream
+# reconciliation, and the report dates each source carries that the other
+# does not. Exits non-zero if any overlapping date disagrees.
 
 using CSV
 using Chain
@@ -37,13 +34,12 @@ const BASE_URL = "https://raw.githubusercontent.com/INRB-UMIE/" *
                  "BDBV2026-Data/main/data/insp_sitrep/processed"
 const SCANNED = joinpath(@__DIR__, "..", "data", "insp_sitrep_scanned.csv")
 
-# (upstream file stem, scanned column, human label) for each series we
-# reconcile. The upstream value column is the third column of the CSV.
+# (upstream file stem, scanned column, TOML key, human label) per series.
 const SERIES = [
     ("insp_sitrep__national_cumulative_confirmed_cases__daily.csv",
-        :confirmed_cases, "confirmed cases"),
+        :confirmed_cases, "confirmed_case_history", "confirmed cases"),
     ("insp_sitrep__national_cumulative_confirmed_deaths__daily.csv",
-        :confirmed_deaths, "confirmed deaths")
+        :confirmed_deaths, "confirmed_death_history", "confirmed deaths")
 ]
 
 # Latest non-missing scanned value per report date. The scanned file can
@@ -58,7 +54,8 @@ function scanned_series(scan, col)
     end
 end
 
-# National cumulative series from the upstream processed CSV, ND dropped.
+# National cumulative series from the upstream processed CSV, ND dropped,
+# sorted oldest-first.
 function upstream_series(file)
     df = CSV.read(Downloads.download("$BASE_URL/$file"),
         DataFrame; missingstring = ["ND"])
@@ -68,14 +65,44 @@ function upstream_series(file)
         @transform :date = Date.(:date)
         @rsubset !ismissing(:upstream)
         @select :date :upstream
+        @orderby :date
     end
+end
+
+# Print a TOML array wrapped to the observations.toml house style, with
+# the continuation lines indented to align under the first item.
+function print_wrapped(label, items, per_line)
+    prefix = rpad(label, 6) * " = ["
+    pad = " "^length(prefix)
+    print(prefix)
+    for (i, item) in enumerate(items)
+        i > 1 && print(i % per_line == 1 ? ",\n$pad" : ", ")
+        print(item)
+    end
+    println("]")
+end
+
+function print_block(key, df)
+    println("[$key]")
+    print_wrapped("dates", ("\"$(d)\"" for d in df.date), 4)
+    print_wrapped("values", df.upstream, 14)
+    println()
 end
 
 scan = CSV.read(SCANNED, DataFrame; missingstring = [""])
 
+println("# Regenerated from the INRB-UMIE national cumulative CSVs.")
+println("# Paste into data/observations.toml (keep the surrounding ",
+    "comments).\n")
+
 any_mismatch = false
-for (file, col, label) in SERIES
-    println("=== $label (scanned vs INRB-UMIE national) ===")
+for (file, col, key, label) in SERIES
+    upstream = upstream_series(file)
+    print_block(key, upstream)
+end
+
+for (file, col, key, label) in SERIES
+    println("=== $label: scan vs upstream ===")
     scanned = scanned_series(scan, col)
     upstream = upstream_series(file)
 
@@ -91,16 +118,15 @@ for (file, col, label) in SERIES
 
     new_dates = @chain antijoin(upstream, scanned; on = :date) @orderby :date
     if nrow(new_dates) > 0
-        println("  upstream dates not yet scanned:")
-        for row in eachrow(new_dates)
-            println("    $(row.date) -> $(row.upstream)")
-        end
+        println("  upstream dates not scanned: " *
+                join(("$(r.date)=$(r.upstream)" for r in eachrow(new_dates)),
+            ", "))
     end
     println()
 end
 
 if any_mismatch
-    println("Reconciliation FAILED: scanned values disagree with upstream.")
+    println("Reconciliation FAILED: a scanned value disagrees with upstream.")
     exit(1)
 else
     println("Reconciliation OK: all overlapping dates agree.")
