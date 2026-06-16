@@ -12,24 +12,27 @@ Changes since v1.5.0.
 
 ### Model
 
-- Added an isolation/treatment-bed occupancy stream ("Patients en
-  isolement"), the renewal analogue of the convolution-and-scaling
-  secondary-observation model of EpiNow2.
-  The daily bed count is fitted as the suspect inflow carried through a
-  length-of-stay survival: a proportion of reported suspects are admitted,
-  the BVD ones staying for a sampled treatment length-of-stay and the non-BVD
-  ones leaving once their negative result returns (after the report-to-receipt
-  laboratory delay), so the bed count is a BVD/background mixture whose level
-  and lag inform the admission proportion and the treatment stay. It carries
-  its own observation dispersion rather than sharing the surveillance
-  dispersion.
-  Added `convolve_survival` (the survival-weighted analogue of
-  `convolve_delay`), the `treatment_admission_model` observation submodel, the
-  `isolation_admission_model` prior and the `treatment_only_model`
-  single-stream composer.
-  The admission proportion is constant, so this assumes demand-driven (not
-  supply-limited) occupancy; a capacity-constrained version is left as
-  follow-up work (#265).
+- Added a supply-limited isolation/treatment-bed stream ("Patients en
+  isolement"), the renewal analogue of the convolution secondary-observation
+  model of EpiNow2.
+  Bed occupancy has been supply-driven (demand has outstripped supply), so
+  the model fits a latent bed DEMAND — the suspect inflow carried through a
+  length-of-stay survival (BVD cases with a sampled treatment stay, non-BVD
+  suspects leaving after the report-to-receipt delay) — and the occupancy is
+  that demand soft-capped at the bed capacity, `occupancy = C·(1−exp(−D/C))`,
+  so the admitted fraction is availability-driven. The capacity `C` is pinned
+  by the implied bed count (reported occupancy / "Taux d'occupation" rate).
+  The stream exposes the bed demand, occupancy, capacity, shortfall and
+  utilisation, and carries its own observation dispersion. Added
+  `convolve_survival`, the `treatment_admission_model` observation submodel,
+  the `isolation_admission_model` and `bed_capacity_model` priors and the
+  `treatment_only_model` single-stream composer (resolves #265).
+  A key limitation is that this is a single national model: it cannot
+  represent local bed saturation (Ituri at 93.9% occupancy on 13 June against
+  Sud-Kivu 21.9%), which is the level the supply constraint operates at, so
+  the national shortfall understates the local unmet need. The renewal model
+  does not carry per-province inflow, so it cannot be split to the
+  per-province bed model the constraint needs.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
   daily confirmed cases, scaled by a recovery proportion and convolved with a
@@ -45,10 +48,13 @@ Changes since v1.5.0.
   cases and deaths together over the one travel-gated at-risk prevalence. The
   single-stream comparison in the walkthrough now shows one joint "exports"
   fit instead of separate export-case and export-death fits.
-- The one-week-ahead forecast now also projects the isolation/treatment-bed
-  occupancy (the expected level of bed use a week ahead) and the cumulative
-  recovered total, each replicated with its own dispersion. The bed occupancy
-  is reported as the projected number of beds in use at the horizon.
+- The one-week-ahead forecast now also projects the isolation/treatment beds
+  — both the bed demand a week ahead (need under unconstrained supply) and the
+  supply-limited occupancy it produces, whose gap is the projected bed
+  shortfall — and the cumulative recovered total, each replicated with its
+  own dispersion. Added `plot_forecast_beds`, which shows the projected bed
+  need against the supply-limited occupancy and the shortfall in the
+  walkthrough's forecast section.
 - Replaced the per-vintage step background random effect with a smooth daily
   lognormal random walk (`background_walk_model`), fixing the joint convergence
   failure on the current data (the per-vintage effect opened a second
@@ -75,7 +81,6 @@ Changes since v1.5.0.
   modelled cumulative confirmed previously ran several-fold above the observed
   early values).
 
-
 ### Data
 
 - Added the daily "Patients en isolement" occupancy for 1-11 June (SitReps
@@ -86,6 +91,10 @@ Changes since v1.5.0.
   different quantity and is excluded.
   Corrected the SitRep 020 note (the PDF headline occupancy is 233, not the
   173 the note claimed).
+- Added the implied bed-capacity series (occupancy / reported "Taux
+  d'occupation" rate ≈ 400-452 beds, 9-13 June) as the `[bed_capacity_history]`
+  manifest block, which pins the bed capacity in the supply-limited isolation
+  model.
 - Added the cumulative "cumul guéris" recovered-among-confirmed total for
   6-11 June (SitReps 023-028) as a structured `cumul_recovered` column and
   the `[recovered_history]` manifest block.

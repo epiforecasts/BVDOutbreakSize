@@ -34,7 +34,7 @@
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
         :lab_history, :lab_daily_history, :suspected_daily_history,
-        :isolation_history, :recovered_history)
+        :isolation_history, :bed_capacity_history, :recovered_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
         @test hasproperty(h, :days)
@@ -93,6 +93,22 @@
     @test all(d -> 1 <= d <= obs.n, obs.isolation_history.days)
     @test minimum(obs.isolation_history.days) >
           maximum(obs.reported_history.days)
+
+    ## The implied bed-capacity series (occupancy / reported occupancy rate):
+    ## positive bed counts, sorted oldest-first and within the grid. An
+    ## invariant rather than a literal echo. Capacity must exceed the
+    ## same-day occupancy (the occupancy rate is below 100%).
+    @test !isempty(obs.bed_capacity_history.counts)
+    @test all(c -> c > 0, obs.bed_capacity_history.counts)
+    @test issorted(obs.bed_capacity_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.bed_capacity_history.days)
+    let isod = Dict(zip(obs.isolation_history.days,
+            obs.isolation_history.counts))
+        for (d, cap) in zip(obs.bed_capacity_history.days,
+            obs.bed_capacity_history.counts)
+            haskey(isod, d) && (@test cap >= isod[d])
+        end
+    end
 
     ## The cumulative recovered-among-confirmed series ("cumul guéris"): a
     ## CUMULATIVE count, so non-decreasing and positive, sorted oldest-first

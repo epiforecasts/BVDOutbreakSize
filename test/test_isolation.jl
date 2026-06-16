@@ -118,6 +118,7 @@ end
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
         isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
@@ -127,9 +128,15 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     C_T = vec(Array(chn[:C_T]))
     iso = vec(Array(chn[:expected_isolation_T]))
+    dem = vec(Array(chn[:expected_bed_demand_T]))
+    cap = vec(Array(chn[:bed_capacity]))
     @test length(C_T) == 30
     @test all(isfinite, C_T)
     @test all(C_T .> 0)
     @test all(isfinite, iso)
     @test all(iso .> 0)
+    ## Occupancy never exceeds the latent demand (the soft cap), and the
+    ## supply-limited occupancy never exceeds the bed capacity.
+    @test all(iso .<= dem .+ 1e-6)
+    @test all(iso .<= cap .+ 1e-6)
 end

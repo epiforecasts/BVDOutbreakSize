@@ -153,6 +153,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
 @model function treatment_only_model(
         n::Integer;
         isolation_history = (; days = Int[], counts = Int[]),
+        bed_capacity_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -175,7 +176,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     receipt_state ~ to_submodel(receipt)
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, receipt_state.pmf))
+        cases_state.bg_daily, p_drc, receipt_state.pmf;
+        capacity_history = bed_capacity_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -370,6 +372,7 @@ death-confirmation probability (`death_confirmation`).
         lab_daily_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
         isolation_history = (; days = Int[], counts = Int[]),
+        bed_capacity_history = (; days = Int[], counts = Int[]),
         recovered_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
@@ -471,12 +474,14 @@ death-confirmation probability (`death_confirmation`).
         deaths_state.deaths_daily, cases_state.bvd_reports_daily,
         p_drc, cases_state.bg_daily, k;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
-    ## Isolation/treatment-bed occupancy: the suspect inflow (BVD treatment
-    ## stay plus non-BVD rule-out stay) carried through a length-of-stay
-    ## survival into a daily stock (see [`treatment_admission_model`](@ref)).
+    ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
+    ## length-of-stay survival into a latent bed demand, soft-capped at the bed
+    ## capacity the implied-capacity series pins (see
+    ## [`treatment_admission_model`](@ref)).
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf))
+        cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf;
+        capacity_history = bed_capacity_history))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases, with a recovery fraction grounded on the CFR and
     ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
@@ -549,6 +554,10 @@ death-confirmation probability (`death_confirmation`).
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
     expected_isolation_T := treatment_state.expected_isolation
+    expected_bed_demand_T := treatment_state.expected_bed_demand
+    bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
+                                 treatment_state.expected_isolation)
+    bed_capacity := treatment_state.capacity
     isolation_admission := treatment_state.p_iso
     isolation_bvd_los_mean := treatment_state.bvd_los_mean
     isolation_dispersion := treatment_state.k_isolation

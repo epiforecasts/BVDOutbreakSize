@@ -532,6 +532,31 @@ override. Returns `(; p_iso)`.
 end
 
 """
+Isolation/treatment-bed capacity for the supply-limited occupancy stream
+([`treatment_admission_model`](@ref)). Samples the number of beds available,
+`capacity`, the ceiling the latent bed demand saturates against. Bed
+occupancy has been supply-driven (demand has outstripped supply, with
+occupancy catching up as capacity is expanded), so the modelled occupancy is
+the demand passed through a soft cap at `capacity` rather than tracking
+demand directly.
+
+The default `truncated(Normal(450, 200); lower = 1)` is weakly informative,
+centred on the bed count implied by the reported occupancy rates (the
+"Taux d'occupation" gives `capacity = occupancy / rate ≈ 400–452` over
+9–13 June). The capacity is identified by the implied-capacity series the
+isolation submodel fits, so the prior only has to bracket it. A single
+national capacity is a limitation: it cannot represent local saturation (one
+province full while another has slack), which is the level the supply
+constraint operates at, and it averages over a growing capacity. Pass
+`capacity_prior` to override. Returns `(; capacity)`.
+"""
+@model function bed_capacity_model(;
+        capacity_prior = truncated(Normal(450.0, 200.0); lower = 1))
+    capacity ~ capacity_prior
+    return (; capacity)
+end
+
+"""
 Recovery probability for the recovered-among-confirmed stream
 ([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
 is recovery rather than death is the confirmed-case survival fraction, the

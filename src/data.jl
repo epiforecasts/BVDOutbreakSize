@@ -33,8 +33,10 @@ trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
 `isolation_history` from the post-cutoff daily isolation/hospitalisation
 occupancy ("Patients en isolement", a daily bed count fitted by the
-length-of-stay submodel), `recovered_history` from the cumulative
-recovered-among-confirmed series ("cumul guéris"),
+length-of-stay submodel), `bed_capacity_history` from the implied bed
+capacity (occupancy / reported occupancy rate),
+`recovered_history` from the cumulative recovered-among-confirmed series
+("cumul guéris"),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
@@ -124,6 +126,11 @@ function load_observations(
     ## all-patients column
     ## definition is stable (see the manifest note).
     isolation_history = history("isolation_history")
+    ## Implied isolation/treatment-bed capacity (occupancy / reported
+    ## occupancy rate) on the days a rate is published; fitted by the
+    ## isolation submodel as noisy observations of the national bed capacity
+    ## the latent bed demand saturates against.
+    bed_capacity_history = history("bed_capacity_history")
     ## Post-cutoff cumulative recovered-among-confirmed ("cumul guéris"):
     ## a cumulative count of laboratory-confirmed cases recorded as recovered,
     ## fitted as survivors among the modelled confirmed cases (a scaled
@@ -175,6 +182,7 @@ function load_observations(
         lab_daily_history = lab_daily_history,
         suspected_daily_history = suspected_daily_history,
         isolation_history = isolation_history,
+        bed_capacity_history = bed_capacity_history,
         recovered_history = recovered_history,
         recovered_cases = _scalar("recovered_cases", recovered_history),
         tests_received_history = tests_received_history,
