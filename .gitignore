@@ -19,6 +19,9 @@ test/Manifest.toml
 test/jet/Manifest.toml
 test/formatter/Manifest.toml
 
+# SitRep PDFs fetched by scripts/download_sitreps.jl for scanning
+/data/sitrep_pdfs/
+
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
 

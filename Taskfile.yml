@@ -11,6 +11,23 @@ tasks:
     cmds:
       - julia --project=scripts scripts/refresh_releases.jl {{.CLI_ARGS}}
 
+  download-sitreps:
+    desc: >
+      Download the INSP situation-report PDFs from the INRB-UMIE mirror
+      into data/sitrep_pdfs/ (git-ignored) for direct scanning. Skips
+      reports already present, so it fetches only new sitreps.
+    cmds:
+      - julia --project=scripts scripts/download_sitreps.jl {{.CLI_ARGS}}
+
+  confirm-data:
+    desc: >
+      Cross-check the hand-scanned confirmed-case and confirmed-death
+      totals in data/insp_sitrep_scanned.csv against the INRB-UMIE
+      national cumulative series, flagging mismatches and report dates
+      not yet scanned. Exits non-zero on any disagreement.
+    cmds:
+      - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
+
   format:
     desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.
     cmds:
