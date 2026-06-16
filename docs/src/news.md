@@ -105,19 +105,19 @@ Changes since v1.5.0.
   Added the `death_ascertainment_model` and `background_cfr_model` priors.
 - Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the
   confirmed cases.
-  A death "analysed" volume (the suspected deaths carried to laboratory receipt
-  by the confirmed cases' report-to-receipt delay and thinned by a death testing
-  fraction `tau_death`) is scored through a death-pool composition positivity
+  The death analysed volume scales the modelled case analysed volume at the
+  per-day suspected death-to-case ratio, times a testing-intensity scaling
+  (`LogNormal(0, 0.25)`, centred on one), so death testing follows the
+  laboratory's realised throughput; the death-to-case ratio carries the
+  suspect-pool severity and the suspected-death level. The volume is scored
+  through a death-pool composition positivity
   `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
-  suspected deaths, replacing the previous `m_death`/`q_susp` multiplier.
-  Deaths are tested at the same laboratory coverage rate as cases, so
-  `tau_death = tau_test` (the case testing fraction the analysed-volume data
-  already pin) rather than a free, prior-only death testing fraction that
-  ignores the testing volume the laboratory had.
-  The death "analysed" volume is gated to the same testing onset as the
-  confirmed cases, so no deaths are confirmed before testing existed.
-  The joint exposes the `death_ascertainment`, `background_cfr`, `tau_death` and
-  `death_composition` deterministics and drops `m_death`.
+  suspected deaths from the death series' own components. The case volume
+  carries the laboratory capacity onset, so the death volume inherits it and no
+  deaths are confirmed before testing began.
+  The joint exposes the `death_ascertainment`, `background_cfr`,
+  `death_testing_scaling`, `tau_death` and `death_composition` deterministics
+  and drops `m_death`.
 
 ### Data
 

@@ -1011,8 +1011,8 @@ cfr_prior_fig #hide
 # below the values reported for other strains and give it a fairly wide
 # spread. The specificity is high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
-# never down); deaths are tested at the same laboratory coverage rate as
-# cases, so the death testing fraction equals the case testing fraction:
+# never down); the death testing-intensity scaling is a tight log-normal
+# centred on one, since no death-testing data grounds it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
@@ -1022,7 +1022,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \tau_{\text{death}} = \tau_{\text{test}}. \tag{23}
+# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{23}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
@@ -1412,12 +1412,11 @@ cfr_prior_fig #hide
 # scored from it. The suspected-case count itself is not gated — those cases did
 # accumulate over the cryptic phase.
 #
-# This same construction — a testing fraction times the suspected pipeline
-# carried to laboratory receipt — is reused on the death side to give a death
-# "analysed" volume (replacing $\tau_{\text{test}}$ with the death testing
-# fraction $\tau_{\text{death}}$ and the suspected deaths for the suspected
-# cases), with the same testing-onset gate, so the confirmed deaths share the
-# confirmed cases' volume logic (see the confirmed-deaths section below).
+# This construction — a testing fraction times the suspected pipeline carried
+# to laboratory receipt — gives the modelled case analysed volume that the
+# confirmed deaths reuse: the death volume scales it at the per-day suspected
+# death-to-case ratio (see the confirmed-deaths section below), so the two
+# share the laboratory capacity onset.
 #
 # The per-vintage increments are scored against the cumulative analysed
 # series with a NegBinomial sharing the dispersion $k$:
@@ -1512,16 +1511,23 @@ cfr_prior_fig #hide
 # of that volume and score the confirmed-death increments as NegBinomial
 # counts of it.
 #
-# A fraction $\tau_{\text{death}}$ of the suspected deaths reach the
-# laboratory, carried to receipt by the same report-to-receipt delay
-# $f_{\text{rec}}$ the confirmed cases use, giving a death "analysed" volume
-# $\tau_{\text{death}}\sum_{s\ge 0} m_{t-s}\,f_{\text{rec},s}$ with $m_t$ the
-# modelled suspected-death series. Deaths are tested at the same laboratory
-# coverage rate as cases, so $\tau_{\text{death}} = \tau_{\text{test}}$, the
-# case testing fraction the analysed-volume data already pin; this corrects
-# the death testing for the volume the laboratory had rather than leaving it a
-# free, prior-only fraction. Those specimens confirm at the assay positivity
-# built from the death-pool BVD share
+# Deaths are tested out of the same laboratory as cases, so the death analysed
+# volume tracks the modelled case analysed volume $v^{\text{c}}_t$ at the
+# per-day suspected death-to-case ratio, times a testing-intensity scaling,
+#
+# ```math
+# v^{\text{d}}_t = \text{scaling}\; v^{\text{c}}_t\,
+#     \frac{\sum_{s\ge 0} m^{\text{d}}_{t-s}\, f_{\text{rec},s}}
+#          {\sum_{s\ge 0} m^{\text{c}}_{t-s}\, f_{\text{rec},s}},
+# ```
+#
+# with $m^{\text{d}}$ and $m^{\text{c}}$ the modelled suspected-death and
+# suspected-case series and $f_{\text{rec}}$ the report-to-receipt delay the
+# confirmed cases use. The death-to-case ratio carries the suspect-pool
+# severity and the suspected-death level, so the scaling is the per-suspect
+# testing-intensity difference between deaths and living suspects alone; with
+# no death-testing data it is a tight log-normal centred on one. Those
+# specimens confirm at the assay positivity built from the death-pool BVD share
 #
 # ```math
 # q_{\text{death},t} = \frac{\text{bvd}^{\text{d}}_t}
@@ -1540,8 +1546,7 @@ cfr_prior_fig #hide
 # volume,
 #
 # ```math
-# \text{cd}_t = \tau_{\text{death}}\, p_t \sum_{s \ge 0} m_{t-s}\,
-#     f_{\text{rec},s},
+# \text{cd}_t = p_t\, v^{\text{d}}_t,
 # ```
 #
 # and the per-vintage increments are scored with a NegBinomial sharing the
@@ -1552,11 +1557,10 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{30}
 # ```
 #
-# As on the case side, the death analysed volume is **gated to the testing
-# onset**: no deaths are confirmed before the laboratory existed, so $\text{cd}_t$
-# is zeroed before the first confirmed-case vintage (the suspected-death series
-# feeding it is not gated, since suspected deaths did accrue over the cryptic
-# phase).
+# The death analysed volume inherits the laboratory capacity onset from the
+# case volume $v^{\text{c}}_t$, so $\text{cd}_t$ is zero before the first
+# confirmed-case vintage: no deaths are confirmed before the laboratory
+# existed.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: confirmed_deaths_model</summary>

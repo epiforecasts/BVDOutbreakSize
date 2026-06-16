@@ -1225,61 +1225,42 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 end
 
 """
-Laboratory-confirmed-deaths likelihood, built to MIRROR the confirmed-case
-laboratory pipeline ([`confirmed_cases_model`](@ref)) rather than thinning
-the observed suspected-death total. The confirmed-case model fits a modelled
-analysed-specimen volume (`τ_test ·` the suspected-case pipeline carried to
-laboratory receipt) and scores the confirmed positives as that volume times a
-composition-linked positivity. The death side has no published analysed
-denominator, so this model constructs the death analogue of that volume at
-the same `τ_test` coverage rate (deaths tested at the case rate) and scores
-the confirmed-death increments as `NegBinomial` counts of it — the same
-modelled-volume route the early and post-lab confirmed CASE windows use.
+Laboratory-confirmed-deaths likelihood, the death analogue of the
+confirmed-case laboratory pipeline ([`confirmed_cases_model`](@ref)). The
+confirmed cases score a modelled analysed-specimen volume (the suspected-case
+pipeline carried to laboratory receipt and thinned by the testing fraction)
+times a composition-linked assay positivity. The death side has no published
+analysed denominator, so the confirmed-death increments are `NegBinomial(k)`
+counts of the modelled death volume, the same modelled-volume route the early
+and post-lab confirmed-case windows use.
 
-Three pieces, each the death analogue of the case pipeline:
+Three pieces:
 
-  - Death "analysed" volume. The modelled suspected-death daily series
-    `deaths_daily` (BVD deaths `p_death · CFR ·` onset-to-death plus the
-    non-BVD background) is carried to laboratory receipt through the SAME
-    report-to-receipt delay `receipt_pmf` the confirmed cases use, and
-    thinned by the death testing fraction `τ_death`. Deaths are tested at the
-    same laboratory coverage rate as cases, so `τ_death = τ_test` (the case
-    testing fraction, pinned by the analysed-volume data and passed in as
-    `case_testing`) rather than a free, prior-only fraction that ignores the
-    testing volume the laboratory had. This is `τ_death ·` (suspected deaths
-    at receipt), the death analogue of `analysed_daily = τ_test ·` (suspected
-    cases at receipt). The death-only composer, which has no case stream, falls
-    back to [`death_testing_fraction_model`](@ref).
-  - Death-pool composition. The BVD share of the suspected deaths AT receipt,
-    `q_death = bvd_deaths / (bvd_deaths + bg_death)`, per day, computed from
-    the death series' own BVD and background components — NOT from the
-    suspected-CASE composition. This is now well-defined because the death
-    background is on (tied to the case background through `cfr_bg`, see
-    [`deaths_model`](@ref) and [`background_cfr_model`](@ref)); without a
-    death background `q_death` would collapse to 1.
-  - Assay positivity. The tested-positive probability `p = s · q_death +
-    (1 − spec)(1 − q_death)` with PCR sensitivity `s`
-    ([`test_sensitivity_model`](@ref)) and specificity `spec`
-    ([`test_specificity_model`](@ref)), the same form as the composition-
-    linked confirmed-case positivity. Sampled from the same informative
-    priors but as the death stream's OWN draws, so the confirmed-death model
-    is self-contained and does not draw the case-pool composition,
-    ascertainment `p_drc` or background `λ_bg` directly.
+  - Death analysed volume. Deaths are tested out of the same laboratory as
+    cases, so the death volume tracks the modelled case analysed volume
+    `case_analysed_daily` at the per-day suspected death-to-case ratio, times a
+    testing-intensity scaling, `v = scaling · case_analysed_daily ·
+    susp_death / susp_case`, with `susp_death` and `susp_case` the suspected
+    deaths and cases carried to receipt by the confirmed cases' delay. The case
+    volume carries the laboratory capacity onset, so the death volume inherits
+    it. The scaling ([`death_testing_scaling_model`](@ref)) is the per-suspect
+    testing-intensity difference between deaths and living suspects; the
+    death-to-case ratio carries the suspect-pool severity and the
+    suspected-death level. The death-only composer has no case stream and falls
+    back to a death testing fraction ([`death_testing_fraction_model`](@ref)).
+  - Death-pool composition. The BVD share of the suspected deaths at receipt,
+    `q_death = bvd_death / (bvd_death + bg_death)` per day, from the death
+    series' own BVD and background components. The death background, tied to
+    the case background by `cfr_bg` (see [`deaths_model`](@ref) and
+    [`background_cfr_model`](@ref)), keeps `q_death` below one.
+  - Assay positivity. `p = s · q_death + (1 − spec)(1 − q_death)` with PCR
+    sensitivity `s` ([`test_sensitivity_model`](@ref)) and specificity `spec`
+    ([`test_specificity_model`](@ref)), the same form as the confirmed-case
+    positivity, drawn from the same priors as separate death-stream parameters.
 
-The expected daily confirmed deaths are `τ_death · p · q`-weighted volume,
-binned to the confirmed-death vintages and scored as `NegBinomial(k)`
-increments. The suspected-death total `total_deaths` is no longer a Binomial
-denominator. This removes the `m_death` odds enrichment and the dependence on
-the suspected-case composition `q_susp`. Returns the death testing fraction,
-the cut-off death-pool composition `q_death`, the confirmation positivity and
-the expected confirmed-death count.
-
-This is the renewal analogue of the integral-lineage forwarded-positivity lab
-model (PR #193): a death "analysed" volume thinned by `τ_death`, a death-pool
-composition `q_death`, and a shared-assay positivity
-`p = s·q_death + (1−spec)(1−q_death)`. It becomes portable under the renewal
-because the death background is now switched on (`cfr_bg · λ_bg`), so
-`q_death` is informative.
+Returns the cut-off realised death testing fraction `τ_death`, the testing
+scaling, the cut-off death-pool composition `q_death`, the confirmation
+positivity and the expected confirmed-death count.
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
@@ -1290,93 +1271,81 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         receipt_pmf::AbstractVector = [1.0],
         capacity_start::Integer = 0,
-        case_testing = missing,
+        case_analysed_daily = nothing,
+        case_suspected_daily = nothing,
+        scaling = death_testing_scaling_model(),
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model())
-    ## Deaths are tested at the same laboratory coverage rate as cases. That
-    ## rate is the case testing fraction `τ_test` (analysed specimens per
-    ## testable suspect), which the laboratory analysed-volume data already
-    ## pin, so the death "analysed" volume reuses it rather than a free,
-    ## prior-only death testing fraction that ignores the testing volume the
-    ## laboratory actually had. The joint passes `case_testing = τ_test`; the
-    ## standalone composer (no case stream) falls back to the `testing` model.
-    if case_testing === missing
-        test_state ~ to_submodel(testing)
-        τ_death = test_state.τ_death
-    else
-        τ_death = case_testing
-    end
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
     s = sens_state.s_test
     spec = spec_state.spec
     n = length(deaths_daily)
 
-    ## Specimens carried from the death event to laboratory receipt by the same
-    ## report-to-receipt delay the confirmed cases use, for the suspected-death
-    ## total and its BVD component.
-    analysed_susp_death = convolve_delay(deaths_daily, receipt_pmf)
-    analysed_bvd_death = convolve_delay(bvd_deaths_daily, receipt_pmf)
-    ## In predict / check-model mode the series can widen to `Vector{Any}`,
-    ## which then trips `zero(Any)` downstream; pin to the (concrete) testing-
-    ## fraction type, leaving the AD/fit path (concrete dual eltype) untouched.
-    if eltype(analysed_susp_death) === Any
-        analysed_susp_death = convert(Vector{typeof(τ_death)},
-            analysed_susp_death)
-        analysed_bvd_death = convert(Vector{typeof(τ_death)}, analysed_bvd_death)
-    end
-    ## Gate the death laboratory CAPACITY to the testing window: no deaths are
-    ## confirmed before testing began, so the death "analysed" volume is zeroed
-    ## before `capacity_start` (the case testing onset, passed from the joint).
-    ## The suspected-death series feeding it is NOT gated — suspected deaths did
-    ## accumulate over the cryptic phase. `capacity_start ≤ 1` leaves it ungated
-    ## (the single-stream composer default). This mirrors the confirmed-case
-    ## analysed-volume gating; a shared helper is intentionally avoided so the
-    ## death stream stays independent of the confirmed-case capacity change.
-    cap = clamp(Int(capacity_start), 1, n)
-    if cap > 1
-        Td = eltype(analysed_susp_death)
-        analysed_susp_death = Td[i < cap ? zero(Td) : analysed_susp_death[i]
-                                 for i in eachindex(analysed_susp_death)]
-        analysed_bvd_death = Td[i < cap ? zero(Td) : analysed_bvd_death[i]
-                                for i in eachindex(analysed_bvd_death)]
+    ## Suspected deaths carried to laboratory receipt by the same
+    ## report-to-receipt delay the confirmed cases use, with the BVD component.
+    susp_death = convolve_delay(deaths_daily, receipt_pmf)
+    bvd_death = convolve_delay(bvd_deaths_daily, receipt_pmf)
+    ## In predict or check-model mode the series can widen to `Vector{Any}`,
+    ## which trips `zero(Any)` downstream; pin to the sampled scalar type,
+    ## leaving the fit path (concrete dual eltype) untouched.
+    if eltype(susp_death) === Any
+        susp_death = convert(Vector{typeof(s)}, susp_death)
+        bvd_death = convert(Vector{typeof(s)}, bvd_death)
     end
 
-    ## Death-pool BVD composition per day, `q = bvd / (bvd + bg)`, and the assay
-    ## tested-positive probability `p = s·q + (1−spec)(1−q)`. The `(1−spec)(1−q)`
-    ## false-positive term makes the confirmed deaths respond to the non-BVD
-    ## share, the same structural link the confirmed cases use.
-    lo = eps(typeof(τ_death))
-    hi = one(τ_death) - lo
-    s_t = convert(typeof(τ_death), s)
-    sp_t = convert(typeof(τ_death), spec)
-    q_death_daily = map(eachindex(analysed_susp_death)) do t
-        den = analysed_susp_death[t]
-        ratio = den > lo ? analysed_bvd_death[t] / den : one(τ_death)
-        clamp(isfinite(ratio) ? ratio : one(τ_death), lo, hi)
+    ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
+    ## tested-positive probability p = s·q + (1 − spec)(1 − q). The false-
+    ## positive term lets the confirmed deaths respond to the non-BVD share,
+    ## the same link the confirmed cases use.
+    lo = eps(typeof(s))
+    hi = one(s) - lo
+    q_death_daily = map(eachindex(susp_death)) do t
+        den = susp_death[t]
+        ratio = den > lo ? bvd_death[t] / den : one(s)
+        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
     end
-    p_pos_daily = s_t .* q_death_daily .+ (one(s_t) - sp_t) .*
-                                          (one(s_t) .- q_death_daily)
+    p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
+                                        (one(s) .- q_death_daily)
 
-    ## Death "analysed" volume (τ_death × suspected deaths at receipt) times the
-    ## positivity gives the expected daily confirmed deaths. No published death-
-    ## analysed denominator exists, so the increments are scored as NegBinomial
-    ## counts of this modelled volume — the modelled-volume route the early and
-    ## post-lab confirmed CASE windows also use.
-    confirmed_death_daily = (τ_death .* p_pos_daily) .* analysed_susp_death
+    ## Death analysed volume. Deaths are tested out of the same laboratory as
+    ## cases, so the death volume tracks the modelled case analysed volume at
+    ## the per-day suspected death-to-case ratio, times a testing-intensity
+    ## scaling, v = scaling · analysed_case · susp_death / susp_case. The case
+    ## volume already carries the laboratory capacity onset, so the death volume
+    ## inherits it. The death-only composer has no case stream and falls back to
+    ## a death testing fraction of the suspected deaths, gated at the onset.
+    if case_analysed_daily !== nothing
+        scale_state ~ to_submodel(scaling)
+        sc = scale_state.scaling
+        susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
+        death_volume = map(eachindex(susp_death)) do t
+            den = susp_case[t]
+            den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
+            zero(sc)
+        end
+        τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
+    else
+        test_state ~ to_submodel(testing)
+        τ_death = test_state.τ_death
+        sc = one(τ_death)
+        death_volume = τ_death .* gate_before(susp_death, capacity_start)
+    end
+
+    confirmed_death_daily = p_pos_daily .* death_volume
     vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
     modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
     cdeath_increments ~ to_submodel(
         vintage_increments_model(modelled_inc, vobs.obs_increments, k))
 
     expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
-    ## Cut-off death-pool composition and confirmation positivity, for the
-    ## report (kept under the names `death_composition` / `death_confirmation`).
+    ## Cut-off death-pool composition and confirmation positivity, surfaced as
+    ## `death_composition` and `death_confirmation`.
     q_death := q_death_daily[n]
     p_death_conf := p_pos_daily[n]
 
-    return (; τ_death, s_test = s, spec, q_death, p_death_conf,
+    return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
         expected_confirmed_deaths)
 end
 

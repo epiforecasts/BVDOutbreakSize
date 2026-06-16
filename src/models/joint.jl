@@ -219,7 +219,7 @@ on the confirmed-death likelihood alone. See
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
-        confirmed_deaths_history, case_testing = cases_state.τ_test))
+        confirmed_deaths_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -478,22 +478,20 @@ death-confirmation positivity (`death_confirmation`).
         lab_history, lab_daily_history,
         tests_analysed,
         positivity_link = confirmed_positivity_link))
-    ## Confirmed deaths mirror the confirmed-case lab pipeline: a death
-    ## "analysed" volume (suspected deaths carried to receipt by the confirmed
-    ## cases' `receipt_pmf`, thinned by `τ_death`) scored through a death-pool
-    ## composition positivity. Self-contained — it takes the death series'
-    ## own BVD and background components, not the case-pool composition. The
-    ## death capacity is gated to the same testing onset as the confirmed cases
-    ## (the first confirmed-case vintage), so no deaths are confirmed before
-    ## testing existed.
-    cap_start = isempty(confirmed_history.days) ? 0 :
-                Int(confirmed_history.days[1])
+    ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
+    ## analysed volume scales the modelled case analysed volume
+    ## (`confirmed_state.analysed_daily`) at the per-day suspected
+    ## death-to-case ratio, scored through a death-pool composition positivity
+    ## from the death series' own BVD and background components. The case
+    ## volume carries the laboratory capacity onset, so the death volume
+    ## inherits it and no deaths are confirmed before testing began.
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
-        capacity_start = cap_start, case_testing = cases_state.τ_test))
+        case_analysed_daily = confirmed_state.analysed_daily,
+        case_suspected_daily = cases_state.reports_daily))
     ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
     ## length-of-stay survival into a latent bed demand, soft-capped at the bed
     ## capacity the implied-capacity series pins (see
@@ -600,6 +598,7 @@ death-confirmation positivity (`death_confirmation`).
     bg_death_sigma := deaths_state.bg_death_sigma
     background_death_total := deaths_state.bg_death_total
     tau_death := confirmed_deaths_state.τ_death
+    death_testing_scaling := confirmed_deaths_state.scaling
     suspected_positivity := cases_state.positivity
     test_positivity := confirmed_state.p_positive
     death_composition := confirmed_deaths_state.q_death

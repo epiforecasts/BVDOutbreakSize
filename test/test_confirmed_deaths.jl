@@ -123,31 +123,35 @@ end
     @test sg.expected_confirmed_deaths ≈ (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
 end
 
-@testitem "confirmed_deaths_model ties τ_death to the case testing rate" begin
+@testitem "confirmed_deaths_model scales the case analysed volume" begin
     using BVDOutbreakSize: confirmed_deaths_model
     using Turing: returned
     using Random: MersenneTwister
 
-    ## In the joint, deaths are tested at the same laboratory coverage rate as
-    ## cases, so the death testing fraction IS the case testing fraction τ_test
-    ## (pinned by the analysed-volume data): passing `case_testing` sets τ_death
-    ## to it exactly and draws no separate death testing fraction. The expected
-    ## confirmed deaths are linear in τ_death (the positivity and the suspected-
-    ## death series do not depend on it), so halving the rate halves them.
+    ## In the joint the death analysed volume is scaling times the modelled
+    ## case analysed volume carried at the per-day suspected death-to-case
+    ## ratio, so the expected confirmed deaths are linear in the case analysed
+    ## volume: doubling it doubles them (the scaling and assay draws are fixed
+    ## by the seed, the suspected series are unchanged).
     bvd_deaths = fill(5.5, 40)
     bg_death = fill(0.5, 40)
     deaths_daily = bvd_deaths .+ bg_death
+    susp_case = fill(20.0, 40)
+    analysed_case = fill(6.0, 40)
     seed = 3
-    tied = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
-        5.0; case_testing = 0.7)
-    st = returned(tied, rand(MersenneTwister(seed), tied))
-    @test st.τ_death == 0.7
-    low = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
-        5.0; case_testing = 0.35)
-    sl = returned(low, rand(MersenneTwister(seed), low))
-    @test sl.τ_death == 0.35
-    @test sl.expected_confirmed_deaths ≈
-          0.5 * st.expected_confirmed_deaths rtol=1e-6
+    base = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_analysed_daily = analysed_case,
+        case_suspected_daily = susp_case)
+    sb = returned(base, rand(MersenneTwister(seed), base))
+    @test sb.scaling > 0
+    @test 0 < sb.τ_death < 1
+    @test sb.expected_confirmed_deaths >= 0
+    twice = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_analysed_daily = 2 .* analysed_case,
+        case_suspected_daily = susp_case)
+    s2 = returned(twice, rand(MersenneTwister(seed), twice))
+    @test s2.expected_confirmed_deaths ≈
+          2 * sb.expected_confirmed_deaths rtol=1e-6
 end
 
 @testitem "confirmed_deaths_only_model conditions and stays finite" begin

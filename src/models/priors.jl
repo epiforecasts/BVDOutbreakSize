@@ -928,29 +928,36 @@ volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
 end
 
 """
-Death testing fraction `τ_death` for the confirmed-death stream
-([`confirmed_deaths_model`](@ref)). The confirmed-death model is built to
-mirror the confirmed-case laboratory pipeline: a modelled death "analysed"
-volume is the suspected-death series carried to laboratory receipt and
-thinned by `τ_death`, the fraction of suspected deaths that have a specimen
-analysed, exactly as the confirmed-case analysed volume is `τ_test` of the
-suspected-case pipeline ([`test_positivity_model`](@ref),
-[`confirmed_cases_model`](@ref)). The confirmed deaths are then the assay
-positivity applied to that volume.
-
-This is only the **standalone fallback** for the death-only composer, which
-has no case stream to borrow the testing rate from. In the joint, deaths are
-tested at the same laboratory coverage rate as cases, so
-[`confirmed_deaths_model`](@ref) sets `τ_death = τ_test` directly (the case
-testing fraction, pinned by the analysed-volume data) and does not draw this
-submodel. Without a case stream there is no `τ_test`, so the fallback draws
-`τ_death` from the same prior as the case fraction (`Beta(5, 2)`, mean ≈ 0.71),
-encoding the same "tested at the case rate" assumption. Pass `fraction_prior`
-to override. Returns `(; τ_death)`.
+Death testing fraction `τ_death`, the fallback for the death-only composer
+([`confirmed_deaths_only_model`](@ref)), which has no case stream to set the
+death testing volume from. It thins the suspected deaths to a death "analysed"
+volume at the case testing rate, drawing `τ_death` from the same prior as the
+case testing fraction (`Beta(5, 2)`, mean ≈ 0.71). The full joint instead
+scales the modelled case analysed volume (see [`confirmed_deaths_model`](@ref)
+and [`death_testing_scaling_model`](@ref)) and does not draw this submodel.
+Pass `fraction_prior` to override. Returns `(; τ_death)`.
 """
 @model function death_testing_fraction_model(; fraction_prior = Beta(5.0, 2.0))
     τ_death ~ fraction_prior
     return (; τ_death)
+end
+
+"""
+Death testing-intensity scaling for the confirmed-death volume in the joint
+([`confirmed_deaths_model`](@ref)). The death analysed volume is the modelled
+case analysed volume carried at the per-day suspected death-to-case ratio,
+times this scaling. That ratio already carries the suspect-pool severity and
+the suspected-death level, so the scaling is the per-suspect testing-intensity
+difference between deaths and living suspects alone. No death-testing data
+grounds it, so it is a tight log-normal centred on one (`LogNormal(0, 0.25)`,
+median 1, 90% ≈ 0.66–1.51): deaths are tested at the case intensity unless the
+confirmed-death counts pull the scaling off one. Pass `scaling_prior` to
+override. Returns `(; scaling)`.
+"""
+@model function death_testing_scaling_model(;
+        scaling_prior = LogNormal(0.0, 0.25))
+    scaling ~ scaling_prior
+    return (; scaling)
 end
 
 """
