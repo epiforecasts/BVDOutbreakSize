@@ -47,6 +47,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_forecast_latent, plot_forecast_beds,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
+       plot_forecast_beds_vs_truth,
        delay_corrected_cfr, delay_corrected_confirmed_cfr,
        confirmed_cfr_table, plot_confirmed_cfr,
 # renewal helpers

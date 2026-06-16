@@ -62,10 +62,11 @@ Changes since v1.5.0.
 - The forecast-versus-frozen validation now also scores the isolation beds:
   the frozen one-week-back fit conditions on the isolation occupancy, and the
   projected bed occupancy is compared against the beds actually held a week
-  later (`forecast_vs_truth` gains an `isolation` argument). The bed check is
-  weak at a one-week-back freeze because the reported occupancy rate starts
-  only on 9 June, so the capacity rides its random walk back to the freeze
-  date.
+  later (`forecast_vs_truth` gains an `isolation` argument, and
+  `plot_forecast_beds_vs_truth` plots the projected occupancy against the
+  observed beds). The bed check is weak at a one-week-back freeze because the
+  reported occupancy rate starts only on 9 June, so the capacity rides its
+  random walk back to the freeze date.
 - Replaced the per-vintage step background random effect with a smooth daily
   lognormal random walk (`background_walk_model`), fixing the joint convergence
   failure on the current data (the per-vintage effect opened a second

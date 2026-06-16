@@ -3006,6 +3006,26 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 
 validation_fig #hide
 
+# The bed panel scores last week's projected isolation-bed occupancy against
+# the beds actually occupied now (the dashed rule). The bed forecast is the
+# weakest of the validated streams: at a one-week-back freeze the capacity has
+# no implied-capacity anchor (the occupancy rate starts only on 9 June), so
+# the projection rides the capacity random walk back to the freeze date and
+# its interval is wide.
+
+#md # ```@raw html
+#md # <details><summary>Bed forecast-versus-observed plot</summary>
+#md # ```
+
+validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
+    isolation = _obs_beds);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_beds_fig #hide
+
 # The latent quantities are not observed, so they are scored distribution
 # against distribution: what the frozen fit forecast for the past week's new
 # infections, onsets and deaths against what the current fit now estimates
