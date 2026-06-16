@@ -586,6 +586,65 @@ override. Returns `(; p_iso)`.
 end
 
 """
+Isolation/treatment-bed capacity for the supply-limited occupancy stream
+([`treatment_admission_model`](@ref)). Samples the number of beds available,
+`capacity`, the ceiling the latent bed demand saturates against. Bed
+occupancy has been supply-driven (demand has outstripped supply, with
+occupancy catching up as capacity is expanded), so the modelled occupancy is
+the demand passed through a soft cap at `capacity` rather than tracking
+demand directly.
+
+The default `truncated(Normal(450, 200); lower = 1)` is weakly informative,
+centred on the bed count implied by the reported occupancy rates (the
+"Taux d'occupation" gives `capacity = occupancy / rate ≈ 400–452` over
+9–13 June). The capacity is identified by the implied-capacity series the
+isolation submodel fits, so the prior only has to bracket it. A single
+national capacity is a limitation: it cannot represent local saturation (one
+province full while another has slack), which is the level the supply
+constraint operates at, and it averages over a growing capacity. Pass
+`capacity_prior` to override. Returns `(; capacity)`.
+"""
+@model function bed_capacity_model(;
+        capacity_prior = truncated(Normal(450.0, 200.0); lower = 1))
+    capacity ~ capacity_prior
+    return (; capacity)
+end
+
+"""
+Time-varying isolation/treatment-bed capacity over the daily grid, a
+multiplicative random walk: the supply-limited occupancy stream
+([`treatment_admission_model`](@ref)) uses `C(t)` as the ceiling the latent
+bed demand saturates against on each day. Capacity is not fixed — beds are
+being added (SitRep 030 records mattress and bed deliveries and new treatment
+centres opening) — so a single scalar capacity ([`bed_capacity_model`](@ref))
+cannot track the growth or be projected forward; the walk does both.
+
+The walk is a non-centred cumulative log-deviation from a baseline bed count
+`C0`, so `C(t) = C0 · exp(σ_cap · cumsum(z))` with `z ~ Normal(0, 1)` per day
+and a tight innovation SD `σ_cap`, keeping capacity a gentle daily drift
+rather than a jump. The baseline carries the same weakly-informative
+`truncated(Normal(450, 200); lower = 1)` prior as the scalar model, centred
+on the bed count implied by the reported occupancy rates (≈ 400–452 over
+9–13 June), and the implied-capacity series the isolation submodel fits pins
+`C(t)` on the days a rate is published. Capacity before the isolation window
+is unused (no occupancy data) and rides the walk. A single NATIONAL capacity
+remains a limitation: it cannot represent local saturation (one province full
+while another has slack), the level the supply constraint actually operates
+at. Pass `baseline_prior` / `innovation_prior` to override. Returns
+`(; C, C0, σ_cap)` with `C` a length-`n` vector.
+"""
+@model function bed_capacity_walk_model(n::Integer;
+        baseline_prior = truncated(Normal(450.0, 200.0); lower = 1),
+        innovation_prior = truncated(Normal(0.0, 0.05); lower = 0))
+    C0 ~ baseline_prior
+    σ_cap ~ innovation_prior
+    z ~ product_distribution(fill(Normal(0, 1), n))
+    walk = vcat(zero(σ_cap), cumsum((σ_cap .* z)[1:(n - 1)]))
+    C = C0 .* exp.(walk)
+    return (; C, C0, σ_cap)
+end
+
+"""
 Recovery probability for the recovered-among-confirmed stream
 ([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
 is recovery rather than death is the confirmed-case survival fraction, the

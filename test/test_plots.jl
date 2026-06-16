@@ -339,6 +339,34 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_forecast_beds returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_beds
+    rng = MersenneTwister(33)
+    n = 300
+    ## Demand exceeds the supply-limited occupancy, so the shortfall panel is
+    ## non-degenerate.
+    demand = rand(rng, 400:900, n)
+    occ = min.(demand, rand(rng, 300:450, n))
+    fc = DataFrame(bed_demand = demand, isolation_level = occ)
+    fig = plot_forecast_beds(fc)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_beds_vs_truth scores beds against observed" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_beds_vs_truth
+    rng = MersenneTwister(34)
+    fc = DataFrame(isolation_level = rand(rng, 250:400, 300))
+    @test plot_forecast_beds_vs_truth(fc; isolation = 359) isa
+          CairoMakie.Makie.Figure
+    ## A missing observed value returns an empty figure rather than erroring.
+    @test plot_forecast_beds_vs_truth(fc; isolation = missing) isa
+          CairoMakie.Makie.Figure
+end
+
 @testitem "plot_forecast_latent returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame

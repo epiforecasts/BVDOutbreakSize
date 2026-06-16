@@ -122,9 +122,26 @@ julia --project=docs -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.in
 julia --project=docs docs/make.jl
 ```
 
-Updating the observation counts for a new sitrep is a single-file
-edit of `data/observations.toml`; the literate picks the new numbers
-up automatically.
+### Updating the data
+
+The observations live in `data/observations.toml`; the literate picks up
+new numbers automatically.
+The figures come from the INSP situation reports, transcribed by
+[INRB-UMIE/BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data),
+and are refreshed for each new sitrep with the `scripts/` tooling
+(`task download-sitreps`, `task confirm-data`):
+
+- The cumulative confirmed-case and confirmed-death series come from the
+  upstream `national_*` daily CSVs, regenerated and spot-confirmed against
+  our own scan by `scripts/confirm_insp_data.jl`.
+- Every other stream (suspected totals, laboratory cumulatives, the 24h
+  analysed volume, daily new suspects, isolation occupancy, bed capacity
+  and recoveries) is read directly from the situation-report PDFs
+  (fetched by `scripts/download_sitreps.jl` into `data/sitrep_pdfs/`) and
+  recorded in `data/insp_sitrep_scanned.csv`.
+
+`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream
+national series and exits non-zero on any disagreement.
 
 ## Outputs and releases
 
@@ -166,9 +183,9 @@ repository depends on:
   suspected-death counts and the sitrep cumulative trajectory —
   Institut National de Santé Publique, Démocratique du Congo (2026).
   *Situation reports on the 17th Ebola epidemic.*
-  <https://insp.cd/ebola-17eme-epidemie/>. Transcribed across health
-  zones by INRB-UMIE/Ebola_DRC_2026,
-  <https://github.com/INRB-UMIE/Ebola_DRC_2026>.
+  <https://insp.cd/ebola-17eme-epidemie/>. Transcribed by
+  INRB-UMIE/BDBV2026-Data,
+  <https://github.com/INRB-UMIE/BDBV2026-Data>.
 - **WHO situation reports and Disease Outbreak News** that supply
   the Uganda import-case counts and the dated detection and death
   events for the first Uganda import —

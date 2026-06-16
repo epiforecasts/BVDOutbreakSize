@@ -1094,6 +1094,78 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
+One-week-ahead isolation/treatment-bed forecast from
+[`forecast_reported`](@ref): the projected bed DEMAND (the need a week ahead,
+under unconstrained supply) against the supply-limited occupancy (the beds
+actually filled), and the shortfall between them. The left panel overlays the
+two predictive distributions, so the gap between the need and the
+supply-limited occupancy is the unmet demand; the right panel histograms the
+shortfall directly. Drawn only when the forecast carries the bed streams
+(`bed_demand` and `isolation_level`).
+
+Because the model carries a SINGLE national bed capacity it cannot represent
+LOCAL saturation — on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
+at 21.9% — so the national shortfall understates the local unmet need (beds
+free in one province cannot serve patients who need them in another).
+"""
+function plot_forecast_beds(fc::DataFrame)
+    (:bed_demand in propertynames(fc) &&
+     :isolation_level in propertynames(fc)) || return Figure()
+    demand = float.(fc[!, :bed_demand])
+    occ = float.(fc[!, :isolation_level])
+    shortfall = max.(demand .- occ, 0.0)
+    fig = Figure(; size = (800, 360))
+    upper = max(1.0, quantile(demand, 0.995))
+    ax1 = Axis(fig[1, 1];
+        xlabel = "Isolation beds a week ahead (DRC)",
+        ylabel = "Predictive density", title = "Need vs supply-limited use",
+        limits = ((0, upper), nothing))
+    density!(ax1, demand; color = (:darkorange, 0.35),
+        strokecolor = :darkorange, strokewidth = 2, label = "Demand (need)")
+    density!(ax1, occ; color = (:steelblue, 0.35),
+        strokecolor = :steelblue, strokewidth = 2,
+        label = "Occupancy (supply-limited)")
+    CairoMakie.axislegend(ax1; position = :rt, framevisible = false)
+    _forecast_count_panel!(fig, (1, 2), shortfall, "Bed shortfall (DRC)",
+        :firebrick)
+    return fig
+end
+
+"""
+Validate a [`forecast_reported`](@ref) bed projection against the beds
+actually occupied a week later. Histograms the projected supply-limited
+isolation-bed occupancy with the 90% predictive interval shaded and the
+`isolation` count observed at the target date drawn as a dashed black rule,
+so last week's bed forecast is scored against what the beds held. Drawn only
+when the forecast carries `isolation_level`.
+
+At a one-week-back freeze the bed capacity has no implied-capacity anchor
+(the reported occupancy rate starts only on 9 June), so the projected
+occupancy rides the capacity random walk back to the freeze date and the
+interval is wide — the bed forecast is the weakest of the validated streams.
+"""
+function plot_forecast_beds_vs_truth(fc::DataFrame;
+        isolation::Union{Real, Missing})
+    (isolation !== missing && :isolation_level in propertynames(fc)) ||
+        return Figure()
+    v = float.(fc[!, :isolation_level])
+    lo = quantile(v, 0.05)
+    hi = quantile(v, 0.95)
+    upper = max(1.0, quantile(v, 0.995), float(isolation) * 1.05)
+    fig = Figure(; size = (440, 360))
+    ax = Axis(fig[1, 1];
+        xlabel = "Isolation beds occupied at the target date (DRC)",
+        ylabel = "Predictive frequency", title = "Forecast vs observed",
+        limits = ((0, upper), nothing))
+    vspan!(ax, lo, hi; color = (:steelblue, 0.15))
+    hist!(ax, v; bins = range(0, upper; length = 30),
+        color = (:steelblue, 0.7))
+    vlines!(ax, [float(isolation)]; color = :black, linestyle = :dash,
+        linewidth = 2)
+    return fig
+end
+
+"""
 Confirmed-stream validation figure for a [`forecast_reported`](@ref)
 projection, laid out as a two-row grid. The top row shows the cumulative
 forecast distribution per confirmed stream (DRC confirmed cases and

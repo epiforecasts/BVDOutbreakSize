@@ -1381,51 +1381,56 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
 end
 
 """
-DRC isolation / treatment-bed occupancy likelihood. The "Patients en
-isolement" figure is a daily count of how many patients are in an
-isolation/treatment bed. A patient enters a bed when reported as a suspect
-and leaves on discharge (recovery, death or rule-out), so the daily
-occupancy is the admission inflow convolved with a length-of-stay survival
-`S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)). This is the renewal
-analogue of the convolution-and-scaling secondary-observation model of
-EpiNow2 [epinow2](@cite), applied to a bed-occupancy (prevalence) signal.
+DRC isolation / treatment-bed occupancy likelihood, a SUPPLY-LIMITED
+prevalence stream. The "Patients en isolement" figure is the daily count of
+occupied beds. Bed occupancy has been supply-driven — demand for beds has
+outstripped supply, with occupancy catching up as capacity is expanded — so
+the occupancy is a latent bed DEMAND passed through a soft cap at the bed
+capacity, not the demand itself.
 
-A proportion `p_iso` of the reported suspects ([`reported_cases_model`](@ref))
-are admitted to a bed; the suspect pipeline is a BVD/background mixture and
-the two populations leave the bed on different clocks, so the occupancy is
-the sum of two survival convolutions sharing the one admission proportion:
+The latent demand is the suspect inflow carried through a length-of-stay
+survival `S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)), the renewal
+analogue of the convolution secondary-observation model of EpiNow2
+[epinow2](@cite). A proportion `p_iso` of the reported suspects
+([`reported_cases_model`](@ref)) need a bed; the suspect pipeline is a
+BVD/background mixture whose two populations leave on different clocks:
 
-- BVD admissions `p_iso · p_drc · bvd_reports` stay for a sampled treatment
-  length-of-stay — a confirmed case occupies a bed until recovery or death.
-- non-BVD admissions `p_iso · bg_daily` leave once their negative result
-  returns, so their length-of-stay is the report-to-receipt laboratory delay
-  `receipt_pmf` (shared from [`confirmed_cases_model`](@ref)) rather than a
-  separate sampled stay.
+- BVD demand `p_iso · p_drc · bvd_reports` with a sampled treatment
+  length-of-stay (a confirmed case occupies a bed until recovery or death);
+- non-BVD demand `p_iso · bg_daily` leaving once the negative result returns,
+  so its stay is the report-to-receipt laboratory delay `receipt_pmf`.
 
-Each observed day's count follows a NegativeBinomial around the modelled
-occupancy on that day, with a dispersion `k` sampled here, NOT shared with
-the other streams (the isolation signal has its own observation noise).
-The exposed `isolation_bvd_share` is the fraction of the modelled bed that is
-true BVD (BVD-confirmed plus BVD-suspect); it is not the report's "dont
-confirmés / dont suspects" split, since most of the report's "suspects in
-isolation" are true BVD cases awaiting confirmation and so sit in the BVD
-component. Empty by default; a `missing` count vector samples (the
-predictive path). Returns the admission proportion, the BVD stay mean, the
-dispersion, the daily occupancy and its BVD/background split for reuse and
-posterior-predictive replication.
+The occupancy is the total demand soft-capped at the time-varying bed
+capacity `C(t)` ([`bed_capacity_walk_model`](@ref), a random walk so the
+ceiling tracks the beds being added),
 
-The admission proportion is constant, so this assumes the occupancy is
-demand-driven rather than supply-limited. The reported occupancy is in fact
-approaching capacity (national 83%, Ituri 94% on 13 June), so a
-capacity-constrained version (latent demand and supply-limited occupancy) is
-left as follow-up work (epiforecasts/BVDOutbreakSize#265).
+```math
+\\text{occupancy}(t) = C(t)\\,\\bigl(1 - e^{-\\text{demand}(t)/C(t)}\\bigr),
+```
+
+so occupancy → `C(t)` under excess demand and ≈ demand when beds are slack,
+and the admitted fraction is availability-driven rather than constant. Each
+report day's occupied-bed count follows a NegativeBinomial around the
+modelled occupancy with a dispersion `k` sampled here (not shared with the
+other streams). The capacity is pinned by the implied bed count (occupancy /
+reported occupancy rate, `capacity_history`), each entry a noisy observation
+of `C(t)` on its day. Empty histories are no-ops; `missing` count vectors
+sample (the predictive path).
+
+Exposes the cut-off occupancy, the cut-off bed DEMAND (need under
+unconstrained supply), their difference (the bed shortfall), the utilisation
+`occupancy / C` and the true-BVD share of demand, and returns the daily
+demand and occupancy series for forecasting and posterior-predictive
+replication.
 """
 @model function treatment_admission_model(
         isolation_history,
         bvd_reports_daily::AbstractVector,
         bg_daily::AbstractVector,
         p_drc::Real, receipt_pmf::AbstractVector;
+        capacity_history = (; days = Int[], counts = Int[]),
         admission = isolation_admission_model(),
+        capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
         ## Sampled BVD treatment stay. The truncation covers the 99th
         ## percentile of the prior-centre distribution (a longer reach than
@@ -1438,23 +1443,39 @@ left as follow-up work (epiforecasts/BVDOutbreakSize#265).
     p_iso = adm_state.p_iso
     disp_state ~ to_submodel(dispersion)
     k = disp_state.k
+    n = length(bvd_reports_daily)
+    ## Time-varying bed capacity `C(t)` (a random walk), so the ceiling tracks
+    ## the beds being added rather than being fixed.
+    cap_state ~ to_submodel(capacity(n))
+    C = cap_state.C
+    C_T = isempty(C) ? zero(eltype(C)) : C[end]
     bvd_los_state ~ to_submodel(bvd_los)
 
-    ## A proportion `p_iso` of both BVD and non-BVD suspects are admitted. BVD
-    ## patients stay for the sampled treatment length-of-stay; non-BVD
-    ## suspects leave once their negative result returns, after the
-    ## report-to-receipt laboratory delay.
-    bvd_admissions = p_iso .* p_drc .* bvd_reports_daily
-    bg_admissions = p_iso .* bg_daily
-    occupancy_bvd = convolve_survival(bvd_admissions, bvd_los_state.pmf)
-    occupancy_bg = convolve_survival(bg_admissions, receipt_pmf)
-    occupancy = occupancy_bvd .+ occupancy_bg
+    ## Latent bed DEMAND: a proportion `p_iso` of both BVD and non-BVD
+    ## suspects need a bed. BVD patients stay for the sampled treatment
+    ## length-of-stay; non-BVD suspects leave once their negative result
+    ## returns, after the report-to-receipt laboratory delay.
+    bvd_demand = convolve_survival(p_iso .* p_drc .* bvd_reports_daily,
+        bvd_los_state.pmf)
+    bg_demand = convolve_survival(p_iso .* bg_daily, receipt_pmf)
+    demand = bvd_demand .+ bg_demand
+    ## In predict / check-model mode the daily series can widen to
+    ## `Vector{Any}`, which the `exp.` saturation below cannot broadcast over,
+    ## so pin it to the capacity's (always-concrete) element type, leaving the
+    ## AD/fit path untouched.
+    if eltype(demand) === Any
+        demand = convert(Vector{eltype(C)}, demand)
+    end
 
-    ## Each report day's count follows a NegBinomial around the modelled
-    ## occupancy on that day (a single-day mean). Day indices are clamped into
-    ## the grid. Empty history is a no-op; a `missing` count vector samples
-    ## (the predictive path).
-    n = length(bvd_reports_daily)
+    ## Supply-limited occupancy: the demand passed through a soft cap at the
+    ## daily bed capacity `C(t)`. occupancy → C(t) under excess demand, ≈
+    ## demand when beds are slack, so the admitted fraction is
+    ## availability-driven.
+    occupancy = C .* (1 .- exp.(.- demand ./ C))
+
+    ## Each report day's occupied-bed count follows a NegBinomial around the
+    ## modelled occupancy on that day. Empty history is a no-op; a `missing`
+    ## count vector samples (the predictive path).
     iso_days = isolation_history.days
     iso_modelled = [occupancy[clamp(Int(d), 1, n)] for d in iso_days]
     iso_obs = isempty(isolation_history.counts) ? missing :
@@ -1462,16 +1483,33 @@ left as follow-up work (epiforecasts/BVDOutbreakSize#265).
     isolation ~ to_submodel(
         vintage_increments_model(iso_modelled, iso_obs, k))
 
-    ## Cut-off occupancy and the true-BVD share of the bed at the cut-off
-    ## (BVD-confirmed plus BVD-suspect; NOT the report's confirmed/suspect
-    ## split, see the docstring).
-    occ_T = isempty(occupancy) ? zero(p_iso) : occupancy[end]
-    occ_bvd_T = isempty(occupancy_bvd) ? zero(p_iso) : occupancy_bvd[end]
-    expected_isolation := safe_rate(occ_T)
-    isolation_bvd_share := safe_rate(occ_bvd_T) / safe_rate(occ_T)
+    ## Bed capacity: the implied bed count (occupancy / reported occupancy
+    ## rate) on the days a rate is published is a noisy observation of `C(t)`
+    ## on that day.
+    cap_days = capacity_history.days
+    cap_modelled = [C[clamp(Int(d), 1, n)] for d in cap_days]
+    cap_obs = isempty(capacity_history.counts) ? missing :
+              collect(Int.(capacity_history.counts))
+    bed_capacity ~ to_submodel(
+        vintage_increments_model(cap_modelled, cap_obs, k))
 
-    return (; p_iso, bvd_los_mean = bvd_los_state.mean, k_isolation = k,
-        occupancy, occupancy_bvd, occupancy_bg, expected_isolation)
+    ## Cut-off occupancy (beds in use), demand (need under unconstrained
+    ## supply), the shortfall between them, the utilisation and the true-BVD
+    ## share of demand.
+    z0 = zero(eltype(C))
+    occ_T = isempty(occupancy) ? z0 : occupancy[end]
+    dem_T = isempty(demand) ? z0 : demand[end]
+    bvd_dem_T = isempty(bvd_demand) ? z0 : bvd_demand[end]
+    expected_isolation := safe_rate(occ_T)
+    expected_bed_demand := safe_rate(dem_T)
+    bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
+    bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
+    isolation_bvd_share := safe_rate(bvd_dem_T) / safe_rate(dem_T)
+
+    return (; p_iso, capacity = C_T, bvd_los_mean = bvd_los_state.mean,
+        k_isolation = k, demand, occupancy,
+        expected_isolation = safe_rate(occ_T),
+        expected_bed_demand = safe_rate(dem_T))
 end
 
 """

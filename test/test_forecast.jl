@@ -89,7 +89,8 @@ end
         R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
         expected_confirmed_T ~ truncated(Normal(120.0, 20.0); lower = 1.0)
         expected_confirmed_deaths_T ~ truncated(Normal(8.0, 2.0); lower = 0.5)
-        expected_isolation_T ~ truncated(Normal(280.0, 40.0); lower = 1.0)
+        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
         isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
         expected_recovered_T ~ truncated(Normal(32.0, 8.0); lower = 1.0)
         recovered_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
@@ -101,16 +102,29 @@ end
         obs_cases = 905, obs_deaths = 18,
         obs_confirmed = 210, obs_confirmed_deaths = 17,
         obs_recovered = 32)
+    @test :bed_demand in propertynames(fc)
     @test :isolation_level in propertynames(fc)
     @test :recovered_cum in propertynames(fc)
     @test :recovered_new in propertynames(fc)
     @test all(fc.isolation_level .>= 0)
+    @test all(fc.bed_demand .>= 0)
+    ## Supply-limited occupancy never exceeds the projected demand.
+    @test all(fc.isolation_level .<= fc.bed_demand)
     @test all(fc.recovered_cum .>= 0)
     @test all(fc.recovered_new .<= fc.recovered_cum)
     tbl = forecast_table(fc)
     @test "DRC isolation beds" in tbl[!, "Stream"]
     @test "DRC recovered" in tbl[!, "Stream"]
+    @test "demand at T+7" in tbl[!, "Quantity"]
     @test "occupancy at T+7" in tbl[!, "Quantity"]
+    ## The bed forecast is validated against an observed occupancy when one is
+    ## supplied; without it the beds are not scored.
+    using BVDOutbreakSize: forecast_vs_truth
+    vt = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17,
+        isolation = 359)
+    @test "DRC isolation beds" in vt[!, "Stream"]
+    vt0 = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17)
+    @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin
