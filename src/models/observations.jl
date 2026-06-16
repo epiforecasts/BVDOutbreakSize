@@ -1231,10 +1231,10 @@ the observed suspected-death total. The confirmed-case model fits a modelled
 analysed-specimen volume (`τ_test ·` the suspected-case pipeline carried to
 laboratory receipt) and scores the confirmed positives as that volume times a
 composition-linked positivity. The death side has no published analysed
-denominator (post-mortem swabbing is rare and uncounted), so this model
-constructs the death analogue of that volume and scores the confirmed-death
-increments as `NegBinomial` counts of it — the same modelled-volume route the
-early and post-lab confirmed CASE windows use.
+denominator, so this model constructs the death analogue of that volume at
+the same `τ_test` coverage rate (deaths tested at the case rate) and scores
+the confirmed-death increments as `NegBinomial` counts of it — the same
+modelled-volume route the early and post-lab confirmed CASE windows use.
 
 Three pieces, each the death analogue of the case pipeline:
 

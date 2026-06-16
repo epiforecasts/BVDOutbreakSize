@@ -1011,8 +1011,8 @@ cfr_prior_fig #hide
 # below the values reported for other strains and give it a fairly wide
 # spread. The specificity is high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
-# never down); the death testing fraction is centred well below the case
-# testing fraction (post-mortem swabbing is rarer):
+# never down); deaths are tested at the same laboratory coverage rate as
+# cases, so the death testing fraction equals the case testing fraction:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
@@ -1022,7 +1022,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \tau_{\text{death}} \sim \mathrm{Beta}(2,\ 4). \tag{23}
+# \tau_{\text{death}} = \tau_{\text{test}}. \tag{23}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
