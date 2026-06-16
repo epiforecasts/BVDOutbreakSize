@@ -1291,21 +1291,22 @@ BVD/background mixture whose two populations leave on different clocks:
 - non-BVD demand `p_iso · bg_daily` leaving once the negative result returns,
   so its stay is the report-to-receipt laboratory delay `receipt_pmf`.
 
-The occupancy is the total demand soft-capped at the sampled bed capacity
-`C` ([`bed_capacity_model`](@ref)),
+The occupancy is the total demand soft-capped at the time-varying bed
+capacity `C(t)` ([`bed_capacity_walk_model`](@ref), a random walk so the
+ceiling tracks the beds being added),
 
 ```math
-\\text{occupancy}(t) = C\\,\\bigl(1 - e^{-\\text{demand}(t)/C}\\bigr),
+\\text{occupancy}(t) = C(t)\\,\\bigl(1 - e^{-\\text{demand}(t)/C(t)}\\bigr),
 ```
 
-so occupancy → `C` under excess demand and ≈ demand when beds are slack, and
-the admitted fraction is availability-driven rather than constant. Each
+so occupancy → `C(t)` under excess demand and ≈ demand when beds are slack,
+and the admitted fraction is availability-driven rather than constant. Each
 report day's occupied-bed count follows a NegativeBinomial around the
 modelled occupancy with a dispersion `k` sampled here (not shared with the
 other streams). The capacity is pinned by the implied bed count (occupancy /
 reported occupancy rate, `capacity_history`), each entry a noisy observation
-of `C`. Empty histories are no-ops; `missing` count vectors sample (the
-predictive path).
+of `C(t)` on its day. Empty histories are no-ops; `missing` count vectors
+sample (the predictive path).
 
 Exposes the cut-off occupancy, the cut-off bed DEMAND (need under
 unconstrained supply), their difference (the bed shortfall), the utilisation
@@ -1320,7 +1321,7 @@ replication.
         p_drc::Real, receipt_pmf::AbstractVector;
         capacity_history = (; days = Int[], counts = Int[]),
         admission = isolation_admission_model(),
-        capacity = bed_capacity_model(),
+        capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
         ## Sampled BVD treatment stay. The truncation covers the 99th
         ## percentile of the prior-centre distribution (a longer reach than
@@ -1333,8 +1334,12 @@ replication.
     p_iso = adm_state.p_iso
     disp_state ~ to_submodel(dispersion)
     k = disp_state.k
-    cap_state ~ to_submodel(capacity)
-    C = cap_state.capacity
+    n = length(bvd_reports_daily)
+    ## Time-varying bed capacity `C(t)` (a random walk), so the ceiling tracks
+    ## the beds being added rather than being fixed.
+    cap_state ~ to_submodel(capacity(n))
+    C = cap_state.C
+    C_T = isempty(C) ? zero(eltype(C)) : C[end]
     bvd_los_state ~ to_submodel(bvd_los)
 
     ## Latent bed DEMAND: a proportion `p_iso` of both BVD and non-BVD
@@ -1350,18 +1355,18 @@ replication.
     ## so pin it to the capacity's (always-concrete) element type, leaving the
     ## AD/fit path untouched.
     if eltype(demand) === Any
-        demand = convert(Vector{typeof(C)}, demand)
+        demand = convert(Vector{eltype(C)}, demand)
     end
 
     ## Supply-limited occupancy: the demand passed through a soft cap at the
-    ## bed capacity `C`. occupancy → C under excess demand, ≈ demand when beds
-    ## are slack, so the admitted fraction is availability-driven.
-    occupancy = C .* (one(C) .- exp.(.- demand ./ C))
+    ## daily bed capacity `C(t)`. occupancy → C(t) under excess demand, ≈
+    ## demand when beds are slack, so the admitted fraction is
+    ## availability-driven.
+    occupancy = C .* (1 .- exp.(.- demand ./ C))
 
     ## Each report day's occupied-bed count follows a NegBinomial around the
     ## modelled occupancy on that day. Empty history is a no-op; a `missing`
     ## count vector samples (the predictive path).
-    n = length(bvd_reports_daily)
     iso_days = isolation_history.days
     iso_modelled = [occupancy[clamp(Int(d), 1, n)] for d in iso_days]
     iso_obs = isempty(isolation_history.counts) ? missing :
@@ -1370,9 +1375,10 @@ replication.
         vintage_increments_model(iso_modelled, iso_obs, k))
 
     ## Bed capacity: the implied bed count (occupancy / reported occupancy
-    ## rate) on the days a rate is published is a noisy observation of `C`.
+    ## rate) on the days a rate is published is a noisy observation of `C(t)`
+    ## on that day.
     cap_days = capacity_history.days
-    cap_modelled = [C for _ in cap_days]
+    cap_modelled = [C[clamp(Int(d), 1, n)] for d in cap_days]
     cap_obs = isempty(capacity_history.counts) ? missing :
               collect(Int.(capacity_history.counts))
     bed_capacity ~ to_submodel(
@@ -1381,16 +1387,17 @@ replication.
     ## Cut-off occupancy (beds in use), demand (need under unconstrained
     ## supply), the shortfall between them, the utilisation and the true-BVD
     ## share of demand.
-    occ_T = isempty(occupancy) ? zero(C) : occupancy[end]
-    dem_T = isempty(demand) ? zero(C) : demand[end]
-    bvd_dem_T = isempty(bvd_demand) ? zero(C) : bvd_demand[end]
+    z0 = zero(eltype(C))
+    occ_T = isempty(occupancy) ? z0 : occupancy[end]
+    dem_T = isempty(demand) ? z0 : demand[end]
+    bvd_dem_T = isempty(bvd_demand) ? z0 : bvd_demand[end]
     expected_isolation := safe_rate(occ_T)
     expected_bed_demand := safe_rate(dem_T)
-    bed_shortfall := safe_rate(max(dem_T - occ_T, zero(occ_T)))
-    bed_utilisation := safe_rate(occ_T) / safe_rate(C)
+    bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
+    bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
     isolation_bvd_share := safe_rate(bvd_dem_T) / safe_rate(dem_T)
 
-    return (; p_iso, capacity = C, bvd_los_mean = bvd_los_state.mean,
+    return (; p_iso, capacity = C_T, bvd_los_mean = bvd_los_state.mean,
         k_isolation = k, demand, occupancy,
         expected_isolation = safe_rate(occ_T),
         expected_bed_demand = safe_rate(dem_T))

@@ -117,6 +117,14 @@ end
     @test "DRC recovered" in tbl[!, "Stream"]
     @test "demand at T+7" in tbl[!, "Quantity"]
     @test "occupancy at T+7" in tbl[!, "Quantity"]
+    ## The bed forecast is validated against an observed occupancy when one is
+    ## supplied; without it the beds are not scored.
+    using BVDOutbreakSize: forecast_vs_truth
+    vt = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17,
+        isolation = 359)
+    @test "DRC isolation beds" in vt[!, "Stream"]
+    vt0 = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17)
+    @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin

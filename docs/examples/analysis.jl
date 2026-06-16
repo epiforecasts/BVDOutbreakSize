@@ -2079,6 +2079,8 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
             lab_daily_history = o.lab_daily_history,
+            isolation_history = o.isolation_history,
+            bed_capacity_history = o.bed_capacity_history,
             export_case_days = o.export_case_days,
             export_death_days = o.export_death_days,
             breakpoint = bp,
@@ -2946,7 +2948,13 @@ forecast_beds_fig #hide
 # How last week's forecast held up against the data since observed, using the
 # frozen re-fit and one-week projection defined in the methods
 # [forecast-versus-frozen evaluation](@ref
-# "Forecast-versus-frozen evaluation").
+# "Forecast-versus-frozen evaluation"). The frozen fit now also conditions on
+# the isolation beds, so the projected bed occupancy is scored against the
+# beds actually held a week later. The bed validation is the weakest of the
+# scored streams, though: the reported occupancy rate starts only on 9 June,
+# so at a one-week-back freeze the capacity has no implied-capacity anchor and
+# rides its random walk back to the freeze date, widening the projected bed
+# interval.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -2962,9 +2970,14 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
     obs_confirmed = frozen_lastweek.o.confirmed_cases,
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
+## The observed beds at the current cut-off (the forecast target), so the
+## frozen-fit bed forecast is scored against what the beds actually held.
+_obs_beds = isempty(obs.isolation_history.counts) ? missing :
+            obs.isolation_history.counts[end]
 validation_table = forecast_vs_truth(validation_forecast;
     confirmed = obs.confirmed_cases,
-    confirmed_deaths = obs.confirmed_deaths);
+    confirmed_deaths = obs.confirmed_deaths,
+    isolation = _obs_beds);
 
 #md # ```@raw html
 #md # </details>
