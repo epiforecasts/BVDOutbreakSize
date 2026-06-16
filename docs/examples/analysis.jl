@@ -1369,7 +1369,7 @@ cfr_prior_fig #hide
 
 # ##### Laboratory pipeline
 #
-# The laboratory pipeline fits a single analysed-specimen *volume*. There is no
+# The laboratory pipeline fits a single analysed-specimen volume. There is no
 # separately-modelled testing capacity: the analysed volume is a deterministic
 # function of the suspected-case incidence. It is the suspected daily pipeline
 # ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background
@@ -1485,13 +1485,12 @@ cfr_prior_fig #hide
 
 # ##### Confirmed deaths
 #
-# The confirmed deaths mirror the confirmed-case laboratory pipeline rather
-# than thinning the observed suspected-death total. The confirmed cases fit a
-# modelled analysed-specimen volume and score the positives as that volume
-# times a composition-linked positivity; the death side has no published
-# analysed denominator (post-mortem swabbing is rare and uncounted), so we
-# build the death analogue of that volume and score the confirmed-death
-# increments as NegBinomial counts of it.
+# The confirmed deaths mirror the confirmed-case laboratory pipeline. The
+# confirmed cases fit a modelled analysed-specimen volume and score the
+# positives as that volume times a composition-linked positivity; the death
+# side has no published analysed denominator, so we build the death analogue
+# of that volume and score the confirmed-death increments as NegBinomial
+# counts of it.
 #
 # A fraction $\tau_{\text{death}}$ of the suspected deaths reach the
 # laboratory, carried to receipt by the same report-to-receipt delay
