@@ -1130,6 +1130,40 @@ function plot_forecast_beds(fc::DataFrame)
 end
 
 """
+Validate a [`forecast_reported`](@ref) bed projection against the beds
+actually occupied a week later. Histograms the projected supply-limited
+isolation-bed occupancy with the 90% predictive interval shaded and the
+`isolation` count observed at the target date drawn as a dashed black rule,
+so last week's bed forecast is scored against what the beds held. Drawn only
+when the forecast carries `isolation_level`.
+
+At a one-week-back freeze the bed capacity has no implied-capacity anchor
+(the reported occupancy rate starts only on 9 June), so the projected
+occupancy rides the capacity random walk back to the freeze date and the
+interval is wide — the bed forecast is the weakest of the validated streams.
+"""
+function plot_forecast_beds_vs_truth(fc::DataFrame;
+        isolation::Union{Real, Missing})
+    (isolation !== missing && :isolation_level in propertynames(fc)) ||
+        return Figure()
+    v = float.(fc[!, :isolation_level])
+    lo = quantile(v, 0.05)
+    hi = quantile(v, 0.95)
+    upper = max(1.0, quantile(v, 0.995), float(isolation) * 1.05)
+    fig = Figure(; size = (440, 360))
+    ax = Axis(fig[1, 1];
+        xlabel = "Isolation beds occupied at the target date (DRC)",
+        ylabel = "Predictive frequency", title = "Forecast vs observed",
+        limits = ((0, upper), nothing))
+    vspan!(ax, lo, hi; color = (:steelblue, 0.15))
+    hist!(ax, v; bins = range(0, upper; length = 30),
+        color = (:steelblue, 0.7))
+    vlines!(ax, [float(isolation)]; color = :black, linestyle = :dash,
+        linewidth = 2)
+    return fig
+end
+
+"""
 Confirmed-stream validation figure for a [`forecast_reported`](@ref)
 projection, laid out as a two-row grid. The top row shows the cumulative
 forecast distribution per confirmed stream (DRC confirmed cases and

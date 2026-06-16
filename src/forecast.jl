@@ -361,14 +361,23 @@ end
 Validate a [`forecast_reported`](@ref) projection against the counts that
 were later observed. `confirmed` and `confirmed_deaths` are the observed
 cumulative DRC laboratory-confirmed cases and confirmed deaths at the
-forecast target date. Returns a `DataFrame` with one row per confirmed
-stream giving the observed count, the equal-tailed 30/60/90% predictive
-intervals (the same endpoints as the other summary tables), and whether
-the observed count falls inside the 90% interval. The suspected reported
-streams are no longer reported, so they are not scored.
+forecast target date. When `isolation` (the observed bed occupancy at the
+target date) is supplied and the forecast carries the beds, the projected
+supply-limited occupancy is scored against it too — a last-week's-forecast
+versus what the beds actually held. Returns a `DataFrame` with one row per
+scored stream giving the observed count, the equal-tailed 30/60/90%
+predictive intervals (the same endpoints as the other summary tables), and
+whether the observed count falls inside the 90% interval. The suspected
+reported streams are no longer reported, so they are not scored.
+
+Note that at a one-week-back freeze the bed capacity is weakly informed (the
+reported occupancy rate starts only on 9 June), so the projected bed
+occupancy rides the capacity random walk back to the freeze date and its
+interval is wide.
 """
 function forecast_vs_truth(fc::DataFrame;
         confirmed::Real, confirmed_deaths::Real,
+        isolation::Union{Real, Missing} = missing,
         digits::Integer = 0)
     _row(label,
         draws,
@@ -389,6 +398,9 @@ function forecast_vs_truth(fc::DataFrame;
     :confirmed_deaths_cum in propertynames(fc) &&
         push!(rows, _row("DRC confirmed deaths", fc[!, :confirmed_deaths_cum],
             confirmed_deaths))
+    isolation !== missing && :isolation_level in propertynames(fc) &&
+        push!(rows, _row("DRC isolation beds", fc[!, :isolation_level],
+            isolation))
     return _prettify(DataFrame(rows))
 end
 

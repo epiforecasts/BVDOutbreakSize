@@ -19,14 +19,18 @@ Changes since v1.5.0.
   the model fits a latent bed DEMAND — the suspect inflow carried through a
   length-of-stay survival (BVD cases with a sampled treatment stay, non-BVD
   suspects leaving after the report-to-receipt delay) — and the occupancy is
-  that demand soft-capped at the bed capacity, `occupancy = C·(1−exp(−D/C))`,
-  so the admitted fraction is availability-driven. The capacity `C` is pinned
-  by the implied bed count (reported occupancy / "Taux d'occupation" rate).
+  that demand soft-capped at the bed capacity,
+  `occupancy = C(t)·(1−exp(−D/C(t)))`, so the admitted fraction is
+  availability-driven. The capacity `C(t)` is a random walk
+  (`bed_capacity_walk_model`), so the ceiling tracks the beds being added and
+  can be projected forward; it is pinned by the implied bed count (reported
+  occupancy / "Taux d'occupation" rate) on the days a rate is published.
   The stream exposes the bed demand, occupancy, capacity, shortfall and
   utilisation, and carries its own observation dispersion. Added
   `convolve_survival`, the `treatment_admission_model` observation submodel,
-  the `isolation_admission_model` and `bed_capacity_model` priors and the
-  `treatment_only_model` single-stream composer (resolves #265).
+  the `isolation_admission_model`, `bed_capacity_model` and
+  `bed_capacity_walk_model` priors and the `treatment_only_model`
+  single-stream composer (resolves #265).
   A key limitation is that this is a single national model: it cannot
   represent local bed saturation (Ituri at 93.9% occupancy on 13 June against
   Sud-Kivu 21.9%), which is the level the supply constraint operates at, so
@@ -55,6 +59,14 @@ Changes since v1.5.0.
   own dispersion. Added `plot_forecast_beds`, which shows the projected bed
   need against the supply-limited occupancy and the shortfall in the
   walkthrough's forecast section.
+- The forecast-versus-frozen validation now also scores the isolation beds:
+  the frozen one-week-back fit conditions on the isolation occupancy, and the
+  projected bed occupancy is compared against the beds actually held a week
+  later (`forecast_vs_truth` gains an `isolation` argument, and
+  `plot_forecast_beds_vs_truth` plots the projected occupancy against the
+  observed beds). The bed check is weak at a one-week-back freeze because the
+  reported occupancy rate starts only on 9 June, so the capacity rides its
+  random walk back to the freeze date.
 - Replaced the per-vintage step background random effect with a smooth daily
   lognormal random walk (`background_walk_model`), fixing the joint convergence
   failure on the current data (the per-vintage effect opened a second

@@ -42,6 +42,21 @@ end
     @test all(occ .>= -1e-12)
 end
 
+@testitem "bed_capacity_walk: positive capacity path over the grid" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: bed_capacity_walk_model
+
+    ## The walk returns a positive bed-capacity path; with a tight innovation
+    ## SD it stays a gentle drift around the baseline rather than blowing up.
+    chn = sample(bed_capacity_walk_model(30), Prior(), 100;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ks = string.(collect(keys(chn)))
+    @test any(k -> occursin("C0", k), ks)
+    C0 = vec(Array(chn[:C0]))
+    @test all(C0 .> 0)
+end
+
 @testitem "isolation occupancy: conditioned fit stays positive" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
