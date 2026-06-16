@@ -520,10 +520,15 @@ death-confirmation positivity (`death_confirmation`).
     ## Daily cumulative trajectories for the headline 3x2 figure: the
     ## modelled expected cumulative infections, symptom onsets and deaths
     ## over the grid. Exposed as vector deterministics so the ribbon panels
-    ## reconstruct from the chain without re-running the renewal.
+    ## reconstruct from the chain without re-running the renewal. All three
+    ## are BVD-only latent renewal quantities: deaths uses the BVD death
+    ## series (onsets convolved with the onset-to-death delay), NOT the
+    ## fitted total, so it stays smooth like infections and onsets. The
+    ## additive non-BVD background is a daily random walk and belongs to the
+    ## observation side, not this latent trajectory.
     cumulative_infections := cumsum(infection_state.infections)
     cumulative_onsets := cumsum(onsets)
-    cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
+    cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
     ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
     ## the per-window tested-positive probability applied to the modelled,
     ## testing-onset-gated analysed volume), so the cumulative trajectory carries
