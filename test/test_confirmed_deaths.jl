@@ -123,6 +123,33 @@ end
     @test sg.expected_confirmed_deaths ≈ (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
 end
 
+@testitem "confirmed_deaths_model ties τ_death to the case testing rate" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## In the joint, deaths are tested at the same laboratory coverage rate as
+    ## cases, so the death testing fraction IS the case testing fraction τ_test
+    ## (pinned by the analysed-volume data): passing `case_testing` sets τ_death
+    ## to it exactly and draws no separate death testing fraction. The expected
+    ## confirmed deaths are linear in τ_death (the positivity and the suspected-
+    ## death series do not depend on it), so halving the rate halves them.
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    seed = 3
+    tied = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_testing = 0.7)
+    st = returned(tied, rand(MersenneTwister(seed), tied))
+    @test st.τ_death == 0.7
+    low = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_testing = 0.35)
+    sl = returned(low, rand(MersenneTwister(seed), low))
+    @test sl.τ_death == 0.35
+    @test sl.expected_confirmed_deaths ≈
+          0.5 * st.expected_confirmed_deaths rtol=1e-6
+end
+
 @testitem "confirmed_deaths_only_model conditions and stays finite" begin
     using BVDOutbreakSize: confirmed_deaths_only_model
     using Turing.DynamicPPL: logjoint

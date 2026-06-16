@@ -92,6 +92,10 @@ Changes since v1.5.0.
   fraction `tau_death`) is scored through a death-pool composition positivity
   `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
   suspected deaths, replacing the previous `m_death`/`q_susp` multiplier.
+  Deaths are tested at the same laboratory coverage rate as cases, so
+  `tau_death = tau_test` (the case testing fraction the analysed-volume data
+  already pin) rather than a free, prior-only death testing fraction that
+  ignores the testing volume the laboratory had.
   The death "analysed" volume is gated to the same testing onset as the
   confirmed cases, so no deaths are confirmed before testing existed.
   The joint exposes the `death_ascertainment`, `background_cfr`, `tau_death` and

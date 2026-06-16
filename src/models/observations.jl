@@ -1242,11 +1242,14 @@ Three pieces, each the death analogue of the case pipeline:
     `deaths_daily` (BVD deaths `p_death · CFR ·` onset-to-death plus the
     non-BVD background) is carried to laboratory receipt through the SAME
     report-to-receipt delay `receipt_pmf` the confirmed cases use, and
-    thinned by the death testing fraction `τ_death`
-    ([`death_testing_fraction_model`](@ref)): only a minority of suspected
-    deaths reach the laboratory. This is `τ_death ·` (suspected deaths at
-    receipt), the death analogue of `analysed_daily = τ_test ·` (suspected
-    cases at receipt).
+    thinned by the death testing fraction `τ_death`. Deaths are tested at the
+    same laboratory coverage rate as cases, so `τ_death = τ_test` (the case
+    testing fraction, pinned by the analysed-volume data and passed in as
+    `case_testing`) rather than a free, prior-only fraction that ignores the
+    testing volume the laboratory had. This is `τ_death ·` (suspected deaths
+    at receipt), the death analogue of `analysed_daily = τ_test ·` (suspected
+    cases at receipt). The death-only composer, which has no case stream, falls
+    back to [`death_testing_fraction_model`](@ref).
   - Death-pool composition. The BVD share of the suspected deaths AT receipt,
     `q_death = bvd_deaths / (bvd_deaths + bg_death)`, per day, computed from
     the death series' own BVD and background components — NOT from the
@@ -1287,13 +1290,25 @@ because the death background is now switched on (`cfr_bg · λ_bg`), so
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         receipt_pmf::AbstractVector = [1.0],
         capacity_start::Integer = 0,
+        case_testing = missing,
         testing = death_testing_fraction_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model())
-    test_state ~ to_submodel(testing)
+    ## Deaths are tested at the same laboratory coverage rate as cases. That
+    ## rate is the case testing fraction `τ_test` (analysed specimens per
+    ## testable suspect), which the laboratory analysed-volume data already
+    ## pin, so the death "analysed" volume reuses it rather than a free,
+    ## prior-only death testing fraction that ignores the testing volume the
+    ## laboratory actually had. The joint passes `case_testing = τ_test`; the
+    ## standalone composer (no case stream) falls back to the `testing` model.
+    if case_testing === missing
+        test_state ~ to_submodel(testing)
+        τ_death = test_state.τ_death
+    else
+        τ_death = case_testing
+    end
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
-    τ_death = test_state.τ_death
     s = sens_state.s_test
     spec = spec_state.spec
     n = length(deaths_daily)

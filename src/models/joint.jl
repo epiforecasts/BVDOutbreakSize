@@ -217,7 +217,7 @@ on the confirmed-death likelihood alone. See
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
-        confirmed_deaths_history))
+        confirmed_deaths_history, case_testing = cases_state.τ_test))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -490,7 +490,7 @@ death-confirmation positivity (`death_confirmation`).
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
-        capacity_start = cap_start))
+        capacity_start = cap_start, case_testing = cases_state.τ_test))
     ## Isolation/treatment-bed occupancy: the suspect inflow (BVD treatment
     ## stay plus non-BVD rule-out stay) carried through a length-of-stay
     ## survival into a daily stock (see [`treatment_admission_model`](@ref)).

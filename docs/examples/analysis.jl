@@ -1496,8 +1496,12 @@ cfr_prior_fig #hide
 # laboratory, carried to receipt by the same report-to-receipt delay
 # $f_{\text{rec}}$ the confirmed cases use, giving a death "analysed" volume
 # $\tau_{\text{death}}\sum_{s\ge 0} m_{t-s}\,f_{\text{rec},s}$ with $m_t$ the
-# modelled suspected-death series. Those specimens confirm at the assay
-# positivity built from the death-pool BVD share
+# modelled suspected-death series. Deaths are tested at the same laboratory
+# coverage rate as cases, so $\tau_{\text{death}} = \tau_{\text{test}}$, the
+# case testing fraction the analysed-volume data already pin; this corrects
+# the death testing for the volume the laboratory had rather than leaving it a
+# free, prior-only fraction. Those specimens confirm at the assay positivity
+# built from the death-pool BVD share
 #
 # ```math
 # q_{\text{death},t} = \frac{\text{bvd}^{\text{d}}_t}

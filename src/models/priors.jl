@@ -874,17 +874,17 @@ suspected-case pipeline ([`test_positivity_model`](@ref),
 [`confirmed_cases_model`](@ref)). The confirmed deaths are then the assay
 positivity applied to that volume.
 
-`τ_death` is the death analogue of the case testing fraction `τ_test`, but
-centred far lower: post-mortem swabbing is rarer than testing a living
-suspect, so only a minority of suspected deaths reach the laboratory. The
-default `Beta(2, 4)` (mean ≈ 0.33, 90% ≈ 0.06–0.68) is weakly informative
-and wide; the confirmed-death level identifies it alongside the assay
-positivity. The model carries no published death-analysed denominator, so
-`τ_death` is pinned by the confirmed-death counts and this prior rather than
-by an observed testing volume. Pass `fraction_prior` to override. Returns
-`(; τ_death)`.
+This is only the **standalone fallback** for the death-only composer, which
+has no case stream to borrow the testing rate from. In the joint, deaths are
+tested at the same laboratory coverage rate as cases, so
+[`confirmed_deaths_model`](@ref) sets `τ_death = τ_test` directly (the case
+testing fraction, pinned by the analysed-volume data) and does not draw this
+submodel. Without a case stream there is no `τ_test`, so the fallback draws
+`τ_death` from the same prior as the case fraction (`Beta(5, 2)`, mean ≈ 0.71),
+encoding the same "tested at the case rate" assumption. Pass `fraction_prior`
+to override. Returns `(; τ_death)`.
 """
-@model function death_testing_fraction_model(; fraction_prior = Beta(2.0, 4.0))
+@model function death_testing_fraction_model(; fraction_prior = Beta(5.0, 2.0))
     τ_death ~ fraction_prior
     return (; τ_death)
 end
