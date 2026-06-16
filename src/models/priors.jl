@@ -781,12 +781,17 @@ laboratory confirmed, discretised to a daily PMF over lags `0 … nmax`
 by [`censored_delay_model`](@ref) so it convolves cleanly onto the
 renewal onsets. The mean and SD carry weakly-informative priors centred
 on a short turnaround with a heavy right tail allowing for specimen
-shipment to a confirmatory lab; no per-sample outbreak data grounds this
-prior, matching integral `main`. Returns `(; pmf, dist, mean, sd)`.
+shipment to a confirmatory lab. No per-sample outbreak data grounds this
+delay, so the likelihood does not identify the turnaround mean or SD; the
+priors are therefore kept tight around the documented turnaround belief
+(mean ≈ 4.5 d, SD ≈ 4 d) rather than wide, since a wide prior on an
+unidentified nuisance delay only makes the sampler wander it (it was the
+worst-mixing quantity in the joint, dragging the confirmation PMFs convolved
+from it). Returns `(; pmf, dist, mean, sd)`.
 """
 @model function lab_delay_model(nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
-        mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-        sd_prior = truncated(Normal(4.0, 1.5); lower = 1))
+        mean_prior = truncated(Normal(4.5, 1.0); lower = 1),
+        sd_prior = truncated(Normal(4.0, 0.75); lower = 1))
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
     return (; pmf = d.pmf, dist = d.dist, mean = d.mean, sd = d.sd)
 end
