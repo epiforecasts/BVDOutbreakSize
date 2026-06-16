@@ -159,7 +159,6 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
         treatment = treatment_admission_model,
-        receipt = lab_delay_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model())
     latent ~ to_submodel(
@@ -171,12 +170,9 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
-    ## Report-to-receipt laboratory delay for the non-BVD rule-out stay (the
-    ## confirmed pipeline that supplies it in the joint is not run here).
-    receipt_state ~ to_submodel(receipt)
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, receipt_state.pmf;
+        cases_state.bg_daily, p_drc;
         capacity_history = bed_capacity_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
@@ -477,10 +473,11 @@ death-confirmation probability (`death_confirmation`).
     ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
     ## length-of-stay survival into a latent bed demand, soft-capped at the bed
     ## capacity the implied-capacity series pins (see
-    ## [`treatment_admission_model`](@ref)).
+    ## [`treatment_admission_model`](@ref)). The non-BVD rule-out stay is a
+    ## separate parameter from the lab-turnaround `receipt_pmf`.
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, confirmed_state.receipt_pmf;
+        cases_state.bg_daily, p_drc;
         capacity_history = bed_capacity_history))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases, with a recovery fraction grounded on the CFR and
@@ -560,6 +557,7 @@ death-confirmation probability (`death_confirmation`).
     bed_capacity := treatment_state.capacity
     isolation_admission := treatment_state.p_iso
     isolation_bvd_los_mean := treatment_state.bvd_los_mean
+    isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
     isolation_dispersion := treatment_state.k_isolation
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
