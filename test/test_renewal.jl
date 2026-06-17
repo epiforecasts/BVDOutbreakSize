@@ -255,6 +255,34 @@ end
     @test out[6] ≈ 5.0
 end
 
+@testitem "soft_min_cap: tracks demand then saturates at capacity" begin
+    using BVDOutbreakSize: soft_min_cap
+
+    C = 400.0
+    softness = 0.1
+
+    ## Well below capacity the occupancy tracks demand (no manufactured
+    ## shortfall); well above it the occupancy saturates just below C.
+    @test isapprox(soft_min_cap(50.0, C, softness), 50.0; rtol = 1e-3)
+    big = soft_min_cap(5_000.0, C, softness)
+    @test big <= C
+    @test isapprox(big, C; rtol = 1e-3)
+
+    ## Always <= demand and never above capacity; non-decreasing overall and
+    ## strictly increasing while below the cap (it plateaus at C once
+    ## saturated, so strict monotonicity holds only in the slack regime).
+    ds = collect(10.0:10.0:2_000.0)
+    occ = soft_min_cap.(ds, C, softness)
+    @test all(occ .<= ds .+ 1e-9)
+    @test all(occ .<= C + 1e-9)
+    @test issorted(occ)
+    @test all(diff(occ[ds .< 0.8C]) .> 0)
+
+    ## A larger softness rounds the knee more, so at demand == capacity the
+    ## occupancy sits lower.
+    @test soft_min_cap(C, C, 0.2) < soft_min_cap(C, C, 0.05)
+end
+
 @testitem "interpolate_knots: holds flat outside the knot span" begin
     using BVDOutbreakSize: interpolate_knots
 

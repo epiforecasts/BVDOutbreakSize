@@ -568,19 +568,18 @@ The derived per-suspected positivity is exposed inside
 end
 
 """
-Treatment-admission probability for the isolation-occupancy stream
+Base treatment-admission probability for the isolation-occupancy stream
 ([`treatment_admission_model`](@ref)). Samples `p_iso`, the fraction of
-ascertained BVD suspected cases that are admitted to and retained in an
-isolation/treatment bed, so the modelled BVD bed occupancy is `p_iso` times
-the survival-convolution of the BVD admission inflow. The non-BVD
-background suspects are taken to be isolated on report (admission
-probability one) and leave quickly under their own short rule-out
-length-of-stay, so a separate background admission probability would be
-degenerate with the background rate `λ_bg` and is not sampled.
+ascertained suspected cases that are admitted to and retained in an
+isolation/treatment bed at the base (non-BVD rule-out) intensity, so the
+modelled bed occupancy is `p_iso` times the survival-convolution of the
+admission inflow. BVD suspects are admitted at a higher rate skewed up from
+this base by a severity log-odds ([`isolation_severity_model`](@ref)),
+since triage admits the sicker patients and BVD presents more severely.
 
 The default `Beta(2, 2)` is weakly informative on `(0, 1)` with mean ½ and
-no mass piled at the bounds. `p_iso` is partially confounded with the BVD
-length-of-stay mean for the occupancy LEVEL (Little's law: mean occupancy
+no mass piled at the bounds. `p_iso` is partially confounded with the
+length-of-stay mean for the occupancy level (Little's law: mean occupancy
 ≈ `p_iso · admissions · (E[LOS] + 1)`), so the length-of-stay prior carries
 the duration and `p_iso` absorbs the admission/retention fraction; the
 length-of-stay also sets the lag and smoothing of occupancy relative to the
@@ -590,6 +589,31 @@ override. Returns `(; p_iso)`.
 @model function isolation_admission_model(; p_prior = Beta(2.0, 2.0))
     p_iso ~ p_prior
     return (; p_iso)
+end
+
+"""
+Severity skew for isolation admission ([`treatment_admission_model`](@ref)).
+Samples `δ_iso ≥ 0`, the log-odds by which a BVD suspect is more likely to be
+admitted to and retained in an isolation bed than a non-BVD rule-out at the
+same base intensity `p_iso` ([`isolation_admission_model`](@ref)), so the BVD
+admission probability is `logistic(logit(p_iso) + δ_iso)`. Admission cannot
+condition on the unobserved BVD status of a suspect; the skew instead
+represents the net effect of severity-based triage, where the sicker
+patients are isolated and BVD presents more severely, enriching BVD among
+the admitted. The non-negative truncation keeps a BVD suspect at least as
+likely to be admitted as a rule-out.
+
+The isolation stream observes only total occupancy, so the skew is weakly
+identified from it alone; its effect is to enrich the long-stay BVD
+component of demand, which the occupancy persistence informs only mildly,
+so the half-normal `truncated(Normal(0, 0.75); lower = 0)` carries most of
+the weight (`δ_iso = 0` recovers a shared admission rate). Pass
+`logodds_prior` to override. Returns `(; δ_iso)`.
+"""
+@model function isolation_severity_model(;
+        logodds_prior = truncated(Normal(0.0, 0.75); lower = 0))
+    δ_iso ~ logodds_prior
+    return (; δ_iso)
 end
 
 """

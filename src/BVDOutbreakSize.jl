@@ -19,7 +19,7 @@ using Distributions: Distribution, pdf, Poisson,
                      NegativeBinomial, Binomial, Normal, LogNormal, Beta,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
-using StatsFuns: logit, logistic
+using StatsFuns: logit, logistic, log1pexp
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
@@ -57,7 +57,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        seed_at_renewal_start,
        knot_days,
        interpolate_knots, sigmoid_ramp, seeding_age, lognormal_meansd,
-       safe_rate,
+       safe_rate, soft_min_cap,
 # prior / latent submodels
        censored_delay_model, gamma_delay_model, onset_to_death_model,
        generation_interval_model, rt_walk_model,
@@ -65,7 +65,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        onset_incidence_model,
        genetic_seeding_model,
        cfr_model, traveller_volume_model, test_positivity_model,
-       isolation_admission_model, bed_capacity_model,
+       isolation_admission_model, isolation_severity_model, bed_capacity_model,
        bed_capacity_walk_model, recovery_probability_model,
        death_background_model, death_ascertainment_model, background_cfr_model,
        background_re_model, background_pooling_model,

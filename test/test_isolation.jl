@@ -154,4 +154,12 @@ end
     ## supply-limited occupancy never exceeds the bed capacity.
     @test all(iso .<= dem .+ 1e-6)
     @test all(iso .<= cap .+ 1e-6)
+    ## The severity skew is non-negative and admits BVD suspects at least as
+    ## readily as the base (non-BVD rule-out) rate.
+    skew = vec(Array(chn[:isolation_severity]))
+    p_base = vec(Array(chn[:isolation_admission]))
+    p_bvd = vec(Array(chn[:isolation_bvd_admission]))
+    @test all(skew .>= -1e-9)
+    @test all(p_bvd .>= p_base .- 1e-9)
+    @test all(0 .<= p_bvd .<= 1)
 end
