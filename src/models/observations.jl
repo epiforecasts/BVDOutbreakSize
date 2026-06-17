@@ -481,68 +481,6 @@ sitrep.
 end
 
 """
-Per-window confirmed-positives likelihood, expressed as a vector
-likelihood scored against the observed analysed denominators. Given the
-per-window analysed counts `analysed` and positivities `p_pos`, scores the
-observed `positives` with one `Binomial(analysed[i], p_pos[i])` per window.
-`positives` is the model argument on the LHS of `~`, so a supplied vector
-is observed data DynamicPPL conditions on (mirroring
-[`vintage_increments_model`](@ref)) and a `missing` argument is sampled,
-making the submodel a predictive generator. Under a prefixed submodel
-attachment the predict keys are `<prefix>.positives[i]`. Returns the
-observed (or sampled) positives.
-"""
-@model function confirmed_positives_model(
-        positives::Union{Missing, AbstractVector{<:Integer}},
-        analysed::AbstractVector{<:Integer}, p_pos::AbstractVector)
-    nv = length(analysed)
-    if ismissing(positives)
-        positives = Vector{Union{Missing, Int}}(missing, nv)
-    end
-    for i in 1:nv
-        positives[i] ~ Binomial(analysed[i], p_pos[i])
-    end
-    return (; positives)
-end
-
-"""
-Late confirmed-vintage likelihood, one per-window confirmed increment over
-the days after the last cumulative laboratory date. Each window scores its
-increment two ways depending on whether a 24h analysed denominator was
-published for that day (`analysed[i] > 0`): an anchored day is a
-`Binomial(analysed[i], p_pos[i])` of the observed denominator (like an
-observed window), a unanchored day a `NegativeBinomial` of the modelled
-laboratory volume `modelled[i]` sharing the surveillance dispersion `k`.
-Keeping both in one submodel preserves a single per-window predict-key
-vector (`<prefix>.increments[i]`) over all late days in order, so the
-posterior-predictive trajectory reconstructs without interleaving.
-
-`increments` is the model argument on the LHS of `~`: a supplied vector is
-observed data DynamicPPL conditions on and a `missing` argument is sampled
-(the predictive-generator path). A `Vector{Union{Missing, Int}}` with some
-entries `missing` scores only the present ones, used to observe the
-anchored days while leaving the unanchored days latent under the
-no-extrapolation probe.
-"""
-@model function late_confirmed_model(
-        increments::Union{Missing, AbstractVector},
-        modelled::AbstractVector, analysed::AbstractVector{<:Integer},
-        p_pos::AbstractVector, k::Real)
-    n = length(modelled)
-    if ismissing(increments)
-        increments = Vector{Union{Missing, Int}}(missing, n)
-    end
-    for i in 1:n
-        if analysed[i] > 0
-            increments[i] ~ Binomial(analysed[i], p_pos[i])
-        else
-            increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
-        end
-    end
-    return (; modelled, increments)
-end
-
-"""
 Align the confirmed-case counts onto the laboratory windows, splitting
 them into three non-overlapping groups so all the confirmed data is used:
 
@@ -717,44 +655,41 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   Its between-vintage increments are fitted against `lab_history`
   (specimens analysed) as observed `~` data with a NegativeBinomial
   sharing the surveillance dispersion `k`, identifying `τ_test` and the
-  delay. This single suspected->analysed volume is also the denominator
-  proxy reused in the early and unanchored late windows below, so the volume
-  that is fitted is the same quantity used as the denominator where no
-  analysed count is observed. The specimens-received series is not
-  modelled: analysed is the throughput that actually produces confirmed
-  cases, and received overshoots it by the laboratory backlog.
-- Confirmed positives. The confirmed counts are scored as a `Binomial` of
-  the observed specimens-*analysed* denominator in each laboratory window
-  ([`confirmed_positivity_windows`](@ref)), with a partially-pooled
-  per-window positivity ([`confirmed_positivity_model`](@ref)).
-  Conditioning the positives on the observed analysed denominator (rather
-  than a modelled count scaled by `p_drc · s_test · τ_test`) removes the
-  multiplicative ascertainment ridge that basin-split the joint, so the
-  outbreak size is pinned by the deaths and exports streams while the
-  laboratory positivity is free to track the noisy per-vintage data. The
-  early confirmed vintages with no per-vintage analysed denominator
-  (18-23 May) are scored as NegativeBinomial counts against the modelled
-  laboratory volume with the same pooled positivity, so all the confirmed
-  data is used and the early per-vintage shape informs the fit.
+  delay. The post-cutoff 24h analysed counts (`lab_daily_history`) are
+  fitted the same way against the modelled daily volume. The
+  specimens-received series is not modelled: analysed is the throughput
+  that actually produces confirmed cases, and received overshoots it by
+  the laboratory backlog.
+- Confirmed cases. The confirmed-case counts are scored directly as a
+  single NegativeBinomial (sharing `k`) on the between-vintage increments
+  of the modelled daily confirmed series `confirmed_daily =
+  expand_vintage_rate(p_pos, window_days, n) .* analysed_daily`, binned
+  ([`bin_increments`](@ref)) over the confirmed-history vintage day grid,
+  with the first confirmed vintage as the testing-onset baseline (not
+  scored). Each confirmed datum is used exactly once, against the modelled
+  confirmed trajectory, so the confirmed level and shape (and any slowdown
+  in cumulative confirmed) inform the renewal jointly through incidence ×
+  positivity. The analysed-volume likelihoods above score the ANALYSED
+  counts, a different data series, so there is no double count. Where a
+  per-window analysed denominator is observed, the analysed-volume
+  likelihood pins `analysed_daily` to that data, so the confirmed-incidence
+  constraint is strongest on days with no observed analysed denominator.
 
-The per-window positivity has two links, set by `positivity_link`. The
-default `:composition` ties the tested BVD share to the suspect-pool
-composition `φ_v = (p_drc·BVD)_v / ((p_drc·BVD)_v + λ_bg_v)`, severity-
-upsampled by a decaying enrichment δ0, then mapped to the tested-positive
-probability through the assay sensitivity and specificity,
-`p = s · q + (1 − spec)(1 − q)`. The false-positive term `(1 − spec)(1 − q)`
-makes the confirmed counts respond to the non-BVD share `1 − q`, so the
-laboratory positivity identifies the background `λ_bg` rather than
-absorbing it into a free curve — the structural link that lets the lab data
-pin `λ_bg`. The alternative `:free` link uses a free partially-pooled
-per-window random effect ([`confirmed_positivity_model`](@ref)) decoupled
-from `λ_bg`; it leaves `λ_bg` weakly identified and is kept for sensitivity
-analysis.
-
-The observed-window positives are conditioned on the observed analysed
-denominator, so the Binomial conditioning that removes the multiplicative
-ascertainment ridge is preserved; only the early and unanchored late windows use the
-modelled analysed volume as the denominator.
+The per-window positivity `p_pos` building `confirmed_daily` has two links,
+set by `positivity_link`. The default `:composition` ties the tested BVD
+share to the suspect-pool composition `φ_v = (p_drc·BVD)_v /
+((p_drc·BVD)_v + λ_bg_v)`, severity-upsampled by a decaying enrichment δ0,
+then mapped to the tested-positive probability through the assay
+sensitivity and specificity, `p = s · q + (1 − spec)(1 − q)`. The
+false-positive term `(1 − spec)(1 − q)` makes the confirmed counts respond
+to the non-BVD share `1 − q`, so the laboratory positivity identifies the
+background `λ_bg` rather than absorbing it into a free curve — the
+structural link that lets the lab data pin `λ_bg`. The alternative `:free`
+link uses a free partially-pooled per-window random effect
+([`confirmed_positivity_model`](@ref)) decoupled from `λ_bg`; it leaves
+`λ_bg` weakly identified and is kept for sensitivity analysis.
+[`confirmed_positivity_windows`](@ref) still defines the per-window day
+grid the positivity is partially pooled over.
 
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
@@ -776,13 +711,7 @@ quantities.
         positivity_link::Symbol = :composition,
         severity_enrichment = severity_enrichment_model(),
         sensitivity = test_sensitivity_model(),
-        specificity = test_specificity_model(),
-        ## When false, the early/late windows (confirmed vintages with NO
-        ## observed analysed denominator) are not scored — only the
-        ## observed-denominator Binomial windows contribute, so confirmed
-        ## informs positivity without extrapolating a denominator from
-        ## incidence. Used to probe the no-test-data extrapolation.
-        fit_unanchored::Bool = true)
+        specificity = test_specificity_model())
     n = length(onsets)
     ## `missing` cut-off scalar means generator mode: observed increments are
     ## left missing so `predict` resamples them.
@@ -936,41 +865,25 @@ quantities.
         p_pos = pos_state.p_pos
     end
 
-    ## Early windows: confirmed increment ~ NegBinomial(positivity ×
-    ## modelled analysed volume), the volume binned over each window's OWN day
-    ## range pinned at `early_start` (the first confirmed vintage, the testing-
-    ## onset baseline), so the first early increment is scored from the data
-    ## start rather than rolling the (now-gated) pre-testing volume. Mirrors the
-    ## late-window pinning at `late_start`.
+    ## Per-window positivity slices, kept to build the modelled daily confirmed
+    ## series and the cut-off deterministics. The confirmed counts are NOT
+    ## scored per window any more: the confirmed-case likelihood is a single
+    ## NegBinomial on the modelled daily confirmed series below, so each
+    ## confirmed datum is used exactly once and the confirmed level and shape
+    ## inform the renewal. The early and late modelled volumes are binned over
+    ## each window's OWN day range pinned at the testing-onset baseline
+    ## (`early_start` / `late_start`), so the cut-off `expected_confirmed`
+    ## deterministic does not roll the gated pre-testing volume into the first
+    ## bin.
     early_p = p_pos[1:n_early]
     early_volume = n_early > 0 ?
                    bin_increments(analysed_daily,
         vcat(windows.early_start, windows.early_days))[2:end] :
                    similar(analysed_daily, 0)
     early_mean = early_p .* early_volume
-    early_obs = (have_data && n_early > 0 && fit_unanchored) ?
-                windows.early_increments : missing
-    early_increments ~ to_submodel(
-        vintage_increments_model(early_mean, early_obs, k))
 
-    ## Observed windows: Binomial of the observed analysed denominator.
     obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
-    obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
-                    missing
-    confirmed_positives ~ to_submodel(
-        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
 
-    ## Late windows: confirmed-only vintages after the last laboratory date.
-    ## A day that publishes a 24h analysed count (`late_analysed > 0`) is
-    ## scored as a Binomial of that observed denominator — like an observed
-    ## window, anchoring its positivity to data — and each remaining unanchored day
-    ## as NegBinomial(positivity × modelled volume). The modelled volume is
-    ## binned over each late window's own day range, with the running edge
-    ## PINNED at the last laboratory day (`late_start`): `bin_increments`
-    ## runs its running `prev` from day 0, so prepending `late_start` to the
-    ## late day edges and dropping the synthetic first bin starts the
-    ## accumulation at `late_start`, avoiding double-counting the
-    ## observed-window volume.
     late_p = p_pos[(n_early + n_obs + 1):nv]
     if n_late > 0
         late_edges = vcat(windows.late_start, windows.late_days)
@@ -979,29 +892,6 @@ quantities.
         late_volume = similar(analysed_daily, 0)
     end
     late_mean = late_p .* late_volume
-    ## Observed late increments: anchored days (24h denominator) carry the
-    ## confirmed increment clamped into the Binomial support and are always
-    ## scored; unanchored days are scored only when `fit_unanchored` (the
-    ## no-extrapolation probe leaves them latent). A per-entry
-    ## `missing`/value vector lets the one submodel observe each accordingly.
-    if have_data && n_late > 0
-        late_obs = Vector{Union{Missing, Int}}(undef, n_late)
-        for i in 1:n_late
-            a = windows.late_analysed[i]
-            if a > 0
-                late_obs[i] = clamp(windows.late_increments[i], 0, a)
-            elseif fit_unanchored
-                late_obs[i] = windows.late_increments[i]
-            else
-                late_obs[i] = missing
-            end
-        end
-    else
-        late_obs = missing
-    end
-    late_increments ~ to_submodel(
-        late_confirmed_model(late_obs, late_mean, windows.late_analysed,
-        late_p, k))
 
     expected_analysed := safe_rate(sum(analysed_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
@@ -1040,6 +930,42 @@ quantities.
     end
     confirmed_daily = expand_vintage_rate(p_pos_daily, window_days, n) .*
                       analysed_daily
+
+    ## Confirmed-case likelihood: the observed confirmed increments (from the
+    ## FULL cumulative `confirmed_history`) scored as a single NegBinomial
+    ## against the modelled daily confirmed series `confirmed_daily`, binned
+    ## over the confirmed vintage day grid sharing the dispersion `k`. This is
+    ## the ONLY confirmed-count likelihood, so each confirmed datum is used
+    ## exactly once and the confirmed level and shape inform incidence ×
+    ## positivity jointly. The first confirmed vintage is the testing-onset
+    ## BASELINE and is not scored: the modelled volume is binned over each
+    ## window's own day range pinned at that baseline day (prepended as the
+    ## running edge with its synthetic first bin dropped), mirroring the gated
+    ## `analysed_daily`, so the gated pre-testing volume is not rolled into the
+    ## first bin. One coherent `confirmed_increments` predict-key vector keeps
+    ## the posterior-predictive reconstruction working; a `missing` cut-off
+    ## (generator / predict mode) resamples it. NOTE: where a per-window
+    ## analysed denominator is observed, the analysed-volume likelihood pins
+    ## `analysed_daily` to that data, so the confirmed-incidence constraint is
+    ## strongest on days with no observed analysed denominator.
+    cdays = confirmed_history.days
+    if length(cdays) >= 2
+        inc_days = Int[clamp(Int(d), 1, n) for d in cdays[2:end]]
+        base_day = clamp(Int(cdays[1]), 1, n)
+        conf_modelled = bin_increments(confirmed_daily,
+            vcat(base_day, inc_days))[2:end]
+        conf_obs = have_data && !isempty(confirmed_history.counts) ?
+                   Int[Int(confirmed_history.counts[i]) -
+                       Int(confirmed_history.counts[i - 1])
+                       for i in 2:length(confirmed_history.counts)] : missing
+    else
+        ## Fewer than two confirmed vintages: nothing to score, but keep the
+        ## `confirmed_increments` key present and coherent via an empty vector.
+        conf_modelled = similar(confirmed_daily, 0)
+        conf_obs = missing
+    end
+    confirmed_increments ~ to_submodel(
+        vintage_increments_model(conf_modelled, conf_obs, k))
 
     return (; τ_test, bg_daily, p_pos, windows, analysed_daily,
         confirmed_daily,

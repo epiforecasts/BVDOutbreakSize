@@ -106,8 +106,8 @@ the infection process and onset staging, samples dispersion and pooled
 ascertainment, then runs the suspected-case stream (in predictive mode,
 to draw the shared background rate, testing fraction and onset-to-report
 kernel) and conditions on the laboratory pipeline alone: the confirmed
-positives (a Binomial of the observed analysed denominator in
-`lab_history`) and the modelled analysed-specimen volume. See
+cases (a NegativeBinomial on the modelled daily confirmed trajectory) and
+the modelled analysed-specimen volume (fitted to `lab_history`). See
 [`confirmed_cases_model`](@ref) and [`reported_cases_model`](@ref).
 """
 @model function confirmed_only_model(
@@ -313,17 +313,18 @@ model doubles as a prior- and posterior-predictive generator.
 
 onset-to-report kernel with the suspected-case stream. A single
 analysed-specimen volume is fit through a report-to-analysed delay and the
-tested fraction; the confirmed positives are scored as a Binomial of the
-observed specimens-analysed denominator (`lab_history`) with a
-partially-pooled per-window positivity, so the confirmed counts no longer
-pass through the multiplicative ascertainment ridge. After the national
-cumulative analysed series stops, the reporting format gives a 24h analysed
-count on some days (`lab_daily_history`); these are fitted as per-day
-analysed volumes and also anchor that day's confirmed positives as a
-Binomial of the observed denominator. The early and unanchored windows
-(days with no published denominator) use the modelled analysed volume as
-the denominator, with the positivity (hence `λ_bg`) carried over from the
-windows that do have data (see [`confirmed_cases_model`](@ref)). The
+tested fraction; the confirmed-case counts are scored directly as a
+NegativeBinomial on the between-vintage increments of the modelled daily
+confirmed trajectory (the per-window positivity applied to the modelled
+analysed volume), so the confirmed level and shape inform the renewal. The
+analysed-volume likelihood scores the analysed counts, a separate series,
+so each confirmed datum is used once. After the national cumulative
+analysed series stops, the reporting format gives a 24h analysed count on
+some days (`lab_daily_history`); these are fitted as per-day analysed
+volumes. Where a per-window analysed denominator is observed the
+analysed-volume likelihood pins the modelled volume to it, so the
+confirmed-incidence constraint is strongest on days with no observed
+denominator (see [`confirmed_cases_model`](@ref)). The
 optional `suspected_daily_history` adds the post-26 May daily new-suspect
 inflow ("nouveaux cas suspects du jour"), scored against the modelled daily
 suspected series at each report day where the frozen cumulative suspected
