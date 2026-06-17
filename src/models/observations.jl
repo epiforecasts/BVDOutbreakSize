@@ -1379,42 +1379,54 @@ capacity, not the demand itself.
 The latent demand is the suspect inflow carried through a length-of-stay
 survival `S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)), the renewal
 analogue of the convolution secondary-observation model of EpiNow2
-[epinow2](@cite). A proportion `p_iso` of the reported suspects
-([`reported_cases_model`](@ref)) need a bed; the suspect pipeline is a
-BVD/background mixture whose two populations leave on different clocks:
+[epinow2](@cite). The reported suspects ([`reported_cases_model`](@ref)) are
+a BVD/background mixture whose two populations are admitted at different
+rates and leave on different clocks:
 
-- BVD demand `p_iso · p_drc · bvd_reports` with a sampled treatment
-  length-of-stay (a confirmed case occupies a bed until recovery or death);
-- non-BVD demand `p_iso · bg_daily` leaving once the suspect is ruled out and
-  discharged, with a separately sampled non-BVD rule-out stay `ruleout_los`.
+- BVD demand `p_iso_bvd · p_drc · bvd_reports` with a sampled treatment
+  length-of-stay (a confirmed case occupies a bed until recovery or death).
+  BVD suspects are admitted at `p_iso_bvd`, skewed up from the base rate by
+  a severity log-odds `δ_iso` ([`isolation_severity_model`](@ref)): triage
+  admits the sicker patients and BVD presents more severely, so BVD is
+  enriched among the isolated. Admission does not condition on the
+  unobserved BVD status of any individual; the skew is the net effect of
+  severity-based triage.
+- non-BVD demand `p_iso · bg_daily` at the base admission rate
+  ([`isolation_admission_model`](@ref)), leaving once the suspect is ruled
+  out and discharged, after a separately sampled rule-out stay `ruleout_los`.
   This is a different parameter from the report-to-receipt laboratory delay
   (`receipt_pmf` from [`confirmed_cases_model`](@ref)): a non-BVD bed is freed
   around the time the negative result returns, but discharge also carries
   clinical sign-off and bed logistics, so the rule-out stay is identified by
   the occupancy on its own clock.
 
-The occupancy is the total demand soft-capped at the time-varying bed
-capacity `C(t)` ([`bed_capacity_walk_model`](@ref), a random walk so the
-ceiling tracks the beds being added),
+The occupancy is the total demand soft-capped at an effective bed-fullness
+ceiling `κ·C(t)` ([`soft_min_cap`](@ref)), with `C(t)` the time-varying bed
+capacity ([`bed_capacity_walk_model`](@ref), a random walk so the ceiling
+tracks the beds being added) and `κ ≈ 0.95` the fraction at which beds are
+effectively full:
 
 ```math
-\\text{occupancy}(t) = C(t)\\,\\bigl(1 - e^{-\\text{demand}(t)/C(t)}\\bigr),
+\\text{occupancy}(t) = \\text{demand}(t) - s\\,\\log\\!\\bigl(1 +
+    e^{(\\text{demand}(t) - \\kappa C(t))/s}\\bigr),
+\\qquad s = \\text{softness}\\cdot\\kappa C(t),
 ```
 
-so occupancy → `C(t)` under excess demand and ≈ demand when beds are slack,
-and the admitted fraction is availability-driven rather than constant. Each
-report day's occupied-bed count follows a NegativeBinomial around the
-modelled occupancy with a dispersion `k` sampled here (not shared with the
-other streams). The capacity is pinned by the implied bed count (occupancy /
-reported occupancy rate, `capacity_history`), each entry a noisy observation
-of `C(t)` on its day. Empty histories are no-ops; `missing` count vectors
-sample (the predictive path).
+a smoothed `min(demand, κC)`: occupancy ≈ demand while beds are slack and
+saturates near `κC` once demand exceeds it, so a shortfall is inferred only
+when occupancy approaches genuine fullness, not at every utilisation below
+capacity. Each report day's occupied-bed count follows a NegativeBinomial
+around the modelled occupancy with a dispersion `k` sampled here (not shared
+with the other streams). The capacity is pinned by the implied bed count
+(occupancy / reported occupancy rate, `capacity_history`), each entry a noisy
+observation of `C(t)` on its day. Empty histories are no-ops; `missing`
+count vectors sample (the predictive path).
 
-Exposes the cut-off occupancy, the cut-off bed DEMAND (need under
+Exposes the cut-off occupancy, the cut-off bed demand (need under
 unconstrained supply), their difference (the bed shortfall), the utilisation
-`occupancy / C` and the true-BVD share of demand, and returns the daily
-demand and occupancy series for forecasting and posterior-predictive
-replication.
+`occupancy / C`, the true-BVD share of demand, the severity skew `δ_iso` and
+the BVD admission probability, and returns the daily demand and occupancy
+series for forecasting and posterior-predictive replication.
 """
 @model function treatment_admission_model(
         isolation_history,
@@ -1423,8 +1435,15 @@ replication.
         p_drc::Real;
         capacity_history = (; days = Int[], counts = Int[]),
         admission = isolation_admission_model(),
+        severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
+        ## Bed-fullness soft cap: beds are effectively full at `kappa` of
+        ## nominal capacity (wards do not pack to 100%), and `softness` sets
+        ## the knee width as a fraction of that ceiling (see
+        ## [`soft_min_cap`](@ref)).
+        kappa::Real = 0.95,
+        softness::Real = 0.1,
         ## Sampled BVD treatment stay. The truncation covers the 99th
         ## percentile of the prior-centre distribution (a longer reach than
         ## the 98% default) so the long-stay survival tail is not clipped.
@@ -1443,6 +1462,13 @@ replication.
             sd_prior = truncated(Normal(4.0, 1.5); lower = 1)))
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
+    sev_state ~ to_submodel(severity)
+    ## BVD suspects are admitted at a higher rate than non-BVD rule-outs,
+    ## skewed up from the base `p_iso` by the severity log-odds `δ_iso`:
+    ## triage admits the sicker patients and BVD presents more severely. The
+    ## skew enriches BVD among the admitted without conditioning on the
+    ## unobserved BVD status of any individual suspect.
+    p_iso_bvd = logistic(logit(p_iso) + sev_state.δ_iso)
     disp_state ~ to_submodel(dispersion)
     k = disp_state.k
     n = length(bvd_reports_daily)
@@ -1454,27 +1480,29 @@ replication.
     bvd_los_state ~ to_submodel(bvd_los)
     ruleout_los_state ~ to_submodel(ruleout_los)
 
-    ## Latent bed DEMAND: a proportion `p_iso` of both BVD and non-BVD
-    ## suspects need a bed. BVD patients stay for the sampled treatment
-    ## length-of-stay; non-BVD suspects leave once they are ruled out and
-    ## discharged, after the separately sampled rule-out stay.
-    bvd_demand = convolve_survival(p_iso .* p_drc .* bvd_reports_daily,
+    ## Latent bed demand: BVD suspects are admitted at `p_iso_bvd`, non-BVD
+    ## suspects at the base `p_iso`. BVD patients stay for the sampled
+    ## treatment length-of-stay; non-BVD suspects leave once they are ruled
+    ## out and discharged, after the separately sampled rule-out stay.
+    bvd_demand = convolve_survival(p_iso_bvd .* p_drc .* bvd_reports_daily,
         bvd_los_state.pmf)
     bg_demand = convolve_survival(p_iso .* bg_daily, ruleout_los_state.pmf)
     demand = bvd_demand .+ bg_demand
     ## In predict / check-model mode the daily series can widen to
-    ## `Vector{Any}`, which the `exp.` saturation below cannot broadcast over,
-    ## so pin it to the capacity's (always-concrete) element type, leaving the
+    ## `Vector{Any}`, which the saturation below cannot broadcast over, so
+    ## pin it to the capacity's (always-concrete) element type, leaving the
     ## AD/fit path untouched.
     if eltype(demand) === Any
         demand = convert(Vector{eltype(C)}, demand)
     end
 
-    ## Supply-limited occupancy: the demand passed through a soft cap at the
-    ## daily bed capacity `C(t)`. occupancy → C(t) under excess demand, ≈
-    ## demand when beds are slack, so the admitted fraction is
-    ## availability-driven.
-    occupancy = C .* (1 .- exp.(.- demand ./ C))
+    ## Supply-limited occupancy: the demand soft-capped at the effective
+    ## bed-fullness ceiling `kappa·C(t)`. Occupancy tracks demand while beds
+    ## are slack and saturates near the ceiling once demand exceeds it, so a
+    ## shortfall is inferred only when occupancy is near genuine fullness
+    ## rather than at every utilisation below capacity (see
+    ## [`soft_min_cap`](@ref)).
+    occupancy = soft_min_cap.(demand, C, kappa, softness)
 
     ## Each report day's occupied-bed count follows a NegBinomial around the
     ## modelled occupancy on that day. Empty history is a no-op; a `missing`
@@ -1508,8 +1536,11 @@ replication.
     bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
     bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
     isolation_bvd_share := safe_rate(bvd_dem_T) / safe_rate(dem_T)
+    isolation_severity := sev_state.δ_iso
+    isolation_bvd_admission := p_iso_bvd
 
-    return (; p_iso, capacity = C_T, bvd_los_mean = bvd_los_state.mean,
+    return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
+        capacity = C_T, bvd_los_mean = bvd_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
         k_isolation = k, demand, occupancy,
         expected_isolation = safe_rate(occ_T),

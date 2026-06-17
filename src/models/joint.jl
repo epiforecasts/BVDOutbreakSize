@@ -593,6 +593,8 @@ death-confirmation positivity (`death_confirmation`).
                                  treatment_state.expected_isolation)
     bed_capacity := treatment_state.capacity
     isolation_admission := treatment_state.p_iso
+    isolation_bvd_admission := treatment_state.p_iso_bvd
+    isolation_severity := treatment_state.δ_iso
     isolation_bvd_los_mean := treatment_state.bvd_los_mean
     isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
     isolation_dispersion := treatment_state.k_isolation
