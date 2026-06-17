@@ -210,13 +210,20 @@ Changes since v1.4.0.
   delay.
   The received stream is still recorded but no longer fitted, and the
   post-cut-off 24-hour analysed volume is now fit directly.
-- Late reporting windows, where the cumulative national analysed denominator
-  stops, are scored in one submodel.
-  A day with a published 24-hour analysed count anchors its positivity as a
-  binomial on that count, and the remaining days are scored against the
-  modelled laboratory volume.
-  These are a reporting-format change rather than data blackouts, so the
-  earlier "dark window" framing is dropped.
+- Fit the laboratory-confirmed cases directly as a per-vintage NegBinomial on
+  the between-vintage increments of the modelled daily confirmed trajectory
+  (the composition-linked tested-positive probability times the modelled
+  analysed-specimen volume), with the first confirmed vintage the testing-onset
+  baseline.
+  The confirmed positives are no longer conditioned on the observed analysed
+  denominator, so the confirmed level and shape inform the renewal directly and
+  a slowdown in cumulative confirmed registers in the fit.
+  The analysed-specimen volume is still fitted to the specimens-analysed series,
+  a separate stream, so each confirmed count is used once; where a window
+  publishes an analysed denominator the volume likelihood pins it, so the
+  confirmed-incidence constraint is strongest on windows without one.
+  Confirmed deaths already use this per-vintage NegBinomial structure, so the
+  two laboratory streams are consistent.
 - Added the delay-corrected confirmed case-fatality ratio, the Nishiura et al.
   (2009) real-time correction computed per posterior draw on the modelled
   confirmed trajectory and sampled confirmation-to-death delay.

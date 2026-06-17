@@ -408,12 +408,15 @@ vintage_table #hide
 #
 # The table below shows which parameters inform each observation submodel.
 # The *analysed* column is the analysed-specimen volume, the single
-# laboratory stream fitted as a count; the *confirmed* positives are scored
-# as a Binomial of the observed analysed denominator with a positivity
-# linked to the composition of the suspected pool, so the laboratory data
-# help identify the non-BVD background. The *conf. deaths* column mirrors the
-# laboratory pipeline on the death side: a death testing fraction and a
-# death-pool composition positivity built from the same assay:
+# laboratory stream fitted as a count; the *confirmed* cases are scored as a
+# per-vintage NegBinomial on the between-vintage increments of the modelled
+# daily confirmed trajectory, the per-window tested-positive probability
+# (linked to the composition of the suspected pool, so the laboratory data
+# help identify the non-BVD background) times the modelled analysed-specimen
+# volume, so the confirmed level and shape inform the renewal directly. The
+# *conf. deaths* column mirrors the laboratory pipeline on the death side: a
+# death testing fraction and a death-pool composition positivity built from
+# the same assay:
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -1451,16 +1454,13 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{27}
 # ```
 #
-# The confirmed positives in each laboratory window $v$ are scored as a
-# Binomial of the observed specimens-analysed denominator $A_v$ with a
-# per-window tested-positive probability $p_{\text{pos},v}$, and where no
-# analysed count is observed (the early and unanchored windows) the modelled
-# volume $v_t$ is the denominator instead, so the fitted volume and the
-# proxy denominator are the same quantity. We tie that probability to the
-# composition of the tested pool, so the confirmed data help identify the
-# non-BVD background. The suspect-pool composition $\varphi_v$ is the BVD
-# share among the specimens analysed in the window, carried through the same
-# delay as the volume so composition and volume share one clock:
+# The confirmed-case counts are scored directly on the modelled daily
+# confirmed trajectory. Each window $v$ carries a per-window tested-positive
+# probability $p_{\text{pos},v}$, which we tie to the composition of the
+# tested pool so the confirmed data help identify the non-BVD background. The
+# suspect-pool composition $\varphi_v$ is the BVD share among the specimens
+# analysed in the window, carried through the same delay as the volume so
+# composition and volume share one clock:
 #
 # ```math
 # \varphi_v = \frac{(p_{\text{DRC}}\,\text{bvd} * f_{\text{rec}})_v}
@@ -1480,22 +1480,26 @@ cfr_prior_fig #hide
 # p_{\text{pos},v} = s\, q_v + (1 - \mathrm{spec})(1 - q_v),
 # ```
 #
-# ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{28}
-# ```
-#
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the
-# clock on which the enrichment decays. The confirmed vintages before the
-# first and after the last laboratory date carry no observed analysed
-# denominator. They are scored as NegBinomial counts against the modelled
-# laboratory volume $V_v$, the daily modelled volume $v_t$ summed over the
-# window, with the same composition-linked positivity, so all the confirmed
-# data is used where no laboratory denominator is observed:
+# clock on which the enrichment decays. The per-window positivity is expanded
+# onto the daily grid and multiplied by the modelled analysed-specimen volume
+# $v_t$ to give the modelled daily confirmed series
+# $c_t = p_{\text{pos}}(t)\, v_t$. The observed confirmed increments are then
+# scored as a per-vintage NegBinomial on the between-vintage increments of
+# that series, sharing the dispersion $k$, with the first confirmed vintage
+# the testing-onset baseline (not scored). The confirmed level and shape
+# inform the renewal directly:
 #
 # ```math
-# C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{29}
+# C_v - C_{v-1} \sim \mathrm{NegBinomial}\!\Bigl(
+#     \sum_{t = d_{v-1}+1}^{d_v} c_t,\ k\Bigr). \tag{28}
 # ```
+#
+# The analysed-specimen volume above is fitted to the analysed counts, a
+# separate data series, so each confirmed datum is used once. Where a window
+# publishes an analysed denominator the volume likelihood pins $v_t$ to that
+# count, so the confirmed-incidence constraint is strongest on windows
+# without an observed analysed denominator.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: lab_delay_model (receipt delay)</summary>
@@ -1530,11 +1534,11 @@ cfr_prior_fig #hide
 # ##### Confirmed deaths
 #
 # The confirmed deaths mirror the confirmed-case laboratory pipeline. The
-# confirmed cases fit a modelled analysed-specimen volume and score the
-# positives as that volume times a composition-linked positivity; the death
-# side has no published analysed denominator, so we build the death analogue
-# of that volume and score the confirmed-death increments as NegBinomial
-# counts of it.
+# confirmed cases score the increments of a modelled daily confirmed
+# trajectory (a modelled analysed-specimen volume times a composition-linked
+# positivity) as NegBinomial counts; the death side has no published analysed
+# denominator, so we build the death analogue of that trajectory and score
+# the confirmed-death increments as NegBinomial counts of it.
 #
 # Deaths are tested out of the same laboratory as cases, so the death analysed
 # volume tracks the modelled case analysed volume $v^{\text{c}}_t$ at the
@@ -1579,7 +1583,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{30}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{29}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the
@@ -1689,7 +1693,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{31}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{30}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate
@@ -1705,7 +1709,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{32}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{31}
 # ```
 
 #md # ```@raw html
@@ -1741,7 +1745,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{33}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{32}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a
@@ -1753,7 +1757,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{34}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{33}
 # ```
 
 #md # ```@raw html
@@ -2101,7 +2105,7 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{35}
+#         \Pr(X_d - X_c \le T - t)}, \tag{34}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$
@@ -2761,40 +2765,24 @@ tests_analysed_daily_panel = (;
     observed = obs.lab_daily_history.counts, colour = :teal,
     cumulative = false);
 
-## Confirmed cases are scored over two groups of laboratory windows: the
-## early confirmed vintages (no per-vintage analysed denominator, scored
-## as counts against the modelled laboratory volume) and the observed
-## windows (a Binomial of the observed analysed denominator). Both groups
-## produce per-window replicate increments in `predict`, so concatenating
-## them oldest-first gives the per-vintage cumulative confirmed-case
-## trajectory, grounded on the observed cumulative confirmed at each window
-## end-day. The 24-25 May analysis stall merges into 26 May, so the window
-## grid is slightly coarser than the raw confirmed history.
-_conf_windows = BVDOutbreakSize.confirmed_positivity_windows(
-    obs.confirmed_history, obs.lab_history, obs.lab_daily_history);
-## Oldest-first: early (no denominator) → observed (analysed Binomial) →
-## late (post-28 May; trusted 24h-analysed days are Binomial windows, the
-## rest unanchored windows scored against the modelled volume).
-_conf_window_days = vcat(_conf_windows.early_days, _conf_windows.obs_days,
-    _conf_windows.late_days);
-function _confirmed_at(day)
-    i = searchsortedlast(obs.confirmed_history.days, day)
-    return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
-end;
-_conf_early = _vintage_replicates(
-    pp_joint, "confirmed_state.early_increments");
-_conf_obs = collect(first(pp_joint[k]
-for k in keys(pp_joint)
-if occursin("confirmed_state.confirmed_positives.positives", string(k))));
-_conf_late = _vintage_replicates(
-    pp_joint, "confirmed_state.late_increments");
+## Confirmed cases are a per-vintage stream, scored as increments of the
+## modelled daily confirmed trajectory (the per-window positivity times the
+## modelled analysed-specimen volume) over the confirmed vintage day grid, so
+## they get the same cumulative conditional check as the other per-vintage
+## streams. The first confirmed vintage is the testing-onset baseline (not
+## scored), so the modelled increments run from the second confirmed day
+## onward; we prepend the observed baseline cumulative as the first bin so
+## the conditional cumulative reconstruction starts from the data, matching
+## the other cumulative panels.
+_conf_baseline = isempty(obs.confirmed_history.counts) ? 0.0 :
+                 float(obs.confirmed_history.counts[1]);
 confirmed_panel = (;
     title = "Confirmed cases",
-    dates = _vintage_dates(_conf_window_days),
-    replicates = [vcat(collect(e), collect(p), collect(l))
-                  for (e, p, l) in zip(vec(_conf_early), vec(_conf_obs), vec(_conf_late))],
-    observed = [_confirmed_at(d) for d in _conf_window_days],
-    colour = :goldenrod);
+    dates = _vintage_dates(obs.confirmed_history.days),
+    replicates = [vcat(_conf_baseline, collect(r))
+                  for r in vec(collect(_vintage_replicates(
+        pp_joint, "confirmed_state.confirmed_increments")))],
+    observed = obs.confirmed_history.counts, colour = :goldenrod);
 
 ## Confirmed deaths are a per-vintage stream, scored as increments of the
 ## modelled confirmed-death trajectory up to the cut-off, so they get the
