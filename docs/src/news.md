@@ -12,6 +12,18 @@ Changes since v1.5.0.
 
 ### Model
 
+- Retightened the severity-enrichment decay-scale prior in the
+  composition-linked confirmed positivity from a half-normal
+  (`truncated(Normal(0, 200); lower = 0)`) to `LogNormal(log(200), 0.5)`
+  (median ~200 specimens, ~95% in [75, 530], strictly positive, bounded
+  right tail). The half-normal's fat upper tail let `decay_scale` run past
+  the observed analysed-volume span (~200 at the first lab window to ~750
+  at the cut-off), so the enrichment `δ₀·exp(−c/decay_scale)` never
+  relaxed, the tested BVD share stayed near one, and positivity stopped
+  tracking the suspect-pool composition φ. The lognormal bounds the
+  relaxation timescale to the observed volume range so the enrichment
+  decays identifiably across the early-to-late window gradient and the lab
+  data identify the non-BVD background `λ_bg` through the composition link.
 - Added a supply-limited isolation/treatment-bed stream ("Patients en
   isolement"), the renewal analogue of the convolution secondary-observation
   model of EpiNow2.

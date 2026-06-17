@@ -946,13 +946,18 @@ bounded: even severity-triaged testing cannot be near-pure BVD (other
 haemorrhagic / severe febrile illness is also triaged), so for a pool
 composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
 1.5) ≈ 0.75`. `decay_scale` is the relaxation timescale on the analysed-
-volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
+volume clock. Its default `LogNormal(log(200.0), 0.5)` is strictly
+positive with a median of ~200 specimens and a bounded right tail (~95% in
+[75, 530]), so the relaxation stays within the observed analysed-volume
+span (~200 at the first lab window to ~750 at the cut-off) and the
+enrichment decays identifiably across the early-to-late window gradient.
+Pass `logodds_prior` / `decay_prior` to override. Used by
 [`confirmed_cases_model`](@ref) in composition mode. Returns
 `(; δ0, decay_scale)`.
 """
 @model function severity_enrichment_model(;
         logodds_prior = truncated(Normal(1.5, 0.75); lower = 0),
-        decay_prior = truncated(Normal(0.0, 200.0); lower = 0.0))
+        decay_prior = LogNormal(log(200.0), 0.5))
     δ0 ~ logodds_prior
     decay_scale ~ decay_prior
     return (; δ0, decay_scale)
