@@ -1400,22 +1400,23 @@ rates and leave on different clocks:
   clinical sign-off and bed logistics, so the rule-out stay is identified by
   the occupancy on its own clock.
 
-The occupancy is the total demand soft-capped at an effective bed-fullness
-ceiling `κ·C(t)` ([`soft_min_cap`](@ref)), with `C(t)` the time-varying bed
-capacity ([`bed_capacity_walk_model`](@ref), a random walk so the ceiling
-tracks the beds being added) and `κ ≈ 0.95` the fraction at which beds are
-effectively full:
+The occupancy is the total demand soft-capped at the bed capacity `C(t)`
+([`soft_min_cap`](@ref)), with `C(t)` the time-varying bed capacity
+([`bed_capacity_walk_model`](@ref), a random walk so the ceiling tracks the
+beds being added):
 
 ```math
 \\text{occupancy}(t) = \\text{demand}(t) - s\\,\\log\\!\\bigl(1 +
-    e^{(\\text{demand}(t) - \\kappa C(t))/s}\\bigr),
-\\qquad s = \\text{softness}\\cdot\\kappa C(t),
+    e^{(\\text{demand}(t) - C(t))/s}\\bigr),
+\\qquad s = \\text{softness}\\cdot C(t),
 ```
 
-a smoothed `min(demand, κC)`: occupancy ≈ demand while beds are slack and
-saturates near `κC` once demand exceeds it, so a shortfall is inferred only
+a smoothed `min(demand, C)`: occupancy ≈ demand while beds are slack and
+saturates near `C` once demand exceeds it, so a shortfall is inferred only
 when occupancy approaches genuine fullness, not at every utilisation below
-capacity. Each report day's occupied-bed count follows a NegativeBinomial
+capacity. The smooth approach is the soft ceiling, so occupancy sits below
+`C(t)` at finite demand. Each report day's occupied-bed count follows a
+NegativeBinomial
 around the modelled occupancy with a dispersion `k` sampled here (not shared
 with the other streams). The capacity is pinned by the implied bed count
 (occupancy / reported occupancy rate, `capacity_history`), each entry a noisy
@@ -1438,11 +1439,11 @@ series for forecasting and posterior-predictive replication.
         severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
-        ## Bed-fullness soft cap: beds are effectively full at `kappa` of
-        ## nominal capacity (wards do not pack to 100%), and `softness` sets
-        ## the knee width as a fraction of that ceiling (see
-        ## [`soft_min_cap`](@ref)).
-        kappa::Real = 0.95,
+        ## Bed-fullness soft cap: occupancy soft-mins against the capacity
+        ## `C(t)`, and `softness` sets the knee width as a fraction of `C(t)`.
+        ## The smooth approach is the soft ceiling, so occupancy sits below
+        ## `C(t)` at finite demand without a separate sub-capacity ceiling
+        ## (see [`soft_min_cap`](@ref)).
         softness::Real = 0.1,
         ## Sampled BVD treatment stay. The truncation covers the 99th
         ## percentile of the prior-centre distribution (a longer reach than
@@ -1496,13 +1497,12 @@ series for forecasting and posterior-predictive replication.
         demand = convert(Vector{eltype(C)}, demand)
     end
 
-    ## Supply-limited occupancy: the demand soft-capped at the effective
-    ## bed-fullness ceiling `kappa·C(t)`. Occupancy tracks demand while beds
-    ## are slack and saturates near the ceiling once demand exceeds it, so a
-    ## shortfall is inferred only when occupancy is near genuine fullness
-    ## rather than at every utilisation below capacity (see
-    ## [`soft_min_cap`](@ref)).
-    occupancy = soft_min_cap.(demand, C, kappa, softness)
+    ## Supply-limited occupancy: the demand soft-capped at the bed capacity
+    ## `C(t)`. Occupancy tracks demand while beds are slack and saturates near
+    ## `C(t)` once demand exceeds it, so a shortfall is inferred only when
+    ## occupancy is near genuine fullness rather than at every utilisation
+    ## below capacity (see [`soft_min_cap`](@ref)).
+    occupancy = soft_min_cap.(demand, C, softness)
 
     ## Each report day's occupied-bed count follows a NegBinomial around the
     ## modelled occupancy on that day. Empty history is a no-op; a `missing`
