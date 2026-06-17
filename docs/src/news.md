@@ -197,6 +197,14 @@ Changes since v1.4.0.
   The post-26 May per-day counts are scored against the modelled daily
   suspected series at each report day, continuing the suspected signal where
   the frozen cumulative series stops, on days disjoint from it (#222).
+- Added the deaths analogue, an optional daily new suspected-death inflow
+  stream ("cas suspects du jour N (M deces)") to the suspected-death
+  likelihood.
+  The post-26 May per-day counts are scored against the modelled daily
+  suspected-death series at each report day, continuing the suspected-death
+  signal where the frozen cumulative series stops, on days disjoint from it,
+  and a matching "New suspected deaths/day" posterior-predictive panel is
+  added alongside the new-suspects-per-day panel.
 - Collapsed the laboratory pipeline onto a single suspected-to-analysed
   volume, fit to the specimens-analysed series through one report-to-analysed
   delay.
@@ -241,6 +249,11 @@ Changes since v1.4.0.
 - Captured the daily new-suspect counts (SitReps 021-024, 4-7 June) as a
   structured `new_daily_suspects` column in the scanned situation-report CSV
   and a `suspected_daily_history` block in the observation manifest.
+- Captured the daily new suspected-death counts ("cas suspects du jour N (M
+  deces)", SitReps 024-032, 7-15 June) as a structured
+  `new_daily_suspected_deaths` column in the scanned situation-report CSV and a
+  `suspected_daily_deaths_history` block in the observation manifest, the
+  deaths analogue of the daily new-suspect inflow.
 - Extended the confirmed case and death series to SitRep 025 (8 June).
 - Added the trusted-day 24-hour analysed laboratory counts (1, 4-7 June) as a
   `tests_analysed_daily_history` block to anchor late-window positivity.

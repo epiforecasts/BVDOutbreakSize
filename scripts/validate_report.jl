@@ -23,6 +23,8 @@ pp = predict(
         confirmed_deaths = missing,
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
+        suspected_daily_deaths_history =
+        _days_only(obs.suspected_daily_deaths_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
@@ -71,13 +73,22 @@ deaths_panel = (; title = "Suspected deaths",
     dates = _vdates(obs.deaths_history.days),
     replicates = _vrep("deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick)
+## Daily new suspected deaths (a per-day count, not cumulative): the deaths
+## analogue of the new-suspects-per-day stream, picking up where the
+## cumulative suspected-death panel freezes on 26 May.
+suspected_daily_deaths_panel = (; title = "New suspected deaths/day",
+    dates = _vdates(obs.suspected_daily_deaths_history.days),
+    replicates = _vrep("deaths_state.suspected_daily_deaths"),
+    observed = obs.suspected_daily_deaths_history.counts,
+    colour = :indianred, cumulative = false)
 tests_panel = (; title = "Specimens analysed",
     dates = _vdates(obs.lab_history.days),
     replicates = _vrep("confirmed_state.analysed_increments"),
     observed = obs.lab_history.counts, colour = :seagreen)
 
 fig1 = plot_vintage_conditional_ppc(
-    [reported_panel, confirmed_panel, deaths_panel, tests_panel])
+    [reported_panel, confirmed_panel, deaths_panel,
+    suspected_daily_deaths_panel, tests_panel])
 CairoMakie.save("logs/val_vintage.png", fig1)
 println("OK vintage PPC (with confirmed cases): ", "ok")
 

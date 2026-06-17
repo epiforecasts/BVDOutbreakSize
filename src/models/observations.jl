@@ -254,6 +254,18 @@ identified case background without a second free, outbreak-size-degenerate
 rate. The `death_background` ([`death_background_model`](@ref)) scalar, the
 per-vintage `background_re` and the pure-BVD stream are sensitivity fallbacks.
 
+An optional `suspected_daily_deaths_history` adds the post-26 May daily new
+suspected deaths ("cas suspects du jour N (M deces)"): per-day counts of
+suspected deaths scored against the modelled daily suspected-death series
+`deaths_daily` at each report day (a single-day mean, not a between-vintage
+increment) with NegativeBinomials sharing `k`. This is the deaths analogue of
+the suspected-case daily inflow ([`reported_cases_model`](@ref)): it continues
+the suspected-death signal where the cumulative `deaths_history` stops once
+INSP stopped publishing a national suspected-death total. The inflow is a
+genuine per-day count that never falls, so it fits directly; its days fall
+strictly after the cumulative series ends, so the two suspected-death
+likelihoods cover disjoint days. Empty by default.
+
 Returns the cut-off expected count, the daily death series (total and the
 BVD and background components), the onset-to-death PMF, the CFR, the death
 ascertainment and the background CFR for reuse by
@@ -263,6 +275,7 @@ ascertainment and the background CFR for reuse by
         deaths_history,
         total_deaths::Union{Missing, Integer},
         onsets::AbstractVector, k::Real;
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         cfr = cfr_model(),
         ascertainment = death_ascertainment_model(),
         case_bg_daily = nothing,
@@ -322,6 +335,20 @@ ascertainment and the background CFR for reuse by
     modelled_increments = bin_increments(deaths_daily, vobs.days)
     death_increments ~ to_submodel(
         vintage_increments_model(modelled_increments, vobs.obs_increments, k))
+
+    ## Daily new suspected deaths ("cas suspects du jour N (M deces)"): per-day
+    ## counts scored against the modelled daily suspected-death series at each
+    ## report day. The mean for day `d` is the single-day `deaths_daily[d]`
+    ## (clamped into the grid), NOT a between-vintage increment — this is a
+    ## genuine daily count, so it never differences a falling cumulative. Empty
+    ## by default; a `missing` count vector samples (the predictive path). The
+    ## deaths analogue of the suspected-case daily inflow.
+    sdd_days = suspected_daily_deaths_history.days
+    sdd_modelled = [deaths_daily[clamp(Int(d), 1, n)] for d in sdd_days]
+    sdd_obs = isempty(suspected_daily_deaths_history.counts) ? missing :
+              collect(Int.(suspected_daily_deaths_history.counts))
+    suspected_daily_deaths ~ to_submodel(
+        vintage_increments_model(sdd_modelled, sdd_obs, k))
 
     raw_total = sum(deaths_daily)
     expected_deaths_T := safe_rate(raw_total)

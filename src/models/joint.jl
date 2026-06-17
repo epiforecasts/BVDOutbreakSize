@@ -56,6 +56,7 @@ deaths likelihood only. See [`deaths_model`](@ref).
 @model function deaths_only_model(
         n::Integer, total_deaths::Union{Missing, Integer};
         deaths_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -66,7 +67,7 @@ deaths likelihood only. See [`deaths_model`](@ref).
     dispersion_state ~ to_submodel(dispersion)
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, latent.onsets,
-        dispersion_state.k))
+        dispersion_state.k; suspected_daily_deaths_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
 end
@@ -325,7 +326,11 @@ windows that do have data (see [`confirmed_cases_model`](@ref)). The
 optional `suspected_daily_history` adds the post-26 May daily new-suspect
 inflow ("nouveaux cas suspects du jour"), scored against the modelled daily
 suspected series at each report day where the frozen cumulative suspected
-stream stops, on days disjoint from it. The confirmed deaths mirror the
+stream stops, on days disjoint from it. The optional
+`suspected_daily_deaths_history` adds the deaths analogue, the post-26 May
+daily new suspected deaths ("cas suspects du jour N (M deces)"), scored
+against the modelled daily suspected-death series where the frozen cumulative
+suspected-death stream stops. The confirmed deaths mirror the
 confirmed-case laboratory pipeline: a death "analysed" volume (the suspected
 deaths carried to laboratory receipt and thinned by the death testing
 fraction `tau_death`) scored through a death-pool composition positivity
@@ -375,6 +380,7 @@ death-confirmation positivity (`death_confirmation`).
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
         suspected_daily_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         isolation_history = (; days = Int[], counts = Int[]),
         bed_capacity_history = (; days = Int[], counts = Int[]),
         recovered_history = (; days = Int[], counts = Int[]),
@@ -466,7 +472,7 @@ death-confirmation positivity (`death_confirmation`).
         suspected_daily_history, background_re = case_bg_re))
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k;
-        case_bg_daily = cases_state.bg_daily))
+        suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
