@@ -48,6 +48,7 @@ end
                            severity_enrichment_model
     using Turing: @model, to_submodel, returned
     using Random: MersenneTwister
+    using Statistics: mean, median
 
     @model function _latent(n)
         inf ~ to_submodel(infection_model(n), false)
@@ -90,6 +91,18 @@ end
         rand(MersenneTwister(5), severity_enrichment_model()))
     @test sv.δ0 >= 0
     @test sv.decay_scale >= 0
+
+    ## The decay-scale prior is a strictly positive LogNormal with median
+    ## ~200 specimens and a bounded right tail (no fat half-normal tail),
+    ## so the enrichment relaxes identifiably over the observed analysed-
+    ## volume range.
+    decay_draws = [returned(severity_enrichment_model(),
+                       rand(MersenneTwister(i), severity_enrichment_model())).decay_scale
+                   for i in 1:2000]
+    @test all(d -> d > 0, decay_draws)
+    @test 150 < median(decay_draws) < 260
+    ## Bounded tail: very few draws leave the observed volume span.
+    @test mean(d -> d > 600, decay_draws) < 0.02
 end
 
 @testitem "test_specificity_model returns a high-but-imperfect spec" begin
