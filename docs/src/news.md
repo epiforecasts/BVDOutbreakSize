@@ -18,7 +18,7 @@ Changes since v1.5.0.
   Bed occupancy has been supply-driven (demand has outstripped supply), so
   the model fits a latent bed DEMAND — the suspect inflow carried through a
   length-of-stay survival (BVD cases with a sampled treatment stay, non-BVD
-  suspects leaving after the report-to-receipt delay) — and the occupancy is
+  suspects leaving after a sampled rule-out stay) — and the occupancy is
   that demand soft-capped at the bed capacity,
   `occupancy = C(t)·(1−exp(−D/C(t)))`, so the admitted fraction is
   availability-driven. The capacity `C(t)` is a random walk
@@ -37,6 +37,15 @@ Changes since v1.5.0.
   the national shortfall understates the local unmet need. The renewal model
   does not carry per-province inflow, so it cannot be split to the
   per-province bed model the constraint needs.
+- Gave the non-BVD isolation rule-out stay its own sampled length-of-stay
+  (`ruleout_los`) in `treatment_admission_model`, separate from the
+  report-to-receipt laboratory delay it previously shared. Sharing one delay
+  let the daily-observed occupancy stream, where the delay mean scales the
+  non-BVD bed demand, collapse the lab-turnaround delay that the testing,
+  composition and confirmed-death streams use only as a time shift. The
+  occupancy now identifies the rule-out stay on its own clock, and the
+  lab-turnaround delay is set by those streams plus its prior. Exposes
+  `isolation_ruleout_los_mean`.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
   daily confirmed cases, scaled by a recovery proportion and convolved with a

@@ -1234,12 +1234,14 @@ cfr_prior_fig #hide
 # suspects are a BVD/background mixture leaving on different clocks, so the
 # demand is the sum of two survival convolutions: the BVD demand with a
 # sampled treatment length-of-stay $S_{\text{BVD}}$, and the non-BVD demand
-# leaving after the report-to-receipt laboratory delay $S_{\text{rec}}$,
+# with a separately sampled rule-out stay $S_{\text{ruleout}}$ (how long a
+# ruled-out suspect occupies a bed before discharge, distinct from the
+# report-to-receipt laboratory delay),
 #
 # ```math
 # D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
 #       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
-#       \lambda_{\text{bg},\,t-s}\, S_{\text{rec}}(s) \right].
+#       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right].
 # ```
 #
 # The occupancy is the demand soft-capped at the bed capacity $C$, so it
@@ -1932,7 +1934,8 @@ display_names = Dict{Symbol, String}(
     Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
     Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
     Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
-    :isolation_bvd_los_mean => "isolation length-of-stay mean",
+    :isolation_bvd_los_mean => "isolation BVD length-of-stay mean",
+    :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
     :recovery_delay_mean => "confirmation-to-recovery mean",
     Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
 
@@ -2392,10 +2395,11 @@ intervention_table #hide
 # onset-to-death is the convolution of two atomic Gamma delays, onset to
 # admission and admission to death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
-# The two new length-of-stay delays are also shown: the isolation-bed
-# treatment length-of-stay (how long a BVD patient occupies a bed) and the
-# confirmation-to-recovery delay (how long after confirmation a case is
-# recorded as recovered).
+# The length-of-stay delays are also shown: the isolation-bed BVD treatment
+# length-of-stay (how long a BVD patient occupies a bed), the non-BVD rule-out
+# stay (how long a ruled-out suspect occupies a bed before discharge, sampled
+# separately from the report-to-receipt delay), and the confirmation-to-
+# recovery delay (how long after confirmation a case is recorded as recovered).
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
 # each marginal is visible.
@@ -2416,6 +2420,7 @@ obs_delay_summary = summary_table(chn_joint,
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         Symbol("confirmed_state.receipt_state.d.delay_sd"),
         :isolation_bvd_los_mean,
+        :isolation_ruleout_los_mean,
         :recovery_delay_mean];
     digits = 2, labels = display_names);
 
@@ -2435,6 +2440,7 @@ obs_delay_pair_fig = plot_pair(chn_joint,
         Symbol("exports_state.detect_state.α"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         :isolation_bvd_los_mean,
+        :isolation_ruleout_los_mean,
         :recovery_delay_mean];
     prior = prior_chn, labels = display_names);
 
