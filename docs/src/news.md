@@ -93,15 +93,14 @@ Changes since v1.5.0.
   modelled cumulative confirmed previously ran several-fold above the observed
   early values).
 - Redesigned the death pathway.
-  Suspected deaths now carry a death ascertainment `p_death` (the death analogue
+  Suspected deaths carry a death ascertainment `p_death` (the death analogue
   of the case ascertainment, with an informative prior centred high) and a
-  non-BVD death background tied to the suspected-case background by a background
-  CFR (`cfr_bg`), so the death background is a fixed share of the already-
-  identified case background rather than a second free, outbreak-size-degenerate
-  rate.
-  With the case background now the smooth, gated daily random walk, the death
-  background inherits that shape, so the modelled cumulative-death trajectory is
-  smooth with no onset or per-vintage step.
+  non-BVD death background that applies a background CFR (`cfr_bg`) to the
+  suspected-case background and lags it by the onset-to-death delay, so a
+  background death follows its background case. The death background tracks the
+  identified case background rather than a second free, outbreak-size-
+  degenerate rate, and inherits the case background's smooth gated daily shape,
+  so the modelled cumulative-death trajectory is smooth.
   Added the `death_ascertainment_model` and `background_cfr_model` priors.
 - Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the
   confirmed cases.

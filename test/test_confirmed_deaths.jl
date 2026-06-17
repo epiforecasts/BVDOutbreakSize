@@ -164,16 +164,17 @@ end
     @test isfinite(logjoint(m, draw))
 end
 
-@testitem "deaths_model background is cfr_bg times the case background" begin
-    using BVDOutbreakSize: deaths_model, background_walk_model
+@testitem "deaths_model background is the lagged scaled case background" begin
+    using BVDOutbreakSize: deaths_model, background_walk_model, convolve_delay
     using Turing: returned
     using Random: MersenneTwister
 
-    ## The joint passes the suspected-CASE background `case_bg_daily` (the
+    ## The joint passes the suspected-case background `case_bg_daily` (the
     ## smooth, gated, ramped daily random walk) into `deaths_model`; the death
-    ## background must be exactly `cfr_bg .* case_bg_daily`, so it inherits the
-    ## case background's gating (zero before the surveillance onset) and its
-    ## smoothness (no per-vintage or onset step).
+    ## background is that background scaled by `cfr_bg` and lagged by the
+    ## onset-to-death delay, so a background death follows its background case.
+    ## It inherits the case background's gating (zero before the onset, since
+    ## the delay only shifts mass later) and its smoothness.
     n = 60
     onset = 20
     seed = 5
@@ -184,9 +185,10 @@ end
         case_bg_daily = case_bg)
     st = returned(m, rand(MersenneTwister(seed), m))
 
-    ## The death background equals the scaled case background, pointwise.
-    @test st.bg_death_daily ≈ st.cfr_bg .* case_bg
-    ## Gated: zero before the case-background onset (the case background is too).
+    ## The death background is the case background scaled by cfr_bg and lagged by
+    ## the onset-to-death delay, pointwise.
+    @test st.bg_death_daily ≈ st.cfr_bg .* convolve_delay(case_bg, st.od_pmf)
+    ## Gated: zero before the case-background onset (the lag only shifts later).
     @test all(st.bg_death_daily[1:(onset - 1)] .== 0)
     ## Smooth: no day-to-day jump in the background exceeds the tight random-walk
     ## innovation scale (a per-vintage step background would jump abruptly).

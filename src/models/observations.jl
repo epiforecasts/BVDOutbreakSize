@@ -244,16 +244,15 @@ ascertainment `p_drc` (see [`death_ascertainment_model`](@ref)). The default
 death ascertainment prior is informative and high (centre ≈ 0.9), reflecting
 that a death is more reliably reported than a living suspect.
 
-Non-BVD background suspected deaths are added on top. The renewal joint
-passes the per-day non-BVD suspected-CASE background `case_bg_daily` and a
-background CFR submodel ([`background_cfr_model`](@ref)): the background
-deaths are `cfr_bg · case_bg_daily`, a fixed share of the (already
-identified) case background, so deaths inherit a background level and time
-profile without a second free, outbreak-size-degenerate rate. With
-`case_bg_daily === nothing` the legacy paths apply: a scalar
-`death_background` ([`death_background_model`](@ref)) or a per-vintage
-`background_re`, kept for sensitivity analyses. With none of these the death
-stream is pure BVD.
+Non-BVD background suspected deaths are added on top. The joint passes the
+per-day non-BVD suspected-case background `case_bg_daily` and a background CFR
+submodel ([`background_cfr_model`](@ref)): the background deaths are `cfr_bg`
+times that case background, lagged by the onset-to-death delay so a background
+death follows its background case the way the BVD deaths follow the onsets.
+The death background therefore inherits a level and time profile from the
+identified case background without a second free, outbreak-size-degenerate
+rate. The `death_background` ([`death_background_model`](@ref)) scalar, the
+per-vintage `background_re` and the pure-BVD stream are sensitivity fallbacks.
 
 Returns the cut-off expected count, the daily death series (total and the
 BVD and background components), the onset-to-death PMF, the CFR, the death
@@ -287,24 +286,17 @@ ascertainment and the background CFR for reuse by
     n = length(bvd_deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
 
-    ## Daily non-BVD background deaths.
-    ## - DEFAULT (joint): a background CFR `cfr_bg` applied to the per-day
-    ##   non-BVD suspected-CASE background `case_bg_daily`, so the death
-    ##   background tracks the (identified) case background instead of a free
-    ##   rate. With `case_bg_daily` now the smooth, gated, ramped daily random
-    ##   walk ([`background_walk_model`](@ref)), the death background inherits
-    ##   that shape directly. `λ_bg_death` is reported as the mean daily
-    ##   background death rate.
-    ## - `background_re`: the smooth daily random-walk background
-    ##   ([`background_walk_model`](@ref)), already a length-`n` daily series
-    ##   gated to the surveillance onset (legacy / sensitivity).
-    ## - `death_background`: a constant scalar rate (legacy / sensitivity).
-    ## - none: pure-BVD deaths.
+    ## Daily non-BVD background deaths: the background CFR `cfr_bg` applied to
+    ## the non-BVD suspected-case background `case_bg_daily`, lagged by the
+    ## onset-to-death delay so a background death follows its background case
+    ## the way the BVD deaths follow the onsets. `λ_bg_death` is the mean daily
+    ## background death rate. The `background_re`, `death_background` and
+    ## pure-BVD branches are sensitivity fallbacks.
     if case_bg_daily !== nothing
         bgcfr_state ~ to_submodel(background_cfr)
         cfr_bg = bgcfr_state.cfr_bg
-        bg_death_daily = cfr_bg .* case_bg_daily
-        λ_bg_death = cfr_bg * (sum(case_bg_daily) / n)
+        bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
+        λ_bg_death = sum(bg_death_daily) / n
         bg_death_sigma = zero(CFR)
     elseif background_re !== nothing
         bg_state ~ to_submodel(background_re(n))

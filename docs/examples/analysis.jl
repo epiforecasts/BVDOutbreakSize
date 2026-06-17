@@ -1353,14 +1353,16 @@ cfr_prior_fig #hide
 # the case ascertainment $p_{\text{DRC}}$, with an informative prior centred
 # high (a death is more reliably reported than a living suspect). The non-BVD
 # background suspected deaths are a background CFR $\mathrm{cfr}_{\text{bg}}$
-# applied to the per-day non-BVD suspected-CASE background
-# $\lambda_{\text{bg},t}$, so the death background tracks the already-identified
-# case background rather than a second free, outbreak-size-degenerate rate. The
-# daily death series is
+# applied to the per-day non-BVD suspected-case background
+# $\lambda_{\text{bg},t}$, lagged by the same onset-to-death delay so a
+# background death follows its background case; the death background tracks the
+# identified case background rather than a second free, outbreak-size-
+# degenerate rate. The daily death series is
 #
 # ```math
 # m_t = p_{\text{death}}\,\mathrm{CFR} \sum_{s \ge 0} \text{onsets}_{t-s}\,
-#     f_{d,s} \; + \; \mathrm{cfr}_{\text{bg}}\,\lambda_{\text{bg},t}.
+#     f_{d,s} \; + \; \mathrm{cfr}_{\text{bg}} \sum_{s \ge 0}
+#     \lambda_{\text{bg},t-s}\, f_{d,s}.
 # ```
 #
 # The per-vintage increments are scored with a NegBinomial sharing the
@@ -1540,10 +1542,10 @@ cfr_prior_fig #hide
 # the same assay sensitivity and specificity as the confirmed cases. The
 # false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the
 # confirmed deaths respond to the non-BVD death share, the same structural link
-# the confirmed cases use; the composition is well-defined because the death
-# background is switched on (tied to the case background by the background CFR).
-# The daily confirmed deaths are the positivity times the death analysed
-# volume,
+# the confirmed cases use; the death background (the background CFR applied to
+# the case background, lagged by the onset-to-death delay) keeps the
+# composition below one. The daily confirmed deaths are the positivity times
+# the death analysed volume,
 #
 # ```math
 # \text{cd}_t = p_t\, v^{\text{d}}_t,
