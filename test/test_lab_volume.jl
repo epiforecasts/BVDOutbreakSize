@@ -1,7 +1,7 @@
 ## Tests for the collapsed laboratory volume: a single suspected->analysed
 ## volume fitted to the specimens-analysed series (`lab_history`) and reused
-## as the denominator in the early and unanchored late windows. The received-specimen
-## stream is not modelled.
+## to build the modelled daily confirmed series the confirmed counts are
+## scored against. The received-specimen stream is not modelled.
 
 @testitem "confirmed_cases_model fits the analysed volume" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,

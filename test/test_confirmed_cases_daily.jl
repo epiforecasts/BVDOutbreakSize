@@ -41,15 +41,16 @@ end
     @test w1.late_analysed == [0, 40, 0]
 end
 
-@testitem "lab pipeline daily anchor scores the 24h day as Binomial" begin
+@testitem "lab pipeline scores post-cutoff confirmed vintages" begin
     using BVDOutbreakSize: confirmed_only_model
     using Turing: logjoint
     using Random: MersenneTwister
 
-    ## Post-cutoff late vintages (days 30, 35, 40 after the last lab date
-    ## 20) where day 35 publishes a 24h analysed count: it is scored as a
-    ## Binomial of that observed denominator, the others as modelled-volume
-    ## unanchored windows.
+    ## Post-cutoff confirmed vintages (days 30, 35, 40 after the last lab
+    ## date 20) where day 35 also publishes a 24h analysed count: the
+    ## confirmed counts are scored directly on the modelled confirmed
+    ## trajectory, and the 24h analysed count is fitted by the analysed-volume
+    ## likelihood. The joint stays finite.
     m = confirmed_only_model(40, 20;
         confirmed_history =
         (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
@@ -58,8 +59,9 @@ end
     lp = logjoint(m, rand(MersenneTwister(1), m))
     @test isfinite(lp)
 
-    ## When the confirmed increment exceeds the observed denominator it is
-    ## clamped into the Binomial support, so the likelihood stays finite.
+    ## A small published 24h analysed count leaves the confirmed likelihood
+    ## unchanged (confirmed is no longer a Binomial of that denominator), and
+    ## the analysed-volume likelihood still fits it, so the joint stays finite.
     m2 = confirmed_only_model(40, 20;
         confirmed_history =
         (; days = [20, 30, 35, 40], counts = [5, 9, 14, 20]),
