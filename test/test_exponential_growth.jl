@@ -102,6 +102,46 @@ end
     @test all(isapprox.(sa, 2.0 .^ m; rtol = 1e-6))
 end
 
+@testitem "infection_model: rt_walk_start holds Rt flat before the walk" begin
+    using Turing: returned
+    using Random: default_rng, seed!
+    using BVDOutbreakSize: infection_model
+
+    ## The renewal/seeding starts at `rt_start` (the genetic-TMRCA renewal
+    ## start), but the reproduction-number random walk can be held flat at the
+    ## established `R0` until a LATER day `rt_walk_start` (the first situation
+    ## report), so no unsupported Rt drift happens over the pre-surveillance
+    ## window where the dynamics are unidentified. With `breakpoint = missing`
+    ## there is no intervention ramp, so `Rt` must be EXACTLY constant on every
+    ## day from day 1 up to the first walk knot at `rt_walk_start`, while the
+    ## renewal still seeds and grows from the earlier `rt_start`.
+    n = 109
+    rt_start = 45
+    rt_walk_start = 81
+    seed!(13)
+    m = infection_model(n; rt_start, rt_walk_start)
+    rng = default_rng()
+    for _ in 1:50
+        s = returned(m, rand(rng, m))
+        ## Flat (= the established R0) from day 1 through the walk start.
+        @test all(s.Rt[1:rt_walk_start] .≈ s.Rt[1])
+        ## The renewal still ran over the full grid: a finite, positive
+        ## trajectory of the right length (seeding unaffected by the walk
+        ## start).
+        @test length(s.infections) == n
+        @test all(isfinite, s.infections)
+        @test all(>(0), s.infections)
+    end
+
+    ## Default `rt_walk_start = rt_start`: the walk starts at the renewal
+    ## start, so Rt is free to vary from `rt_start` onward (the old behaviour
+    ## is preserved when the walk start is not decoupled).
+    seed!(13)
+    m0 = infection_model(n; rt_start)
+    s0 = returned(m0, rand(rng, m0))
+    @test all(s0.Rt[1:rt_start] .≈ s0.Rt[1])
+end
+
 @testitem "infection_model: current r and R_T agree in sign per draw" begin
     using Turing: returned
     using Random: default_rng, seed!

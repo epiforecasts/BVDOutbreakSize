@@ -381,6 +381,14 @@ only at the knots and is otherwise straight; applied on the log-`R_t`
 scale this gives weekly random-walk knots with within-week linear
 interpolation. Type-stable and AD-transparent (the output element type
 follows `knot_vals`).
+
+Outside the knot span the series is held FLAT at the nearest knot value
+(the interpolation fraction is clamped to `[0, 1]`), not extrapolated: days
+before the first knot take `knot_vals[1]` and days after the last take
+`knot_vals[end]`. This is what lets the reproduction-number walk start at a
+day `> 1` and hold `R_t` flat at the established `R0` (the first knot value)
+over every earlier day, rather than running the first segment's slope
+backwards off the start of the grid.
 """
 function interpolate_knots(knot_vals::AbstractVector,
         days::AbstractVector{<:Integer}, n::Integer)
@@ -394,7 +402,10 @@ function interpolate_knots(knot_vals::AbstractVector,
         end
         d0 = days[b]
         d1 = days[b + 1]
-        frac = d1 == d0 ? zero(Tp) : Tp(t - d0) / Tp(d1 - d0)
+        ## Clamp the fraction to `[0, 1]` so days outside the knot span hold
+        ## flat at the nearest knot instead of extrapolating the end segment.
+        frac = d1 == d0 ? zero(Tp) :
+               clamp(Tp(t - d0) / Tp(d1 - d0), zero(Tp), one(Tp))
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out

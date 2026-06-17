@@ -863,7 +863,8 @@ are marked. `seeding` is the calendar date of grid day 1 (so day `d` is
 """
 function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
-        rt_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
+        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
+        week::Integer = 7, ramp::Real = 14.0,
         n_traj::Integer = 100)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
@@ -874,17 +875,20 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     zmat = chn[Symbol("rt_state.z")]
     zrows = [collect(z) for z in vec(collect(zmat))]
 
-    days = knot_days(n; week, start = rt_start)
+    ## The knot grid is built from the model's WALK start `rt_walk_start`
+    ## (the first situation report, the breakpoint grid day), which is
+    ## decoupled from `rt_start` (the renewal/established-window start used for
+    ## the plot mask below). The innovation vector length is fixed by that
+    ## walk start; if the caller passes a mismatching one the knot grid here
+    ## will not match, so fail with a clear message rather than a downstream
+    ## bounds error.
+    days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    ## The innovation vector length is fixed by the model's own `rt_start`
-    ## (the renewal start, `n - tmrca_days + RENEWAL_START_LEAD`). If the
-    ## caller passes a different `rt_start` the knot grid here will not match,
-    ## so fail with a clear message rather than a downstream bounds error.
     if !isempty(zrows) && length(zrows[1]) != nb - 1
-        error("plot_rt: rt_start = $rt_start gives $(nb - 1) random-walk " *
-              "steps but the chain has $(length(zrows[1])); pass the same " *
-              "renewal start the model used " *
-              "(n - tmrca_days + RENEWAL_START_LEAD).")
+        error("plot_rt: rt_walk_start = $rt_walk_start gives $(nb - 1) " *
+              "random-walk steps but the chain has $(length(zrows[1])); " *
+              "pass the same walk start the model used (the breakpoint grid " *
+              "day, n - who_first_sitrep_days).")
     end
     ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
     ndraws = length(log_R0)

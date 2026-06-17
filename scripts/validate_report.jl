@@ -115,6 +115,7 @@ println("OK scalar PP (exports + confirmed deaths): ", "ok")
 
 # --- Rt trajectory (established window) ---
 fig3 = plot_rt(chn; n = obs.n, breakpoint = _BREAKPOINT,
+    rt_walk_start = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding)
 CairoMakie.save("logs/val_rt.png", fig3)
 println("OK Rt trajectory: ", "ok")
