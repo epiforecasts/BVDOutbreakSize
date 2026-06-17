@@ -322,6 +322,7 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         gi = generation_interval_model,
         growth = exponential_growth_model,
@@ -336,7 +337,14 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     growth_state ~ to_submodel(growth())
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
-    rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start))
+    ## The random walk's first knot sits at `rt_walk_start`, which is DECOUPLED
+    ## from the renewal start `rt_start`: the renewal seeds and grows from the
+    ## genetic-TMRCA renewal start, but `R_t` is held flat at `R0` until
+    ## `rt_walk_start` (the first situation report). Before any case or death
+    ## surveillance the dynamics are unidentified, so a free walk there only
+    ## adds unsupported drift; `rt_walk_start` defaults to `rt_start` so the
+    ## walk-from-renewal-start behaviour is preserved unless it is set.
+    rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
     Rt = rt_state.Rt
     ## renewal_start = genetic-TMRCA grid day (`rt_start`); the observation
     ## span is τ_obs = n − renewal_start. The renewal-start seed magnitude is

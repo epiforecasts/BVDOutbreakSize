@@ -255,6 +255,25 @@ end
     @test out[6] ≈ 5.0
 end
 
+@testitem "interpolate_knots: holds flat outside the knot span" begin
+    using BVDOutbreakSize: interpolate_knots
+
+    ## Knots start at day 5 (a walk that begins after the grid start). Before
+    ## the first knot the series must hold FLAT at the first knot value, not
+    ## run the first segment's slope backwards; after the last knot it holds
+    ## flat at the last value.
+    vals = [1.0, 3.0]
+    days = [5, 12]
+    out = interpolate_knots(vals, days, 15)
+    ## Flat at the first knot value before day 5 (< 1 if extrapolated).
+    @test all(out[1:5] .≈ 1.0)
+    ## Linear between the knots: day 12 → 3.0, day 8 on the segment.
+    @test out[12] ≈ 3.0
+    @test out[8] ≈ 1.0 + (8 - 5) / (12 - 5) * 2.0
+    ## Flat at the last knot value after day 12.
+    @test all(out[12:15] .≈ 3.0)
+end
+
 @testitem "interpolate_knots: constant when all knots equal" begin
     using BVDOutbreakSize: interpolate_knots, knot_days
 

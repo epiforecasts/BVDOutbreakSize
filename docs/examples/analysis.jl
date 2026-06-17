@@ -2441,8 +2441,13 @@ infection_delay_pair_fig #hide
 
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
+    ## `rt_start` is the renewal/established-window start the plot shows from;
+    ## `rt_walk_start` is where the random walk's knots begin (the first
+    ## situation report), so the chain reconstruction uses the same knot grid
+    ## the model did. R_t is flat at R0 between the two.
     rt_start = clamp(
         obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n),
+    rt_walk_start = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
     ramp = 21.0);
 
