@@ -31,6 +31,8 @@ per-day Poisson likelihood), the per-vintage histories as
 `lab_daily_history` from the post-cutoff 24h analysed counts on the
 trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
 daily new-suspect inflow ("nouveaux cas suspects du jour"),
+`suspected_daily_deaths_history` from the post-cutoff daily new suspected
+deaths ("cas suspects du jour N (M deces)", the deaths analogue),
 `isolation_history` from the post-cutoff daily isolation/hospitalisation
 occupancy ("Patients en isolement", a daily bed count fitted by the
 length-of-stay submodel), `bed_capacity_history` from the implied bed
@@ -119,6 +121,12 @@ function load_observations(
     ## a daily incidence against the modelled suspected series where the
     ## frozen cumulative suspected stream stops at 26 May.
     suspected_daily_history = history("suspected_daily_history")
+    ## Post-cutoff daily new suspected deaths ("cas suspects du jour N (M
+    ## deces)"): per-day counts (not cumulative) of suspected deaths in the
+    ## preceding 24h, fitted as a daily incidence against the modelled
+    ## suspected-death series where the frozen cumulative suspected-death stream
+    ## stops at 26 May (the deaths analogue of `suspected_daily_history`).
+    suspected_daily_deaths_history = history("suspected_daily_deaths_history")
     ## Post-cutoff daily isolation/hospitalisation occupancy ("Patients en
     ## isolement"): a per-day count of patients in an isolation/treatment bed,
     ## fitted against the modelled bed count on each report day by the
@@ -181,6 +189,7 @@ function load_observations(
         lab_history = lab_history,
         lab_daily_history = lab_daily_history,
         suspected_daily_history = suspected_daily_history,
+        suspected_daily_deaths_history = suspected_daily_deaths_history,
         isolation_history = isolation_history,
         bed_capacity_history = bed_capacity_history,
         recovered_history = recovered_history,

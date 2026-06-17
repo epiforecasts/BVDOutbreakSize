@@ -34,6 +34,7 @@
     ## Per-vintage histories: named tuples with `days` and `counts`
     for key in (:deaths_history, :reported_history, :confirmed_history,
         :lab_history, :lab_daily_history, :suspected_daily_history,
+        :suspected_daily_deaths_history,
         :isolation_history, :bed_capacity_history, :recovered_history)
         h = getproperty(obs, key)
         @test h isa NamedTuple
@@ -79,6 +80,21 @@
     ## suspected likelihoods cover disjoint days, so they do not double-count.
     @test minimum(obs.suspected_daily_history.days) >
           maximum(obs.reported_history.days)
+
+    ## The post-cutoff daily new suspected deaths ("cas suspects du jour N (M
+    ## deces)"): the deaths analogue of the daily new-suspect inflow, a per-day
+    ## count (never cumulative), so every count is positive, sorted oldest-first
+    ## and within the grid. An invariant rather than a literal echo of the data
+    ## file, which would break on every SitRep advance.
+    @test !isempty(obs.suspected_daily_deaths_history.counts)
+    @test all(c -> c > 0, obs.suspected_daily_deaths_history.counts)
+    @test issorted(obs.suspected_daily_deaths_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.suspected_daily_deaths_history.days)
+    ## Strictly after the last cumulative suspected-death vintage (26 May): the
+    ## two suspected-death likelihoods cover disjoint days, so they do not
+    ## double-count.
+    @test minimum(obs.suspected_daily_deaths_history.days) >
+          maximum(obs.deaths_history.days)
 
     ## The daily isolation/treatment-bed occupancy ("Patients en isolement"):
     ## a per-day STOCK (point prevalence, never cumulative), so every count is

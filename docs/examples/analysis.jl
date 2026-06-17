@@ -217,7 +217,10 @@ Random.seed!(20260518)
 # it at its last stable vintage (26 May) and instead read the daily
 # new-suspect count ("nouveaux cas suspects du jour") that the
 # confirmed-based reports publish from 4 June, fitting it as a daily
-# incidence where the cumulative series stops. The confirmed-based reports
+# incidence where the cumulative series stops. The same reports print a daily
+# new suspected-death count alongside it ("cas suspects du jour N (M deces)",
+# from 7 June), fitted the same way where the cumulative suspected-death
+# series stops. The confirmed-based reports
 # also publish a daily "Patients en isolement" count, the number of patients
 # (confirmed plus suspected) in an isolation/treatment bed at the end of the
 # day; we fit it as the suspect inflow carried through a length-of-stay
@@ -332,6 +335,7 @@ vintage_table = let
         suspected_new_daily = bydate(obs.suspected_daily_history),
         patients_isolated = bydate(obs.isolation_history),
         suspected_deaths = bydate(obs.deaths_history),
+        suspected_new_daily_deaths = bydate(obs.suspected_daily_deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
         confirmed_deaths = bydate(obs.confirmed_deaths_history),
         recovered_confirmed = bydate(obs.recovered_history),
@@ -1244,6 +1248,11 @@ cfr_prior_fig #hide
 #
 # The daily report days fall strictly after the frozen cumulative series ends,
 # so the two suspected likelihoods cover disjoint days and do not double-count.
+# The suspected-death stream is fitted the same way: the cumulative
+# suspected-death total freezes at 26 May and the daily new suspected-death
+# count ("cas suspects du jour N (M deces)", from 7 June) is scored against the
+# modelled daily suspected-death count on each report day with a NegBinomial
+# sharing $k$ (see `deaths_model`).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: reported_cases_model</summary>
@@ -1943,6 +1952,7 @@ chn_treatment = fit_parallel([
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
+        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
         isolation_history = obs.isolation_history,
         bed_capacity_history = obs.bed_capacity_history,
         recovered_history = obs.recovered_history,
@@ -1964,6 +1974,7 @@ chn_treatment = fit_parallel([
         check_model = false),
     () -> nuts_sample(deaths_only_model(obs.n, obs.total_deaths;
         deaths_history = obs.deaths_history,
+        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
         breakpoint = _BREAKPOINT)),
     () -> nuts_sample(cases_only_model(obs.n, obs.reported_cases;
         reported_history = obs.reported_history,
@@ -2628,6 +2639,8 @@ pp_joint = predict(
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
         suspected_daily_history = _days_only(obs.suspected_daily_history),
+        suspected_daily_deaths_history =
+        _days_only(obs.suspected_daily_deaths_history),
         isolation_history = _days_only(obs.isolation_history),
         bed_capacity_history = _days_only(obs.bed_capacity_history),
         recovered_history = _days_only(obs.recovered_history),
@@ -2695,6 +2708,18 @@ deaths_panel = (;
     replicates = _vintage_replicates(
         pp_joint, "deaths_state.death_increments"),
     observed = obs.deaths_history.counts, colour = :firebrick);
+## Daily new suspected deaths: a per-day count (not cumulative), so the panel
+## is drawn with `cumulative = false` — each replicate is its own daily count
+## against the observed daily count rather than a running total. Its days
+## (7-14 June) pick up where the cumulative suspected-death panel freezes on
+## 26 May, the deaths analogue of the new-suspects-per-day panel.
+suspected_daily_deaths_panel = (;
+    title = "New suspected deaths/day",
+    dates = _vintage_dates(obs.suspected_daily_deaths_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "deaths_state.suspected_daily_deaths"),
+    observed = obs.suspected_daily_deaths_history.counts,
+    colour = :indianred, cumulative = false);
 ## Specimens analysed is the single modelled laboratory volume (the
 ## report-to-analysed delay and tested-fraction throughput), fit to the
 ## cumulative analysed series, so it gets the same cumulative conditional
@@ -2782,8 +2807,8 @@ recovered_panel = (;
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
     [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
-    deaths_panel, confirmed_deaths_panel, recovered_panel,
-    tests_analysed_panel, tests_analysed_daily_panel]);
+    deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
+    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
 
 #md # ```@raw html
 #md # </details>
@@ -3521,6 +3546,8 @@ function refit_joint_variant(;
             lab_history = obs.lab_history,
             lab_daily_history = obs.lab_daily_history,
             suspected_daily_history = obs.suspected_daily_history,
+            suspected_daily_deaths_history =
+            obs.suspected_daily_deaths_history,
             isolation_history = obs.isolation_history,
             bed_capacity_history = obs.bed_capacity_history,
             recovered_history = obs.recovered_history,

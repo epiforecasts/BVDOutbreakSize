@@ -350,6 +350,29 @@ dates  = ["2026-05-18", "2026-05-19", "2026-05-20", "2026-05-21",
 values = [131, 148, 160, 175, 204, 220, 223, 238, 246]
 source = "INSP situation reports 18-26 May 2026, read from the PDFs (recorded in data/insp_sitrep_scanned.csv). National cumulative suspected deaths; 23 May uses the SitRep 009 Tableau IV zone-row sum (220) because the report total (119) is a data-entry error; the 26 May value uses the revised re-issue SitRep 012_v2 (246, correcting the original headline of 238); 18-22 May use the WHO AFRO / early-report baseline."
 
+# Daily new suspected deaths: the per-day count of suspected deaths in the
+# preceding 24h, printed alongside the daily new-suspect count in the
+# confirmed-based SitReps as "cas suspects du jour N (M deces)". This is the
+# post-26 May continuation of the suspected-death signal, mirroring
+# `suspected_daily_history` for cases. The national CUMULATIVE suspected-death
+# total was frozen at 26 May (see `death_history`) once INSP stopped publishing
+# a national suspected-death headline, but the daily new-suspected-death inflow
+# is a genuine per-day count that never falls, so it can be fitted directly.
+# The model scores each count against the modelled daily suspected-death series
+# (the CFR-weighted onset-to-death convolution plus any non-BVD background) on
+# its report day, sharing the surveillance dispersion with the frozen
+# cumulative stream. The days (7-14 June) fall strictly after the cumulative
+# series ends (26 May), so the two suspected-death likelihoods cover disjoint
+# days and do not double-count. The series begins 7 June (SitRep 024), three
+# days after the new-suspect series: SitReps 021-023 (4-6 June) print the
+# new-suspect count but not the deaths-of-the-day figure, and SitRep 029
+# (12 June) was not published upstream.
+[suspected_daily_deaths_history]
+dates  = ["2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
+          "2026-06-11", "2026-06-13", "2026-06-14", "2026-06-15"]
+values = [35, 41, 30, 50, 64, 49, 54, 61]
+source = "INSP situation reports 7-15 June 2026 (SitReps 024-028, 030-032), read from the PDFs; recorded in the new_daily_suspected_deaths column of data/insp_sitrep_scanned.csv. National per-day count of suspected deaths in the preceding 24h, printed alongside the daily new-suspect count as 'cas suspects du jour N (M deces)': 35 on 7 June, 41 on 8 June, 30 on 9 June, 50 on 10 June, 64 on 11 June, 49 on 13 June, 54 on 14 June and 61 on 15 June. SitReps 021-023 (4-6 June) print the new-suspect count without a deaths-of-the-day figure, so the series begins 7 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
 [daily_outbound_travellers]
 value  = 1871
 source = "McCabe et al. Table 3 — mean daily PoE flow across seven Uganda-DRC border points, Ituri side"
