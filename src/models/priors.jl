@@ -1006,6 +1006,41 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
+Partially-pooled negative-binomial dispersions for the `n_streams`
+passive-surveillance count streams in the joint model (suspected cases,
+suspected deaths, confirmed cases and confirmed deaths). Each stream draws
+its own dispersion from a shared population, so heterogeneous streams (a
+handful of deaths versus hundreds of suspects versus a daily laboratory
+volume) no longer share one global `k` that the dominant stream pulls
+around, while the sparse streams still borrow strength through the common
+hyper-parameters rather than going noisy on a fully independent draw.
+
+The pooling is on the `log(1/sqrt(k))` scale in non-centred form: a
+population mean `μ_log`, a pooling SD `τ`, and per-stream standard-normal
+deviations `z`, giving `inv_sqrt_k_s = exp(μ_log + τ z_s)` and
+`k_s = 1 / inv_sqrt_k_s^2`. The non-centred form avoids the funnel between
+`τ` and `z`. The population mean is centred on the shared `1/sqrt(k)` prior
+of [`surveillance_dispersion_model`](@ref) (`exp(μ_log)` near 0.6), and the
+half-normal `τ` keeps the per-stream dispersions close unless the data pull
+them apart (`τ = 0` collapses every stream to the population value, the
+shared-`k` model). Exposes the per-stream dispersion vector `k`, the
+population-level dispersion `k_pop = 1 / exp(μ_log)^2`, the pooling SD `τ`
+and the raw deviations. Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with
+`k` a length-`n_streams` vector.
+"""
+@model function pooled_dispersion_model(n_streams::Integer;
+        mean_prior = Normal(log(0.6), 0.33),
+        sd_prior = truncated(Normal(0, 0.3); lower = 0))
+    μ_log ~ mean_prior
+    τ ~ sd_prior
+    z ~ product_distribution(fill(Normal(0, 1), max(n_streams, 1)))
+    inv_sqrt_k = exp.(μ_log .+ τ .* z[1:n_streams])
+    k = 1.0 ./ (inv_sqrt_k .^ 2 .+ eps(eltype(inv_sqrt_k)))
+    k_pop = 1.0 / (exp(μ_log)^2 + eps(typeof(float(μ_log))))
+    return (; k, inv_sqrt_k, k_pop, μ_log, τ)
+end
+
+"""
 Independent ascertainment fractions for the DRC and Uganda surveillance
 systems. The two countries run different surveillance systems — DRC
 passive community surveillance and Uganda point-of-entry / hospital

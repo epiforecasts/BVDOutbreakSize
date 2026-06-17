@@ -1357,3 +1357,68 @@ function plot_vintage_conditional_ppc(
     end
     return fig
 end
+
+"""
+Per-vintage incidence posterior-predictive check: the same panels as
+[`plot_vintage_conditional_ppc`](@ref) but plotting the count between
+consecutive vintages rather than the running cumulative, so trends (a rise
+or a slowdown) read directly off the height of each bar-like step instead of
+the slope of a near-straight cumulative line. For a cumulative panel the
+observed incidence is the between-vintage increment (the first vintage is
+its own baseline); for a non-cumulative panel (a standalone per-day count
+such as the 24h analysed volume or the daily new-suspect inflow) it is the
+count itself. The replicates are already per-vintage increments, so they are
+the modelled incidence directly and are summarised as 30/60/90% credible
+ribbons with the observed incidence overlaid. `panels` and `max_date` match
+[`plot_vintage_conditional_ppc`](@ref).
+"""
+function plot_vintage_incidence_ppc(
+        panels::AbstractVector; xlabel = "Sitrep date",
+        max_date::Union{Nothing, Date, AbstractString} = nothing)
+    cap = isnothing(max_date) ? nothing :
+          (max_date isa Date ? max_date : Date(String(max_date)))
+    npanels = length(panels)
+    nrows = npanels > 1 ? 2 : 1
+    ncols = cld(npanels, nrows)
+    fig = Figure(; size = (460 * ncols, 420 * nrows))
+    for (j, p) in enumerate(panels)
+        row, col = cld(j, ncols), mod1(j, ncols)
+        keep = isnothing(cap) ? eachindex(p.dates) :
+               [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
+        dates = p.dates[keep]
+        observed = p.observed[keep]
+        replicates = [collect(r)[keep] for r in vec(collect(p.replicates))]
+        n = length(dates)
+        colour = get(p, :colour, :steelblue)
+        cumulative = get(p, :cumulative, true)
+        ## Observed per-vintage incidence: the increment for a cumulative
+        ## series (the first vintage is its own baseline at zero), or the
+        ## standalone count for a non-cumulative panel.
+        obs_cum = float.(observed)
+        obs_inc = cumulative ?
+                  [v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
+                   for v in 1:n] : obs_cum
+        ## The replicates are already per-vintage increments (per-day counts
+        ## for a non-cumulative panel), so they are the modelled incidence.
+        q(i, pr) = quantile([r[i] for r in replicates], pr)
+        lo90 = [q(i, 0.05) for i in 1:n]
+        hi90 = [q(i, 0.95) for i in 1:n]
+        lo60 = [q(i, 0.20) for i in 1:n]
+        hi60 = [q(i, 0.80) for i in 1:n]
+        lo30 = [q(i, 0.35) for i in 1:n]
+        hi30 = [q(i, 0.65) for i in 1:n]
+        x = collect(1:n)
+        yupper = 1.6 * max(isempty(obs_inc) ? 1.0 : maximum(obs_inc),
+            isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
+        ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
+            ylabel = col == 1 ? "New per vintage" : "",
+            xticks = (x, string.(dates)),
+            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            limits = (nothing, (0, yupper)))
+        band!(ax, x, lo90, hi90; color = (colour, 0.15))
+        band!(ax, x, lo60, hi60; color = (colour, 0.28))
+        band!(ax, x, lo30, hi30; color = (colour, 0.42))
+        scatter!(ax, x, float.(obs_inc); color = :black, markersize = 9)
+    end
+    return fig
+end

@@ -296,6 +296,27 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_incidence_ppc
+    rng = MersenneTwister(23)
+    dates = ["2026-05-18", "2026-05-19", "2026-05-20",
+        "2026-05-21", "2026-05-22", "2026-05-23"]
+    reps = [rand(rng, 1:30, length(dates)) for _ in 1:150]
+    ## A cumulative panel (observed is the running total; the incidence view
+    ## differences it) and a non-cumulative daily panel (observed already a
+    ## per-vintage count).
+    cum_observed = cumsum([18, 9, 12, 7, 6, 5])
+    daily_observed = [18, 9, 12, 7, 6, 5]
+    fig = plot_vintage_incidence_ppc([
+        (; title = "Suspected", dates = dates,
+            replicates = reps, observed = cum_observed, colour = :steelblue),
+        (; title = "New suspects/day", dates = dates,
+            replicates = reps, observed = daily_observed,
+            cumulative = false)])
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
     using Distributions: Beta
     using BVDOutbreakSize: plot_cfr_prior

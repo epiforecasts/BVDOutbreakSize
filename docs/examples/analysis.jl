@@ -2559,13 +2559,18 @@ obs_delay_pair_fig #hide
 # ### Surveillance parameters
 #
 # The surveillance-data parameters: the reporting fractions for the DRC and
-# Uganda, the surveillance dispersion, and the laboratory pipeline (the
+# Uganda, the surveillance dispersions, and the laboratory pipeline (the
 # testing fraction and receipt delay, the per-suspected and per-test
 # positivity, the non-BVD background rate, and the death-confirmation
-# probability). The isolation and recovered streams add the proportion of
-# suspects admitted to a bed, the recovery probability among confirmed cases,
-# and their own observation dispersions (these two streams do not share the
-# surveillance dispersion; see the length-of-stay delays in the
+# probability). The four passive-surveillance count streams (suspected
+# cases, suspected deaths, confirmed cases, confirmed deaths) each have their
+# own negative-binomial dispersion partially pooled from a shared
+# population: `k` is the population-level dispersion, `k_cases`, `k_deaths`,
+# `k_confirmed` and `k_confirmed_deaths` the per-stream values, and
+# `dispersion_sd` the pooling spread. The isolation and recovered streams add
+# the proportion of suspects admitted to a bed, the recovery probability
+# among confirmed cases, and their own observation dispersions (sampled
+# independently of the pooled set; see the length-of-stay delays in the
 # observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
@@ -2575,7 +2580,8 @@ obs_delay_pair_fig #hide
 #md # ```
 
 surveillance_summary = summary_table(chn_joint,
-    [:p_drc, :p_uganda, :k, :tau_test, :lambda_bg,
+    [:p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
+        :k_confirmed_deaths, :dispersion_sd, :tau_test, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
@@ -2832,6 +2838,29 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
 #md # ```
 
 joint_vintage_ppc_fig #hide
+
+# The same check as per-vintage incidence: the count reported between
+# consecutive situation reports rather than the running cumulative. Plotting
+# the increment makes the trend in each stream read directly off the height
+# of each step, so a rise or a slowdown is visible where the near-straight
+# cumulative line hides it. The replicates are the modelled per-vintage
+# increments, shown as 30/60/90% credible ribbons with the observed
+# increment overlaid.
+
+#md # ```@raw html
+#md # <details><summary>Per-vintage incidence posterior predictive plot</summary>
+#md # ```
+
+joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
+    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+    deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
+    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_vintage_incidence_fig #hide
 
 # The exports group is checked next.
 # The Uganda export and export-death streams are dated per-day series, each
