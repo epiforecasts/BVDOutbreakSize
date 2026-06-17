@@ -225,24 +225,48 @@ end
 
 """
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
-daily onsets with the sampled onset-to-death delay, scales by the CFR, and
-reads the modelled cumulative deaths at each vintage day off the daily
-series, fitting the between-vintage increments as observed `~` data with a
-NegativeBinomial sharing the surveillance dispersion `k`
-([`surveillance_dispersion_model`](@ref)). The death history ends at the
-cut-off, so the cut-off total is the final increment and is not scored
-separately. Samples the onset-to-death delay
-and the CFR via injected submodels. The onset-to-death prior is centred on
-the Bayesian BDBV line-list reanalysis (mean 11.2 d, SD 5.4 d; the
-`bdbv-linelist-analysis` submodule), the same source the integral model
-used. Returns the cut-off expected count, the daily death series, the
-onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
+daily onsets with the sampled onset-to-death delay, scales by the CFR and
+the death ascertainment `p_death`, and reads the modelled cumulative deaths
+at each vintage day off the daily series, fitting the between-vintage
+increments as observed `~` data with a NegativeBinomial sharing the
+surveillance dispersion `k` ([`surveillance_dispersion_model`](@ref)). The
+death history ends at the cut-off, so the cut-off total is the final
+increment and is not scored separately. Samples the onset-to-death delay,
+the CFR and the death ascertainment via injected submodels. The onset-to-
+death prior is centred on the Bayesian BDBV line-list reanalysis (mean
+11.2 d, SD 5.4 d; the `bdbv-linelist-analysis` submodule), the same source
+the integral model used.
+
+The expected BVD suspected deaths are `p_death · CFR` of the onset-to-death-
+convolved infections: a fatal BVD infection is counted as a suspected death
+only when ascertained, the death analogue of the suspected-case
+ascertainment `p_drc` (see [`death_ascertainment_model`](@ref)). The default
+death ascertainment prior is informative and high (centre ≈ 0.9), reflecting
+that a death is more reliably reported than a living suspect.
+
+Non-BVD background suspected deaths are added on top. The joint passes the
+per-day non-BVD suspected-case background `case_bg_daily` and a background CFR
+submodel ([`background_cfr_model`](@ref)): the background deaths are `cfr_bg`
+times that case background, lagged by the onset-to-death delay so a background
+death follows its background case the way the BVD deaths follow the onsets.
+The death background therefore inherits a level and time profile from the
+identified case background without a second free, outbreak-size-degenerate
+rate. The `death_background` ([`death_background_model`](@ref)) scalar, the
+per-vintage `background_re` and the pure-BVD stream are sensitivity fallbacks.
+
+Returns the cut-off expected count, the daily death series (total and the
+BVD and background components), the onset-to-death PMF, the CFR, the death
+ascertainment and the background CFR for reuse by
+[`confirmed_deaths_model`](@ref) and [`exports_deaths_model`](@ref).
 """
 @model function deaths_model(
         deaths_history,
         total_deaths::Union{Missing, Integer},
         onsets::AbstractVector, k::Real;
         cfr = cfr_model(),
+        ascertainment = death_ascertainment_model(),
+        case_bg_daily = nothing,
+        background_cfr = background_cfr_model(),
         death_background = nothing,
         background_re = nothing,
         ## nmax covers 98% of the convolved onset->death sum (the two atomic
@@ -254,30 +278,40 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
             ad_theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)))
     cfr_state ~ to_submodel(cfr)
     od_state ~ to_submodel(onset_to_death)
+    asc_state ~ to_submodel(ascertainment)
     CFR = cfr_state.CFR
-    bvd_deaths_daily = CFR .* convolve_delay(onsets, od_state.pmf)
+    p_death = asc_state.p_death
+    bvd_deaths_daily = (p_death * CFR) .* convolve_delay(onsets, od_state.pmf)
 
     n = length(bvd_deaths_daily)
     vobs = vintage_obs(deaths_history, total_deaths, n)
 
-    ## Daily non-BVD background deaths. The renewal default has no
-    ## background (`death_background === nothing`), so the deaths stream is
-    ## pure BVD. With a scalar `death_background` the background is constant
-    ## over the grid; with `background_re` it is the smooth daily random-walk
-    ## background ([`background_walk_model`](@ref)), already a length-`n` daily
-    ## series gated to the surveillance onset, sharing the suspected-case
-    ## background's innovation SD and onset.
-    if background_re !== nothing
+    ## Daily non-BVD background deaths: the background CFR `cfr_bg` applied to
+    ## the non-BVD suspected-case background `case_bg_daily`, lagged by the
+    ## onset-to-death delay so a background death follows its background case
+    ## the way the BVD deaths follow the onsets. `λ_bg_death` is the mean daily
+    ## background death rate. The `background_re`, `death_background` and
+    ## pure-BVD branches are sensitivity fallbacks.
+    if case_bg_daily !== nothing
+        bgcfr_state ~ to_submodel(background_cfr)
+        cfr_bg = bgcfr_state.cfr_bg
+        bg_death_daily = cfr_bg .* convolve_delay(case_bg_daily, od_state.pmf)
+        λ_bg_death = sum(bg_death_daily) / n
+        bg_death_sigma = zero(CFR)
+    elseif background_re !== nothing
         bg_state ~ to_submodel(background_re(n))
+        cfr_bg = zero(CFR)
         λ_bg_death = bg_state.λ_mu
         bg_death_sigma = bg_state.σ_bg
         bg_death_daily = bg_state.λ
     elseif death_background !== nothing
         dbg_state ~ to_submodel(death_background)
+        cfr_bg = zero(CFR)
         λ_bg_death = dbg_state.λ_bg_death
         bg_death_sigma = zero(λ_bg_death)
         bg_death_daily = fill(λ_bg_death, n)
     else
+        cfr_bg = zero(CFR)
         λ_bg_death = zero(CFR)
         bg_death_sigma = zero(CFR)
         bg_death_daily = fill(zero(CFR), n)
@@ -293,9 +327,9 @@ onset-to-death PMF and the CFR for reuse by [`exports_deaths_model`](@ref).
     expected_deaths_T := safe_rate(raw_total)
     bg_death_total = sum(bg_death_daily)
 
-    return (; CFR, od_pmf = od_state.pmf, deaths_daily, bvd_deaths_daily,
-        expected_deaths_T, λ_bg_death, bg_death_sigma, bg_death_daily,
-        bg_death_total)
+    return (; CFR, p_death, cfr_bg, od_pmf = od_state.pmf, deaths_daily,
+        bvd_deaths_daily, expected_deaths_T, λ_bg_death, bg_death_sigma,
+        bg_death_daily, bg_death_total)
 end
 
 """
@@ -1183,92 +1217,128 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
 end
 
 """
-Laboratory-confirmed-deaths likelihood. Confirmed deaths are a thinning of
-the observed suspected deaths: the cut-off confirmed-death count is scored
-as a `Binomial` of the suspected-death total `total_deaths`, with a
-confirmation probability linked to the suspected-case BVD composition
-`q_susp` (the BVD share of the expected suspected total, from the
-[`reported_cases_model`](@ref) pipeline) and enriched on the odds scale by
-the sampled `m_death` ([`confirmed_death_enrichment_model`](@ref)):
+Laboratory-confirmed-deaths likelihood, the death analogue of the
+confirmed-case laboratory pipeline ([`confirmed_cases_model`](@ref)). The
+confirmed cases score a modelled analysed-specimen volume (the suspected-case
+pipeline carried to laboratory receipt and thinned by the testing fraction)
+times a composition-linked assay positivity. The death side has no published
+analysed denominator, so the confirmed-death increments are `NegBinomial(k)`
+counts of the modelled death volume, the same modelled-volume route the early
+and post-lab confirmed-case windows use.
 
-```math
-p = \\operatorname{logistic}(\\operatorname{logit}(q_\\text{susp}) +
-    \\log m_\\text{death}).
-```
+Three pieces:
 
-The odds-scale enrichment keeps `p` in `(0, 1)` without a hard clamp, and
-ties the death-confirmation rate to the same composition that drives the
-case streams, so a confirmed-death observation informs the background
-`λ_bg` and ascertainment `p_drc` rather than introducing a free rate. The
-thinned daily series is carried through the report-to-receipt laboratory
-delay `receipt_pmf` before scoring, so the laboratory-confirmed deaths lag
-the death event by the same laboratory delay the suspected specimens carry
-from report to laboratory receipt; the default identity PMF leaves it
-instantaneous. The suspected-death total is the denominator. Returns the
-enrichment, the composition, the confirmation probability and the expected
-confirmed-death count.
+  - Death analysed volume. Deaths are tested out of the same laboratory as
+    cases, so the death volume tracks the modelled case analysed volume
+    `case_analysed_daily` at the per-day suspected death-to-case ratio, times a
+    testing-intensity scaling, `v = scaling · case_analysed_daily ·
+    susp_death / susp_case`, with `susp_death` and `susp_case` the suspected
+    deaths and cases carried to receipt by the confirmed cases' delay. The case
+    volume carries the laboratory capacity onset, so the death volume inherits
+    it. The scaling ([`death_testing_scaling_model`](@ref)) is the per-suspect
+    testing-intensity difference between deaths and living suspects; the
+    death-to-case ratio carries the suspect-pool severity and the
+    suspected-death level. The death-only composer has no case stream and falls
+    back to a death testing fraction ([`death_testing_fraction_model`](@ref)).
+  - Death-pool composition. The BVD share of the suspected deaths at receipt,
+    `q_death = bvd_death / (bvd_death + bg_death)` per day, from the death
+    series' own BVD and background components. The death background, tied to
+    the case background by `cfr_bg` (see [`deaths_model`](@ref) and
+    [`background_cfr_model`](@ref)), keeps `q_death` below one.
+  - Assay positivity. `p = s · q_death + (1 − spec)(1 − q_death)` with PCR
+    sensitivity `s` ([`test_sensitivity_model`](@ref)) and specificity `spec`
+    ([`test_specificity_model`](@ref)), the same form as the confirmed-case
+    positivity, drawn from the same priors as separate death-stream parameters.
 
-This is the renewal analogue of the integral-lineage forwarded-positivity
-lab model (PR #193), which scores per-vintage confirmed-death increments as
-`NegBinomial(τ_death · p_pos_death · ΔN_death, k)` with a positivity
-`p_pos_death = s·q_death + (1−spec)(1−q_death)` built from a shared PCR
-sensitivity `s` and specificity `spec` and the death-pool BVD share
-`q_death`. A death-side composition link of that form is not portable here:
-the death-pool composition `q_death = bvd_deaths / (bvd_deaths +
-bg_death_daily)` collapses to 1 whenever the death background is off (the
-renewal default), which would make a death-side composition link degenerate.
-The renewal confirmed-case lab pipeline ([`confirmed_cases_model`](@ref))
-does now carry sampled PCR sensitivity `s` and specificity `spec` (its
-composition-linked positivity is `p = s·q + (1−spec)(1−q)`), but grounding
-the death-confirmation rate on the case composition `q_susp` is what makes it
-well-defined: the case background `λ_bg` is always on, so `q_susp` is always
-informative. Grounding the enrichment on `q_susp` reproduces #193's intent —
-a composition-driven confirmed-death rate that feeds back to `λ_bg` and
-`p_drc` — under the renewal architecture. The substantive half of #193, the
-constant-rate non-BVD suspected-death background `λ_bg_death`, is already
-carried by [`deaths_model`](@ref).
+Returns the cut-off realised death testing fraction `τ_death`, the testing
+scaling, the cut-off death-pool composition `q_death`, the confirmation
+positivity and the expected confirmed-death count.
 """
 @model function confirmed_deaths_model(
         confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer},
         deaths_daily::AbstractVector,
-        bvd_reports_daily::AbstractVector, p_drc::Real,
-        bg_daily::AbstractVector, k::Real;
+        bvd_deaths_daily::AbstractVector,
+        bg_death_daily::AbstractVector, k::Real;
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         receipt_pmf::AbstractVector = [1.0],
-        enrichment = confirmed_death_enrichment_model())
-    enr_state ~ to_submodel(enrichment)
-    m_death = enr_state.m_death
-
-    bvd_total = p_drc * sum(bvd_reports_daily)
-    q_susp := safe_rate(bvd_total) / safe_rate(bvd_total + sum(bg_daily))
-    qc = clamp(q_susp, eps(typeof(q_susp)), one(q_susp) - eps(typeof(q_susp)))
-    p_death_conf := logistic(logit(qc) + log(m_death))
-
-    ## Confirmed deaths are a thinning of the modelled suspected-death daily
-    ## series by the composition-linked confirmation probability, then carried
-    ## through the report-to-receipt laboratory delay so the laboratory-
-    ## confirmed series lags the death event rather than tracking it
-    ## instantaneously. A suspected death is dated at the death event, so the
-    ## only step left to confirmation is the same `receipt_pmf` laboratory delay
-    ## the suspected specimens carry from report to laboratory receipt, so
-    ## confirmed cases and confirmed deaths pay a consistent laboratory delay.
-    ## The default identity PMF leaves the series instantaneous when no delay is
-    ## injected. The observed suspected-death total is frozen at its last stable
-    ## vintage (well before the cut-off), so the modelled death trajectory
-    ## carries the timing of the later confirmed-death vintages, the same
-    ## modelled-volume route the post-lab confirmed cases use.
-    confirmed_death_daily = p_death_conf .* convolve_delay(deaths_daily,
-        receipt_pmf)
+        capacity_start::Integer = 0,
+        case_analysed_daily = nothing,
+        case_suspected_daily = nothing,
+        scaling = death_testing_scaling_model(),
+        testing = death_testing_fraction_model(),
+        sensitivity = test_sensitivity_model(),
+        specificity = test_specificity_model())
+    sens_state ~ to_submodel(sensitivity)
+    spec_state ~ to_submodel(specificity)
+    s = sens_state.s_test
+    spec = spec_state.spec
     n = length(deaths_daily)
+
+    ## Suspected deaths carried to laboratory receipt by the same
+    ## report-to-receipt delay the confirmed cases use, with the BVD component.
+    susp_death = convolve_delay(deaths_daily, receipt_pmf)
+    bvd_death = convolve_delay(bvd_deaths_daily, receipt_pmf)
+    ## In predict or check-model mode the series can widen to `Vector{Any}`,
+    ## which trips `zero(Any)` downstream; pin to the sampled scalar type,
+    ## leaving the fit path (concrete dual eltype) untouched.
+    if eltype(susp_death) === Any
+        susp_death = convert(Vector{typeof(s)}, susp_death)
+        bvd_death = convert(Vector{typeof(s)}, bvd_death)
+    end
+
+    ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
+    ## tested-positive probability p = s·q + (1 − spec)(1 − q). The false-
+    ## positive term lets the confirmed deaths respond to the non-BVD share,
+    ## the same link the confirmed cases use.
+    lo = eps(typeof(s))
+    hi = one(s) - lo
+    q_death_daily = map(eachindex(susp_death)) do t
+        den = susp_death[t]
+        ratio = den > lo ? bvd_death[t] / den : one(s)
+        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
+    end
+    p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
+                                        (one(s) .- q_death_daily)
+
+    ## Death analysed volume. Deaths are tested out of the same laboratory as
+    ## cases, so the death volume tracks the modelled case analysed volume at
+    ## the per-day suspected death-to-case ratio, times a testing-intensity
+    ## scaling, v = scaling · analysed_case · susp_death / susp_case. The case
+    ## volume already carries the laboratory capacity onset, so the death volume
+    ## inherits it. The death-only composer has no case stream and falls back to
+    ## a death testing fraction of the suspected deaths, gated at the onset.
+    if case_analysed_daily !== nothing
+        scale_state ~ to_submodel(scaling)
+        sc = scale_state.scaling
+        susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
+        death_volume = map(eachindex(susp_death)) do t
+            den = susp_case[t]
+            den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
+            zero(sc)
+        end
+        τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
+    else
+        test_state ~ to_submodel(testing)
+        τ_death = test_state.τ_death
+        sc = one(τ_death)
+        death_volume = τ_death .* gate_before(susp_death, capacity_start)
+    end
+
+    confirmed_death_daily = p_pos_daily .* death_volume
     vobs = vintage_obs(confirmed_deaths_history, confirmed_deaths, n)
     modelled_inc = bin_increments(confirmed_death_daily, vobs.days)
     cdeath_increments ~ to_submodel(
         vintage_increments_model(modelled_inc, vobs.obs_increments, k))
 
     expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
+    ## Cut-off death-pool composition and confirmation positivity, surfaced as
+    ## `death_composition` and `death_confirmation`.
+    q_death := q_death_daily[n]
+    p_death_conf := p_pos_daily[n]
 
-    return (; m_death, q_susp, p_death_conf, expected_confirmed_deaths)
+    return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
+        expected_confirmed_deaths)
 end
 
 """

@@ -180,10 +180,11 @@ end
 
 """
 Confirmed-deaths-only composer. Runs the infection process and onset
-staging, samples dispersion and pooled ascertainment, runs the suspected
-deaths and reported-cases streams (the latter in predictive mode for the
-shared background rate and onset-to-report kernel), then conditions on the
-confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
+staging, samples dispersion and pooled ascertainment, runs the reported-
+cases stream (in predictive mode, to supply the non-BVD background the death
+background is scaled from) and the suspected-deaths stream, then conditions
+on the confirmed-death likelihood alone. See
+[`confirmed_deaths_model`](@ref).
 """
 @model function confirmed_deaths_only_model(
         n::Integer, confirmed_deaths::Union{Missing, Integer},
@@ -204,15 +205,16 @@ confirmed-death thinning alone. See [`confirmed_deaths_model`](@ref).
     asc_state ~ to_submodel(ascertainment)
     k = dispersion_state.k
     p_drc = asc_state.p_drc
-    deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, latent.onsets, k))
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
+    deaths_state ~ to_submodel(
+        deaths(deaths_history, total_deaths, latent.onsets, k;
+        case_bg_daily = cases_state.bg_daily))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily, k;
+        deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
+        deaths_state.bg_death_daily, k;
         confirmed_deaths_history))
     cumulative_infections := cumsum(latent.infection_state.infections)
     C_T := latent.infection_state.C_T
@@ -323,10 +325,15 @@ windows that do have data (see [`confirmed_cases_model`](@ref)). The
 optional `suspected_daily_history` adds the post-26 May daily new-suspect
 inflow ("nouveaux cas suspects du jour"), scored against the modelled daily
 suspected series at each report day where the frozen cumulative suspected
-stream stops, on days disjoint from it. The confirmed deaths are a thinning of
-the suspected deaths whose confirmation probability is the suspected-case
-BVD composition enriched on the odds scale (`confirmed_deaths`,
-`total_deaths` the denominator). The optional `isolation_history` adds the
+stream stops, on days disjoint from it. The confirmed deaths mirror the
+confirmed-case laboratory pipeline: a death "analysed" volume (the suspected
+deaths carried to laboratory receipt and thinned by the death testing
+fraction `tau_death`) scored through a death-pool composition positivity
+`p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
+suspected deaths (see [`confirmed_deaths_model`](@ref)). The suspected deaths
+carry a death ascertainment `p_death` and a non-BVD background tied to the
+case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)). The
+optional `isolation_history` adds the
 daily isolation/treatment-bed occupancy ("Patients en isolement"), a
 prevalence stream fitted as the suspect inflow (BVD treatment stay plus
 non-BVD rule-out stay) carried through a length-of-stay survival into a
@@ -344,11 +351,12 @@ reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
 (outbreak age),
 `R_T` (current reproduction number), the per-stream expected counts, the
-testing fraction `tau_test`, the background rate `lambda_bg`, the
-confirmed-death enrichment `m_death`, the implied per-suspected
+testing fraction `tau_test`, the background rate `lambda_bg`, the death
+ascertainment `death_ascertainment`, the background CFR `background_cfr`, the
+death testing fraction `tau_death`, the implied per-suspected
 (`suspected_positivity`) and per-test (`test_positivity`) positivities,
-and the suspected BVD composition (`death_composition`) and
-death-confirmation probability (`death_confirmation`).
+and the death-pool BVD composition (`death_composition`) and
+death-confirmation positivity (`death_confirmation`).
 """
 @model function bvd_joint(
         n::Integer,
@@ -415,18 +423,20 @@ death-confirmation probability (`death_confirmation`).
     p_uganda = asc_state.p_uganda
 
     ## Non-BVD background as a SMOOTH daily lognormal random walk over the
-    ## surveillance window ([`background_walk_model`](@ref)), with ONE tight
-    ## innovation SD `σ_rw` shared between the suspected-case and suspected-
-    ## death streams (the same non-BVD reporting environment drives both). The
-    ## background is gated to zero before the surveillance onset (the first
-    ## suspected-case report vintage) — it does not exist before surveillance
-    ## began — and is the SAME onset for every stream, since it is intrinsic to
-    ## the suspected pool. The tight innovation SD keeps it fairly constant,
+    ## surveillance window ([`background_walk_model`](@ref)), with the tight
+    ## innovation SD `σ_rw` driving the suspected-CASE stream. The background is
+    ## gated to zero before the surveillance onset (a report-to-receipt lead
+    ## before the first suspected-case report) — it does not exist before
+    ## surveillance began. The tight innovation SD keeps it fairly constant,
     ## which regularises the background/outbreak-size degeneracy (the prior used
     ## a per-vintage STEP random effect whose multiplicative blow-up opened a
-    ## second posterior mode that broke convergence). With `background_re =
-    ## false` the case stream keeps its scalar `λ_bg` and the death stream has
-    ## no background.
+    ## second posterior mode that broke convergence). The suspected-DEATH
+    ## background is NOT a separate random effect: it is tied to the case
+    ## background by a background CFR (`cfr_bg · case_bg_daily`, see
+    ## [`deaths_model`](@ref)), so it inherits the case background's smooth,
+    ## gated, ramped level and time-variation rather than competing as a second
+    ## free, outbreak-size-degenerate rate. With `background_re = false` (the
+    ## renewal default) the case stream keeps its scalar `λ_bg`.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
@@ -444,20 +454,19 @@ death-confirmation probability (`death_confirmation`).
                    clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
         case_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
             onset = bg_onset)
-        death_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
-            onset = bg_onset,
-            baseline_prior = truncated(Normal(0.0, 2.0); lower = 0))
     else
         case_bg_re = nothing
-        death_bg_re = nothing
     end
 
-    deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, onsets, k;
-        background_re = death_bg_re))
+    ## Cases first so the suspected-case background `bg_daily` is available to
+    ## the deaths stream (which scales it by `cfr_bg` for the death background)
+    ## and to the laboratory pipeline.
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k, p_drc;
         suspected_daily_history, background_re = case_bg_re))
+    deaths_state ~ to_submodel(
+        deaths(deaths_history, total_deaths, onsets, k;
+        case_bg_daily = cases_state.bg_daily))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
@@ -465,11 +474,20 @@ death-confirmation probability (`death_confirmation`).
         lab_history, lab_daily_history,
         tests_analysed,
         positivity_link = confirmed_positivity_link))
+    ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
+    ## analysed volume scales the modelled case analysed volume
+    ## (`confirmed_state.analysed_daily`) at the per-day suspected
+    ## death-to-case ratio, scored through a death-pool composition positivity
+    ## from the death series' own BVD and background components. The case
+    ## volume carries the laboratory capacity onset, so the death volume
+    ## inherits it and no deaths are confirmed before testing began.
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.deaths_daily, cases_state.bvd_reports_daily,
-        p_drc, cases_state.bg_daily, k;
-        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf))
+        deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
+        deaths_state.bg_death_daily, k;
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        case_analysed_daily = confirmed_state.analysed_daily,
+        case_suspected_daily = cases_state.reports_daily))
     ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
     ## length-of-stay survival into a latent bed demand, soft-capped at the bed
     ## capacity the implied-capacity series pins (see
@@ -502,10 +520,15 @@ death-confirmation probability (`death_confirmation`).
     ## Daily cumulative trajectories for the headline 3x2 figure: the
     ## modelled expected cumulative infections, symptom onsets and deaths
     ## over the grid. Exposed as vector deterministics so the ribbon panels
-    ## reconstruct from the chain without re-running the renewal.
+    ## reconstruct from the chain without re-running the renewal. All three
+    ## are BVD-only latent renewal quantities: deaths uses the BVD death
+    ## series (onsets convolved with the onset-to-death delay), NOT the
+    ## fitted total, so it stays smooth like infections and onsets. The
+    ## additive non-BVD background is a daily random walk and belongs to the
+    ## observation side, not this latent trajectory.
     cumulative_infections := cumsum(infection_state.infections)
     cumulative_onsets := cumsum(onsets)
-    cumulative_expected_deaths := cumsum(deaths_state.deaths_daily)
+    cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
     ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
     ## the per-window tested-positive probability applied to the modelled,
     ## testing-onset-gated analysed volume), so the cumulative trajectory carries
@@ -567,12 +590,15 @@ death-confirmation probability (`death_confirmation`).
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
     background_total := cases_state.bg_total
+    death_ascertainment := deaths_state.p_death
+    background_cfr := deaths_state.cfr_bg
     lambda_bg_death := deaths_state.λ_bg_death
     bg_death_sigma := deaths_state.bg_death_sigma
     background_death_total := deaths_state.bg_death_total
-    m_death := confirmed_deaths_state.m_death
+    tau_death := confirmed_deaths_state.τ_death
+    death_testing_scaling := confirmed_deaths_state.scaling
     suspected_positivity := cases_state.positivity
     test_positivity := confirmed_state.p_positive
-    death_composition := confirmed_deaths_state.q_susp
+    death_composition := confirmed_deaths_state.q_death
     death_confirmation := confirmed_deaths_state.p_death_conf
 end

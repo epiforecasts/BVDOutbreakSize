@@ -101,6 +101,31 @@ Changes since v1.5.0.
   This removes a large over-prediction of the early confirmed-case counts (the
   modelled cumulative confirmed previously ran several-fold above the observed
   early values).
+- Redesigned the death pathway.
+  Suspected deaths carry a death ascertainment `p_death` (the death analogue
+  of the case ascertainment, with an informative prior centred high) and a
+  non-BVD death background that applies a background CFR (`cfr_bg`) to the
+  suspected-case background and lags it by the onset-to-death delay, so a
+  background death follows its background case. The death background tracks the
+  identified case background rather than a second free, outbreak-size-
+  degenerate rate, and inherits the case background's smooth gated daily shape,
+  so the modelled cumulative-death trajectory is smooth.
+  Added the `death_ascertainment_model` and `background_cfr_model` priors.
+- Rebuilt the confirmed-death stream as a laboratory pipeline mirroring the
+  confirmed cases.
+  The death analysed volume scales the modelled case analysed volume at the
+  per-day suspected death-to-case ratio, times a testing-intensity scaling
+  (`LogNormal(0, 0.25)`, centred on one), so death testing follows the
+  laboratory's realised throughput; the death-to-case ratio carries the
+  suspect-pool severity and the suspected-death level. The volume is scored
+  through a death-pool composition positivity
+  `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
+  suspected deaths from the death series' own components. The case volume
+  carries the laboratory capacity onset, so the death volume inherits it and no
+  deaths are confirmed before testing began.
+  The joint exposes the `death_ascertainment`, `background_cfr`,
+  `death_testing_scaling`, `tau_death` and `death_composition` deterministics
+  and drops `m_death`.
 
 ### Data
 

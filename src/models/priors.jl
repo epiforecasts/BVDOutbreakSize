@@ -465,6 +465,60 @@ suspected deaths. Pass `lambda_prior` to override. Returns
 end
 
 """
+Ascertainment of the suspected-death stream ([`deaths_model`](@ref)): the
+fraction `p_death` of true BVD deaths that enter the INSP suspected-death
+count by the cut-off. The suspected-death definition is symptomatic-then-
+deceased, so a fatal BVD infection only counts once the death is reported,
+and not every BVD death is captured. The expected BVD suspected deaths are
+therefore `p_death · CFR` of the onset-to-death-convolved infections, the
+death analogue of the suspected-case ascertainment `p_drc`
+([`pooled_ascertainment_model`](@ref)).
+
+The default `Normal(logit(0.9), 0.5)` on the logit scale is deliberately
+informative and centred on a HIGH ascertainment: a death is a salient event
+in an Ebola response and is reported more reliably than a living suspected
+case (`p_drc ≈ 0.75`). The SD 0.5 gives a 90% prior interval of roughly
+0.80–0.95, admitting moderate under-ascertainment without letting the death
+stream slide to an implausibly low capture. `p_death` is weakly identified
+on its own (it trades off with the CFR for the suspected-death level), so it
+leans on this prior; the export-death stream and the CFR prior pin the CFR
+separately. Pass `ascertainment_prior` to override. Returns
+`(; p_death, logit_p_death)`.
+"""
+@model function death_ascertainment_model(;
+        ascertainment_prior = Normal(logit(0.9), 0.5))
+    logit_p_death ~ ascertainment_prior
+    p_death := logistic(logit_p_death)
+    return (; p_death, logit_p_death)
+end
+
+"""
+Background case-fatality ratio `cfr_bg` for the non-BVD suspected-death
+background ([`deaths_model`](@ref)). The renewal joint ties the non-BVD
+suspected-death background to the (already identified) non-BVD suspected-
+CASE background `λ_bg` ([`test_positivity_model`](@ref)) rather than giving
+deaths a free, outbreak-size-degenerate background rate of their own: the
+per-day background suspected deaths are `cfr_bg · λ_bg_v`, a background CFR
+applied to the per-day non-BVD suspected-case rate. A non-BVD suspected case
+(other severe febrile or haemorrhagic illness that meets the suspect
+definition) carries its own fatality risk, and `cfr_bg` is the share of that
+background pool that is reported as a suspected death.
+
+Tying the death background to the case background removes the degeneracy that
+keeps a free `λ_bg_death` switched off: the case background is pinned by the
+laboratory positivity link, so scaling it by `cfr_bg` gives the death
+background a level and time profile without a second free rate competing with
+outbreak size. The default `Beta(2, 6)` (mean ≈ 0.25, 90% ≈ 0.05–0.52) is
+weakly informative and centred below the BVD CFR (non-BVD suspect illness is
+on average less lethal than BVD). Pass `cfr_prior` to override. Returns
+`(; cfr_bg)`.
+"""
+@model function background_cfr_model(; cfr_prior = Beta(2.0, 6.0))
+    cfr_bg ~ cfr_prior
+    return (; cfr_bg)
+end
+
+"""
 Test-positivity machinery shared by the suspected- and confirmed-case
 streams. Samples
 
@@ -786,12 +840,17 @@ laboratory confirmed, discretised to a daily PMF over lags `0 … nmax`
 by [`censored_delay_model`](@ref) so it convolves cleanly onto the
 renewal onsets. The mean and SD carry weakly-informative priors centred
 on a short turnaround with a heavy right tail allowing for specimen
-shipment to a confirmatory lab; no per-sample outbreak data grounds this
-prior, matching integral `main`. Returns `(; pmf, dist, mean, sd)`.
+shipment to a confirmatory lab. No per-sample outbreak data grounds this
+delay, so the likelihood does not identify the turnaround mean or SD; the
+priors are therefore kept tight around the documented turnaround belief
+(mean ≈ 4.5 d, SD ≈ 4 d) rather than wide, since a wide prior on an
+unidentified nuisance delay only makes the sampler wander it (it was the
+worst-mixing quantity in the joint, dragging the confirmation PMFs convolved
+from it). Returns `(; pmf, dist, mean, sd)`.
 """
 @model function lab_delay_model(nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
-        mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-        sd_prior = truncated(Normal(4.0, 1.5); lower = 1))
+        mean_prior = truncated(Normal(4.5, 1.0); lower = 1),
+        sd_prior = truncated(Normal(4.0, 0.75); lower = 1))
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
     return (; pmf = d.pmf, dist = d.dist, mean = d.mean, sd = d.sd)
 end
@@ -869,34 +928,36 @@ volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
 end
 
 """
-Confirmed-death enrichment scalar `m_death` for the confirmed-death
-stream ([`confirmed_deaths_model`](@ref)). Confirmed deaths are a thinning
-of the suspected deaths whose per-window confirmation probability is the
-suspected-case BVD composition `q_susp` enriched on the odds scale by
-`m_death`:
-
-```math
-p = \\operatorname{logistic}(\\operatorname{logit}(q_\\text{susp}) +
-    \\log m_\\text{death}),
-```
-
-a multiplicative effect on the confirmation odds that stays in `(0, 1)`
-without a hard clamp. `m_death > 1` means a suspected death is more likely
-to be laboratory-confirmed BVD than a suspected case; `m_death < 1` means
-it is less likely, as when deaths are under-swabbed relative to living
-suspected cases (post-mortem confirmation is rarer). `m_death = 1` ties
-the death-confirmation rate to the case composition. The default
-`LogNormal(0, 1.0)` is weakly informative and centred on no enrichment, so
-the confirmed-death vintages (a small fraction of the ≈ 246 suspected
-deaths) determine the differential rather than the prior: with a
-suspected-case BVD composition near 0.4, a low confirmed-death share needs
-`m_death` well below 1, which a tight prior centred on 1 would fight.
-Returns `(; m_death)`.
+Death testing fraction `τ_death`, the fallback for the death-only composer
+([`confirmed_deaths_only_model`](@ref)), which has no case stream to set the
+death testing volume from. It thins the suspected deaths to a death "analysed"
+volume at the case testing rate, drawing `τ_death` from the same prior as the
+case testing fraction (`Beta(5, 2)`, mean ≈ 0.71). The full joint instead
+scales the modelled case analysed volume (see [`confirmed_deaths_model`](@ref)
+and [`death_testing_scaling_model`](@ref)) and does not draw this submodel.
+Pass `fraction_prior` to override. Returns `(; τ_death)`.
 """
-@model function confirmed_death_enrichment_model(;
-        enrichment_prior = LogNormal(0.0, 1.0))
-    m_death ~ enrichment_prior
-    return (; m_death)
+@model function death_testing_fraction_model(; fraction_prior = Beta(5.0, 2.0))
+    τ_death ~ fraction_prior
+    return (; τ_death)
+end
+
+"""
+Death testing-intensity scaling for the confirmed-death volume in the joint
+([`confirmed_deaths_model`](@ref)). The death analysed volume is the modelled
+case analysed volume carried at the per-day suspected death-to-case ratio,
+times this scaling. That ratio already carries the suspect-pool severity and
+the suspected-death level, so the scaling is the per-suspect testing-intensity
+difference between deaths and living suspects alone. No death-testing data
+grounds it, so it is a tight log-normal centred on one (`LogNormal(0, 0.25)`,
+median 1, 90% ≈ 0.66–1.51): deaths are tested at the case intensity unless the
+confirmed-death counts pull the scaling off one. Pass `scaling_prior` to
+override. Returns `(; scaling)`.
+"""
+@model function death_testing_scaling_model(;
+        scaling_prior = LogNormal(0.0, 0.25))
+    scaling ~ scaling_prior
+    return (; scaling)
 end
 
 """

@@ -60,21 +60,19 @@ end
     using Turing: returned
     using Random: MersenneTwister
 
-    ## 246 suspected deaths, 17 confirmed. The composition q_susp is built
-    ## from a flat unit BVD report series and a small background, and the
-    ## confirmation probability is the odds-enriched composition.
-    bvd = fill(1.0, 40)
-    ## Per-day non-BVD background series (was a scalar λ_bg); sum is the
-    ## background total entering the composition q_susp.
-    bg_daily = fill(0.5, 40)
-    ## Modelled suspected-death daily series (was a scalar expected total);
-    ## confirmed deaths thin it per-vintage. k is the dispersion.
-    deaths_daily = fill(6.0, 40)
-    m = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
+    ## 246 suspected deaths, 17 confirmed. The death-pool composition q_death
+    ## is built from the death series' own BVD and background components, and
+    ## the confirmation positivity is the assay transform of that composition.
+    ## Modelled BVD and background suspected-death daily series; the suspected-
+    ## death total is their sum. k is the dispersion.
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    m = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
     st = returned(m, rand(MersenneTwister(2), m))
-    @test 0 < st.q_susp < 1
+    @test 0 < st.q_death < 1
     @test 0 < st.p_death_conf < 1
-    @test st.m_death > 0
+    @test 0 < st.τ_death < 1
     @test st.expected_confirmed_deaths >= 0
 end
 
@@ -83,23 +81,77 @@ end
     using Turing: returned
     using Random: MersenneTwister
 
-    bvd = fill(1.0, 40)
-    bg_daily = fill(0.5, 40)
-    deaths_daily = fill(6.0, 40)
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
     seed = 7
     ## Same args, one with no delay (identity PMF) and one with all mass at a
-    ## five-day lag. The confirmation probability is unchanged (it depends on
-    ## the composition, not the delay), but the delay pushes five of the forty
-    ## flat days off the end of the grid, so the windowed expected confirmed
-    ## deaths fall to 35/40 of the undelayed total.
-    base = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily, 5.0)
-    delayed = confirmed_deaths_model(17, 246, deaths_daily, bvd, 0.3, bg_daily,
-        5.0; receipt_pmf = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+    ## five-day lag. The confirmation positivity is unchanged (the composition
+    ## is flat, so a uniform delay leaves the BVD share fixed), but the delay
+    ## pushes five of the forty flat days off the end of the grid, so the
+    ## windowed expected confirmed deaths fall to 35/40 of the undelayed total.
+    base = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0)
+    delayed = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths,
+        bg_death, 5.0; receipt_pmf = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0])
     sb = returned(base, rand(MersenneTwister(seed), base))
     sd = returned(delayed, rand(MersenneTwister(seed), delayed))
     @test sd.p_death_conf ≈ sb.p_death_conf
     @test sd.expected_confirmed_deaths < sb.expected_confirmed_deaths
     @test sd.expected_confirmed_deaths ≈ (35 / 40) * sb.expected_confirmed_deaths rtol=1e-6
+end
+
+@testitem "confirmed_deaths_model gates the capacity before the testing onset" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## No deaths are confirmed before testing began: with a flat death series,
+    ## gating the death "analysed" volume at day 21 of 40 zeroes the first 20
+    ## days, so the expected confirmed deaths fall to 20/40 of the ungated total.
+    ## The default `capacity_start = 0` leaves it ungated.
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    seed = 4
+    ung = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
+    gat = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; capacity_start = 21)
+    su = returned(ung, rand(MersenneTwister(seed), ung))
+    sg = returned(gat, rand(MersenneTwister(seed), gat))
+    @test sg.expected_confirmed_deaths < su.expected_confirmed_deaths
+    @test sg.expected_confirmed_deaths ≈ (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
+end
+
+@testitem "confirmed_deaths_model scales the case analysed volume" begin
+    using BVDOutbreakSize: confirmed_deaths_model
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## In the joint the death analysed volume is scaling times the modelled
+    ## case analysed volume carried at the per-day suspected death-to-case
+    ## ratio, so the expected confirmed deaths are linear in the case analysed
+    ## volume: doubling it doubles them (the scaling and assay draws are fixed
+    ## by the seed, the suspected series are unchanged).
+    bvd_deaths = fill(5.5, 40)
+    bg_death = fill(0.5, 40)
+    deaths_daily = bvd_deaths .+ bg_death
+    susp_case = fill(20.0, 40)
+    analysed_case = fill(6.0, 40)
+    seed = 3
+    base = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_analysed_daily = analysed_case,
+        case_suspected_daily = susp_case)
+    sb = returned(base, rand(MersenneTwister(seed), base))
+    @test sb.scaling > 0
+    @test 0 < sb.τ_death < 1
+    @test sb.expected_confirmed_deaths >= 0
+    twice = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
+        5.0; case_analysed_daily = 2 .* analysed_case,
+        case_suspected_daily = susp_case)
+    s2 = returned(twice, rand(MersenneTwister(seed), twice))
+    @test s2.expected_confirmed_deaths ≈
+          2 * sb.expected_confirmed_deaths rtol=1e-6
 end
 
 @testitem "confirmed_deaths_only_model conditions and stays finite" begin
@@ -110,4 +162,41 @@ end
         deaths_history = (; days = [20, 40], counts = [120, 246]))
     draw = rand(MersenneTwister(1), m)
     @test isfinite(logjoint(m, draw))
+end
+
+@testitem "deaths_model background is the lagged scaled case background" begin
+    using BVDOutbreakSize: deaths_model, background_walk_model, convolve_delay
+    using Turing: returned
+    using Random: MersenneTwister
+
+    ## The joint passes the suspected-case background `case_bg_daily` (the
+    ## smooth, gated, ramped daily random walk) into `deaths_model`; the death
+    ## background is that background scaled by `cfr_bg` and lagged by the
+    ## onset-to-death delay, so a background death follows its background case.
+    ## It inherits the case background's gating (zero before the onset, since
+    ## the delay only shifts mass later) and its smoothness.
+    n = 60
+    onset = 20
+    seed = 5
+    bgm = background_walk_model(n, 0.1; onset = onset)
+    case_bg = returned(bgm, rand(MersenneTwister(seed), bgm)).λ
+    onsets = [40.0 * exp(-((t - 35) / 10)^2) for t in 1:n]
+    m = deaths_model((; days = Int[], counts = Int[]), missing, onsets, 5.0;
+        case_bg_daily = case_bg)
+    st = returned(m, rand(MersenneTwister(seed), m))
+
+    ## The death background is the case background scaled by cfr_bg and lagged by
+    ## the onset-to-death delay, pointwise.
+    @test st.bg_death_daily ≈ st.cfr_bg .* convolve_delay(case_bg, st.od_pmf)
+    ## Gated: zero before the case-background onset (the lag only shifts later).
+    @test all(st.bg_death_daily[1:(onset - 1)] .== 0)
+    ## Smooth: no day-to-day jump in the background exceeds the tight random-walk
+    ## innovation scale (a per-vintage step background would jump abruptly).
+    Δ = diff(st.bg_death_daily[onset:end])
+    level = maximum(st.bg_death_daily)
+    @test maximum(abs.(Δ)) <= 0.3 * level
+    ## A positive case background gives a positive death background (when cfr_bg
+    ## is non-trivial); both totals are finite.
+    @test st.bg_death_total >= 0
+    @test isfinite(st.bg_death_total)
 end

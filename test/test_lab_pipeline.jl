@@ -60,11 +60,15 @@ end
     chn = nuts_sample(m; samples = 25, chains = 1, progress = false)
     for key in (:expected_confirmed_T, :expected_analysed_T,
         :tau_test, :lambda_bg, :suspected_positivity, :test_positivity,
-        :m_death, :death_composition, :death_confirmation,
+        :death_ascertainment, :background_cfr, :tau_death,
+        :death_composition, :death_confirmation,
         :expected_confirmed_deaths_T)
         v = vec(Array(chn[key]))
         @test all(isfinite, v)
     end
     @test all(0 .<= vec(Array(chn[:test_positivity])) .<= 1)
     @test all(0 .<= vec(Array(chn[:death_confirmation])) .<= 1)
+    @test all(0 .<= vec(Array(chn[:death_composition])) .<= 1)
+    @test all(0 .<= vec(Array(chn[:death_ascertainment])) .<= 1)
+    @test all(0 .<= vec(Array(chn[:tau_death])) .<= 1)
 end
