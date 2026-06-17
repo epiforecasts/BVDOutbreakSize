@@ -1358,8 +1358,13 @@ BVD/background mixture whose two populations leave on different clocks:
 
 - BVD demand `p_iso · p_drc · bvd_reports` with a sampled treatment
   length-of-stay (a confirmed case occupies a bed until recovery or death);
-- non-BVD demand `p_iso · bg_daily` leaving once the negative result returns,
-  so its stay is the report-to-receipt laboratory delay `receipt_pmf`.
+- non-BVD demand `p_iso · bg_daily` leaving once the suspect is ruled out and
+  discharged, with a separately sampled non-BVD rule-out stay `ruleout_los`.
+  This is a different parameter from the report-to-receipt laboratory delay
+  (`receipt_pmf` from [`confirmed_cases_model`](@ref)): a non-BVD bed is freed
+  around the time the negative result returns, but discharge also carries
+  clinical sign-off and bed logistics, so the rule-out stay is identified by
+  the occupancy on its own clock.
 
 The occupancy is the total demand soft-capped at the time-varying bed
 capacity `C(t)` ([`bed_capacity_walk_model`](@ref), a random walk so the
@@ -1388,7 +1393,7 @@ replication.
         isolation_history,
         bvd_reports_daily::AbstractVector,
         bg_daily::AbstractVector,
-        p_drc::Real, receipt_pmf::AbstractVector;
+        p_drc::Real;
         capacity_history = (; days = Int[], counts = Int[]),
         admission = isolation_admission_model(),
         capacity = bed_capacity_walk_model,
@@ -1399,7 +1404,16 @@ replication.
         bvd_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(12.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+        ## Sampled non-BVD rule-out stay: how long a ruled-out suspect occupies
+        ## an isolation bed before discharge. Centred on the report-to-receipt
+        ## laboratory turnaround but a separate parameter from the
+        ## lab-turnaround `receipt_pmf`, so the occupancy identifies it on its
+        ## own clock.
+        ruleout_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
+            mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)))
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
     disp_state ~ to_submodel(dispersion)
@@ -1411,14 +1425,15 @@ replication.
     C = cap_state.C
     C_T = isempty(C) ? zero(eltype(C)) : C[end]
     bvd_los_state ~ to_submodel(bvd_los)
+    ruleout_los_state ~ to_submodel(ruleout_los)
 
     ## Latent bed DEMAND: a proportion `p_iso` of both BVD and non-BVD
     ## suspects need a bed. BVD patients stay for the sampled treatment
-    ## length-of-stay; non-BVD suspects leave once their negative result
-    ## returns, after the report-to-receipt laboratory delay.
+    ## length-of-stay; non-BVD suspects leave once they are ruled out and
+    ## discharged, after the separately sampled rule-out stay.
     bvd_demand = convolve_survival(p_iso .* p_drc .* bvd_reports_daily,
         bvd_los_state.pmf)
-    bg_demand = convolve_survival(p_iso .* bg_daily, receipt_pmf)
+    bg_demand = convolve_survival(p_iso .* bg_daily, ruleout_los_state.pmf)
     demand = bvd_demand .+ bg_demand
     ## In predict / check-model mode the daily series can widen to
     ## `Vector{Any}`, which the `exp.` saturation below cannot broadcast over,
@@ -1468,6 +1483,7 @@ replication.
     isolation_bvd_share := safe_rate(bvd_dem_T) / safe_rate(dem_T)
 
     return (; p_iso, capacity = C_T, bvd_los_mean = bvd_los_state.mean,
+        ruleout_los_mean = ruleout_los_state.mean,
         k_isolation = k, demand, occupancy,
         expected_isolation = safe_rate(occ_T),
         expected_bed_demand = safe_rate(dem_T))
