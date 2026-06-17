@@ -50,10 +50,11 @@
 #   \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval
 #   PMF, and every delay is applied as a discrete convolution. McCabe et
 #   al. [mccabe2026](@cite) use continuous-time closed forms.
-# - *Time-varying reproduction number.* $R_t$ follows a weekly Gaussian
-#   random walk on the log scale, interpolated within weeks, with a
-#   logistic outbreak-response ramp of about three weeks at the first WHO
-#   situation report (18 May 2026). McCabe et al. use one constant
+# - *Time-varying reproduction number.* $R_t$ is held flat at the
+#   established $R_0$ until the first WHO situation report (18 May 2026),
+#   then follows a weekly Gaussian random walk on the log scale,
+#   interpolated within weeks, with a logistic outbreak-response ramp of
+#   about three weeks from that report. McCabe et al. use one constant
 #   exponential growth rate.
 # - *Joint posterior rather than scenario estimates.* The reproduction
 #   number, case-fatality ratio, all delays, traveller volume and
@@ -451,16 +452,21 @@ vintage_table #hide
 #
 # ##### Reproduction number
 #
-# The reproduction number is assumed to follow a non-centred Gaussian random
-# walk on the log scale, with knots at weekly intervals (day 1, 8, 15, …,
-# $n$). The walk starts from the established reproduction number $R_0$ at the
-# renewal start:
+# The reproduction number is held flat at the established reproduction
+# number $R_0$ from the renewal start until the first WHO situation report,
+# and follows a non-centred Gaussian random walk on the log scale only from
+# that report onward, with knots at weekly intervals from the report to the
+# cut-off. Before any case or death surveillance the outbreak dynamics are
+# unidentified, so a free walk over the pre-report window would only add
+# drift the data cannot support; the walk therefore begins at the first
+# report (the breakpoint), and every earlier day sits at $R_0$. The walk
+# starts from $R_0$ at its first knot:
 #
 # ```math
 # \log R_k = \log R_0 + \sigma_{\text{rw}}
 #            \sum_{j=1}^{k} z_j, \quad
 # z_j \sim \mathrm{Normal}(0, 1), \qquad
-# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.05). \tag{2}
+# \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
 # ```
 #
 # We do not place a prior on $R_0$ directly. We put the prior on the initial
@@ -472,13 +478,19 @@ vintage_table #hide
 # R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
 # ```
 #
-# The step-size prior keeps weekly changes in the reproduction number small.
-# We set the half-normal on $\sigma_{\text{rw}}$ so that the reproduction
-# number is unlikely to change by more than about 10% from one week to the
-# next: two standard deviations of the weekly log-step is around $0.10$.
+# The step-size prior keeps weekly changes in the reproduction number
+# moderate. We set the half-normal on $\sigma_{\text{rw}}$ so that the
+# reproduction number is unlikely to change by more than about 20% from one
+# week to the next: two standard deviations of the weekly log-step is around
+# $0.20$. Confining the walk to the observed window means this flexibility is
+# spent where the data can support it, letting $R_t$ bend to a slowdown or
+# acceleration over the sitreps rather than drifting over the unobserved
+# pre-report stretch.
 #
 # Daily $\log R_t$ is the linear interpolation between the weekly knots, so
-# the reproduction number varies piecewise linearly within each week:
+# the reproduction number varies piecewise linearly within each week; before
+# the first knot it is held flat at $R_0$ (the interpolation clamps below the
+# first knot rather than extrapolating):
 #
 # ```math
 # \log R_t = \log R_k +

@@ -140,14 +140,13 @@ renewal start are filled by the analytic cryptic exponential and so are
 unused by the walk;
 the walk simply clamps to `R0` before its first knot.
 
-The random-walk step SD prior is a tight half-normal SD 0.05. The
-observed sitrep window is only the final ≈9 days of a ≈90-day inferred
-outbreak, so the weekly log-`R_t` knots over the unobserved stretch are
-free to drift; with a wider step the walk climbed from `R0 ≈ 1.9` to a
-terminal `R_T ≈ 3.1` (a faster terminal doubling, 5.5 d, than the observed
-7.5–8.8 d), inflating `C_T` through a large pool of recent, not-yet-
-observed infections. A tight step keeps `R_t` near the seeding value so
-the outbreak size is not driven by an unsupported terminal acceleration.
+The random-walk step SD prior is a half-normal SD 0.1, so the weekly
+log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
+one week to the next. The walk starts at the first situation report
+(`rt_start` is the breakpoint at the composer), so every knot sits in the
+observed window and the step flexibility is spent where the data support
+it, letting `R_t` bend to a slowdown or acceleration over the sitreps
+rather than drifting over the unobserved pre-report stretch.
 
 The intervention effect is constrained to be non-positive
 (`truncated(Normal(0, 0.4); upper = 0)`): a declared WHO response (case
@@ -166,7 +165,7 @@ fortnight, the response damps `R_t` only partially by the cut-off.
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         ramp::Real = 21.0,
-        sigma_prior = truncated(Normal(0, 0.05); lower = 0),
+        sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
@@ -337,13 +336,13 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     growth_state ~ to_submodel(growth())
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
-    ## The random walk's first knot sits at `rt_walk_start`, which is DECOUPLED
-    ## from the renewal start `rt_start`: the renewal seeds and grows from the
+    ## The random walk's first knot sits at `rt_walk_start`, decoupled from
+    ## the renewal start `rt_start`: the renewal seeds and grows from the
     ## genetic-TMRCA renewal start, but `R_t` is held flat at `R0` until
     ## `rt_walk_start` (the first situation report). Before any case or death
     ## surveillance the dynamics are unidentified, so a free walk there only
-    ## adds unsupported drift; `rt_walk_start` defaults to `rt_start` so the
-    ## walk-from-renewal-start behaviour is preserved unless it is set.
+    ## adds unsupported drift. `rt_walk_start` defaults to `rt_start`, the
+    ## walk-from-renewal-start case.
     rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
     Rt = rt_state.Rt
     ## renewal_start = genetic-TMRCA grid day (`rt_start`); the observation
