@@ -338,12 +338,14 @@ fraction `tau_death`) scored through a death-pool composition positivity
 `p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
 suspected deaths (see [`confirmed_deaths_model`](@ref)). The suspected deaths
 carry a death ascertainment `p_death` and a non-BVD background tied to the
-case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)). The
-optional `isolation_history` adds the
+case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)). When
+`fit_isolation` is set the optional `isolation_history` adds the
 daily isolation/treatment-bed occupancy ("Patients en isolement"), a
 prevalence stream fitted as the suspect inflow (BVD treatment stay plus
 non-BVD rule-out stay) carried through a length-of-stay survival into a
-daily stock (see [`treatment_admission_model`](@ref)). The optional
+daily stock (see [`treatment_admission_model`](@ref)); with `fit_isolation`
+unset the treatment submodel and its isolation/bed deterministics are skipped.
+The optional
 `recovered_history` adds the recovered-among-confirmed stream ("cumul
 guéris"), survivors among the modelled daily confirmed cases scaled by the
 recovery probability and lagged by a confirmation-to-recovery delay (see
@@ -402,6 +404,7 @@ death-confirmation positivity (`death_confirmation`).
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
+        fit_isolation::Bool = true,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
@@ -507,10 +510,12 @@ death-confirmation positivity (`death_confirmation`).
     ## capacity the implied-capacity series pins (see
     ## [`treatment_admission_model`](@ref)). The non-BVD rule-out stay is a
     ## separate parameter from the lab-turnaround `receipt_pmf`.
-    treatment_state ~ to_submodel(
-        treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc;
-        capacity_history = bed_capacity_history))
+    if fit_isolation
+        treatment_state ~ to_submodel(
+            treatment(isolation_history, cases_state.bvd_reports_daily,
+            cases_state.bg_daily, p_drc;
+            capacity_history = bed_capacity_history))
+    end
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases, with a recovery fraction grounded on the CFR and
     ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
@@ -587,17 +592,19 @@ death-confirmation positivity (`death_confirmation`).
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
-    expected_isolation_T := treatment_state.expected_isolation
-    expected_bed_demand_T := treatment_state.expected_bed_demand
-    bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
-                                 treatment_state.expected_isolation)
-    bed_capacity := treatment_state.capacity
-    isolation_admission := treatment_state.p_iso
-    isolation_bvd_admission := treatment_state.p_iso_bvd
-    isolation_severity := treatment_state.δ_iso
-    isolation_bvd_los_mean := treatment_state.bvd_los_mean
-    isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
-    isolation_dispersion := treatment_state.k_isolation
+    if fit_isolation
+        expected_isolation_T := treatment_state.expected_isolation
+        expected_bed_demand_T := treatment_state.expected_bed_demand
+        bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
+                                     treatment_state.expected_isolation)
+        bed_capacity := treatment_state.capacity
+        isolation_admission := treatment_state.p_iso
+        isolation_bvd_admission := treatment_state.p_iso_bvd
+        isolation_severity := treatment_state.δ_iso
+        isolation_bvd_los_mean := treatment_state.bvd_los_mean
+        isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
+        isolation_dispersion := treatment_state.k_isolation
+    end
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean

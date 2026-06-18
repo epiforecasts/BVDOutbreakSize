@@ -221,19 +221,10 @@ Random.seed!(20260518)
 # incidence where the cumulative series stops. The same reports print a daily
 # new suspected-death count alongside it ("cas suspects du jour N (M deces)",
 # from 7 June), fitted the same way where the cumulative suspected-death
-# series stops. The confirmed-based reports
-# also publish a daily "Patients en isolement" count, the number of patients
-# (confirmed plus suspected) in an isolation/treatment bed at the end of the
-# day; we fit it as the suspect inflow carried through a length-of-stay
-# survival into a daily bed count. The fitted
-# series runs from 1 June (SitRep 018), where the column is relabelled to the
-# all-patients "Patients en isolement - hospitalisation"; the narrower
-# suspects-only count in SitReps 016-017 is a different quantity and is left
-# out. The reports also print a cumulative "cumul guéris" total of confirmed
-# cases recorded as recovered, from 6 June; we fit it as survivors among the
-# modelled confirmed cases (a scaled confirmation-to-recovery convolution,
-# the incidence analogue of the isolation prevalence stream). We extracted
-# these figures from the
+# series stops. The reports also print a cumulative "cumul guéris" total of
+# confirmed cases recorded as recovered, from 6 June; we fit it as survivors
+# among the modelled confirmed cases (a scaled confirmation-to-recovery
+# convolution). We extracted these figures from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
 # re-read them, rather than the published per-zone CSVs. The zone sums in
@@ -315,12 +306,10 @@ observations_table #hide
 # The per-date cumulative history of the DRC situation-report streams,
 # the national totals at each report date. The joint model fits the
 # between-report increments of these series, so a single date reduces to
-# the cut-off total. Two columns are the exception. `suspected_new_daily`
+# the cut-off total. One column is the exception. `suspected_new_daily`
 # is a per-day new-suspect count (not a cumulative total), fitted directly
 # as a daily incidence, and it picks up where the cumulative
-# `suspected_cases` column freezes on 26 May. `patients_isolated` is a
-# daily count of patients in an isolation/treatment bed, fitted as the
-# suspect inflow carried through a length-of-stay survival. See
+# `suspected_cases` column freezes on 26 May. See
 # `data/observations.toml` for the per-stream sources.
 
 #md # ```@raw html
@@ -334,7 +323,6 @@ vintage_table = let
     streams = (
         suspected_cases = bydate(obs.reported_history),
         suspected_new_daily = bydate(obs.suspected_daily_history),
-        patients_isolated = bydate(obs.isolation_history),
         suspected_deaths = bydate(obs.deaths_history),
         suspected_new_daily_deaths = bydate(obs.suspected_daily_deaths_history),
         confirmed_cases = bydate(obs.confirmed_history),
@@ -349,7 +337,6 @@ vintage_table = let
         date = dates,
         suspected_cases = at(streams.suspected_cases),
         suspected_new_daily = at(streams.suspected_new_daily),
-        patients_isolated = at(streams.patients_isolated),
         suspected_deaths = at(streams.suspected_deaths),
         confirmed_cases = at(streams.confirmed_cases),
         confirmed_deaths = at(streams.confirmed_deaths),
@@ -1282,89 +1269,6 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Isolation occupancy
-#
-# The "Patients en isolement" figure is the daily count of occupied
-# isolation/treatment beds. Bed occupancy has been supply-driven — demand for
-# beds has outstripped supply, with occupancy catching up as capacity is
-# expanded — so we model a latent bed DEMAND and the supply-limited occupancy
-# it produces, rather than occupancy directly.
-#
-# The latent demand is the suspect inflow carried through a length-of-stay
-# survival $S(\tau) = P(\text{LOS} \ge \tau)$ (the renewal analogue of the
-# convolution secondary-observation model of EpiNow2 [epinow2](@cite)). A
-# proportion $p_{\text{iso}}$ of the reported suspects need a bed; the
-# suspects are a BVD/background mixture leaving on different clocks, so the
-# demand is the sum of two survival convolutions: the BVD demand with a
-# sampled treatment length-of-stay $S_{\text{BVD}}$, and the non-BVD demand
-# with a separately sampled rule-out stay $S_{\text{ruleout}}$ (how long a
-# ruled-out suspect occupies a bed before discharge, distinct from the
-# report-to-receipt laboratory delay),
-#
-# ```math
-# D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
-#       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
-#       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right].
-# ```
-#
-# The occupancy is the demand soft-capped at the bed capacity $C$, so it
-# approaches $C$ under excess demand and tracks the demand when beds are
-# slack, making the admitted fraction availability-driven rather than
-# constant:
-#
-# ```math
-# O_t = C\left(1 - e^{-D_t / C}\right).
-# ```
-#
-# Each report day's occupied-bed count $O_j$ follows a NegBinomial around the
-# modelled occupancy, with a dispersion of its own (not shared with the other
-# streams). The capacity $C$ is pinned by the implied bed count, the reported
-# occupancy (the "Patients en isolement" count) divided by the reported
-# "Taux d'occupation" rate ($\approx 400 \to 452$ beds over 9–13 June), fitted
-# as noisy observations of $C$:
-#
-# ```math
-# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k_{\text{iso}}),
-# \qquad
-# C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C,\ k_{\text{iso}}).
-# ```
-#
-# The model exposes the cut-off occupancy, the cut-off bed demand (the need
-# under unconstrained supply), their difference (the bed shortfall) and the
-# utilisation $O_T / C$.
-#
-# A key limitation is that this is a single national model, with one national
-# bed capacity and one national demand, so it cannot represent LOCAL
-# saturation: on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at
-# 21.9%, so beds free in one province cannot serve patients who need them in
-# another, and the national capacity averages over a saturated epicentre and
-# slack elsewhere. The national shortfall therefore understates the local
-# unmet need. This is a limitation, not a refinement: the renewal model does
-# not carry per-province inflow, so it cannot be split into the per-province
-# bed model that the supply constraint actually operates at. A second
-# limitation is that capacity is taken as a single (slowly varying) national
-# quantity even though beds are being added.
-#
-# The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
-# BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
-# series is the all-patients column from 1 June (SitRep 018) onward.
-
-#md # ```@raw html
-#md # <details><summary>Submodel: treatment_admission_model</summary>
-#md # ```
-
-#md # ```@eval
-#md # using BVDOutbreakSize, CodeTracking, Markdown
-#md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.treatment_admission_model(
-#md #         (; days = Int[], counts = Int[]),
-#md #         Float64[], Float64[], 0.25, [1.0])), "\n```"))
-#md # ```
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
 # ##### Suspected deaths
 #
 # Suspected deaths are the ascertained, CFR-weighted convolution of the daily
@@ -1948,9 +1852,11 @@ const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 ## for their CFR, onset-to-death PMF and export onsets, leaving their own
 ## counts missing, which leaves two redundant sampled discrete draws, so its
 ## model check is disabled (see `nuts_sample`).
-chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
-chn_confirmed_deaths,
-chn_treatment = fit_parallel([
+chn_joint, chn_exports,
+chn_deaths,
+chn_cases,
+chn_confirmed,
+chn_confirmed_deaths = fit_parallel([
     () -> nuts_sample(bvd_joint(
         obs.n, obs.exported_cases, obs.total_deaths,
         obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
@@ -1965,14 +1871,13 @@ chn_treatment = fit_parallel([
         lab_daily_history = obs.lab_daily_history,
         suspected_daily_history = obs.suspected_daily_history,
         suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
         recovered_history = obs.recovered_history,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = _BREAKPOINT,
         background_re = true,
         confirmed_positivity_link = :composition,
+        fit_isolation = false,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)),
     ## Exports fit cases and deaths jointly as one "exports" stream, sharing
@@ -2001,10 +1906,6 @@ chn_treatment = fit_parallel([
         obs.total_deaths;
         deaths_history = obs.deaths_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
-        breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(treatment_only_model(obs.n;
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
         breakpoint = _BREAKPOINT))]);
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
@@ -2013,7 +1914,6 @@ posterior_C_deaths = vec(Array(chn_deaths[:C_T]));
 posterior_C_cases = vec(Array(chn_cases[:C_T]));
 posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
 posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
-posterior_C_treatment = vec(Array(chn_treatment[:C_T]));
 
 ## Clean display names for the summary tables and pair plots. The submodel
 ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
@@ -2035,8 +1935,6 @@ display_names = Dict{Symbol, String}(
     Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
     Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
     Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
-    :isolation_bvd_los_mean => "isolation BVD length-of-stay mean",
-    :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
     :recovery_delay_mean => "confirmation-to-recovery mean",
     Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
 
@@ -2060,8 +1958,7 @@ diagnostics_table( #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
     "confirmed (DRC)" => chn_confirmed, #hide
-    "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
-    "isolation (DRC)" => chn_treatment) #hide
+    "confirmed deaths (DRC)" => chn_confirmed_deaths) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -2132,13 +2029,8 @@ diagnostics_table( #hide
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
 # We forecast the two confirmed DRC streams (laboratory-confirmed cases and
-# confirmed deaths) as the forecast targets, and also the isolation/treatment
-# beds and the cumulative recovered total. For the beds we project both the
-# bed DEMAND (the need a week ahead, under unconstrained supply: the cut-off
-# demand grown by the horizon factor like the case inflow) and the
-# supply-limited occupancy that demand produces against the bed capacity. The
-# gap between them is the projected bed shortfall — the policy-relevant
-# quantity, since bed occupancy has been supply-driven. The suspected reported
+# confirmed deaths) as the forecast targets, and also the cumulative recovered
+# total. The suspected reported
 # cases and deaths are no longer reported, so they are not shown as
 # targets. Exports are not forecast either, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the
@@ -2183,13 +2075,12 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_deaths_history = o.confirmed_deaths_history,
             lab_history = o.lab_history,
             lab_daily_history = o.lab_daily_history,
-            isolation_history = o.isolation_history,
-            bed_capacity_history = o.bed_capacity_history,
             export_case_days = o.export_case_days,
             export_death_days = o.export_death_days,
             breakpoint = bp,
             background_re = true,
             confirmed_positivity_link = :composition,
+            fit_isolation = false,
             genetic = genetic_seeding_model,
             tmrca_days = o.tmrca_days);
         samples = samples, chains = chains)
@@ -2501,11 +2392,8 @@ intervention_table #hide
 # onset-to-death is the convolution of two atomic Gamma delays, onset to
 # admission and admission to death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
-# The length-of-stay delays are also shown: the isolation-bed BVD treatment
-# length-of-stay (how long a BVD patient occupies a bed), the non-BVD rule-out
-# stay (how long a ruled-out suspect occupies a bed before discharge, sampled
-# separately from the report-to-receipt delay), and the confirmation-to-
-# recovery delay (how long after confirmation a case is recorded as recovered).
+# The confirmation-to-recovery delay is also shown (how long after confirmation
+# a case is recorded as recovered).
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
 # each marginal is visible.
@@ -2525,8 +2413,6 @@ obs_delay_summary = summary_table(chn_joint,
         Symbol("exports_state.detect_state.θ"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
         Symbol("confirmed_state.receipt_state.d.delay_sd"),
-        :isolation_bvd_los_mean,
-        :isolation_ruleout_los_mean,
         :recovery_delay_mean];
     digits = 2, labels = display_names);
 
@@ -2545,8 +2431,6 @@ obs_delay_pair_fig = plot_pair(chn_joint,
         Symbol("deaths_state.od_state.oa.α"),
         Symbol("exports_state.detect_state.α"),
         Symbol("confirmed_state.receipt_state.d.delay_mean"),
-        :isolation_bvd_los_mean,
-        :isolation_ruleout_los_mean,
         :recovery_delay_mean];
     prior = prior_chn, labels = display_names);
 
@@ -2562,10 +2446,9 @@ obs_delay_pair_fig #hide
 # Uganda, the surveillance dispersion, and the laboratory pipeline (the
 # testing fraction and receipt delay, the per-suspected and per-test
 # positivity, the non-BVD background rate, and the death-confirmation
-# probability). The isolation and recovered streams add the proportion of
-# suspects admitted to a bed, the recovery probability among confirmed cases,
-# and their own observation dispersions (these two streams do not share the
-# surveillance dispersion; see the length-of-stay delays in the
+# probability). The recovered stream adds the recovery probability among
+# confirmed cases and its own observation dispersion (it does not share the
+# surveillance dispersion; see the confirmation-to-recovery delay in the
 # observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
@@ -2580,8 +2463,6 @@ surveillance_summary = summary_table(chn_joint,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,
         :death_confirmation, :expected_confirmed_deaths_T,
-        :isolation_admission, :isolation_dispersion, :expected_isolation_T,
-        :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
         :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);
 
@@ -2620,20 +2501,19 @@ surveillance_pair_fig #hide
 # checked against data here.
 # The second is the surveillance data, the dated DRC streams that are real
 # per-vintage observations: cumulative suspected cases, the daily new-suspect
-# inflow, the daily isolation-bed occupancy, confirmed cases, suspected
-# deaths, confirmed deaths, recovered-among-confirmed and specimens analysed.
+# inflow, confirmed cases, suspected deaths, confirmed deaths,
+# recovered-among-confirmed and specimens analysed.
 # The third is the exports, the cross-border imported cases and deaths
 # detected in Uganda.
 #
 # The surveillance group is checked first.
 # Each panel is shown over its own reporting dates with the observed series
 # overlaid: the cumulative streams as replicated cumulative trajectories, and
-# the daily new-suspect inflow and the daily isolation-bed occupancy on a
-# daily scale (each day's replicated count against the observed count). The
-# cumulative suspected case and death streams stop at their last stable
-# vintage on 26 May; the daily new-suspect inflow then runs 4-11 June, where
-# the cumulative suspected series freezes, and the isolation occupancy runs
-# 1-11 June; the laboratory-confirmed streams keep reporting to the cut-off.
+# the daily new-suspect inflow on a daily scale (each day's replicated count
+# against the observed count). The cumulative suspected case and death streams
+# stop at their last stable vintage on 26 May; the daily new-suspect inflow
+# then runs 4-11 June, where the cumulative suspected series freezes; the
+# laboratory-confirmed streams keep reporting to the cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2658,8 +2538,6 @@ pp_joint = predict(
         suspected_daily_history = _days_only(obs.suspected_daily_history),
         suspected_daily_deaths_history =
         _days_only(obs.suspected_daily_deaths_history),
-        isolation_history = _days_only(obs.isolation_history),
-        bed_capacity_history = _days_only(obs.bed_capacity_history),
         recovered_history = _days_only(obs.recovered_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
@@ -2670,6 +2548,7 @@ pp_joint = predict(
         breakpoint = _BREAKPOINT,
         background_re = true,
         confirmed_positivity_link = :composition,
+        fit_isolation = false,
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days),
     chn_joint);
@@ -2707,18 +2586,6 @@ suspected_daily_panel = (;
         pp_joint, "cases_state.suspected_daily"),
     observed = obs.suspected_daily_history.counts,
     colour = :slateblue, cumulative = false);
-## Isolation/treatment-bed occupancy: a daily count, so the panel is drawn
-## with `cumulative = false` — each replicate is the modelled bed count on a
-## report day against the observed "Patients en isolement" count. The count
-## is the suspect inflow carried through a length-of-stay survival, so its
-## level and lag reflect the admission proportion and the stays.
-isolation_panel = (;
-    title = "Patients in isolation",
-    dates = _vintage_dates(obs.isolation_history.days),
-    replicates = _vintage_replicates(
-        pp_joint, "treatment_state.isolation"),
-    observed = obs.isolation_history.counts,
-    colour = :darkorange, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -2823,7 +2690,7 @@ recovered_panel = (;
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+    [reported_panel, suspected_daily_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
 
@@ -2989,10 +2856,7 @@ confirmed_cfr_fig #hide
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
 # The suspected reported cases and deaths are no longer reported, so they are
 # not shown as forecast targets.
-# The forecast also projects the isolation/treatment beds — both the bed
-# demand a week ahead (the need under unconstrained supply) and the
-# supply-limited occupancy it produces, whose gap is the projected bed
-# shortfall — and the cumulative recovered total.
+# The forecast also projects the cumulative recovered total.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3045,43 +2909,12 @@ forecast_fig = plot_forecast(forecast);
 
 forecast_fig #hide
 
-# The bed figure shows the projected isolation/treatment-bed DEMAND (the need
-# a week ahead, under unconstrained supply) against the supply-limited
-# occupancy the beds can actually meet; the gap between the two is the
-# projected bed shortfall, shown in the right panel. The reported "Patients en
-# isolement" count IS the occupied-bed count (the report computes the "Taux
-# d'occupation" as that count over the bed capacity), so isolation is bed
-# usage, gated by supply; the demand is its unobserved counterpart, the number
-# who need a bed. Because the model carries a single national bed capacity it
-# cannot represent local saturation — Ituri was at 93.9% occupancy on 13 June
-# while Sud-Kivu was at 21.9% — so the national shortfall understates the
-# local unmet need, since beds free in one province cannot serve patients who
-# need them in another.
-
-#md # ```@raw html
-#md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
-#md # ```
-
-forecast_beds_fig = plot_forecast_beds(forecast);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-forecast_beds_fig #hide
-
 # ### Forecast validation (last week versus now)
 #
 # How last week's forecast held up against the data since observed, using the
 # frozen re-fit and one-week projection defined in the methods
 # [forecast-versus-frozen evaluation](@ref
-# "Forecast-versus-frozen evaluation"). The frozen fit now also conditions on
-# the isolation beds, so the projected bed occupancy is scored against the
-# beds actually held a week later. The bed validation is the weakest of the
-# scored streams, though: the reported occupancy rate starts only on 9 June,
-# so at a one-week-back freeze the capacity has no implied-capacity anchor and
-# rides its random walk back to the freeze date, widening the projected bed
-# interval.
+# "Forecast-versus-frozen evaluation").
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -3097,14 +2930,9 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
     obs_confirmed = frozen_lastweek.o.confirmed_cases,
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
 
-## The observed beds at the current cut-off (the forecast target), so the
-## frozen-fit bed forecast is scored against what the beds actually held.
-_obs_beds = isempty(obs.isolation_history.counts) ? missing :
-            obs.isolation_history.counts[end]
 validation_table = forecast_vs_truth(validation_forecast;
     confirmed = obs.confirmed_cases,
-    confirmed_deaths = obs.confirmed_deaths,
-    isolation = _obs_beds);
+    confirmed_deaths = obs.confirmed_deaths);
 
 #md # ```@raw html
 #md # </details>
@@ -3132,26 +2960,6 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 #md # ```
 
 validation_fig #hide
-
-# The bed panel scores last week's projected isolation-bed occupancy against
-# the beds actually occupied now (the dashed rule). The bed forecast is the
-# weakest of the validated streams: at a one-week-back freeze the capacity has
-# no implied-capacity anchor (the occupancy rate starts only on 9 June), so
-# the projection rides the capacity random walk back to the freeze date and
-# its interval is wide.
-
-#md # ```@raw html
-#md # <details><summary>Bed forecast-versus-observed plot</summary>
-#md # ```
-
-validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
-    isolation = _obs_beds);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-validation_beds_fig #hide
 
 # The latent quantities are not observed, so they are scored distribution
 # against distribution: what the frozen fit forecast for the past week's new
@@ -3199,7 +3007,6 @@ streams_C_table = streams_table(
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
-    "isolation (DRC)" => posterior_C_treatment,
     "joint" => posterior_C_joint);
 
 #md # ```@raw html
@@ -3246,10 +3053,7 @@ stream_traj_fig = plot_stream_trajectories(
             colour = :steelblue),
         (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
             last_day = _last_day(obs.confirmed_history.days),
-            colour = :goldenrod),
-        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
-            last_day = _last_day(obs.isolation_history.days),
-            colour = :darkorange)];
+            colour = :goldenrod)];
     n = obs.n, seeding = obs.seeding);
 
 #md # ```@raw html
@@ -3281,7 +3085,6 @@ cumulative_density_fig = plot_cumulative_cases(
     "deaths (DRC)" => posterior_C_deaths,
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
-    "isolation (DRC)" => posterior_C_treatment,
     "joint" => posterior_C_joint;
     scenarios = [], xmax = density_xmax);
 
@@ -3565,14 +3368,13 @@ function refit_joint_variant(;
             suspected_daily_history = obs.suspected_daily_history,
             suspected_daily_deaths_history =
             obs.suspected_daily_deaths_history,
-            isolation_history = obs.isolation_history,
-            bed_capacity_history = obs.bed_capacity_history,
             recovered_history = obs.recovered_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,
             background_re = true,
             confirmed_positivity_link = :composition,
+            fit_isolation = false,
             deaths = deaths,
             genetic = genetic_seeding_model,
             tmrca_days = tmrca_days,
