@@ -1213,20 +1213,21 @@ cfr_prior_fig #hide
 #
 # The second part is an additive non-BVD background, so a suspected case need
 # not be a true BVD infection. It is a per-day rate $\lambda_{\text{bg},t}$ that
-# follows a smooth daily lognormal random walk around a baseline $\lambda_\mu$,
+# follows a lognormal random walk on weekly knots around a baseline
+# $\lambda_\mu$, linearly interpolated to the daily grid,
 #
 # ```math
-# \lambda_{\text{bg},t} = \lambda_\mu \exp\!\Bigl(\sigma_{\text{rw}}
-#     \sum_{s < t} z_s\Bigr), \qquad z_s \sim \mathcal N(0, 1),
+# \lambda_{\text{bg},t} = \lambda_\mu \exp\!\bigl(w_t\bigr), \qquad
+# w_t = \mathrm{interp}\Bigl(\sigma_{\text{rw}} \sum_{s < k} z_s\Bigr),
+# \qquad z_s \sim \mathcal N(0, 1),
 # ```
 #
 # gated to zero before the surveillance onset (a report-to-receipt lead before
 # the first suspected-case report — the background does not exist before
 # surveillance began) and shared, with one tight innovation SD
 # $\sigma_{\text{rw}}$, between the suspected-case and suspected-death streams.
-# The walk is per day, so the background varies smoothly rather than in
-# reporting-vintage steps, and the tight $\sigma_{\text{rw}}$ keeps it a gentle
-# drift. The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 8)$ prior on
+# Weekly knots match the reproduction-number walk and keep the background a
+# gentle drift over a small number of innovations. The baseline carries a half-normal $\mathrm{Normal}^{+}(0, 8)$ prior on
 # the natural scale: a log-scale level would have a heavy right tail the
 # background/outbreak-size degeneracy could exploit, while the natural-scale
 # half-normal bounds it but is wide enough that the laboratory positivity (only
@@ -1307,31 +1308,32 @@ cfr_prior_fig #hide
 #       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right].
 # ```
 #
-# The occupancy is the demand soft-capped at the bed capacity $C$, so it
-# approaches $C$ under excess demand and tracks the demand when beds are
-# slack, making the admitted fraction availability-driven rather than
-# constant:
+# The bed capacity $C(t)$ is a non-decreasing random walk on weekly knots —
+# beds are added over the response and not taken away — pinned by the implied
+# bed count, the reported occupancy (the "Patients en isolement" count)
+# divided by the reported "Taux d'occupation" rate ($\approx 400 \to 452$ beds
+# over 9–13 June). Only a fraction of the nominal beds can be occupied (ward
+# layout, staffing, isolation spacing), so the effective ceiling is
+# $\rho\, C(t)$ with usable fraction $\rho \in (0, 1]$, bounded below by the
+# largest observed utilisation since occupancy never exceeds usable capacity.
+#
+# The occupied-bed count is the demand right-censored at the effective ceiling:
+# while demand is below the ceiling the count tracks it, and once demand
+# reaches the ceiling the count is censored there. Censoring keeps the demand
+# identified at saturation, where a deterministic cap would make occupancy
+# insensitive to demand,
 #
 # ```math
-# O_t = C\left(1 - e^{-D_t / C}\right).
-# ```
-#
-# Each report day's occupied-bed count $O_j$ follows a NegBinomial around the
-# modelled occupancy, with a dispersion of its own (not shared with the other
-# streams). The capacity $C$ is pinned by the implied bed count, the reported
-# occupancy (the "Patients en isolement" count) divided by the reported
-# "Taux d'occupation" rate ($\approx 400 \to 452$ beds over 9–13 June), fitted
-# as noisy observations of $C$:
-#
-# ```math
-# O_j \sim \mathrm{NegBinomial}(O_{t_j},\ k_{\text{iso}}),
+# O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
+#     \text{upper} = \rho\, C_{t_j}\bigr),
 # \qquad
-# C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C,\ k_{\text{iso}}).
+# C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C_{t_j},\ k_{\text{iso}}),
 # ```
 #
-# The model exposes the cut-off occupancy, the cut-off bed demand (the need
-# under unconstrained supply), their difference (the bed shortfall) and the
-# utilisation $O_T / C$.
+# with a dispersion $k_{\text{iso}}$ of its own (not shared with the other
+# streams). The model exposes the cut-off occupancy, the cut-off bed demand
+# (the need under unconstrained supply), their difference (the bed shortfall)
+# and the utilisation $O_T / C$.
 #
 # A key limitation is that this is a single national model, with one national
 # bed capacity and one national demand, so it cannot represent LOCAL
