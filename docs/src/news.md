@@ -158,6 +158,12 @@ Changes since v1.5.0.
   27 May 2026 Lancet publication, plotted beside our renewal estimate on
   27 May, with a frozen re-fit at the 27 May cut-off added to the
   frozen-fit outbreak-size table.
+- Quantified the per-vintage posterior-predictive checks with a per-stream
+  calibration table (`stream_calibration`): the mean forecast bias and the
+  empirical 50%/90% interval coverage of each stream's one-step-ahead
+  conditional predictive, so the streams the joint fit reproduces less well
+  can be read off rather than eyeballed. Added the `bias_sample` scoring
+  helper (resolves #269).
 
 ### Documentation
 
