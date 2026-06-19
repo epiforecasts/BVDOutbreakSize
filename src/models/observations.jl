@@ -1614,7 +1614,7 @@ series for forecasting and posterior-predictive replication.
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         capacity = C_T, bvd_los_mean = bvd_los_state.mean,
         ruleout_los_mean = ruleout_los_state.mean,
-        k_isolation = k, demand, occupancy,
+        k_isolation = k, demand, occupancyll, isolation,
         expected_isolation = safe_rate(occ_T),
         expected_bed_demand = safe_rate(dem_T))
 end
