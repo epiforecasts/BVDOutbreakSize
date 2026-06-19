@@ -2724,7 +2724,7 @@ isolation_panel = (;
     title = "Patients in isolation",
     dates = _vintage_dates(obs.isolation_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "treatment_state.bed_capacity"),
+        pp_joint, "treatment_state.isolation"),
     observed = obs.isolation_history.counts,
     colour = :darkorange, cumulative = false);
 deaths_panel = (;
