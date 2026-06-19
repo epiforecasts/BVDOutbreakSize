@@ -2714,13 +2714,7 @@ suspected_daily_panel = (;
 ## report day against the observed "Patients en isolement" count. The count
 ## is the suspect inflow carried through a length-of-stay survival, so its
 ## level and lag reflect the admission proportion and the stays.
-isolation_panel = (;
-    title = "Patients in isolation",
-    dates = _vintage_dates(obs.isolation_history.days),
-    replicates = _vintage_replicates(
-        pp_joint, "treatment_state.isolation"),
-    observed = obs.isolation_history.counts,
-    colour = :darkorange, cumulative = false);
+
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -2825,7 +2819,7 @@ recovered_panel = (;
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+    [reported_panel, suspected_daily_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
 
