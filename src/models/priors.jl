@@ -651,26 +651,47 @@ centres opening) — so a single scalar capacity ([`bed_capacity_model`](@ref))
 cannot track the growth or be projected forward; the walk does both.
 
 The walk is a non-centred cumulative log-deviation from a baseline bed count
-`C0`, so `C(t) = C0 · exp(σ_cap · cumsum(z))` with `z ~ Normal(0, 1)` per day
-and a tight innovation SD `σ_cap`, keeping capacity a gentle daily drift
-rather than a jump. The baseline carries the same weakly-informative
+`C0` on WEEKLY knots, linearly interpolated to the daily grid (the same
+parameterisation as the reproduction-number and background walks): with knot
+values `\\log C` and knot days `d`, `C(t) = C0 · exp(\\text{interp}(σ_cap ·
+cumsum(z)))` with `z ~ Normal(0, 1)` per knot and a tight innovation SD
+`σ_cap`, keeping capacity a gentle drift rather than per-day jumps. Knots
+need far fewer innovations than a daily walk, avoiding the high-dimensional
+funnel. The baseline carries the same weakly-informative
 `truncated(Normal(450, 200); lower = 1)` prior as the scalar model, centred
 on the bed count implied by the reported occupancy rates (≈ 400–452 over
 9–13 June), and the implied-capacity series the isolation submodel fits pins
-`C(t)` on the days a rate is published. Capacity before the isolation window
-is unused (no occupancy data) and rides the walk. A single NATIONAL capacity
-remains a limitation: it cannot represent local saturation (one province full
-while another has slack), the level the supply constraint actually operates
-at. Pass `baseline_prior` / `innovation_prior` to override. Returns
-`(; C, C0, σ_cap)` with `C` a length-`n` vector.
+`C(t)` on the days a rate is published.
+
+Knots run only from `start`, the first day with occupancy or capacity data;
+capacity is flat at `C0` before it. Off-window capacity carries no
+likelihood, so walking it adds unidentified innovations that leave the
+posterior poorly conditioned, and `start` keeps the knots to the days the
+data speaks to. Pass `start = 1` for knots over the whole grid, or `week`
+to change the knot spacing. A single national capacity remains a limitation:
+it cannot represent local saturation (one province full while another has
+slack), the level the supply constraint actually operates at. Pass
+`baseline_prior` / `innovation_prior` to override. Returns `(; C, C0, σ_cap)`
+with `C` a length-`n` vector.
 """
-@model function bed_capacity_walk_model(n::Integer;
+@model function bed_capacity_walk_model(n::Integer; start::Integer = 1,
+        week::Integer = 7,
         baseline_prior = truncated(Normal(450.0, 200.0); lower = 1),
         innovation_prior = truncated(Normal(0.0, 0.05); lower = 0))
     C0 ~ baseline_prior
     σ_cap ~ innovation_prior
-    z ~ product_distribution(fill(Normal(0, 1), n))
-    walk = vcat(zero(σ_cap), cumsum((σ_cap .* z)[1:(n - 1)]))
+    s = clamp(Int(start), 1, n)
+    days = knot_days(n; week = week, start = s)
+    nb = length(days)
+    ## Non-negative innovations, so capacity is non-decreasing: beds are added
+    ## over the response and are not taken away, so `C(t)` cannot drop below an
+    ## already-reached level. This also keeps the effective ceiling from
+    ## jittering down into the observed occupancy.
+    z ~ product_distribution(fill(truncated(Normal(0, 1); lower = 0),
+        max(nb - 1, 1)))
+    steps = σ_cap .* z[1:max(nb - 1, 0)]
+    log_knots = vcat(zero(σ_cap), cumsum(steps))
+    walk = interpolate_knots(log_knots, days, n)
     C = C0 .* exp.(walk)
     return (; C, C0, σ_cap)
 end
@@ -769,50 +790,60 @@ a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 end
 
 """
-Non-BVD background rate as a SMOOTH daily lognormal random walk over the
+Non-BVD background rate as a SMOOTH weekly lognormal random walk over the
 surveillance window, the replacement for the per-vintage step random effect
-([`background_re_model`](@ref)). The background is a property of the suspected
-pool, so it is defined per DAY (no reporting-vintage steps) and gated to zero
-before the surveillance `onset` — the non-BVD background does not exist before
-surveillance began. From the onset the daily log-rate follows a non-centred
-random walk anchored at a sampled level,
+([`background_re_model`](@ref)). The log-rate follows a non-centred random
+walk on WEEKLY knots and is linearly interpolated to the daily grid, the same
+parameterisation as the reproduction-number walk ([`rt_walk_model`](@ref)):
+the background is a slow drift, so a knot per `week` carries the time variation
+with far fewer innovations than a daily walk, which avoids the
+high-dimensional funnel a daily walk over a long window opens. The series is
+gated to zero before the surveillance `onset` — the non-BVD background does
+not exist before surveillance began — and ramps in over the first `onset_ramp`
+days of the window. With knot values `\\log\\lambda` and knot days `d`,
 
 ```math
-\\log \\lambda_t = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < t} z_s,
-\\qquad z_s \\sim \\mathcal N(0, 1), \\quad t \\ge \\text{onset},
+\\log \\lambda_d = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < d} z_s,
+\\qquad z_s \\sim \\mathcal N(0, 1),
 \\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
 ```
 
 `σ_rw` (passed in, shared across the suspected-case and suspected-death
-streams via [`background_pooling_model`](@ref)) is the daily innovation SD on
-the log scale; a TIGHT prior keeps the background fairly CONSTANT (a gentle
-drift, not per-day noise), which both regularises the well-known
+streams via [`background_pooling_model`](@ref)) is the per-knot innovation SD
+on the log scale; a TIGHT prior keeps the background fairly CONSTANT (a gentle
+drift, not week-to-week jumps), which both regularises the well-known
 background/outbreak-size degeneracy (closing the high-background second
 posterior mode that breaks convergence) and keeps the series smooth (so a
-death background scaled from it carries no steps). The walk runs only over the
+death background scaled from it carries no steps). Knots run only over the
 surveillance window `[onset, n]`, so the number of innovations is small.
-`onset ≤ 1` runs it over the whole grid. Returns `(; λ, λ_mu, σ_bg, log_λ0)`
-with `λ` the length-`n` daily series (zero before `onset`).
+`onset ≤ 1` runs it over the whole grid. Pass `week` to change the knot
+spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
+(zero before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
-        onset::Integer = 1, onset_ramp::Integer = 7,
+        onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
         baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
-    m = max(nw, 1)
+    ## Weekly knots over the window, linearly interpolated to the daily grid
+    ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
+    days = knot_days(n; week = week, start = t0)
+    nb = length(days)
     ## Half-normal baseline on the NATURAL scale, the SAME informative prior as
     ## the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
     ## background level tightly (a lognormal/log-scale level has a heavy right
     ## tail the background/outbreak-size degeneracy exploits to run away), so
     ## the background cannot blow up to explain the suspected stream.
     λ_mu ~ baseline_prior
-    z ~ product_distribution(fill(Normal(0, 1), m))
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
-    ## log-deviation from the baseline, anchored at the baseline on the onset
-    ## day. With independent per-vintage `z` this would be the step random
-    ## effect; the cumulative sum makes it smooth day-to-day. A tight `σ_rw`
-    ## keeps the walk a gentle drift around the bounded baseline.
-    walk = vcat(zero(σ_rw), cumsum((σ_rw .* z)[1:(nw - 1)]))
+    ## log-deviation from the baseline, anchored at the baseline on the first
+    ## knot. A tight `σ_rw` keeps the walk a gentle drift around the bounded
+    ## baseline. Interpolated to daily so a death background scaled from it is
+    ## smooth.
+    steps = σ_rw .* z[1:max(nb - 1, 0)]
+    log_knots = vcat(zero(σ_rw), cumsum(steps))
+    walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
     ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the window,
     ## so the gated background grows in from zero instead of stepping straight to

@@ -1,12 +1,16 @@
 name = "BVDOutbreakSize"
 uuid = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
-authors = ["Sam Abbott <sam.abbott@lshtm.ac.uk>", "Samuel P. C. Brand"]
 version = "1.6.0"
+authors = ["Sam Abbott <sam.abbott@lshtm.ac.uk>", "Samuel P. C. Brand"]
+
+[workspace]
+projects = ["test", "docs"]
 
 [deps]
-AbstractMCMC = "80f14c24-f653-4e6a-9b94-39d6b0f70001"
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+AbstractMCMC = "80f14c24-f653-4e6a-9b94-39d6b0f70001"
 AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 CensoredDistributions = "b2eeebe4-5992-4301-9193-7ebc9f62c855"
 Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
@@ -35,13 +39,14 @@ BVDOutbreakSizeEnzymeExt = "Enzyme"
 BVDOutbreakSizeTensorBoardLoggerExt = "TensorBoardLogger"
 
 [compat]
-AbstractMCMC = "5.15"
 ADTypes = "1.22"
+AbstractMCMC = "5.15"
 AlgebraOfGraphics = "0.12"
+CSV = "0.10.16"
 CairoMakie = "0.15"
 CensoredDistributions = "0.2.18"
-ChainRulesCore = "1"
 Chain = "0.6, 1"
+ChainRulesCore = "1"
 DataFrames = "1.6"
 DataFramesMeta = "0.15"
 Dates = "1"
@@ -59,6 +64,3 @@ TOML = "1"
 TensorBoardLogger = "0.1"
 Turing = "0.45"
 julia = "1.11"
-
-[workspace]
-projects = ["test", "docs"]
