@@ -19,6 +19,14 @@
         infection(n; breakpoint, rt_start, rt_walk_start), false)
     onset_state ~ to_submodel(
         onset_incidence(infection_state.infections), false)
+    ## Shared latent-trajectory deterministics, exposed once here rather than
+    ## repeated in every composer: `_latent` is attached unprefixed
+    ## (`to_submodel(_latent(...), false)`) by all composers and by
+    ## [`bvd_joint`](@ref), so these surface bare in each. `cumulative` is the
+    ## renewal `cumsum` already computed by [`infection_model`](@ref) (no
+    ## recompute), and `C_T` its cut-off value (`cumulative[n]`).
+    cumulative_infections := infection_state.cumulative
+    C_T := infection_state.C_T
     return (; infection_state, onsets = onset_state.onsets,
         incubation_pmf = onset_state.incubation_pmf)
 end
@@ -45,8 +53,6 @@ exports likelihood only. See [`exports_model`](@ref).
         asc_state.p_uganda; export_case_days,
         incubation_pmf = latent.incubation_pmf,
         source_population))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -69,8 +75,6 @@ deaths likelihood only. See [`deaths_model`](@ref).
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, latent.onsets,
         dispersion_state.k; suspected_daily_deaths_history))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -96,8 +100,6 @@ then conditions on the reported-cases likelihood. See
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, latent.onsets,
         dispersion_state.k, asc_state.p_drc; suspected_daily_history))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -140,8 +142,6 @@ positives (a Binomial of the observed analysed denominator in
         lab_history, lab_daily_history,
         tests_analysed,
         positivity_link = confirmed_positivity_link))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -176,8 +176,6 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc;
         capacity_history = bed_capacity_history))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -218,8 +216,6 @@ on the confirmed-death likelihood alone. See
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
         confirmed_deaths_history))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -254,8 +250,6 @@ See [`exports_deaths_model`](@ref).
         exports_deaths_model(exports_deaths,
         exports_state.travelled_prevalence, deaths_state.CFR,
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -296,8 +290,6 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         exports_deaths_model(exports_deaths,
         exports_state.travelled_prevalence, deaths_state.CFR,
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
-    cumulative_infections := cumsum(latent.infection_state.infections)
-    C_T := latent.infection_state.C_T
 end
 
 """
@@ -539,8 +531,8 @@ death-confirmation positivity (`death_confirmation`).
     ## series (onsets convolved with the onset-to-death delay), NOT the
     ## fitted total, so it stays smooth like infections and onsets. The
     ## additive non-BVD background is a daily random walk and belongs to the
-    ## observation side, not this latent trajectory.
-    cumulative_infections := cumsum(infection_state.infections)
+    ## observation side, not this latent trajectory. `cumulative_infections`
+    ## and `C_T` are exposed once by the shared `_latent` submodel above.
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
     ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
@@ -567,7 +559,6 @@ death-confirmation positivity (`death_confirmation`).
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
-    C_T := infection_state.C_T
     R0 := infection_state.R0
     r := infection_state.r
     r0 := infection_state.r0
