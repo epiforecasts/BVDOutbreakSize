@@ -1477,13 +1477,21 @@ series for forecasting and posterior-predictive replication.
         ## is a smooth soft cap. Censoring keeps demand identified at the ceiling
         ## where a deterministic cap goes flat in demand.
         saturation::Symbol = :censored,
-        ## Sampled BVD treatment stay. The truncation covers the 99th
-        ## percentile of the prior-centre distribution (a longer reach than
-        ## the 98% default) so the long-stay survival tail is not clipped.
-        bvd_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(12.0, 8.0); q = 0.99);
-            mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+        ## BVD treatment stay (admission → outcome): the in-hospital length of
+        ## stay an admitted BVD case occupies a bed before leaving by death or
+        ## discharge. Carried through on the natural Gamma shape/scale from our
+        ## BDBV line-list reanalysis (the `bdbv-linelist-analysis` submodule)
+        ## with its posterior uncertainty — the admission→death atomic delay,
+        ## the same Gamma the onset→death convolution uses (mean ≈ 8.4 d). The
+        ## reanalysis admission→discharge stay is close (≈7.7 d), so this single
+        ## distribution stands in for the admission→outcome stay; the
+        ## death/discharge mixture is a separate refinement. The truncation
+        ## covers the 99th percentile so the long-stay survival tail is not
+        ## clipped.
+        bvd_los = gamma_delay_model(
+            cdf_nmax(Gamma(2.151, 3.906); q = 0.99);
+            alpha_prior = truncated(Normal(2.151, 0.604); lower = 0.01),
+            theta_prior = truncated(Normal(3.906, 1.381); lower = 0.1)),
         ## Sampled non-BVD rule-out stay: how long a ruled-out suspect occupies
         ## an isolation bed before discharge. Centred on the report-to-receipt
         ## laboratory turnaround but a separate parameter from the

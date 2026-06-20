@@ -12,6 +12,8 @@ Changes since v1.5.0.
 
 ### Model
 
+- The isolation BVD treatment length of stay now uses the BDBV line-list
+  admission-to-death delay as its prior.
 - The reproduction-number random walk now starts two weeks BEFORE the first
   situation report (the new `RT_WALK_LEAD = 14` lead, exposed as the
   `bvd_joint` keyword `rt_walk_lead`) rather than exactly at it, so `R_t` is
