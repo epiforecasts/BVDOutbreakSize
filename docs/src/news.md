@@ -12,11 +12,8 @@ Changes since v1.5.0.
 
 ### Model
 
-- The isolation BVD treatment stay — how long an admitted BVD case occupies a
-  bed — now uses the BDBV line-list reanalysis admission-to-death delay as its
-  prior, on its natural Gamma shape and scale with the reanalysis posterior
-  uncertainty (the same atomic Gamma the onset-to-death convolution uses),
-  replacing an independent weakly-informative prior.
+- The isolation BVD treatment length of stay now uses the BDBV line-list
+  admission-to-death delay as its prior.
 - The reproduction-number random walk now starts two weeks BEFORE the first
   situation report (the new `RT_WALK_LEAD = 14` lead, exposed as the
   `bvd_joint` keyword `rt_walk_lead`) rather than exactly at it, so `R_t` is

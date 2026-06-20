@@ -1298,10 +1298,10 @@ cfr_prior_fig #hide
 # suspects are a BVD/background mixture leaving on different clocks, so the
 # demand is the sum of two survival convolutions: the BVD demand with the
 # treatment length-of-stay $S_{\text{BVD}}$ — the line-list admission-to-death
-# delay on its natural Gamma shape and scale, the time an admitted BVD case
-# occupies a bed — and the non-BVD demand with a separately sampled rule-out
-# stay $S_{\text{ruleout}}$ (how long a ruled-out suspect occupies a bed before
-# discharge, distinct from the report-to-receipt laboratory delay),
+# delay, the time an admitted BVD case occupies a bed — and the non-BVD demand
+# with a separately sampled rule-out stay $S_{\text{ruleout}}$ (how long a
+# ruled-out suspect occupies a bed before discharge, distinct from the
+# report-to-receipt laboratory delay),
 #
 # ```math
 # D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
@@ -2507,12 +2507,11 @@ intervention_table #hide
 # admission and admission to death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
 # The length-of-stay delays are also shown: the isolation-bed BVD treatment
-# length-of-stay — the line-list admission-to-death delay, on its Gamma shape
-# and scale like the other line-list delays, for how long an admitted BVD
-# patient occupies a bed; the non-BVD rule-out stay (how long a ruled-out
-# suspect occupies a bed before discharge, sampled separately from the
-# report-to-receipt delay); and the confirmation-to-recovery delay (how long
-# after confirmation a case is recorded as recovered).
+# length-of-stay — the line-list admission-to-death delay, for how long an
+# admitted BVD patient occupies a bed; the non-BVD rule-out stay (how long a
+# ruled-out suspect occupies a bed before discharge, sampled separately from
+# the report-to-receipt delay); and the confirmation-to-recovery delay (how
+# long after confirmation a case is recorded as recovered).
 # The table reports their posteriors; the pair plot beside it shows their
 # joint posterior with the prior overlaid, so the data's contribution to
 # each marginal is visible.
