@@ -41,4 +41,3 @@
     ## A non-trivial gradient (not identically zero) confirms AD actually ran.
     @test any(!iszero, grad)
 end
-
