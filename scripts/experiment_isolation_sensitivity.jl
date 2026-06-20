@@ -28,7 +28,7 @@
 
 using BVDOutbreakSize
 using BVDOutbreakSize: treatment_admission_model, isolation_admission_model,
-    censored_delay_model, cdf_nmax, lognormal_meansd
+                       censored_delay_model, cdf_nmax, lognormal_meansd
 using Turing: truncated, Normal, Beta
 using Statistics: median
 using Printf: @printf
@@ -112,18 +112,24 @@ C_joint_without = _C(chn_joint_without)
 
 # Shorter BVD length-of-stay delay submodel (mean prior 6 d vs the shipped
 # 12 d), matching the truncation style of the shipped default.
-short_bvd_los() = censored_delay_model(
-    cdf_nmax(lognormal_meansd(6.0, 5.0); q = 0.99);
-    mean_prior = truncated(Normal(6.0, 3.0); lower = 1),
-    sd_prior = truncated(Normal(5.0, 3.0); lower = 1))
+function short_bvd_los()
+    censored_delay_model(
+        cdf_nmax(lognormal_meansd(6.0, 5.0); q = 0.99);
+        mean_prior = truncated(Normal(6.0, 3.0); lower = 1),
+        sd_prior = truncated(Normal(5.0, 3.0); lower = 1))
+end
 
 treatment_baseline(args...; kw...) = treatment_admission_model(args...; kw...)
 
-treatment_low_admission(args...; kw...) = treatment_admission_model(args...;
-    admission = isolation_admission_model(; p_prior = Beta(2.0, 6.0)), kw...)
+function treatment_low_admission(args...; kw...)
+    treatment_admission_model(args...;
+        admission = isolation_admission_model(; p_prior = Beta(2.0, 6.0)), kw...)
+end
 
-treatment_short_los(args...; kw...) = treatment_admission_model(args...;
-    bvd_los = short_bvd_los(), kw...)
+function treatment_short_los(args...; kw...)
+    treatment_admission_model(args...;
+        bvd_los = short_bvd_los(), kw...)
+end
 
 function treatment_only(; treatment = treatment_admission_model)
     return treatment_only_model(obs.n;
@@ -181,11 +187,11 @@ try
         ylabel = "density",
         title = "Isolation pull on the outbreak size (C_T)")
     for (label, draws, col) in [
-            ("joint (iso in)", C_joint_with, :firebrick),
-            ("joint (iso out)", C_joint_without, :seagreen),
-            ("iso baseline", C_iso_base, :darkorange),
-            ("iso low-admission", C_iso_lowadm, :steelblue),
-            ("iso short-LOS", C_iso_shortlos, :purple)]
+        ("joint (iso in)", C_joint_with, :firebrick),
+        ("joint (iso out)", C_joint_without, :seagreen),
+        ("iso baseline", C_iso_base, :darkorange),
+        ("iso low-admission", C_iso_lowadm, :steelblue),
+        ("iso short-LOS", C_iso_shortlos, :purple)]
         CairoMakie.density!(ax, draws; label = label, color = (col, 0.25),
             strokecolor = col, strokewidth = 2)
     end
