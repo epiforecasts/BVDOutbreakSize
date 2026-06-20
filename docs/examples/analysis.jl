@@ -1360,7 +1360,7 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.treatment_admission_model(
 #md #         (; days = Int[], counts = Int[]),
-#md #         Float64[], Float64[], 0.25, [1.0])), "\n```"))
+#md #         Float64[], Float64[], 0.25)), "\n```"))
 #md # ```
 
 #md # ```@raw html
