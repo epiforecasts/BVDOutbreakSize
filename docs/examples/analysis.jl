@@ -2689,12 +2689,16 @@ pp_joint = predict(
 ## an iter×chain matrix of per-draw increment vectors, exactly the
 ## `replicates` shape `plot_vintage_conditional_ppc` grounds on each
 ## vintage's observed previous cumulative for the one-step-ahead
-## predictive. Find it by its prefix among the predict keys.
-function _vintage_replicates(pp, prefix, suffix = "increments")
-    key = first(k for k in keys(pp)
-    if occursin("$prefix.$suffix", string(k)))
-    return collect(pp[key])
-end;
+## predictive. Look it up by its VarName with FlexiChains' `Prefixed`, which
+## matches a (submodel-prefixed) key by its varname tail: `Prefixed(@varname(
+## reported_increments.increments))` finds `cases_state.reported_increments.
+## increments` without hard-coding the `cases_state.` prefix and — unlike the
+## old `occursin` substring match — cannot be fooled by a loose substring or
+## a scalar `expected_*_T` deterministic. `FlexiChains` is a package
+## dependency (imported, not exported), so it is reached through the package
+## namespace.
+const _Prefixed = BVDOutbreakSize.FlexiChains.Prefixed;
+_vintage_replicates(pp, vn) = collect(pp[_Prefixed(vn)]);
 
 ## Grid day-index → INSP situation-report date label.
 _vintage_dates(days) = string.(obs.seeding .+ Day.(days .- 1));
@@ -2703,7 +2707,7 @@ reported_panel = (;
     title = "Suspected cases",
     dates = _vintage_dates(obs.reported_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "cases_state.reported_increments"),
+        pp_joint, @varname(reported_increments.increments)),
     observed = obs.reported_history.counts, colour = :steelblue);
 ## Daily new-suspect inflow: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily
@@ -2714,7 +2718,7 @@ suspected_daily_panel = (;
     title = "New suspects/day",
     dates = _vintage_dates(obs.suspected_daily_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "cases_state.suspected_daily"),
+        pp_joint, @varname(suspected_daily.increments)),
     observed = obs.suspected_daily_history.counts,
     colour = :slateblue, cumulative = false);
 ## Isolation/treatment-bed occupancy: a daily count, so the panel is drawn
@@ -2728,14 +2732,14 @@ isolation_panel = (;
     title = "Patients in isolation",
     dates = _vintage_dates(obs.isolation_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "treatment_state.isolation", "obs"),
+        pp_joint, @varname(isolation.obs)),
     observed = obs.isolation_history.counts,
     colour = :darkorange, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "deaths_state.death_increments"),
+        pp_joint, @varname(death_increments.increments)),
     observed = obs.deaths_history.counts, colour = :firebrick);
 ## Daily new suspected deaths: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily count
@@ -2746,7 +2750,7 @@ suspected_daily_deaths_panel = (;
     title = "New suspected deaths/day",
     dates = _vintage_dates(obs.suspected_daily_deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "deaths_state.suspected_daily_deaths"),
+        pp_joint, @varname(suspected_daily_deaths.increments)),
     observed = obs.suspected_daily_deaths_history.counts,
     colour = :indianred, cumulative = false);
 ## Specimens analysed is the single modelled laboratory volume (the
@@ -2758,7 +2762,7 @@ tests_analysed_panel = (;
     title = "Specimens analysed (cumulative)",
     dates = _vintage_dates(obs.lab_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.analysed_increments"),
+        pp_joint, @varname(analysed_increments.increments)),
     observed = obs.lab_history.counts, colour = :seagreen);
 ## Post-cutoff 24h analysed volume: once the cumulative series stops, INSP
 ## reports a 24h analysed count on some days. These are fitted as per-day
@@ -2769,7 +2773,7 @@ tests_analysed_daily_panel = (;
     title = "Specimens analysed (24h)",
     dates = _vintage_dates(obs.lab_daily_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_state.analysed_daily_increments"),
+        pp_joint, @varname(analysed_daily_increments.increments)),
     observed = obs.lab_daily_history.counts, colour = :teal,
     cumulative = false);
 
@@ -2794,12 +2798,12 @@ function _confirmed_at(day)
     return i == 0 ? 0 : Int(obs.confirmed_history.counts[i])
 end;
 _conf_early = _vintage_replicates(
-    pp_joint, "confirmed_state.early_increments");
+    pp_joint, @varname(early_increments.increments));
 _conf_obs = collect(first(pp_joint[k]
 for k in keys(pp_joint)
 if occursin("confirmed_state.confirmed_positives.positives", string(k))));
 _conf_late = _vintage_replicates(
-    pp_joint, "confirmed_state.late_increments");
+    pp_joint, @varname(late_increments.increments));
 confirmed_panel = (;
     title = "Confirmed cases",
     dates = _vintage_dates(_conf_window_days),
@@ -2815,7 +2819,7 @@ confirmed_deaths_panel = (;
     title = "Confirmed deaths",
     dates = _vintage_dates(obs.confirmed_deaths_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "confirmed_deaths_state.cdeath_increments"),
+        pp_joint, @varname(cdeath_increments.increments)),
     observed = obs.confirmed_deaths_history.counts, colour = :purple);
 
 ## Recovered among confirmed ("cumul guéris") is a cumulative per-vintage
@@ -2826,7 +2830,7 @@ recovered_panel = (;
     title = "Recovered (confirmed)",
     dates = _vintage_dates(obs.recovered_history.days),
     replicates = _vintage_replicates(
-        pp_joint, "recovered_state.recovered_increments"),
+        pp_joint, @varname(recovered_increments.increments)),
     observed = obs.recovered_history.counts, colour = :mediumseagreen);
 
 ## Each panel runs to its own last vintage: the suspected case and death
@@ -2880,17 +2884,17 @@ joint_vintage_incidence_fig #hide
 #md # ```
 
 ## The dated counts are nested under their submodel prefix as a single
-## per-day count vector `<prefix>.counts`; match the full prefixed varname so
-## the deterministic `expected_*_T` quantities are not picked up by a loose
+## per-day count vector `<prefix>.counts`; look it up by its VarName with
+## `Prefixed` (matching the key by its `<obs>.counts` tail) so the
+## deterministic `expected_*_T` quantities cannot be picked up by a loose
 ## substring, then sum each replicate's per-day vector into the total.
-function _dated_total(pp, name)
-    key = first(k for k in keys(pp) if occursin("$name.counts", string(k)))
-    return [sum(v) for v in vec(Array(pp[key]))]
+function _dated_total(pp, vn)
+    return [sum(v) for v in vec(Array(pp[_Prefixed(vn)]))]
 end;
 
-pp_exports = _dated_total(pp_joint, "exports_state.export_obs");
+pp_exports = _dated_total(pp_joint, @varname(export_obs.counts));
 pp_exports_deaths = _dated_total(
-    pp_joint, "exports_deaths_state.death_obs");
+    pp_joint, @varname(death_obs.counts));
 
 joint_ppc_fig = plot_posterior_predictive(
     pp_exports, nothing,
