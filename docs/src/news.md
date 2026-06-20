@@ -12,17 +12,11 @@ Changes since v1.5.0.
 
 ### Model
 
-- The isolation BVD treatment stay (admission → outcome length of stay) is now
-  grounded on our BDBV line-list reanalysis (`bdbv-linelist-analysis`
-  submodule), carried through on its natural Gamma shape/scale with the
-  reported posterior uncertainty — the admission→death atomic Gamma the
-  onset→death convolution already uses (mean ≈ 8.4 d; the reanalysis
-  admission→discharge stay is close, ≈7.7 d, so a single distribution stands in
-  for the admission→outcome stay). This replaces the previous
-  weakly-informative ~12 d prior. Because the isolation occupancy reads beds
-  back into a suspect inflow as `occupancy ≈ admission fraction · admissions ·
-  (stay + 1)`, the shorter, evidence-based stay relaxes the downward pull the
-  treatment-bed stream placed on the inferred outbreak size.
+- The isolation BVD treatment stay — how long an admitted BVD case occupies a
+  bed — now uses the BDBV line-list reanalysis admission-to-death delay as its
+  prior, on its natural Gamma shape and scale with the reanalysis posterior
+  uncertainty (the same atomic Gamma the onset-to-death convolution uses),
+  replacing an independent weakly-informative prior.
 - The reproduction-number random walk now starts two weeks BEFORE the first
   situation report (the new `RT_WALK_LEAD = 14` lead, exposed as the
   `bvd_joint` keyword `rt_walk_lead`) rather than exactly at it, so `R_t` is
