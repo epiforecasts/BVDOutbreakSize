@@ -395,6 +395,12 @@ function interpolate_knots(knot_vals::AbstractVector,
     Tp = eltype(knot_vals)
     out = Vector{Tp}(undef, n)
     nb = length(days)
+    ## A single knot spans no segment to interpolate over (and `days[b + 1]`
+    ## would read out of bounds), so the window holds flat at that knot's value.
+    if nb == 1
+        fill!(out, knot_vals[1])
+        return out
+    end
     @inbounds for t in 1:n
         b = 1
         while b < nb - 1 && t > days[b + 1]
