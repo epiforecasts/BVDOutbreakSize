@@ -397,7 +397,8 @@ death-confirmation positivity (`death_confirmation`).
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
-        renewal_start_lead::Integer = RENEWAL_START_LEAD)
+        renewal_start_lead::Integer = RENEWAL_START_LEAD,
+        rt_walk_lead::Integer = RT_WALK_LEAD)
     ## The renewal start sits `renewal_start_lead` days AFTER the genetic
     ## TMRCA day (`n - tmrca_days + lead`), past the TMRCA's uncertainty where
     ## sustained transmission is confident. The lead keeps the observed span
@@ -407,15 +408,15 @@ death-confirmation positivity (`death_confirmation`).
     ## grows from here.
     rt_start = ismissing(tmrca_days) ? 1 :
                clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
-    ## Hold R_t flat at R0 until the first situation report (`breakpoint`),
-    ## starting the random walk there rather than at the renewal start. Between
-    ## the renewal start and the first report there is no case or death
-    ## surveillance, so the outbreak follows the established `R0` and a free
-    ## walk over that window only adds drift the data cannot support; the
-    ## intervention ramp then layers the response decline on top from the
-    ## breakpoint. With no breakpoint the walk falls back to the renewal start.
+    ## Start the random walk `rt_walk_lead` days (two weeks by default) BEFORE
+    ## the first situation report (`breakpoint`) rather than exactly at it, so
+    ## R_t is free to move over the fortnight of transmission leading up to the
+    ## first report instead of being held flat at R0 right to it (the response
+    ## decline can begin before the outbreak is first reported). The start is
+    ## floored at the renewal start so the walk never precedes the seeded
+    ## trajectory. With no breakpoint the walk falls back to the renewal start.
     rt_walk_start = ismissing(breakpoint) ? rt_start :
-                    clamp(round(Int, breakpoint), 1, n)
+                    clamp(round(Int, breakpoint) - rt_walk_lead, rt_start, n)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence;
             rt_start, rt_walk_start), false)

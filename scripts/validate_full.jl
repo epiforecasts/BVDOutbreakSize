@@ -98,7 +98,7 @@ println("5-panel vintage PPC built OK (incl. confirmed-case late windows + ",
 ## Rt plot + forecast (the other new pieces).
 rtf = plot_rt(chn; n = obs.n, breakpoint = BP,
     rt_start = clamp(obs.n - round(Int, obs.tmrca_days), 1, obs.n),
-    rt_walk_start = BP,
+    rt_walk_start = clamp(BP - RT_WALK_LEAD, 1, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding)
 println("plot_rt OK")
 fc = forecast_reported(chn; horizon = 7)

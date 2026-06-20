@@ -2453,15 +2453,17 @@ infection_delay_pair_fig #hide
 #md # <details><summary>Reproduction-number trajectory</summary>
 #md # ```
 
+## `rt_start` is the renewal/established-window start the plot shows from;
+## `rt_walk_start` is where the random walk's knots begin — `RT_WALK_LEAD`
+## days (two weeks) before the first situation report, matching `bvd_joint`'s
+## `rt_walk_lead` — so the chain reconstruction uses the same knot grid the
+## model did, floored at the renewal start. R_t is flat at R0 between the two.
+_rt_start_plot = clamp(
+    obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n);
 rt_fig = plot_rt(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
-    ## `rt_start` is the renewal/established-window start the plot shows from;
-    ## `rt_walk_start` is where the random walk's knots begin (the first
-    ## situation report), so the chain reconstruction uses the same knot grid
-    ## the model did. R_t is flat at R0 between the two.
-    rt_start = clamp(
-        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n),
-    rt_walk_start = _BREAKPOINT,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
     ramp = 21.0);
 
