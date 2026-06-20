@@ -1464,6 +1464,9 @@ series for forecasting and posterior-predictive replication.
         severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
+        ## Dispersion can be injected from the joint composer's pooled set
+        ## (`k_external`); standalone it samples its own from `dispersion`.
+        k_external::Union{Nothing, Real} = nothing,
         ## Bed-fullness soft cap: occupancy soft-mins against the capacity
         ## `C(t)`, and `softness` sets the knee width as a fraction of `C(t)`.
         ## Knee width of the `:softmin` cap as a fraction of capacity.
@@ -1499,8 +1502,12 @@ series for forecasting and posterior-predictive replication.
     ## skew enriches BVD among the admitted without conditioning on the
     ## unobserved BVD status of any individual suspect.
     p_iso_bvd = logistic(logit(p_iso) + sev_state.δ_iso)
-    disp_state ~ to_submodel(dispersion)
-    k = disp_state.k
+    if k_external === nothing
+        disp_state ~ to_submodel(dispersion)
+        k = disp_state.k
+    else
+        k = k_external
+    end
     n = length(bvd_reports_daily)
     ## Time-varying bed capacity `C(t)` (a random walk), so the ceiling tracks
     ## the beds being added rather than being fixed. The walk starts at the
@@ -1669,13 +1676,20 @@ series and the cut-off total.
         confirmation_to_recovery = censored_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
             mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)))
+            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+        ## Dispersion can be injected from the joint composer's pooled set
+        ## (`k_external`); standalone it samples its own from `dispersion`.
+        k_external::Union{Nothing, Real} = nothing)
     ## Recovery fraction grounded on the CFR complement (see
     ## `recovery_probability_model`), adjusted for the confirmed population.
     rec_state ~ to_submodel(recovery(CFR))
     p_recover = rec_state.p_recover
-    disp_state ~ to_submodel(dispersion)
-    k = disp_state.k
+    if k_external === nothing
+        disp_state ~ to_submodel(dispersion)
+        k = disp_state.k
+    else
+        k = k_external
+    end
     delay_state ~ to_submodel(confirmation_to_recovery)
 
     ## Survivors among confirmed cases, lagged by the confirmation-to-recovery

@@ -390,7 +390,7 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_deaths_stream = confirmed_deaths_model,
         treatment = treatment_admission_model,
         recovered = recovered_model,
-        dispersion = surveillance_dispersion_model(),
+        dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
@@ -422,9 +422,23 @@ death-confirmation positivity (`death_confirmation`).
     infection_state = latent.infection_state
     onsets = latent.onsets
 
-    dispersion_state ~ to_submodel(dispersion)
+    ## Partially-pooled per-stream dispersions: every count stream draws its
+    ## own negative-binomial dispersion from a shared population rather than
+    ## sharing one global `k`, so a stream's noise is not pulled around by
+    ## whichever stream dominates the likelihood while the sparse streams
+    ## still borrow strength. Order: 1 suspected cases, 2 suspected deaths,
+    ## 3 confirmed cases, 4 confirmed deaths, 5 isolation occupancy,
+    ## 6 recovered. The isolation and recovered dispersions are injected into
+    ## their submodels (which sample their own only when run standalone).
+    dispersion_state ~ to_submodel(dispersion(6))
     asc_state ~ to_submodel(ascertainment)
-    k = dispersion_state.k
+    kv = dispersion_state.k
+    k_cases = kv[1]
+    k_deaths = kv[2]
+    k_confirmed = kv[3]
+    k_confirmed_deaths = kv[4]
+    k_isolation = kv[5]
+    k_recovered = kv[6]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
@@ -468,14 +482,14 @@ death-confirmation positivity (`death_confirmation`).
     ## the deaths stream (which scales it by `cfr_bg` for the death background)
     ## and to the laboratory pipeline.
     cases_state ~ to_submodel(
-        cases(reported_history, reported_cases, onsets, k, p_drc;
+        cases(reported_history, reported_cases, onsets, k_cases, p_drc;
         suspected_daily_history, background_re = case_bg_re))
     deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, onsets, k;
+        deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
     confirmed_state ~ to_submodel(
-        confirmed(confirmed_history, confirmed_cases, onsets, k, p_drc,
-        cases_state.bg_daily, cases_state.τ_test,
+        confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
+        p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history,
         tests_analysed,
@@ -490,7 +504,7 @@ death-confirmation positivity (`death_confirmation`).
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
-        deaths_state.bg_death_daily, k;
+        deaths_state.bg_death_daily, k_confirmed_deaths;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
@@ -502,13 +516,14 @@ death-confirmation positivity (`death_confirmation`).
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc;
-        capacity_history = bed_capacity_history))
+        capacity_history = bed_capacity_history, k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases, with a recovery fraction grounded on the CFR and
     ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(
         recovered(recovered_history, recovered_cases,
-        confirmed_state.confirmed_daily, deaths_state.CFR))
+        confirmed_state.confirmed_daily, deaths_state.CFR;
+        k_external = k_recovered))
     exports_state ~ to_submodel(
         exports(exported_cases, infection_state.infections, p_uganda;
         export_case_days, incubation_pmf = latent.incubation_pmf,
@@ -567,7 +582,14 @@ death-confirmation positivity (`death_confirmation`).
     R_T := infection_state.Rt[n]
     expected_infections_T := infection_state.infections[n]
     CFR := deaths_state.CFR
-    k := dispersion_state.k
+    ## Population-level dispersion (`k`, the headline scalar) plus the
+    ## partially-pooled per-stream dispersions and the pooling SD.
+    k := dispersion_state.k_pop
+    k_cases := kv[1]
+    k_deaths := kv[2]
+    k_confirmed := kv[3]
+    k_confirmed_deaths := kv[4]
+    dispersion_sd := dispersion_state.τ
     p_drc := asc_state.p_drc
     p_uganda := asc_state.p_uganda
     expected_deaths_T := deaths_state.expected_deaths_T
