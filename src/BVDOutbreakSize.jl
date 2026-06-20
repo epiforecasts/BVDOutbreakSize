@@ -28,7 +28,7 @@ using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
 
 export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
-       ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD,
+       ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
        load_observations, freeze_observations, m_prior_centre,
        summary_table, posterior_summary,
        fit_diagnostics, diagnostics_table,

@@ -12,6 +12,13 @@ Changes since v1.5.0.
 
 ### Model
 
+- The reproduction-number random walk now starts two weeks BEFORE the first
+  situation report (the new `RT_WALK_LEAD = 14` lead, exposed as the
+  `bvd_joint` keyword `rt_walk_lead`) rather than exactly at it, so `R_t` is
+  free to move over the fortnight of transmission leading up to the first
+  report instead of being held flat at `R0` right to it. The walk start is
+  floored at the renewal start so it never precedes the seeded trajectory, and
+  the `plot_rt` reconstruction uses the same earlier knot grid.
 - Added a supply-limited isolation/treatment-bed stream ("Patients en
   isolement"), the renewal analogue of the convolution secondary-observation
   model of EpiNow2.

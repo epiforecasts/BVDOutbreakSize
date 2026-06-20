@@ -158,6 +158,19 @@ sustained transmission is treated as confidently established.
 const RENEWAL_START_LEAD = 14
 
 """
+    RT_WALK_LEAD
+
+Days BEFORE the first situation report (`breakpoint`) at which the
+reproduction-number random walk is allowed to start moving, rather than
+holding `R_t` flat at `R0` right up to the report. Two weeks lets the walk
+capture the transmission dynamics in the fortnight leading up to the first
+report — the response decline can begin before the outbreak is first
+reported — while staying floored at the renewal start so the walk never
+precedes the seeded trajectory.
+"""
+const RT_WALK_LEAD = 14
+
+"""
     ITURI_POPULATION
 
 Source population for the Ituri Province (McCabe et al., Table 1).
