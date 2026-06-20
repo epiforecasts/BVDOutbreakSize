@@ -1477,13 +1477,24 @@ series for forecasting and posterior-predictive replication.
         ## is a smooth soft cap. Censoring keeps demand identified at the ceiling
         ## where a deterministic cap goes flat in demand.
         saturation::Symbol = :censored,
-        ## Sampled BVD treatment stay. The truncation covers the 99th
-        ## percentile of the prior-centre distribution (a longer reach than
-        ## the 98% default) so the long-stay survival tail is not clipped.
+        ## BVD treatment stay (admission → outcome): the in-hospital length of
+        ## stay an admitted BVD case occupies a bed before leaving by death or
+        ## discharge. Grounded on our BDBV line-list reanalysis (the
+        ## `bdbv-linelist-analysis` submodule; doubly-censored Gamma fits, not
+        ## the source's raw means): the fitted admission→death (mean 7.6 d, 95%
+        ## CrI 5.6–10.4) and admission→discharge (mean 7.7 d, 95% CrI 4.8–13.8)
+        ## stays, mixed at the admitted-case fatality (22/37 ≈ 0.59), give an
+        ## admission→outcome stay of ≈ 7.6 d mean, 6.0 d SD. The mean prior
+        ## carries the reanalysis posterior uncertainty. Modelled as a single
+        ## LogNormal matched to that mixture; resolving it into the
+        ## death/discharge mixture is a separate refinement. The truncation
+        ## covers the 99th percentile of the prior-centre distribution (a longer
+        ## reach than the 98% default) so the long-stay survival tail is not
+        ## clipped.
         bvd_los = censored_delay_model(
-            cdf_nmax(lognormal_meansd(12.0, 8.0); q = 0.99);
-            mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
-            sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
+            cdf_nmax(lognormal_meansd(7.6, 6.0); q = 0.99);
+            mean_prior = truncated(Normal(7.6, 1.6); lower = 1),
+            sd_prior = truncated(Normal(6.0, 2.5); lower = 1)),
         ## Sampled non-BVD rule-out stay: how long a ruled-out suspect occupies
         ## an isolation bed before discharge. Centred on the report-to-receipt
         ## laboratory turnaround but a separate parameter from the
