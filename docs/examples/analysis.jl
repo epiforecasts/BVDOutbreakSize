@@ -1360,7 +1360,7 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.treatment_admission_model(
 #md #         (; days = Int[], counts = Int[]),
-#md #         Float64[], Float64[], 0.25, [1.0])), "\n```"))
+#md #         Float64[], Float64[], 0.25)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -2682,9 +2682,9 @@ pp_joint = predict(
 ## `replicates` shape `plot_vintage_conditional_ppc` grounds on each
 ## vintage's observed previous cumulative for the one-step-ahead
 ## predictive. Find it by its prefix among the predict keys.
-function _vintage_replicates(pp, prefix)
+function _vintage_replicates(pp, prefix, suffix = "increments")
     key = first(k for k in keys(pp)
-    if occursin("$prefix.increments", string(k)))
+    if occursin("$prefix.$suffix", string(k)))
     return collect(pp[key])
 end;
 
@@ -2713,8 +2713,16 @@ suspected_daily_panel = (;
 ## with `cumulative = false` — each replicate is the modelled bed count on a
 ## report day against the observed "Patients en isolement" count. The count
 ## is the suspect inflow carried through a length-of-stay survival, so its
-## level and lag reflect the admission proportion and the stays.
-
+## level and lag reflect the admission proportion and the stays. The censored-
+## occupancy likelihood stores its per-day predictive draws under the submodel
+## `obs` variable (not `increments`), so the replicates are read from that key.
+isolation_panel = (;
+    title = "Patients in isolation",
+    dates = _vintage_dates(obs.isolation_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "treatment_state.isolation", "obs"),
+    observed = obs.isolation_history.counts,
+    colour = :darkorange, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
@@ -2819,7 +2827,7 @@ recovered_panel = (;
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, suspected_daily_panel, confirmed_panel,
+    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
 
