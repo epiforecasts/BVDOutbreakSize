@@ -19,6 +19,7 @@ pp_joint = predict(
         confirmed_deaths = missing,
         deaths_history = _days_only(obs.deaths_history),
         reported_history = _days_only(obs.reported_history),
+        isolation_history = _days_only(obs.isolation_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
@@ -30,9 +31,9 @@ pp_joint = predict(
     chn)
 println("predict OK; ", length(keys(pp_joint)), " predicted variables")
 
-function _vintage_replicates(pp, prefix)
+function _vintage_replicates(pp, prefix, suffix = "increments")
     key = first(k for k in keys(pp)
-    if occursin("$prefix.increments", string(k)))
+    if occursin("$prefix.$suffix", string(k)))
     return collect(pp[key])
 end
 _vintage_dates(days) = string.(obs.seeding .+ Day.(days .- 1))
@@ -41,6 +42,15 @@ reported_panel = (; title = "Suspected cases",
     dates = _vintage_dates(obs.reported_history.days),
     replicates = _vintage_replicates(pp_joint, "cases_state.reported_increments"),
     observed = obs.reported_history.counts, colour = :steelblue)
+# Isolation occupancy is a daily (non-cumulative) count fitted by the
+# censored-occupancy likelihood, whose per-day predictive draws are stored
+# under the submodel `obs` variable rather than `increments`.
+isolation_panel = (; title = "Patients in isolation",
+    dates = _vintage_dates(obs.isolation_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, "treatment_state.isolation", "obs"),
+    observed = obs.isolation_history.counts,
+    colour = :darkorange, cumulative = false)
 deaths_panel = (; title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(pp_joint, "deaths_state.death_increments"),
@@ -52,7 +62,7 @@ tests_analysed_panel = (; title = "Specimens analysed",
     observed = obs.lab_history.counts, colour = :seagreen)
 
 fig = plot_vintage_conditional_ppc(
-    [reported_panel, deaths_panel, tests_analysed_panel])
+    [reported_panel, isolation_panel, deaths_panel, tests_analysed_panel])
 println("panel figure built OK: ", typeof(fig))
 import CairoMakie
 CairoMakie.save("logs/validate_ppc.png", fig)
