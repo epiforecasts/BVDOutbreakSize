@@ -15,11 +15,17 @@ NUTS proposals during warmup do not trip the distribution domain check.
 Shared by the count-stream observation submodels.
 """
 function safe_nbinomial(k, μ)
-    p_raw = k / (k + max(μ, eps(typeof(μ))))
+    ## Guard the dispersion `r`, not just `p`: a fit can drive `k` to `0`
+    ## (or underflow / non-finite), and `NegativeBinomial(0, p)` throws
+    ## `DomainError: r > 0`, which aborts the whole fit inside a Mooncake
+    ## gradient rather than rejecting the step. Floor it at `eps` so the
+    ## likelihood stays defined everywhere the sampler can reach.
+    r = (isfinite(k) && k > zero(k)) ? k : eps(typeof(k))
+    p_raw = r / (r + max(μ, eps(typeof(μ))))
     p = isfinite(p_raw) ?
-        clamp(p_raw, eps(typeof(k)), one(k) - eps(typeof(k))) :
-        eps(typeof(k))
-    return NegativeBinomial(k, p)
+        clamp(p_raw, eps(typeof(r)), one(r) - eps(typeof(r))) :
+        eps(typeof(r))
+    return NegativeBinomial(r, p)
 end
 
 """
