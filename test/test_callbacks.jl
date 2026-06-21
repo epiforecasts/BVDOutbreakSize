@@ -131,3 +131,64 @@ end
     @test any(t -> endswith(t, "/value"), tags)
     @test any(t -> endswith(t, "/distribution"), tags)
 end
+
+@testitem "combined_callback composes survivors and prunes nothings" begin
+    using BVDOutbreakSize: combined_callback
+    ## All-`nothing` collapses so `nuts_sample` sees no callback.
+    @test combined_callback(nothing, nothing) === nothing
+    ## A single survivor is returned unwrapped.
+    f = (args...; kwargs...) -> nothing
+    @test combined_callback(f, nothing) === f
+    ## Several survivors fire in order on each step.
+    calls = Int[]
+    a = (args...; kwargs...) -> push!(calls, 1)
+    b = (args...; kwargs...) -> push!(calls, 2)
+    cb = combined_callback(a, nothing, b)
+    cb(nothing, nothing, nothing, nothing, nothing, 1)
+    @test calls == [1, 2]
+end
+
+@testitem "fit_callback: BVD_FIT_LOG=none disables logging" begin
+    using BVDOutbreakSize: fit_callback
+    @test fit_callback("x"; spec = "none") === nothing
+    ## Case-insensitive and whitespace-tolerant.
+    @test fit_callback("x"; spec = " NONE ") === nothing
+end
+
+@testitem "fit_callback: progress streams a named log" tags=[:slow] begin
+    using Distributions: Normal
+    using Turing: @model
+    using BVDOutbreakSize: fit_callback, nuts_sample
+
+    @model function _fc_model()
+        x ~ Normal(0.0, 1.0)
+    end
+
+    dir = mktempdir()
+    cb = fit_callback("unit"; logdir = dir, spec = "progress")
+    @test cb !== nothing
+    nuts_sample(_fc_model(); samples = 20, chains = 1, callback = cb)
+    ## The progress file is named after the fit; no TensorBoard run dir.
+    @test isfile(joinpath(dir, "unit.log"))
+    @test !isdir(joinpath(dir, "tensorboard", "unit"))
+end
+
+@testitem "fit_callback: all streams progress and TensorBoard" tags=[:slow] begin
+    using Distributions: Normal
+    using Turing: @model
+    using TensorBoardLogger
+    using BVDOutbreakSize: fit_callback, nuts_sample
+
+    @model function _fc_all_model()
+        x ~ Normal(0.0, 1.0)
+    end
+
+    dir = mktempdir()
+    cb = fit_callback("unit"; logdir = dir, spec = "all")
+    @test cb !== nothing
+    nuts_sample(_fc_all_model(); samples = 20, chains = 1, callback = cb)
+    @test isfile(joinpath(dir, "unit.log"))
+    tbdir = joinpath(dir, "tensorboard", "unit")
+    @test isdir(tbdir)
+    @test any(startswith("events.out.tfevents"), readdir(tbdir))
+end

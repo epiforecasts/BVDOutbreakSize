@@ -132,6 +132,85 @@ function progress_callback(; path::AbstractString, every::Integer = 10)
 end
 
 """
+Compose several `nuts_sample` step callbacks into one. Each argument is
+either a callback with the AbstractMCMC step signature or `nothing`;
+`nothing` entries are dropped. The composite invokes the surviving
+callbacks in order on every step. Returns the single callback unchanged
+when only one survives, and `nothing` when none do (so `nuts_sample` sees
+no callback at all rather than a no-op wrapper).
+
+See also: [`fit_callback`](@ref), [`progress_callback`](@ref),
+[`tensorboard_callback`](@ref).
+"""
+function combined_callback(callbacks...)
+    cbs = filter(!isnothing, collect(callbacks))
+    isempty(cbs) && return nothing
+    length(cbs) == 1 && return only(cbs)
+    return function (args...; kwargs...)
+        for cb in cbs
+            cb(args...; kwargs...)
+        end
+        return nothing
+    end
+end
+
+"""
+Build the logging callback for a named model fit, selected by the
+`BVD_FIT_LOG` environment variable (or an explicit `spec`). This is the
+wiring the report build uses so every fit streams its progress without
+each call site repeating the callback construction.
+
+Recognised `spec` values (case-insensitive), defaulting to `"all"` when
+`BVD_FIT_LOG` is unset:
+
+- `"all"` — both the dependency-free [`progress_callback`](@ref) (a
+  `<name>.log` file under `logdir`) and the [`tensorboard_callback`](@ref)
+  (a `tensorboard/<name>` run directory under `logdir`).
+- `"progress"` — the file progress stream only.
+- `"tensorboard"` (or `"tb"`) — the TensorBoard stream only.
+- `"none"` — no logging; returns `nothing`. CI sets this to keep release
+  builds quiet (`BVD_FIT_LOG=none`).
+
+TensorBoard logging needs `TensorBoardLogger` loaded (it activates the
+`tensorboard_callback` method through the package extension). When it is
+requested but not loaded, the TensorBoard stream is skipped with a warning
+rather than erroring, so a build without `using TensorBoardLogger` still
+gets the file progress stream.
+
+See also: [`combined_callback`](@ref), [`nuts_sample`](@ref).
+"""
+function fit_callback(name::AbstractString;
+        logdir::AbstractString = "logs",
+        spec::AbstractString = get(ENV, "BVD_FIT_LOG", "all"))
+    mode = lowercase(strip(spec))
+    mode == "none" && return nothing
+    want_progress = !(mode in ("tensorboard", "tb"))
+    want_tb = !(mode in ("progress", "file"))
+    progress = if want_progress
+        mkpath(logdir)
+        progress_callback(; path = joinpath(logdir, "$(name).log"))
+    end
+    tb = want_tb ? _tensorboard_if_loaded(joinpath(logdir, "tensorboard",
+        name)) : nothing
+    return combined_callback(progress, tb)
+end
+
+## TensorBoard callback if the extension is active, otherwise `nothing`
+## with a warning. Keeps `fit_callback`'s default `"all"` from erroring when
+## TensorBoardLogger is not loaded.
+function _tensorboard_if_loaded(logdir)
+    ext = Base.get_extension(@__MODULE__,
+        :BVDOutbreakSizeTensorBoardLoggerExt)
+    if isnothing(ext)
+        @warn "BVD_FIT_LOG requested TensorBoard logging but " *
+              "TensorBoardLogger is not loaded; logging file progress only. " *
+              "Add `using TensorBoardLogger` to enable it."
+        return nothing
+    end
+    return tensorboard_callback(logdir)
+end
+
+"""
 NUTS on `model`, parallel chains via `MCMCThreads`. Chains
 initialise from the prior (`InitFromPrior()`) to keep the sampler
 in regions with reasonable physical interpretation. Pass `init =

@@ -48,3 +48,16 @@ tasks:
     desc: Run the test suite without the quality (Aqua/JET/format) checks.
     cmds:
       - julia --project=. -e 'using Pkg; Pkg.test(; test_args = ["skip_quality"])'
+
+  tensorboard:
+    desc: >
+      Launch TensorBoard on the per-fit logs from a dev/report build in this
+      worktree. Fit logging is on by default (`BVD_FIT_LOG` unset → `all`), so
+      a build writes `logs/tensorboard/<fit>/` and `logs/<fit>.log` without
+      any flag; `BVD_FIT_LOG=none` turns it off (CI release builds do this).
+      Run this in the same directory you built from. Pins Python 3.12 and
+      `setuptools<81` because newer setuptools drops `pkg_resources`, which
+      TensorBoard still imports. Needs `uv`.
+    cmds:
+      - uvx --python 3.12 --with 'setuptools<81' --from tensorboard
+        tensorboard --logdir logs/tensorboard {{.CLI_ARGS}}
