@@ -1294,10 +1294,10 @@ cfr_prior_fig #hide
 # ##### Isolation occupancy
 #
 # The "Patients en isolement" figure is the daily count of occupied
-# isolation/treatment beds. Bed occupancy has been supply-driven, with demand
-# for beds outstripping supply and occupancy catching up as capacity expands,
-# so we model a latent bed demand and the supply-limited occupancy it produces
-# rather than occupancy directly.
+# isolation/treatment beds. Bed occupancy may be supply-driven, with demand
+# for beds able to outstrip supply and occupancy catching up as capacity
+# expands. To allow for that we model a latent bed demand and the
+# supply-limited occupancy it produces rather than occupancy directly.
 #
 # The latent demand is the suspect inflow carried through a length-of-stay
 # survival $S(\tau) = P(\text{LOS} \ge \tau)$ (the renewal analogue of the
@@ -2318,7 +2318,7 @@ diagnostics_table( #hide
 # demand grown by the horizon factor like the case inflow) and the
 # supply-limited occupancy that demand produces against the bed capacity. The
 # gap between them is the projected bed shortfall, the quantity of interest
-# since bed occupancy has been supply-driven. The suspected case and death
+# if bed occupancy is supply-constrained. The suspected case and death
 # streams are no longer published, so they are not shown as
 # targets. Exports are not forecast either, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the

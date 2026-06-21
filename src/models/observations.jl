@@ -1403,10 +1403,10 @@ end
 """
 DRC isolation / treatment-bed occupancy likelihood, a SUPPLY-LIMITED
 prevalence stream. The "Patients en isolement" figure is the daily count of
-occupied beds. Bed occupancy has been supply-driven — demand for beds has
-outstripped supply, with occupancy catching up as capacity is expanded — so
-the occupancy is a latent bed demand right-censored at the bed capacity, not
-the demand itself.
+occupied beds. Bed occupancy may be supply-driven — demand for beds can
+outstrip supply, with occupancy catching up as capacity is expanded — so the
+occupancy is modelled as a latent bed demand right-censored at the bed
+capacity, not the demand itself.
 
 The latent demand is the suspect inflow carried through a length-of-stay
 survival `S(τ) = P(LOS ≥ τ)` ([`convolve_survival`](@ref)), the renewal

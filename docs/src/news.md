@@ -22,7 +22,7 @@ Changes since v1.5.0.
 - Added a supply-limited isolation/treatment-bed stream ("Patients en
   isolement"), the renewal analogue of the convolution secondary-observation
   model of EpiNow2.
-  Bed occupancy is supply-driven (demand has outstripped supply), so the model
+  Bed occupancy may be supply-driven (demand can outstrip supply), so the model
   fits a latent bed demand, the suspect inflow carried through a length-of-stay
   survival (BVD cases with a sampled treatment stay, non-BVD suspects leaving
   after a sampled rule-out stay), right-censored at an effective bed capacity
