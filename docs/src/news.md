@@ -25,8 +25,8 @@ Changes since v1.5.0.
   Bed occupancy is supply-driven (demand has outstripped supply), so the model
   fits a latent bed demand, the suspect inflow carried through a length-of-stay
   survival (BVD cases with a sampled treatment stay, non-BVD suspects leaving
-  after a sampled rule-out stay), soft-capped at the bed capacity,
-  `occupancy = C(t)·(1−exp(−D/C(t)))`. The capacity `C(t)` is a random walk
+  after a sampled rule-out stay), right-censored at an effective bed capacity
+  `ρ·C(t)` (a censored negative binomial). The capacity `C(t)` is a random walk
   (`bed_capacity_walk_model`) that tracks the beds being added and can be
   projected forward, pinned by the implied bed count (reported occupancy /
   "Taux d'occupation" rate) on the days a rate is published.

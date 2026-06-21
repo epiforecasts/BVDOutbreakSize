@@ -456,14 +456,15 @@ vintage_table #hide
 # ##### Reproduction number
 #
 # The reproduction number is held flat at the established reproduction
-# number $R_0$ from the renewal start until the first WHO situation report,
-# and follows a non-centred Gaussian random walk on the log scale only from
-# that report onward, with knots at weekly intervals from the report to the
-# cut-off. Before any case or death surveillance the outbreak dynamics are
-# unidentified, so a free walk over the pre-report window would only add
-# drift the data cannot support; the walk therefore begins at the first
-# report (the breakpoint), and every earlier day sits at $R_0$. The walk
-# starts from $R_0$ at its first knot:
+# number $R_0$ from the renewal start until two weeks before the first WHO
+# situation report, then follows a non-centred Gaussian random walk on the log
+# scale, with knots at weekly intervals to the cut-off. The walk begins a
+# fortnight (14 days) before the first report rather than exactly at it, so
+# $R_t$ is free to move over the two weeks of transmission leading up to the
+# first report, where the response may already have begun to bend transmission
+# before the outbreak was formally reported. The walk start is floored at the
+# renewal start so it never precedes the seeded trajectory, and every earlier
+# day sits at $R_0$. The walk starts from $R_0$ at its first knot:
 #
 # ```math
 # \log R_k = \log R_0 + \sigma_{\text{rw}}
@@ -485,10 +486,10 @@ vintage_table #hide
 # moderate. We set the half-normal on $\sigma_{\text{rw}}$ so that the
 # reproduction number is unlikely to change by more than about 20% from one
 # week to the next: two standard deviations of the weekly log-step is around
-# $0.20$. Confining the walk to the observed window means this flexibility is
-# spent where the data can support it, letting $R_t$ respond to a slowdown or
-# acceleration over the situation-report window rather than drifting over the
-# unobserved pre-report period.
+# $0.20$. Holding $R_t$ flat over the unobserved cryptic phase keeps this
+# flexibility where the data can support it, letting $R_t$ respond to a
+# slowdown or acceleration around the situation-report window rather than
+# drifting over the long unobserved period before it.
 #
 # Daily $\log R_t$ is the linear interpolation between the weekly knots, so
 # the reproduction number varies piecewise linearly within each week; before
@@ -848,7 +849,7 @@ vintage_table #hide
 # ```
 #
 # and the onset-to-death PMF is the convolution of the two discretised
-# components (implied mean about 12 d). The source is shown with the deaths
+# components (implied mean about 13 d). The source is shown with the deaths
 # submodel below, where the delay is injected.
 #
 # ##### Onset-to-detection delay (exports)
@@ -876,8 +877,8 @@ vintage_table #hide
 # is our own choice:
 #
 # ```math
-# \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 2.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 1.5). \tag{18}
+# \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 1.0), \qquad
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{18}
 # ```
 #
 # It drives the laboratory analysed-specimen volume; its source is shown
@@ -942,24 +943,36 @@ cfr_prior_fig #hide
 #
 # ###### Surveillance dispersion
 #
-# Passive-surveillance counts (DRC suspected deaths, reported cases and
-# analysed specimens) are modelled with negative-binomial observation error
-# sharing one dispersion $k$. Following Stan prior-choice recommendations
+# The passive-surveillance count streams (suspected cases, suspected deaths,
+# laboratory-confirmed cases and confirmed deaths, and the isolation occupancy
+# and recovered streams) are modelled with negative-binomial observation
+# error. Rather than sharing one global dispersion, each stream draws its own
+# dispersion from a shared population, so a stream's noise is not pulled around
+# by whichever stream dominates the likelihood while the sparse streams still
+# borrow strength. Following Stan prior-choice recommendations
 # [stan_prior_choice](@cite), the dispersion is sampled on the $1/\sqrt{k}$
-# scale:
+# scale, partially pooled in non-centred form on the log scale:
 #
 # ```math
-# 1/\sqrt{k} \sim \mathrm{Normal}^{+}(0.6,\ 0.2). \tag{20}
+# \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
+# z_s \sim \mathrm{Normal}(0, 1), \qquad
+# \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.3), \tag{20}
 # ```
+#
+# so each per-stream dispersion is $k_s = 1/\exp(\mu + \tau z_s)^2$ and the
+# pooling SD $\tau$ keeps the streams close unless the data pull them apart
+# ($\tau = 0$ recovers a single shared dispersion). The population-level value
+# $k = 1/\exp(\mu)^2$ is reported as the headline dispersion.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: surveillance_dispersion_model</summary>
+#md # <details><summary>Submodel: pooled_dispersion_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.surveillance_dispersion_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.pooled_dispersion_model(6)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1705,9 +1718,11 @@ cfr_prior_fig #hide
 # reported detection date. An import detected on a given day is scored as a
 # Poisson of the rise in cumulative export intensity between consecutive
 # detection dates, with a term before the earliest detection $d_1$ observed
-# at zero, since no export is expected then. We model zero reports after the
-# last detection date, assuming continued cross-border exports beyond that date
-# are inconsistent with our assumed travel rates:
+# at zero, since no export is expected then. After the last detection date we
+# stop modelling exports rather than scoring further zeros: travellers'
+# reasons for crossing the border change over the outbreak, so the baseline
+# travel rate no longer applies beyond it and the export clock is truncated
+# there:
 #
 # ```math
 # Y_{\text{exports},i} \sim
@@ -2712,16 +2727,17 @@ obs_delay_pair_fig #hide
 # Uganda, the surveillance dispersions, and the laboratory pipeline (the
 # testing fraction and receipt delay, the per-suspected and per-test
 # positivity, the non-BVD background rate, and the death-confirmation
-# probability). The four passive-surveillance count streams (suspected
-# cases, suspected deaths, confirmed cases, confirmed deaths) each have their
-# own negative-binomial dispersion partially pooled from a shared
-# population: `k` is the population-level dispersion, `k_cases`, `k_deaths`,
-# `k_confirmed` and `k_confirmed_deaths` the per-stream values, and
-# `dispersion_sd` the pooling spread. The isolation and recovered streams add
-# the proportion of suspects admitted to a bed, the recovery probability
-# among confirmed cases, and their own observation dispersions (sampled
-# independently of the pooled set; see the length-of-stay delays in the
-# observation-delay table above).
+# probability). The six passive-surveillance count streams (suspected
+# cases, suspected deaths, confirmed cases, confirmed deaths, isolation
+# occupancy and recovered) each have their own negative-binomial dispersion
+# partially pooled from a shared population: `k` is the population-level
+# dispersion, `k_cases`, `k_deaths`, `k_confirmed` and `k_confirmed_deaths`
+# the per-stream values for the four DRC count streams, and `dispersion_sd`
+# the pooling spread. The isolation and recovered streams add the proportion
+# of suspects admitted to a bed and the recovery probability among confirmed
+# cases, with their dispersions (`isolation_dispersion`,
+# `recovered_dispersion`) drawn from the same pooled population (see the
+# length-of-stay delays in the observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
 
