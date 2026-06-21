@@ -26,16 +26,18 @@
 # report, built from the same run, is attached to each results release:
 # [download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html).
 #
-# ## Relation to the McCabe et al. report
+# ## Origins of this work
 #
-# This is a real-time joint Bayesian estimate of the current outbreak size,
-# built from a discrete-time renewal process with a time-varying reproduction
-# number and fitted to more of the available data streams than McCabe et al.
-# [mccabe2026](@cite).
-# The points below summarise how the model differs from their report; the
-# Methods section carries the full treatment, and the later
+# This work began as a replication of the McCabe et al. [mccabe2026](@cite)
+# report.
+# It has since evolved into a real-time joint Bayesian estimate of the
+# current outbreak size, a discrete-time renewal process with a time-varying
+# reproduction number fitted to more of the available data streams than the
+# original.
+# The points below summarise how it now differs from the report; the Methods
+# section carries the full treatment, and the later
 # [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") sets
-# the estimates against theirs.
+# the current estimates against theirs.
 #
 #md # ```@raw html
 #md # <details><summary>Expand: differences from the report</summary>
