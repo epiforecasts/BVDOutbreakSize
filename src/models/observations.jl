@@ -1562,13 +1562,18 @@ series for forecasting and posterior-predictive replication.
         ## prior support starts at the peak observed occupancy / capacity
         ## ratio and runs to 1. The data pins it from below; we estimate how
         ## far above the observed peak the true ceiling sits.
-        cap_lookup = Dict(zip(Int.(capacity_history.days),
-            Int.(capacity_history.counts)))
+        ## Match each isolation day to its capacity entry by linear search
+        ## over the data-only integer day/count vectors. The lookup stays free
+        ## of try/catch, which Mooncake cannot differentiate in reverse mode,
+        ## and this whole body is traced.
+        cap_days = Int.(capacity_history.days)
+        cap_counts = Int.(capacity_history.counts)
         peak_util = isempty(isolation_history.counts) ? 0.5 :
                     maximum(
-            haskey(cap_lookup, Int(d)) ?
-            isolation_history.counts[i] / cap_lookup[Int(d)] :
-            0.0
+            let j = findfirst(==(Int(d)), cap_days)
+                isnothing(j) ? 0.0 :
+                isolation_history.counts[i] / cap_counts[j]
+            end
             for (i, d) in enumerate(isolation_history.days);
             init = 0.0)
         ## Set the lower bound three-quarters of the way from the observed
