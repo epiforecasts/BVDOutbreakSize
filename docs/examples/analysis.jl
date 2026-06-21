@@ -939,15 +939,11 @@ cfr_prior_fig #hide
 #
 # ###### Surveillance dispersion
 #
-# The passive-surveillance count streams (suspected cases, suspected deaths,
-# laboratory-confirmed cases and confirmed deaths, and the isolation occupancy
-# and recovered streams) are modelled with negative-binomial observation
-# error. Rather than sharing one global dispersion, each stream draws its own
-# dispersion from a shared population, so a stream's noise is not pulled around
-# by whichever stream dominates the likelihood while the sparse streams still
-# borrow strength. Following Stan prior-choice recommendations
+# Each passive-surveillance count stream has its own negative-binomial
+# dispersion, partially pooled across the streams so the sparse ones borrow
+# strength. Following Stan prior-choice recommendations
 # [stan_prior_choice](@cite), the dispersion is sampled on the $1/\sqrt{k}$
-# scale, partially pooled in non-centred form on the log scale:
+# scale in non-centred log form:
 #
 # ```math
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
@@ -956,10 +952,9 @@ cfr_prior_fig #hide
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.3), \tag{20}
 # ```
 #
-# so each per-stream dispersion is $k_s = 1/\exp(\mu + \tau z_s)^2$ and the
-# pooling SD $\tau$ keeps the streams close unless the data pull them apart
-# ($\tau = 0$ recovers a single shared dispersion). The population-level value
-# $k = 1/\exp(\mu)^2$ is reported as the headline dispersion.
+# so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the
+# pooling ($\tau = 0$ collapses to one shared dispersion). The population
+# value $k = 1/\exp(\mu)^2$ is the headline dispersion.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_dispersion_model</summary>
