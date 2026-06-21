@@ -40,6 +40,9 @@ jobs:
           # two Julia threads run them two-at-a-time, roughly halving the
           # dominant sampling cost of the docs build.
           JULIA_NUM_THREADS: '2'
+          # Skip per-fit progress/TensorBoard logging on the build; the
+          # callbacks (`fit_callback`) are for local runs, not CI artifacts.
+          BVD_FIT_LOG: none
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9

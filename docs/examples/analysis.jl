@@ -195,6 +195,10 @@ using Markdown
 using Dates: Date, Day, value
 using BVDOutbreakSize
 import CairoMakie
+## Loading TensorBoardLogger activates the `tensorboard_callback` extension
+## so `fit_callback` can stream each fit to TensorBoard as well as a progress
+## log. Set `BVD_FIT_LOG=none` to disable all fit logging (CI release builds).
+using TensorBoardLogger
 
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
@@ -1955,30 +1959,32 @@ const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
 chn_confirmed_deaths,
 chn_treatment = fit_parallel([
-    () -> nuts_sample(bvd_joint(
-        obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        recovered_cases = obs.recovered_cases,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        recovered_history = obs.recovered_history,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = _BREAKPOINT,
-        background_re = true,
-        confirmed_positivity_link = :composition,
-        genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days)),
+    () -> nuts_sample(
+        bvd_joint(
+            obs.n, obs.exported_cases, obs.total_deaths,
+            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+            obs.tests_analysed;
+            confirmed_deaths = obs.confirmed_deaths,
+            recovered_cases = obs.recovered_cases,
+            deaths_history = obs.deaths_history,
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
+            suspected_daily_history = obs.suspected_daily_history,
+            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            recovered_history = obs.recovered_history,
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = _BREAKPOINT,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            genetic = genetic_seeding_model,
+            tmrca_days = obs.tmrca_days);
+        callback = fit_callback("joint")),
     ## Exports fit cases and deaths jointly as one "exports" stream, sharing
     ## the travel-gated at-risk prevalence, rather than as two separate fits.
     () -> nuts_sample(
@@ -1987,29 +1993,39 @@ chn_treatment = fit_parallel([
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT);
-        check_model = false),
-    () -> nuts_sample(deaths_only_model(obs.n, obs.total_deaths;
-        deaths_history = obs.deaths_history,
-        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-        breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(cases_only_model(obs.n, obs.reported_cases;
-        reported_history = obs.reported_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(confirmed_only_model(obs.n, obs.confirmed_cases;
-        confirmed_history = obs.confirmed_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
-        obs.total_deaths;
-        deaths_history = obs.deaths_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        breakpoint = _BREAKPOINT)),
-    () -> nuts_sample(treatment_only_model(obs.n;
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        breakpoint = _BREAKPOINT))]);
+        check_model = false, callback = fit_callback("exports")),
+    () -> nuts_sample(
+        deaths_only_model(obs.n, obs.total_deaths;
+            deaths_history = obs.deaths_history,
+            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+            breakpoint = _BREAKPOINT);
+        callback = fit_callback("deaths")),
+    () -> nuts_sample(
+        cases_only_model(obs.n, obs.reported_cases;
+            reported_history = obs.reported_history,
+            suspected_daily_history = obs.suspected_daily_history,
+            breakpoint = _BREAKPOINT);
+        callback = fit_callback("cases")),
+    () -> nuts_sample(
+        confirmed_only_model(obs.n, obs.confirmed_cases;
+            confirmed_history = obs.confirmed_history,
+            lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
+            breakpoint = _BREAKPOINT);
+        callback = fit_callback("confirmed")),
+    () -> nuts_sample(
+        confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
+            obs.total_deaths;
+            deaths_history = obs.deaths_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            breakpoint = _BREAKPOINT);
+        callback = fit_callback("confirmed_deaths")),
+    () -> nuts_sample(
+        treatment_only_model(obs.n;
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            breakpoint = _BREAKPOINT);
+        callback = fit_callback("treatment"))]);
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
 posterior_C_exports = vec(Array(chn_exports[:C_T]));
@@ -2196,7 +2212,8 @@ function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
             confirmed_positivity_link = :composition,
             genetic = genetic_seeding_model,
             tmrca_days = o.tmrca_days);
-        samples = samples, chains = chains)
+        samples = samples, chains = chains,
+        callback = fit_callback("frozen_$(cutoff_date)"))
     return (; cutoff = o.cutoff, o, chn)
 end
 
@@ -3619,7 +3636,8 @@ function refit_joint_variant(;
             genetic = genetic_seeding_model,
             tmrca_days = tmrca_days,
             tmrca_days_sd = tmrca_days_sd);
-        samples = samples, chains = chains)
+        samples = samples, chains = chains,
+        callback = fit_callback("variant"))
     return chn
 end
 
