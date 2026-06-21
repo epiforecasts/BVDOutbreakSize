@@ -12,48 +12,38 @@ Changes since v1.5.0.
 
 ### Model
 
-- The isolation BVD treatment length of stay now uses the BDBV line-list
+- The isolation BVD treatment length-of-stay uses the BDBV line-list
   admission-to-death delay as its prior.
-- The reproduction-number random walk now starts two weeks BEFORE the first
-  situation report (the new `RT_WALK_LEAD = 14` lead, exposed as the
-  `bvd_joint` keyword `rt_walk_lead`) rather than exactly at it, so `R_t` is
-  free to move over the fortnight of transmission leading up to the first
-  report instead of being held flat at `R0` right to it. The walk start is
-  floored at the renewal start so it never precedes the seeded trajectory, and
-  the `plot_rt` reconstruction uses the same earlier knot grid.
+- The reproduction-number random walk starts two weeks before the first
+  situation report (`RT_WALK_LEAD = 14`, exposed as the `bvd_joint` keyword
+  `rt_walk_lead`), so `R_t` can move over the fortnight of transmission
+  leading up to that report. The walk start is floored at the renewal start,
+  and the `plot_rt` reconstruction uses the same knot grid.
 - Added a supply-limited isolation/treatment-bed stream ("Patients en
   isolement"), the renewal analogue of the convolution secondary-observation
   model of EpiNow2.
-  Bed occupancy has been supply-driven (demand has outstripped supply), so
-  the model fits a latent bed DEMAND — the suspect inflow carried through a
-  length-of-stay survival (BVD cases with a sampled treatment stay, non-BVD
-  suspects leaving after a sampled rule-out stay) — and the occupancy is
-  that demand soft-capped at the bed capacity,
-  `occupancy = C(t)·(1−exp(−D/C(t)))`, so the admitted fraction is
-  availability-driven. The capacity `C(t)` is a random walk
-  (`bed_capacity_walk_model`), so the ceiling tracks the beds being added and
-  can be projected forward; it is pinned by the implied bed count (reported
-  occupancy / "Taux d'occupation" rate) on the days a rate is published.
+  Bed occupancy may be supply-driven (demand can outstrip supply), so the model
+  fits a latent bed demand, the suspect inflow carried through a length-of-stay
+  survival (BVD cases with a sampled treatment stay, non-BVD suspects leaving
+  after a sampled rule-out stay), right-censored at an effective bed capacity
+  `ρ·C(t)` (a censored negative binomial). The capacity `C(t)` is a random walk
+  (`bed_capacity_walk_model`) that tracks the beds being added and can be
+  projected forward, pinned by the implied bed count (reported occupancy /
+  "Taux d'occupation" rate) on the days a rate is published.
   The stream exposes the bed demand, occupancy, capacity, shortfall and
   utilisation, and carries its own observation dispersion. Added
   `convolve_survival`, the `treatment_admission_model` observation submodel,
   the `isolation_admission_model`, `bed_capacity_model` and
   `bed_capacity_walk_model` priors and the `treatment_only_model`
   single-stream composer (resolves #265).
-  A key limitation is that this is a single national model: it cannot
-  represent local bed saturation (Ituri at 93.9% occupancy on 13 June against
-  Sud-Kivu 21.9%), which is the level the supply constraint operates at, so
-  the national shortfall understates the local unmet need. The renewal model
-  does not carry per-province inflow, so it cannot be split to the
-  per-province bed model the constraint needs.
+  This is a single national model, so it cannot represent local bed saturation
+  (Ituri at 93.9% occupancy on 13 June against Sud-Kivu 21.9%); the national
+  shortfall understates the local unmet need.
 - Gave the non-BVD isolation rule-out stay its own sampled length-of-stay
   (`ruleout_los`) in `treatment_admission_model`, separate from the
-  report-to-receipt laboratory delay it previously shared. Sharing one delay
-  let the daily-observed occupancy stream, where the delay mean scales the
-  non-BVD bed demand, collapse the lab-turnaround delay that the testing,
-  composition and confirmed-death streams use only as a time shift. The
-  occupancy now identifies the rule-out stay on its own clock, and the
-  lab-turnaround delay is set by those streams plus its prior. Exposes
+  report-to-receipt laboratory delay, so the occupancy identifies the rule-out
+  stay on its own clock and the lab-turnaround delay is set by the testing,
+  composition and confirmed-death streams. Exposes
   `isolation_ruleout_los_mean`.
 - Added a recovered-among-confirmed stream ("cumul guéris"), the
   secondary-observation incidence analogue: survivors among the modelled
@@ -61,8 +51,8 @@ Changes since v1.5.0.
   confirmation-to-recovery delay, with its own observation dispersion. The
   recovery proportion is grounded on the case-fatality ratio (a recovered
   case is one that did not die) with a log-odds adjustment for the confirmed
-  population, rather than estimated from scratch.
-  The confirmed model now exposes one daily confirmed-case series
+  population, rather than estimated independently.
+  The confirmed model exposes one daily confirmed-case series
   (`confirmed_daily`) that both the recovered stream and the cumulative-
   confirmed trajectory reuse. Added the `recovered_model` submodel and the
   `recovery_probability_model` prior.
@@ -70,10 +60,10 @@ Changes since v1.5.0.
   cases and deaths together over the one travel-gated at-risk prevalence. The
   single-stream comparison in the walkthrough now shows one joint "exports"
   fit instead of separate export-case and export-death fits.
-- The one-week-ahead forecast now also projects the isolation/treatment beds
-  — both the bed demand a week ahead (need under unconstrained supply) and the
+- The one-week-ahead forecast also projects the isolation/treatment beds: the
+  bed demand a week ahead (need under unconstrained supply) and the
   supply-limited occupancy it produces, whose gap is the projected bed
-  shortfall — and the cumulative recovered total, each replicated with its
+  shortfall, and the cumulative recovered total, each replicated with its
   own dispersion. Added `plot_forecast_beds`, which shows the projected bed
   need against the supply-limited occupancy and the shortfall in the
   walkthrough's forecast section.
@@ -86,30 +76,19 @@ Changes since v1.5.0.
   reported occupancy rate starts only on 9 June, so the capacity rides its
   random walk back to the freeze date.
 - Replaced the per-vintage step background random effect with a smooth daily
-  lognormal random walk (`background_walk_model`), fixing the joint convergence
-  failure on the current data (the per-vintage effect opened a second
-  "background explains the majority of suspected cases" posterior mode that
-  split the chains; the published dev joint had max R-hat 2.5).
-  The background is now per day with no reporting-vintage steps, gated to begin
-  a report-to-receipt lead before the first suspected-case report (it does not
-  exist before surveillance began), shared across the suspected-case and
+  lognormal random walk (`background_walk_model`): a per-day background with no
+  reporting-vintage steps, gated to begin a report-to-receipt lead before the
+  first suspected-case report, shared across the suspected-case and
   suspected-death streams, with a half-normal baseline and a tight random-walk
   innovation SD.
   This also removes the per-vintage step in the modelled cumulative-death
   trajectory.
 - Widened the non-BVD background level prior so the laboratory positivity
-  identifies it.
-  The previous prior, calibrated for the un-gated full-grid background, forced
-  the background to a tiny fraction of the suspect pool, inconsistent with the
-  observed per-test positivity (210/755 ≈ 0.28).
-  The suspect pool is now inferred to be a minority BVD, raising the non-BVD
-  background substantially and lowering the cumulative-infection estimate
-  (C_T) accordingly, with a wider credible interval.
+  (210/755 ≈ 0.28 positive) identifies it.
+  The suspect pool is inferred to be a minority BVD, which lowers the
+  cumulative-infection estimate (`C_T`) with a wider credible interval.
 - Gated the laboratory analysed-specimen capacity to the testing onset, so no
   specimens are modelled as analysed before testing existed.
-  This removes a large over-prediction of the early confirmed-case counts (the
-  modelled cumulative confirmed previously ran several-fold above the observed
-  early values).
 - Redesigned the death pathway.
   Suspected deaths carry a death ascertainment `p_death` (the death analogue
   of the case ascertainment, with an informative prior centred high) and a
@@ -187,8 +166,7 @@ Changes since v1.5.0.
   `posterior_draws.csv` gains a `cumulative_onsets_T` column, the cumulative
   symptom onsets by the cut-off per draw (the onset analogue of `C_T`), and a
   new `onsets_over_time.csv` records the daily new and cumulative onset
-  trajectory over time with 30/60/90% credible intervals, the curve plotted
-  to show the outbreak grow.
+  trajectory over time with 30/60/90% credible intervals.
   Exposed through `onsets_over_time`.
 
 ## v1.5.0

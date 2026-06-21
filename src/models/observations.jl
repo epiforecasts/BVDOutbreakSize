@@ -264,9 +264,10 @@ surveillance dispersion `k` ([`surveillance_dispersion_model`](@ref)). The
 death history ends at the cut-off, so the cut-off total is the final
 increment and is not scored separately. Samples the onset-to-death delay,
 the CFR and the death ascertainment via injected submodels. The onset-to-
-death prior is centred on the Bayesian BDBV line-list reanalysis (mean
-11.2 d, SD 5.4 d; the `bdbv-linelist-analysis` submodule), the same source
-the integral model used.
+death prior is the convolution of the two atomic line-list components
+(onset-to-admission and admission-to-death; the `bdbv-linelist-analysis`
+submodule), implied mean ≈ 12.8 d, SD ≈ 7.0 d, the same source the integral
+model used.
 
 The expected BVD suspected deaths are `p_death · CFR` of the onset-to-death-
 convolved infections: a fatal BVD infection is counted as a suspected death
@@ -1402,9 +1403,9 @@ end
 """
 DRC isolation / treatment-bed occupancy likelihood, a SUPPLY-LIMITED
 prevalence stream. The "Patients en isolement" figure is the daily count of
-occupied beds. Bed occupancy has been supply-driven — demand for beds has
-outstripped supply, with occupancy catching up as capacity is expanded — so
-the occupancy is a latent bed DEMAND passed through a soft cap at the bed
+occupied beds. Bed occupancy may be supply-driven — demand for beds can
+outstrip supply, with occupancy catching up as capacity is expanded — so the
+occupancy is modelled as a latent bed demand right-censored at the bed
 capacity, not the demand itself.
 
 The latent demand is the suspect inflow carried through a length-of-stay
@@ -1431,28 +1432,22 @@ rates and leave on different clocks:
   clinical sign-off and bed logistics, so the rule-out stay is identified by
   the occupancy on its own clock.
 
-The occupancy is the total demand soft-capped at the bed capacity `C(t)`
-([`soft_min_cap`](@ref)), with `C(t)` the time-varying bed capacity
+The occupancy is the latent demand right-censored at an effective capacity
+`ρ·C(t)`, with `C(t)` the time-varying bed capacity
 ([`bed_capacity_walk_model`](@ref), a random walk so the ceiling tracks the
-beds being added):
-
-```math
-\\text{occupancy}(t) = \\text{demand}(t) - s\\,\\log\\!\\bigl(1 +
-    e^{(\\text{demand}(t) - C(t))/s}\\bigr),
-\\qquad s = \\text{softness}\\cdot C(t),
-```
-
-a smoothed `min(demand, C)`: occupancy ≈ demand while beds are slack and
-saturates near `C` once demand exceeds it, so a shortfall is inferred only
-when occupancy approaches genuine fullness, not at every utilisation below
-capacity. The smooth approach is the soft ceiling, so occupancy sits below
-`C(t)` at finite demand. Each report day's occupied-bed count follows a
-NegativeBinomial
-around the modelled occupancy with a dispersion `k` sampled here (not shared
-with the other streams). The capacity is pinned by the implied bed count
-(occupancy / reported occupancy rate, `capacity_history`), each entry a noisy
-observation of `C(t)` on its day. Empty histories are no-ops; `missing`
-count vectors sample (the predictive path).
+beds being added) and `ρ ∈ (0, 1]` the usable fraction of the nominal beds
+(ward layout, staffing and isolation spacing mean only a fraction can be
+occupied; `ρ` is bounded below by the largest observed utilisation). While
+demand is below the ceiling the count tracks it; once demand reaches the
+ceiling the count is censored there. Each report day's occupied-bed count
+follows a NegativeBinomial around the demand, right-censored at `ρ·C(t)`
+([`censored_occupancy_model`](@ref)), with a dispersion `k` (the pooled
+isolation dispersion in the joint, sampled here when run standalone).
+Censoring keeps the demand identified at saturation, where a deterministic cap
+would make occupancy insensitive to demand. The capacity is pinned by the
+implied bed count (occupancy / reported occupancy rate, `capacity_history`),
+each entry a noisy observation of `C(t)` on its day. Empty histories are
+no-ops; `missing` count vectors sample (the predictive path).
 
 Exposes the cut-off occupancy, the cut-off bed demand (need under
 unconstrained supply), their difference (the bed shortfall), the utilisation
