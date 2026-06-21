@@ -19,7 +19,7 @@
 using PrecompileTools: @setup_workload, @compile_workload
 using Preferences: @load_preference
 using LogDensityProblems: logdensity_and_gradient
-import Turing: DynamicPPL
+using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
 
 @static if @load_preference("precompile_workload", false)
     @setup_workload begin
@@ -37,9 +37,9 @@ import Turing: DynamicPPL
                     lab_history = lh, breakpoint = 30),
                 exports_only_model(40, 2))
             for m in models
-                vi = DynamicPPL.link(DynamicPPL.VarInfo(m), m)
-                ldf = DynamicPPL.LogDensityFunction(
-                    m, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+                vi = link(VarInfo(m), m)
+                ldf = LogDensityFunction(
+                    m, getlogjoint, vi; adtype = default_adtype())
                 logdensity_and_gradient(ldf, collect(vi[:]))
             end
         end
