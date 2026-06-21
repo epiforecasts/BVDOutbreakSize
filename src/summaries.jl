@@ -75,6 +75,30 @@ function summary_table(chn, params::AbstractVector{Symbol};
     return _prettify(df)
 end
 
+## --- Markdown rendering --------------------------------------------------
+
+# Format one cell for a markdown table: integer-valued floats print without
+# a trailing `.0` so count columns read as whole numbers, everything else
+# prints with its default string form.
+_md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
+_md_cell(x) = string(x)
+
+"""
+GitHub-flavoured markdown table for a `DataFrame`, one header row from the
+column names and one body row per data row. Used to persist a rendered
+summary table to disk so a static documentation page can embed it without
+re-running the fit.
+"""
+function markdown_table(df::DataFrame)
+    cols = names(df)
+    header = "| " * join(cols, " | ") * " |"
+    sep = "| " * join(fill("---", length(cols)), " | ") * " |"
+    rows = map(eachrow(df)) do row
+        "| " * join((_md_cell(row[c]) for c in cols), " | ") * " |"
+    end
+    return join(vcat(header, sep, rows), "\n") * "\n"
+end
+
 ## --- Fit diagnostics ----------------------------------------------------
 
 # Derived daily latent trajectories carried only for the figures. Their
