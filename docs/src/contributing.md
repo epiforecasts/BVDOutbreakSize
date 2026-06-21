@@ -61,6 +61,15 @@ julia --project=docs -e 'using Pkg; \
 julia --project=docs docs/make.jl
 ```
 
+A build streams per-fit progress by default: every NUTS fit writes
+`logs/<fit>.log` (iteration, log-density, divergences) and a TensorBoard
+run under `logs/tensorboard/<fit>/`, controlled by `BVD_FIT_LOG` (`all` when
+unset, or `progress`, `tensorboard`, `none`).
+CI release builds set `BVD_FIT_LOG=none`.
+Tail a log for quick liveness, or run `task tensorboard` to view all fits in
+the worktree.
+The logs live under the git-ignored `logs/`, so each worktree keeps its own.
+
 `test/runtests.jl` includes each `test/test_*.jl`.
 To iterate on one file, run it inside a REPL after
 `using BVDOutbreakSize`, or temporarily comment out the others in
