@@ -43,6 +43,10 @@ jobs:
           # Skip per-fit progress/TensorBoard logging on the build; the
           # callbacks (`fit_callback`) are for local runs, not CI artifacts.
           BVD_FIT_LOG: none
+          # Run the slow sensitivity refits (onset-to-death delay, molecular
+          # clock) on main and release builds, but skip them on PR previews
+          # to keep PR docs builds fast.
+          BVD_RUN_SENSITIVITY: ${{ github.event_name != 'pull_request' }}
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
