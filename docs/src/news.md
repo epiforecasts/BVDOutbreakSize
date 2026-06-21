@@ -14,9 +14,9 @@ Changes since v1.5.0.
 
 - The isolation BVD treatment length-of-stay uses the BDBV line-list
   admission-to-death delay as its prior.
-- The reproduction-number random walk starts two weeks before the first
-  situation report (`RT_WALK_LEAD = 14`, exposed as the `bvd_joint` keyword
-  `rt_walk_lead`), so `R_t` can move over the fortnight of transmission
+- The reproduction-number random walk starts a month before the first
+  situation report (`RT_WALK_LEAD = 28`, exposed as the `bvd_joint` keyword
+  `rt_walk_lead`), so `R_t` can move over the weeks of transmission
   leading up to that report. The walk start is floored at the renewal start,
   and the `plot_rt` reconstruction uses the same knot grid.
 - Added a supply-limited isolation/treatment-bed stream ("Patients en

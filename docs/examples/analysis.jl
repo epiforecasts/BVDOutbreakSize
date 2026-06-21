@@ -458,9 +458,9 @@ vintage_table #hide
 # ##### Reproduction number
 #
 # The reproduction number is held flat at the established reproduction
-# number $R_0$ until two weeks before the first WHO situation report, then
+# number $R_0$ until a month before the first WHO situation report, then
 # follows a non-centred Gaussian random walk on the log scale with weekly
-# knots to the cut-off. The fortnight lead lets $R_t$ start moving before the
+# knots to the cut-off. The month-long lead lets $R_t$ start moving before the
 # first report, since transmission may already have turned before the outbreak
 # was formally reported; the walk start is floored at the renewal start. The
 # walk starts from $R_0$ at its first knot:
@@ -2662,7 +2662,7 @@ infection_delay_pair_fig #hide
 
 ## `rt_start` is the renewal/established-window start the plot shows from;
 ## `rt_walk_start` is where the random walk's knots begin — `RT_WALK_LEAD`
-## days (two weeks) before the first situation report, matching `bvd_joint`'s
+## days (a month) before the first situation report, matching `bvd_joint`'s
 ## `rt_walk_lead` — so the chain reconstruction uses the same knot grid the
 ## model did, floored at the renewal start. R_t is flat at R0 between the two.
 _rt_start_plot = clamp(

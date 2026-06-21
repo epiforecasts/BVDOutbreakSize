@@ -162,13 +162,13 @@ const RENEWAL_START_LEAD = 14
 
 Days BEFORE the first situation report (`breakpoint`) at which the
 reproduction-number random walk is allowed to start moving, rather than
-holding `R_t` flat at `R0` right up to the report. Two weeks lets the walk
-capture the transmission dynamics in the fortnight leading up to the first
+holding `R_t` flat at `R0` right up to the report. A month lets the walk
+capture the transmission dynamics in the period leading up to the first
 report — the response decline can begin before the outbreak is first
 reported — while staying floored at the renewal start so the walk never
 precedes the seeded trajectory.
 """
-const RT_WALK_LEAD = 14
+const RT_WALK_LEAD = 28
 
 """
     ITURI_POPULATION
