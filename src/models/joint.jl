@@ -408,9 +408,9 @@ death-confirmation positivity (`death_confirmation`).
     ## grows from here.
     rt_start = ismissing(tmrca_days) ? 1 :
                clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
-    ## Start the random walk `rt_walk_lead` days (two weeks by default) BEFORE
+    ## Start the random walk `rt_walk_lead` days (a month by default) BEFORE
     ## the first situation report (`breakpoint`) rather than exactly at it, so
-    ## R_t is free to move over the fortnight of transmission leading up to the
+    ## R_t is free to move over the weeks of transmission leading up to the
     ## first report instead of being held flat at R0 right to it (the response
     ## decline can begin before the outbreak is first reported). The start is
     ## floored at the renewal start so the walk never precedes the seeded
