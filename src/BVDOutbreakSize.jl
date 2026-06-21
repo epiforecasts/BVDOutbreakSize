@@ -102,5 +102,6 @@ include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
+include("precompile.jl")
 
 end # module

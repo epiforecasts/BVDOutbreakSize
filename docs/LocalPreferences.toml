@@ -1,0 +1,8 @@
+# The report build fits the joint model many times, so it opts in to the
+# BVDOutbreakSize precompile workload: the joint Mooncake reverse rule is
+# baked into the package precompile cache (and persisted by CI's depot
+# cache), so the build skips the multi-minute first-fit compile. The workload
+# is off by default (see src/precompile.jl) to keep quick local package
+# precompilation fast; this enables it only for the `docs/` environment.
+[BVDOutbreakSize]
+precompile_workload = true

@@ -1956,9 +1956,138 @@ const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
 ## for their CFR, onset-to-death PMF and export onsets, leaving their own
 ## counts missing, which leaves two redundant sampled discrete draws, so its
 ## model check is disabled (see `nuts_sample`).
-chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
-chn_confirmed_deaths,
-chn_treatment = fit_parallel([
+## Setup for the single master fit pool: relocated cut-offs, frozen-fit and
+## sensitivity-variant helpers so every independent fit can run in one pool.
+validation_cutoff = string(obs.cutoff - Day(7))
+
+## Published per-release estimates, pulled from the tagged results
+## releases by `scripts/refresh_releases.jl` into
+## `data/released_estimates.csv`. Columns: tag, date, model (integral or
+## renewal), median and the 30/60/90% bounds.
+released_df = CSV.read(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
+    DataFrame)
+
+## Integral-era release cut-offs for the frozen renewal overlay: a
+## release whose data cut-off already has a renewal release needs no
+## re-fit, since that release already is the renewal estimate. 20, 23 and
+## 27 May are additionally fit for the matched-cutoff comparison further
+## down (27 May matches the Lancet publication's cut-off).
+renewal_release_dates = Set(string(r.date)
+for r in eachrow(released_df) if r.model == "renewal")
+frozen_evolution_cutoffs = sort(unique(string(r.date)
+for r in eachrow(released_df)
+if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
+frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
+    ["2026-05-20", "2026-05-23", "2026-05-27"]))
+
+## A joint fit at the full headline settings (1000 draws × 2 chains) to the
+## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
+## the full `obs`, so the model call mirrors the headline joint fit.
+function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
+    o = freeze_observations(cutoff_date)
+    bp = o.n - o.who_first_sitrep_days
+    chn = nuts_sample(
+        bvd_joint(
+            o.n, o.exported_cases, o.total_deaths,
+            o.reported_cases, o.exports_deaths, o.confirmed_cases,
+            o.tests_analysed;
+            confirmed_deaths = o.confirmed_deaths,
+            deaths_history = o.deaths_history,
+            reported_history = o.reported_history,
+            confirmed_history = o.confirmed_history,
+            confirmed_deaths_history = o.confirmed_deaths_history,
+            lab_history = o.lab_history,
+            lab_daily_history = o.lab_daily_history,
+            isolation_history = o.isolation_history,
+            bed_capacity_history = o.bed_capacity_history,
+            export_case_days = o.export_case_days,
+            export_death_days = o.export_death_days,
+            breakpoint = bp,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            genetic = genetic_seeding_model,
+            tmrca_days = o.tmrca_days);
+        samples = samples, chains = chains,
+        callback = fit_callback("frozen_$(cutoff_date)"))
+    return (; cutoff = o.cutoff, o, chn)
+end
+
+## One joint re-fit on the live data at the full headline settings, with hooks
+## to override the genetic-seeding bound and the deaths submodel. The deaths
+## submodel is passed the same way the genetic-seeding override is, as a
+## closure matching the joint's `deaths(history, total, onsets, k;
+## background_re)` call, so an alternative onset-to-death delay can be injected
+## without touching the package.
+function refit_joint_variant(;
+        deaths = deaths_model,
+        tmrca_days = obs.tmrca_days,
+        tmrca_days_sd = 15.0,
+        samples = 1000, chains = 2)
+    chn = nuts_sample(
+        bvd_joint(
+            obs.n, obs.exported_cases, obs.total_deaths,
+            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+            obs.tests_analysed;
+            confirmed_deaths = obs.confirmed_deaths,
+            recovered_cases = obs.recovered_cases,
+            deaths_history = obs.deaths_history,
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
+            suspected_daily_history = obs.suspected_daily_history,
+            suspected_daily_deaths_history =
+            obs.suspected_daily_deaths_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            recovered_history = obs.recovered_history,
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = _BREAKPOINT,
+            background_re = true,
+            confirmed_positivity_link = :composition,
+            deaths = deaths,
+            genetic = genetic_seeding_model,
+            tmrca_days = tmrca_days,
+            tmrca_days_sd = tmrca_days_sd);
+        samples = samples, chains = chains,
+        callback = fit_callback("variant"))
+    return chn
+end
+
+## Community-pathway onset-to-death delay from the Isiro 2012 line-list
+## reanalysis community-death model (a single Gamma, implied mean ≈ 8 d,
+## shape ≈ 5.5), a closure that re-injects this delay on its natural Gamma
+## shape and scale into the deaths submodel while keeping its other defaults.
+deaths_community_delay = (history,
+    total,
+    onsets,
+    k;
+    kwargs...) -> deaths_model(history, total, onsets, k;
+    onset_to_death = gamma_delay_model(40;
+        alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
+        theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
+    kwargs...)
+
+## The faster early-epidemic clock dates the common ancestor about 17 days
+## more recently, so the bound on the outbreak age sits that many days
+## closer to the cut-off, with a tighter spread from its narrower interval.
+clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
+tmrca_days_alt = obs.tmrca_days - clock_alt_offset
+
+## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
+## joint fits; run them only on main and release builds, not PRs or local
+## builds. `BVD_RUN_SENSITIVITY` (set in the docs workflow off PRs) gates them.
+RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in (
+    "true", "1", "yes", "on")
+
+## Every independent fit runs as one work-stealing pool so the long joint fit
+## overlaps the per-stream, frozen and (gated) sensitivity re-fits and keeps
+## all cores busy, rather than the short fits idling cores while the joint
+## finishes. The fits are data-only independent, so the schedule is free.
+_headline_thunks = [
     () -> nuts_sample(
         bvd_joint(
             obs.n, obs.exported_cases, obs.total_deaths,
@@ -2025,7 +2154,28 @@ chn_treatment = fit_parallel([
             isolation_history = obs.isolation_history,
             bed_capacity_history = obs.bed_capacity_history,
             breakpoint = _BREAKPOINT);
-        callback = fit_callback("treatment"))]);
+        callback = fit_callback("treatment"))
+]
+_frozen_thunks = [() -> fit_frozen_joint(c) for c in frozen_cutoffs]
+_sens_thunks = RUN_SENSITIVITY ?
+               [() -> refit_joint_variant(deaths = deaths_community_delay),
+    () -> refit_joint_variant(
+        tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)] : []
+_all_fits = fit_parallel(vcat(_headline_thunks,
+    [() -> fit_frozen_joint(validation_cutoff)], _frozen_thunks, _sens_thunks))
+
+_n_head = length(_headline_thunks)
+_n_frozen = length(frozen_cutoffs)
+(chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
+    chn_confirmed_deaths, chn_treatment) = _all_fits[1:_n_head]
+frozen_lastweek = _all_fits[_n_head + 1]
+frozen_results = _all_fits[(_n_head + 2):(_n_head + 1 + _n_frozen)]
+frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
+frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+if RUN_SENSITIVITY
+    chn_joint_community_delay = _all_fits[_n_head + 2 + _n_frozen]
+    chn_joint_fast_clock = _all_fits[_n_head + 3 + _n_frozen]
+end
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
 posterior_C_exports = vec(Array(chn_exports[:C_T]));
@@ -2081,7 +2231,11 @@ diagnostics_table( #hide
     "cases (DRC)" => chn_cases, #hide
     "confirmed (DRC)" => chn_confirmed, #hide
     "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
-    "isolation (DRC)" => chn_treatment) #hide
+    "isolation (DRC)" => chn_treatment, #hide
+    "frozen (1wk back)" => frozen_lastweek.chn, #hide
+    (RUN_SENSITIVITY ? #hide
+     ["delay sensitivity" => chn_joint_community_delay, #hide
+        "clock sensitivity" => chn_joint_fast_clock] : [])...) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -2185,37 +2339,8 @@ diagnostics_table( #hide
 #md # <details><summary>Frozen-fit helper (reused by the forecast validation, evolution and matched-in-time sections)</summary>
 #md # ```
 
-## A joint fit at the full headline settings (1000 draws × 2 chains) to the
-## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
-## the full `obs`, so the model call mirrors the headline joint fit.
-function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
-    o = freeze_observations(cutoff_date)
-    bp = o.n - o.who_first_sitrep_days
-    chn = nuts_sample(
-        bvd_joint(
-            o.n, o.exported_cases, o.total_deaths,
-            o.reported_cases, o.exports_deaths, o.confirmed_cases,
-            o.tests_analysed;
-            confirmed_deaths = o.confirmed_deaths,
-            deaths_history = o.deaths_history,
-            reported_history = o.reported_history,
-            confirmed_history = o.confirmed_history,
-            confirmed_deaths_history = o.confirmed_deaths_history,
-            lab_history = o.lab_history,
-            lab_daily_history = o.lab_daily_history,
-            isolation_history = o.isolation_history,
-            bed_capacity_history = o.bed_capacity_history,
-            export_case_days = o.export_case_days,
-            export_death_days = o.export_death_days,
-            breakpoint = bp,
-            background_re = true,
-            confirmed_positivity_link = :composition,
-            genetic = genetic_seeding_model,
-            tmrca_days = o.tmrca_days);
-        samples = samples, chains = chains,
-        callback = fit_callback("frozen_$(cutoff_date)"))
-    return (; cutoff = o.cutoff, o, chn)
-end
+## fit_frozen_joint and the frozen re-fits are defined and run in the setup
+## block above.
 
 #md # ```@raw html
 #md # </details>
@@ -3146,9 +3271,7 @@ forecast_beds_fig #hide
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
 #md # ```
 
-validation_cutoff = string(obs.cutoff - Day(7))
-frozen_lastweek = fit_frozen_joint(validation_cutoff)
-
+## frozen_lastweek is computed in the setup block above.
 validation_forecast = forecast_reported(frozen_lastweek.chn;
     horizon = 7,
     obs_cases = frozen_lastweek.o.reported_cases,
@@ -3359,33 +3482,7 @@ cumulative_density_fig #hide
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
 #md # ```
 
-## Published per-release estimates, pulled from the tagged results
-## releases by `scripts/refresh_releases.jl` into
-## `data/released_estimates.csv`. Columns: tag, date, model (integral or
-## renewal), median and the 30/60/90% bounds.
-released_df = CSV.read(
-    joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
-    DataFrame)
-
-## Integral-era release cut-offs for the frozen renewal overlay: a
-## release whose data cut-off already has a renewal release needs no
-## re-fit, since that release already is the renewal estimate. 20, 23 and
-## 27 May are additionally fit for the matched-cutoff comparison further
-## down (27 May matches the Lancet publication's cut-off).
-renewal_release_dates = Set(string(r.date)
-for r in eachrow(released_df) if r.model == "renewal")
-frozen_evolution_cutoffs = sort(unique(string(r.date)
-for r in eachrow(released_df)
-if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
-frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
-    ["2026-05-20", "2026-05-23", "2026-05-27"]))
-
-## Independent frozen re-fits (one per cut-off); run in parallel and keyed
-## by the requested cut-off so each reads as its own estimate.
-frozen_results = fit_parallel(
-    [() -> fit_frozen_joint(c) for c in frozen_cutoffs])
-frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
-frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+## Frozen re-fits and released_df are prepared in the setup block above.
 
 #md # ```@raw html
 #md # </details>
@@ -3429,7 +3526,13 @@ function _ci369(xs)
     q(p) = round(Int, quantile(xs, p))
     (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
 end
-renewal_frozen = [(c, _ci369(frozen_C(c))...) for c in frozen_evolution_cutoffs]
+## Reuse the one-week-back frozen fit (already run for forecast validation)
+## as an additional recent renewal point, so the evolution plot shows the
+## current-vintage frozen estimate without an extra re-fit.
+frozen_by_cutoff[validation_cutoff] = frozen_lastweek
+renewal_frozen = [(c, _ci369(frozen_C(c))...)
+                  for c in sort(union(frozen_evolution_cutoffs,
+    [validation_cutoff]))]
 
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
@@ -3597,68 +3700,10 @@ frozen_streams_table #hide
 #md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
 #md # ```
 
-## One joint re-fit on the live data at the full headline settings, with hooks
-## to override the genetic-seeding bound and the deaths submodel. The deaths
-## submodel is passed the same way the genetic-seeding override is, as a
-## closure matching the joint's `deaths(history, total, onsets, k;
-## background_re)` call, so an alternative onset-to-death delay can be injected
-## without touching the package.
-function refit_joint_variant(;
-        deaths = deaths_model,
-        tmrca_days = obs.tmrca_days,
-        tmrca_days_sd = 15.0,
-        samples = 1000, chains = 2)
-    chn = nuts_sample(
-        bvd_joint(
-            obs.n, obs.exported_cases, obs.total_deaths,
-            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-            obs.tests_analysed;
-            confirmed_deaths = obs.confirmed_deaths,
-            recovered_cases = obs.recovered_cases,
-            deaths_history = obs.deaths_history,
-            reported_history = obs.reported_history,
-            confirmed_history = obs.confirmed_history,
-            confirmed_deaths_history = obs.confirmed_deaths_history,
-            lab_history = obs.lab_history,
-            lab_daily_history = obs.lab_daily_history,
-            suspected_daily_history = obs.suspected_daily_history,
-            suspected_daily_deaths_history =
-            obs.suspected_daily_deaths_history,
-            isolation_history = obs.isolation_history,
-            bed_capacity_history = obs.bed_capacity_history,
-            recovered_history = obs.recovered_history,
-            export_case_days = obs.export_case_days,
-            export_death_days = obs.export_death_days,
-            breakpoint = _BREAKPOINT,
-            background_re = true,
-            confirmed_positivity_link = :composition,
-            deaths = deaths,
-            genetic = genetic_seeding_model,
-            tmrca_days = tmrca_days,
-            tmrca_days_sd = tmrca_days_sd);
-        samples = samples, chains = chains,
-        callback = fit_callback("variant"))
-    return chn
-end
-
-## Community-pathway onset-to-death delay from the Isiro 2012 line-list
-## reanalysis community-death model (a single Gamma, implied mean ≈ 8 d,
-## shape ≈ 5.5), a closure that re-injects this delay on its natural Gamma
-## shape and scale into the deaths submodel while keeping its other defaults.
-deaths_community_delay = (history,
-    total,
-    onsets,
-    k;
-    kwargs...) -> deaths_model(history, total, onsets, k;
-    onset_to_death = gamma_delay_model(40;
-        alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-        theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
-    kwargs...)
-
-chn_joint_community_delay = refit_joint_variant(
-    deaths = deaths_community_delay)
-
-posterior_C_community_delay = vec(Array(chn_joint_community_delay[:C_T]))
+## refit_joint_variant, deaths_community_delay and the sensitivity re-fits are
+## defined and run (when enabled) in the setup block above.
+posterior_C_community_delay = RUN_SENSITIVITY ?
+                              vec(Array(chn_joint_community_delay[:C_T])) : nothing
 
 #md # ```@raw html
 #md # </details>
@@ -3668,9 +3713,10 @@ posterior_C_community_delay = vec(Array(chn_joint_community_delay[:C_T]))
 #md # <details><summary>Delay-sensitivity infection-count table</summary>
 #md # ```
 
-delay_sensitivity_table = streams_table(
-    "baseline (hospital pathway)" => posterior_C_joint,
-    "community pathway" => posterior_C_community_delay);
+delay_sensitivity_table = RUN_SENSITIVITY ?
+                          streams_table("baseline (hospital pathway)" => posterior_C_joint,
+    "community pathway" => posterior_C_community_delay) :
+                          Markdown.md"_Delay sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
@@ -3682,10 +3728,11 @@ delay_sensitivity_table #hide
 #md # <details><summary>Delay-sensitivity infection-count density plot</summary>
 #md # ```
 
-delay_sensitivity_fig = plot_cumulative_cases(
+delay_sensitivity_fig = RUN_SENSITIVITY ?
+                        plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
-    "community pathway" => posterior_C_community_delay;
-    scenarios = []);
+    "community pathway" => posterior_C_community_delay; scenarios = []) :
+                        Markdown.md"_Delay sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
@@ -3713,18 +3760,12 @@ delay_sensitivity_fig #hide
 #md # <details><summary>Re-fit the joint under the faster clock rate</summary>
 #md # ```
 
-## The faster early-epidemic clock dates the common ancestor about 17 days
-## more recently, so the bound on the outbreak age sits that many days
-## closer to the cut-off, with a tighter spread from its narrower interval.
-clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
-tmrca_days_alt = obs.tmrca_days - clock_alt_offset
-
-chn_joint_fast_clock = refit_joint_variant(
-    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)
-
-posterior_C_fast_clock = vec(Array(chn_joint_fast_clock[:C_T]))
+## clock_alt_offset, tmrca_days_alt and the faster-clock re-fit are defined and
+## run (when enabled) in the setup block above.
+posterior_C_fast_clock = RUN_SENSITIVITY ?
+                         vec(Array(chn_joint_fast_clock[:C_T])) : nothing
 T_baseline_clock = vec(Array(chn_joint[:T]))
-T_fast_clock = vec(Array(chn_joint_fast_clock[:T]))
+T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
 
 #md # ```@raw html
 #md # </details>
@@ -3736,9 +3777,10 @@ T_fast_clock = vec(Array(chn_joint_fast_clock[:T]))
 #md # <details><summary>Clock-rate infection-count table</summary>
 #md # ```
 
-clock_sensitivity_C_table = streams_table(
-    "baseline clock" => posterior_C_joint,
-    "faster clock" => posterior_C_fast_clock);
+clock_sensitivity_C_table = RUN_SENSITIVITY ?
+                            streams_table("baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock) :
+                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
@@ -3750,10 +3792,10 @@ clock_sensitivity_C_table #hide
 #md # <details><summary>Clock-rate infection-count density plot</summary>
 #md # ```
 
-clock_sensitivity_C_fig = plot_cumulative_cases(
-    "baseline clock" => posterior_C_joint,
-    "faster clock" => posterior_C_fast_clock;
-    scenarios = []);
+clock_sensitivity_C_fig = RUN_SENSITIVITY ?
+                          plot_cumulative_cases("baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock; scenarios = []) :
+                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
@@ -3769,10 +3811,10 @@ clock_sensitivity_C_fig #hide
 #md # <details><summary>Clock-rate outbreak-age table</summary>
 #md # ```
 
-clock_sensitivity_T_table = streams_table(
-    "baseline clock" => T_baseline_clock,
-    "faster clock" => T_fast_clock;
-    digits = 0);
+clock_sensitivity_T_table = RUN_SENSITIVITY ?
+                            streams_table("baseline clock" => T_baseline_clock,
+    "faster clock" => T_fast_clock; digits = 0) :
+                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
@@ -3784,11 +3826,12 @@ clock_sensitivity_T_table #hide
 #md # <details><summary>Clock-rate outbreak-age density plot</summary>
 #md # ```
 
-clock_sensitivity_T_fig = plot_density_overlay(
-    "baseline clock" => T_baseline_clock,
+clock_sensitivity_T_fig = RUN_SENSITIVITY ?
+                          plot_density_overlay("baseline clock" => T_baseline_clock,
     "faster clock" => T_fast_clock;
     xlabel = "Outbreak age (days before cut-off)",
-    title = "Posterior outbreak age by clock rate");
+    title = "Posterior outbreak age by clock rate") :
+                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
 
 #md # ```@raw html
 #md # </details>
