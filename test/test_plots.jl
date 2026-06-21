@@ -261,6 +261,47 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_rt_streams overlays streams and joint" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_rt_streams, knot_days
+    rng = MersenneTwister(31)
+    ndraws = 80
+    n = 95
+    ## Build one chain reconstructable by `reconstruct_rt`, parameterised by
+    ## the walk start so the joint (walk from the breakpoint lead) and the
+    ## per-stream fits (walk from day 1) each get an innovation vector of the
+    ## right length.
+    function make_chain(walk_start)
+        nz = length(knot_days(n; week = 7, start = walk_start)) - 1
+        zcol = reshape([randn(rng, nz) for _ in 1:ndraws], ndraws, 1)
+        FlexiChains.FlexiChain{Symbol}(ndraws, 1,
+            Dict(
+                FlexiChains.Parameter(Symbol("rt_state.log_R0")) => reshape(
+                    log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
+                FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
+                    abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
+                FlexiChains.Parameter(
+                    Symbol("rt_state.intervention_effect")) => reshape(
+                    -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
+                FlexiChains.Parameter(Symbol("rt_state.z")) => zcol))
+    end
+    breakpoint = n - 11
+    joint_walk = breakpoint - 14
+    streams = [
+        (; label = "cases", chn = make_chain(1), rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue),
+        (; label = "deaths", chn = make_chain(1), rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick)]
+    joint = (; label = "joint", chn = make_chain(joint_walk),
+        rt_start = joint_walk, rt_walk_start = joint_walk)
+    fig = plot_rt_streams(streams; joint = joint, n = n,
+        breakpoint = breakpoint, as_of_date = "2026-05-28",
+        seeding = Date("2026-02-23"), display_start = joint_walk)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc

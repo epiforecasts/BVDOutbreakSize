@@ -841,6 +841,76 @@ function plot_start_date_pair(chn;
 end
 
 """
+Reconstruct each posterior draw's daily reproduction-number trajectory
+`Rt` from the sampled weekly random-walk parameters, returning a
+`ndraws × n` matrix masked to each draw's established window (`missing`
+before `rt_start`). The saved chain stores only the cut-off `R_T`, so each
+draw's daily `Rt` is rebuilt by mirroring [`rt_walk_model`](@ref): weekly
+knots ([`knot_days`](@ref)) from `rt_walk_start` follow a non-centred
+Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
+`rt_state.sigma_rw .* rt_state.z`), linearly interpolated to the day grid
+([`interpolate_knots`](@ref)) and shifted by the sampled
+`rt_state.intervention_effect` along a logistic ramp
+([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
+Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
+"""
+function reconstruct_rt(chn; n::Integer, breakpoint::Real,
+        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
+        week::Integer = 7, ramp::Real = 14.0)
+    log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
+    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
+    effect = _draws(chn, Symbol("rt_state.intervention_effect"))
+    ## `rt_state.z` is vector-valued: one standard-normal innovation vector
+    ## per draw. Pull each draw's full vector from the chain slice.
+    zmat = chn[Symbol("rt_state.z")]
+    zrows = [collect(z) for z in vec(collect(zmat))]
+
+    ## The knot grid is built from the model's WALK start `rt_walk_start`
+    ## (the first situation report, the breakpoint grid day), which is
+    ## decoupled from `rt_start` (the renewal/established-window start used for
+    ## the mask below). The innovation vector length is fixed by that walk
+    ## start; if the caller passes a mismatching one the knot grid here will
+    ## not match, so fail with a clear message rather than a downstream bounds
+    ## error.
+    days = knot_days(n; week, start = rt_walk_start)
+    nb = length(days)
+    if !isempty(zrows) && length(zrows[1]) != nb - 1
+        error("reconstruct_rt: rt_walk_start = $rt_walk_start gives " *
+              "$(nb - 1) random-walk steps but the chain has " *
+              "$(length(zrows[1])); pass the same walk start the model used " *
+              "(the breakpoint grid day, n - who_first_sitrep_days).")
+    end
+    ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
+    ndraws = length(log_R0)
+
+    ## Per-draw daily Rt, masked to the draw's own established window
+    ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
+    rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
+    for i in 1:ndraws
+        z = zrows[i]
+        steps = sigma[i] .* z[1:(nb - 1)]
+        log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
+        walk = interpolate_knots(log_R, days, n)
+        ## Days before the renewal start clamp to the established R0 (the
+        ## walk base); they are filled by the analytic cryptic exponential in
+        ## the model and are not plotted (masked from `rt_start` onward).
+        log_Rt = walk .+ effect[i] .* ramp_shape
+        start = clamp(rt_start, 1, n)
+        for d in start:n
+            rt[i, d] = exp(log_Rt[d])
+        end
+    end
+    return rt
+end
+
+## Per-day quantile `pr` of an established-window Rt matrix, skipping the
+## masked (pre-renewal) days; `missing` where a day has no established draws.
+function _rt_quantile(rt::AbstractMatrix, d::Integer, pr::Real)
+    col = collect(skipmissing(@view rt[:, d]))
+    return isempty(col) ? missing : quantile(col, pr)
+end
+
+"""
 Reconstruct the daily reproduction-number trajectory `Rt` per posterior
 draw from the sampled weekly random-walk parameters and plot it over the
 established-outbreak window. The saved chain stores only the cut-off
@@ -866,59 +936,11 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = 14.0,
         n_traj::Integer = 100)
-    log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
-    sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
-    effect = _draws(chn, Symbol("rt_state.intervention_effect"))
-    T_draws = _draws(chn, :T)
-    ## `rt_state.z` is vector-valued: one standard-normal innovation vector
-    ## per draw. Pull each draw's full vector from the chain slice.
-    zmat = chn[Symbol("rt_state.z")]
-    zrows = [collect(z) for z in vec(collect(zmat))]
-
-    ## The knot grid is built from the model's WALK start `rt_walk_start`
-    ## (the first situation report, the breakpoint grid day), which is
-    ## decoupled from `rt_start` (the renewal/established-window start used for
-    ## the plot mask below). The innovation vector length is fixed by that
-    ## walk start; if the caller passes a mismatching one the knot grid here
-    ## will not match, so fail with a clear message rather than a downstream
-    ## bounds error.
-    days = knot_days(n; week, start = rt_walk_start)
-    nb = length(days)
-    if !isempty(zrows) && length(zrows[1]) != nb - 1
-        error("plot_rt: rt_walk_start = $rt_walk_start gives $(nb - 1) " *
-              "random-walk steps but the chain has $(length(zrows[1])); " *
-              "pass the same walk start the model used (the breakpoint grid " *
-              "day, n - who_first_sitrep_days).")
-    end
-    ramp_shape = sigmoid_ramp(n, breakpoint; ramp)
-    ndraws = length(log_R0)
-
-    ## Per-draw daily Rt, masked to the draw's own established window
-    ## (cumulative infections ≥ 1, i.e. grid day ≥ n - round(T)).
-    rt = Matrix{Union{Missing, Float64}}(missing, ndraws, n)
-    for i in 1:ndraws
-        z = zrows[i]
-        steps = sigma[i] .* z[1:(nb - 1)]
-        log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
-        walk = interpolate_knots(log_R, days, n)
-        ## Days before the renewal start clamp to the established R0 (the
-        ## walk base); they are filled by the analytic cryptic exponential in
-        ## the model and are not plotted (masked below from `rt_start`
-        ## onward).
-        log_Rt = walk .+ effect[i] .* ramp_shape
-        ## Only the established R_t, from the genetic bound onward; the
-        ## pre-bound seeding window is not plotted.
-        start = clamp(rt_start, 1, n)
-        for d in start:n
-            rt[i, d] = exp(log_Rt[d])
-        end
-    end
+    rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
+    ndraws = size(rt, 1)
 
     ## Median and ribbons over established draws only (skip masked days).
-    function q(d, pr)
-        col = collect(skipmissing(@view rt[:, d]))
-        isempty(col) ? missing : quantile(col, pr)
-    end
+    q(d, pr) = _rt_quantile(rt, d, pr)
     med = [q(d, 0.5) for d in 1:n]
     lo90 = [q(d, 0.05) for d in 1:n]
     hi90 = [q(d, 0.95) for d in 1:n]
@@ -984,6 +1006,121 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     ax.xticks = collect(lo:7:hi)
     ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                               for v in vals]
+    return fig
+end
+
+"""
+Overlaid implied reproduction-number trajectories, one per single-stream
+fit, with the joint fit drawn on top as the reference. Each stream's daily
+`Rt` is reconstructed from its own sampled random walk exactly as in
+[`plot_rt`](@ref) (see [`reconstruct_rt`](@ref)), so the figure shows what
+reproduction number each data stream implies on its own against the
+all-streams-together joint estimate.
+
+Each stream is drawn as a median line in its colour over the shared display
+window; the joint adds 50% and 90% credible ribbons and a heavier line so
+it stands out. Streams whose data informs `Rt` only weakly (the
+confirmed-only fit) run wide, so the y-axis is capped from the joint's 90%
+band and stray stream medians above the cap are clipped rather than
+stretching the scale.
+
+Each `stream` is a `NamedTuple`
+`(; label, chn, rt_start, rt_walk_start, colour)` and `joint` is
+`(; label, chn, rt_start, rt_walk_start)`, where `chn` is that fit's chain
+and `rt_start`/`rt_walk_start` are the renewal start and random-walk start
+that fit used (the per-stream fits walk from day 1, the joint from the
+breakpoint lead). `display_start` is the shared grid day the plot draws from
+(the joint renewal start), so every stream reads over the same window.
+`seeding` is the calendar date of grid day 1, so day `d` is
+`seeding + (d - 1)`. The intervention breakpoint, the end of the scale-up
+(`breakpoint + ramp`, dotted) and the cut-off are marked as in
+[`plot_rt`](@ref).
+"""
+function plot_rt_streams(streams::AbstractVector;
+        joint, n::Integer, breakpoint::Real,
+        as_of_date::AbstractString, seeding::Date,
+        display_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
+        joint_colour = :black)
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+    ds = clamp(display_start, 1, n)
+
+    ## Per-fit median Rt over the shared display window (`ds` onward), with
+    ## the fit's own established mask applied through `reconstruct_rt`.
+    function median_over_window(s)
+        rt = reconstruct_rt(s.chn; n, breakpoint,
+            rt_start = s.rt_start, rt_walk_start = s.rt_walk_start, week, ramp)
+        med = [_rt_quantile(rt, d, 0.5) for d in 1:n]
+        est = findall(d -> d >= ds && !ismissing(med[d]), 1:n)
+        return rt, med, est
+    end
+
+    fig = Figure(; size = (900, 460))
+    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
+        title = "Implied Rt by data stream, with the joint fit overlaid",
+        xticklabelrotation = pi / 6)
+
+    handles = Any[]
+    labels = String[]
+
+    ## Per-stream median lines first, so the joint and its ribbon sit on top.
+    for s in streams
+        _, med, est = median_over_window(s)
+        isempty(est) && continue
+        h = lines!(ax, x[est], Float64[med[d] for d in est];
+            color = s.colour, linewidth = 2)
+        push!(handles, h)
+        push!(labels, s.label)
+    end
+
+    ## Joint fit: 90% then 50% credible ribbon, then a heavier median line so
+    ## the all-streams-together estimate reads as the reference.
+    rtj = reconstruct_rt(joint.chn; n, breakpoint,
+        rt_start = joint.rt_start, rt_walk_start = joint.rt_walk_start,
+        week, ramp)
+    medj = [_rt_quantile(rtj, d, 0.5) for d in 1:n]
+    estj = findall(d -> d >= ds && !ismissing(medj[d]), 1:n)
+    lo90 = [_rt_quantile(rtj, d, 0.05) for d in 1:n]
+    hi90 = [_rt_quantile(rtj, d, 0.95) for d in 1:n]
+    lo50 = [_rt_quantile(rtj, d, 0.25) for d in 1:n]
+    hi50 = [_rt_quantile(rtj, d, 0.75) for d in 1:n]
+    if !isempty(estj)
+        band!(ax, x[estj], Float64[lo90[d] for d in estj],
+            Float64[hi90[d] for d in estj]; color = (joint_colour, 0.12))
+        band!(ax, x[estj], Float64[lo50[d] for d in estj],
+            Float64[hi50[d] for d in estj]; color = (joint_colour, 0.22))
+        hj = lines!(ax, x[estj], Float64[medj[d] for d in estj];
+            color = joint_colour, linewidth = 3.5)
+        push!(handles, hj)
+        push!(labels, joint.label)
+    end
+
+    ## Horizontal grey dashed line at the no-growth threshold Rt = 1, with the
+    ## breakpoint, scale-up end and cut-off marked as in `plot_rt`.
+    hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash, linewidth = 2)
+    vlines!(ax, [Float64(epoch + breakpoint - 1)];
+        color = :firebrick, linestyle = :dash, linewidth = 2)
+    vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
+        color = :firebrick, linestyle = :dot, linewidth = 2)
+    vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
+        color = :grey, linestyle = :dash)
+
+    ## Window x-axis to the shared display range; weekly date ticks.
+    lo = floor(Int, x[ds])
+    hi = ceil(Int, maximum(x))
+    CairoMakie.xlims!(ax, lo, hi)
+    ax.xticks = collect(lo:7:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    ## Cap the y-axis from the joint's 90% band (rounded to a tidy step) so
+    ## the ill-defined confirmed-only stream does not stretch the scale; stray
+    ## medians above the cap are clipped.
+    hi90_est = [hi90[d] for d in estj if !ismissing(hi90[d])]
+    ytop = isempty(hi90_est) ? 4.0 :
+           max(1.2, ceil(2 * maximum(hi90_est) * 2) / 2)
+    CairoMakie.ylims!(ax, 0, ytop)
+    CairoMakie.axislegend(ax, handles, labels; position = :rt,
+        framevisible = true)
     return fig
 end
 

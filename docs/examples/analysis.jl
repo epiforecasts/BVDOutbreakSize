@@ -3478,6 +3478,50 @@ cumulative_density_fig = plot_cumulative_cases(
 
 cumulative_density_fig #hide
 
+# The third figure is the reproduction number each stream implies on its own,
+# with the joint fit overlaid as the reference.
+# Each single-stream fit carries its own random walk on Rt, so reconstructing
+# the daily trajectory per fit shows where the streams agree on the response
+# and where a thinner stream (the confirmed-only fit in particular) is too
+# weakly informed to pin Rt down.
+# Each stream is a median line in its colour; the joint adds 50% and 90%
+# credible ribbons and a heavier line.
+# The window, the response markers and the cut-off match the joint Rt figure
+# above.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream implied-Rt plot</summary>
+#md # ```
+
+## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
+## joint walks from `RT_WALK_LEAD` days before the first situation report; the
+## shared `display_start` is the joint renewal start so every stream reads over
+## the same established window. `ramp` matches the joint Rt figure.
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
+stream_rt_fig = plot_rt_streams(
+    [
+        (; label = "exports", chn = chn_exports, rt_start = 1,
+            rt_walk_start = 1, colour = :seagreen),
+        (; label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick),
+        (; label = "cases (DRC)", chn = chn_cases, rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue),
+        (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
+            rt_walk_start = 1, colour = :goldenrod),
+        (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
+            rt_walk_start = 1, colour = :darkorange)];
+    joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ramp = 21.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_rt_fig #hide
+
 # The frozen re-fits below freeze the renewal data to an earlier cut-off
 # and re-fit, so that a change driven by newer data can be distinguished from
 # one driven by a change of method.
