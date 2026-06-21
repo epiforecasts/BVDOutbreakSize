@@ -456,15 +456,12 @@ vintage_table #hide
 # ##### Reproduction number
 #
 # The reproduction number is held flat at the established reproduction
-# number $R_0$ from the renewal start until two weeks before the first WHO
-# situation report, then follows a non-centred Gaussian random walk on the log
-# scale, with knots at weekly intervals to the cut-off. The walk begins a
-# fortnight (14 days) before the first report rather than exactly at it, so
-# $R_t$ is free to move over the two weeks of transmission leading up to the
-# first report, where the response may already have begun to bend transmission
-# before the outbreak was formally reported. The walk start is floored at the
-# renewal start so it never precedes the seeded trajectory, and every earlier
-# day sits at $R_0$. The walk starts from $R_0$ at its first knot:
+# number $R_0$ until two weeks before the first WHO situation report, then
+# follows a non-centred Gaussian random walk on the log scale with weekly
+# knots to the cut-off. The fortnight lead lets $R_t$ start moving before the
+# first report, since transmission may already have turned before the outbreak
+# was formally reported; the walk start is floored at the renewal start. The
+# walk starts from $R_0$ at its first knot:
 #
 # ```math
 # \log R_k = \log R_0 + \sigma_{\text{rw}}
@@ -486,10 +483,7 @@ vintage_table #hide
 # moderate. We set the half-normal on $\sigma_{\text{rw}}$ so that the
 # reproduction number is unlikely to change by more than about 20% from one
 # week to the next: two standard deviations of the weekly log-step is around
-# $0.20$. Holding $R_t$ flat over the unobserved cryptic phase keeps this
-# flexibility where the data can support it, letting $R_t$ respond to a
-# slowdown or acceleration around the situation-report window rather than
-# drifting over the long unobserved period before it.
+# $0.20$.
 #
 # Daily $\log R_t$ is the linear interpolation between the weekly knots, so
 # the reproduction number varies piecewise linearly within each week; before
