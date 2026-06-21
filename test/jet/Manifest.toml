@@ -260,10 +260,10 @@ uuid = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 version = "0.4.8"
 
 [[deps.BVDOutbreakSize]]
-deps = ["ADTypes", "AbstractMCMC", "AlgebraOfGraphics", "CairoMakie", "CensoredDistributions", "Chain", "ChainRulesCore", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "FlexiChains", "Makie", "Mooncake", "PairPlots", "Random", "Statistics", "StatsFuns", "TOML", "Turing"]
+deps = ["ADTypes", "AbstractMCMC", "AlgebraOfGraphics", "CairoMakie", "CensoredDistributions", "Chain", "ChainRulesCore", "DataFrames", "DataFramesMeta", "Dates", "Distributions", "DocStringExtensions", "FlexiChains", "LogDensityProblems", "Makie", "Mooncake", "PairPlots", "PrecompileTools", "Preferences", "Random", "Statistics", "StatsFuns", "TOML", "Turing"]
 path = "../.."
 uuid = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
-version = "1.5.0"
+version = "1.6.0"
 
     [deps.BVDOutbreakSize.extensions]
     BVDOutbreakSizeEnzymeExt = "Enzyme"
