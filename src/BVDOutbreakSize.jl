@@ -15,7 +15,7 @@ import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
-using Distributions: Distribution, pdf, Poisson,
+using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, Binomial, Normal, LogNormal, Beta,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored

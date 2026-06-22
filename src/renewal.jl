@@ -55,10 +55,24 @@ end
 ## Function barrier: `double_interval_censored` returns a `Union` of solver
 ## types, so it is inferred abstractly at the call site above; isolating the
 ## PMF loop in its own method lets it specialise on the concrete `dic` type,
-## making the ~`nmax` `pdf` evaluations type-stable under AD. See
+## making the ~`nmax` censored-CDF evaluations type-stable under AD. See
 ## CensoredDistributions.jl#367 on the Union return.
 @inline function _pmf_from_dic(dic, dist, nmax::Integer)
-    raw = [pdf(dic, float(d)) for d in 0:nmax]
+    ## Differencing one CDF path, not `nmax + 1` overlapping `pdf` calls. The
+    ## interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, and
+    ## `pdf(dic, d)` computes exactly that pair, so the old
+    ## `[pdf(dic, d) for d in 0:nmax]` evaluated every interior integer
+    ## boundary CDF twice. Evaluating the boundary CDFs once over `0:nmax+1`
+    ## and taking adjacent differences halves the censored-CDF evaluations the
+    ## Mooncake reverse pass walks (each CDF is the expensive part: a
+    ## primary-censored, truncation-normalised incomplete-gamma / Normal-CDF
+    ## call), and is numerically identical to the `pdf` differences it
+    ## replaces — `IntervalCensored`'s `cdf` floors to the interval, so at an
+    ## integer boundary it returns the same inner CDF the `pdf` pair reads,
+    ## with the same below-minimum→0 / at-maximum→1 edge handling.
+    c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
+    z0 = zero(eltype(c))
+    raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
     s = sum(raw)
     if !isfinite(s) || s <= zero(s)
         z = zero(pdf(dist, oneunit(float(nmax))))
