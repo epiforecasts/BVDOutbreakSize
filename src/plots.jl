@@ -1009,27 +1009,56 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     return fig
 end
 
+## Per-fit credible bands over the shared display window (`ds` onward), with
+## the fit's own established mask applied through `reconstruct_rt`. Returns a
+## NamedTuple of the 30/60/90% lower/upper quantiles and the established days
+## `est` to draw, mirroring the band style used across the report.
+function _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
+    rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
+    q(pr) = [_rt_quantile(rt, d, pr) for d in 1:n]
+    med = q(0.5)
+    est = findall(d -> d >= ds && !ismissing(med[d]), 1:n)
+    return (; lo90 = q(0.05), hi90 = q(0.95), lo60 = q(0.20), hi60 = q(0.80),
+        lo30 = q(0.35), hi30 = q(0.65), est)
+end
+
+## Draw nested 30/60/90% credible ribbons (no median line) for one fit's
+## bands in `colour`, matching the ribbon style of [`plot_rt`](@ref).
+function _draw_rt_bands!(ax, x, b, colour;
+        alphas = (0.15, 0.28, 0.42))
+    isempty(b.est) && return
+    xe = x[b.est]
+    band!(ax, xe, Float64[b.lo90[d] for d in b.est],
+        Float64[b.hi90[d] for d in b.est]; color = (colour, alphas[1]))
+    band!(ax, xe, Float64[b.lo60[d] for d in b.est],
+        Float64[b.hi60[d] for d in b.est]; color = (colour, alphas[2]))
+    band!(ax, xe, Float64[b.lo30[d] for d in b.est],
+        Float64[b.hi30[d] for d in b.est]; color = (colour, alphas[3]))
+    return
+end
+
 """
-Overlaid implied reproduction-number trajectories, one per single-stream
-fit, with the joint fit drawn on top as the reference. Each stream's daily
-`Rt` is reconstructed from its own sampled random walk exactly as in
+Faceted implied reproduction number, one panel per single-stream fit, each
+with the joint fit overlaid as the reference. Each fit's daily `Rt` is
+reconstructed from its own sampled random walk exactly as in
 [`plot_rt`](@ref) (see [`reconstruct_rt`](@ref)), so the figure shows what
 reproduction number each data stream implies on its own against the
 all-streams-together joint estimate.
 
-Each stream is drawn as a median line in its colour over the shared display
-window; the joint adds 50% and 90% credible ribbons and a heavier line so
-it stands out. Streams whose data informs `Rt` only weakly (the
-confirmed-only fit) run wide, so the y-axis is capped from the joint's 90%
-band and stray stream medians above the cap are clipped rather than
-stretching the scale.
+Every panel draws 30/60/90% credible ribbons with no median line, matching
+the band style used across the report: the joint in grey first, then the
+stream in its colour on top (the panel title is in that colour). One panel
+per stream rather than a single overlay, so the wide per-stream ribbons stay
+legible. The y-axis is shared across panels and capped from the panels'
+90% bands so a weakly-informed stream (the confirmed-only fit) does not
+stretch the scale; ribbon above the cap is clipped.
 
 Each `stream` is a `NamedTuple`
 `(; label, chn, rt_start, rt_walk_start, colour)` and `joint` is
 `(; label, chn, rt_start, rt_walk_start)`, where `chn` is that fit's chain
 and `rt_start`/`rt_walk_start` are the renewal start and random-walk start
 that fit used (the per-stream fits walk from day 1, the joint from the
-breakpoint lead). `display_start` is the shared grid day the plot draws from
+breakpoint lead). `display_start` is the shared grid day the panels draw from
 (the joint renewal start), so every stream reads over the same window.
 `seeding` is the calendar date of grid day 1, so day `d` is
 `seeding + (d - 1)`. The intervention breakpoint, the end of the scale-up
@@ -1040,87 +1069,70 @@ function plot_rt_streams(streams::AbstractVector;
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         display_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
-        joint_colour = :black)
+        ncols::Integer = 2, joint_colour = :grey25)
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
     ds = clamp(display_start, 1, n)
 
-    ## Per-fit median Rt over the shared display window (`ds` onward), with
-    ## the fit's own established mask applied through `reconstruct_rt`.
-    function median_over_window(s)
-        rt = reconstruct_rt(s.chn; n, breakpoint,
-            rt_start = s.rt_start, rt_walk_start = s.rt_walk_start, week, ramp)
-        med = [_rt_quantile(rt, d, 0.5) for d in 1:n]
-        est = findall(d -> d >= ds && !ismissing(med[d]), 1:n)
-        return rt, med, est
-    end
-
-    fig = Figure(; size = (900, 460))
-    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
-        title = "Implied Rt by data stream, with the joint fit overlaid",
-        xticklabelrotation = pi / 6)
-
-    handles = Any[]
-    labels = String[]
-
-    ## Per-stream median lines first, so the joint and its ribbon sit on top.
+    ## Reconstruct the joint once and each stream's bands; the joint is the
+    ## shared reference drawn behind every stream.
+    bj = _rt_bands(joint.chn; n, breakpoint, rt_start = joint.rt_start,
+        rt_walk_start = joint.rt_walk_start, week, ramp, ds)
+    sbands = Tuple{Any, NamedTuple}[]
     for s in streams
-        _, med, est = median_over_window(s)
-        isempty(est) && continue
-        h = lines!(ax, x[est], Float64[med[d] for d in est];
-            color = s.colour, linewidth = 2)
-        push!(handles, h)
-        push!(labels, s.label)
+        b = _rt_bands(s.chn; n, breakpoint, rt_start = s.rt_start,
+            rt_walk_start = s.rt_walk_start, week, ramp, ds)
+        push!(sbands, (s, b))
     end
 
-    ## Joint fit: 90% then 50% credible ribbon, then a heavier median line so
-    ## the all-streams-together estimate reads as the reference.
-    rtj = reconstruct_rt(joint.chn; n, breakpoint,
-        rt_start = joint.rt_start, rt_walk_start = joint.rt_walk_start,
-        week, ramp)
-    medj = [_rt_quantile(rtj, d, 0.5) for d in 1:n]
-    estj = findall(d -> d >= ds && !ismissing(medj[d]), 1:n)
-    lo90 = [_rt_quantile(rtj, d, 0.05) for d in 1:n]
-    hi90 = [_rt_quantile(rtj, d, 0.95) for d in 1:n]
-    lo50 = [_rt_quantile(rtj, d, 0.25) for d in 1:n]
-    hi50 = [_rt_quantile(rtj, d, 0.75) for d in 1:n]
-    if !isempty(estj)
-        band!(ax, x[estj], Float64[lo90[d] for d in estj],
-            Float64[hi90[d] for d in estj]; color = (joint_colour, 0.12))
-        band!(ax, x[estj], Float64[lo50[d] for d in estj],
-            Float64[hi50[d] for d in estj]; color = (joint_colour, 0.22))
-        hj = lines!(ax, x[estj], Float64[medj[d] for d in estj];
-            color = joint_colour, linewidth = 3.5)
-        push!(handles, hj)
-        push!(labels, joint.label)
+    ## Shared y-cap from the panels' typical 90% upper band (the median over
+    ## days, robust to a single spiky day), so the weakly-informed streams do
+    ## not stretch the axis while the Rt = 1 line stays visible.
+    function panel_top(b)
+        v = Float64[b.hi90[d] for d in b.est if !ismissing(b.hi90[d])]
+        return isempty(v) ? 0.0 : quantile(v, 0.5)
     end
+    tops = Float64[panel_top(bj); [panel_top(b) for (_, b) in sbands]]
+    ytop = max(2.5, ceil(1.3 * maximum(tops) * 2) / 2)
 
-    ## Horizontal grey dashed line at the no-growth threshold Rt = 1, with the
-    ## breakpoint, scale-up end and cut-off marked as in `plot_rt`.
-    hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash, linewidth = 2)
-    vlines!(ax, [Float64(epoch + breakpoint - 1)];
-        color = :firebrick, linestyle = :dash, linewidth = 2)
-    vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
-        color = :firebrick, linestyle = :dot, linewidth = 2)
-    vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
-        color = :grey, linestyle = :dash)
-
-    ## Window x-axis to the shared display range; weekly date ticks.
     lo = floor(Int, x[ds])
     hi = ceil(Int, maximum(x))
-    CairoMakie.xlims!(ax, lo, hi)
-    ax.xticks = collect(lo:7:hi)
-    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
-                              for v in vals]
-    ## Cap the y-axis from the joint's 90% band (rounded to a tidy step) so
-    ## the ill-defined confirmed-only stream does not stretch the scale; stray
-    ## medians above the cap are clipped.
-    hi90_est = [hi90[d] for d in estj if !ismissing(hi90[d])]
-    ytop = isempty(hi90_est) ? 4.0 :
-           max(1.2, ceil(2 * maximum(hi90_est) * 2) / 2)
-    CairoMakie.ylims!(ax, 0, ytop)
-    CairoMakie.axislegend(ax, handles, labels; position = :rt,
-        framevisible = true)
+    nrows = cld(length(sbands), ncols)
+    fig = Figure(; size = (480 * ncols, 300 * nrows + 70))
+
+    for (i, (s, b)) in enumerate(sbands)
+        r = cld(i, ncols)
+        c = i - (r - 1) * ncols
+        ax = Axis(fig[r, c]; xlabel = "Date", ylabel = "Rt",
+            title = s.label, titlecolor = s.colour,
+            xticklabelrotation = pi / 6)
+        ## Joint reference behind the stream, both as 30/60/90% ribbons.
+        _draw_rt_bands!(ax, x, bj, joint_colour;
+            alphas = (0.10, 0.16, 0.22))
+        _draw_rt_bands!(ax, x, b, s.colour)
+        hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
+            linewidth = 2)
+        vlines!(ax, [Float64(epoch + breakpoint - 1)];
+            color = :firebrick, linestyle = :dash, linewidth = 2)
+        vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
+            color = :firebrick, linestyle = :dot, linewidth = 2)
+        vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
+            color = :grey, linestyle = :dash)
+        CairoMakie.xlims!(ax, lo, hi)
+        CairoMakie.ylims!(ax, 0, ytop)
+        ax.xticks = collect(lo:14:hi)
+        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                  for v in vals]
+    end
+
+    CairoMakie.Label(fig[nrows + 1, 1:ncols],
+        "Bands are 30/60/90% credible intervals. Grey is the joint fit " *
+        "(the same in every panel); the coloured band is the single-stream " *
+        "fit named in the panel title.";
+        fontsize = 12, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:ncols],
+        "Implied Rt by data stream, with the joint fit overlaid";
+        fontsize = 16, font = :bold)
     return fig
 end
 
