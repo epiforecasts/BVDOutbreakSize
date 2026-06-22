@@ -78,6 +78,7 @@ makedocs(;
     plugins = [bib],
     pages = [
         "Home" => "index.md",
+        "Summary" => "summary.md",
         "Analysis" => "analysis.md",
         "API" => "api.md",
         "Contributing" => "contributing.md",

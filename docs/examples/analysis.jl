@@ -4008,6 +4008,66 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 #md # </details>
 #md # ```
 
+# ### Summary-page assets
+#
+# The one-page [Summary dashboard](@ref) reuses the results computed above
+# rather than re-fitting. Here we save its headline text, headline tables and
+# the three figures it shows (reproduction number, infections over time, and
+# modelled versus observed reported cases) into `docs/src/summary_assets/`,
+# so the static dashboard page can embed them after this build step has run.
+
+#md # ```@raw html
+#md # <details><summary>Write the dashboard assets</summary>
+#md # ```
+
+dashboard_dir = joinpath(
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+mkpath(dashboard_dir)
+
+## Figures: estimated R(t), latent infections over time, and the modelled
+## versus observed reported cases. All three are produced in the Results
+## sections above; here we just write them out at the dashboard size.
+CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
+    cumulative_traj_fig)
+CairoMakie.save(joinpath(dashboard_dir, "reported_cases.png"),
+    joint_vintage_ppc_fig)
+
+## Headline prose: the same bullet summary shown at the top of the Results
+## section, serialised to markdown so the dashboard renders it verbatim.
+open(joinpath(dashboard_dir, "headline.md"), "w") do io
+    print(io, sprint(Markdown.plain, summary_ranges))
+end
+
+## Headline tables: outbreak size and timing as whole numbers, and the
+## growth and severity parameters to two decimals, each with reader-friendly
+## quantity names.
+dashboard_counts = summary_table(chn_joint, [:C_T, :T]; digits = 0,
+    labels = Dict(:C_T => "Cumulative infections",
+        :T => "Outbreak age (days)"))
+dashboard_rates = summary_table(chn_joint,
+    [:R0, :R_T, :r, :doubling_time, :CFR]; digits = 2,
+    labels = Dict(:R0 => "Initial reproduction number",
+        :R_T => "Latest reproduction number",
+        :r => "Latest growth rate (per day)",
+        :doubling_time => "Latest doubling time (days)",
+        :CFR => "Case-fatality ratio"))
+open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
+    print(io, markdown_table(dashboard_counts))
+end
+open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
+    print(io, markdown_table(dashboard_rates))
+end
+
+## The data cut-off the dashboard reports as of, written as a plain date.
+open(joinpath(dashboard_dir, "cutoff.md"), "w") do io
+    print(io, string(obs.cutoff))
+end
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ---
 #
 # The full analysis code, data and model definitions are in the

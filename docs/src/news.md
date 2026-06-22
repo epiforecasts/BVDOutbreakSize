@@ -159,6 +159,14 @@ Changes since v1.5.0.
   27 May, with a frozen re-fit at the 27 May cut-off added to the
   frozen-fit outbreak-size table.
 
+### Documentation
+
+- Added a one-page [Summary dashboard](@ref) for readers with limited time:
+  the headline estimates as prose and tables alongside the reproduction
+  number, infections-over-time and modelled-versus-observed reported-case
+  figures. It reuses the artifacts written by the analysis build rather than
+  re-fitting, so it refreshes whenever the data updates.
+
 ### Outputs
 
 - Added the latent symptom onsets (the "symptomatic cases" outcome) to the
