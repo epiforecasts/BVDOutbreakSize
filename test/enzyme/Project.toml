@@ -10,6 +10,6 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [compat]
 Enzyme = "0.13"
-
+Turing = "0.45.0"
 [sources]
 BVDOutbreakSize = {path = "../.."}
