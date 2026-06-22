@@ -416,30 +416,3 @@ function interpolate_knots(knot_vals::AbstractVector,
     end
     return out
 end
-
-"""
-    soft_min_cap(demand, capacity, softness = 0.1)
-
-Smooth lower bound of `demand` against `capacity`, the supply-limited
-occupancy from a latent bed demand. Returns
-
-```math
-\\text{occupancy} = \\text{demand} - s\\,\\log\\!\\bigl(1 +
-    e^{(\\text{demand} - C)/s}\\bigr),
-\\qquad s = \\text{softness}\\cdot C,
-```
-
-a softplus-smoothed `min(demand, C)`: occupancy ≈ demand while beds are slack
-(`demand ≪ C`) and saturates at the capacity `C` once demand exceeds it, so
-occupancy tracks demand below capacity and only bends near genuine fullness.
-The smooth approach is the soft ceiling, so at any finite demand occupancy
-sits below `C` (the cap is not reached until demand far exceeds it).
-`softness` sets the knee width as a fraction of `C`, so a larger value rounds
-the transition more. The result is always `≤ demand` and `≤ C`. Built from
-`log1pexp` so it is overflow-safe and AD-transparent; the element type
-follows the inputs.
-"""
-@inline function soft_min_cap(demand, capacity, softness = 0.1)
-    s = softness * capacity
-    return demand - s * log1pexp((demand - capacity) / s)
-end

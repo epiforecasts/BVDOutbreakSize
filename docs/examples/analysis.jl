@@ -1322,28 +1322,30 @@ cfr_prior_fig #hide
 # since beds are added over the response and not taken away, pinned by the
 # implied bed count, the reported occupancy (the "Patients en isolement" count)
 # divided by the reported "Taux d'occupation" rate ($\approx 400 \to 452$ beds
-# over 9–13 June). Only a fraction of the nominal beds can be occupied (ward
-# layout, staffing, isolation spacing), so the effective ceiling is
-# $\rho\, C(t)$ with usable fraction $\rho \in (0, 1]$, bounded below by the
-# largest observed utilisation since occupancy never exceeds usable capacity.
+# over 9–13 June).
 #
-# The occupied-bed count is the demand right-censored at the effective ceiling:
-# while demand is below the ceiling the count tracks it, and once demand
-# reaches the ceiling the count is censored there. Censoring keeps the demand
-# identified at saturation, where a deterministic cap would make occupancy
-# insensitive to demand,
+# The occupied-bed count is the latent demand right-censored at the bed
+# capacity: while demand is below capacity the count tracks it, and once demand
+# reaches capacity the count is censored there. The censoring bound is fixed at
+# the recorded implied capacity $C^{\text{cap}}_j$ rather than a sampled
+# ceiling, so the likelihood has no moving boundary for the sampler to fall
+# off, and the latent demand is left uncensored,
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
-#     \text{upper} = \rho\, C_{t_j}\bigr),
+#     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
 # C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C_{t_j},\ k_{\text{iso}}),
 # ```
 #
 # with a dispersion $k_{\text{iso}}$ of its own (not shared with the other
-# streams). The model exposes the cut-off occupancy, the cut-off bed demand
-# (the need under unconstrained supply), their difference (the bed shortfall)
-# and the utilisation $O_T / C$.
+# streams). Occupancy below capacity identifies the demand directly; the part
+# of demand above a saturated capacity is only partially identified, since
+# occupancy says demand was at least the beds filled and not how much more, so
+# the bed shortfall above capacity is informed by the demand model and its
+# priors rather than measured by the occupancy. The model exposes the cut-off
+# occupancy, the cut-off bed demand (the need under unconstrained supply),
+# their difference (the bed shortfall) and the utilisation $O_T / C$.
 #
 # One limitation is that this is a single national model, with one national
 # bed capacity and one national demand, so it cannot represent local
