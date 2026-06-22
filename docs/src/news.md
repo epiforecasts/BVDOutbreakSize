@@ -161,7 +161,7 @@ Changes since v1.5.0.
 
 ### Documentation
 
-- Added a one-page [Summary](@ref) dashboard for readers with limited time:
+- Added a one-page [Summary dashboard](@ref) for readers with limited time:
   the headline estimates as prose and tables alongside the reproduction
   number, infections-over-time and modelled-versus-observed reported-case
   figures. It reuses the artifacts written by the analysis build rather than

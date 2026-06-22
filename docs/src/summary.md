@@ -1,9 +1,9 @@
-# Summary
+# Summary dashboard
 
 A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model
-fit as the full [Analysis](@ref) and refreshes whenever the data updates.
-See the [Analysis](@ref) page for the methods, assumptions and supporting
+fit as the full [Analysis](analysis.md) and refreshes whenever the data updates.
+See the [Analysis](analysis.md) page for the methods, assumptions and supporting
 detail behind each result.
 
 ```@eval
@@ -64,6 +64,6 @@ that the fit reproduces what was seen on the ground.
 
 ---
 
-For the full results, methods and code see the [Analysis](@ref) page and the
+For the full results, methods and code see the [Analysis](analysis.md) page and the
 [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize)
 repository.

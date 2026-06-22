@@ -3922,7 +3922,7 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 
 # ### Summary-page assets
 #
-# The one-page [Summary](@ref) dashboard reuses the results computed above
+# The one-page [Summary dashboard](@ref) reuses the results computed above
 # rather than re-fitting. Here we save its headline text, headline tables and
 # the three figures it shows (reproduction number, infections over time, and
 # modelled versus observed reported cases) into `docs/src/summary_assets/`,
