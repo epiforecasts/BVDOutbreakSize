@@ -1945,15 +1945,7 @@ prior_pair_fig = plot_pair(prior_chn,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show prior pair plot</summary>
-#md # ```
-
 prior_pair_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # #### Fitting the models
 #
@@ -2531,15 +2523,7 @@ start_date_fig = plot_start_date_pair(chn_joint;
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show outbreak start date pair plot</summary>
-#md # ```
-
 start_date_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # The summary table reports the credible intervals on the infection-process
 # parameters: the growth rate and doubling time, the reproduction number,
@@ -2559,15 +2543,7 @@ infection_summary = summary_table(chn_joint,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show infection-parameter summary table</summary>
-#md # ```
-
 infection_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Infection-parameter pair plot (prior overlaid)</summary>
@@ -2582,15 +2558,7 @@ infection_pair_fig = plot_pair(chn_joint,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show infection-parameter pair plot</summary>
-#md # ```
-
 infection_pair_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # The infection model carries two delays: the generation interval, the time
 # between an infector's and an infectee's onset that drives the renewal
@@ -2635,15 +2603,7 @@ infection_delay_pair_fig = plot_pair(chn_joint,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show infection-delay pair plot</summary>
-#md # ```
-
 infection_delay_pair_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ### Reproduction number over time
 #
@@ -2774,15 +2734,7 @@ obs_delay_pair_fig = plot_pair(chn_joint,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show observation-delay pair plot</summary>
-#md # ```
-
 obs_delay_pair_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ### Surveillance parameters
 #
@@ -2847,15 +2799,7 @@ surveillance_pair_fig = plot_pair(chn_joint,
 #md # </details>
 #md # ```
 
-#md # ```@raw html
-#md # <details><summary>Show surveillance-parameter pair plot</summary>
-#md # ```
-
 surveillance_pair_fig #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # ### Posterior predictive checks
 #
