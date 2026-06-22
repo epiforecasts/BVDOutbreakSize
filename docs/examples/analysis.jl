@@ -3480,25 +3480,9 @@ cumulative_density_fig #hide
 
 # The third figure is the reproduction number each stream implies on its own,
 # one panel per stream with the joint fit overlaid in grey as the reference.
-# Each single-stream fit carries its own random walk on Rt, so reconstructing
-# the daily trajectory per fit shows where each stream alone can resolve the
-# response and where it cannot.
 # Each panel draws 30/60/90% credible ribbons with no median line, matching
 # the band style used elsewhere; the window, the response markers and the
 # cut-off match the joint Rt figure above.
-#
-# The joint fit brings Rt down over the response scale-up while most single
-# streams stay close to flat.
-# This is what the data allow rather than an artefact of the reconstruction,
-# which mirrors the model walk per draw.
-# The response begins at the first situation report on 18 May, but the
-# suspected case and death streams freeze on 26 May, roughly a week into the
-# three-week scale-up, so on their own they never see the decline and their
-# intervention effect stays near its prior.
-# The exports, confirmed and isolation streams run to the cut-off but each
-# alone constrains the late trajectory weakly, so their ribbons stay wide.
-# Only the joint, pooling every stream and the response timing together,
-# resolves the fall, which is the case for fitting the streams jointly.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream implied-Rt plot</summary>
