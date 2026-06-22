@@ -43,10 +43,11 @@ let readme = read(joinpath(REPO_ROOT, "README.md"), String)
         r"\*\*Data as of:\*\* [^.]*\." => "**Data as of:** $asof.")
     readme = replace(
         readme,
-        r"\(https?://[^)]*?/analysis#([^)]+)\)" => m -> begin
-            slug = match(r"#([^)]+)\)$", m).captures[1]
-            "(@ref \"" * replace(slug, '-' => ' ') * "\")"
-        end
+        r"\(https?://[^)]*?/analysis#([^)]+)\)" =>
+            m -> begin
+                slug = match(r"#([^)]+)\)$", m).captures[1]
+                "(@ref \"" * replace(slug, '-' => ' ') * "\")"
+            end
     )
     write(joinpath(LITERATE_OUT, "index.md"), readme)
 end

@@ -10,10 +10,18 @@ updates:
       - "dependencies"
       - "github-actions"
 
-  # Julia dependency updates using workspace feature (Julia 1.12+) to
-  # coordinate updates across main package, test/, and docs/ environments
+  # Julia dependency updates. The root "/" is a Julia 1.12 workspace
+  # (`[workspace] projects = ["test", "docs"]`), so that entry coordinates the
+  # main package, test/, and docs/ together. The remaining CI/tooling
+  # environments are NOT workspace members and have their own Project.toml, so
+  # they need their own directory entries to be updated.
   - package-ecosystem: "julia"
-    directory: "/"
+    directories:
+      - "/"
+      - "/test/jet"
+      - "/test/enzyme"
+      - "/test/formatter"
+      - "/scripts"
     schedule:
       interval: "weekly"
       day: "monday"
