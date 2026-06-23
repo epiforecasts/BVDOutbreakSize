@@ -1327,9 +1327,8 @@ cfr_prior_fig #hide
 # The occupied-bed count is the latent demand right-censored at the bed
 # capacity: while demand is below capacity the count tracks it, and once demand
 # reaches capacity the count is censored there. The censoring bound is fixed at
-# the recorded implied capacity $C^{\text{cap}}_j$ rather than a sampled
-# ceiling, so the likelihood has no moving boundary for the sampler to fall
-# off, and the latent demand is left uncensored,
+# the recorded implied capacity $C^{\text{cap}}_j$ so the latent demand is left
+# uncensored,
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
@@ -2750,14 +2749,14 @@ obs_delay_pair_fig #hide
 # probability). The six passive-surveillance count streams (suspected
 # cases, suspected deaths, confirmed cases, confirmed deaths, isolation
 # occupancy and recovered) each have their own negative-binomial dispersion
-# partially pooled from a shared population: `k` is the population-level
-# dispersion, `k_cases`, `k_deaths`, `k_confirmed` and `k_confirmed_deaths`
-# the per-stream values for the four DRC count streams, and `dispersion_sd`
-# the pooling spread. The isolation and recovered streams add the proportion
-# of suspects admitted to a bed and the recovery probability among confirmed
-# cases, with their dispersions (`isolation_dispersion`,
-# `recovered_dispersion`) drawn from the same pooled population (see the
-# length-of-stay delays in the observation-delay table above).
+# partially pooled from a shared population: $k$ is the population-level
+# dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and
+# $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count
+# streams, and a pooling spread. The isolation and recovered streams add the
+# proportion of suspects admitted to a bed and the recovery probability among
+# confirmed cases, with their dispersions ($k_{\text{iso}}$, $k_{\text{rec}}$)
+# drawn from the same pooled population (see the length-of-stay delays in the
+# observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
 
