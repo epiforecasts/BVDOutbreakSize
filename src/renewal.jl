@@ -76,9 +76,23 @@ end
     ## cache path is not Mooncake-differentiable — it hits a bitcast-to-a-
     ## differentiable-type error in the reverse pass — so the gradient hot path
     ## stays on this plain-array CDF difference, which Mooncake handles cleanly.
-    c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
-    z0 = zero(eltype(c))
-    raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
+    ##
+    ## The boundary CDFs are differenced in ONE pass that carries only the
+    ## previous CDF value, so the intermediate length-`nmax + 2` `c` array never
+    ## materialises. That array was a pure scratch quantity the Mooncake reverse
+    ## pass had to allocate and walk; folding the difference into the loop keeps
+    ## the exact same `nmax + 2` censored-CDF evaluations and bit-identical PMF
+    ## while dropping that array from the tape (a measured ~1.05–1.20× on the
+    ## per-discretisation gradient, larger at the small `nmax` the model's
+    ## shorter delays use; see `scripts/bench_pmf_fused.jl`).
+    prev = cdf(dic, zero(float(nmax)))
+    z0 = zero(prev)
+    raw = Vector{typeof(prev)}(undef, nmax + 1)
+    @inbounds for i in 1:(nmax + 1)
+        cur = cdf(dic, float(i))
+        raw[i] = max(cur - prev, z0)
+        prev = cur
+    end
     s = sum(raw)
     if !isfinite(s) || s <= zero(s)
         z = zero(pdf(dist, oneunit(float(nmax))))
