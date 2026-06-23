@@ -110,6 +110,10 @@ end
     @test all(fc.bed_demand .>= 0)
     ## Supply-limited occupancy never exceeds the projected demand.
     @test all(fc.isolation_level .<= fc.bed_demand)
+    ## Occupancy is min(demand, capacity): with demand (~600) above capacity
+    ## (~430) it reaches the capacity, where the old exponential soft cap would
+    ## have plateaued well below it (~0.75 of capacity).
+    @test maximum(fc.isolation_level) > 400
     @test all(fc.recovered_cum .>= 0)
     @test all(fc.recovered_new .<= fc.recovered_cum)
     tbl = forecast_table(fc)

@@ -182,8 +182,8 @@ end
     @test all(C_T .> 0)
     @test all(isfinite, iso)
     @test all(iso .> 0)
-    ## Occupancy never exceeds the latent demand (the soft cap), and the
-    ## supply-limited occupancy never exceeds the bed capacity.
+    ## Occupancy is `min(demand, C)`, so it never exceeds the latent demand,
+    ## and the supply-limited occupancy never exceeds the bed capacity.
     @test all(iso .<= dem .+ 1e-6)
     @test all(iso .<= cap .+ 1e-6)
     ## The severity skew is non-negative and admits BVD suspects at least as
