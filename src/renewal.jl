@@ -70,6 +70,12 @@ end
     ## replaces — `IntervalCensored`'s `cdf` floors to the interval, so at an
     ## integer boundary it returns the same inner CDF the `pdf` pair reads,
     ## with the same below-minimum→0 / at-maximum→1 edge handling.
+    ##
+    ## CensoredDistributions' batched `pdf(dic, 0:nmax)` also evaluates each
+    ## boundary CDF once (via a `Dict` cache) and is value-identical, but its
+    ## cache path is not Mooncake-differentiable — it hits a bitcast-to-a-
+    ## differentiable-type error in the reverse pass — so the gradient hot path
+    ## stays on this plain-array CDF difference, which Mooncake handles cleanly.
     c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
     z0 = zero(eltype(c))
     raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
