@@ -133,10 +133,10 @@ Returns a `DataFrame` with one row per draw and columns:
   DEMAND (need under unconstrained supply) and the supply-limited occupancy
   it produces against the bed capacity, both at the horizon, present when the
   chain carries `expected_bed_demand_T` and `bed_capacity`. The demand grows
-  by the horizon factor like the inflow; the occupancy is that demand
-  soft-capped at the capacity, so `bed_demand − isolation_level` is the
-  projected bed shortfall. Replicated with the isolation stream's own
-  dispersion.
+  by the horizon factor like the inflow; the occupancy is that demand capped
+  at the capacity, `min(demand, C)` (matching the fitted occupancy), so
+  `bed_demand − isolation_level` is the projected bed shortfall. Replicated
+  with the isolation stream's own dispersion.
 - `:recovered_cum`, `:recovered_new` — cumulative recovered-among-confirmed
   by the horizon (and new this week when `obs_recovered` is supplied),
   present when the chain carries `expected_recovered_T`.
@@ -267,13 +267,14 @@ function forecast_reported(chn;
         ## Projected bed demand (need under unconstrained supply) and the
         ## supply-limited occupancy it produces against the bed capacity, plus
         ## cumulative recovered. The demand replicate carries the dispersion;
-        ## the occupancy is that same replicate soft-capped at the capacity, so
-        ## per draw the occupancy never exceeds the demand or the capacity.
+        ## the occupancy is that same replicate capped at the capacity,
+        ## `min(demand, C)`, matching the fitted occupancy and the censored
+        ## likelihood, so per draw the occupancy never exceeds the demand or
+        ## the capacity.
         if has_iso
             d = _nb_rand(rng, k_iso[i], demand_T[i] * grow)
             bed_demand[i] = d
-            isolation_level[i] = round(Int,
-                cap[i] * (1 - exp(-d / max(cap[i], eps()))))
+            isolation_level[i] = min(d, round(Int, cap[i]))
         end
         has_rec && (recovered_cum[i] = _nb_rand(rng, k_rec[i],
             rec_T[i] * grow))

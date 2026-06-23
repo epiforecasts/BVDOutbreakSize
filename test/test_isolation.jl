@@ -42,6 +42,38 @@ end
     @test all(occ .>= -1e-12)
 end
 
+@testitem "censoring_cap: fixed bound from recorded capacity, never below obs" begin
+    using BVDOutbreakSize: censoring_cap
+
+    iso_days = [9, 10, 11]
+    iso_obs = [260, 262, 315]
+    capacity_history = (; days = [9, 10, 11], counts = [400, 410, 452])
+    ## Each day takes its recorded capacity (all above the observed count), so
+    ## the bound is the data, fixed, and never below the occupancy.
+    cap = censoring_cap(iso_days, iso_obs, capacity_history)
+    @test cap == [400.0, 410.0, 452.0]
+    @test all(cap .>= iso_obs)
+
+    ## A capacity below the count is floored at the count, so the censored NB
+    ## never has zero probability on the observation (the -Inf wall is removed).
+    low_cap = (; days = [9], counts = [200])
+    @test censoring_cap([9], [260], low_cap) == [260.0]
+
+    ## No recorded capacity gives a large finite no-op bound (not Inf, which
+    ## safe_rate would map to eps), so the censoring is inactive.
+    nocap = censoring_cap([9], [260], (; days = Int[], counts = Int[]))
+    @test only(nocap) > 1.0e5
+
+    ## The predictive generator passes the capacity history days-only (counts
+    ## emptied) and the occupancy missing; the guard is on the counts, so this
+    ## must not index the empty counts vector and returns the no-op cap.
+    daysonly = (; days = [9, 10, 11], counts = Int[])
+    @test only(censoring_cap([10], missing, daysonly)) > 1.0e5
+
+    ## Nearest-day fill for a report day without its own capacity entry.
+    @test censoring_cap([12], [300], capacity_history) == [452.0]
+end
+
 @testitem "bed_capacity_walk: positive capacity path over the grid" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -150,8 +182,8 @@ end
     @test all(C_T .> 0)
     @test all(isfinite, iso)
     @test all(iso .> 0)
-    ## Occupancy never exceeds the latent demand (the soft cap), and the
-    ## supply-limited occupancy never exceeds the bed capacity.
+    ## Occupancy is `min(demand, C)`, so it never exceeds the latent demand,
+    ## and the supply-limited occupancy never exceeds the bed capacity.
     @test all(iso .<= dem .+ 1e-6)
     @test all(iso .<= cap .+ 1e-6)
     ## The severity skew is non-negative and admits BVD suspects at least as

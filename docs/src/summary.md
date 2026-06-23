@@ -62,6 +62,14 @@ that the fit reproduces what was seen on the ground.
 
 ![Modelled versus observed reported cases over time](summary_assets/reported_cases.png)
 
+## Reproduction number by data stream
+
+The reproduction number each data stream implies on its own, fitted to that
+stream alone. Agreement between the streams supports the joint estimate;
+disagreement shows where they pull in different directions.
+
+![Reproduction number implied by each data stream](summary_assets/rt_streams.png)
+
 ---
 
 For the full results, methods and code see the [Analysis](analysis.md) page and the

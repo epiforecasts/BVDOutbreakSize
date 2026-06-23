@@ -255,6 +255,61 @@ dispersion `k`.
 end
 
 """
+    censoring_cap(iso_days, iso_obs, capacity_history)
+
+Per-report-day right-censoring bound for the isolation-occupancy likelihood,
+built from DATA only (no sampled parameter), so the censored NegativeBinomial
+never sits against a moving `-Inf` wall. Each isolation day takes the nearest
+recorded implied-capacity value (`capacity_history`, the occupancy / reported
+occupancy-rate series), floored at that day's observed occupancy so the bound
+is never below the count (a count above the cap has zero probability under the
+censored NB, the discontinuity that drives the divergences). With the cap
+fixed, the censored likelihood is smooth in the sampled demand: below the cap
+the count identifies demand directly, and at the cap it contributes the
+one-sided `demand ≥ capacity` tail. A `capacity_history` with no counts
+(empty, or days-only as the predictive generator supplies) returns a large
+finite cap far above any bed count, so the censoring is a no-op and the
+likelihood is the plain NB (a literal `Inf` cannot be used because
+[`safe_rate`](@ref) maps non-finite values to `eps`); a `missing` `iso_obs`
+skips the occupancy floor.
+
+The latent bed demand itself is left UNCENSORED: the cap enters only as the
+observation bound, so demand above capacity is carried by the renewal /
+length-of-stay demand model and its priors, not by the bound. Demand above a
+saturated capacity is only partially identified from occupancy (occupancy can
+say "demand was at least the beds filled", not how much more), so the bed
+shortfall is a prior/model-informed quantity, not pinned by the occupancy data
+— see [`treatment_admission_model`](@ref).
+"""
+function censoring_cap(iso_days, iso_obs, capacity_history)
+    cdays = Int.(capacity_history.days)
+    ccounts = Float64.(capacity_history.counts)
+    ## Large finite no-op cap (bed counts are in the hundreds), used when there
+    ## is no recorded capacity. Not `Inf`: `safe_rate` maps non-finite to eps.
+    nocap = 1.0e6
+    ## Censor only where recorded capacity COUNTS exist. The predictive
+    ## generator passes the capacity history days-only (counts emptied), so the
+    ## guard is on the counts, not the days — otherwise the nearest-day lookup
+    ## would index an empty counts vector.
+    have_cap = !isempty(ccounts)
+    m = length(iso_days)
+    cap = Vector{Float64}(undef, m)
+    @inbounds for (i, d) in enumerate(iso_days)
+        di = Int(d)
+        c = if !have_cap
+            nocap
+        else
+            ## nearest recorded capacity by day distance (data lookup, no AD)
+            j = argmin(abs.(cdays .- di))
+            ccounts[j]
+        end
+        o = iso_obs === missing ? 0.0 : Float64(iso_obs[i])
+        cap[i] = max(c, o)
+    end
+    return cap
+end
+
+"""
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
 daily onsets with the sampled onset-to-death delay, scales by the CFR and
 the death ascertainment `p_death`, and reads the modelled cumulative deaths
@@ -1432,21 +1487,29 @@ rates and leave on different clocks:
   clinical sign-off and bed logistics, so the rule-out stay is identified by
   the occupancy on its own clock.
 
-The occupancy is the latent demand right-censored at an effective capacity
-`ρ·C(t)`, with `C(t)` the time-varying bed capacity
-([`bed_capacity_walk_model`](@ref), a random walk so the ceiling tracks the
-beds being added) and `ρ ∈ (0, 1]` the usable fraction of the nominal beds
-(ward layout, staffing and isolation spacing mean only a fraction can be
-occupied; `ρ` is bounded below by the largest observed utilisation). While
-demand is below the ceiling the count tracks it; once demand reaches the
-ceiling the count is censored there. Each report day's occupied-bed count
-follows a NegativeBinomial around the demand, right-censored at `ρ·C(t)`
+Each report day's occupied-bed count follows a NegativeBinomial around the
+latent demand, right-censored at the bed capacity
 ([`censored_occupancy_model`](@ref)), with a dispersion `k` (the pooled
-isolation dispersion in the joint, sampled here when run standalone).
-Censoring keeps the demand identified at saturation, where a deterministic cap
-would make occupancy insensitive to demand. The capacity is pinned by the
-implied bed count (occupancy / reported occupancy rate, `capacity_history`),
-each entry a noisy observation of `C(t)` on its day. Empty histories are
+isolation dispersion in the joint, sampled here when run standalone). The
+censoring bound is FIXED at the recorded implied-capacity series
+([`censoring_cap`](@ref)), not a sampled ceiling: a sampled bound sitting on
+the data at high utilisation gives the censored likelihood a moving `-Inf`
+wall (a count above the bound has zero probability), which NUTS cannot cross
+and which drove ~60% divergent transitions at the ~94% utilisation of the
+current data. With the bound fixed, the likelihood is smooth — below capacity
+the count identifies demand directly, and at capacity it contributes the
+one-sided `demand ≥ capacity` tail (the marginalised censored encoding; Stan
+manual). The latent demand is left UNCENSORED, so demand above capacity is
+carried by the renewal / length-of-stay demand model and its priors, not by a
+fitted ceiling fraction; the bed shortfall above a saturated capacity is only
+partially identified from occupancy (occupancy says "demand was at least the
+beds filled", not how much more), so it is a prior/model-informed quantity.
+The capacity walk `C(t)` ([`bed_capacity_walk_model`](@ref)) still carries the
+implied-capacity likelihood and the forecast cap, and `occupancy =
+min(demand, C)` is the supply-capped stock the derived quantities report. The
+capacity is pinned by the implied bed count (occupancy / reported occupancy
+rate, `capacity_history`), each entry a noisy observation of `C(t)` on its
+day. Empty histories are
 no-ops; `missing` count vectors sample (the predictive path).
 
 Exposes the cut-off occupancy, the cut-off bed demand (need under
@@ -1468,16 +1531,6 @@ series for forecasting and posterior-predictive replication.
         ## Dispersion can be injected from the joint composer's pooled set
         ## (`k_external`); standalone it samples its own from `dispersion`.
         k_external::Union{Nothing, Real} = nothing,
-        ## Bed-fullness soft cap: occupancy soft-mins against the capacity
-        ## `C(t)`, and `softness` sets the knee width as a fraction of `C(t)`.
-        ## Knee width of the `:softmin` cap as a fraction of capacity.
-        softness::Real = 0.1,
-        ## Occupancy saturation against capacity. `:censored` right-censors the
-        ## demand at an effective capacity (the supply ceiling identified from
-        ## the occupancy plateau); `:none` leaves occupancy at demand; `:softmin`
-        ## is a smooth soft cap. Censoring keeps demand identified at the ceiling
-        ## where a deterministic cap goes flat in demand.
-        saturation::Symbol = :censored,
         ## BVD treatment stay (admission → outcome): the in-hospital length of
         ## stay an admitted BVD case occupies a bed before leaving by death or
         ## discharge. Carried through on the natural Gamma shape/scale from our
@@ -1540,72 +1593,35 @@ series for forecasting and posterior-predictive replication.
     bg_demand = convolve_survival(p_iso .* bg_daily, ruleout_los_state.pmf)
     demand = bvd_demand .+ bg_demand
     ## In predict / check-model mode the daily series can widen to
-    ## `Vector{Any}`, which the saturation below cannot broadcast over, so
-    ## pin it to the capacity's (always-concrete) element type, leaving the
+    ## `Vector{Any}`, which the `min.(demand, C)` below cannot broadcast over,
+    ## so pin it to the capacity's (always-concrete) element type, leaving the
     ## AD/fit path untouched.
     if eltype(demand) === Any
         demand = convert(Vector{eltype(C)}, demand)
     end
 
-    ## Supply-limited occupancy: the demand soft-capped at the bed capacity
-    ## `C(t)`. Occupancy tracks demand while beds are slack and saturates near
-    ## `C(t)` once demand exceeds it, so a shortfall is inferred only when
-    ## occupancy is near genuine fullness rather than at every utilisation
-    ## below capacity (see [`soft_min_cap`](@ref)).
-    ## `:censored` models the occupancy as the latent demand right-censored at
-    ## an effective capacity `usable_frac · C(t)`, a fitted fraction of the
-    ## nominal beds (saturation sets in below the full reported count). The
-    ## other modes saturate the mean deterministically.
-    local Ceff
-    if saturation === :censored
-        ## The usable fraction is bounded below by the largest observed
-        ## utilisation — occupancy never exceeds usable capacity — so the
-        ## prior support starts at the peak observed occupancy / capacity
-        ## ratio and runs to 1. The data pins it from below; we estimate how
-        ## far above the observed peak the true ceiling sits.
-        ## Match each isolation day to its capacity entry by linear search
-        ## over the data-only integer day/count vectors. The lookup stays free
-        ## of try/catch, which Mooncake cannot differentiate in reverse mode,
-        ## and this whole body is traced.
-        cap_days = Int.(capacity_history.days)
-        cap_counts = Int.(capacity_history.counts)
-        peak_util = isempty(isolation_history.counts) ? 0.5 :
-                    maximum(
-            let j = findfirst(==(Int(d)), cap_days)
-                isnothing(j) ? 0.0 :
-                isolation_history.counts[i] / cap_counts[j]
-            end
-            for (i, d) in enumerate(isolation_history.days);
-            init = 0.0)
-        ## Set the lower bound three-quarters of the way from the observed
-        ## peak up to 1, fencing the usable fraction into a tight high band so
-        ## the effective ceiling stays clear of the observed occupancy and the
-        ## censoring stays inactive at current utilisation.
-        lo = clamp(peak_util + 0.75 * (1.0 - peak_util), 0.3, 0.99)
-        usable_frac ~ truncated(Normal(1.0, 0.03); lower = lo, upper = 1.0)
-        Ceff = usable_frac .* C
-        occupancy = min.(demand, Ceff)
-    else
-        occupancy = saturation === :none ? demand :
-                    soft_min_cap.(demand, C, softness)
-    end
+    ## Supply-limited occupancy: the latent demand right-censored at the bed
+    ## capacity. The censoring bound is the recorded implied-capacity series
+    ## ([`censoring_cap`](@ref)), a fixed data bound rather than a sampled
+    ## ceiling, so the censored NegativeBinomial has no moving `-Inf` wall to
+    ## diverge against. The latent demand is left UNCENSORED, so demand above
+    ## capacity is carried by the renewal / length-of-stay demand model and its
+    ## priors; the part of demand above a saturated capacity is only partially
+    ## identified from occupancy. `occupancy = min(demand, C)` is the
+    ## supply-capped stock the derived quantities report; the capacity walk
+    ## `C(t)` carries the implied-capacity likelihood and the forecast cap.
+    occupancy = min.(demand, C)
 
-    ## Each report day's occupied-bed count follows a NegBinomial around the
-    ## modelled occupancy on that day. Empty history is a no-op; a `missing`
-    ## count vector samples (the predictive path).
+    ## Each report day's occupied-bed count is a NegativeBinomial around the
+    ## latent demand, right-censored at the fixed capacity bound. Empty history
+    ## is a no-op; a `missing` count vector samples (the predictive path).
     iso_days = isolation_history.days
     iso_obs = isempty(isolation_history.counts) ? missing :
               collect(Int.(isolation_history.counts))
-    if saturation === :censored
-        iso_means = [demand[clamp(Int(d), 1, n)] for d in iso_days]
-        iso_ceil = [Ceff[clamp(Int(d), 1, n)] for d in iso_days]
-        isolation ~ to_submodel(
-            censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
-    else
-        iso_modelled = [occupancy[clamp(Int(d), 1, n)] for d in iso_days]
-        isolation ~ to_submodel(
-            vintage_increments_model(iso_modelled, iso_obs, k))
-    end
+    iso_means = [demand[clamp(Int(d), 1, n)] for d in iso_days]
+    iso_ceil = censoring_cap(iso_days, iso_obs, capacity_history)
+    isolation ~ to_submodel(
+        censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
 
     ## Bed capacity: the implied bed count (occupancy / reported occupancy
     ## rate) on the days a rate is published is a noisy observation of `C(t)`

@@ -1322,28 +1322,29 @@ cfr_prior_fig #hide
 # since beds are added over the response and not taken away, pinned by the
 # implied bed count, the reported occupancy (the "Patients en isolement" count)
 # divided by the reported "Taux d'occupation" rate ($\approx 400 \to 452$ beds
-# over 9–13 June). Only a fraction of the nominal beds can be occupied (ward
-# layout, staffing, isolation spacing), so the effective ceiling is
-# $\rho\, C(t)$ with usable fraction $\rho \in (0, 1]$, bounded below by the
-# largest observed utilisation since occupancy never exceeds usable capacity.
+# over 9–13 June).
 #
-# The occupied-bed count is the demand right-censored at the effective ceiling:
-# while demand is below the ceiling the count tracks it, and once demand
-# reaches the ceiling the count is censored there. Censoring keeps the demand
-# identified at saturation, where a deterministic cap would make occupancy
-# insensitive to demand,
+# The occupied-bed count is the latent demand right-censored at the bed
+# capacity: while demand is below capacity the count tracks it, and once demand
+# reaches capacity the count is censored there. The censoring bound is fixed at
+# the recorded implied capacity $C^{\text{cap}}_j$ so the latent demand is left
+# uncensored,
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
-#     \text{upper} = \rho\, C_{t_j}\bigr),
+#     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
 # C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C_{t_j},\ k_{\text{iso}}),
 # ```
 #
 # with a dispersion $k_{\text{iso}}$ of its own (not shared with the other
-# streams). The model exposes the cut-off occupancy, the cut-off bed demand
-# (the need under unconstrained supply), their difference (the bed shortfall)
-# and the utilisation $O_T / C$.
+# streams). Occupancy below capacity identifies the demand directly; the part
+# of demand above a saturated capacity is only partially identified, since
+# occupancy says demand was at least the beds filled and not how much more, so
+# the bed shortfall above capacity is informed by the demand model and its
+# priors rather than measured by the occupancy. The model exposes the cut-off
+# occupancy, the cut-off bed demand (the need under unconstrained supply),
+# their difference (the bed shortfall) and the utilisation $O_T / C$.
 #
 # One limitation is that this is a single national model, with one national
 # bed capacity and one national demand, so it cannot represent local
@@ -2092,10 +2093,13 @@ clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
 tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
 ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
-## joint fits; run them only on main and release builds, not PRs or local
-## builds. `BVD_RUN_SENSITIVITY` (set in the docs workflow off PRs) gates them.
-RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in (
-    "true", "1", "yes", "on")
+## joint fits. They are PAUSED due to compute constraints: the serial
+## sensitivity re-fits pushed the main docs build toward the 6h CI cap, so they
+## are not run on any build for now. The code below is retained unchanged;
+## re-enable by restoring the `BVD_RUN_SENSITIVITY` env gate:
+##   RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
+##       "false"))) in ("true", "1", "yes", "on")
+RUN_SENSITIVITY = false
 
 ## Every independent fit runs as one work-stealing pool so the long joint fit
 ## overlaps the per-stream, frozen and (gated) sensitivity re-fits and keeps
@@ -2745,14 +2749,14 @@ obs_delay_pair_fig #hide
 # probability). The six passive-surveillance count streams (suspected
 # cases, suspected deaths, confirmed cases, confirmed deaths, isolation
 # occupancy and recovered) each have their own negative-binomial dispersion
-# partially pooled from a shared population: `k` is the population-level
-# dispersion, `k_cases`, `k_deaths`, `k_confirmed` and `k_confirmed_deaths`
-# the per-stream values for the four DRC count streams, and `dispersion_sd`
-# the pooling spread. The isolation and recovered streams add the proportion
-# of suspects admitted to a bed and the recovery probability among confirmed
-# cases, with their dispersions (`isolation_dispersion`,
-# `recovered_dispersion`) drawn from the same pooled population (see the
-# length-of-stay delays in the observation-delay table above).
+# partially pooled from a shared population: $k$ is the population-level
+# dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and
+# $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count
+# streams, and a pooling spread. The isolation and recovered streams add the
+# proportion of suspects admitted to a bed and the recovery probability among
+# confirmed cases, with their dispersions ($k_{\text{iso}}$, $k_{\text{rec}}$)
+# drawn from the same pooled population (see the length-of-stay delays in the
+# observation-delay table above).
 # The table reports their credible intervals; the pair plot beside it shows
 # their joint posterior with the prior overlaid.
 
@@ -3756,6 +3760,11 @@ frozen_streams_table #hide
 
 # ### Delay sensitivity
 #
+# **Paused due to compute constraints.** This sensitivity re-fit is not run in
+# the current build to keep the docs build within compute limits. The method
+# and code are unchanged and it can be re-enabled (see the sensitivity gate in
+# the setup block); the description below documents what it does.
+#
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
 # The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
@@ -3791,7 +3800,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity runs on main and release builds._"
+                          Markdown.md"_Delay sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3807,7 +3816,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity runs on main and release builds._"
+                        Markdown.md"_Delay sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3816,6 +3825,11 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
 delay_sensitivity_fig #hide
 
 # ### Clock-rate sensitivity
+#
+# **Paused due to compute constraints.** This sensitivity re-fit is not run in
+# the current build to keep the docs build within compute limits. The method
+# and code are unchanged and it can be re-enabled (see the sensitivity gate in
+# the setup block); the description below documents what it does.
 #
 # The whole outbreak-age estimate rests on the genetic bound, the oldest
 # date the common ancestor of the sequenced cases can sit, which is set by
@@ -3855,7 +3869,7 @@ T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3870,7 +3884,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock; scenarios = []) :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3889,7 +3903,7 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => T_baseline_clock,
     "faster clock" => T_fast_clock; digits = 0) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3906,7 +3920,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "faster clock" => T_fast_clock;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by clock rate") :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3995,8 +4009,9 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above
 # rather than re-fitting. Here we save its headline text, headline tables and
-# the three figures it shows (reproduction number, infections over time, and
-# modelled versus observed reported cases) into `docs/src/summary_assets/`,
+# the four figures it shows (reproduction number, the reproduction number each
+# data stream implies on its own, infections over time, and modelled versus
+# observed reported cases) into `docs/src/summary_assets/`,
 # so the static dashboard page can embed them after this build step has run.
 
 #md # ```@raw html
@@ -4007,10 +4022,12 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t), latent infections over time, and the modelled
-## versus observed reported cases. All three are produced in the Results
-## sections above; here we just write them out at the dashboard size.
+## Figures: estimated R(t), the R(t) each data stream implies on its own,
+## latent infections over time, and the modelled versus observed reported
+## cases. All are produced in the Results sections above; here we just write
+## them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "rt_streams.png"), stream_rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 CairoMakie.save(joinpath(dashboard_dir, "reported_cases.png"),
