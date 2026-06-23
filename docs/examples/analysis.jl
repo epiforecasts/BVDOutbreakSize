@@ -4009,8 +4009,9 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above
 # rather than re-fitting. Here we save its headline text, headline tables and
-# the three figures it shows (reproduction number, infections over time, and
-# modelled versus observed reported cases) into `docs/src/summary_assets/`,
+# the four figures it shows (reproduction number, the reproduction number each
+# data stream implies on its own, infections over time, and modelled versus
+# observed reported cases) into `docs/src/summary_assets/`,
 # so the static dashboard page can embed them after this build step has run.
 
 #md # ```@raw html
@@ -4021,10 +4022,12 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t), latent infections over time, and the modelled
-## versus observed reported cases. All three are produced in the Results
-## sections above; here we just write them out at the dashboard size.
+## Figures: estimated R(t), the R(t) each data stream implies on its own,
+## latent infections over time, and the modelled versus observed reported
+## cases. All are produced in the Results sections above; here we just write
+## them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "rt_streams.png"), stream_rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 CairoMakie.save(joinpath(dashboard_dir, "reported_cases.png"),
