@@ -23,6 +23,33 @@ end
     @test isapprox(sum(pmf), 1.0; atol = 1e-10)
 end
 
+@testitem "discretise_censored: cdf-difference matches the pdf-loop PMF" begin
+    using Distributions: Gamma, cdf, pdf
+    using CensoredDistributions: double_interval_censored
+    using BVDOutbreakSize: discretise_censored, lognormal_meansd
+
+    ## `_pmf_from_dic` differences one CDF path rather than calling `pdf` at
+    ## every lag; differencing each integer boundary CDF once is numerically
+    ## identical to the overlapping `pdf(dic, d)` pairs it replaced. Rebuild
+    ## the old pdf-loop here and assert the PMF is unchanged to tight
+    ## tolerance for the delays the model actually uses, so the optimisation
+    ## cannot silently shift the discretisation.
+    function pmf_pdf_loop(dist, nmax)
+        dic = double_interval_censored(dist; interval = 1.0,
+            upper = float(nmax))
+        raw = [pdf(dic, float(d)) for d in 0:nmax]
+        return raw ./ sum(raw)
+    end
+    cases = ((lognormal_meansd(6.3, 3.5), 30),
+        (lognormal_meansd(4.5, 4.0), 30),
+        (Gamma(1.178, 3.694), 30),
+        (Gamma(3.33, 3.83), 60))
+    for (dist, nmax) in cases
+        @test isapprox(discretise_censored(dist, nmax),
+            pmf_pdf_loop(dist, nmax); rtol = 1e-10, atol = 1e-12)
+    end
+end
+
 @testitem "discretise_censored: PMF contract (non-negative, sums to 1)" begin
     using BVDOutbreakSize: discretise_censored, lognormal_meansd
     using Distributions: LogNormal
