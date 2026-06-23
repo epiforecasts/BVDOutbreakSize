@@ -2094,10 +2094,13 @@ clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
 tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
 ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
-## joint fits; run them only on main and release builds, not PRs or local
-## builds. `BVD_RUN_SENSITIVITY` (set in the docs workflow off PRs) gates them.
-RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in (
-    "true", "1", "yes", "on")
+## joint fits. They are PAUSED due to compute constraints: the serial
+## sensitivity re-fits pushed the main docs build toward the 6h CI cap, so they
+## are not run on any build for now. The code below is retained unchanged;
+## re-enable by restoring the `BVD_RUN_SENSITIVITY` env gate:
+##   RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
+##       "false"))) in ("true", "1", "yes", "on")
+RUN_SENSITIVITY = false
 
 ## Every independent fit runs as one work-stealing pool so the long joint fit
 ## overlaps the per-stream, frozen and (gated) sensitivity re-fits and keeps
@@ -3758,6 +3761,11 @@ frozen_streams_table #hide
 
 # ### Delay sensitivity
 #
+# **Paused due to compute constraints.** This sensitivity re-fit is not run in
+# the current build to keep the docs build within compute limits. The method
+# and code are unchanged and it can be re-enabled (see the sensitivity gate in
+# the setup block); the description below documents what it does.
+#
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
 # The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
@@ -3793,7 +3801,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity runs on main and release builds._"
+                          Markdown.md"_Delay sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3809,7 +3817,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity runs on main and release builds._"
+                        Markdown.md"_Delay sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3818,6 +3826,11 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
 delay_sensitivity_fig #hide
 
 # ### Clock-rate sensitivity
+#
+# **Paused due to compute constraints.** This sensitivity re-fit is not run in
+# the current build to keep the docs build within compute limits. The method
+# and code are unchanged and it can be re-enabled (see the sensitivity gate in
+# the setup block); the description below documents what it does.
 #
 # The whole outbreak-age estimate rests on the genetic bound, the oldest
 # date the common ancestor of the sequenced cases can sit, which is set by
@@ -3857,7 +3870,7 @@ T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3872,7 +3885,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock; scenarios = []) :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3891,7 +3904,7 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => T_baseline_clock,
     "faster clock" => T_fast_clock; digits = 0) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
@@ -3908,7 +3921,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "faster clock" => T_fast_clock;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by clock rate") :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds._"
+                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
 
 #md # ```@raw html
 #md # </details>
