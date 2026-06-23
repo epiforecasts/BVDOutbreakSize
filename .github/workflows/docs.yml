@@ -17,6 +17,10 @@ jobs:
   docs:
     name: Build and deploy
     runs-on: ubuntu-latest
+    # The build runs ~14 NUTS fits (plus the sensitivity refits on main), so
+    # cap it well above the expected runtime; a pathological run then fails
+    # clearly here instead of being killed at GitHub's silent 6h job ceiling.
+    timeout-minutes: 300
     permissions:
       contents: write
       statuses: write
@@ -36,10 +40,12 @@ jobs:
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # The analysis literate fits four NUTS chains via MCMCThreads;
-          # two Julia threads run them two-at-a-time, roughly halving the
-          # dominant sampling cost of the docs build.
-          JULIA_NUM_THREADS: '2'
+          # ubuntu-latest is a 4-vCPU runner. With `chains = 2`, `fit_parallel`
+          # runs `maxconc = nthreads / chains = 2` fits at once, each fitting
+          # its 2 NUTS chains in parallel via MCMCThreads, so all 4 vCPUs stay
+          # busy. At the previous `2` the fits ran one-at-a-time (maxconc = 1),
+          # leaving half the runner idle; `4` roughly halves the docs build.
+          JULIA_NUM_THREADS: '4'
           # Skip per-fit progress/TensorBoard logging on the build; the
           # callbacks (`fit_callback`) are for local runs, not CI artifacts.
           BVD_FIT_LOG: none
