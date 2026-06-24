@@ -17,10 +17,12 @@ jobs:
   docs:
     name: Build and deploy
     runs-on: ubuntu-latest
-    # The build runs ~14 NUTS fits (plus the sensitivity refits on main), so
-    # cap it well above the expected runtime; a pathological run then fails
-    # clearly here instead of being killed at GitHub's silent 6h job ceiling.
-    timeout-minutes: 300
+    # The build runs ~14 NUTS fits, and on main/tag also the sensitivity
+    # refits, which land near 5h, so a 300-minute cap was killing builds that
+    # would otherwise finish. 360 is GitHub's hosted-runner job maximum, so
+    # this gives the fits the full window; a genuinely stuck run is still
+    # stopped at the runner ceiling.
+    timeout-minutes: 360
     permissions:
       contents: write
       statuses: write
