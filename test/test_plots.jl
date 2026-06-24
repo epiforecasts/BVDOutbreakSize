@@ -142,6 +142,36 @@ end
     @test obj !== nothing
 end
 
+@testitem "plot_correlation_heatmap returns a Makie figure" setup=[HeadlessMakie] begin
+    using Distributions: Normal
+    using Turing: @model, sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: plot_correlation_heatmap
+
+    @model function _corr_model()
+        a ~ Normal(0.0, 1.0)
+        b ~ Normal(2.0, 0.5)
+        c ~ Normal(-1.0, 2.0)
+    end
+
+    chn = sample(_corr_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false)
+    fig = plot_correlation_heatmap(chn, [:a, :b, :c];
+        labels = Dict(:a => "A", :b => "B"))
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_stream_pairs returns a renderable object" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_stream_pairs
+    rng = MersenneTwister(7)
+    modelled = (; cases = randn(rng, 300) .* 50 .+ 1000,
+        deaths = randn(rng, 300) .* 20 .+ 250)
+    observed = (; cases = 1077.0, deaths = 246.0)
+    obj = plot_stream_pairs(modelled, observed)
+    @test obj !== nothing
+end
+
 @testitem "plot_estimate_comparison returns a Makie figure" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_estimate_comparison
     rows = [
