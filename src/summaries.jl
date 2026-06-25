@@ -35,7 +35,9 @@ const _PRETTY_COLS = Dict(
     "horizon_days" => "Horizon (days)",
     "lower_90" => "Lower 90%", "lower_60" => "Lower 60%",
     "lower_30" => "Lower 30%", "upper_30" => "Upper 30%",
-    "upper_60" => "Upper 60%", "upper_90" => "Upper 90%"
+    "upper_60" => "Upper 60%", "upper_90" => "Upper 90%",
+    "n" => "Vintages", "bias" => "Bias",
+    "coverage_50" => "50% coverage", "coverage_90" => "90% coverage"
 )
 
 _prettify(df::DataFrame) = rename(df, [n => get(_PRETTY_COLS, n, n) for n in names(df)])
@@ -246,6 +248,86 @@ function comparison_table(C_draws::AbstractVector;
         end
         (scenario = label, reported_cases = val,
             narrowest_interval = crI)
+    end
+    return _prettify(DataFrame(rows))
+end
+
+## --- Posterior-predictive calibration -----------------------------------
+
+"""
+Sample-based forecast bias for a single observation against a predictive
+sample, following `scoringutils::bias_sample`. With `n_lt` and `n_eq` the
+counts of predictive draws strictly below and exactly equal to the
+observation, the bias is
+
+``1 - 2\\,(n_{lt} + n_{eq}/2)/m``
+
+over the `m` draws. It lies in ``[-1, 1]``: negative when the predictive
+distribution sits below the observation (under-prediction), positive when
+it sits above (over-prediction), and zero when the observation falls at the
+predictive median. The equal-count term handles ties in count data so a
+mass of draws exactly at the observation does not bias the score.
+"""
+function bias_sample(observed::Real, predicted::AbstractVector{<:Real})
+    m = length(predicted)
+    m == 0 && return NaN
+    n_lt = count(<(observed), predicted)
+    n_eq = count(==(observed), predicted)
+    return 1 - 2 * (n_lt + n_eq / 2) / m
+end
+
+# Whether `observed` lies inside the central equal-tailed `level` predictive
+# interval of the sample (e.g. `level = 0.9` → the 5–95% interval).
+function _covered(observed::Real, predicted::AbstractVector{<:Real}, level::Real)
+    lo = quantile(predicted, (1 - level) / 2)
+    hi = quantile(predicted, (1 + level) / 2)
+    return lo <= observed <= hi
+end
+
+# Per-vintage conditional predictive samples for one PPC panel, mirroring
+# `plot_vintage_conditional_ppc`: each cumulative-stream draw at vintage `v`
+# is the observed previous cumulative plus the drawn increment (baseline
+# zero for a `cumulative = false` daily panel), and the matching observed
+# value is the cumulative (or daily) count at that vintage. Returns
+# `(samples, observed)` with `samples[v]` the draw vector at vintage `v`.
+function _panel_conditional(panel)
+    observed = float.(panel.observed)
+    n = length(observed)
+    cumulative = get(panel, :cumulative, true)
+    obs_prev = cumulative ?
+               [v == 1 ? 0.0 : observed[v - 1] for v in 1:n] : zeros(n)
+    replicates = [collect(r) for r in vec(collect(panel.replicates))]
+    samples = [[obs_prev[v] + r[v] for r in replicates] for v in 1:n]
+    return (samples = samples, observed = observed)
+end
+
+"""
+Per-stream posterior-predictive calibration for the per-vintage
+one-step-ahead conditional checks. Pass the same `panels` given to
+[`plot_vintage_conditional_ppc`](@ref): each is a `NamedTuple`
+`(; title, observed, replicates, …)` with optional `cumulative`. For each
+stream the conditional predictive at every vintage is scored against the
+observed count, and the per-vintage scores are averaged into one row.
+
+Columns: `stream`, the number of scored vintages `n`, the mean forecast
+`bias` (see [`bias_sample`](@ref); negative = the stream is under-predicted,
+positive = over-predicted), and the empirical `coverage_50`/`coverage_90`
+— the fraction of vintages whose observed count falls inside the central
+50% and 90% predictive intervals. A well-calibrated stream has bias near
+zero and coverage near its nominal level; departures flag the streams the
+joint fit reproduces less well.
+"""
+function stream_calibration(panels::AbstractVector)
+    rows = map(panels) do panel
+        c = _panel_conditional(panel)
+        n = length(c.observed)
+        biases = [bias_sample(c.observed[v], c.samples[v]) for v in 1:n]
+        cov50 = [_covered(c.observed[v], c.samples[v], 0.5) for v in 1:n]
+        cov90 = [_covered(c.observed[v], c.samples[v], 0.9) for v in 1:n]
+        (stream = panel.title, n = n,
+            bias = round(n == 0 ? NaN : mean(biases); digits = 2),
+            coverage_50 = round(n == 0 ? NaN : mean(cov50); digits = 2),
+            coverage_90 = round(n == 0 ? NaN : mean(cov90); digits = 2))
     end
     return _prettify(DataFrame(rows))
 end

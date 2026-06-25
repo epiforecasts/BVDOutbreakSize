@@ -1,6 +1,6 @@
 module BVDOutbreakSize
 
-using Statistics: quantile
+using Statistics: quantile, mean
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
@@ -32,7 +32,8 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        load_observations, freeze_observations, m_prior_centre,
        summary_table, posterior_summary, markdown_table,
        fit_diagnostics, diagnostics_table,
-       streams_table, comparison_table, onsets_over_time,
+       streams_table, comparison_table,
+       bias_sample, stream_calibration, onsets_over_time,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,

@@ -3027,10 +3027,11 @@ recovered_panel = (;
 ## laboratory-confirmed streams keep reporting to the cut-off, so the
 ## confirmed panels show the full series the model is fitting, not just the
 ## window the suspected streams cover.
-joint_vintage_ppc_fig = plot_vintage_conditional_ppc(
-    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+vintage_panels = [
+    reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
-    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel]);
+    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel];
+joint_vintage_ppc_fig = plot_vintage_conditional_ppc(vintage_panels);
 
 #md # ```@raw html
 #md # </details>
@@ -3060,6 +3061,28 @@ joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
 #md # ```
 
 joint_vintage_incidence_fig #hide
+
+# The above plot is useful for building an intuition for which panels track the data well, but to quantify it we
+# score each stream's per-vintage conditional predictions against the
+# observed counts. `bias` is the mean forecast bias over the vintages
+# (negative = the stream is under-predicted, positive = over-predicted, zero
+# = the observed counts sit at the predictive median); `50%/90% coverage`
+# are the fractions of vintages whose observed count falls inside the central
+# 50% and 90% predictive intervals, which a well-calibrated stream keeps near
+# those nominal levels. Streams with a large bias or coverage far from
+# nominal are the ones the joint fit reproduces less well.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream calibration table</summary>
+#md # ```
+
+stream_calibration_table = stream_calibration(vintage_panels);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_calibration_table #hide
 
 # The exports group is checked next.
 # The Uganda export and export-death streams are dated per-day series, each
