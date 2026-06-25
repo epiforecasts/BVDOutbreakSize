@@ -3062,7 +3062,7 @@ joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
 
 joint_vintage_incidence_fig #hide
 
-# The eye can tell which panels track the data well, but to quantify it we
+# The above plot is useful for building an intuition for which panels track the data well, but to quantify it we
 # score each stream's per-vintage conditional predictive against the
 # observed counts. `bias` is the mean forecast bias over the vintages
 # (negative = the stream is under-predicted, positive = over-predicted, zero
