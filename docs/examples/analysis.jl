@@ -949,7 +949,7 @@ cfr_prior_fig #hide
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
 # z_s \sim \mathrm{Normal}(0, 1), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.3), \tag{20}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{20}
 # ```
 #
 # so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the
