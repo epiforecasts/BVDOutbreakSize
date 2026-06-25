@@ -1061,7 +1061,7 @@ and the raw deviations. Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with
 """
 @model function pooled_dispersion_model(n_streams::Integer;
         mean_prior = Normal(log(0.6), 0.33),
-        sd_prior = truncated(Normal(0, 0.3); lower = 0))
+        sd_prior = truncated(Normal(0, 0.6); lower = 0))
     μ_log ~ mean_prior
     τ ~ sd_prior
     z ~ product_distribution(fill(Normal(0, 1), max(n_streams, 1)))
