@@ -1291,13 +1291,47 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
-# ##### Isolation occupancy
+# ##### Treatment-centre flow
 #
-# The "Patients en isolement" figure is the daily count of occupied
-# isolation/treatment beds. Bed occupancy may be supply-driven, with demand
-# for beds able to outstrip supply and occupancy catching up as capacity
-# expands. To allow for that we model a latent bed demand and the
-# supply-limited occupancy it produces rather than occupancy directly.
+# The treatment-centre stream models the daily patient flow through the
+# isolation/treatment centres (CTE/CT/CI): the occupied-bed count ("Patients en
+# isolement"), the daily admissions, and the daily discharges split by outcome —
+# in-care deaths ("décédés"), rule-outs ("non-cas") and absconded ("évadés") —
+# read from the situation-report Tableau 6 patient-movement table. Recoveries
+# ("cumul guéris") are the confirmed-and-discharged subset and are modelled as a
+# separate confirmed-recovery stream (below).
+#
+# ```mermaid
+# flowchart TD
+#   S["suspects"] -->|admission delay| B["BVD admissions"]
+#   S -->|admission delay| N["non-BVD admissions"]
+#   B -->|"CFR_iso · death stay"| D["in-care deaths"]
+#   B -->|"(1 - CFR_iso) · recovery stay"| R["recovery (occupies a bed)"]
+#   N -->|"rule-out stay"| RO["rule-outs"]
+#   B --> A["admissions"]
+#   N --> A
+#   O["occupancy: beds in use, censored at capacity"] -->|small fraction| EV["absconded"]
+# ```
+#
+# Bed occupancy may be supply-driven, with demand for beds able to outstrip
+# supply and occupancy catching up as capacity expands, so we model a latent bed
+# demand and the supply-limited occupancy it produces rather than occupancy
+# directly. The bed length-of-stay is an outcome MIXTURE, not competing risks: an
+# admitted BVD patient leaves by death (weight the in-care fatality
+# $\text{CFR}_{\text{iso}}$, on the admission-to-death stay) or by recovery
+# (weight $1 - \text{CFR}_{\text{iso}}$, on a longer admission-to-recovery stay);
+# a non-BVD patient leaves on the rule-out stay. The in-care fatality
+# $\text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}(\mathrm{logit}\,\text{CFR} +
+# \beta_{\text{iso}})$ is the infection CFR adjusted for the admitted population
+# by a log-odds modifier $\beta_{\text{iso}}$, identified by the in-care death
+# flow relative to admissions and occupancy. It is a conditional-on-admission
+# (in-care) fatality, reported with $\beta_{\text{iso}}$ and the overall
+# length-of-stay (the mixture mean); it sits below the infection CFR where
+# treatment reduces mortality, and is not a causal treatment effect (it also
+# reflects which cases survive to be admitted). The daily admissions and
+# discharges (in-care deaths, rule-outs, absconded) are scored as optional
+# negative-binomial streams sharing $k_{\text{iso}}$, a no-op where a flow is not
+# reported.
 #
 # The latent demand is the suspect inflow carried through a length-of-stay
 # survival $S(\tau) = P(\text{LOS} \ge \tau)$ (the renewal analogue of the
