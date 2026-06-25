@@ -146,6 +146,17 @@ function load_observations(
     ## submodel. Begins 6 June, where the confirmed-based reports first print
     ## the running total.
     recovered_history = history("recovered_history")
+    ## Post-cutoff daily treatment-centre patient-movement flows (Tableau 6
+    ## "Mouvement des patients", national): per-day counts (not cumulative) of
+    ## admissions, in-care deaths (suspects + confirmed), rule-out discharges
+    ## (non-cas) and absconded patients. Optional refinements of the
+    ## treatment-flow submodel over their 13-22 June overlap; the longer
+    ## occupancy / recovered / capacity stock streams carry the earlier window.
+    ## An absent block loads empty and is a no-op in the model.
+    treatment_admissions_history = history("treatment_admissions_history")
+    treatment_deaths_history = history("treatment_deaths_history")
+    treatment_ruleout_history = history("treatment_ruleout_history")
+    treatment_absconded_history = history("treatment_absconded_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -194,6 +205,10 @@ function load_observations(
         bed_capacity_history = bed_capacity_history,
         recovered_history = recovered_history,
         recovered_cases = _scalar("recovered_cases", recovered_history),
+        treatment_admissions_history = treatment_admissions_history,
+        treatment_deaths_history = treatment_deaths_history,
+        treatment_ruleout_history = treatment_ruleout_history,
+        treatment_absconded_history = treatment_absconded_history,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

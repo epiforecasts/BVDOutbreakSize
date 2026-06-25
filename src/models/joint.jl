@@ -150,23 +150,29 @@ Runs the infection process and onset staging, samples dispersion and pooled
 ascertainment, then runs the suspected-case stream in predictive mode (to
 draw the shared background rate, testing fraction and onset-to-report
 kernel) and conditions on the isolation/treatment-bed occupancy alone. See
-[`treatment_admission_model`](@ref) and [`reported_cases_model`](@ref).
+[`treatment_flow_model`](@ref) and [`reported_cases_model`](@ref).
 """
 @model function treatment_only_model(
         n::Integer;
         isolation_history = (; days = Int[], counts = Int[]),
         bed_capacity_history = (; days = Int[], counts = Int[]),
+        treatment_admissions_history = (; days = Int[], counts = Int[]),
+        treatment_deaths_history = (; days = Int[], counts = Int[]),
+        treatment_ruleout_history = (; days = Int[], counts = Int[]),
+        treatment_absconded_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
-        treatment = treatment_admission_model,
+        treatment = treatment_flow_model,
+        cfr = cfr_model(),
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
     asc_state ~ to_submodel(ascertainment)
+    cfr_state ~ to_submodel(cfr)
     k = dispersion_state.k
     p_drc = asc_state.p_drc
     cases_state ~ to_submodel(
@@ -174,8 +180,12 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         k, p_drc))
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc;
-        capacity_history = bed_capacity_history))
+        cases_state.bg_daily, p_drc, cfr_state.CFR;
+        capacity_history = bed_capacity_history,
+        admissions_history = treatment_admissions_history,
+        deaths_history = treatment_deaths_history,
+        ruleout_history = treatment_ruleout_history,
+        absconded_history = treatment_absconded_history))
 end
 
 """
@@ -335,7 +345,7 @@ optional `isolation_history` adds the
 daily isolation/treatment-bed occupancy ("Patients en isolement"), a
 prevalence stream fitted as the suspect inflow (BVD treatment stay plus
 non-BVD rule-out stay) carried through a length-of-stay survival into a
-daily stock (see [`treatment_admission_model`](@ref)). The optional
+daily stock (see [`treatment_flow_model`](@ref)). The optional
 `recovered_history` adds the recovered-among-confirmed stream ("cumul
 guéris"), survivors among the modelled daily confirmed cases scaled by the
 recovery probability and lagged by a confirmation-to-recovery delay (see
@@ -377,6 +387,10 @@ death-confirmation positivity (`death_confirmation`).
         isolation_history = (; days = Int[], counts = Int[]),
         bed_capacity_history = (; days = Int[], counts = Int[]),
         recovered_history = (; days = Int[], counts = Int[]),
+        treatment_admissions_history = (; days = Int[], counts = Int[]),
+        treatment_deaths_history = (; days = Int[], counts = Int[]),
+        treatment_ruleout_history = (; days = Int[], counts = Int[]),
+        treatment_absconded_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -388,7 +402,7 @@ death-confirmation positivity (`death_confirmation`).
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         confirmed_deaths_stream = confirmed_deaths_model,
-        treatment = treatment_admission_model,
+        treatment = treatment_flow_model,
         recovered = recovered_model,
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
@@ -512,14 +526,25 @@ death-confirmation positivity (`death_confirmation`).
     ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
     ## length-of-stay survival into a latent bed demand, soft-capped at the bed
     ## capacity the implied-capacity series pins (see
-    ## [`treatment_admission_model`](@ref)). The non-BVD rule-out stay is a
+    ## [`treatment_flow_model`](@ref)). The non-BVD rule-out stay is a
     ## separate parameter from the lab-turnaround `receipt_pmf`.
+    ## Treatment-centre patient flow: occupancy plus the in-care outcome flows
+    ## (admissions, in-care deaths, rule-outs, absconded), with the in-care
+    ## fatality CFR_iso (a modifier on the infection CFR) identified by the
+    ## in-care death flow. The Tableau 6 flow histories are optional refinements
+    ## (empty → no-op).
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc;
-        capacity_history = bed_capacity_history, k_external = k_isolation))
+        cases_state.bg_daily, p_drc, deaths_state.CFR;
+        capacity_history = bed_capacity_history,
+        admissions_history = treatment_admissions_history,
+        deaths_history = treatment_deaths_history,
+        ruleout_history = treatment_ruleout_history,
+        absconded_history = treatment_absconded_history,
+        k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
-    ## daily confirmed cases, with a recovery fraction grounded on the CFR and
+    ## daily confirmed cases (the confirmed-and-discharged subset, NOT all
+    ## in-care recoveries), with a recovery fraction grounded on the CFR and
     ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(
         recovered(recovered_history, recovered_cases,
@@ -609,9 +634,20 @@ death-confirmation positivity (`death_confirmation`).
     isolation_admission := treatment_state.p_iso
     isolation_bvd_admission := treatment_state.p_iso_bvd
     isolation_severity := treatment_state.δ_iso
-    isolation_bvd_los_mean := treatment_state.bvd_los_mean
+    ## BVD bed stay is now the outcome mixture; `isolation_bvd_los_mean`
+    ## reports the mixture mean (overall length-of-stay), with the death and
+    ## recovery branch means surfaced separately.
+    isolation_bvd_los_mean := treatment_state.overall_los
+    isolation_death_los_mean := treatment_state.death_los_mean
+    isolation_recovery_los_mean := treatment_state.recovery_los_mean
     isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
+    isolation_admission_delay_mean := treatment_state.admission_delay_mean
     isolation_dispersion := treatment_state.k_isolation
+    ## In-care fatality CFR_iso (a modifier on the infection CFR) and the
+    ## abscond fraction.
+    incare_cfr := treatment_state.CFR_iso
+    incare_cfr_modifier := treatment_state.β_iso
+    abscond_fraction := treatment_state.abscond_frac
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean

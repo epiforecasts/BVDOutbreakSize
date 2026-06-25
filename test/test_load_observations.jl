@@ -137,6 +137,24 @@
     @test all(d -> 1 <= d <= obs.n, obs.recovered_history.days)
     @test obs.recovered_cases == obs.recovered_history.counts[end]
 
+    ## Tableau 6 treatment-centre patient-movement flows (per-day counts).
+    ## Inflow/outflow streams are positive; absconded may be zero on a day.
+    ## All sorted oldest-first and within the grid.
+    for h in (obs.treatment_admissions_history, obs.treatment_deaths_history,
+        obs.treatment_ruleout_history)
+        @test !isempty(h.counts)
+        @test all(c -> c > 0, h.counts)
+        @test issorted(h.days)
+        @test all(d -> 1 <= d <= obs.n, h.days)
+    end
+    @test !isempty(obs.treatment_absconded_history.counts)
+    @test all(c -> c >= 0, obs.treatment_absconded_history.counts)
+    @test issorted(obs.treatment_absconded_history.days)
+    @test all(d -> 1 <= d <= obs.n, obs.treatment_absconded_history.days)
+    ## Flow days fall within the occupancy window (they refine it).
+    @test maximum(obs.treatment_admissions_history.days) <=
+          maximum(obs.isolation_history.days)
+
     ## History day indices are in range
     dh = obs.deaths_history
     if !isempty(dh.days)

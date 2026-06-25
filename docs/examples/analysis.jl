@@ -1363,15 +1363,15 @@ cfr_prior_fig #hide
 # series is the all-patients column from 1 June (SitRep 018) onward.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: treatment_admission_model</summary>
+#md # <details><summary>Submodel: treatment_flow_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.treatment_admission_model(
+#md #     (@code_string BVDOutbreakSize.treatment_flow_model(
 #md #         (; days = Int[], counts = Int[]),
-#md #         Float64[], Float64[], 0.25)), "\n```"))
+#md #         Float64[], Float64[], 0.25, 0.3)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -2058,6 +2058,10 @@ function refit_joint_variant(;
             isolation_history = obs.isolation_history,
             bed_capacity_history = obs.bed_capacity_history,
             recovered_history = obs.recovered_history,
+            treatment_admissions_history = obs.treatment_admissions_history,
+            treatment_deaths_history = obs.treatment_deaths_history,
+            treatment_ruleout_history = obs.treatment_ruleout_history,
+            treatment_absconded_history = obs.treatment_absconded_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,
@@ -2124,6 +2128,10 @@ _headline_thunks = [
             isolation_history = obs.isolation_history,
             bed_capacity_history = obs.bed_capacity_history,
             recovered_history = obs.recovered_history,
+            treatment_admissions_history = obs.treatment_admissions_history,
+            treatment_deaths_history = obs.treatment_deaths_history,
+            treatment_ruleout_history = obs.treatment_ruleout_history,
+            treatment_absconded_history = obs.treatment_absconded_history,
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = _BREAKPOINT,
@@ -2171,6 +2179,10 @@ _headline_thunks = [
         treatment_only_model(obs.n;
             isolation_history = obs.isolation_history,
             bed_capacity_history = obs.bed_capacity_history,
+            treatment_admissions_history = obs.treatment_admissions_history,
+            treatment_deaths_history = obs.treatment_deaths_history,
+            treatment_ruleout_history = obs.treatment_ruleout_history,
+            treatment_absconded_history = obs.treatment_absconded_history,
             breakpoint = _BREAKPOINT);
         callback = fit_callback("treatment"))
 ]
@@ -2223,8 +2235,14 @@ display_names = Dict{Symbol, String}(
     Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
     Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
     Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
-    :isolation_bvd_los_mean => "isolation BVD length-of-stay mean",
+    :isolation_bvd_los_mean => "in-care BVD length-of-stay mean (mixture)",
+    :isolation_death_los_mean => "in-care admission-to-death stay mean",
+    :isolation_recovery_los_mean => "in-care admission-to-recovery stay mean",
+    :isolation_admission_delay_mean => "suspected-to-admission delay mean",
     :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
+    :incare_cfr => "in-care fatality (CFR_iso)",
+    :incare_cfr_modifier => "in-care fatality log-odds modifier",
+    :abscond_fraction => "daily abscond fraction",
     :recovery_delay_mean => "confirmation-to-recovery mean",
     Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
 
@@ -2773,6 +2791,8 @@ surveillance_summary = summary_table(chn_joint,
         :death_confirmation, :expected_confirmed_deaths_T,
         :isolation_admission, :isolation_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
+        :incare_cfr, :incare_cfr_modifier, :isolation_death_los_mean,
+        :isolation_recovery_los_mean, :abscond_fraction,
         :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);
 

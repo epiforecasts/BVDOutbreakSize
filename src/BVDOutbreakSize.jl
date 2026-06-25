@@ -83,7 +83,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
 # observation models
        deaths_model, reported_cases_model, confirmed_cases_model,
        confirmed_positivity_windows, confirmed_deaths_model,
-       treatment_admission_model, recovered_model,
+       treatment_flow_model, recovered_model,
        exports_model, exports_deaths_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
