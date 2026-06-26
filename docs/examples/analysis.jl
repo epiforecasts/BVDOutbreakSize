@@ -1382,15 +1382,11 @@ cfr_prior_fig #hide
 #
 # One limitation is that this is a single national model, with one national
 # bed capacity and one national demand, so it cannot represent local
-# saturation. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at
-# 21.9%, so beds free in one province cannot serve patients who need them in
-# another, and the national capacity averages over a saturated epicentre and
-# slack elsewhere. The national shortfall therefore understates the local
-# unmet need. The renewal model does not carry per-province inflow, so it
-# cannot be split into the per-province bed model at which the supply
-# constraint actually operates. A second
-# limitation is that capacity is taken as a single (slowly varying) national
-# quantity even though beds are being added.
+# saturation and the national shortfall understates local unmet need. The
+# renewal model does not carry per-province inflow, so it cannot be split into
+# the per-province bed model at which the supply constraint actually operates.
+# A second limitation is that capacity is taken as a single (slowly varying)
+# national quantity even though beds are being added.
 #
 # The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
 # BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
@@ -2534,17 +2530,10 @@ cumulative_cases_summary = summary_table(
 
 cumulative_cases_summary #hide
 
-# The figure below shows three modelled cumulative quantities over time, one
-# per row, all latent.
-# The top row is infections, the middle row symptom onsets and the bottom
-# row deaths.
-# The left column is the modelled cumulative trajectory with its 50% and 90%
-# intervals; the right column is the posterior density of the current cut-off
-# cumulative.
-# The infection density on the top right is the headline outbreak size, a
-# count of infections rather than reported cases.
-# No observed counts are overlaid, since each quantity sits upstream of the
-# ascertainment, confirmation and reporting that produce the observations.
+# The figure below shows the cumulative trajectories and current-cut-off
+# densities for three latent quantities: infections, symptom onsets and deaths.
+# The infection density is the headline outbreak size, a count of infections
+# rather than reported cases.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative infections, onsets and deaths figure</summary>
@@ -2562,8 +2551,6 @@ cumulative_traj_fig #hide
 # The cumulative infection count is set by the reproduction number trajectory
 # and the outbreak age, the elapsed time from the import that started the
 # outbreak to the cut-off.
-# Read as a calendar date, the age places the outbreak start at the
-# cut-off date minus the age.
 # The left panel below shows the posterior for that start date; the right
 # panel shows the joint posterior of the outbreak age and the early
 # doubling time.
@@ -2719,10 +2706,8 @@ intervention_table #hide
 
 # ### Observation delays
 #
-# The delays from symptom onset to each observed event: onset to a suspected
-# case being reported, onset to death, onset to detection abroad (the export
-# model uses the same onset-to-admission delay as the report), and the
-# report-to-laboratory receipt delay.
+# The delays carry latent infections through to each observed event: reporting,
+# death, detection abroad and laboratory receipt.
 # The onset-to-report and onset-to-detection delays are the same line-list
 # onset-to-admission delay, sampled on its natural Gamma shape and scale, and
 # onset-to-death is the convolution of two atomic Gamma delays, onset to
@@ -3157,15 +3142,14 @@ joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
 
 joint_vintage_incidence_fig #hide
 
-# The above plot is useful for building an intuition for which panels track the data well, but to quantify it we
-# score each stream's per-vintage conditional predictions against the
+# We score each stream's per-vintage conditional predictions against the
 # observed counts. `bias` is the mean forecast bias over the vintages
-# (negative = the stream is under-predicted, positive = over-predicted, zero
-# = the observed counts sit at the predictive median); `50%/90% coverage`
-# are the fractions of vintages whose observed count falls inside the central
-# 50% and 90% predictive intervals, which a well-calibrated stream keeps near
-# those nominal levels. Streams with a large bias or coverage far from
-# nominal are the ones the joint fit reproduces less well.
+# (negative = under-predicted, positive = over-predicted, zero = the observed
+# counts sit at the predictive median); `50%/90% coverage` are the fractions
+# of vintages whose observed count falls inside the central 50% and 90%
+# predictive intervals, which a well-calibrated stream keeps near those nominal
+# levels. Streams with a large bias or coverage far from nominal are the ones
+# the joint fit reproduces less well.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream calibration table</summary>
@@ -3301,10 +3285,6 @@ end;
 #md # ```
 
 confirmed_cfr_line #hide
-
-# The four quantities side by side: the delay-corrected confirmed CFR, the
-# structural CFR, the uncorrected modelled confirmed ratio and the naive
-# observed confirmed ratio.
 
 confirmed_cfr_summary #hide
 
@@ -3553,14 +3533,10 @@ streams_C_table = streams_table(
 
 streams_C_table #hide
 
-# Each single-stream fit projects its outbreak size out to the cut-off, even
-# for streams whose data stops earlier.
-# The first figure shows each fit's cumulative-infection trajectory over the
-# grid as 50% and 90% credible ribbons, with a dotted vertical rule in each
-# stream's colour where that stream's data stops reporting.
-# The suspected case and death streams freeze at 26 May while the exports and
-# confirmed streams run on, so the part of each ribbon beyond its rule is the
-# model projecting forward from the last data it saw.
+# The first figure shows each single-stream fit's cumulative-infection
+# trajectory projected to the cut-off, with a dotted rule in each stream's
+# colour marking where its data stops and the ribbon beyond it becomes a
+# forward projection.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream projected-trajectory plot</summary>
@@ -3604,13 +3580,9 @@ stream_traj_fig = plot_stream_trajectories(
 stream_traj_fig #hide
 
 # The second figure is the posterior density of each fit's cumulative
-# infection count at the cut-off.
-# The confirmed-cases-only stream is ill-defined on its own, so its posterior
-# runs far wider than the rest.
-# The horizontal axis is scaled to a multiple of the joint-fit 90% upper
-# bound, the estimate that constrains every stream together, so the bulk of
-# the joint and the other streams stays visible rather than being flattened
-# by the confirmed-only tail.
+# infection count at the cut-off; the x-axis is scaled to a multiple of the
+# joint-fit 90% upper bound so the bulk of the streams stays visible rather
+# than being flattened by the wide, ill-defined confirmed-only tail.
 
 #md # ```@raw html
 #md # <details><summary>Cut-off infection-count density plot</summary>
@@ -3638,9 +3610,6 @@ cumulative_density_fig #hide
 
 # The third figure is the reproduction number each stream implies on its own,
 # one panel per stream with the joint fit overlaid in grey as the reference.
-# Each panel draws 30/60/90% credible ribbons with no median line, matching
-# the band style used elsewhere; the window, the response markers and the
-# cut-off match the joint Rt figure above.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream implied-Rt plot</summary>
