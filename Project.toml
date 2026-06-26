@@ -34,10 +34,12 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 
 [weakdeps]
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+Pathfinder = "b1d3bc72-d0e7-4279-b92f-7fa5d6d2d454"
 TensorBoardLogger = "899adc3e-224a-11e9-021f-63837185c80f"
 
 [extensions]
 BVDOutbreakSizeEnzymeExt = "Enzyme"
+BVDOutbreakSizePathfinderExt = "Pathfinder"
 BVDOutbreakSizeTensorBoardLoggerExt = "TensorBoardLogger"
 
 [compat]
@@ -59,6 +61,7 @@ LogDensityProblems = "2"
 Makie = "0.24"
 Mooncake = "0.5"
 PairPlots = "3"
+Pathfinder = "0.10.4"
 PrecompileTools = "1"
 Preferences = "1"
 Random = "1"

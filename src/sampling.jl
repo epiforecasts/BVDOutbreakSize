@@ -25,6 +25,21 @@ the package default for fitting.
 function enzyme_adtype end
 
 """
+    pathfinder_init(model, chains; nruns, ndraws, adtype, rng)
+
+Per-chain NUTS initialisation strategies (one `InitFromParams` per chain) drawn
+from a multi-path Pathfinder (Zhang et al. 2022) variational approximation of
+`model`. Defined by the package's Pathfinder weak-dependency extension
+(`ext/BVDOutbreakSizePathfinderExt.jl`); calling it without `Pathfinder` loaded
+raises a `MethodError`. Load `Pathfinder` to activate the extension. Used by
+[`nuts_sample`](@ref) when `pathfinder = true`, where it seeds each chain from a
+Pathfinder draw to shorten NUTS warmup; the multi-path resampling lets the
+initial points spread across the small-outbreak posterior's modes rather than
+collapse onto one.
+"""
+function pathfinder_init end
+
+"""
 TensorBoard streaming callback for `nuts_sample`, mirroring the
 optional Enzyme backend. `tensorboard_callback(logdir; every = 20,
 histograms = true)` opens a `TensorBoardLogger.TBLogger(logdir)` and, on
@@ -258,6 +273,14 @@ divergences are visible live. Those warmup draws are then also retained
 in the returned chain, so the first `min(1000, samples ÷ 2)` draws are
 adaptation steps rather than posterior samples; raise `samples`
 accordingly or drop them before summarising.
+
+`pathfinder = true` initialises each chain from a multi-path Pathfinder
+(Zhang et al. 2022) variational approximation of the model instead of the prior,
+which can shorten NUTS warmup. It requires `using Pathfinder` (a weak-dependency
+extension) and is off by default. `pathfinder_nruns` (default `max(chains, 4)`)
+sets the number of Pathfinder runs and `pathfinder_ndraws` (default
+`max(100, chains)`) the importance-resampled draw pool the per-chain initial
+points are spread across, so distinct posterior modes can seed distinct chains.
 """
 function nuts_sample(model;
         samples::Integer = 1_000,
@@ -267,11 +290,23 @@ function nuts_sample(model;
         progress::Bool = false,
         adtype = default_adtype(),
         init = InitFromPrior(),
+        pathfinder::Bool = false,
+        pathfinder_nruns::Integer = max(chains, 4),
+        pathfinder_ndraws::Integer = max(100, chains),
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
         kwargs...)
     rng = MersenneTwister(seed)
+    ## Per-chain initialisation: the prior (or a passed strategy) by default; a
+    ## multi-path Pathfinder variational approximation when `pathfinder = true`,
+    ## which seeds each chain from a Pathfinder draw to cut NUTS warmup. The
+    ## Pathfinder run consumes `rng` first, then the sampler continues from it,
+    ## so the whole fit stays deterministic in `seed`.
+    initial = pathfinder ?
+              _pathfinder_init(model, chains; nruns = pathfinder_nruns,
+        ndraws = pathfinder_ndraws, adtype = adtype, rng = rng) :
+              fill(init, chains)
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
     return sample(
@@ -280,13 +315,23 @@ function nuts_sample(model;
         NUTS(target_accept; adtype),
         MCMCThreads(),
         samples, chains;
-        initial_params = fill(init, chains),
+        initial_params = initial,
         progress = progress,
         check_model = check_model,
         cb_kwargs...,
         warmup_kwargs...,
         kwargs...
     )
+end
+
+## Dispatch to the Pathfinder extension, with a clear error when `Pathfinder` is
+## not loaded (the extension supplies the `pathfinder_init` method).
+function _pathfinder_init(model, chains::Integer; kwargs...)
+    if isnothing(Base.get_extension(@__MODULE__, :BVDOutbreakSizePathfinderExt))
+        error("nuts_sample(...; pathfinder = true) needs the Pathfinder " *
+              "extension; add `using Pathfinder` to load it.")
+    end
+    return pathfinder_init(model, chains; kwargs...)
 end
 
 """
