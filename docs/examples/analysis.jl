@@ -2848,20 +2848,11 @@ surveillance_pair_fig #hide
 #
 # A posterior predictive check draws replicated observations from the
 # fitted joint model and compares them to the observed counts.
-# The checks read in three groups, following the generative order of the
-# model.
-# The first is the infection process, the latent infections, symptom
-# onsets and deaths that drive every stream; these are not observed
-# directly, so they carry no genuine replicate and are shown as the
-# estimated cumulative trajectories in the
-# [joint model estimates](@ref "Joint model estimates") figure rather than
-# checked against data here.
-# The second is the surveillance data, the dated DRC streams that are real
-# per-vintage observations: cumulative suspected cases, the daily new-suspect
-# inflow, the daily isolation-bed occupancy, confirmed cases, suspected
-# deaths, confirmed deaths, recovered-among-confirmed and specimens analysed.
-# The third is the exports, the cross-border imported cases and deaths
-# detected in Uganda.
+# The checks cover two groups: the dated DRC surveillance streams and the
+# Uganda exports.
+# The latent infection process is not checked here, as it carries no direct
+# observation, and is shown instead as the estimated cumulative trajectories
+# in the [joint model estimates](@ref "Joint model estimates") figure.
 #
 # The surveillance group is checked first.
 # Each panel is shown over its own reporting dates with the observed series
