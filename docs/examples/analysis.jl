@@ -1983,18 +1983,12 @@ released_df = CSV.read(
     joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
     DataFrame)
 
-## Integral-era release cut-offs for the frozen renewal overlay: a
-## release whose data cut-off already has a renewal release needs no
-## re-fit, since that release already is the renewal estimate. 20, 23 and
-## 27 May are additionally fit for the matched-cutoff comparison further
-## down (27 May matches the Lancet publication's cut-off).
-renewal_release_dates = Set(string(r.date)
-for r in eachrow(released_df) if r.model == "renewal")
-frozen_evolution_cutoffs = sort(unique(string(r.date)
-for r in eachrow(released_df)
-if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
-frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
-    ["2026-05-20", "2026-05-23", "2026-05-27"]))
+## Frozen joint re-fits at the cut-offs McCabe et al. used (27 May matches
+## the Lancet publication's cut-off), for the matched-in-time comparison
+## further down. The estimate-evolution overlay relies on the published
+## per-release estimates in `released_df`, so no per-release-date current-
+## model re-fits are run here.
+frozen_cutoffs = ["2026-05-20", "2026-05-23", "2026-05-27"]
 
 ## A joint fit at the full headline settings (1000 draws × 2 chains) to the
 ## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
@@ -2348,14 +2342,12 @@ diagnostics_table( #hide
 # driven by newer data can be distinguished from one driven by a change of
 # method. Each frozen re-fit uses the
 # full headline settings (1000 draws across two chains). The same frozen re-fit is
-# reused to compare against McCabe et al. at the cut-offs they used, and to
-# trace how the estimate moved as the situation reports accrued, re-fitting
-# the renewal model frozen at each release date. The helper below performs
-# one frozen joint re-fit and is reused by the forecast validation,
-# estimate-evolution and matched-in-time results.
+# reused to compare against McCabe et al. at the cut-offs they used. The helper
+# below performs one frozen joint re-fit and is reused by the forecast
+# validation and matched-in-time results.
 
 #md # ```@raw html
-#md # <details><summary>Frozen-fit helper (reused by the forecast validation, evolution and matched-in-time sections)</summary>
+#md # <details><summary>Frozen-fit helper (reused by the forecast validation and matched-in-time sections)</summary>
 #md # ```
 
 ## fit_frozen_joint and the frozen re-fits are defined and run in the setup
@@ -3604,17 +3596,13 @@ stream_rt_fig #hide
 # model from v1.4.0 on.
 # Each release is its own fit, so it is drawn as a discrete estimate, a
 # median with nested 30/60/90% interval bars, rather than a ribbon.
-# The renewal series, in red, is the renewal model re-fit frozen at each
-# integral-era release cut-off.
-# The renewal-era releases already are renewal fits, so they carry no frozen
-# re-fit.
 # The current-data, current-model estimate is drawn in green as the
 # cumulative-infection trajectory over time, a single fit shown across the
 # period so the latest estimate reads against the earlier ones.
 # Each release date is marked with a dotted vertical rule.
 
 #md # ```@raw html
-#md # <details><summary>Released estimates and frozen renewal re-fits</summary>
+#md # <details><summary>Released estimates and the current-model trajectory</summary>
 #md # ```
 
 ## Released median and 30/60/90% intervals per release, from
@@ -3623,28 +3611,13 @@ stream_rt_fig #hide
 release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
                          r.lo90, r.hi90) for r in eachrow(released_df)]
 
-## The current renewal model re-fit frozen at each integral-era release
-## cut-off, each its own discrete estimate. Each tuple carries the median
-## and 30/60/90% credible bounds.
-function _ci369(xs)
-    q(p) = round(Int, quantile(xs, p))
-    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
-end
-## Reuse the one-week-back frozen fit (already run for forecast validation)
-## as an additional recent renewal point, so the evolution plot shows the
-## current-vintage frozen estimate without an extra re-fit.
-frozen_by_cutoff[validation_cutoff] = frozen_lastweek
-renewal_frozen = [(c, _ci369(frozen_C(c))...)
-                  for c in sort(union(frozen_evolution_cutoffs,
-    [validation_cutoff]))]
-
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
 ## the seeding date), summarised by per-day 30/60/90% credible bounds. This
 ## is the same latent quantity the cumulative-trajectory figure shows, so
 ## the current estimate rises over time on the release-date axis instead of
 ## sitting flat. Drawn against calendar dates, it lines up with the
-## release and frozen-renewal points.
+## release points.
 infection_trajectory = let
     mat = chn_joint[:cumulative_infections]
     trajs = [collect(v) for v in vec(collect(mat))]
@@ -3661,7 +3634,6 @@ infection_trajectory = let
 end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
-    renewal = renewal_frozen,
     trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
