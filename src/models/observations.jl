@@ -1674,6 +1674,14 @@ mixture mean) and the daily series for forecasting and replication.
                   (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
     expected_isolation := safe_rate(occ_T)
     expected_bed_demand := safe_rate(dem_T)
+    ## Cut-off daily flows: the end-of-grid value of each modelled daily
+    ## series, the one-week-ahead forecast base for admissions, in-care
+    ## deaths and rule-outs.
+    expected_admissions := safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
+                                        deaths_daily[end])
+    expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :
+                                   ruleout_daily[end])
     bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
     bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
     isolation_bvd_share := safe_rate(bvd_dem_T) / safe_rate(dem_T)
@@ -1693,7 +1701,13 @@ mixture mean) and the daily series for forecasting and replication.
         demand, occupancy, isolation,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         expected_isolation = safe_rate(occ_T),
-        expected_bed_demand = safe_rate(dem_T))
+        expected_bed_demand = safe_rate(dem_T),
+        expected_admissions = safe_rate(isempty(admit_daily) ? z0 :
+                                        admit_daily[end]),
+        expected_incare_deaths = safe_rate(isempty(deaths_daily) ? z0 :
+                                           deaths_daily[end]),
+        expected_ruleouts = safe_rate(isempty(ruleout_daily) ? z0 :
+                                      ruleout_daily[end]))
 end
 
 """

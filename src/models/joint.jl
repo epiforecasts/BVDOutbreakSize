@@ -630,6 +630,10 @@ death-confirmation positivity (`death_confirmation`).
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
                                  treatment_state.expected_isolation)
+    ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
+    expected_admissions_T := treatment_state.expected_admissions
+    expected_incare_deaths_T := treatment_state.expected_incare_deaths
+    expected_ruleouts_T := treatment_state.expected_ruleouts
     bed_capacity := treatment_state.capacity
     isolation_admission := treatment_state.p_iso
     isolation_bvd_admission := treatment_state.p_iso_bvd

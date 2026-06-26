@@ -3411,6 +3411,23 @@ forecast_beds_fig = plot_forecast_beds(forecast);
 
 forecast_beds_fig #hide
 
+# The flow figure projects the daily isolation/treatment flows a week ahead:
+# new admissions, in-care deaths and rule-outs, each grown from its cut-off
+# daily rate and replicated through the isolation dispersion. These are the
+# daily-flow counterparts of the bed-stock forecast above.
+
+#md # ```@raw html
+#md # <details><summary>One-week-ahead treatment-flow forecast plot</summary>
+#md # ```
+
+forecast_flows_fig = plot_forecast_flows(forecast);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_flows_fig #hide
+
 # ### Forecast validation (last week versus now)
 #
 # How last week's forecast held up against the data since observed, using the

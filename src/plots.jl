@@ -1249,6 +1249,35 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
+One-week-ahead forecast of the daily isolation/treatment flows from
+[`forecast_reported`](@ref): the projected new admissions, in-care deaths and
+rule-outs a day at the horizon. Each panel histograms the projected daily
+count with its 90% predictive interval shaded, drawn only when the forecast
+carries the flow streams (`admissions_fc`, `incare_deaths_fc`, `ruleouts_fc`).
+These are the daily-flow counterparts of the bed-stock forecast in
+[`plot_forecast_beds`](@ref).
+"""
+function plot_forecast_flows(fc::DataFrame)
+    count_cols = Tuple{Symbol, String, Symbol}[]
+    :admissions_fc in propertynames(fc) && push!(count_cols,
+        (:admissions_fc, "New isolation admissions (DRC)", :steelblue))
+    :incare_deaths_fc in propertynames(fc) && push!(count_cols,
+        (:incare_deaths_fc, "New in-care deaths (DRC)", :firebrick))
+    :ruleouts_fc in propertynames(fc) && push!(count_cols,
+        (:ruleouts_fc, "New rule-outs (DRC)", :seagreen))
+    npanels = length(count_cols)
+    npanels == 0 && return Figure()
+    ncols = min(npanels, 2)
+    nrows = cld(npanels, ncols)
+    fig = Figure(; size = (400 * ncols, 360 * nrows))
+    for (i, (col, title, colour)) in enumerate(count_cols)
+        pos = (cld(i, ncols), mod1(i, ncols))
+        _forecast_count_panel!(fig, pos, fc[!, col], title, colour)
+    end
+    return fig
+end
+
+"""
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed DEMAND (the need a week ahead,
 under unconstrained supply) against the supply-limited occupancy (the beds
