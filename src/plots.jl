@@ -1146,11 +1146,13 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     epoch = date2epochdays(seeding)
     x = [epoch + (d - 1) for d in 1:n]
     xe = x[est]
-    ## Cap the y-axis a little above the upper 90% credible band so a handful
-    ## of high sampled trajectories do not stretch the scale; the thin
-    ## trajectories above the cap are simply clipped.
-    ytop = isempty(est) ? 6.0 :
-           1.2 * maximum(Float64[hi90[d] for d in est])
+    ## Cap the y-axis just above the upper 90% credible band so the focus
+    ## stays on the Rt trajectory: a 20% headroom keeps the band off the top
+    ## edge without leaving a wide empty strip, and the handful of higher
+    ## sampled trajectories above the cap are simply clipped.
+    hi90_est = Float64[hi90[d] for d in est if !ismissing(hi90[d])]
+    ytop = isempty(hi90_est) ? 4.0 :
+           max(1.2, 1.2 * maximum(hi90_est))
     fig = Figure(; size = (900, 440))
     ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
         title = "Estimated Rt over the established outbreak",
@@ -1186,12 +1188,6 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     lo = isempty(xe) ? floor(Int, minimum(x)) : floor(Int, minimum(xe))
     hi = ceil(Int, maximum(x))
     CairoMakie.xlims!(ax, lo, hi)
-    ## Cap the y-axis at roughly twice the 90% upper bound (rounded up to a
-    ## tidy step), so stray trajectories do not stretch the axis into
-    ## whitespace while the Rt = 1 line stays visible.
-    hi90_est = [hi90[d] for d in est if !ismissing(hi90[d])]
-    ytop = isempty(hi90_est) ? 4.0 :
-           max(1.2, ceil(2 * maximum(hi90_est) * 2) / 2)
     CairoMakie.ylims!(ax, 0, ytop)
     ## Weekly date ticks across the estimated window.
     ax.xticks = collect(lo:7:hi)
