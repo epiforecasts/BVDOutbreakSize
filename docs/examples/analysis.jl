@@ -3076,6 +3076,40 @@ recovered_panel = (;
         pp_joint, @varname(recovered_increments.increments)),
     observed = obs.recovered_history.counts, colour = :mediumseagreen);
 
+## Tableau 6 treatment-centre daily flows (the new patient-movement data
+## sources): admissions and the discharge reasons (in-care deaths, rule-outs,
+## absconded). Per-day counts, so drawn with `cumulative = false` — each
+## replicate is the modelled daily flow on a report day against the observed
+## Tableau 6 count.
+admissions_panel = (;
+    title = "Admissions/day",
+    dates = _vintage_dates(obs.treatment_admissions_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(admissions.increments)),
+    observed = obs.treatment_admissions_history.counts,
+    colour = :teal, cumulative = false);
+incare_deaths_panel = (;
+    title = "In-care deaths/day",
+    dates = _vintage_dates(obs.treatment_deaths_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(incare_deaths.increments)),
+    observed = obs.treatment_deaths_history.counts,
+    colour = :darkred, cumulative = false);
+ruleouts_panel = (;
+    title = "Rule-outs/day",
+    dates = _vintage_dates(obs.treatment_ruleout_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(ruleouts.increments)),
+    observed = obs.treatment_ruleout_history.counts,
+    colour = :goldenrod, cumulative = false);
+absconded_panel = (;
+    title = "Absconded/day",
+    dates = _vintage_dates(obs.treatment_absconded_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(absconded.increments)),
+    observed = obs.treatment_absconded_history.counts,
+    colour = :slategray, cumulative = false);
+
 ## Each panel runs to its own last vintage: the suspected case and death
 ## streams freeze at 26 May (their last stable vintage) while the
 ## laboratory-confirmed streams keep reporting to the cut-off, so the
@@ -3084,7 +3118,8 @@ recovered_panel = (;
 vintage_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
-    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel];
+    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
+    admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel];
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(vintage_panels);
 
 #md # ```@raw html

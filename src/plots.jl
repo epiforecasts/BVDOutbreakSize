@@ -1446,8 +1446,12 @@ function plot_vintage_conditional_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
@@ -1527,8 +1531,12 @@ function plot_vintage_incidence_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
