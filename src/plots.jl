@@ -1586,3 +1586,53 @@ function plot_vintage_incidence_ppc(
     end
     return fig
 end
+
+"""
+Per-stream calibration of the one-step-ahead conditional posterior
+predictive, plotting the table from [`stream_calibration`](@ref). Pass the
+table that function returns (its prettified columns `Stream`, `50% coverage`,
+`90% coverage`, `Bias`). The figure has two panels sharing a categorical
+y-axis of streams: the left panel marks each stream's empirical 50% and 90%
+coverage with vertical dashed reference lines at the nominal 0.5 and 0.9, so a
+well-calibrated stream sits on its line and a marker to the left of its line
+flags under-coverage; the right panel marks the mean forecast `Bias` (negative
+= the stream is under-predicted, positive = over-predicted) with a dashed line
+at zero. Streams are read off the shared row labels, so all ~14 stay legible
+without splitting the figure into columns.
+"""
+function plot_stream_calibration(tbl::DataFrame)
+    ## Read the prettified columns the table carries; oldest-first order is
+    ## kept but reversed for the y-axis so the first stream reads at the top.
+    streams = string.(tbl[!, "Stream"])
+    cov50 = float.(tbl[!, "50% coverage"])
+    cov90 = float.(tbl[!, "90% coverage"])
+    bias = float.(tbl[!, "Bias"])
+    n = length(streams)
+    ## Categorical y positions, top-to-bottom in table order.
+    y = collect(n:-1:1)
+    height = max(360, 60 + 26 * n)
+    fig = Figure(; size = (980, height))
+
+    ax1 = Axis(fig[1, 1];
+        xlabel = "Empirical coverage", title = "Interval coverage",
+        yticks = (y, streams), limits = ((0, 1), nothing))
+    ## Nominal reference lines: a marker on its line is well calibrated.
+    vlines!(ax1, [0.5]; color = (:steelblue, 0.6), linestyle = :dash,
+        linewidth = 2)
+    vlines!(ax1, [0.9]; color = (:seagreen, 0.6), linestyle = :dash,
+        linewidth = 2)
+    h50 = scatter!(ax1, cov50, y; color = :steelblue, markersize = 11)
+    h90 = scatter!(ax1, cov90, y; color = :seagreen, markersize = 11,
+        marker = :diamond)
+    CairoMakie.axislegend(ax1, [h50, h90], ["50% interval", "90% interval"];
+        position = :lt, framevisible = false)
+
+    ## Bias panel: zero is unbiased; sign flags over/under-prediction.
+    bmax = max(1.0, maximum(abs.(bias)) * 1.1)
+    ax2 = Axis(fig[1, 2];
+        xlabel = "Mean forecast bias", title = "Forecast bias",
+        yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing))
+    vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 2)
+    scatter!(ax2, bias, y; color = :firebrick, markersize = 11)
+    return fig
+end

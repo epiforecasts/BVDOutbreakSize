@@ -3151,17 +3151,34 @@ joint_vintage_incidence_fig #hide
 # levels. Streams with a large bias or coverage far from nominal are the ones
 # the joint fit reproduces less well.
 
+stream_calibration_table = stream_calibration(vintage_panels);
+
+# The calibration plot reads the table at a glance: the left panel marks each
+# stream's empirical 50% and 90% coverage against dashed reference lines at the
+# nominal levels, and the right panel marks the mean forecast bias against a
+# dashed line at zero.
+
 #md # ```@raw html
-#md # <details><summary>Per-stream calibration table</summary>
+#md # <details><summary>Per-stream calibration plot</summary>
 #md # ```
 
-stream_calibration_table = stream_calibration(vintage_panels);
+stream_calibration_fig = plot_stream_calibration(stream_calibration_table);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+stream_calibration_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-stream calibration table</summary>
+#md # ```
+
 stream_calibration_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The exports group is checked next.
 # The Uganda export and export-death streams are dated per-day series, each
