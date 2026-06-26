@@ -733,9 +733,9 @@ end
 
 """
 Calendar time-series comparison of cumulative-count projections against the
-data observed since. `external` is another group's published projection drawn
-as a central line with a shaded `[lower, upper]` band; `ours` is our own
-forward projection drawn as points with vertical credible-interval bars; and
+data observed since. `external` is another group's published projection and
+`ours` is our own forward projection, each drawn as a central line with a
+shaded `[lower, upper]` band so the two fans read directly against each other;
 `observed` is the data observed so far, drawn as a marked line. Each is a
 vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
 are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
@@ -777,18 +777,19 @@ function plot_projection_comparison(;
     lines!(ax, ob_x[obord], ob_y[obord]; color = :black, linewidth = 1.5)
     ob_h = scatter!(ax, ob_x, ob_y; color = :black, markersize = 7)
 
-    ## Our forward projection: diamond markers with vertical 90% bars, drawn
-    ## as line segments (the same primitive `plot_estimate_comparison` uses).
+    ## Our forward projection: shaded 90% band, central line and markers, the
+    ## same ribbon form as the external projection so the two fans read against
+    ## each other.
     our_x = [_x(r[1]) for r in ours]
     our_m = [float(r[2]) for r in ours]
     our_lo = [float(r[3]) for r in ours]
     our_hi = [float(r[4]) for r in ours]
-    for i in eachindex(our_x)
-        lines!(ax, [our_x[i], our_x[i]], [our_lo[i], our_hi[i]];
-            color = (ours_colour, 0.85), linewidth = 3)
-    end
+    oord = sortperm(our_x)
+    band!(ax, our_x[oord], our_lo[oord], our_hi[oord];
+        color = (ours_colour, 0.15))
+    lines!(ax, our_x[oord], our_m[oord]; color = ours_colour, linewidth = 2)
     our_h = scatter!(ax, our_x, our_m;
-        color = ours_colour, markersize = 13, marker = :diamond)
+        color = ours_colour, markersize = 8, marker = :diamond)
 
     allx = vcat(ex_x, ob_x, our_x)
     lo, hi = minimum(allx), maximum(allx)

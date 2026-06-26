@@ -492,10 +492,12 @@ end
 
 @testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
-    ## External projection drawn from the packaged Chamla central trajectory;
-    ## our projection as two dated point-and-interval rows; observed as a dated
-    ## value series, with dates deliberately out of order to exercise sorting.
-    ours = [("2026-06-24", 1200, 800, 1700), ("2026-06-10", 700, 500, 950)]
+    ## External projection from the packaged Chamla central trajectory; our
+    ## projection as a dated fan (ribbon) including a zero-width anchor; observed
+    ## a dated value series, all with dates out of order to exercise sorting.
+    ours = [("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
+        ("2026-06-10", 700, 500, 950), ("2026-06-03", 430, 330, 560),
+        ("2026-06-17", 930, 660, 1300)]
     observed = [("2026-06-08", 598), ("2026-05-27", 250),
         ("2026-06-23", 1118), ("2026-06-15", 850)]
     fig = plot_projection_comparison(;
