@@ -732,6 +732,76 @@ function plot_estimate_comparison(
 end
 
 """
+Calendar time-series comparison of cumulative-count projections against the
+data observed since. `external` is another group's published projection drawn
+as a central line with a shaded `[lower, upper]` band; `ours` is our own
+forward projection drawn as points with vertical credible-interval bars; and
+`observed` is the data observed so far, drawn as a marked line. Each is a
+vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
+are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
+share one calendar x-axis, so the two projections read directly against what
+the outbreak actually did. Used to set our forward projection beside the
+Chamla et al. [chamla2026](@cite) confirmed-case projection.
+"""
+function plot_projection_comparison(;
+        external::AbstractVector,
+        ours::AbstractVector,
+        observed::AbstractVector,
+        external_label::AbstractString = "External projection",
+        ours_label::AbstractString = "Our projection",
+        observed_label::AbstractString = "Observed",
+        external_colour = :steelblue,
+        ours_colour = :firebrick,
+        ylabel::AbstractString = "Cumulative confirmed cases",
+        title::AbstractString = "Projected versus observed cumulative cases")
+    _x(d) = Float64(date2epochdays(Date(String(d))))
+
+    fig = Figure(; size = (820, 460))
+    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = ylabel, title = title)
+
+    ## External projection: shaded 90% band, central line and markers.
+    ex_x = [_x(r[1]) for r in external]
+    ex_m = [float(r[2]) for r in external]
+    ex_lo = [float(r[3]) for r in external]
+    ex_hi = [float(r[4]) for r in external]
+    ord = sortperm(ex_x)
+    band!(ax, ex_x[ord], ex_lo[ord], ex_hi[ord];
+        color = (external_colour, 0.15))
+    lines!(ax, ex_x[ord], ex_m[ord]; color = external_colour, linewidth = 2)
+    ex_h = scatter!(ax, ex_x, ex_m; color = external_colour, markersize = 8)
+
+    ## Observed data so far: a marked black line.
+    ob_x = [_x(r[1]) for r in observed]
+    ob_y = [float(r[2]) for r in observed]
+    obord = sortperm(ob_x)
+    lines!(ax, ob_x[obord], ob_y[obord]; color = :black, linewidth = 1.5)
+    ob_h = scatter!(ax, ob_x, ob_y; color = :black, markersize = 7)
+
+    ## Our forward projection: diamond markers with vertical 90% bars, drawn
+    ## as line segments (the same primitive `plot_estimate_comparison` uses).
+    our_x = [_x(r[1]) for r in ours]
+    our_m = [float(r[2]) for r in ours]
+    our_lo = [float(r[3]) for r in ours]
+    our_hi = [float(r[4]) for r in ours]
+    for i in eachindex(our_x)
+        lines!(ax, [our_x[i], our_x[i]], [our_lo[i], our_hi[i]];
+            color = (ours_colour, 0.85), linewidth = 3)
+    end
+    our_h = scatter!(ax, our_x, our_m;
+        color = ours_colour, markersize = 13, marker = :diamond)
+
+    allx = vcat(ex_x, ob_x, our_x)
+    lo, hi = minimum(allx), maximum(allx)
+    ax.xticks = collect(lo:14:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    CairoMakie.axislegend(ax, [ex_h, our_h, ob_h],
+        [external_label, ours_label, observed_label];
+        position = :lt, framevisible = true)
+    return fig
+end
+
+"""
 Density of a prior over the case-fatality ratio (CFR) on `[0, 1]`,
 plotted on the sub-range `[0, 0.7]`. The CDC central estimate of
 55/169 ≈ 0.33 is drawn as a solid vertical rule, and the report's 26%

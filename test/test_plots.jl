@@ -489,3 +489,17 @@ end
         confirmed = 70, confirmed_deaths = 18)
     @test fig2 isa CairoMakie.Makie.Figure
 end
+
+@testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
+    ## External projection drawn from the packaged Chamla central trajectory;
+    ## our projection as two dated point-and-interval rows; observed as a dated
+    ## value series, with dates deliberately out of order to exercise sorting.
+    ours = [("2026-06-24", 1200, 800, 1700), ("2026-06-10", 700, 500, 950)]
+    observed = [("2026-06-08", 598), ("2026-05-27", 250),
+        ("2026-06-23", 1118), ("2026-06-15", 850)]
+    fig = plot_projection_comparison(;
+        external = CHAMLA_CONFIRMED_CENTRAL[1:4],
+        ours = ours, observed = observed)
+    @test fig isa CairoMakie.Makie.Figure
+end

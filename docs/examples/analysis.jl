@@ -100,7 +100,9 @@
 #   McCabe et al. [mccabe2026](@cite) scenario estimates as an external
 #   sense-check, matched in time at the cut-off each scenario was computed,
 #   while the cumulative infection count, the running sum of the daily
-#   infections, is the headline quantity reported separately.
+#   infections, is the headline quantity reported separately. A forward
+#   projection from a frozen fit is also set against the Chamla et al.
+#   [chamla2026](@cite) confirmed-case projection and the data observed since.
 #
 # **Extensions**
 #
@@ -3780,6 +3782,160 @@ frozen_streams_table = streams_table(
 #md # ```
 
 frozen_streams_table #hide
+
+# ### Comparison with Chamla et al.
+#
+# In the same week a second group, Chamla et al. [chamla2026](@cite) at the
+# World Health Organization Regional Office for Africa, published a stochastic
+# compartmental model of the same outbreak.
+# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead
+# ensemble, recalibrated by simulation filtering to the laboratory-confirmed
+# case series, anchored on the 598 confirmed cases reported by 8 June, then run
+# forward to project the confirmed-case trajectory under a low, central and
+# high transmissibility scenario.
+#
+# Their published quantity is the cumulative confirmed-case count, with the
+# reporting fraction held at one, so it does not adjust for the cases that are
+# infected but never laboratory-confirmed.
+# This is a different quantity from the cumulative cases this analysis and
+# McCabe et al. estimate, which include the unconfirmed and unascertained, and
+# it sits below them: it is a floor on the true size rather than an estimate of
+# it.
+# The like-for-like comparison is therefore against our own confirmed-case
+# projection, not against our cumulative infection count.
+#
+# We compare forward projections rather than refitting to their assumptions.
+# We take our existing fit frozen at 27 May, the closest of our frozen vintages
+# to their 8 June calibration point and the date their own early projection
+# passes through, and roll its confirmed-case stream forward with the same
+# machinery as the one-week-ahead forecast.
+# Setting our projection, their projection and the confirmed cases observed
+# since on one timeline shows how each projection has held up against the data.
+
+#md # ```@raw html
+#md # <details><summary>Project the 27 May fit forward and assemble the Chamla comparison</summary>
+#md # ```
+
+## The 27 May frozen joint fit is the nearest frozen vintage to Chamla's 8 June
+## calibration anchor, so we roll its confirmed-case stream forward with the
+## one-week-ahead forecast machinery to the dates Chamla report.
+chamla_anchor = frozen_by_cutoff["2026-05-27"]
+
+## Our projected cumulative confirmed cases on a future date: a forward
+## `forecast_reported` run from the 27 May fit at the matching horizon (its
+## reproduction number left to keep evolving), summarised as (median, 5%, 95%).
+function _our_confirmed_on(date)
+    h = value(Date(date) - chamla_anchor.cutoff)
+    fc = forecast_reported(chamla_anchor.chn;
+        horizon = h,
+        obs_cases = chamla_anchor.o.reported_cases,
+        obs_deaths = chamla_anchor.o.total_deaths,
+        obs_confirmed = chamla_anchor.o.confirmed_cases,
+        obs_confirmed_deaths = chamla_anchor.o.confirmed_deaths)
+    return _ci90row(float.(fc.confirmed_cum))
+end
+
+## Forecast once at each of Chamla's two horizons that fall in or at the edge of
+## the observed window (10 June, mid-projection; 24 June, week 12).
+ours_10jun = _our_confirmed_on("2026-06-10")
+ours_24jun = _our_confirmed_on("2026-06-24")
+
+## Observed confirmed cases over the comparison window: the daily cumulative
+## series read off the chain's grid from 18 May (Chamla's first projected point)
+## to the cut-off.
+chamla_obs_series = let
+    ds = [grid_date(d) for d in obs.confirmed_history.days]
+    cs = obs.confirmed_history.counts
+    [(string(ds[i]), cs[i]) for i in eachindex(ds) if ds[i] >= Date("2026-05-18")]
+end
+
+## Chamla's central confirmed-case projection over the comparison window; their
+## later, far-larger horizons are noted in the text rather than plotted so the
+## window stays legible.
+chamla_central_window = CHAMLA_CONFIRMED_CENTRAL[1:4]
+
+chamla_projection_fig = plot_projection_comparison(;
+    external = chamla_central_window,
+    ours = [("2026-06-10", ours_10jun...), ("2026-06-24", ours_24jun...)],
+    observed = chamla_obs_series,
+    external_label = "Chamla et al. central (R₀=1.71)",
+    ours_label = "Our projection (from 27 May)",
+    observed_label = "Observed confirmed",
+    title = "Confirmed-case projections versus observed, from late May");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_projection_fig #hide
+
+# By 24 June their central scenario projected just under a thousand confirmed
+# cases, and their low and high scenarios ranged from roughly 870 to 1360.
+# The figure below sets that week-12 scenario spread beside our 27 May
+# projection for the same date and the confirmed count observed by the cut-off,
+# so each reads against their three scenarios at a glance.
+
+#md # ```@raw html
+#md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
+#md # ```
+
+chamla_w12_rows = vcat(
+    [(label, m, lo, hi) for (label, m, lo, hi) in CHAMLA_CONFIRMED_W12],
+    [("Our projection (from 27 May)", ours_24jun...)],
+    [("Observed by 23 June cut-off", obs.confirmed_cases,
+        obs.confirmed_cases, obs.confirmed_cases)])
+chamla_w12_groups = vcat(fill("Chamla et al. scenarios", 3),
+    ["Our projection"], ["Observed"])
+
+chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
+    xlabel = "Cumulative confirmed cases by 24 June",
+    groups = chamla_w12_groups,
+    group_colours = ["Chamla et al. scenarios" => :steelblue,
+        "Our projection" => :firebrick,
+        "Observed" => :black]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_w12_fig #hide
+
+# The table reads the matched-date values directly, with the observed column
+# taken to the 23 June cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Confirmed-case projection comparison table</summary>
+#md # ```
+
+chamla_comparison_table = let
+    fmt(t) = string(t[1], " (", t[2], "–", t[3], ")")
+    central(date) =
+        let r = first(x for x in CHAMLA_CONFIRMED_CENTRAL
+            if x[1] == date)
+            fmt((r[2], r[3], r[4]))
+        end
+    DataFrame(
+        "Date" => ["10 June", "24 June"],
+        "Chamla central (90% PI)" => [central("2026-06-10"),
+            central("2026-06-24")],
+        "Our projection (90% CrI)" => [fmt(ours_10jun), fmt(ours_24jun)],
+        "Observed confirmed" => [
+            string(freeze_observations("2026-06-10").confirmed_cases),
+            string(obs.confirmed_cases) * " (23 June)"])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_comparison_table #hide
+
+# Beyond the comparison window their central scenario continues to roughly 8200
+# confirmed cases by mid-September, with the high scenario far higher; those
+# longer projections are not set against data here.
+# Their confirmed-case projections are a floor on the outbreak size, so they sit
+# below our cumulative infection count, which adds the unconfirmed and
+# unascertained cases on top.
 
 # ### Delay sensitivity
 #
