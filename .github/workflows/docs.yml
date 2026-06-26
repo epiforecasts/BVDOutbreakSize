@@ -39,6 +39,18 @@ jobs:
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
+      # Refresh the released-estimate overlay from the live GitHub releases so
+      # the "Estimate evolution across releases" figure always picks up the
+      # newest results-v* release. Best-effort: on any failure (no network /
+      # gh / token) it leaves the committed data/released_estimates.csv in
+      # place rather than failing the build.
+      - name: Refresh released-estimate overlay
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
+           julia --project=scripts scripts/refresh_releases.jl) ||
+            echo "release refresh failed; using committed released_estimates.csv"
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

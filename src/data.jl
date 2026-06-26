@@ -146,6 +146,27 @@ function load_observations(
     ## submodel. Begins 6 June, where the confirmed-based reports first print
     ## the running total.
     recovered_history = history("recovered_history")
+    ## Post-cutoff daily treatment-centre patient-movement flows (Tableau 6
+    ## "Mouvement des patients", national): per-day counts (not cumulative) of
+    ## admissions, in-care deaths (suspects + confirmed), rule-out discharges
+    ## (non-cas) and absconded patients. Optional refinements of the
+    ## treatment-flow submodel over their 13-22 June overlap; the longer
+    ## occupancy / recovered / capacity stock streams carry the earlier window.
+    ## An absent block loads empty and is a no-op in the model.
+    treatment_admissions_history = history("treatment_admissions_history")
+    treatment_deaths_history = history("treatment_deaths_history")
+    treatment_ruleout_history = history("treatment_ruleout_history")
+    treatment_absconded_history = history("treatment_absconded_history")
+    ## Post-cutoff start-of-day in-bed count (Tableau 6 "Patients au lit
+    ## (J-1)", national): the bed stock at the start of each report day. The
+    ## treatment-flow submodel differences it against the previous day's
+    ## occupancy to identify the between-report DHIS2 reclassification days and
+    ## centre a fitted break-step prior, accumulating the sampled steps into a
+    ## cumulative offset added to the modelled occupancy mean, so the modelled
+    ## occupancy tracks the reclassification without bending Rt while still
+    ## partitioning each step into reporting-artifact vs real demand. Optional:
+    ## an empty block leaves the offset at zero, a no-op.
+    treatment_aulit_history = history("treatment_aulit_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -194,6 +215,11 @@ function load_observations(
         bed_capacity_history = bed_capacity_history,
         recovered_history = recovered_history,
         recovered_cases = _scalar("recovered_cases", recovered_history),
+        treatment_admissions_history = treatment_admissions_history,
+        treatment_deaths_history = treatment_deaths_history,
+        treatment_ruleout_history = treatment_ruleout_history,
+        treatment_absconded_history = treatment_absconded_history,
+        treatment_aulit_history = treatment_aulit_history,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

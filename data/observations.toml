@@ -208,7 +208,91 @@ dates  = ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09",
           "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22",
           "2026-06-23"]
 values = [12, 19, 22, 30, 32, 32, 40, 48, 49, 67, 78, 80, 92, 100, 112, 115, 122]
-source = "INSP situation reports 6-23 June 2026 (SitReps 023-028, 030-040) page-1 headline `Nombre cumulé des guéris` / `Cumul guéris`, read from the PDFs; recorded in the cumul_recovered column of data/insp_sitrep_scanned.csv. Cumulative recovered among confirmed cases: 12, 19, 22, 30, 32, 32 on 6-11 June, 40 on 13 June, 48 on 14 June, 49 on 15 June, 67 on 16 June (18 newly recovered), 78 on 17 June (11 newly recovered), 80 on 18 June (2 newly recovered), 92 on 19 June (12 newly recovered), 100 on 20 June (8 newly recovered: 6 Ituri, 2 Sud-Kivu), 112 on 21 June (12 newly recovered: 9 Ituri, 3 Nord-Kivu), 115 on 22 June (3 newly recovered, all Ituri) and 122 on 23 June (7 newly recovered, all Ituri); cross-checks the INRB-UMIE national_cumulative_recovered_cases DRC values (20 June 100, 21 June 112, 22 June 115, 23 June 122). SitReps 021-022 (4-5 June) do not print a cumul guéris total, so the series begins 6 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+source = "INSP situation reports 6-23 June 2026 (SitReps 023-028, 030-040) page-1 headline `Nombre cumulé des guéris` / `Cumul guéris`, read from the PDFs; recorded in the cumul_recovered column of data/insp_sitrep_scanned.csv. Cumulative recovered among confirmed cases: 12, 19, 22, 30, 32, 32 on 6-11 June, 40 on 13 June, 48 on 14 June, 49 on 15 June, 67 on 16 June (18 newly recovered), 78 on 17 June (11 newly recovered), 80 on 18 June (2 newly recovered), 92 on 19 June (12 newly recovered), 100 on 20 June (8 newly recovered: 6 Ituri, 2 Sud-Kivu), 112 on 21 June (12 newly recovered: 9 Ituri, 3 Nord-Kivu), 115 on 22 June (3 newly recovered, all Ituri) and 122 on 23 June (7 newly recovered, all Ituri); cross-checks the INRB-UMIE national_cumulative_recovered_cases DRC values (20 June 100, 21 June 112, 22 June 115, 23 June 122). The daily increments equal the Tableau 6 `Guéris` in-care discharge-cured outflow (see [treatment_recovered cross-check]: 14 June 8, 15 June 1, 16 June 18, 17 June 11, 18 June 2, 19 June 12), so the cumulative recovered is the in-care recovery exit. SitReps 021-022 (4-5 June) do not print a cumul guéris total, so the series begins 6 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
+# --- Tableau 6 treatment-centre patient-movement flows (CTE/CT/CI) -------
+# Daily in/out flows for the isolation/treatment centres, the national
+# "Ensemble" column of `Tableau 6. Mouvement des patients dans les
+# etablissements de soins`, read from the SitRep PDFs (SitReps 030-040,
+# 13-23 June 2026; SitRep 029 / 12 June not published). The daily balance
+# closes exactly each day: `patients au lit (J-1) + admissions - total
+# sorties = patients en isolement (Fin J)`, and the Fin J figure equals the
+# `isolation_history` occupancy stock. These are per-day flow counts (not
+# cumulative). They refine the treatment-centre flow submodel
+# (`treatment_flow_model`) where they overlap (13-23 June); the longer
+# occupancy / recovered / capacity stock streams carry the model over the
+# earlier window (occupancy from 1 June). All four are optional: an absent or
+# empty block is a no-op in the loader and the model.
+
+# Total admissions to isolation/treatment beds in the preceding 24h
+# (`Total admissions (24h)`), national. The supply-limited admission inflow:
+# scored against the modelled admission demand, censored at the free-bed
+# headroom when capacity binds.
+[treatment_admissions_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [68, 54, 61, 67, 67, 70, 65, 67, 70, 93, 61]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Total admissions (24h)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 68, 54, 61, 67, 67, 70, 65, 67, 70, 93, 61 on 13-23 June. Per-day admission inflow to isolation/treatment beds. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
+# In-care deaths in the preceding 24h (`Sorties (24h) - Decedes
+# (Suspects/Conf.)`), national. Deaths occurring among patients in the
+# treatment centres, covering both suspected and confirmed patients - a
+# distinct quantity from `confirmed_death_history` (confirmed only, including
+# community and late-confirmed deaths). The death branch of the in-care
+# outcome mixture; informs the in-care fatality CFR_iso.
+[treatment_deaths_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [13, 9, 14, 9, 7, 16, 5, 21, 14, 14, 9]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) Tableau 6 row `Decedes (Suspects/Conf.)`, national Ensemble column, read from the PDFs: 13, 9, 14, 9, 7, 16, 5, 21, 14, 14, 9 on 13-23 June. Deaths among patients in the CTE/CT/CI (suspects and confirmed), the in-care mortality outflow - distinct from the confirmed-death headline. SitRep 029 (12 June) was not published upstream."
+
+# Rule-out discharges in the preceding 24h (`Sorties (24h) - Non-cas`),
+# national: suspects discharged after being ruled out (negative). The
+# non-BVD rule-out outflow. SitRep 030 (13 June) prints `Non-cas / Gueris`
+# as a single combined row (22), not separable, so this series begins
+# 14 June; the 13 June recovery signal is carried by recovered_history.
+[treatment_ruleout_history]
+dates  = ["2026-06-14", "2026-06-15", "2026-06-16", "2026-06-17",
+          "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21",
+          "2026-06-22", "2026-06-23"]
+values = [34, 26, 36, 18, 32, 24, 40, 28, 23, 24]
+source = "INSP situation reports 14-23 June 2026 (SitReps 031-040) Tableau 6 row `Non-cas`, national Ensemble column, read from the PDFs: 34, 26, 36, 18, 32, 24, 40, 28, 23, 24 on 14-23 June. Per-day rule-out discharges (suspects discharged as non-cases). SitRep 030 (13 June) prints a combined `Non-cas / Gueris` row (22) that cannot be split, so the series begins 14 June; SitRep 029 (12 June) was not published."
+
+# Absconded patients in the preceding 24h (`Sorties (24h) - Evades
+# (Suspects/Conf.)`), national: a small loss-to-follow-up exit channel. May
+# be zero on a day (e.g. 13 June), so unlike the inflow streams it admits
+# zero counts.
+[treatment_absconded_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [0, 1, 6, 1, 3, 2, 5, 6, 4, 1, 0]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) Tableau 6 row `Evades (Suspects/Conf.)`, national Ensemble column, read from the PDFs: 0, 1, 6, 1, 3, 2, 5, 6, 4, 1, 0 on 13-23 June. A small abscond / loss-to-follow-up outflow (the `Transferes a l'HGR` exit is ~0-1/day and is folded in / not separately tracked). SitRep 029 (12 June) was not published."
+
+# Start-of-day in-bed count (`Patients au lit (J-1)`, national Ensemble),
+# the bed stock at the start of each reporting day before that day's
+# admissions and discharges. It is the same patient stock as the
+# end-of-day `Patients en isolement (Fin J)` occupancy, but read at the
+# start of the day, so `au-lit(J-1)(t)` should equal the previous report
+# day's `isolation_history` occupancy. Where it does not, the gap is a
+# between-report DHIS2 reclassification jump (e.g. the 19 June drop from
+# 416 to 342), a discontinuity the smooth inflow-through-survival demand
+# cannot reproduce. The treatment-flow submodel uses these gaps to identify
+# the break days (a material `|gap|`) and to centre a fitted break-step
+# prior; the sampled steps accumulate into a cumulative offset `Δ(t)` added
+# to the modelled occupancy mean, so the modelled occupancy tracks the
+# reclassified observed series and the residual stays smooth (the fit no
+# longer bends Rt to chase the reclassification) while still partitioning
+# each step into reporting-artifact vs real demand with uncertainty.
+# Optional: an absent or empty block leaves Δ = 0, a no-op.
+[treatment_aulit_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Patients au lit (J-1)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387 on 13-23 June. Start-of-day in-bed stock (before that day's admissions/discharges); the same patient stock as the end-of-day `Patients en isolement (Fin J)` occupancy read at the start of the day. The break against the previous report day's occupancy (e.g. 19 June au-lit 342 vs 18 June Fin J 416) is the between-report DHIS2 reclassification jump the treatment-flow offset absorbs. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,

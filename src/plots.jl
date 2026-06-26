@@ -1358,7 +1358,9 @@ end
 ## forecast new-count draws with its 90% predictive interval shaded.
 function _forecast_count_panel!(fig, pos, v, title, colour)
     r, c = pos
-    upper = max(1.0, quantile(v, 0.995))
+    ## 98th-percentile x-axis cap so a heavy forecast tail does not squash the
+    ## readable bulk of the histogram.
+    upper = max(1.0, quantile(v, 0.98))
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
     ax = Axis(fig[r, c];
@@ -1434,6 +1436,35 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
+One-week-ahead forecast of the daily isolation/treatment flows from
+[`forecast_reported`](@ref): the projected new admissions, in-care deaths and
+rule-outs a day at the horizon. Each panel histograms the projected daily
+count with its 90% predictive interval shaded, drawn only when the forecast
+carries the flow streams (`admissions_fc`, `incare_deaths_fc`, `ruleouts_fc`).
+These are the daily-flow counterparts of the bed-stock forecast in
+[`plot_forecast_beds`](@ref).
+"""
+function plot_forecast_flows(fc::DataFrame)
+    count_cols = Tuple{Symbol, String, Symbol}[]
+    :admissions_fc in propertynames(fc) && push!(count_cols,
+        (:admissions_fc, "New isolation admissions (DRC)", :steelblue))
+    :incare_deaths_fc in propertynames(fc) && push!(count_cols,
+        (:incare_deaths_fc, "New in-care deaths (DRC)", :firebrick))
+    :ruleouts_fc in propertynames(fc) && push!(count_cols,
+        (:ruleouts_fc, "New rule-outs (DRC)", :seagreen))
+    npanels = length(count_cols)
+    npanels == 0 && return Figure()
+    ncols = min(npanels, 2)
+    nrows = cld(npanels, ncols)
+    fig = Figure(; size = (400 * ncols, 360 * nrows))
+    for (i, (col, title, colour)) in enumerate(count_cols)
+        pos = (cld(i, ncols), mod1(i, ncols))
+        _forecast_count_panel!(fig, pos, fc[!, col], title, colour)
+    end
+    return fig
+end
+
+"""
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed DEMAND (the need a week ahead,
 under unconstrained supply) against the supply-limited occupancy (the beds
@@ -1455,7 +1486,12 @@ function plot_forecast_beds(fc::DataFrame)
     occ = float.(fc[!, :isolation_level])
     shortfall = max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
-    upper = max(1.0, quantile(demand, 0.995))
+    ## Cap the x-axis at the 98th percentile of demand: the unconstrained
+    ## bed-demand projection is heavy-tailed (it grows with the reproduction
+    ## number over the horizon), so its long upper tail otherwise squashes the
+    ## readable bulk of both densities. Occupancy is capped at capacity, so it
+    ## sits below this bound.
+    upper = max(1.0, quantile(demand, 0.98))
     ax1 = Axis(fig[1, 1];
         xlabel = "Isolation beds a week ahead (DRC)",
         ylabel = "Predictive density", title = "Need vs supply-limited use",
@@ -1633,8 +1669,12 @@ function plot_vintage_conditional_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
@@ -1714,8 +1754,12 @@ function plot_vintage_incidence_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
@@ -1756,5 +1800,55 @@ function plot_vintage_incidence_ppc(
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
         scatter!(ax, x, float.(obs_inc); color = :black, markersize = 9)
     end
+    return fig
+end
+
+"""
+Per-stream calibration of the one-step-ahead conditional posterior
+predictive, plotting the table from [`stream_calibration`](@ref). Pass the
+table that function returns (its prettified columns `Stream`, `50% coverage`,
+`90% coverage`, `Bias`). The figure has two panels sharing a categorical
+y-axis of streams: the left panel marks each stream's empirical 50% and 90%
+coverage with vertical dashed reference lines at the nominal 0.5 and 0.9, so a
+well-calibrated stream sits on its line and a marker to the left of its line
+flags under-coverage; the right panel marks the mean forecast `Bias` (negative
+= the stream is under-predicted, positive = over-predicted) with a dashed line
+at zero. Streams are read off the shared row labels, so all ~14 stay legible
+without splitting the figure into columns.
+"""
+function plot_stream_calibration(tbl::DataFrame)
+    ## Read the prettified columns the table carries; oldest-first order is
+    ## kept but reversed for the y-axis so the first stream reads at the top.
+    streams = string.(tbl[!, "Stream"])
+    cov50 = float.(tbl[!, "50% coverage"])
+    cov90 = float.(tbl[!, "90% coverage"])
+    bias = float.(tbl[!, "Bias"])
+    n = length(streams)
+    ## Categorical y positions, top-to-bottom in table order.
+    y = collect(n:-1:1)
+    height = max(360, 60 + 26 * n)
+    fig = Figure(; size = (980, height))
+
+    ax1 = Axis(fig[1, 1];
+        xlabel = "Empirical coverage", title = "Interval coverage",
+        yticks = (y, streams), limits = ((0, 1), nothing))
+    ## Nominal reference lines: a marker on its line is well calibrated.
+    vlines!(ax1, [0.5]; color = (:steelblue, 0.6), linestyle = :dash,
+        linewidth = 2)
+    vlines!(ax1, [0.9]; color = (:seagreen, 0.6), linestyle = :dash,
+        linewidth = 2)
+    h50 = scatter!(ax1, cov50, y; color = :steelblue, markersize = 11)
+    h90 = scatter!(ax1, cov90, y; color = :seagreen, markersize = 11,
+        marker = :diamond)
+    CairoMakie.axislegend(ax1, [h50, h90], ["50% interval", "90% interval"];
+        position = :lt, framevisible = false)
+
+    ## Bias panel: zero is unbiased; sign flags over/under-prediction.
+    bmax = max(1.0, maximum(abs.(bias)) * 1.1)
+    ax2 = Axis(fig[1, 2];
+        xlabel = "Mean forecast bias", title = "Forecast bias",
+        yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing))
+    vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 2)
+    scatter!(ax2, bias, y; color = :firebrick, markersize = 11)
     return fig
 end
