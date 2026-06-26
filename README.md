@@ -17,6 +17,7 @@ exact data cut-off automatically.
 [one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
 [estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Estimate-evolution-across-releases) ·
 [comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-McCabe-et-al.) ·
+[comparison with Chamla et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-Chamla-et-al.) ·
 [how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Outbreak-size-estimated-by-each-data-stream) ·
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
 [full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
@@ -222,6 +223,15 @@ repository depends on:
   of the Congo.* The Lancet Infectious Diseases, correspondence,
   online first 9 June 2026; estimates as of 27 May 2026.
   DOI: [10.1016/S1473-3099(26)00299-9](https://doi.org/10.1016/S1473-3099(26)00299-9).
+- **Chamla et al. projection** that this work compares against — a
+  stochastic SEIRD ensemble that projects cumulative laboratory-confirmed
+  cases forward (a confirmed-case count, not an ascertainment-corrected
+  total) — Chamla, D., Belizaire, M. R. D., Co, I. F., Jinadu, A.,
+  Mamadu, I., Atagbaza, A. O. (2026). *Size of the 2026 Ebola outbreak and
+  risk of cross-border spillover from Bundibugyo virus in Ituri Province,
+  DR Congo, and its implications for preparedness: a recalibrated stochastic
+  modelling study.* The Lancet Infectious Diseases, 25 June 2026.
+  DOI: [10.1016/S1473-3099(26)00320-8](https://doi.org/10.1016/S1473-3099(26)00320-8).
 - **Onset-to-death delay reanalysis** that this work uses for
   delay priors — Funk, S. (2026). *bdbv-linelist-analysis:
   Bayesian reanalysis of the 2012 Isiro Bundibugyo line list.*

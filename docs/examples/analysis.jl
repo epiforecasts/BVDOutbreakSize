@@ -100,7 +100,9 @@
 #   McCabe et al. [mccabe2026](@cite) scenario estimates as an external
 #   sense-check, matched in time at the cut-off each scenario was computed,
 #   while the cumulative infection count, the running sum of the daily
-#   infections, is the headline quantity reported separately.
+#   infections, is the headline quantity reported separately. A forward
+#   projection from a frozen fit is also set against the Chamla et al.
+#   [chamla2026](@cite) confirmed-case projection and the data observed since.
 #
 # **Extensions**
 #
@@ -3666,10 +3668,12 @@ evolution_fig #hide
 # McCabe et al. published their estimates as scenarios at fixed
 # situation-report cut-offs, each scenario carrying a 95% confidence
 # interval.
-# We show both their reports, the 18 May report and the 20 May update, with
-# those intervals.
-# The two reports share the same geographic-spread scenarios from exported
-# cases and travel volume, so those appear once.
+# We show all three, the 18 May report, the 20 May update and the 27 May
+# Lancet publication, as one panel each, with their intervals kept.
+# Within a panel each method and scenario family is a single line, carrying its
+# sweep over the nuisance assumptions: the case-fatality ratio, the geographic
+# window and the doubling time.
+# The geographic-spread scenarios come from exported cases and travel volume.
 # Their back-calculation-from-deaths scenarios differ between the reports,
 # since the 18 May report used 88 reported deaths and the 20 May update 131,
 # with a corrected set of case-fatality ratios.
@@ -3712,31 +3716,22 @@ function _ours_on(date)
     _ci90row(Float64[t[d] for t in _onset_trajs])
 end
 
-## McCabe scenarios with their reported 95% confidence intervals, grouped by
-## report date, then our modelled cumulative onsets on the matching
-## report date with its credible interval.
-mccabe_rows = [(label, mean, lo, hi)
-               for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
-mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
-                 date == "2026-05-20" ? "McCabe et al. (20 May update)" :
-                 "McCabe et al. (27 May, Lancet)"
-                 for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
+## Our matched cumulative-onset estimate for each report date, keyed by date so
+## it lands beside that vintage's scenarios in its own panel.
+mccabe_ours = Dict(
+    "2026-05-18" => _ours_on("2026-05-18"),
+    "2026-05-20" => _ours_on("2026-05-20"),
+    "2026-05-27" => _ours_on("2026-05-27"))
 
-ours_rows = [("Renewal onsets on 18 May", _ours_on("2026-05-18")...),
-    ("Renewal onsets on 20 May", _ours_on("2026-05-20")...),
-    ("Renewal onsets on 27 May", _ours_on("2026-05-27")...)]
-ours_groups = fill("Our renewal estimate", 3)
-
-matched_rows = vcat(mccabe_rows, ours_rows)
-matched_groups = vcat(mccabe_groups, ours_groups)
-
-matched_comparison_fig = plot_estimate_comparison(matched_rows;
-    xlabel = "Cumulative cases / infections",
-    groups = matched_groups,
-    group_colours = ["McCabe et al. (18 May)" => :grey,
-        "McCabe et al. (20 May update)" => :black,
-        "McCabe et al. (27 May, Lancet)" => :steelblue,
-        "Our renewal estimate" => :firebrick]);
+## One panel per report date; within a panel each method-and-family is one row,
+## with the case-fatality / window / doubling-time sweep dodged onto that single
+## line, so the ~40 scenarios keep their intervals without becoming ~40 rows.
+matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
+    ours = mccabe_ours,
+    date_titles = ["2026-05-18" => "18 May report",
+        "2026-05-20" => "20 May update",
+        "2026-05-27" => "27 May (Lancet)"],
+    xlabel = "Cumulative cases");
 
 #md # ```@raw html
 #md # </details>
@@ -3749,14 +3744,15 @@ matched_comparison_fig #hide
 # Their 95% confidence intervals come from exact negative-binomial counts
 # for the geographic-spread method and a Poisson likelihood profile for the
 # back-calculation from deaths.
-#
-# Side-by-side outbreak-size intervals for the two frozen fits and the
-# current-data fit, so the shift with the data cut-off reads off directly.
 
 #md # ```@raw html
-#md # <details><summary>Frozen-fit C_T table</summary>
+#md # <details><summary>Frozen-fit C_T intervals (kept for the CSV export, not shown)</summary>
 #md # ```
 
+## The estimate-evolution figure above already shows how the size estimate
+## shifts as data accrues, so the side-by-side frozen-fit table is no longer
+## rendered in the report; it is kept only to populate the published
+## `frozen_matched_cutoffs.csv` export.
 frozen_streams_table = streams_table(
     "frozen 20 May" => frozen_C("2026-05-20"),
     "frozen 23 May" => frozen_C("2026-05-23"),
@@ -3767,7 +3763,206 @@ frozen_streams_table = streams_table(
 #md # </details>
 #md # ```
 
-frozen_streams_table #hide
+# ### Comparison with Chamla et al.
+#
+# A second group, Chamla et al. [chamla2026](@cite) at the World Health
+# Organization Regional Office for Africa, published a stochastic compartmental
+# model of the same outbreak on 25 June 2026.
+# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead
+# ensemble, recalibrated by simulation filtering to the laboratory-confirmed
+# case series, anchored on the 598 confirmed cases reported by 8 June, then run
+# forward to project the confirmed-case trajectory under a low, central and
+# high transmissibility scenario.
+#
+# Their published quantity is the cumulative confirmed-case count, with the
+# reporting fraction held at one, so it does not adjust for the cases that are
+# infected but never laboratory-confirmed.
+# This is a different quantity from the cumulative cases this analysis and
+# McCabe et al. estimate, which include the unconfirmed and unascertained, and
+# it sits below them: it is a floor on the true size rather than an estimate of
+# it.
+# The like-for-like comparison is therefore against our own confirmed-case
+# projection, not against our cumulative infection count.
+#
+# We compare forward projections rather than refitting to their assumptions.
+# We take our existing fit frozen at 27 May, the closest of our frozen vintages
+# to their 8 June calibration point and the date their own early projection
+# passes through, and roll its confirmed-case stream forward week by week with
+# the same machinery as the one-week-ahead forecast.
+# Setting our projection, their projection and the confirmed cases observed
+# since on one timeline shows how each projection has held up against the data.
+
+#md # ```@raw html
+#md # <details><summary>Project the 27 May fit forward and assemble the Chamla comparison</summary>
+#md # ```
+
+## The 27 May frozen joint fit is the nearest frozen vintage to Chamla's 8 June
+## calibration anchor, so we roll its confirmed-case stream forward with the
+## one-week-ahead forecast machinery to the dates Chamla report.
+chamla_anchor = frozen_by_cutoff["2026-05-27"]
+
+## Our projected cumulative confirmed cases at a horizon of `h` days past the
+## 27 May cut-off: a forward `forecast_reported` run (its reproduction number
+## left to keep evolving), summarised as (median, 5%, 95%).
+function _our_confirmed_h(h)
+    fc = forecast_reported(chamla_anchor.chn;
+        horizon = h,
+        obs_cases = chamla_anchor.o.reported_cases,
+        obs_deaths = chamla_anchor.o.total_deaths,
+        obs_confirmed = chamla_anchor.o.confirmed_cases,
+        obs_confirmed_deaths = chamla_anchor.o.confirmed_deaths)
+    return _ci90row(float.(fc.confirmed_cum))
+end
+
+## A week-by-week fan of our projection out to week 12 (24 June): the anchor day
+## is the fitted confirmed total at 27 May, each later week a forward forecast.
+## Reused for the matched-date table and the week-12 scenario figure.
+chamla_fan = map(0:7:28) do h
+    d = chamla_anchor.cutoff + Day(h)
+    row = h == 0 ?
+          (chamla_anchor.o.confirmed_cases, chamla_anchor.o.confirmed_cases,
+        chamla_anchor.o.confirmed_cases) : _our_confirmed_h(h)
+    (string(d), row...)
+end
+_fan_at(date) =
+    let r = first(x for x in chamla_fan if x[1] == date)
+        (r[2], r[3], r[4])
+    end
+ours_10jun = _fan_at("2026-06-10")
+ours_24jun = _fan_at("2026-06-24")
+
+## Observed confirmed cases over the comparison window: the daily cumulative
+## series read off the chain's grid from 18 May (Chamla's first projected point)
+## to the cut-off.
+chamla_obs_series = let
+    ds = [grid_date(d) for d in obs.confirmed_history.days]
+    cs = obs.confirmed_history.counts
+    [(string(ds[i]), cs[i]) for i in eachindex(ds) if ds[i] >= Date("2026-05-18")]
+end
+
+## Chamla's central confirmed-case projection over the comparison window; their
+## later, far-larger horizons are noted in the text rather than plotted so the
+## window stays legible.
+chamla_central_window = CHAMLA_CONFIRMED_CENTRAL[1:4]
+
+chamla_projection_fig = plot_projection_comparison(;
+    external = chamla_central_window,
+    ours = chamla_fan,
+    observed = chamla_obs_series,
+    external_label = "Chamla et al. central (R₀=1.71)",
+    ours_label = "Our projection (from 27 May)",
+    observed_label = "Observed confirmed",
+    title = "Confirmed-case projections versus observed, from late May");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_projection_fig #hide
+
+# By 24 June their central scenario projected just under a thousand confirmed
+# cases, and their low and high scenarios ranged from roughly 870 to 1360.
+# The figure below sets that week-12 scenario spread beside our 27 May
+# projection for the same date and the confirmed count observed by the cut-off,
+# so each reads against their three scenarios at a glance.
+
+#md # ```@raw html
+#md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
+#md # ```
+
+chamla_w12_rows = vcat(
+    [(label, m, lo, hi) for (label, m, lo, hi) in CHAMLA_CONFIRMED_W12],
+    [("Our projection (from 27 May)", ours_24jun...)],
+    [("Observed by 23 June cut-off", obs.confirmed_cases,
+        obs.confirmed_cases, obs.confirmed_cases)])
+chamla_w12_groups = vcat(fill("Chamla et al. scenarios", 3),
+    ["Our projection"], ["Observed"])
+
+chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
+    xlabel = "Cumulative confirmed cases by 24 June",
+    groups = chamla_w12_groups,
+    group_colours = ["Chamla et al. scenarios" => :steelblue,
+        "Our projection" => :firebrick,
+        "Observed" => :black]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_w12_fig #hide
+
+# The matched-date numbers behind these figures are in the dropdown below, with
+# the observed column taken to the 23 June cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
+#md # ```
+
+chamla_comparison_table = let
+    fmt(t) = string(t[1], " (", t[2], "–", t[3], ")")
+    central(date) =
+        let r = first(x for x in CHAMLA_CONFIRMED_CENTRAL
+            if x[1] == date)
+            fmt((r[2], r[3], r[4]))
+        end
+    DataFrame(
+        "Date" => ["10 June", "24 June"],
+        "Chamla central (90% PI)" => [central("2026-06-10"),
+            central("2026-06-24")],
+        "Our projection (90% CrI)" => [fmt(ours_10jun), fmt(ours_24jun)],
+        "Observed confirmed" => [
+            string(freeze_observations("2026-06-10").confirmed_cases),
+            string(obs.confirmed_cases) * " (23 June)"])
+end;
+
+chamla_comparison_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Beyond the comparison window their central scenario continues to roughly 8200
+# confirmed cases by mid-September, with the high scenario far higher; those
+# longer projections are not set against data here.
+# Their confirmed-case projections are a floor on the outbreak size, so they sit
+# below our cumulative infection count, which adds the unconfirmed and
+# unascertained cases on top.
+
+# ### Reproduction number behind the projection
+#
+# The forward projection above is carried by the reproduction-number trajectory
+# our 27 May fit estimated, a quantity we report in its own right rather than as
+# a comparison.
+# The figure shows that trajectory, the time-varying reproduction number from
+# the renewal walk with its credible intervals, as the fit saw it at 27 May.
+# It declines over the weeks leading to the cut-off, and that decline is what
+# bends the projected trajectory away from sustained early growth.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number as estimated by the 27 May fit</summary>
+#md # ```
+
+## Reconstruct the reproduction-number trajectory the 27 May fit estimated,
+## mirroring the current-data R_t figure but with the frozen vintage's own grid,
+## breakpoint and renewal start.
+chamla_rt_obs = chamla_anchor.o
+chamla_rt_breakpoint = chamla_rt_obs.n - chamla_rt_obs.who_first_sitrep_days
+chamla_rt_start = clamp(
+    chamla_rt_obs.n - round(Int, chamla_rt_obs.tmrca_days) + RENEWAL_START_LEAD,
+    1, chamla_rt_obs.n)
+chamla_rt_fig = plot_rt(chamla_anchor.chn;
+    n = chamla_rt_obs.n, breakpoint = chamla_rt_breakpoint,
+    rt_start = chamla_rt_start,
+    rt_walk_start = clamp(chamla_rt_breakpoint - RT_WALK_LEAD,
+        chamla_rt_start, chamla_rt_obs.n),
+    as_of_date = string(chamla_rt_obs.cutoff),
+    seeding = chamla_rt_obs.seeding, ramp = 21.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_rt_fig #hide
 
 # ### Delay sensitivity
 #

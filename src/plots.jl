@@ -732,6 +732,197 @@ function plot_estimate_comparison(
 end
 
 """
+Calendar time-series comparison of cumulative-count projections against the
+data observed since. `external` is another group's published projection and
+`ours` is our own forward projection, each drawn as a central line with a
+shaded `[lower, upper]` band so the two fans read directly against each other;
+`observed` is the data observed so far, drawn as a marked line. Each is a
+vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
+are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
+share one calendar x-axis, so the two projections read directly against what
+the outbreak actually did. Used to set our forward projection beside the
+Chamla et al. [chamla2026](@cite) confirmed-case projection.
+"""
+function plot_projection_comparison(;
+        external::AbstractVector,
+        ours::AbstractVector,
+        observed::AbstractVector,
+        external_label::AbstractString = "External projection",
+        ours_label::AbstractString = "Our projection",
+        observed_label::AbstractString = "Observed",
+        external_colour = :steelblue,
+        ours_colour = :firebrick,
+        ylabel::AbstractString = "Cumulative confirmed cases",
+        title::AbstractString = "Projected versus observed cumulative cases")
+    _x(d) = Float64(date2epochdays(Date(String(d))))
+
+    fig = Figure(; size = (820, 460))
+    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = ylabel, title = title)
+
+    ## External projection: shaded 90% band, central line and markers.
+    ex_x = [_x(r[1]) for r in external]
+    ex_m = [float(r[2]) for r in external]
+    ex_lo = [float(r[3]) for r in external]
+    ex_hi = [float(r[4]) for r in external]
+    ord = sortperm(ex_x)
+    band!(ax, ex_x[ord], ex_lo[ord], ex_hi[ord];
+        color = (external_colour, 0.15))
+    lines!(ax, ex_x[ord], ex_m[ord]; color = external_colour, linewidth = 2)
+    ex_h = scatter!(ax, ex_x, ex_m; color = external_colour, markersize = 8)
+
+    ## Observed data so far: a marked black line.
+    ob_x = [_x(r[1]) for r in observed]
+    ob_y = [float(r[2]) for r in observed]
+    obord = sortperm(ob_x)
+    lines!(ax, ob_x[obord], ob_y[obord]; color = :black, linewidth = 1.5)
+    ob_h = scatter!(ax, ob_x, ob_y; color = :black, markersize = 7)
+
+    ## Our forward projection: shaded 90% band, central line and markers, the
+    ## same ribbon form as the external projection so the two fans read against
+    ## each other.
+    our_x = [_x(r[1]) for r in ours]
+    our_m = [float(r[2]) for r in ours]
+    our_lo = [float(r[3]) for r in ours]
+    our_hi = [float(r[4]) for r in ours]
+    oord = sortperm(our_x)
+    band!(ax, our_x[oord], our_lo[oord], our_hi[oord];
+        color = (ours_colour, 0.15))
+    lines!(ax, our_x[oord], our_m[oord]; color = ours_colour, linewidth = 2)
+    our_h = scatter!(ax, our_x, our_m;
+        color = ours_colour, markersize = 8, marker = :diamond)
+
+    allx = vcat(ex_x, ob_x, our_x)
+    lo, hi = minimum(allx), maximum(allx)
+    ax.xticks = collect(lo:14:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    CairoMakie.axislegend(ax, [ex_h, our_h, ob_h],
+        [external_label, ours_label, observed_label];
+        position = :lt, framevisible = true)
+    return fig
+end
+
+"""
+Faceted point-and-interval comparison of published scenario estimates, one
+panel per date of estimation so the figure spreads sideways instead of into one
+tall column. `scenarios` is `REPORT_SCENARIOS_CI`-shaped
+`(date, label, central, lower, upper)` with `label` of the form
+`"M1|M2 <family>, <swept level>"` (for example `"M2 τ=14 d, CFR 26%"`). Within a
+panel each `(method, family)` is one row, and the swept nuisance level (the CFR,
+window or doubling time) is dodged onto that single line so every scenario keeps
+its own interval while the sweep no longer adds rows. Method sets the colour.
+`ours` maps a date string to our matched `(median, lower, upper)` estimate, drawn
+as a grey reference band with a dashed median in that date's panel.
+`date_titles` are `date => title` pairs giving each panel its heading.
+"""
+function plot_scenario_comparison(scenarios::AbstractVector;
+        ours::AbstractDict = Dict{String, Any}(),
+        date_titles::AbstractVector = ["2026-05-18" => "18 May report",
+            "2026-05-20" => "20 May update",
+            "2026-05-27" => "27 May (Lancet)"],
+        method_names = Dict("M1" => "geographic", "M2" => "back-calc"),
+        method_colours = Dict("M1" => :steelblue, "M2" => :darkorange),
+        xlabel::AbstractString = "Cumulative cases",
+        title::AbstractString = "Published scenarios versus our estimate")
+    title_of = Dict(date_titles)
+    dates = sort(unique(String[String(s[1]) for s in scenarios]))
+
+    ## Parse "M2 τ=14 d, CFR 26%" → (method, family, level).
+    function parts(label)
+        head, level = split(String(label), ", "; limit = 2)
+        method, family = split(head, " "; limit = 2)
+        return (String(method), String(family), String(level))
+    end
+
+    ## First pass: group each date's scenarios into ordered (method, family)
+    ## rows, so a shared row count keeps the panels' rows the same height.
+    function group(date)
+        fams = Tuple{String, String}[]
+        members = Dict{Tuple{String, String}, Vector{Any}}()
+        for s in scenarios
+            String(s[1]) == date || continue
+            m, fam, lvl = parts(s[2])
+            key = (m, fam)
+            haskey(members, key) || (push!(fams, key); members[key] = [])
+            push!(members[key], (lvl, float(s[3]), float(s[4]), float(s[5])))
+        end
+        return fams, members
+    end
+    grouped = Dict(d => group(d) for d in dates)
+    ## Reserve the geographic rows at the top and the back-calculation rows at
+    ## the bottom of every panel, sized to the busiest panel, so the two method
+    ## blocks line up across dates even where a panel has no geographic row.
+    countm(d, m) = count(f -> f[1] == m, first(grouped[d]))
+    maxgeo = maximum(countm(d, "M1") for d in dates)
+    maxbc = maximum(countm(d, "M2") for d in dates)
+    maxrow = maxgeo + maxbc
+
+    xmax = 1.05 * max(maximum(float(s[5]) for s in scenarios),
+        maximum((float(v[3]) for v in values(ours)); init = 0.0))
+
+    fig = Figure(; size = (340 * length(dates) + 140, 110 + 70 * maxrow))
+    for (j, d) in enumerate(dates)
+        fams, members = grouped[d]
+        geo = [f for f in fams if f[1] == "M1"]
+        bc = [f for f in fams if f[1] == "M2"]
+        ## Geographic families fill the top block (`maxrow` down); back-calc
+        ## families fill the bottom block (`maxbc` down), so both align in y.
+        ypos = Dict{Tuple{String, String}, Int}()
+        for (i, f) in enumerate(geo)
+            ypos[f] = maxrow - i + 1
+        end
+        for (i, f) in enumerate(bc)
+            ypos[f] = maxbc - i + 1
+        end
+        yvals = [ypos[f] for f in fams]
+        ylabels = [string(get(method_names, m, m), " · ", fam)
+                   for (m, fam) in fams]
+        ax = Axis(fig[1, j];
+            title = get(title_of, d, d), xlabel = xlabel,
+            yticks = (yvals, ylabels),
+            limits = ((0, xmax), (0.4, maxrow + 0.6)))
+
+        ## Our matched estimate for this vintage: a reference band + median.
+        if haskey(ours, d)
+            med, lo, hi = ours[d]
+            vspan!(ax, float(lo), float(hi); color = (:grey, 0.18))
+            vlines!(ax, [float(med)];
+                color = :black, linestyle = :dash, linewidth = 1.5)
+        end
+
+        ## Each family row carries its swept levels dodged around the row centre,
+        ## each a point with its interval, coloured by method.
+        for key in fams
+            y = ypos[key]
+            col = get(method_colours, key[1], :grey)
+            ms = members[key]
+            k = length(ms)
+            offs = k == 1 ? [0.0] : collect(LinRange(0.26, -0.26, k))
+            for (t, (_, c, lo, hi)) in enumerate(ms)
+                yy = y + offs[t]
+                lines!(ax, [lo, hi], [yy, yy];
+                    color = (col, 0.85), linewidth = 2.5)
+                scatter!(ax, [c], [yy]; color = col, markersize = 9)
+            end
+        end
+    end
+
+    CairoMakie.Label(fig[0, 1:length(dates)], title;
+        fontsize = 16, font = :bold)
+    handles = [
+        CairoMakie.MarkerElement(; color = method_colours["M1"],
+            marker = :circle, markersize = 11),
+        CairoMakie.MarkerElement(; color = method_colours["M2"],
+            marker = :circle, markersize = 11),
+        CairoMakie.PolyElement(; color = (:grey, 0.4))]
+    labels = [get(method_names, "M1", "M1") * " spread",
+        get(method_names, "M2", "M2") * " spread", "our estimate (90%)"]
+    CairoMakie.Legend(fig[2, 1:length(dates)], handles, labels;
+        orientation = :horizontal, framevisible = false)
+    return fig
+end
+
+"""
 Density of a prior over the case-fatality ratio (CFR) on `[0, 1]`,
 plotted on the sub-range `[0, 0.7]`. The CDC central estimate of
 55/169 ≈ 0.33 is drawn as a solid vertical rule, and the report's 26%
