@@ -822,7 +822,7 @@ function plot_scenario_comparison(scenarios::AbstractVector;
             "2026-05-27" => "27 May (Lancet)"],
         method_names = Dict("M1" => "geographic", "M2" => "back-calc"),
         method_colours = Dict("M1" => :steelblue, "M2" => :darkorange),
-        xlabel::AbstractString = "Cumulative cases / infections",
+        xlabel::AbstractString = "Cumulative cases",
         title::AbstractString = "Published scenarios versus our estimate")
     title_of = Dict(date_titles)
     dates = sort(unique(String[String(s[1]) for s in scenarios]))

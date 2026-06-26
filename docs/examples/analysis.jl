@@ -3670,10 +3670,9 @@ evolution_fig #hide
 # interval.
 # We show all three, the 18 May report, the 20 May update and the 27 May
 # Lancet publication, as one panel each, with their intervals kept.
-# Within a panel each method and scenario family is a single line, and the sweep
-# over the nuisance assumptions (case-fatality ratio, geographic window,
-# doubling time) is dodged onto that line rather than spread across rows, so the
-# figure stays compact while every scenario keeps its confidence interval.
+# Within a panel each method and scenario family is a single line, carrying its
+# sweep over the nuisance assumptions: the case-fatality ratio, the geographic
+# window and the doubling time.
 # The geographic-spread scenarios come from exported cases and travel volume.
 # Their back-calculation-from-deaths scenarios differ between the reports,
 # since the 18 May report used 88 reported deaths and the 20 May update 131,
@@ -3732,7 +3731,7 @@ matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
     date_titles = ["2026-05-18" => "18 May report",
         "2026-05-20" => "20 May update",
         "2026-05-27" => "27 May (Lancet)"],
-    xlabel = "Cumulative cases / infections");
+    xlabel = "Cumulative cases");
 
 #md # ```@raw html
 #md # </details>
@@ -3766,9 +3765,9 @@ frozen_streams_table = streams_table(
 
 # ### Comparison with Chamla et al.
 #
-# In the same week a second group, Chamla et al. [chamla2026](@cite) at the
-# World Health Organization Regional Office for Africa, published a stochastic
-# compartmental model of the same outbreak.
+# A second group, Chamla et al. [chamla2026](@cite) at the World Health
+# Organization Regional Office for Africa, published a stochastic compartmental
+# model of the same outbreak on 25 June 2026.
 # Their model is a discrete-time susceptible-exposed-infectious-recovered-dead
 # ensemble, recalibrated by simulation filtering to the laboratory-confirmed
 # case series, anchored on the 598 confirmed cases reported by 8 June, then run
