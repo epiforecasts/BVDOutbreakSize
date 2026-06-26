@@ -569,7 +569,7 @@ end
 
 """
 Base treatment-admission probability for the isolation-occupancy stream
-([`treatment_admission_model`](@ref)). Samples `p_iso`, the fraction of
+([`treatment_flow_model`](@ref)). Samples `p_iso`, the fraction of
 ascertained suspected cases that are admitted to and retained in an
 isolation/treatment bed at the base (non-BVD rule-out) intensity, so the
 modelled bed occupancy is `p_iso` times the survival-convolution of the
@@ -592,7 +592,7 @@ override. Returns `(; p_iso)`.
 end
 
 """
-Severity skew for isolation admission ([`treatment_admission_model`](@ref)).
+Severity skew for isolation admission ([`treatment_flow_model`](@ref)).
 Samples `δ_iso ≥ 0`, the log-odds by which a BVD suspect is more likely to be
 admitted to and retained in an isolation bed than a non-BVD rule-out at the
 same base intensity `p_iso` ([`isolation_admission_model`](@ref)), so the BVD
@@ -618,7 +618,7 @@ end
 
 """
 Isolation/treatment-bed capacity for the supply-limited occupancy stream
-([`treatment_admission_model`](@ref)). Samples the number of beds available,
+([`treatment_flow_model`](@ref)). Samples the number of beds available,
 `capacity`, the ceiling the latent bed demand saturates against. Bed
 occupancy has been supply-driven (demand has outstripped supply, with
 occupancy catching up as capacity is expanded), so the modelled occupancy is
@@ -644,7 +644,7 @@ end
 """
 Time-varying isolation/treatment-bed capacity over the daily grid, a
 multiplicative random walk: the supply-limited occupancy stream
-([`treatment_admission_model`](@ref)) uses `C(t)` as the ceiling the latent
+([`treatment_flow_model`](@ref)) uses `C(t)` as the ceiling the latent
 bed demand saturates against on each day. Capacity is not fixed — beds are
 being added (SitRep 030 records mattress and bed deliveries and new treatment
 centres opening) — so a single scalar capacity ([`bed_capacity_model`](@ref))
@@ -1061,7 +1061,7 @@ and the raw deviations. Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with
 """
 @model function pooled_dispersion_model(n_streams::Integer;
         mean_prior = Normal(log(0.6), 0.33),
-        sd_prior = truncated(Normal(0, 0.3); lower = 0))
+        sd_prior = truncated(Normal(0, 0.6); lower = 0))
     μ_log ~ mean_prior
     τ ~ sd_prior
     z ~ product_distribution(fill(Normal(0, 1), max(n_streams, 1)))

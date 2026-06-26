@@ -519,3 +519,33 @@ end
         confirmed = 70, confirmed_deaths = 18)
     @test fig2 isa CairoMakie.Makie.Figure
 end
+
+@testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
+    ## External projection from the packaged Chamla central trajectory; our
+    ## projection as a dated fan (ribbon) including a zero-width anchor; observed
+    ## a dated value series, all with dates out of order to exercise sorting.
+    ours = [("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
+        ("2026-06-10", 700, 500, 950), ("2026-06-03", 430, 330, 560),
+        ("2026-06-17", 930, 660, 1300)]
+    observed = [("2026-06-08", 598), ("2026-05-27", 250),
+        ("2026-06-23", 1118), ("2026-06-15", 850)]
+    fig = plot_projection_comparison(;
+        external = CHAMLA_CONFIRMED_CENTRAL[1:4],
+        ours = ours, observed = observed)
+    @test fig isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_scenario_comparison facets the published scenarios" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_scenario_comparison, REPORT_SCENARIOS_CI
+    ## The real scenario set exercises the parser, the dodge of the swept level,
+    ## and the geographic/back-calc block layout (18 May has no geographic row).
+    ours = Dict("2026-05-18" => (520, 320, 860),
+        "2026-05-20" => (760, 470, 1180),
+        "2026-05-27" => (1250, 720, 2050))
+    fig = plot_scenario_comparison(REPORT_SCENARIOS_CI; ours = ours)
+    @test fig isa CairoMakie.Makie.Figure
+    ## Renders without an `ours` overlay too (every panel still draws).
+    @test plot_scenario_comparison(REPORT_SCENARIOS_CI) isa
+          CairoMakie.Makie.Figure
+end

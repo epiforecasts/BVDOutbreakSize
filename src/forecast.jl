@@ -137,6 +137,13 @@ Returns a `DataFrame` with one row per draw and columns:
   at the capacity, `min(demand, C)` (matching the fitted occupancy), so
   `bed_demand − isolation_level` is the projected bed shortfall. Replicated
   with the isolation stream's own dispersion.
+- `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc` — the projected
+  one-week-ahead daily isolation/treatment flows (new admissions, in-care
+  deaths and rule-outs), present when the chain carries
+  `expected_admissions_T`, `expected_incare_deaths_T` and
+  `expected_ruleouts_T`. Each cut-off daily flow grows by the horizon factor
+  and is replicated through the isolation stream's dispersion, mirroring the
+  bed-demand projection.
 - `:recovered_cum`, `:recovered_new` — cumulative recovered-among-confirmed
   by the horizon (and new this week when `obs_recovered` is supplied),
   present when the chain carries `expected_recovered_T`.
@@ -212,11 +219,20 @@ function forecast_reported(chn;
     has_iso = _has(:expected_bed_demand_T) && _has(:bed_capacity) &&
               _has(:isolation_dispersion)
     has_rec = _has(:expected_recovered_T) && _has(:recovered_dispersion)
+    ## The three daily treatment flows (admissions, in-care deaths, rule-outs)
+    ## share the isolation dispersion, so they need it carried too.
+    has_flows = _has(:expected_admissions_T) && _has(:expected_incare_deaths_T) &&
+                _has(:expected_ruleouts_T) && _has(:isolation_dispersion)
     demand_T = has_iso ? _draws(chn, :expected_bed_demand_T) : nothing
     cap = has_iso ? _draws(chn, :bed_capacity) : nothing
     k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
     rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
     k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
+    admit_T = has_flows ? _draws(chn, :expected_admissions_T) : nothing
+    incare_deaths_T = has_flows ? _draws(chn, :expected_incare_deaths_T) :
+                      nothing
+    ruleout_T = has_flows ? _draws(chn, :expected_ruleouts_T) : nothing
+    k_flow = has_flows ? _draws(chn, :isolation_dispersion) : nothing
 
     rng = MersenneTwister(seed)
     n = length(r)
@@ -230,6 +246,9 @@ function forecast_reported(chn;
     bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
     isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
     recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
+    admissions_fc = has_flows ? Vector{Int}(undef, n) : nothing
+    incare_deaths_fc = has_flows ? Vector{Int}(undef, n) : nothing
+    ruleouts_fc = has_flows ? Vector{Int}(undef, n) : nothing
 
     @inbounds for i in 1:n
         ## Growth factor over the whole horizon: the product of the daily
@@ -278,6 +297,15 @@ function forecast_reported(chn;
         end
         has_rec && (recovered_cum[i] = _nb_rand(rng, k_rec[i],
             rec_T[i] * grow))
+        ## One-week-ahead daily treatment flows: each cut-off daily rate grown
+        ## by the horizon factor and replicated through the isolation
+        ## dispersion, mirroring the bed-demand projection.
+        if has_flows
+            admissions_fc[i] = _nb_rand(rng, k_flow[i], admit_T[i] * grow)
+            incare_deaths_fc[i] = _nb_rand(rng, k_flow[i],
+                incare_deaths_T[i] * grow)
+            ruleouts_fc[i] = _nb_rand(rng, k_flow[i], ruleout_T[i] * grow)
+        end
     end
 
     _new(cum, obs) = max.(cum .- round(Int, obs), 0)
@@ -303,6 +331,11 @@ function forecast_reported(chn;
     if has_iso
         df.bed_demand = bed_demand
         df.isolation_level = isolation_level
+    end
+    if has_flows
+        df.admissions_fc = admissions_fc
+        df.incare_deaths_fc = incare_deaths_fc
+        df.ruleouts_fc = ruleouts_fc
     end
     if has_rec
         df.recovered_cum = recovered_cum
@@ -349,6 +382,14 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
         _row("DRC isolation beds", "demand at T+7", fc[!, :bed_demand]))
     :isolation_level in propertynames(fc) && push!(rows,
         _row("DRC isolation beds", "occupancy at T+7", fc[!, :isolation_level]))
+    ## One-week-ahead daily isolation/treatment flows (a single-day rate at
+    ## the horizon, not a cumulative total).
+    :admissions_fc in propertynames(fc) && push!(rows,
+        _row("DRC isolation admissions", "daily at T+7", fc[!, :admissions_fc]))
+    :incare_deaths_fc in propertynames(fc) && push!(rows,
+        _row("DRC in-care deaths", "daily at T+7", fc[!, :incare_deaths_fc]))
+    :ruleouts_fc in propertynames(fc) && push!(rows,
+        _row("DRC isolation rule-outs", "daily at T+7", fc[!, :ruleouts_fc]))
     if :recovered_cum in propertynames(fc)
         push!(rows,
             _row("DRC recovered", "cumulative by T+7", fc[!, :recovered_cum]))

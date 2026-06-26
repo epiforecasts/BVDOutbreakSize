@@ -17,10 +17,12 @@ jobs:
   docs:
     name: Build and deploy
     runs-on: ubuntu-latest
-    # The build runs ~14 NUTS fits (plus the sensitivity refits on main), so
-    # cap it well above the expected runtime; a pathological run then fails
-    # clearly here instead of being killed at GitHub's silent 6h job ceiling.
-    timeout-minutes: 300
+    # The build runs ~11 NUTS fits, and on tag/release builds two more
+    # sensitivity refits, which land near 5h, so a 300-minute cap was killing
+    # builds that would otherwise finish. 360 is GitHub's hosted-runner job
+    # maximum, so this gives the fits the full window; a genuinely stuck run is
+    # still stopped at the runner ceiling.
+    timeout-minutes: 360
     permissions:
       contents: write
       statuses: write
@@ -37,6 +39,18 @@ jobs:
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
+      # Refresh the released-estimate overlay from the live GitHub releases so
+      # the "Estimate evolution across releases" figure always picks up the
+      # newest results-v* release. Best-effort: on any failure (no network /
+      # gh / token) it leaves the committed data/released_estimates.csv in
+      # place rather than failing the build.
+      - name: Refresh released-estimate overlay
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
+           julia --project=scripts scripts/refresh_releases.jl) ||
+            echo "release refresh failed; using committed released_estimates.csv"
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,9 +64,10 @@ jobs:
           # callbacks (`fit_callback`) are for local runs, not CI artifacts.
           BVD_FIT_LOG: none
           # Run the slow sensitivity refits (onset-to-death delay, molecular
-          # clock) on main and release builds, but skip them on PR previews
-          # to keep PR docs builds fast.
-          BVD_RUN_SENSITIVITY: ${{ github.event_name != 'pull_request' }}
+          # clock) on release builds only (tag pushes, which deploy the
+          # versioned docs), skipping them on main pushes and PR previews to
+          # keep those docs builds fast.
+          BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9

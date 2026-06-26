@@ -791,6 +791,197 @@ function plot_estimate_comparison(
 end
 
 """
+Calendar time-series comparison of cumulative-count projections against the
+data observed since. `external` is another group's published projection and
+`ours` is our own forward projection, each drawn as a central line with a
+shaded `[lower, upper]` band so the two fans read directly against each other;
+`observed` is the data observed so far, drawn as a marked line. Each is a
+vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
+are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
+share one calendar x-axis, so the two projections read directly against what
+the outbreak actually did. Used to set our forward projection beside the
+Chamla et al. [chamla2026](@cite) confirmed-case projection.
+"""
+function plot_projection_comparison(;
+        external::AbstractVector,
+        ours::AbstractVector,
+        observed::AbstractVector,
+        external_label::AbstractString = "External projection",
+        ours_label::AbstractString = "Our projection",
+        observed_label::AbstractString = "Observed",
+        external_colour = :steelblue,
+        ours_colour = :firebrick,
+        ylabel::AbstractString = "Cumulative confirmed cases",
+        title::AbstractString = "Projected versus observed cumulative cases")
+    _x(d) = Float64(date2epochdays(Date(String(d))))
+
+    fig = Figure(; size = (820, 460))
+    ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = ylabel, title = title)
+
+    ## External projection: shaded 90% band, central line and markers.
+    ex_x = [_x(r[1]) for r in external]
+    ex_m = [float(r[2]) for r in external]
+    ex_lo = [float(r[3]) for r in external]
+    ex_hi = [float(r[4]) for r in external]
+    ord = sortperm(ex_x)
+    band!(ax, ex_x[ord], ex_lo[ord], ex_hi[ord];
+        color = (external_colour, 0.15))
+    lines!(ax, ex_x[ord], ex_m[ord]; color = external_colour, linewidth = 2)
+    ex_h = scatter!(ax, ex_x, ex_m; color = external_colour, markersize = 8)
+
+    ## Observed data so far: a marked black line.
+    ob_x = [_x(r[1]) for r in observed]
+    ob_y = [float(r[2]) for r in observed]
+    obord = sortperm(ob_x)
+    lines!(ax, ob_x[obord], ob_y[obord]; color = :black, linewidth = 1.5)
+    ob_h = scatter!(ax, ob_x, ob_y; color = :black, markersize = 7)
+
+    ## Our forward projection: shaded 90% band, central line and markers, the
+    ## same ribbon form as the external projection so the two fans read against
+    ## each other.
+    our_x = [_x(r[1]) for r in ours]
+    our_m = [float(r[2]) for r in ours]
+    our_lo = [float(r[3]) for r in ours]
+    our_hi = [float(r[4]) for r in ours]
+    oord = sortperm(our_x)
+    band!(ax, our_x[oord], our_lo[oord], our_hi[oord];
+        color = (ours_colour, 0.15))
+    lines!(ax, our_x[oord], our_m[oord]; color = ours_colour, linewidth = 2)
+    our_h = scatter!(ax, our_x, our_m;
+        color = ours_colour, markersize = 8, marker = :diamond)
+
+    allx = vcat(ex_x, ob_x, our_x)
+    lo, hi = minimum(allx), maximum(allx)
+    ax.xticks = collect(lo:14:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    CairoMakie.axislegend(ax, [ex_h, our_h, ob_h],
+        [external_label, ours_label, observed_label];
+        position = :lt, framevisible = true)
+    return fig
+end
+
+"""
+Faceted point-and-interval comparison of published scenario estimates, one
+panel per date of estimation so the figure spreads sideways instead of into one
+tall column. `scenarios` is `REPORT_SCENARIOS_CI`-shaped
+`(date, label, central, lower, upper)` with `label` of the form
+`"M1|M2 <family>, <swept level>"` (for example `"M2 τ=14 d, CFR 26%"`). Within a
+panel each `(method, family)` is one row, and the swept nuisance level (the CFR,
+window or doubling time) is dodged onto that single line so every scenario keeps
+its own interval while the sweep no longer adds rows. Method sets the colour.
+`ours` maps a date string to our matched `(median, lower, upper)` estimate, drawn
+as a grey reference band with a dashed median in that date's panel.
+`date_titles` are `date => title` pairs giving each panel its heading.
+"""
+function plot_scenario_comparison(scenarios::AbstractVector;
+        ours::AbstractDict = Dict{String, Any}(),
+        date_titles::AbstractVector = ["2026-05-18" => "18 May report",
+            "2026-05-20" => "20 May update",
+            "2026-05-27" => "27 May (Lancet)"],
+        method_names = Dict("M1" => "geographic", "M2" => "back-calc"),
+        method_colours = Dict("M1" => :steelblue, "M2" => :darkorange),
+        xlabel::AbstractString = "Cumulative cases",
+        title::AbstractString = "Published scenarios versus our estimate")
+    title_of = Dict(date_titles)
+    dates = sort(unique(String[String(s[1]) for s in scenarios]))
+
+    ## Parse "M2 τ=14 d, CFR 26%" → (method, family, level).
+    function parts(label)
+        head, level = split(String(label), ", "; limit = 2)
+        method, family = split(head, " "; limit = 2)
+        return (String(method), String(family), String(level))
+    end
+
+    ## First pass: group each date's scenarios into ordered (method, family)
+    ## rows, so a shared row count keeps the panels' rows the same height.
+    function group(date)
+        fams = Tuple{String, String}[]
+        members = Dict{Tuple{String, String}, Vector{Any}}()
+        for s in scenarios
+            String(s[1]) == date || continue
+            m, fam, lvl = parts(s[2])
+            key = (m, fam)
+            haskey(members, key) || (push!(fams, key); members[key] = [])
+            push!(members[key], (lvl, float(s[3]), float(s[4]), float(s[5])))
+        end
+        return fams, members
+    end
+    grouped = Dict(d => group(d) for d in dates)
+    ## Reserve the geographic rows at the top and the back-calculation rows at
+    ## the bottom of every panel, sized to the busiest panel, so the two method
+    ## blocks line up across dates even where a panel has no geographic row.
+    countm(d, m) = count(f -> f[1] == m, first(grouped[d]))
+    maxgeo = maximum(countm(d, "M1") for d in dates)
+    maxbc = maximum(countm(d, "M2") for d in dates)
+    maxrow = maxgeo + maxbc
+
+    xmax = 1.05 * max(maximum(float(s[5]) for s in scenarios),
+        maximum((float(v[3]) for v in values(ours)); init = 0.0))
+
+    fig = Figure(; size = (340 * length(dates) + 140, 110 + 70 * maxrow))
+    for (j, d) in enumerate(dates)
+        fams, members = grouped[d]
+        geo = [f for f in fams if f[1] == "M1"]
+        bc = [f for f in fams if f[1] == "M2"]
+        ## Geographic families fill the top block (`maxrow` down); back-calc
+        ## families fill the bottom block (`maxbc` down), so both align in y.
+        ypos = Dict{Tuple{String, String}, Int}()
+        for (i, f) in enumerate(geo)
+            ypos[f] = maxrow - i + 1
+        end
+        for (i, f) in enumerate(bc)
+            ypos[f] = maxbc - i + 1
+        end
+        yvals = [ypos[f] for f in fams]
+        ylabels = [string(get(method_names, m, m), " · ", fam)
+                   for (m, fam) in fams]
+        ax = Axis(fig[1, j];
+            title = get(title_of, d, d), xlabel = xlabel,
+            yticks = (yvals, ylabels),
+            limits = ((0, xmax), (0.4, maxrow + 0.6)))
+
+        ## Our matched estimate for this vintage: a reference band + median.
+        if haskey(ours, d)
+            med, lo, hi = ours[d]
+            vspan!(ax, float(lo), float(hi); color = (:grey, 0.18))
+            vlines!(ax, [float(med)];
+                color = :black, linestyle = :dash, linewidth = 1.5)
+        end
+
+        ## Each family row carries its swept levels dodged around the row centre,
+        ## each a point with its interval, coloured by method.
+        for key in fams
+            y = ypos[key]
+            col = get(method_colours, key[1], :grey)
+            ms = members[key]
+            k = length(ms)
+            offs = k == 1 ? [0.0] : collect(LinRange(0.26, -0.26, k))
+            for (t, (_, c, lo, hi)) in enumerate(ms)
+                yy = y + offs[t]
+                lines!(ax, [lo, hi], [yy, yy];
+                    color = (col, 0.85), linewidth = 2.5)
+                scatter!(ax, [c], [yy]; color = col, markersize = 9)
+            end
+        end
+    end
+
+    CairoMakie.Label(fig[0, 1:length(dates)], title;
+        fontsize = 16, font = :bold)
+    handles = [
+        CairoMakie.MarkerElement(; color = method_colours["M1"],
+            marker = :circle, markersize = 11),
+        CairoMakie.MarkerElement(; color = method_colours["M2"],
+            marker = :circle, markersize = 11),
+        CairoMakie.PolyElement(; color = (:grey, 0.4))]
+    labels = [get(method_names, "M1", "M1") * " spread",
+        get(method_names, "M2", "M2") * " spread", "our estimate (90%)"]
+    CairoMakie.Legend(fig[2, 1:length(dates)], handles, labels;
+        orientation = :horizontal, framevisible = false)
+    return fig
+end
+
+"""
 Density of a prior over the case-fatality ratio (CFR) on `[0, 1]`,
 plotted on the sub-range `[0, 0.7]`. The CDC central estimate of
 55/169 ≈ 0.33 is drawn as a solid vertical rule, and the report's 26%
@@ -1014,11 +1205,13 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     epoch = date2epochdays(seeding)
     x = [epoch + (d - 1) for d in 1:n]
     xe = x[est]
-    ## Cap the y-axis a little above the upper 90% credible band so a handful
-    ## of high sampled trajectories do not stretch the scale; the thin
-    ## trajectories above the cap are simply clipped.
-    ytop = isempty(est) ? 6.0 :
-           1.2 * maximum(Float64[hi90[d] for d in est])
+    ## Cap the y-axis just above the upper 90% credible band so the focus
+    ## stays on the Rt trajectory: a 20% headroom keeps the band off the top
+    ## edge without leaving a wide empty strip, and the handful of higher
+    ## sampled trajectories above the cap are simply clipped.
+    hi90_est = Float64[hi90[d] for d in est if !ismissing(hi90[d])]
+    ytop = isempty(hi90_est) ? 4.0 :
+           max(1.2, 1.2 * maximum(hi90_est))
     fig = Figure(; size = (900, 440))
     ax = Axis(fig[1, 1]; xlabel = "Date", ylabel = "Reproduction number Rt",
         title = "Estimated Rt over the established outbreak",
@@ -1054,12 +1247,6 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     lo = isempty(xe) ? floor(Int, minimum(x)) : floor(Int, minimum(xe))
     hi = ceil(Int, maximum(x))
     CairoMakie.xlims!(ax, lo, hi)
-    ## Cap the y-axis at roughly twice the 90% upper bound (rounded up to a
-    ## tidy step), so stray trajectories do not stretch the axis into
-    ## whitespace while the Rt = 1 line stays visible.
-    hi90_est = [hi90[d] for d in est if !ismissing(hi90[d])]
-    ytop = isempty(hi90_est) ? 4.0 :
-           max(1.2, ceil(2 * maximum(hi90_est) * 2) / 2)
     CairoMakie.ylims!(ax, 0, ytop)
     ## Weekly date ticks across the estimated window.
     ax.xticks = collect(lo:7:hi)
@@ -1230,7 +1417,9 @@ end
 ## forecast new-count draws with its 90% predictive interval shaded.
 function _forecast_count_panel!(fig, pos, v, title, colour)
     r, c = pos
-    upper = max(1.0, quantile(v, 0.995))
+    ## 98th-percentile x-axis cap so a heavy forecast tail does not squash the
+    ## readable bulk of the histogram.
+    upper = max(1.0, quantile(v, 0.98))
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
     ax = Axis(fig[r, c];
@@ -1306,6 +1495,35 @@ function plot_forecast(fc::DataFrame)
 end
 
 """
+One-week-ahead forecast of the daily isolation/treatment flows from
+[`forecast_reported`](@ref): the projected new admissions, in-care deaths and
+rule-outs a day at the horizon. Each panel histograms the projected daily
+count with its 90% predictive interval shaded, drawn only when the forecast
+carries the flow streams (`admissions_fc`, `incare_deaths_fc`, `ruleouts_fc`).
+These are the daily-flow counterparts of the bed-stock forecast in
+[`plot_forecast_beds`](@ref).
+"""
+function plot_forecast_flows(fc::DataFrame)
+    count_cols = Tuple{Symbol, String, Symbol}[]
+    :admissions_fc in propertynames(fc) && push!(count_cols,
+        (:admissions_fc, "New isolation admissions (DRC)", :steelblue))
+    :incare_deaths_fc in propertynames(fc) && push!(count_cols,
+        (:incare_deaths_fc, "New in-care deaths (DRC)", :firebrick))
+    :ruleouts_fc in propertynames(fc) && push!(count_cols,
+        (:ruleouts_fc, "New rule-outs (DRC)", :seagreen))
+    npanels = length(count_cols)
+    npanels == 0 && return Figure()
+    ncols = min(npanels, 2)
+    nrows = cld(npanels, ncols)
+    fig = Figure(; size = (400 * ncols, 360 * nrows))
+    for (i, (col, title, colour)) in enumerate(count_cols)
+        pos = (cld(i, ncols), mod1(i, ncols))
+        _forecast_count_panel!(fig, pos, fc[!, col], title, colour)
+    end
+    return fig
+end
+
+"""
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed DEMAND (the need a week ahead,
 under unconstrained supply) against the supply-limited occupancy (the beds
@@ -1327,7 +1545,12 @@ function plot_forecast_beds(fc::DataFrame)
     occ = float.(fc[!, :isolation_level])
     shortfall = max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
-    upper = max(1.0, quantile(demand, 0.995))
+    ## Cap the x-axis at the 98th percentile of demand: the unconstrained
+    ## bed-demand projection is heavy-tailed (it grows with the reproduction
+    ## number over the horizon), so its long upper tail otherwise squashes the
+    ## readable bulk of both densities. Occupancy is capped at capacity, so it
+    ## sits below this bound.
+    upper = max(1.0, quantile(demand, 0.98))
     ax1 = Axis(fig[1, 1];
         xlabel = "Isolation beds a week ahead (DRC)",
         ylabel = "Predictive density", title = "Need vs supply-limited use",
@@ -1505,8 +1728,12 @@ function plot_vintage_conditional_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
@@ -1586,8 +1813,12 @@ function plot_vintage_incidence_ppc(
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
     npanels = length(panels)
-    nrows = npanels > 1 ? 2 : 1
-    ncols = cld(npanels, nrows)
+    ## Cap the grid at four columns so a large stream set lays out over
+    ## several rows rather than one very wide strip that the page downscales
+    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## giving a readable 4-column, ~4-row grid.
+    ncols = min(npanels, 4)
+    nrows = cld(npanels, ncols)
     fig = Figure(; size = (460 * ncols, 420 * nrows))
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
@@ -1628,5 +1859,55 @@ function plot_vintage_incidence_ppc(
         band!(ax, x, lo30, hi30; color = (colour, 0.42))
         scatter!(ax, x, float.(obs_inc); color = :black, markersize = 9)
     end
+    return fig
+end
+
+"""
+Per-stream calibration of the one-step-ahead conditional posterior
+predictive, plotting the table from [`stream_calibration`](@ref). Pass the
+table that function returns (its prettified columns `Stream`, `50% coverage`,
+`90% coverage`, `Bias`). The figure has two panels sharing a categorical
+y-axis of streams: the left panel marks each stream's empirical 50% and 90%
+coverage with vertical dashed reference lines at the nominal 0.5 and 0.9, so a
+well-calibrated stream sits on its line and a marker to the left of its line
+flags under-coverage; the right panel marks the mean forecast `Bias` (negative
+= the stream is under-predicted, positive = over-predicted) with a dashed line
+at zero. Streams are read off the shared row labels, so all ~14 stay legible
+without splitting the figure into columns.
+"""
+function plot_stream_calibration(tbl::DataFrame)
+    ## Read the prettified columns the table carries; oldest-first order is
+    ## kept but reversed for the y-axis so the first stream reads at the top.
+    streams = string.(tbl[!, "Stream"])
+    cov50 = float.(tbl[!, "50% coverage"])
+    cov90 = float.(tbl[!, "90% coverage"])
+    bias = float.(tbl[!, "Bias"])
+    n = length(streams)
+    ## Categorical y positions, top-to-bottom in table order.
+    y = collect(n:-1:1)
+    height = max(360, 60 + 26 * n)
+    fig = Figure(; size = (980, height))
+
+    ax1 = Axis(fig[1, 1];
+        xlabel = "Empirical coverage", title = "Interval coverage",
+        yticks = (y, streams), limits = ((0, 1), nothing))
+    ## Nominal reference lines: a marker on its line is well calibrated.
+    vlines!(ax1, [0.5]; color = (:steelblue, 0.6), linestyle = :dash,
+        linewidth = 2)
+    vlines!(ax1, [0.9]; color = (:seagreen, 0.6), linestyle = :dash,
+        linewidth = 2)
+    h50 = scatter!(ax1, cov50, y; color = :steelblue, markersize = 11)
+    h90 = scatter!(ax1, cov90, y; color = :seagreen, markersize = 11,
+        marker = :diamond)
+    CairoMakie.axislegend(ax1, [h50, h90], ["50% interval", "90% interval"];
+        position = :lt, framevisible = false)
+
+    ## Bias panel: zero is unbiased; sign flags over/under-prediction.
+    bmax = max(1.0, maximum(abs.(bias)) * 1.1)
+    ax2 = Axis(fig[1, 2];
+        xlabel = "Mean forecast bias", title = "Forecast bias",
+        yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing))
+    vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 2)
+    scatter!(ax2, bias, y; color = :firebrick, markersize = 11)
     return fig
 end

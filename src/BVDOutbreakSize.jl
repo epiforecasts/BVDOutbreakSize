@@ -1,6 +1,6 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, cor
+using Statistics: quantile, mean, cor
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
@@ -27,12 +27,14 @@ using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
                   lines!, scatter!, band!, linesegments!
 
 export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
+       CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
        load_observations, freeze_observations, m_prior_centre,
        summary_table, posterior_summary, markdown_table,
        fit_diagnostics, diagnostics_table,
-       streams_table, comparison_table, onsets_over_time,
+       streams_table, comparison_table,
+       bias_sample, stream_calibration, onsets_over_time,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,
@@ -42,13 +44,15 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
        plot_correlation_heatmap, plot_stream_pairs,
-       plot_estimate_evolution,
+       plot_estimate_evolution, plot_projection_comparison,
+       plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
-       plot_vintage_incidence_ppc, plot_rt, plot_rt_streams,
+       plot_vintage_incidence_ppc, plot_stream_calibration,
+       plot_rt, plot_rt_streams,
        reconstruct_rt,
        predict_no_onward_deaths, plot_no_onward_deaths,
        forecast_reported, forecast_table, plot_forecast,
-       plot_forecast_latent, plot_forecast_beds,
+       plot_forecast_latent, plot_forecast_beds, plot_forecast_flows,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
        plot_forecast_beds_vs_truth,
@@ -83,7 +87,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
 # observation models
        deaths_model, reported_cases_model, confirmed_cases_model,
        confirmed_positivity_windows, confirmed_deaths_model,
-       treatment_admission_model, recovered_model,
+       treatment_flow_model, recovered_model,
        exports_model, exports_deaths_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
