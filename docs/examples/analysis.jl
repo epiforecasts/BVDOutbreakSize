@@ -2088,9 +2088,10 @@ tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
 ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
 ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
-## release and main builds and are skipped on PR previews to keep PR docs
-## builds fast: `.github/workflows/docs.yml` sets the var to
-## `github.event_name != 'pull_request'`. Set `BVD_RUN_SENSITIVITY=true`
+## release builds only (tag pushes, which deploy the versioned docs) and are
+## skipped on main pushes and PR previews to keep those docs builds fast:
+## `.github/workflows/docs.yml` sets the var to
+## `startsWith(github.ref, 'refs/tags/')`. Set `BVD_RUN_SENSITIVITY=true`
 ## to run them locally.
 RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
     "false"))) in ("true", "1", "yes", "on")
@@ -3596,13 +3597,18 @@ stream_rt_fig #hide
 # model from v1.4.0 on.
 # Each release is its own fit, so it is drawn as a discrete estimate, a
 # median with nested 30/60/90% interval bars, rather than a ribbon.
+# The current model frozen at earlier cut-offs is drawn in red as discrete
+# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
+# and 27 May) and one week before the current cut-off. These are the frozen
+# joint fits already computed for the matched-in-time comparison and the
+# forecast validation, reused here, so no extra fits are run.
 # The current-data, current-model estimate is drawn in green as the
 # cumulative-infection trajectory over time, a single fit shown across the
 # period so the latest estimate reads against the earlier ones.
 # Each release date is marked with a dotted vertical rule.
 
 #md # ```@raw html
-#md # <details><summary>Released estimates and the current-model trajectory</summary>
+#md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
 #md # ```
 
 ## Released median and 30/60/90% intervals per release, from
@@ -3611,13 +3617,30 @@ stream_rt_fig #hide
 release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
                          r.lo90, r.hi90) for r in eachrow(released_df)]
 
+## The current model frozen at earlier cut-offs, each its own discrete
+## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
+## for the matched-in-time comparison below, plus the one-week-back
+## validation fit (`frozen_lastweek`, at `validation_cutoff`) already
+## computed for the forecast validation above. Both are reused here so the
+## current-model estimate at those earlier cut-offs reads against the
+## released overlay, including a recent point one week before the cut-off.
+## No extra fits are run. Each tuple carries the median and 30/60/90%
+## credible bounds from the frozen `C_T` draws.
+function _ci369(xs)
+    q(p) = round(Int, quantile(xs, p))
+    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
+end
+frozen_by_cutoff[validation_cutoff] = frozen_lastweek
+frozen_matched = [(c, _ci369(frozen_C(c))...)
+                  for c in sort(union(frozen_cutoffs, [validation_cutoff]))]
+
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
 ## the seeding date), summarised by per-day 30/60/90% credible bounds. This
 ## is the same latent quantity the cumulative-trajectory figure shows, so
 ## the current estimate rises over time on the release-date axis instead of
 ## sitting flat. Drawn against calendar dates, it lines up with the
-## release points.
+## release and frozen points.
 infection_trajectory = let
     mat = chn_joint[:cumulative_infections]
     trajs = [collect(v) for v in vec(collect(mat))]
@@ -3634,6 +3657,8 @@ infection_trajectory = let
 end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
+    renewal = frozen_matched,
+    renewal_label = "Current model frozen at matched cut-offs and one week back",
     trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
@@ -3755,10 +3780,11 @@ frozen_streams_table #hide
 
 # ### Delay sensitivity
 #
-# This sensitivity re-fit runs on the release and main docs builds and is
-# skipped on PR previews to keep PR builds fast (controlled by the
-# `BVD_RUN_SENSITIVITY` gate in the setup block). On a PR preview the table
-# and figure below are replaced by a short note in place of the re-fit.
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the table and figure below are replaced by a short note in
+# place of the re-fit.
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
@@ -3795,7 +3821,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity runs on release and main builds; skipped on this PR preview build._"
+                          Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3811,7 +3837,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity runs on release and main builds; skipped on this PR preview build._"
+                        Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3821,10 +3847,11 @@ delay_sensitivity_fig #hide
 
 # ### Clock-rate sensitivity
 #
-# This sensitivity re-fit runs on the release and main docs builds and is
-# skipped on PR previews to keep PR builds fast (controlled by the
-# `BVD_RUN_SENSITIVITY` gate in the setup block). On a PR preview the tables
-# and figures below are replaced by a short note in place of the re-fit.
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the tables and figures below are replaced by a short note in
+# place of the re-fit.
 #
 # The whole outbreak-age estimate rests on the genetic bound, the oldest
 # date the common ancestor of the sequenced cases can sit, which is set by
@@ -3864,7 +3891,7 @@ T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock) :
-                            Markdown.md"_Clock-rate sensitivity runs on release and main builds; skipped on this PR preview build._"
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3879,7 +3906,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock; scenarios = []) :
-                          Markdown.md"_Clock-rate sensitivity runs on release and main builds; skipped on this PR preview build._"
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3898,7 +3925,7 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => T_baseline_clock,
     "faster clock" => T_fast_clock; digits = 0) :
-                            Markdown.md"_Clock-rate sensitivity runs on release and main builds; skipped on this PR preview build._"
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3915,7 +3942,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "faster clock" => T_fast_clock;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by clock rate") :
-                          Markdown.md"_Clock-rate sensitivity runs on release and main builds; skipped on this PR preview build._"
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
