@@ -3891,11 +3891,11 @@ chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
 
 chamla_w12_fig #hide
 
-# The table reads the matched-date values directly, with the observed column
-# taken to the 23 June cut-off.
+# The matched-date numbers behind these figures are in the dropdown below, with
+# the observed column taken to the 23 June cut-off.
 
 #md # ```@raw html
-#md # <details><summary>Confirmed-case projection comparison table</summary>
+#md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
 #md # ```
 
 chamla_comparison_table = let
@@ -3915,11 +3915,11 @@ chamla_comparison_table = let
             string(obs.confirmed_cases) * " (23 June)"])
 end;
 
+chamla_comparison_table #hide
+
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-chamla_comparison_table #hide
 
 # Beyond the comparison window their central scenario continues to roughly 8200
 # confirmed cases by mid-September, with the high scenario far higher; those
