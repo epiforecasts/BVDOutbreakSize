@@ -505,3 +505,17 @@ end
         ours = ours, observed = observed)
     @test fig isa CairoMakie.Makie.Figure
 end
+
+@testitem "plot_scenario_comparison facets the published scenarios" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_scenario_comparison, REPORT_SCENARIOS_CI
+    ## The real scenario set exercises the parser, the dodge of the swept level,
+    ## and the geographic/back-calc block layout (18 May has no geographic row).
+    ours = Dict("2026-05-18" => (520, 320, 860),
+        "2026-05-20" => (760, 470, 1180),
+        "2026-05-27" => (1250, 720, 2050))
+    fig = plot_scenario_comparison(REPORT_SCENARIOS_CI; ours = ours)
+    @test fig isa CairoMakie.Makie.Figure
+    ## Renders without an `ours` overlay too (every panel still draws).
+    @test plot_scenario_comparison(REPORT_SCENARIOS_CI) isa
+          CairoMakie.Makie.Figure
+end

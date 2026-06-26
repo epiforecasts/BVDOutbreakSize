@@ -3680,10 +3680,13 @@ evolution_fig #hide
 # McCabe et al. published their estimates as scenarios at fixed
 # situation-report cut-offs, each scenario carrying a 95% confidence
 # interval.
-# We show both their reports, the 18 May report and the 20 May update, with
-# those intervals.
-# The two reports share the same geographic-spread scenarios from exported
-# cases and travel volume, so those appear once.
+# We show all three, the 18 May report, the 20 May update and the 27 May
+# Lancet publication, as one panel each, with their intervals kept.
+# Within a panel each method and scenario family is a single line, and the sweep
+# over the nuisance assumptions (case-fatality ratio, geographic window,
+# doubling time) is dodged onto that line rather than spread across rows, so the
+# figure stays compact while every scenario keeps its confidence interval.
+# The geographic-spread scenarios come from exported cases and travel volume.
 # Their back-calculation-from-deaths scenarios differ between the reports,
 # since the 18 May report used 88 reported deaths and the 20 May update 131,
 # with a corrected set of case-fatality ratios.
@@ -3726,31 +3729,22 @@ function _ours_on(date)
     _ci90row(Float64[t[d] for t in _onset_trajs])
 end
 
-## McCabe scenarios with their reported 95% confidence intervals, grouped by
-## report date, then our modelled cumulative onsets on the matching
-## report date with its credible interval.
-mccabe_rows = [(label, mean, lo, hi)
-               for (_, label, mean, lo, hi) in REPORT_SCENARIOS_CI]
-mccabe_groups = [date == "2026-05-18" ? "McCabe et al. (18 May)" :
-                 date == "2026-05-20" ? "McCabe et al. (20 May update)" :
-                 "McCabe et al. (27 May, Lancet)"
-                 for (date, _, _, _, _) in REPORT_SCENARIOS_CI]
+## Our matched cumulative-onset estimate for each report date, keyed by date so
+## it lands beside that vintage's scenarios in its own panel.
+mccabe_ours = Dict(
+    "2026-05-18" => _ours_on("2026-05-18"),
+    "2026-05-20" => _ours_on("2026-05-20"),
+    "2026-05-27" => _ours_on("2026-05-27"))
 
-ours_rows = [("Renewal onsets on 18 May", _ours_on("2026-05-18")...),
-    ("Renewal onsets on 20 May", _ours_on("2026-05-20")...),
-    ("Renewal onsets on 27 May", _ours_on("2026-05-27")...)]
-ours_groups = fill("Our renewal estimate", 3)
-
-matched_rows = vcat(mccabe_rows, ours_rows)
-matched_groups = vcat(mccabe_groups, ours_groups)
-
-matched_comparison_fig = plot_estimate_comparison(matched_rows;
-    xlabel = "Cumulative cases / infections",
-    groups = matched_groups,
-    group_colours = ["McCabe et al. (18 May)" => :grey,
-        "McCabe et al. (20 May update)" => :black,
-        "McCabe et al. (27 May, Lancet)" => :steelblue,
-        "Our renewal estimate" => :firebrick]);
+## One panel per report date; within a panel each method-and-family is one row,
+## with the case-fatality / window / doubling-time sweep dodged onto that single
+## line, so the ~40 scenarios keep their intervals without becoming ~40 rows.
+matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
+    ours = mccabe_ours,
+    date_titles = ["2026-05-18" => "18 May report",
+        "2026-05-20" => "20 May update",
+        "2026-05-27" => "27 May (Lancet)"],
+    xlabel = "Cumulative cases / infections");
 
 #md # ```@raw html
 #md # </details>
@@ -3763,14 +3757,15 @@ matched_comparison_fig #hide
 # Their 95% confidence intervals come from exact negative-binomial counts
 # for the geographic-spread method and a Poisson likelihood profile for the
 # back-calculation from deaths.
-#
-# Side-by-side outbreak-size intervals for the two frozen fits and the
-# current-data fit, so the shift with the data cut-off reads off directly.
 
 #md # ```@raw html
-#md # <details><summary>Frozen-fit C_T table</summary>
+#md # <details><summary>Frozen-fit C_T intervals (kept for the CSV export, not shown)</summary>
 #md # ```
 
+## The estimate-evolution figure above already shows how the size estimate
+## shifts as data accrues, so the side-by-side frozen-fit table is no longer
+## rendered in the report; it is kept only to populate the published
+## `frozen_matched_cutoffs.csv` export.
 frozen_streams_table = streams_table(
     "frozen 20 May" => frozen_C("2026-05-20"),
     "frozen 23 May" => frozen_C("2026-05-23"),
@@ -3780,8 +3775,6 @@ frozen_streams_table = streams_table(
 #md # ```@raw html
 #md # </details>
 #md # ```
-
-frozen_streams_table #hide
 
 # ### Comparison with Chamla et al.
 #
