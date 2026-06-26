@@ -3333,12 +3333,6 @@ confirmed_cfr_fig #hide
 # streams (laboratory-confirmed cases and confirmed deaths), from the
 # no-change projection defined in the methods
 # [one-week-ahead forecast](@ref "One-week-ahead forecast").
-# The suspected reported cases and deaths are no longer reported, so they are
-# not shown as forecast targets.
-# The forecast also projects the isolation/treatment beds — both the bed
-# demand a week ahead (the need under unconstrained supply) and the
-# supply-limited occupancy it produces, whose gap is the projected bed
-# shortfall — and the cumulative recovered total.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3357,7 +3351,15 @@ forecast_summary = forecast_table(forecast);
 #md # </details>
 #md # ```
 
+#md # ```@raw html
+#md # <details><summary>One-week-ahead forecast summary table</summary>
+#md # ```
+
 forecast_summary #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The coming week at a glance, split into the latent quantities and the
 # observations.
