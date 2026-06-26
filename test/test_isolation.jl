@@ -146,7 +146,12 @@ end
 end
 
 @testitem "accumulate_occupancy: balance closes and stays non-negative" begin
-    using BVDOutbreakSize: accumulate_occupancy
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay
+    death_pmf = [0.0, 0.1, 0.2, 0.3, 0.2, 0.2]
+    recover_pmf = vcat(zeros(6), [0.2, 0.3, 0.3, 0.2])
+    ruleout_pmf = [0.0, 0.3, 0.4, 0.3]
+    CFR_iso = 0.35
+
     ## A constant admission inflow with simple discharge series builds a
     ## non-negative running balance; the confirmed sub-stock is a subset of the
     ## occupied BVD stock and the suspect sub-stock is the complement, so the two
@@ -154,11 +159,6 @@ end
     n = 30
     A_bvd = fill(4.0, n)
     A_bg = fill(6.0, n)
-    death_pmf = [0.0, 0.1, 0.2, 0.3, 0.2, 0.2]
-    recover_pmf = vcat(zeros(6), [0.2, 0.3, 0.3, 0.2])
-    ruleout_pmf = [0.0, 0.3, 0.4, 0.3]
-    using BVDOutbreakSize: convolve_delay
-    CFR_iso = 0.35
     deaths = convolve_delay(CFR_iso .* A_bvd, death_pmf)
     recover = convolve_delay((1 - CFR_iso) .* A_bvd, recover_pmf)
     ruleout = convolve_delay(A_bg, ruleout_pmf)
@@ -177,6 +177,36 @@ end
         zeros(n))
     @test all(acc0.O_conf .== 0)
     @test all(acc0.O_susp .≈ acc0.demand)
+
+    ## Declining-occupancy regime: a rising-then-falling admission series so the
+    ## stock peaks and then drains, with a non-trivial abscond rate. This is the
+    ## regime where the old total-only abscond accounting let `O_bvd` exceed `D`
+    ## and silently lost mass. With the two sub-stocks both draining their share
+    ## of absconds the invariant `O_conf + O_susp == D` must hold across the
+    ## whole grid, including the declining tail, with both sub-stocks
+    ## non-negative and the confirmed subset never exceeding the demand.
+    m = 60
+    t = 1:m
+    ramp = @. 30.0 * exp(-((t - 18.0)^2) / (2 * 8.0^2))  # rise then fall
+    A_bvd_d = 0.6 .* ramp
+    A_bg_d = 0.4 .* ramp
+    deaths_d = convolve_delay(CFR_iso .* A_bvd_d, death_pmf)
+    recover_d = convolve_delay((1 - CFR_iso) .* A_bvd_d, recover_pmf)
+    ruleout_d = convolve_delay(A_bg_d, ruleout_pmf)
+    conf_hazard_d = fill(0.4, m)
+    acc_d = accumulate_occupancy(A_bvd_d, A_bg_d, deaths_d, recover_d, ruleout_d,
+        0.02, conf_hazard_d)
+    @test all(acc_d.demand .>= -1e-9)
+    @test all(acc_d.O_conf .>= -1e-9)
+    @test all(acc_d.O_susp .>= -1e-9)
+    @test all(acc_d.O_conf .<= acc_d.O_bvd .+ 1e-9)
+    @test all(acc_d.O_bvd .<= acc_d.demand .+ 1e-9)
+    @test all(abs.(acc_d.O_conf .+ acc_d.O_susp .- acc_d.demand) .< 1e-6)
+    ## The series really does decline (the regime the fix targets), so the tail
+    ## exercises the path where the old accounting lost mass.
+    peak = argmax(acc_d.demand)
+    @test peak < m
+    @test acc_d.demand[end] < acc_d.demand[peak]
 end
 
 @testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
@@ -209,13 +239,18 @@ end
     ## On split days the two sub-stock censuses are scored instead of the total
     ## (a per-day total-OR-split switch); the abscond fraction and the two
     ## reporting breaks (suspect↔confirmed reclassification and the overnight
-    ## total offset) are sampled and stay in range.
+    ## total offset) are sampled and stay in range. The lab / confirmed stream is
+    ## conditioned so the in-care confirmation hazard is non-zero and the split
+    ## is identified (the coherent config).
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
     suspect_incare = (; days = [31, 32, 33], counts = [147, 153, 169])
+    confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
+    lab_history = (; days = [28, 30, 32], counts = [120, 200, 320])
     chn = sample(
         treatment_only_model(33; isolation_history,
+            confirmed_history, confirmed_cases = 110, lab_history,
             treatment_confirmed_incare_history = confirmed_incare,
             treatment_suspect_incare_history = suspect_incare,
             treatment_reclass_break_days = [33]),
@@ -243,11 +278,18 @@ end
 
     ## Days but no counts on the split histories: the two sub-stock censuses are
     ## predictive generators, so their per-day increments are sampled under the
-    ## `confirmed_incare_obs` / `suspect_incare_obs` submodels.
+    ## `confirmed_incare_obs` / `suspect_incare_obs` submodels. The split is only
+    ## identified when the in-care confirmation overlay is non-zero, so the lab /
+    ## confirmed stream is conditioned to supply the hazard (the coherent
+    ## config); without it the split would be unscored (the guarded path is
+    ## covered separately below).
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
+    confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
+    lab_history = (; days = [28, 30, 32], counts = [120, 200, 320])
     chn = sample(
         treatment_only_model(33; isolation_history,
+            confirmed_history, confirmed_cases = 110, lab_history,
             treatment_confirmed_incare_history = (; days = [31, 32, 33],
                 counts = Int[]),
             treatment_suspect_incare_history = (; days = [31, 32, 33],
@@ -279,6 +321,48 @@ end
     C_T = vec(Array(chn[:C_T]))
     @test all(isfinite, C_T)
     @test all(C_T .> 0)
+end
+
+@testitem "occupancy split: no lab data leaves the split unscored and finite" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    ## A published split census but NO lab/confirmed data: the borrowed in-care
+    ## confirmation hazard `τ_test · p_pos` is then structurally zero, so the
+    ## modelled confirmed sub-stock is empty by construction. The split-census
+    ## likelihood must no-op (the split is identified only in the joint where the
+    ## lab pipeline exists) rather than score the observed confirmed-in-care
+    ## against a zero sub-stock and blow up. The fit must run and stay finite,
+    ## with no split-observation keys scored, and the split days fall back to the
+    ## total-occupancy backbone.
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
+    suspect_incare = (; days = [31, 32, 33], counts = [147, 153, 169])
+    chn = sample(
+        treatment_only_model(33; isolation_history,
+            treatment_confirmed_incare_history = confirmed_incare,
+            treatment_suspect_incare_history = suspect_incare),
+        Prior(), 60;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ks = string.(collect(keys(chn)))
+    ## The split census is unscored (no sampled or scored sub-stock increments).
+    @test !any(k -> occursin("confirmed_incare_obs.increments", k), ks)
+    @test !any(k -> occursin("suspect_incare_obs.increments", k), ks)
+    ## The total-occupancy backbone still runs and stays finite (no 1e45 blow-up
+    ## from scoring against a structurally-zero confirmed sub-stock).
+    C_T = vec(Array(chn[:C_T]))
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
+    ## The cut-off bed demand stays a finite, bounded stock (the incoherent
+    ## config used to diverge to ~1e45). Index by the chain key object so
+    ## FlexiChains resolves the submodel-prefixed varname.
+    dem_key = first(k for k in keys(chn)
+    if occursin("expected_bed_demand", string(k)))
+    dem = vec(Array(chn[dem_key]))
+    @test all(isfinite, dem)
+    @test all(dem .< 1.0e6)
 end
 
 @testitem "isolation occupancy: joint prior runs with the live data" tags=[:slow] begin
