@@ -145,6 +145,61 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "accumulate_occupancy: balance closes and stays non-negative" begin
+    using BVDOutbreakSize: accumulate_occupancy
+    ## A constant admission inflow with simple discharge series builds a
+    ## non-negative running balance; the confirmed sub-stock is a subset of the
+    ## occupied BVD stock and the suspect sub-stock is the complement, so the two
+    ## sum to the total demand on every day.
+    n = 30
+    A_bvd = fill(4.0, n)
+    A_bg = fill(6.0, n)
+    death_pmf = [0.0, 0.1, 0.2, 0.3, 0.2, 0.2]
+    recover_pmf = vcat(zeros(6), [0.2, 0.3, 0.3, 0.2])
+    ruleout_pmf = [0.0, 0.3, 0.4, 0.3]
+    using BVDOutbreakSize: convolve_delay
+    CFR_iso = 0.35
+    deaths = convolve_delay(CFR_iso .* A_bvd, death_pmf)
+    recover = convolve_delay((1 - CFR_iso) .* A_bvd, recover_pmf)
+    ruleout = convolve_delay(A_bg, ruleout_pmf)
+    conf_hazard = fill(0.55, n)
+    acc = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.01,
+        conf_hazard)
+    @test all(acc.demand .>= -1e-9)
+    @test all(acc.O_conf .>= -1e-9)
+    @test all(acc.O_susp .>= -1e-9)
+    ## Confirmed is a subset of the occupied BVD stock.
+    @test all(acc.O_conf .<= acc.O_bvd .+ 1e-9)
+    ## Suspect + confirmed = total demand.
+    @test all(abs.(acc.O_conf .+ acc.O_susp .- acc.demand) .< 1e-6)
+    ## A zero confirmation hazard leaves the confirmed sub-stock empty.
+    acc0 = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.01,
+        zeros(n))
+    @test all(acc0.O_conf .== 0)
+    @test all(acc0.O_susp .≈ acc0.demand)
+end
+
+@testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
+    using BVDOutbreakSize: admission_headroom
+    ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a
+    ## slack admission count is censored at the headroom, a saturated count is
+    ## kept strictly inside the support (obs + 0.5), so it never sits on the
+    ## non-differentiable NegBin-CDF boundary.
+    capacity_history = (; days = [9, 10], counts = [400, 410])
+    isolation_history = (; days = [9, 10], counts = [260, 262])
+    adm_days = [10, 11]
+    adm_obs = [50, 300]
+    head = admission_headroom(adm_days, adm_obs, capacity_history,
+        isolation_history)
+    @test head[1] ≈ 410 - 260            # day 10: capacity 410 less prev occ 260
+    @test head[2] > adm_obs[2]           # day 11: saturated, strictly above obs
+    @test all(head .> adm_obs .- 1e-9)
+    ## No capacity record gives a large no-op headroom.
+    nocap = admission_headroom([10], [50], (; days = Int[], counts = Int[]),
+        isolation_history)
+    @test only(nocap) > 1.0e5
+end
+
 @testitem "occupancy split: sub-stock parameters sampled, fit stays positive" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -152,9 +207,9 @@ end
 
     ## Occupancy on days 28-33 with a published split on the last three days.
     ## On split days the two sub-stock censuses are scored instead of the total
-    ## (a per-day total-OR-split switch); the split local parameters
-    ## (`f_in_care`, the two sub-stock length-of-stay means and the
-    ## reclassification break) are sampled and stay in range.
+    ## (a per-day total-OR-split switch); the abscond fraction and the two
+    ## reporting breaks (suspect↔confirmed reclassification and the overnight
+    ## total offset) are sampled and stay in range.
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
@@ -167,17 +222,18 @@ end
         Prior(), 60;
         chain_type = FlexiChains.VNChain, progress = false)
     ks = string.(collect(keys(chn)))
-    @test any(k -> occursin("f_in_care", k), ks)
     @test any(k -> occursin("reclass_break", k), ks)
+    @test any(k -> occursin("total_break", k), ks)
+    @test any(k -> occursin("abscond_frac", k), ks)
     C_T = vec(Array(chn[:C_T]))
     @test all(isfinite, C_T)
     @test all(C_T .> 0)
-    ## The in-care fraction stays a valid probability under the prior. Index by
-    ## the chain key object itself (FlexiChains resolves the submodel-prefixed
-    ## varname), not a reconstructed Symbol.
-    fic_key = first(k for k in keys(chn) if occursin("f_in_care", string(k)))
-    fic = vec(Array(chn[fic_key]))
-    @test all(0 .<= fic .<= 1)
+    ## The abscond fraction stays a small non-negative loss-to-follow-up rate
+    ## under the prior. Index by the chain key object itself (FlexiChains
+    ## resolves the submodel-prefixed varname), not a reconstructed Symbol.
+    ab_key = first(k for k in keys(chn) if occursin("abscond_frac", string(k)))
+    ab = vec(Array(chn[ab_key]))
+    @test all(ab .>= 0)
 end
 
 @testitem "occupancy split: predictive path samples the sub-stock censuses" tags=[:slow] begin

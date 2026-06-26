@@ -187,15 +187,20 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
-    ## Confirmed-case incidence: run (in predictive mode when no confirmed data)
-    ## so the occupancy split has a `confirmed_daily` inflow to consume. The
-    ## occupancy split is a no-op without it, but the standalone fit conditions
-    ## on the confirmed stream so `f_in_care` is identified against real data.
+    ## Confirmed-case lab pipeline: run (in predictive mode when no confirmed
+    ## data) so the treatment model can borrow the daily testing intensity and
+    ## positivity for the in-care confirmation overlay. The confirmation hazard
+    ## `τ_test · p_pos` is a no-op (zero) without it, but the standalone fit
+    ## conditions on the confirmed stream so the in-care confirmed sub-stock is
+    ## identified against real data.
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history, tests_analysed))
+    ## Daily in-care confirmation hazard: the scalar testing intensity times the
+    ## per-day positivity expanded onto the grid.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, cfr_state.CFR;
@@ -206,7 +211,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
-        confirmed_daily = confirmed_state.confirmed_daily,
+        conf_hazard_daily = conf_hazard_daily,
         reclass_break_days = treatment_reclass_break_days))
 end
 
@@ -558,11 +563,14 @@ death-confirmation positivity (`death_confirmation`).
     ## fatality CFR_iso (a modifier on the infection CFR) identified by the
     ## in-care death flow. The Tableau 6 flow histories are optional refinements
     ## (empty → no-op).
-    ## The occupancy split consumes the confirmed-case incidence
-    ## (`confirmed_state.confirmed_daily`) as the confirmed-in-care inflow and is
-    ## scored against the Tableau 6 `dont confirmes` / `dont suspects` census on
-    ## the days they are present (a per-day total-OR-split switch). The known
-    ## DHIS2 harmonisation days carry a sparse reclassification break.
+    ## The occupancy split borrows the daily in-care confirmation hazard
+    ## `τ_test · p_pos` from the confirmed lab pipeline (`confirmed_state`) and
+    ## carves the occupied true-case stock into a confirmed and a suspect
+    ## sub-stock, scored against the Tableau 6 `dont confirmes` / `dont suspects`
+    ## census on the days they are present (a per-day total-OR-split switch). The
+    ## known DHIS2 harmonisation days carry the reclassification and overnight
+    ## total reporting breaks.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, deaths_state.CFR;
@@ -573,7 +581,7 @@ death-confirmation positivity (`death_confirmation`).
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
-        confirmed_daily = confirmed_state.confirmed_daily,
+        conf_hazard_daily = conf_hazard_daily,
         reclass_break_days = treatment_reclass_break_days,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
@@ -664,6 +672,11 @@ death-confirmation positivity (`death_confirmation`).
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
                                  treatment_state.expected_isolation)
+    ## Cut-off occupancy split: the confirmed-in-care and suspect-in-care
+    ## sub-stock prevalences carved from the occupied true-case stock by the
+    ## confirmation overlay.
+    expected_confirmed_incare_T := treatment_state.expected_confirmed_incare
+    expected_suspect_incare_T := treatment_state.expected_suspect_incare
     ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
     expected_admissions_T := treatment_state.expected_admissions
     expected_incare_deaths_T := treatment_state.expected_incare_deaths

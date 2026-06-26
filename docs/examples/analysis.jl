@@ -1330,28 +1330,32 @@ cfr_prior_fig #hide
 # ("cumul guéris") are the confirmed-and-discharged subset and are modelled as a
 # separate confirmed-recovery stream (below).
 #
-# Beds can be supply-driven, with demand outstripping supply and occupancy
-# catching up as capacity expands, so the occupied beds are the suspect
-# admissions carried through a length-of-stay survival
-# $S(\tau) = P(\text{LOS} \ge \tau)$ into a supply-limited occupancy (the renewal
-# analogue of the convolution secondary-observation model of EpiNow2
-# [epinow2](@cite)). A proportion $p_{\text{iso}}$ of the reported suspects need
-# a bed, splitting into BVD and non-BVD admissions that leave on different
-# clocks, so the latent bed demand sums two survival convolutions,
+# Occupancy is built as a compartmental event-accumulation balance: the latent
+# bed stock is a forward day-by-day running total of admission, discharge and
+# abscond events, not a convolution. A proportion $p_{\text{iso}}$ of the
+# reported suspects need a bed, splitting into a BVD true-case inflow
+# $A_{\text{bvd},t} = p_{\text{iso,bvd}}\,p_{\text{DRC}}\,\text{bvd}_t$ and a
+# non-BVD inflow $A_{\text{bg},t} = p_{\text{iso}}\,\lambda_{\text{bg},t}$
+# carried through a short suspected-to-admission delay. The discharge events are
+# label-independent (the clinical course does not depend on the lab label, so a
+# true case can die before confirmation): in-care deaths
+# $\text{CFR}_{\text{iso}}\,A_{\text{bvd}}$ through the admission-to-death stay,
+# recoveries $(1 - \text{CFR}_{\text{iso}})\,A_{\text{bvd}}$ through the longer
+# admission-to-recovery stay, and rule-outs $A_{\text{bg}}$ through the rule-out
+# stay; absconds drain the suspect pool at $\kappa\,O_{\text{susp},t-1}$. The
+# total latent demand is the running balance
 #
 # ```math
-# D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
-#       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
-#       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right],
+# D_t = D_{t-1} + A_t - \text{deaths}_t - \text{recoveries}_t
+#       - \text{rule-outs}_t - \text{absconds}_t,
 # ```
 #
-# where the BVD stay $S_{\text{BVD}}$ is itself an outcome mixture: an admitted
-# BVD patient leaves by death (weight $\text{CFR}_{\text{iso}}$, the
-# admission-to-death stay) or by recovery (weight $1 - \text{CFR}_{\text{iso}}$,
-# a longer admission-to-recovery stay). The death-stay prior is the
+# with $A = A_{\text{bvd}} + A_{\text{bg}}$. The death-stay prior is the
 # admission-to-death delay from the line-list reanalysis
-# [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay
-# $S_{\text{ruleout}}$ takes the report-to-receipt laboratory turnaround.
+# [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay takes the
+# report-to-receipt laboratory turnaround. In-care deaths are suspect plus
+# confirmed combined (the Tableau 6 `décédés` row), scored against the death
+# flow directly and never gated by confirmation.
 #
 # The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the
 # infection CFR,
@@ -1371,11 +1375,15 @@ cfr_prior_fig #hide
 # divided by the reported "Taux d'occupation" rate ($\approx 400 \to 452$ beds
 # over 9–13 June).
 #
-# The occupied beds are scored as the latent demand right-censored at the
-# recorded implied capacity $C^{\text{cap}}_j$ (so the demand above a saturated
-# capacity is left uncensored), and the daily admissions and discharges (in-care
-# deaths, rule-outs, absconded) are scored as additional count streams $F_j$
-# sharing the dispersion $k_{\text{iso}}$,
+# Capacity enters only as a fixed, data-derived censoring bound on the
+# observations — the latent demand stays uncapped (it is the demand). The
+# occupied beds are scored as the latent demand right-censored at the recorded
+# implied capacity $C^{\text{cap}}_j$ (so the demand above a saturated capacity
+# is left uncensored), the daily admissions right-censored at the recorded
+# free-bed headroom $C^{\text{cap}}_j - O^{\text{obs}}_{j-1}$ (the admissions
+# analogue of the occupancy censor), and the daily discharges (in-care deaths,
+# rule-outs, absconded) scored as additional count streams $F_j$ sharing the
+# dispersion $k_{\text{iso}}$,
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
@@ -1384,10 +1392,10 @@ cfr_prior_fig #hide
 # F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}),
 # ```
 #
-# with each $\mu^{F}_t$ the matching branch of the demand (the BVD and non-BVD
-# inflow, $\text{CFR}_{\text{iso}}$ of BVD admissions through the death stay, the
-# non-BVD admissions through the rule-out stay, and a small fraction of
-# occupancy), and the implied capacity carried by a NegBinomial of its own.
+# with each $\mu^{F}_t$ the matching event series (the BVD and non-BVD inflow,
+# $\text{CFR}_{\text{iso}}$ of BVD admissions through the death stay, the non-BVD
+# admissions through the rule-out stay, and the abscond outflow), and the implied
+# capacity carried by a NegBinomial of its own.
 #
 # Occupancy below capacity identifies the demand directly; the part of demand
 # above a saturated capacity is only partially identified, since occupancy says
@@ -1403,31 +1411,37 @@ cfr_prior_fig #hide
 #
 # From 13 June the Tableau 6 occupancy is published with a two-row breakdown,
 # `dont confirmés (NC+AC)` and `dont suspects`, which sum to the total each day.
-# We split the total occupancy into a confirmed-in-care and a suspect-in-care
-# prevalence sub-stock and score the two census series in place of the total on
-# the days they are present (a per-day total-or-split switch, so the total and
-# its parts are never both scored on one day). Both sub-stocks are derived from
-# the existing latents rather than re-estimated. Most daily confirmations are
-# posthumous or community (corpse swabs, late confirmations) and never occupy a
-# bed, so the confirmed-in-care inflow is an in-care fraction $f_{\text{in-care}}$
-# of the modelled confirmed-case incidence, carried through a confirmed-in-care
-# residence $S_{\text{conf}}$ (confirmation to death or recovery),
+# A label overlay carves the occupied stock into a confirmed and a suspect
+# sub-stock without removing anyone from the total, and we score the two census
+# series in place of the total on the days they are present (a per-day
+# total-or-split switch, so the total and its parts are never both scored on one
+# day). Confirmation is a relabelling of an occupied true case at the daily
+# hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ borrowed from the confirmed lab
+# pipeline, not a separate compartment a patient must enter before dying, so the
+# confirmed sub-stock is the confirmed subset of the occupied BVD true-case stock
+# $O_{\text{bvd}}$,
 #
 # ```math
-# \text{conf-in-care}_t = \sum_{s \ge 0} f_{\text{in-care}}\,
-#     \text{confirmed}_{t-s}\, S_{\text{conf}}(s),
+# O_{\text{conf},t} = O_{\text{conf},t-1}
+#     + \tau_{\text{test}}\,p_{\text{pos},t}\,
+#       (O_{\text{bvd},t-1} - O_{\text{conf},t-1})
+#     - (\text{deaths}_t + \text{recoveries}_t)\,
+#       \frac{O_{\text{conf},t-1}}{O_{\text{bvd},t-1}},
 # ```
 #
-# with the confirmed-in-care census pinning the residual $f_{\text{in-care}}$.
-# The suspect-in-care stock is the admission inflow through a suspect residence
-# $S_{\text{susp}}$ (admission to rule-out, confirmation or abscond). Because the
-# Tableau 6 `décédés` row combines suspects and confirmed, confirmed-in-care
-# deaths are attributed as $\text{CFR}_{\text{iso}}$ of the confirmed-in-care
-# inflow through the death stay rather than read off a flow. The between-report
-# DHIS2 harmonisation days carry a sparse, tightly-bounded reclassification step
-# that moves patients between the two sub-stocks without changing the total bed
-# count. The split does not change the 1–12 June occupancy (no breakdown is
-# published before 13 June, so the total backbone carries that window).
+# the confirmed cases draining at the confirmed share of the BVD discharges, and
+# the suspect sub-stock is the remainder $O_{\text{susp},t} = D_t -
+# O_{\text{conf},t}$ (the non-BVD rule-out occupancy plus the not-yet-confirmed
+# BVD occupancy). A true case that dies before confirmation is therefore a
+# suspect death, included in the single combined deaths flow; recoveries among
+# the confirmed (the "cumul guéris" stream) are the confirmed subset of
+# recoveries. The between-report DHIS2 harmonisation days carry a sparse,
+# tightly-bounded reclassification step that moves patients between the two
+# sub-stocks without changing the total, and a fitted overnight reporting-break
+# offset on the same days shifts the modelled total to absorb the `au-lit-J-1`
+# versus `Fin-J` overnight gap. The split does not change the 1–12 June occupancy
+# (no breakdown is published before 13 June, so the total backbone carries that
+# window).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
