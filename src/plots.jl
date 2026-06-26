@@ -1171,9 +1171,9 @@ end
 ## forecast new-count draws with its 90% predictive interval shaded.
 function _forecast_count_panel!(fig, pos, v, title, colour)
     r, c = pos
-    ## 99th-percentile x-axis cap so a heavy forecast tail does not squash the
+    ## 98th-percentile x-axis cap so a heavy forecast tail does not squash the
     ## readable bulk of the histogram.
-    upper = max(1.0, quantile(v, 0.99))
+    upper = max(1.0, quantile(v, 0.98))
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
     ax = Axis(fig[r, c];
@@ -1270,12 +1270,12 @@ function plot_forecast_beds(fc::DataFrame)
     occ = float.(fc[!, :isolation_level])
     shortfall = max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
-    ## Cap the x-axis at the 99th percentile of demand: the unconstrained
+    ## Cap the x-axis at the 98th percentile of demand: the unconstrained
     ## bed-demand projection is heavy-tailed (it grows with the reproduction
     ## number over the horizon), so its long upper tail otherwise squashes the
     ## readable bulk of both densities. Occupancy is capped at capacity, so it
     ## sits below this bound.
-    upper = max(1.0, quantile(demand, 0.99))
+    upper = max(1.0, quantile(demand, 0.98))
     ax1 = Axis(fig[1, 1];
         xlabel = "Isolation beds a week ahead (DRC)",
         ylabel = "Predictive density", title = "Need vs supply-limited use",

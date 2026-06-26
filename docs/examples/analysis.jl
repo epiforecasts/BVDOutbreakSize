@@ -3454,7 +3454,15 @@ validation_table = forecast_vs_truth(validation_forecast;
 #md # </details>
 #md # ```
 
+#md # ```@raw html
+#md # <details><summary>Forecast-versus-observed validation table</summary>
+#md # ```
+
 validation_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The observation panels histogram the one-week-ahead cumulative forecast
 # made from the frozen fit, with the 90% predictive interval shaded and the
