@@ -1983,18 +1983,12 @@ released_df = CSV.read(
     joinpath(pkgdir(BVDOutbreakSize), "data", "released_estimates.csv"),
     DataFrame)
 
-## Integral-era release cut-offs for the frozen renewal overlay: a
-## release whose data cut-off already has a renewal release needs no
-## re-fit, since that release already is the renewal estimate. 20, 23 and
-## 27 May are additionally fit for the matched-cutoff comparison further
-## down (27 May matches the Lancet publication's cut-off).
-renewal_release_dates = Set(string(r.date)
-for r in eachrow(released_df) if r.model == "renewal")
-frozen_evolution_cutoffs = sort(unique(string(r.date)
-for r in eachrow(released_df)
-if r.model == "integral" && string(r.date) ∉ renewal_release_dates))
-frozen_cutoffs = sort(union(frozen_evolution_cutoffs,
-    ["2026-05-20", "2026-05-23", "2026-05-27"]))
+## Frozen joint re-fits at the cut-offs McCabe et al. used (27 May matches
+## the Lancet publication's cut-off), for the matched-in-time comparison
+## further down. The estimate-evolution overlay relies on the published
+## per-release estimates in `released_df`, so no per-release-date current-
+## model re-fits are run here.
+frozen_cutoffs = ["2026-05-20", "2026-05-23", "2026-05-27"]
 
 ## A joint fit at the full headline settings (1000 draws × 2 chains) to the
 ## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
@@ -2093,13 +2087,14 @@ clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
 tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
 ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
-## joint fits. They are PAUSED due to compute constraints: the serial
-## sensitivity re-fits pushed the main docs build toward the 6h CI cap, so they
-## are not run on any build for now. The code below is retained unchanged;
-## re-enable by restoring the `BVD_RUN_SENSITIVITY` env gate:
-##   RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
-##       "false"))) in ("true", "1", "yes", "on")
-RUN_SENSITIVITY = false
+## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
+## release builds only (tag pushes, which deploy the versioned docs) and are
+## skipped on main pushes and PR previews to keep those docs builds fast:
+## `.github/workflows/docs.yml` sets the var to
+## `startsWith(github.ref, 'refs/tags/')`. Set `BVD_RUN_SENSITIVITY=true`
+## to run them locally.
+RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
+    "false"))) in ("true", "1", "yes", "on")
 
 ## Every independent fit runs as one work-stealing pool so the long joint fit
 ## overlaps the per-stream, frozen and (gated) sensitivity re-fits and keeps
@@ -2348,14 +2343,12 @@ diagnostics_table( #hide
 # driven by newer data can be distinguished from one driven by a change of
 # method. Each frozen re-fit uses the
 # full headline settings (1000 draws across two chains). The same frozen re-fit is
-# reused to compare against McCabe et al. at the cut-offs they used, and to
-# trace how the estimate moved as the situation reports accrued, re-fitting
-# the renewal model frozen at each release date. The helper below performs
-# one frozen joint re-fit and is reused by the forecast validation,
-# estimate-evolution and matched-in-time results.
+# reused to compare against McCabe et al. at the cut-offs they used. The helper
+# below performs one frozen joint re-fit and is reused by the forecast
+# validation and matched-in-time results.
 
 #md # ```@raw html
-#md # <details><summary>Frozen-fit helper (reused by the forecast validation, evolution and matched-in-time sections)</summary>
+#md # <details><summary>Frozen-fit helper (reused by the forecast validation and matched-in-time sections)</summary>
 #md # ```
 
 ## fit_frozen_joint and the frozen re-fits are defined and run in the setup
@@ -3595,17 +3588,18 @@ stream_rt_fig #hide
 # model from v1.4.0 on.
 # Each release is its own fit, so it is drawn as a discrete estimate, a
 # median with nested 30/60/90% interval bars, rather than a ribbon.
-# The renewal series, in red, is the renewal model re-fit frozen at each
-# integral-era release cut-off.
-# The renewal-era releases already are renewal fits, so they carry no frozen
-# re-fit.
+# The current model frozen at earlier cut-offs is drawn in red as discrete
+# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
+# and 27 May) and one week before the current cut-off. These are the frozen
+# joint fits already computed for the matched-in-time comparison and the
+# forecast validation, reused here, so no extra fits are run.
 # The current-data, current-model estimate is drawn in green as the
 # cumulative-infection trajectory over time, a single fit shown across the
 # period so the latest estimate reads against the earlier ones.
 # Each release date is marked with a dotted vertical rule.
 
 #md # ```@raw html
-#md # <details><summary>Released estimates and frozen renewal re-fits</summary>
+#md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
 #md # ```
 
 ## Released median and 30/60/90% intervals per release, from
@@ -3614,20 +3608,22 @@ stream_rt_fig #hide
 release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
                          r.lo90, r.hi90) for r in eachrow(released_df)]
 
-## The current renewal model re-fit frozen at each integral-era release
-## cut-off, each its own discrete estimate. Each tuple carries the median
-## and 30/60/90% credible bounds.
+## The current model frozen at earlier cut-offs, each its own discrete
+## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
+## for the matched-in-time comparison below, plus the one-week-back
+## validation fit (`frozen_lastweek`, at `validation_cutoff`) already
+## computed for the forecast validation above. Both are reused here so the
+## current-model estimate at those earlier cut-offs reads against the
+## released overlay, including a recent point one week before the cut-off.
+## No extra fits are run. Each tuple carries the median and 30/60/90%
+## credible bounds from the frozen `C_T` draws.
 function _ci369(xs)
     q(p) = round(Int, quantile(xs, p))
     (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
 end
-## Reuse the one-week-back frozen fit (already run for forecast validation)
-## as an additional recent renewal point, so the evolution plot shows the
-## current-vintage frozen estimate without an extra re-fit.
 frozen_by_cutoff[validation_cutoff] = frozen_lastweek
-renewal_frozen = [(c, _ci369(frozen_C(c))...)
-                  for c in sort(union(frozen_evolution_cutoffs,
-    [validation_cutoff]))]
+frozen_matched = [(c, _ci369(frozen_C(c))...)
+                  for c in sort(union(frozen_cutoffs, [validation_cutoff]))]
 
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
@@ -3635,7 +3631,7 @@ renewal_frozen = [(c, _ci369(frozen_C(c))...)
 ## is the same latent quantity the cumulative-trajectory figure shows, so
 ## the current estimate rises over time on the release-date axis instead of
 ## sitting flat. Drawn against calendar dates, it lines up with the
-## release and frozen-renewal points.
+## release and frozen points.
 infection_trajectory = let
     mat = chn_joint[:cumulative_infections]
     trajs = [collect(v) for v in vec(collect(mat))]
@@ -3652,7 +3648,8 @@ infection_trajectory = let
 end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
-    renewal = renewal_frozen,
+    renewal = frozen_matched,
+    renewal_label = "Current model frozen at matched cut-offs and one week back",
     trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
@@ -3774,10 +3771,11 @@ frozen_streams_table #hide
 
 # ### Delay sensitivity
 #
-# **Paused due to compute constraints.** This sensitivity re-fit is not run in
-# the current build to keep the docs build within compute limits. The method
-# and code are unchanged and it can be re-enabled (see the sensitivity gate in
-# the setup block); the description below documents what it does.
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the table and figure below are replaced by a short note in
+# place of the re-fit.
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
@@ -3814,7 +3812,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity is paused due to compute constraints._"
+                          Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3830,7 +3828,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity is paused due to compute constraints._"
+                        Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3840,10 +3838,11 @@ delay_sensitivity_fig #hide
 
 # ### Clock-rate sensitivity
 #
-# **Paused due to compute constraints.** This sensitivity re-fit is not run in
-# the current build to keep the docs build within compute limits. The method
-# and code are unchanged and it can be re-enabled (see the sensitivity gate in
-# the setup block); the description below documents what it does.
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the tables and figures below are replaced by a short note in
+# place of the re-fit.
 #
 # The whole outbreak-age estimate rests on the genetic bound, the oldest
 # date the common ancestor of the sequenced cases can sit, which is set by
@@ -3883,7 +3882,7 @@ T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock) :
-                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3898,7 +3897,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("baseline clock" => posterior_C_joint,
     "faster clock" => posterior_C_fast_clock; scenarios = []) :
-                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3917,7 +3916,7 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("baseline clock" => T_baseline_clock,
     "faster clock" => T_fast_clock; digits = 0) :
-                            Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -3934,7 +3933,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "faster clock" => T_fast_clock;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by clock rate") :
-                          Markdown.md"_Clock-rate sensitivity is paused due to compute constraints._"
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
