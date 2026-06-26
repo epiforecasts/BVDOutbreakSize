@@ -3378,9 +3378,6 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 
 forecast_latent_fig #hide
 
-# The observation figure shows the new confirmed cases and confirmed deaths
-# over the horizon.
-
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
 #md # ```
@@ -3485,11 +3482,8 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 
 validation_fig #hide
 
-# The bed panel scores last week's projected isolation-bed occupancy against
-# the beds actually occupied now (the dashed rule). At a one-week-back freeze
-# the capacity has no implied-capacity anchor (the occupancy rate starts only
-# on 9 June), so the projection rides the capacity random walk back to the
-# freeze date and its interval is wide.
+# The bed panel scores last week's projected occupancy against the beds
+# occupied now (the dashed rule).
 
 #md # ```@raw html
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
