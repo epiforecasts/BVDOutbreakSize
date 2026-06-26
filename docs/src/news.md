@@ -6,6 +6,61 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.7.0
+
+Changes since v1.6.0.
+
+### Data
+
+- Added the situation-report `Tableau 6` treatment-centre patient-movement
+  flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
+  rule-outs and absconded patients (13–23 June), alongside the overnight
+  `Patients au lit (J-1)` count. Each stream is resilient: an empty history
+  is a no-op, so the model degrades to the occupancy backbone where a flow is
+  not reported. Advanced the data to situation report 040 (23 June).
+
+### Model
+
+- Reworked the isolation submodel into a treatment-centre flow model that
+  fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
+  outcome mixture, with the death and recovery branches weighted by an in-care
+  case-fatality `CFR_iso = logistic(logit(CFR) + β_iso)` — a reported modifier
+  on the infection case-fatality, identified by the in-care death flow rather
+  than estimated independently. The daily discharge flows are scored as
+  optional negative-binomial streams (resolves #338).
+- Added a fitted occupancy reporting-break offset on the days the overnight
+  opening census departs materially from the previous day's close (the DHIS2
+  harmonisation steps on 17, 19 and 22 June). Each break is a point adjustment
+  centred on the observed gap but free to move, applied on those identified
+  days only, so reporting reclassification no longer bends the latent bed
+  demand.
+
+### Report and forecasts
+
+- Added one-week-ahead forecasts for the treatment-centre admissions, in-care
+  deaths and rule-outs.
+- Added a per-stream calibration plot (with the calibration table kept in a
+  collapsible block), and posterior-predictive panels for the four flow
+  streams. The treatment-centre flow methods section was rewritten, and the
+  flow streams added to the data-overview table.
+- Added a comparison of the confirmed-case projection against Chamla et al.
+  as a second external comparator, forward-projected from the frozen 27 May
+  fit (resolves #340).
+- Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
+  automatically in continuous integration before each documentation deploy.
+  Dropped the per-release current-model re-fits from the estimate-evolution
+  plot, keeping the matched-McCabe cut-offs and the one-week-back validation
+  fit (resolves #341).
+- Tightened the reproduction-number plot y-axis to 1.2 times the 90% upper
+  bound so the credible band is legible (resolves #342).
+
+### Fixes
+
+- Relaxed the `tau_death` test assertion to non-negativity: the joint exposes
+  the realised cut-off death-testing intensity (analysed over suspected, a
+  diagnostic computed independently of the death volume), which is not a
+  probability and can exceed one in a backlog regime.
+
 ## v1.6.0
 
 Changes since v1.5.0.
