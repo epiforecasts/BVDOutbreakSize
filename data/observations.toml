@@ -271,6 +271,29 @@ dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
 values = [0, 1, 6, 1, 3, 2, 5, 6, 4, 1, 0]
 source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) Tableau 6 row `Evades (Suspects/Conf.)`, national Ensemble column, read from the PDFs: 0, 1, 6, 1, 3, 2, 5, 6, 4, 1, 0 on 13-23 June. A small abscond / loss-to-follow-up outflow (the `Transferes a l'HGR` exit is ~0-1/day and is folded in / not separately tracked). SitRep 029 (12 June) was not published."
 
+# Start-of-day in-bed count (`Patients au lit (J-1)`, national Ensemble),
+# the bed stock at the start of each reporting day before that day's
+# admissions and discharges. It is the same patient stock as the
+# end-of-day `Patients en isolement (Fin J)` occupancy, but read at the
+# start of the day, so `au-lit(J-1)(t)` should equal the previous report
+# day's `isolation_history` occupancy. Where it does not, the gap is a
+# between-report DHIS2 reclassification jump (e.g. the 19 June drop from
+# 416 to 342), a discontinuity the smooth inflow-through-survival demand
+# cannot reproduce. The treatment-flow submodel uses these gaps to identify
+# the break days (a material `|gap|`) and to centre a fitted break-step
+# prior; the sampled steps accumulate into a cumulative offset `Δ(t)` added
+# to the modelled occupancy mean, so the modelled occupancy tracks the
+# reclassified observed series and the residual stays smooth (the fit no
+# longer bends Rt to chase the reclassification) while still partitioning
+# each step into reporting-artifact vs real demand with uncertainty.
+# Optional: an absent or empty block leaves Δ = 0, a no-op.
+[treatment_aulit_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Patients au lit (J-1)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387 on 13-23 June. Start-of-day in-bed stock (before that day's admissions/discharges); the same patient stock as the end-of-day `Patients en isolement (Fin J)` occupancy read at the start of the day. The break against the previous report day's occupancy (e.g. 19 June au-lit 342 vs 18 June Fin J 416) is the between-report DHIS2 reclassification jump the treatment-flow offset absorbs. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
 # `cumulative_tests_analysed`) are derived from the final vintage of the
