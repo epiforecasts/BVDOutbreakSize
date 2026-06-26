@@ -145,6 +145,86 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "occupancy split: sub-stock parameters sampled, fit stays positive" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    ## Occupancy on days 28-33 with a published split on the last three days.
+    ## On split days the two sub-stock censuses are scored instead of the total
+    ## (a per-day total-OR-split switch); the split local parameters
+    ## (`f_in_care`, the two sub-stock length-of-stay means and the
+    ## reclassification break) are sampled and stay in range.
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
+    suspect_incare = (; days = [31, 32, 33], counts = [147, 153, 169])
+    chn = sample(
+        treatment_only_model(33; isolation_history,
+            treatment_confirmed_incare_history = confirmed_incare,
+            treatment_suspect_incare_history = suspect_incare,
+            treatment_reclass_break_days = [33]),
+        Prior(), 60;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ks = string.(collect(keys(chn)))
+    @test any(k -> occursin("f_in_care", k), ks)
+    @test any(k -> occursin("reclass_break", k), ks)
+    C_T = vec(Array(chn[:C_T]))
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
+    ## The in-care fraction stays a valid probability under the prior. Index by
+    ## the chain key object itself (FlexiChains resolves the submodel-prefixed
+    ## varname), not a reconstructed Symbol.
+    fic_key = first(k for k in keys(chn) if occursin("f_in_care", string(k)))
+    fic = vec(Array(chn[fic_key]))
+    @test all(0 .<= fic .<= 1)
+end
+
+@testitem "occupancy split: predictive path samples the sub-stock censuses" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    ## Days but no counts on the split histories: the two sub-stock censuses are
+    ## predictive generators, so their per-day increments are sampled under the
+    ## `confirmed_incare_obs` / `suspect_incare_obs` submodels.
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    chn = sample(
+        treatment_only_model(33; isolation_history,
+            treatment_confirmed_incare_history = (; days = [31, 32, 33],
+                counts = Int[]),
+            treatment_suspect_incare_history = (; days = [31, 32, 33],
+                counts = Int[])),
+        Prior(), 40;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ks = string.(collect(keys(chn)))
+    @test any(k -> occursin("confirmed_incare_obs.increments", k), ks)
+    @test any(k -> occursin("suspect_incare_obs.increments", k), ks)
+end
+
+@testitem "occupancy split: empty split history is a no-op" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    ## With no split history the two sub-stock census likelihoods score nothing
+    ## (no days → no scored or sampled increments), so no split-observation keys
+    ## appear, while the total-occupancy backbone still runs.
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    chn = sample(
+        treatment_only_model(33; isolation_history),
+        Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false)
+    ks = string.(collect(keys(chn)))
+    @test !any(k -> occursin("confirmed_incare_obs.increments", k), ks)
+    @test !any(k -> occursin("suspect_incare_obs.increments", k), ks)
+    C_T = vec(Array(chn[:C_T]))
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
+end
+
 @testitem "isolation occupancy: joint prior runs with the live data" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
@@ -166,6 +246,11 @@ end
         suspected_daily_history = obs.suspected_daily_history,
         isolation_history = obs.isolation_history,
         bed_capacity_history = obs.bed_capacity_history,
+        treatment_confirmed_incare_history =
+        obs.treatment_confirmed_incare_history,
+        treatment_suspect_incare_history =
+        obs.treatment_suspect_incare_history,
+        treatment_reclass_break_days = obs.treatment_reclass_break_days,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,

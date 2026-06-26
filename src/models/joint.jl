@@ -160,11 +160,19 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
+        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
+        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
+        treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_history = (; days = Int[], counts = Int[]),
+        confirmed_cases::Union{Missing, Integer} = missing,
+        lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
+        tests_analysed::Union{Missing, Integer} = missing,
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
+        confirmed = confirmed_cases_model,
         treatment = treatment_flow_model,
         cfr = cfr_model(),
         dispersion = surveillance_dispersion_model(),
@@ -179,6 +187,15 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
+    ## Confirmed-case incidence: run (in predictive mode when no confirmed data)
+    ## so the occupancy split has a `confirmed_daily` inflow to consume. The
+    ## occupancy split is a no-op without it, but the standalone fit conditions
+    ## on the confirmed stream so `f_in_care` is identified against real data.
+    confirmed_state ~ to_submodel(
+        confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
+        p_drc, cases_state.bg_daily, cases_state.τ_test,
+        cases_state.bvd_reports_daily;
+        lab_history, lab_daily_history, tests_analysed))
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, cfr_state.CFR;
@@ -187,7 +204,10 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
         absconded_history = treatment_absconded_history,
-        aulit_history = treatment_aulit_history))
+        confirmed_incare_history = treatment_confirmed_incare_history,
+        suspect_incare_history = treatment_suspect_incare_history,
+        confirmed_daily = confirmed_state.confirmed_daily,
+        reclass_break_days = treatment_reclass_break_days))
 end
 
 """
@@ -393,7 +413,9 @@ death-confirmation positivity (`death_confirmation`).
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
+        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
+        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
+        treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -536,6 +558,11 @@ death-confirmation positivity (`death_confirmation`).
     ## fatality CFR_iso (a modifier on the infection CFR) identified by the
     ## in-care death flow. The Tableau 6 flow histories are optional refinements
     ## (empty → no-op).
+    ## The occupancy split consumes the confirmed-case incidence
+    ## (`confirmed_state.confirmed_daily`) as the confirmed-in-care inflow and is
+    ## scored against the Tableau 6 `dont confirmes` / `dont suspects` census on
+    ## the days they are present (a per-day total-OR-split switch). The known
+    ## DHIS2 harmonisation days carry a sparse reclassification break.
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, deaths_state.CFR;
@@ -544,7 +571,10 @@ death-confirmation positivity (`death_confirmation`).
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
         absconded_history = treatment_absconded_history,
-        aulit_history = treatment_aulit_history,
+        confirmed_incare_history = treatment_confirmed_incare_history,
+        suspect_incare_history = treatment_suspect_incare_history,
+        confirmed_daily = confirmed_state.confirmed_daily,
+        reclass_break_days = treatment_reclass_break_days,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases (the confirmed-and-discharged subset, not all

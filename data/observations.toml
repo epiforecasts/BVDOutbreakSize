@@ -294,6 +294,45 @@ dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
 values = [327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387]
 source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Patients au lit (J-1)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387 on 13-23 June. Start-of-day in-bed stock (before that day's admissions/discharges); the same patient stock as the end-of-day `Patients en isolement (Fin J)` occupancy read at the start of the day. The break against the previous report day's occupancy (e.g. 19 June au-lit 342 vs 18 June Fin J 416) is the between-report DHIS2 reclassification jump the treatment-flow offset absorbs. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
+# --- Tableau 6 occupancy split: confirmed-in-care vs suspect-in-care ------
+# The `Patients en isolement (Fin J)` occupancy stock (= isolation_history)
+# is published with a two-row breakdown from SitRep 030 (13 June): `dont
+# confirmes (NC+AC)` (laboratory-confirmed patients currently in a bed) and
+# `dont suspects` (admitted patients not yet confirmed). The two rows sum to
+# the reported total occupancy each day, which equals the isolation_history
+# stock - the split closes exactly:
+#   dont confirmes + dont suspects = Patients en isolement (Fin J).
+# These are census (prevalence) sub-stocks, NOT flows: each is the count of
+# patients of that class occupying a bed at the end of the reporting day. They
+# refine the treatment-flow submodel (`treatment_flow_model`), which fits the
+# TOTAL occupancy from 1 June and splits it into the two sub-stocks on the
+# 13-23 June overlap where the breakdown is published (a per-day total-OR-split
+# switch: the total backbone carries the earlier window). Both are optional: an
+# absent or empty block falls back to the total-occupancy likelihood.
+
+# Confirmed-in-care occupancy (`dont confirmes (NC+AC)`), national Ensemble.
+# Laboratory-confirmed patients currently in a treatment bed - a PREVALENCE
+# stock distinct from the daily confirmed incidence (`confirmed_case_history`
+# increments) and from the cumulative confirmed total: most daily confirmations
+# are posthumous / community (corpse swabs, late confirmations) and never
+# occupy a bed, so this stock is far below the cumulative confirmed count.
+[treatment_confirmed_incare_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont confirmes (NC+AC)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192 on 13-23 June. Confirmed patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history (359, 363, 376, 379, 383, 416, 361, 365, 371, 387, 408), so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
+# Suspect-in-care occupancy (`dont suspects`), national Ensemble. Admitted
+# patients not yet laboratory-confirmed, occupying a bed at end-of-day; the
+# complement of the confirmed sub-stock within the total occupancy.
+[treatment_suspect_incare_history]
+dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
+          "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+          "2026-06-21", "2026-06-22", "2026-06-23"]
+values = [212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont suspects`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216 on 13-23 June. Suspected (not-yet-confirmed) patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history, so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
 # `cumulative_tests_analysed`) are derived from the final vintage of the

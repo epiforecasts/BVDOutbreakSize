@@ -246,7 +246,10 @@ Random.seed!(20260518)
 # the incidence analogue of the isolation prevalence stream). From 13 June the
 # reports add a Tableau 6 patient-movement table for the treatment centres, and
 # we read its daily admissions, in-care deaths, rule-outs and absconded flows as
-# four count streams feeding the same treatment-centre model. We extracted
+# four count streams feeding the same treatment-centre model. The same table
+# breaks the occupancy into `dont confirmés (NC+AC)` and `dont suspects`
+# sub-rows, two prevalence sub-stocks that sum to the total each day, which we
+# read as two further census streams splitting the occupancy. We extracted
 # these figures from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
@@ -1397,6 +1400,34 @@ cfr_prior_fig #hide
 # The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
 # BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
 # series is the all-patients column from 1 June (SitRep 018) onward.
+#
+# From 13 June the Tableau 6 occupancy is published with a two-row breakdown,
+# `dont confirmés (NC+AC)` and `dont suspects`, which sum to the total each day.
+# We split the total occupancy into a confirmed-in-care and a suspect-in-care
+# prevalence sub-stock and score the two census series in place of the total on
+# the days they are present (a per-day total-or-split switch, so the total and
+# its parts are never both scored on one day). Both sub-stocks are derived from
+# the existing latents rather than re-estimated. Most daily confirmations are
+# posthumous or community (corpse swabs, late confirmations) and never occupy a
+# bed, so the confirmed-in-care inflow is an in-care fraction $f_{\text{in-care}}$
+# of the modelled confirmed-case incidence, carried through a confirmed-in-care
+# residence $S_{\text{conf}}$ (confirmation to death or recovery),
+#
+# ```math
+# \text{conf-in-care}_t = \sum_{s \ge 0} f_{\text{in-care}}\,
+#     \text{confirmed}_{t-s}\, S_{\text{conf}}(s),
+# ```
+#
+# with the confirmed-in-care census pinning the residual $f_{\text{in-care}}$.
+# The suspect-in-care stock is the admission inflow through a suspect residence
+# $S_{\text{susp}}$ (admission to rule-out, confirmation or abscond). Because the
+# Tableau 6 `décédés` row combines suspects and confirmed, confirmed-in-care
+# deaths are attributed as $\text{CFR}_{\text{iso}}$ of the confirmed-in-care
+# inflow through the death stay rather than read off a flow. The between-report
+# DHIS2 harmonisation days carry a sparse, tightly-bounded reclassification step
+# that moves patients between the two sub-stocks without changing the total bed
+# count. The split does not change the 1–12 June occupancy (no breakdown is
+# published before 13 June, so the total backbone carries that window).
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -2894,6 +2925,11 @@ pp_joint = predict(
         treatment_ruleout_history = _days_only(obs.treatment_ruleout_history),
         treatment_absconded_history =
         _days_only(obs.treatment_absconded_history),
+        treatment_confirmed_incare_history =
+        _days_only(obs.treatment_confirmed_incare_history),
+        treatment_suspect_incare_history =
+        _days_only(obs.treatment_suspect_incare_history),
+        treatment_reclass_break_days = obs.treatment_reclass_break_days,
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
@@ -3090,6 +3126,27 @@ absconded_panel = (;
     observed = obs.treatment_absconded_history.counts,
     colour = :slategray, cumulative = false);
 
+## Tableau 6 occupancy split (`dont confirmes` / `dont suspects`): the two
+## in-care prevalence sub-stocks. Per-day census counts, so drawn with
+## `cumulative = false` — each replicate is the modelled confirmed-in-care or
+## suspect-in-care bed count on a report day against the observed sub-stock.
+## On these split days the total-occupancy panel is not scored, so the two
+## sub-stock panels carry the 13-23 June window.
+confirmed_incare_panel = (;
+    title = "Confirmed in care",
+    dates = _vintage_dates(obs.treatment_confirmed_incare_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(confirmed_incare_obs.increments)),
+    observed = obs.treatment_confirmed_incare_history.counts,
+    colour = :darkgoldenrod, cumulative = false);
+suspect_incare_panel = (;
+    title = "Suspects in care",
+    dates = _vintage_dates(obs.treatment_suspect_incare_history.days),
+    replicates = _vintage_replicates(
+        pp_joint, @varname(suspect_incare_obs.increments)),
+    observed = obs.treatment_suspect_incare_history.counts,
+    colour = :chocolate, cumulative = false);
+
 ## Each panel runs to its own last vintage: the suspected case and death
 ## streams freeze at 26 May (their last stable vintage) while the
 ## laboratory-confirmed streams keep reporting to the cut-off, so the
@@ -3099,7 +3156,8 @@ vintage_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
-    admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel];
+    admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel,
+    confirmed_incare_panel, suspect_incare_panel];
 joint_vintage_ppc_fig = plot_vintage_conditional_ppc(vintage_panels);
 
 #md # ```@raw html

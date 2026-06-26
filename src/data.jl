@@ -39,6 +39,9 @@ length-of-stay submodel), `bed_capacity_history` from the implied bed
 capacity (occupancy / reported occupancy rate),
 `recovered_history` from the cumulative recovered-among-confirmed series
 ("cumul guéris"),
+`treatment_confirmed_incare_history` and `treatment_suspect_incare_history`
+from the Tableau 6 occupancy split (`dont confirmes (NC+AC)` and `dont
+suspects`, two prevalence sub-stocks that sum to the total occupancy),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
@@ -167,6 +170,28 @@ function load_observations(
     ## partitioning each step into reporting-artifact vs real demand. Optional:
     ## an empty block leaves the offset at zero, a no-op.
     treatment_aulit_history = history("treatment_aulit_history")
+    ## Tableau 6 occupancy split (13-23 June): the `dont confirmes (NC+AC)` and
+    ## `dont suspects` sub-rows of the `Patients en isolement (Fin J)` stock.
+    ## Census (prevalence) sub-stocks, not flows: each is the count of that
+    ## class of patient occupying a bed at end-of-day, and the two sum to the
+    ## total occupancy (= `isolation_history`) exactly. On the days they are
+    ## present the treatment-flow submodel scores the two sub-stocks in place of
+    ## the total occupancy (a per-day total-OR-split switch); an absent or empty
+    ## block falls back to the total-occupancy likelihood and is a no-op.
+    treatment_confirmed_incare_history = history("treatment_confirmed_incare_history")
+    treatment_suspect_incare_history = history("treatment_suspect_incare_history")
+    ## Known DHIS2 harmonisation / reclassification days for the occupancy
+    ## split: the `Donnees reactualisees`-flagged reports (SitReps 034-040,
+    ## 17-23 June) where the confirmed-vs-suspect sub-stock partition steps by
+    ## more than the flows explain (the overnight `au-lit-J-1` vs `Fin-J` gap).
+    ## Mapped to grid day-indices on or before the cut-off; the treatment-flow
+    ## submodel applies a sparse, tightly-bounded reclassification step on these
+    ## days only. Empty when frozen before the window.
+    _reclass_dates = ["2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
+        "2026-06-21", "2026-06-22", "2026-06-23"]
+    treatment_reclass_break_days = sort(Int[_index(d)
+                                            for d in _reclass_dates
+                                            if Date(String(d)) <= cutoff])
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -220,6 +245,10 @@ function load_observations(
         treatment_ruleout_history = treatment_ruleout_history,
         treatment_absconded_history = treatment_absconded_history,
         treatment_aulit_history = treatment_aulit_history,
+        treatment_confirmed_incare_history =
+        treatment_confirmed_incare_history,
+        treatment_suspect_incare_history = treatment_suspect_incare_history,
+        treatment_reclass_break_days = treatment_reclass_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

@@ -310,86 +310,6 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
 end
 
 """
-    occupancy_break_days(iso_days, iso_obs, aulit_history; threshold = 15.0)
-
-Identify the occupancy reporting-break days from data, returning the observed
-gap on each. The Tableau 6 start-of-day in-bed count (`aulit_history`,
-"Patients au lit (J-1)") should equal the previous report day's end-of-day
-occupancy; where it does not, the gap `g_t = au-lit(t) − occupancy(t−1)` is a
-between-report DHIS2 reclassification step (`occupancy(t−1)` is the most recent
-earlier isolation count, so the 12 June reporting gap steps back to 11 June). A
-day is flagged a break when `|g_t|` exceeds `threshold` beds, so the model
-estimates a step only where the data shows a material discontinuity.
-
-This identifies break days and supplies the observed gap as the centre of the
-fitted break prior — it does not impose the value: the break step is sampled in
-[`treatment_flow_model`](@ref), so the fit can attribute part of a step to real
-demand change. Returns `(; iso_break_idx, gaps)`: `iso_break_idx` the indices
-into `iso_days` of the flagged break days (ascending) and `gaps` the matching
-observed `g_t`. An empty `aulit_history` (no counts, or the days-only
-predictive generator) or a `missing` `iso_obs` returns no break days, a no-op.
-"""
-function occupancy_break_days(iso_days, iso_obs, aulit_history;
-        threshold = 15.0)
-    adays = Int.(aulit_history.days)
-    acounts = Float64.(aulit_history.counts)
-    (isempty(acounts) || iso_obs === missing || isempty(iso_days)) &&
-        return (; iso_break_idx = Int[], gaps = Float64[])
-    idays = Int.(iso_days)
-    iobs = Float64.(iso_obs)
-    ## Map each au-lit day to its isolation-day index and observed gap
-    ## g = au-lit − occupancy(t−1). occupancy(t−1) is the most recent
-    ## strictly-earlier isolation count (handles the 12 June reporting gap).
-    iso_break_idx = Int[]
-    gaps = Float64[]
-    for (j, ad) in enumerate(adays)
-        ipos = findfirst(==(ad), idays)
-        ipos === nothing && continue
-        prior = filter(x -> x < ad, idays)
-        isempty(prior) && continue
-        pidx = findlast(==(maximum(prior)), idays)
-        g = acounts[j] - iobs[pidx]
-        if abs(g) > threshold
-            push!(iso_break_idx, ipos)
-            push!(gaps, g)
-        end
-    end
-    ord = sortperm(iso_break_idx)
-    return (; iso_break_idx = iso_break_idx[ord], gaps = gaps[ord])
-end
-
-"""
-    cumulative_break_offset(iso_days, iso_break_idx, b)
-
-Per-isolation-day cumulative reclassification offset `Δ` from the fitted
-break steps `b` on the break days `iso_break_idx` (indices into `iso_days`).
-`Δ(t)` sums `b_j` over the break days at or before `iso_days[t]`, zero before
-the first break day. Added to the modelled occupancy mean in the censored-
-occupancy likelihood so the modelled occupancy tracks the reclassified series
-and the residual stays smooth. Each `b_j` is sampled (centred on the observed
-gap but free to move), so `Δ` is a fitted quantity, not a constant. Returns a
-length-`length(iso_days)` vector of `eltype(b)` (zeros when there are no break
-days, a no-op).
-"""
-function cumulative_break_offset(iso_days, iso_break_idx, b)
-    m = length(iso_days)
-    T = isempty(b) ? Float64 : eltype(b)
-    Δ = zeros(T, m)
-    isempty(iso_break_idx) && return Δ
-    idays = Int.(iso_days)
-    break_days = idays[iso_break_idx]
-    ## Cumulative sum of the fitted steps up to and including each iso day.
-    @inbounds for t in 1:m
-        s = zero(T)
-        for (j, bd) in enumerate(break_days)
-            bd <= idays[t] && (s += b[j])
-        end
-        Δ[t] = s
-    end
-    return Δ
-end
-
-"""
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
 daily onsets with the sampled onset-to-death delay, scales by the CFR and
 the death ascertainment `p_death`, and reads the modelled cumulative deaths
@@ -1582,10 +1502,40 @@ observed data — the Tableau 6 daily recoveries equal these increments. The
 longer occupancy / recovered / capacity stock streams carry the model over
 the window before the daily flows begin.
 
+The total occupancy is split into a confirmed-in-care and a suspect-in-care
+prevalence sub-stock where the Tableau 6 census breakdown (`dont confirmes` /
+`dont suspects`) is published, scored in place of the total on those days (a
+per-day total-OR-split switch, so the total and its parts are never both
+scored on one day). Both sub-stocks are derived from existing latents, not
+re-estimated. The confirmed-in-care inflow is an in-care FRACTION
+`f_\\text{in-care}` of the modelled confirmed-case incidence
+(`confirmed_daily`), carried through a confirmed-in-care residence
+`S_\\text{conf}` (confirmation → death / recovery):
+
+```math
+\\text{conf-in-care}(t) = \\sum_{\\tau \\ge 0}
+    f_\\text{in-care}\\, \\text{confirmed\\_daily}(t-\\tau)\\, S_\\text{conf}(\\tau),
+```
+
+with `f_\\text{in-care}` lab-informed because most daily confirmations are
+posthumous / community (corpse swabs, late confirmations) the death pipeline
+already models and never occupy a bed, and the confirmed-in-care census
+pinning the residual. The suspect-in-care stock is the admission inflow
+carried through a suspect residence `S_\\text{susp}` (admission → rule-out /
+confirmation / abscond). Confirmed-in-care deaths are ATTRIBUTED as
+`CFR_iso ·` the confirmed-in-care inflow through the death stay (the Tableau 6
+`decedes` row is suspect + confirmed combined, so they are not read off a
+flow). A sparse reclassification break `1 + δ_\\text{reclass}` on identified
+DHIS2 harmonisation days moves patients between the two sub-stocks without
+changing the total bed count (a tightly-bounded point adjustment, not a free
+time-varying process).
+
 Exposes the cut-off occupancy, bed demand, their difference (the bed
 shortfall), the utilisation, the BVD share of demand, the in-care fatality
 `CFR_iso` and modifier `β_iso`, the overall length-of-stay (the outcome-
-mixture mean) and the daily series for forecasting and replication.
+mixture mean), the two sub-stock prevalences and their length-of-stay means,
+the in-care fraction `f_\\text{in-care}` and the daily series for forecasting
+and replication.
 """
 @model function treatment_flow_model(
         isolation_history,
@@ -1598,12 +1548,17 @@ mixture mean) and the daily series for forecasting and replication.
         deaths_history = (; days = Int[], counts = Int[]),
         ruleout_history = (; days = Int[], counts = Int[]),
         absconded_history = (; days = Int[], counts = Int[]),
-        ## Start-of-day in-bed count ("Patients au lit (J-1)"), differenced
-        ## against the previous day's occupancy to identify the reclassification
-        ## break days and centre a fitted break-step prior; the sampled steps
-        ## accumulate into a cumulative offset Δ added to the modelled occupancy
-        ## mean. Empty → no break days, Δ = 0, a no-op.
-        aulit_history = (; days = Int[], counts = Int[]),
+        ## Tableau 6 occupancy split (`dont confirmes` / `dont suspects`): two
+        ## prevalence sub-stock census series scored in place of the total
+        ## occupancy on the days they are present (a per-day total-OR-split
+        ## switch). Empty by default → the total-occupancy likelihood alone.
+        confirmed_incare_history = (; days = Int[], counts = Int[]),
+        suspect_incare_history = (; days = Int[], counts = Int[]),
+        ## Modelled daily confirmed-case incidence (cases/lab model), consumed
+        ## as the confirmed-in-care inflow (× the in-care fraction `f_in_care`)
+        ## rather than re-estimated. Defaults to zeros so the split is a no-op
+        ## when run standalone without a confirmed stream.
+        confirmed_daily::Union{Nothing, AbstractVector} = nothing,
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
@@ -1637,7 +1592,39 @@ mixture mean) and the daily series for forecasting and replication.
         ruleout_los = censored_delay_model(
             cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
             mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
-            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)))
+            sd_prior = truncated(Normal(4.0, 1.5); lower = 1)),
+        ## In-care fraction of confirmed incidence (the share of daily
+        ## confirmations that occupy a bed): most confirmations are posthumous /
+        ## community (corpse swabs, late confirmations) the death pipeline
+        ## already models and never occupy a bed, so the in-care share is well
+        ## below 1. Identified by the confirmed-in-care census against the
+        ## modelled confirmed incidence. Beta centred ≈ 0.5, weakly informative.
+        in_care_fraction_prior = Beta(2.0, 2.0),
+        ## Suspect-in-care residence (admission → rule-out / confirmation /
+        ## abscond): the stay of an admitted suspect before they leave the
+        ## suspect sub-stock. Centred a little above the rule-out turnaround
+        ## (some suspects wait for confirmation), all double interval censored.
+        suspect_incare_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(5.0, 4.0); q = 0.99);
+            mean_prior = truncated(Normal(5.0, 2.5); lower = 1),
+            sd_prior = truncated(Normal(4.0, 2.0); lower = 1)),
+        ## Confirmed-in-care residence (confirmation → death / recovery): the
+        ## outcome-mixture stay of a confirmed patient in a bed, weighted by the
+        ## in-care fatality CFR_iso. Centred on the BVD bed-stay mean (≈ 14 d),
+        ## all double interval censored.
+        confirmed_incare_los = censored_delay_model(
+            cdf_nmax(lognormal_meansd(12.0, 7.0); q = 0.99);
+            mean_prior = truncated(Normal(12.0, 5.0); lower = 1),
+            sd_prior = truncated(Normal(7.0, 3.0); lower = 1)),
+        ## Reporting-break reclassification step on the confirmed sub-stock for
+        ## the known DHIS2 harmonisation days (the `Donnees reactualisees` flag):
+        ## a between-report reclassification between the suspect and confirmed
+        ## sub-stocks that the flows do not explain, handled as a sparse set of
+        ## point adjustments on identified break days only. A tight log-normal
+        ## multiplier centred on 1 (no break) so it cannot launder real signal.
+        reclass_break_days::AbstractVector{<:Integer} = Int[],
+        reclass_break_prior = truncated(Normal(0.0, 0.1); lower = -0.5,
+            upper = 0.5))
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
     sev_state ~ to_submodel(severity)
@@ -1674,6 +1661,21 @@ mixture mean) and the daily series for forecasting and replication.
     recovery_los_state ~ to_submodel(recovery_los)
     ruleout_los_state ~ to_submodel(ruleout_los)
     abscond_frac ~ abscond_prior
+    ## Occupancy-split local parameters: the in-care fraction of confirmed
+    ## incidence and the two sub-stock residences. Sampled unconditionally so the
+    ## parameter set is stable whether or not the split data are present.
+    f_in_care ~ in_care_fraction_prior
+    suspect_incare_los_state ~ to_submodel(suspect_incare_los)
+    confirmed_incare_los_state ~ to_submodel(confirmed_incare_los)
+    ## Sparse reclassification break on the confirmed sub-stock for the known
+    ## DHIS2 harmonisation days. A single tightly-centred relative step `1 + δ`
+    ## (δ ~ Normal(0, 0.1), bounded) applied as a point adjustment on the
+    ## identified break days only — a between-report suspect↔confirmed
+    ## reclassification the flows do not explain, not a free time-varying process
+    ## (which would launder real signal). An empty break-day list makes it a
+    ## no-op. Sampled unconditionally so the parameter set is stable.
+    reclass_break ~ reclass_break_prior
+    break_days = Set(Int.(reclass_break_days))
 
     ## Admission inflow carried through the short suspected→admission delay,
     ## split into BVD (admitted at `p_iso_bvd`) and non-BVD (`p_iso`) demand.
@@ -1704,30 +1706,18 @@ mixture mean) and the daily series for forecasting and replication.
 
     ## Occupancy likelihood: each day's bed count is a NegativeBinomial around
     ## the latent demand, right-censored at the fixed implied-capacity bound.
-    ## A fitted cumulative reclassification offset Δ is added to the modelled
-    ## mean so it tracks the between-report DHIS2 reclassification steps in the
-    ## observed series (the residual stays smooth and the fit does not bend Rt
-    ## to chase them). The break days are identified from the au-lit gap and
-    ## each step b_j is sampled, centred on the observed gap but free to move,
-    ## so the fit can attribute part of a step to real demand change.
-    iso_days = isolation_history.days
+    ## Per-day total-OR-split switch: a day with a published occupancy split
+    ## (`confirmed_incare_history` / `suspect_incare_history`) is scored as the
+    ## two sub-stocks below, NOT as the total here, so the total and its parts
+    ## are never both scored on one day (the #307 total-plus-parts double-count).
+    ## Days without split data keep the total-occupancy backbone.
+    split_days = Set(Int.(confirmed_incare_history.days))
+    iso_all_days = isolation_history.days
+    iso_keep = [!(Int(d) in split_days) for d in iso_all_days]
+    iso_days = iso_all_days[iso_keep]
     iso_obs = isempty(isolation_history.counts) ? missing :
-              collect(Int.(isolation_history.counts))
-    iso_demand = [demand[clamp(Int(d), 1, n)] for d in iso_days]
-    brk = occupancy_break_days(iso_days, iso_obs, aulit_history)
-    ## One break step per identified break day, sampled non-centred (mirroring
-    ## the Rt walk): b_j = g_j + scale_j · z_j with the step prior centred on
-    ## the observed gap g_j and scale_j = max(10, 0.5·|g_j|) wide enough to
-    ## move, so the fit can attribute part of a step to real demand change. The
-    ## localised one-day step against the smooth demand identifies it. The
-    ## `max(nbrk, 1)` keeps the prior non-empty when there are no break days,
-    ## where `b` is empty and the offset is a no-op.
-    nbrk = length(brk.iso_break_idx)
-    z_break ~ product_distribution(fill(Normal(0, 1), max(nbrk, 1)))
-    b = [brk.gaps[j] + max(10.0, 0.5 * abs(brk.gaps[j])) * z_break[j]
-         for j in 1:nbrk]
-    occ_break_offset = cumulative_break_offset(iso_days, brk.iso_break_idx, b)
-    iso_means = iso_demand .+ occ_break_offset
+              collect(Int.(isolation_history.counts))[iso_keep]
+    iso_means = [demand[clamp(Int(d), 1, n)] for d in iso_days]
     iso_ceil = censoring_cap(iso_days, iso_obs, capacity_history)
     isolation ~ to_submodel(
         censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
@@ -1747,6 +1737,78 @@ mixture mean) and the daily series for forecasting and replication.
     ruleout_daily = convolve_delay(bg_adm, ruleout_los_state.pmf)
     admit_daily = bvd_adm .+ bg_adm
     abscond_daily = abscond_frac .* occupancy
+
+    ## --- Occupancy split into confirmed-in-care and suspect-in-care ---------
+    ## Both sub-stocks are PREVALENCE stocks derived from existing latents, not
+    ## re-estimated. The confirmed level is set once by the confirmed-in-care
+    ## inflow and residence; each census is a secondary prevalence observation
+    ## adding the in-care length-of-stay. Daily confirmed incidence
+    ## (`confirmed_daily`) ≠ confirmed-in-care prevalence ≠ cumulative confirmed
+    ## — three distinct quantities.
+    ##
+    ## Confirmed-in-care inflow = `f_in_care · confirmed_daily`: an in-care
+    ## FRACTION of confirmed incidence, lab-informed, because most daily
+    ## confirmations are posthumous / community (corpse swabs, late
+    ## confirmations) the death pipeline already models and never occupy a bed.
+    ## The balance does not close from the flows, so `f_in_care` carries the
+    ## residual with the confirmed-in-care census pinning it. Carried through the
+    ## confirmed-in-care residence (confirmation → death / recovery) into the
+    ## prevalence stock. `confirmed_daily === nothing` (standalone, no confirmed
+    ## stream) gives a zero inflow, so the split is a clean no-op.
+    cdaily = confirmed_daily === nothing ?
+             zeros(eltype(demand), n) : confirmed_daily
+    if eltype(cdaily) === Any
+        cdaily = convert(Vector{eltype(C)}, cdaily)
+    end
+    conf_incare_inflow = f_in_care .* cdaily
+    confirmed_incare = convolve_survival(conf_incare_inflow,
+        confirmed_incare_los_state.pmf)
+    ## Suspect-in-care: every admission enters as a suspect, occupying a bed
+    ## through the suspect residence (admission → rule-out / confirmation /
+    ## abscond) before leaving the suspect sub-stock.
+    suspect_incare = convolve_survival(admit_daily,
+        suspect_incare_los_state.pmf)
+    if eltype(confirmed_incare) === Any
+        confirmed_incare = convert(Vector{eltype(C)}, confirmed_incare)
+    end
+    if eltype(suspect_incare) === Any
+        suspect_incare = convert(Vector{eltype(C)}, suspect_incare)
+    end
+    ## Reclassification break: on a known harmonisation day the confirmed
+    ## sub-stock takes the relative step `1 + reclass_break`, and the suspect
+    ## sub-stock takes the offsetting count so the total occupancy is preserved
+    ## (a reclassification moves patients between the two sub-stocks, it does not
+    ## change the bed count). A near-deterministic, tightly-bounded step on the
+    ## identified days only.
+    one_T = one(eltype(confirmed_incare))
+    conf_split = map(1:n) do t
+        (t in break_days) ? confirmed_incare[t] * (one_T + reclass_break) :
+        confirmed_incare[t]
+    end
+    susp_split = map(1:n) do t
+        confirmed_incare[t] + suspect_incare[t] - conf_split[t]
+    end
+
+    ## Split likelihoods: on the days a published split exists, score the two
+    ## sub-stock censuses (NegativeBinomial prevalence) instead of the total.
+    ci_days = confirmed_incare_history.days
+    ci_obs = isempty(confirmed_incare_history.counts) ? missing :
+             collect(Int.(confirmed_incare_history.counts))
+    confirmed_incare_obs ~ to_submodel(vintage_increments_model(
+        [conf_split[clamp(Int(d), 1, n)] for d in ci_days], ci_obs, k))
+    si_days = suspect_incare_history.days
+    si_obs = isempty(suspect_incare_history.counts) ? missing :
+             collect(Int.(suspect_incare_history.counts))
+    suspect_incare_obs ~ to_submodel(vintage_increments_model(
+        [max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
+         for d in si_days], si_obs, k))
+    ## Confirmed-in-care deaths (attributed): Tableau 6 `decedes` is suspect +
+    ## confirmed combined, so the confirmed-in-care death outflow is ATTRIBUTED
+    ## as `CFR_iso · confirmed-in-care inflow` through the death stay, not read
+    ## off a flow. Exposed for the report (no separate likelihood — the total
+    ## in-care deaths are already scored).
+    confirmed_incare_deaths_daily = convolve_delay(CFR_iso .* conf_incare_inflow,
+        dpmf)
 
     ## Optional daily Tableau 6 flow likelihoods. Each is a no-op when its
     ## history is empty (no days → no scored terms).
@@ -1796,12 +1858,15 @@ mixture mean) and the daily series for forecasting and replication.
     incare_cfr := CFR_iso
     incare_cfr_modifier := β_iso
     treatment_overall_los := overall_los
-    ## Cut-off cumulative occupancy reclassification offset (fitted; can be
-    ## negative, so reported raw rather than through `safe_rate`). Reports how
-    ## much of the observed step the model absorbed as a reporting artifact, the
-    ## rest carried by real demand.
-    occupancy_break := isempty(occ_break_offset) ? zero(eltype(C)) :
-                       last(occ_break_offset)
+    ## Cut-off occupancy split: the two sub-stock prevalences at the grid end.
+    conf_incare_T = isempty(conf_split) ? z0 : conf_split[end]
+    susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[end], z0)
+    expected_confirmed_incare := safe_rate(conf_incare_T)
+    expected_suspect_incare := safe_rate(susp_incare_T)
+    incare_fraction := f_in_care
+    suspect_incare_los_mean := suspect_incare_los_state.mean
+    confirmed_incare_los_mean := confirmed_incare_los_state.mean
+    reclass_break_step := reclass_break
 
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
@@ -1811,10 +1876,15 @@ mixture mean) and the daily series for forecasting and replication.
         admission_delay_mean = adm_delay_state.mean,
         overall_los, abscond_frac, k_isolation = k,
         demand, occupancy, isolation,
-        occupancy_break = isempty(occ_break_offset) ? z0 :
-                          last(occ_break_offset),
-        break_steps = b, break_offset = occ_break_offset,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
+        f_in_care,
+        suspect_incare_los_mean = suspect_incare_los_state.mean,
+        confirmed_incare_los_mean = confirmed_incare_los_state.mean,
+        reclass_break,
+        confirmed_incare = conf_split, suspect_incare = susp_split,
+        confirmed_incare_deaths_daily,
+        expected_confirmed_incare = safe_rate(conf_incare_T),
+        expected_suspect_incare = safe_rate(susp_incare_T),
         expected_isolation = safe_rate(occ_T),
         expected_bed_demand = safe_rate(dem_T),
         expected_admissions = safe_rate(isempty(admit_daily) ? z0 :
