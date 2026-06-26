@@ -17,11 +17,11 @@ jobs:
   docs:
     name: Build and deploy
     runs-on: ubuntu-latest
-    # The build runs ~14 NUTS fits, and on main/tag also the sensitivity
-    # refits, which land near 5h, so a 300-minute cap was killing builds that
-    # would otherwise finish. 360 is GitHub's hosted-runner job maximum, so
-    # this gives the fits the full window; a genuinely stuck run is still
-    # stopped at the runner ceiling.
+    # The build runs ~11 NUTS fits, and on tag/release builds two more
+    # sensitivity refits, which land near 5h, so a 300-minute cap was killing
+    # builds that would otherwise finish. 360 is GitHub's hosted-runner job
+    # maximum, so this gives the fits the full window; a genuinely stuck run is
+    # still stopped at the runner ceiling.
     timeout-minutes: 360
     permissions:
       contents: write
@@ -64,9 +64,10 @@ jobs:
           # callbacks (`fit_callback`) are for local runs, not CI artifacts.
           BVD_FIT_LOG: none
           # Run the slow sensitivity refits (onset-to-death delay, molecular
-          # clock) on main and release builds, but skip them on PR previews
-          # to keep PR docs builds fast.
-          BVD_RUN_SENSITIVITY: ${{ github.event_name != 'pull_request' }}
+          # clock) on release builds only (tag pushes, which deploy the
+          # versioned docs), skipping them on main pushes and PR previews to
+          # keep those docs builds fast.
+          BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
