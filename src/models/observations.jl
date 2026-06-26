@@ -1468,7 +1468,7 @@ split into a BVD/background mixture: BVD demand `p_iso_bvd · p_drc ·
 bvd_reports` admitted at the severity-skewed rate `p_iso_bvd`
 ([`isolation_severity_model`](@ref)), and non-BVD demand `p_iso · bg_daily` at
 the base rate ([`isolation_admission_model`](@ref)). The bed length-of-stay is
-an OUTCOME MIXTURE — not competing risks: an admission is assigned by a
+an outcome mixture — not competing risks: an admission is assigned by a
 probability to an outcome and then leaves on that outcome's length-of-stay
 distribution. The BVD bed stay is the mixture of an admission→death stay
 (weight `CFR_iso`, the in-care fatality) and a longer admission→recovery stay
@@ -1483,7 +1483,7 @@ branch and is reported alongside `β_iso`; it is a conditional-on-admission
 (in-care) fatality, not a causal treatment effect.
 
 The occupancy likelihood is a NegativeBinomial around the latent demand,
-right-censored at the FIXED implied-capacity bound ([`censoring_cap`](@ref),
+right-censored at the fixed implied-capacity bound ([`censoring_cap`](@ref),
 [`censored_occupancy_model`](@ref)) — a fixed data bound, not a sampled
 ceiling, so the censored likelihood has no moving `-Inf` wall to diverge
 against. The capacity walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries
@@ -1491,7 +1491,7 @@ the implied-capacity likelihood and the forecast cap, and `occupancy =
 min(demand, C)` is the supply-capped stock the derived quantities report.
 
 The daily in-care outcome flows are scored against the Tableau 6 patient-
-movement counts where available, each an OPTIONAL NegativeBinomial stream that
+movement counts where available, each an optional NegativeBinomial stream that
 is a no-op when its history is empty: in-care deaths (`CFR_iso ·` BVD
 admissions through the death stay), rule-out discharges (non-BVD admissions
 through the rule-out stay), admissions (the BVD + non-BVD inflow) and
@@ -1537,7 +1537,7 @@ mixture mean) and the daily series for forecasting and replication.
             sd_prior = truncated(Normal(1.5, 1.0); lower = 0.3)),
         ## Outcome-mixture BVD bed stay: admission→death (the admission→death
         ## atomic delay the onset→death convolution also uses, mean ≈ 8.4 d) and
-        ## the longer admission→recovery stay (mean ≈ 14 d). Built to a COMMON
+        ## the longer admission→recovery stay (mean ≈ 14 d). Built to a common
         ## nmax so the two PMFs align for the elementwise mixture.
         death_los = gamma_delay_model(
             cdf_nmax(lognormal_meansd(14.0, 8.0); q = 0.99);
@@ -1595,7 +1595,7 @@ mixture mean) and the daily series for forecasting and replication.
         adm_delay_state.pmf)
     bg_adm = convolve_delay(p_iso .* bg_daily, adm_delay_state.pmf)
 
-    ## Outcome-mixture (NOT competing risks) BVD bed stay: a fraction `CFR_iso`
+    ## Outcome-mixture (not competing risks) BVD bed stay: a fraction `CFR_iso`
     ## of BVD admissions leave on the admission→death stay, the rest on the
     ## admission→recovery stay. The two PMFs share an nmax, so the mixture is
     ## elementwise.

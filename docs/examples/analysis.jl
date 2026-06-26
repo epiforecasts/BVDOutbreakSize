@@ -168,6 +168,11 @@
 # - *Intervention ramp is weakly identified.* With only a few sitreps
 #   straddling it, the ramp effect and the pre-ramp reproduction number
 #   are not well separated.
+# - *Single national bed capacity.* The treatment-centre model carries one
+#   national bed capacity and one national demand, so it cannot represent
+#   local saturation — on 13 June Ituri was at 93.9% occupancy while
+#   Sud-Kivu was at 21.9% — and the national bed shortfall understates
+#   local unmet need.
 #
 # **Implementation**
 #
@@ -236,7 +241,10 @@ Random.seed!(20260518)
 # out. The reports also print a cumulative "cumul guéris" total of confirmed
 # cases recorded as recovered, from 6 June; we fit it as survivors among the
 # modelled confirmed cases (a scaled confirmation-to-recovery convolution,
-# the incidence analogue of the isolation prevalence stream). We extracted
+# the incidence analogue of the isolation prevalence stream). From 13 June the
+# reports add a Tableau 6 patient-movement table for the treatment centres, and
+# we read its daily admissions, in-care deaths, rule-outs and absconded flows as
+# four count streams feeding the same treatment-centre model. We extracted
 # these figures from the
 # written situation-report PDFs (archived by INRB-UMIE
 # [inrb_umie_2026](@cite)) using a language model, with a second pass to
@@ -276,6 +284,10 @@ observations_table = DataFrame(
         "confirmed_cases",
         "confirmed_deaths",
         "specimens_analysed",
+        "treatment_admissions",
+        "treatment_deaths",
+        "treatment_ruleouts",
+        "treatment_absconded",
         "genetic_tmrca_bound",
         "daily_outbound_travellers (prior mean)",
         "daily_outbound_travellers_sd (prior SD)",
@@ -291,6 +303,10 @@ observations_table = DataFrame(
         hist_last_date(obs.confirmed_history),
         hist_last_date(obs.confirmed_deaths_history),
         hist_last_date(obs.lab_history),
+        hist_last_date(obs.treatment_admissions_history),
+        hist_last_date(obs.treatment_deaths_history),
+        hist_last_date(obs.treatment_ruleout_history),
+        hist_last_date(obs.treatment_absconded_history),
         grid_date(obs.n - obs.tmrca_days),
         missing,
         missing,
@@ -304,6 +320,14 @@ observations_table = DataFrame(
         obs.confirmed_cases,
         obs.confirmed_deaths,
         obs.tests_analysed,
+        isempty(obs.treatment_admissions_history.counts) ? missing :
+        obs.treatment_admissions_history.counts[end],
+        isempty(obs.treatment_deaths_history.counts) ? missing :
+        obs.treatment_deaths_history.counts[end],
+        isempty(obs.treatment_ruleout_history.counts) ? missing :
+        obs.treatment_ruleout_history.counts[end],
+        isempty(obs.treatment_absconded_history.counts) ? missing :
+        obs.treatment_absconded_history.counts[end],
         obs.tmrca_days,
         ITURI_DAILY_TRAVEL,
         ITURI_DAILY_TRAVEL_SD,
@@ -1301,56 +1325,40 @@ cfr_prior_fig #hide
 # ("cumul guéris") are the confirmed-and-discharged subset and are modelled as a
 # separate confirmed-recovery stream (below).
 #
-# ```mermaid
-# flowchart TD
-#   S["suspects"] -->|admission delay| B["BVD admissions"]
-#   S -->|admission delay| N["non-BVD admissions"]
-#   B -->|"CFR_iso · death stay"| D["in-care deaths"]
-#   B -->|"(1 - CFR_iso) · recovery stay"| R["recovery (occupies a bed)"]
-#   N -->|"rule-out stay"| RO["rule-outs"]
-#   B --> A["admissions"]
-#   N --> A
-#   O["occupancy: beds in use, censored at capacity"] -->|small fraction| EV["absconded"]
-# ```
-#
-# Bed occupancy may be supply-driven, with demand for beds able to outstrip
-# supply and occupancy catching up as capacity expands, so we model a latent bed
-# demand and the supply-limited occupancy it produces rather than occupancy
-# directly. The bed length-of-stay is an outcome MIXTURE, not competing risks: an
-# admitted BVD patient leaves by death (weight the in-care fatality
-# $\text{CFR}_{\text{iso}}$, on the admission-to-death stay) or by recovery
-# (weight $1 - \text{CFR}_{\text{iso}}$, on a longer admission-to-recovery stay);
-# a non-BVD patient leaves on the rule-out stay. The in-care fatality
-# $\text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}(\mathrm{logit}\,\text{CFR} +
-# \beta_{\text{iso}})$ is the infection CFR adjusted for the admitted population
-# by a log-odds modifier $\beta_{\text{iso}}$, identified by the in-care death
-# flow relative to admissions and occupancy. It is a conditional-on-admission
-# (in-care) fatality, reported with $\beta_{\text{iso}}$ and the overall
-# length-of-stay (the mixture mean); it sits below the infection CFR where
-# treatment reduces mortality, and is not a causal treatment effect (it also
-# reflects which cases survive to be admitted). The daily admissions and
-# discharges (in-care deaths, rule-outs, absconded) are scored as optional
-# negative-binomial streams sharing $k_{\text{iso}}$, a no-op where a flow is not
-# reported.
-#
-# The latent demand is the suspect inflow carried through a length-of-stay
-# survival $S(\tau) = P(\text{LOS} \ge \tau)$ (the renewal analogue of the
-# convolution secondary-observation model of EpiNow2 [epinow2](@cite)). A
-# proportion $p_{\text{iso}}$ of the reported suspects need a bed. The
-# suspects are a BVD/background mixture leaving on different clocks, so the
-# demand is the sum of two survival convolutions. The BVD demand uses the
-# treatment length-of-stay $S_{\text{BVD}}$, the time an admitted BVD case
-# occupies a bed, with the admission-to-death delay from the line-list
-# reanalysis [bdbv_linelist_analysis_2026](@cite) as its prior. The
-# non-BVD demand uses the rule-out stay $S_{\text{ruleout}}$, how long a
-# ruled-out suspect occupies a bed before discharge, with the report-to-receipt
-# laboratory turnaround as its prior,
+# Beds can be supply-driven, with demand outstripping supply and occupancy
+# catching up as capacity expands, so the occupied beds are the suspect
+# admissions carried through a length-of-stay survival
+# $S(\tau) = P(\text{LOS} \ge \tau)$ into a supply-limited occupancy (the renewal
+# analogue of the convolution secondary-observation model of EpiNow2
+# [epinow2](@cite)). A proportion $p_{\text{iso}}$ of the reported suspects need
+# a bed, splitting into BVD and non-BVD admissions that leave on different
+# clocks, so the latent bed demand sums two survival convolutions,
 #
 # ```math
 # D_t = p_{\text{iso}}\left[ \sum_{s \ge 0} p_{\text{DRC}}\,
 #       \text{bvd}_{t-s}\, S_{\text{BVD}}(s) + \sum_{s \ge 0}
-#       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right].
+#       \lambda_{\text{bg},\,t-s}\, S_{\text{ruleout}}(s) \right],
 # ```
+#
+# where the BVD stay $S_{\text{BVD}}$ is itself an outcome mixture: an admitted
+# BVD patient leaves by death (weight $\text{CFR}_{\text{iso}}$, the
+# admission-to-death stay) or by recovery (weight $1 - \text{CFR}_{\text{iso}}$,
+# a longer admission-to-recovery stay). The death-stay prior is the
+# admission-to-death delay from the line-list reanalysis
+# [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay
+# $S_{\text{ruleout}}$ takes the report-to-receipt laboratory turnaround.
+#
+# The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the
+# infection CFR,
+#
+# ```math
+# \text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}\bigl(\mathrm{logit}\,\text{CFR}
+#     + \beta_{\text{iso}}\bigr),
+# ```
+#
+# identified by the in-care death flow. It is an in-care fatality, sitting below
+# the infection CFR where treatment reduces mortality, and is reported with
+# $\beta_{\text{iso}}$ and the overall length-of-stay (the mixture mean).
 #
 # The bed capacity $C(t)$ is a non-decreasing random walk on weekly knots,
 # since beds are added over the response and not taken away, pinned by the
@@ -1358,35 +1366,31 @@ cfr_prior_fig #hide
 # divided by the reported "Taux d'occupation" rate ($\approx 400 \to 452$ beds
 # over 9–13 June).
 #
-# The occupied-bed count is the latent demand right-censored at the bed
-# capacity: while demand is below capacity the count tracks it, and once demand
-# reaches capacity the count is censored there. The censoring bound is fixed at
-# the recorded implied capacity $C^{\text{cap}}_j$ so the latent demand is left
-# uncensored,
+# The occupied beds are scored as the latent demand right-censored at the
+# recorded implied capacity $C^{\text{cap}}_j$ (so the demand above a saturated
+# capacity is left uncensored), and the daily admissions and discharges (in-care
+# deaths, rule-outs, absconded) are scored as additional count streams $F_j$
+# sharing the dispersion $k_{\text{iso}}$,
 #
 # ```math
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# C^{\text{obs}}_j \sim \mathrm{NegBinomial}(C_{t_j},\ k_{\text{iso}}),
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}),
 # ```
 #
-# with a dispersion $k_{\text{iso}}$ of its own (not shared with the other
-# streams). Occupancy below capacity identifies the demand directly; the part
-# of demand above a saturated capacity is only partially identified, since
-# occupancy says demand was at least the beds filled and not how much more, so
-# the bed shortfall above capacity is informed by the demand model and its
-# priors rather than measured by the occupancy. The model exposes the cut-off
-# occupancy, the cut-off bed demand (the need under unconstrained supply),
-# their difference (the bed shortfall) and the utilisation $O_T / C$.
+# with each $\mu^{F}_t$ the matching branch of the demand (the BVD and non-BVD
+# inflow, $\text{CFR}_{\text{iso}}$ of BVD admissions through the death stay, the
+# non-BVD admissions through the rule-out stay, and a small fraction of
+# occupancy), and the implied capacity carried by a NegBinomial of its own.
 #
-# One limitation is that this is a single national model, with one national
-# bed capacity and one national demand, so it cannot represent local
-# saturation and the national shortfall understates local unmet need. The
-# renewal model does not carry per-province inflow, so it cannot be split into
-# the per-province bed model at which the supply constraint actually operates.
-# A second limitation is that capacity is taken as a single (slowly varying)
-# national quantity even though beds are being added.
+# Occupancy below capacity identifies the demand directly; the part of demand
+# above a saturated capacity is only partially identified, since occupancy says
+# demand was at least the beds filled and not how much more, so the bed shortfall
+# above capacity is informed by the demand model and its priors rather than
+# measured by the occupancy. The model exposes the cut-off occupancy, the cut-off
+# bed demand (the need under unconstrained supply), their difference (the bed
+# shortfall) and the utilisation $O_T / C$.
 #
 # The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
 # BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
@@ -1680,8 +1684,7 @@ cfr_prior_fig #hide
 # reported total reflects confirmed cases recorded as recovered.
 # The cumulative recovered series ends at the cut-off, so its per-vintage
 # increments are fitted, like the confirmed and confirmed-death streams, with
-# a NegBinomial whose dispersion $k_{\text{rec}}$ is its own rather than
-# shared with the other streams:
+# a NegBinomial of an independent dispersion $k_{\text{rec}}$:
 #
 # ```math
 # Y_{\text{rec},i} - Y_{\text{rec},i-1} \sim \mathrm{NegBinomial}\!\Bigl(

@@ -543,7 +543,7 @@ death-confirmation positivity (`death_confirmation`).
         absconded_history = treatment_absconded_history,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
-    ## daily confirmed cases (the confirmed-and-discharged subset, NOT all
+    ## daily confirmed cases (the confirmed-and-discharged subset, not all
     ## in-care recoveries), with a recovery fraction grounded on the CFR and
     ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(

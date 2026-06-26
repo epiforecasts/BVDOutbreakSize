@@ -208,7 +208,7 @@ dates  = ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09",
           "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22",
           "2026-06-23"]
 values = [12, 19, 22, 30, 32, 32, 40, 48, 49, 67, 78, 80, 92, 100, 112, 115, 122]
-source = "INSP situation reports 6-23 June 2026 (SitReps 023-028, 030-040) page-1 headline `Nombre cumulé des guéris` / `Cumul guéris`, read from the PDFs; recorded in the cumul_recovered column of data/insp_sitrep_scanned.csv. Cumulative recovered among confirmed cases: 12, 19, 22, 30, 32, 32 on 6-11 June, 40 on 13 June, 48 on 14 June, 49 on 15 June, 67 on 16 June (18 newly recovered), 78 on 17 June (11 newly recovered), 80 on 18 June (2 newly recovered), 92 on 19 June (12 newly recovered), 100 on 20 June (8 newly recovered: 6 Ituri, 2 Sud-Kivu), 112 on 21 June (12 newly recovered: 9 Ituri, 3 Nord-Kivu), 115 on 22 June (3 newly recovered, all Ituri) and 122 on 23 June (7 newly recovered, all Ituri); cross-checks the INRB-UMIE national_cumulative_recovered_cases DRC values (20 June 100, 21 June 112, 22 June 115, 23 June 122). The daily increments equal the Tableau 6 `Guéris` in-care discharge-cured outflow (see [treatment_recovered cross-check]: 14 June 8, 15 June 1, 16 June 18, 17 June 11, 18 June 2, 19 June 12), so the cumulative recovered IS the in-care recovery exit. SitReps 021-022 (4-5 June) do not print a cumul guéris total, so the series begins 6 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+source = "INSP situation reports 6-23 June 2026 (SitReps 023-028, 030-040) page-1 headline `Nombre cumulé des guéris` / `Cumul guéris`, read from the PDFs; recorded in the cumul_recovered column of data/insp_sitrep_scanned.csv. Cumulative recovered among confirmed cases: 12, 19, 22, 30, 32, 32 on 6-11 June, 40 on 13 June, 48 on 14 June, 49 on 15 June, 67 on 16 June (18 newly recovered), 78 on 17 June (11 newly recovered), 80 on 18 June (2 newly recovered), 92 on 19 June (12 newly recovered), 100 on 20 June (8 newly recovered: 6 Ituri, 2 Sud-Kivu), 112 on 21 June (12 newly recovered: 9 Ituri, 3 Nord-Kivu), 115 on 22 June (3 newly recovered, all Ituri) and 122 on 23 June (7 newly recovered, all Ituri); cross-checks the INRB-UMIE national_cumulative_recovered_cases DRC values (20 June 100, 21 June 112, 22 June 115, 23 June 122). The daily increments equal the Tableau 6 `Guéris` in-care discharge-cured outflow (see [treatment_recovered cross-check]: 14 June 8, 15 June 1, 16 June 18, 17 June 11, 18 June 2, 19 June 12), so the cumulative recovered is the in-care recovery exit. SitReps 021-022 (4-5 June) do not print a cumul guéris total, so the series begins 6 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
 # --- Tableau 6 treatment-centre patient-movement flows (CTE/CT/CI) -------
 # Daily in/out flows for the isolation/treatment centres, the national
@@ -217,11 +217,11 @@ source = "INSP situation reports 6-23 June 2026 (SitReps 023-028, 030-040) page-
 # 13-23 June 2026; SitRep 029 / 12 June not published). The daily balance
 # closes exactly each day: `patients au lit (J-1) + admissions - total
 # sorties = patients en isolement (Fin J)`, and the Fin J figure equals the
-# `isolation_history` occupancy stock. These are per-day flow counts (NOT
+# `isolation_history` occupancy stock. These are per-day flow counts (not
 # cumulative). They refine the treatment-centre flow submodel
 # (`treatment_flow_model`) where they overlap (13-23 June); the longer
 # occupancy / recovered / capacity stock streams carry the model over the
-# earlier window (occupancy from 1 June). All four are OPTIONAL: an absent or
+# earlier window (occupancy from 1 June). All four are optional: an absent or
 # empty block is a no-op in the loader and the model.
 
 # Total admissions to isolation/treatment beds in the preceding 24h
@@ -236,7 +236,7 @@ values = [68, 54, 61, 67, 67, 70, 65, 67, 70, 93, 61]
 source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Total admissions (24h)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 68, 54, 61, 67, 67, 70, 65, 67, 70, 93, 61 on 13-23 June. Per-day admission inflow to isolation/treatment beds. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
 
 # In-care deaths in the preceding 24h (`Sorties (24h) - Decedes
-# (Suspects/Conf.)`), national. Deaths occurring among patients IN the
+# (Suspects/Conf.)`), national. Deaths occurring among patients in the
 # treatment centres, covering both suspected and confirmed patients - a
 # distinct quantity from `confirmed_death_history` (confirmed only, including
 # community and late-confirmed deaths). The death branch of the in-care
