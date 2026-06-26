@@ -2914,6 +2914,12 @@ pp_joint = predict(
         isolation_history = _days_only(obs.isolation_history),
         bed_capacity_history = _days_only(obs.bed_capacity_history),
         recovered_history = _days_only(obs.recovered_history),
+        treatment_admissions_history =
+        _days_only(obs.treatment_admissions_history),
+        treatment_deaths_history = _days_only(obs.treatment_deaths_history),
+        treatment_ruleout_history = _days_only(obs.treatment_ruleout_history),
+        treatment_absconded_history =
+        _days_only(obs.treatment_absconded_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
