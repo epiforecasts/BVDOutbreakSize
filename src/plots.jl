@@ -519,6 +519,65 @@ function plot_pair(chn, params::AbstractVector{Symbol};
 end
 
 """
+Posterior correlation heatmap over the named scalar quantities `params`
+(tracked deterministics or sampled parameters). Each cell is the Pearson
+correlation of two quantities' posterior draws, drawn on a symmetric
+red–blue scale with the value printed in the cell. Unlike the block-grouped
+[`plot_pair`](@ref) corners — which keep the infection, delay and
+surveillance parameters in separate plots — this surfaces the whole joint
+identifiability structure in one panel, including the CROSS-block
+degeneracies those corners split apart: the size–ascertainment seesaw
+(`C_T` vs `p_drc`), the weaker size–fatality tilt (`C_T` vs `CFR`), and the
+pooled `p_drc`–`p_uganda` link. `labels` maps a parameter symbol to a
+display string, interpreted as LaTeX math (without the `\$` delimiters), so
+`"p_\\mathrm{drc}"` renders with a subscript and `"\\lambda_\\mathrm{bg}"` as
+`λ_bg`; a parameter absent from `labels` falls back to its symbol name.
+Returns the `Figure`.
+"""
+function plot_correlation_heatmap(chn, params::AbstractVector{Symbol};
+        labels::AbstractDict = Dict{Symbol, String}())
+    ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
+    ## properly; callers pass plain LaTeX math strings.
+    name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
+    mat = reduce(hcat, (_draws(chn, p) for p in params))
+    R = cor(mat)
+    n = length(params)
+    labs = [name(p) for p in params]
+    fig = Figure(; size = (78 * n + 180, 78 * n + 140))
+    ax = Axis(fig[1, 1]; xticks = (1:n, labs), yticks = (1:n, labs),
+        xticklabelrotation = pi / 4, title = "Posterior correlation",
+        aspect = 1)
+    hm = CairoMakie.heatmap!(ax, 1:n, 1:n, R; colormap = :RdBu,
+        colorrange = (-1, 1))
+    for i in 1:n, j in 1:n
+
+        CairoMakie.text!(ax, i, j;
+            text = string(round(R[i, j]; digits = 2)),
+            align = (:center, :center), fontsize = 10,
+            color = abs(R[i, j]) > 0.6 ? :white : :black)
+    end
+    CairoMakie.Colorbar(fig[1, 2], hm)
+    return fig
+end
+
+"""
+Pairs plot of the per-stream modelled totals: a [`PairPlots`](https://sefffal.github.io/PairPlots.jl/)
+corner of the per-draw modelled stream totals (`modelled`, a `NamedTuple`
+of one per-draw vector per stream, each summed to that stream's own
+observed support) with the observed totals (`observed`, a `NamedTuple` of
+scalars) drawn as crosshair reference lines. The diagonals show how much
+predictive density sits above or below each observed value (the
+over/under-shoot), and the off-diagonals whether those shoots move together
+across draws — the posterior-predictive view of data-stream conflict, the
+counterpart to the parameter-space [`plot_correlation_heatmap`](@ref).
+Returns the `Figure`.
+"""
+function plot_stream_pairs(modelled::NamedTuple, observed::NamedTuple)
+    return PairPlots.pairplot(modelled,
+        PairPlots.Truth(observed; label = "observed"))
+end
+
+"""
 Estimate-evolution plot: how the outbreak-size estimate moves as the
 data cut-off advances, drawn against the calendar date.
 
