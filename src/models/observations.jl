@@ -1434,8 +1434,14 @@ positivity and the expected confirmed-death count.
         susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
         death_volume = map(eachindex(susp_death)) do t
             den = susp_case[t]
-            den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
-            zero(sc)
+            v = den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
+                zero(sc)
+            ## A backlog day can push the realised death-testing intensity above
+            ## one, which would confirm more deaths than were ever suspected.
+            ## Cap the volume at the suspected-death pool so confirmed deaths
+            ## stay a subset of suspected and the realised τ_death ≤ 1. Plain
+            ## `min` is piecewise-linear and Mooncake-safe.
+            min(v, susp_death[t])
         end
         τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
     else
