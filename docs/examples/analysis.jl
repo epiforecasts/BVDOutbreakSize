@@ -2258,6 +2258,7 @@ _headline_thunks = [
             treatment_deaths_history = obs.treatment_deaths_history,
             treatment_ruleout_history = obs.treatment_ruleout_history,
             treatment_absconded_history = obs.treatment_absconded_history,
+            treatment_aulit_history = obs.treatment_aulit_history,
             breakpoint = _BREAKPOINT);
         callback = fit_callback("treatment"))
 ]
@@ -2943,6 +2944,7 @@ pp_joint = predict(
         _days_only(obs.treatment_confirmed_incare_history),
         treatment_suspect_incare_history =
         _days_only(obs.treatment_suspect_incare_history),
+        treatment_aulit_history = _days_only(obs.treatment_aulit_history),
         treatment_reclass_break_days = obs.treatment_reclass_break_days,
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),

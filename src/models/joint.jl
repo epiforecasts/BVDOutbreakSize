@@ -162,6 +162,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_absconded_history = (; days = Int[], counts = Int[]),
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
+        treatment_aulit_history = (; days = Int[], counts = Int[]),
         treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_history = (; days = Int[], counts = Int[]),
         confirmed_cases::Union{Missing, Integer} = missing,
@@ -211,6 +212,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
+        aulit_history = treatment_aulit_history,
         conf_hazard_daily = conf_hazard_daily,
         reclass_break_days = treatment_reclass_break_days))
 end
@@ -420,6 +422,7 @@ death-confirmation positivity (`death_confirmation`).
         treatment_absconded_history = (; days = Int[], counts = Int[]),
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
+        treatment_aulit_history = (; days = Int[], counts = Int[]),
         treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
@@ -581,6 +584,7 @@ death-confirmation positivity (`death_confirmation`).
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
+        aulit_history = treatment_aulit_history,
         conf_hazard_daily = conf_hazard_daily,
         reclass_break_days = treatment_reclass_break_days,
         k_external = k_isolation))
