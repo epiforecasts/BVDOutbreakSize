@@ -36,28 +36,3 @@ end
     df = comparison_table(C)
     @test all(==("outside 90%"), df[!, "Narrowest interval"])
 end
-
-@testitem "Chamla confirmed-case constants are well formed" begin
-    using BVDOutbreakSize: CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12
-    using Dates: Date
-
-    ## Central trajectory: dated, monotone non-decreasing in time, with the 90%
-    ## bounds bracketing the median at every point.
-    @test !isempty(CHAMLA_CONFIRMED_CENTRAL)
-    dates = [Date(d) for (d, _, _, _) in CHAMLA_CONFIRMED_CENTRAL]
-    @test issorted(dates)
-    meds = [m for (_, m, _, _) in CHAMLA_CONFIRMED_CENTRAL]
-    @test issorted(meds)
-    for (_, m, lo, hi) in CHAMLA_CONFIRMED_CENTRAL
-        @test lo <= m <= hi
-    end
-
-    ## Week-12 scenario spread: low < central < high in the median, each with
-    ## bracketing bounds.
-    @test length(CHAMLA_CONFIRMED_W12) == 3
-    w12 = [m for (_, m, _, _) in CHAMLA_CONFIRMED_W12]
-    @test issorted(w12)
-    for (_, m, lo, hi) in CHAMLA_CONFIRMED_W12
-        @test lo <= m <= hi
-    end
-end

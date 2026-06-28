@@ -43,9 +43,6 @@ Changes since v1.6.0.
   collapsible block), and posterior-predictive panels for the four flow
   streams. The treatment-centre flow methods section was rewritten, and the
   flow streams added to the data-overview table.
-- Added a comparison of the confirmed-case projection against Chamla et al.
-  as a second external comparator, forward-projected from the frozen 27 May
-  fit (resolves #340).
 - Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
   automatically in continuous integration before each documentation deploy.
   Dropped the per-release current-model re-fits from the estimate-evolution
