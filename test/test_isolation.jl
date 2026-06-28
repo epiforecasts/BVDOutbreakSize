@@ -365,6 +365,70 @@ end
     @test all(dem .< 1.0e6)
 end
 
+@testitem "occupancy split: occupancy extends past the census end (no-flow days)" begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity
+    using Random: seed!
+    using BVDOutbreakSize: treatment_only_model
+
+    ## A situation report that advances the occupancy/flow/case grid but leaves
+    ## the suspect/confirmed in-care census frozen a day or two earlier (the
+    ## 24-25 June gap: SitRep 042 extended occupancy/cases/lab but not the
+    ## Tableau 6 split). The occupancy backbone and the daily flows run to the
+    ## grid end (day 35) while the split census and the flow histories stop two
+    ## days short (day 33). The per-day flow / split likelihoods must score only
+    ## the days each history actually reports and skip the two trailing
+    ## occupancy-only days cleanly: no day index reaches past the end of a
+    ## shorter history, the split day-set is the census days alone (so the
+    ## trailing occupancy days stay on the total-occupancy backbone), and the
+    ## conditioned log density is finite.
+    n = 35
+    isolation_history = (; days = collect(28:35),
+        counts = [206, 233, 258, 267, 283, 309, 301, 297])
+    ## Flows reported only to day 33 (two days short of the occupancy grid).
+    admissions = (; days = [31, 32, 33], counts = [60, 55, 61])
+    incare_deaths = (; days = [31, 32, 33], counts = [9, 14, 9])
+    ruleouts = (; days = [31, 32, 33], counts = [34, 26, 36])
+    absconded = (; days = [31, 32, 33], counts = [1, 6, 1])
+    ## Census also reported only to day 33.
+    confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
+    suspect_incare = (; days = [31, 32, 33], counts = [147, 153, 169])
+    ## A lab / confirmed stream so the in-care confirmation hazard is non-zero
+    ## and the split census is identified (scored, not the guarded no-op path).
+    confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
+    lab_history = (; days = [28, 30, 32], counts = [120, 200, 320])
+
+    model = treatment_only_model(n; isolation_history,
+        treatment_admissions_history = admissions,
+        treatment_deaths_history = incare_deaths,
+        treatment_ruleout_history = ruleouts,
+        treatment_absconded_history = absconded,
+        treatment_confirmed_incare_history = confirmed_incare,
+        treatment_suspect_incare_history = suspect_incare,
+        treatment_reclass_break_days = [33],
+        confirmed_history, confirmed_cases = 110, lab_history)
+
+    ## A prior draw plus a conditioned log-density evaluation exercises every
+    ## per-day flow / split likelihood against the shorter histories. The
+    ## occupancy runs to day 35 with the census ending at day 33, so this is the
+    ## exact reported-occupancy / no-flow gap; any history indexed past its end
+    ## (or a mis-scored trailing day) would throw a bounds error or return a
+    ## non-finite value here.
+    seed!(424242)
+    vi = DynamicPPL.VarInfo(model)
+    ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
+    lp = logdensity(ldf, collect(vi[:]))
+    @test isfinite(lp)
+
+    ## Several further prior draws: none trips a bounds / dimension error from
+    ## the trailing occupancy-only days.
+    for s in 1:5
+        seed!(1000 + s)
+        vi_s = DynamicPPL.VarInfo(model)
+        @test isfinite(logdensity(ldf, collect(vi_s[:])))
+    end
+end
+
 @testitem "isolation occupancy: joint prior runs with the live data" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
