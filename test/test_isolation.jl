@@ -260,6 +260,98 @@ end
     @test acc_d.demand[end] < acc_d.demand[peak]
 end
 
+@testitem "clinical_stay_survival: discharge-complement matches the stock balance" begin
+    using BVDOutbreakSize: clinical_stay_survival, accumulate_occupancy,
+                           convolve_delay
+    ## The clinical-stay survival is the complement of the mixed discharge CDF,
+    ## `S_clin(d) = 1 − Σ_{j≤d}(CFR·death_pmf + (1−CFR)·recover_pmf)`. With no
+    ## same-day discharge it starts at 1 and is non-increasing toward 0.
+    death_pmf = [0.0, 0.30, 0.35, 0.20, 0.10, 0.05]
+    recover_pmf = vcat(zeros(8), [0.15, 0.25, 0.30, 0.20, 0.10])
+    CFR = 0.45
+    S = clinical_stay_survival(death_pmf, recover_pmf, CFR)
+    @test S[1] ≈ 1.0
+    @test all(diff(S) .<= 1e-12)             # non-increasing
+    @test all(S .>= -1e-12)                  # non-negative
+    @test S[end] ≈ 0.0 atol = 1e-9           # everyone discharged by the tail
+    @test length(S) == max(length(death_pmf), length(recover_pmf))
+
+    ## Cohort identity: the abscond-free occupied BVD stock the running balance
+    ## builds equals the survival-weighted admission convolution with exactly
+    ## this `S_clin`, so the two-clock weight is the stock's own per-cohort
+    ## weight (not the inclusive `P(stay ≥ d)` tail).
+    n = 40
+    t = 1:n
+    A_bvd = 0.6 .* (@. 25.0 * exp(-((t - 16.0)^2) / (2 * 7.0^2)))
+    A_bg = 0.4 .* (@. 25.0 * exp(-((t - 16.0)^2) / (2 * 7.0^2)))
+    deaths = convolve_delay(CFR .* A_bvd, death_pmf)
+    recover = convolve_delay((1 - CFR) .* A_bvd, recover_pmf)
+    ruleout = convolve_delay(A_bg, [0.0, 0.3, 0.4, 0.3])
+    ## No absconds → the BVD stock is exactly the cohort survival reconstruction.
+    acc0 = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.0,
+        fill(0.3, n))
+    @test all(abs.(acc0.O_bvd .- convolve_delay(A_bvd, S)) .< 1e-8)
+end
+
+@testitem "two_clock_confirmed: cohort split is a subset of the BVD stock" begin
+    using BVDOutbreakSize: two_clock_confirmed, clinical_stay_survival,
+                           accumulate_occupancy, convolve_delay
+    death_pmf = [0.0, 0.30, 0.35, 0.20, 0.10, 0.05]      # fast death
+    recover_pmf = vcat(zeros(8), [0.15, 0.25, 0.30, 0.20, 0.10])  # slow recover
+    CFR = 0.45
+    S = clinical_stay_survival(death_pmf, recover_pmf, CFR)
+
+    n = 60
+    t = 1:n
+    A_bvd = 0.6 .* (@. 25.0 * exp(-((t - 20.0)^2) / (2 * 9.0^2)))
+    A_bg = 0.4 .* (@. 25.0 * exp(-((t - 20.0)^2) / (2 * 9.0^2)))
+    deaths = convolve_delay(CFR .* A_bvd, death_pmf)
+    recover = convolve_delay((1 - CFR) .* A_bvd, recover_pmf)
+    ruleout = convolve_delay(A_bg, [0.0, 0.3, 0.4, 0.3])
+    conf_hazard = [d < 8 ? 0.05 : 0.30 for d in 1:n]
+
+    ## Zero abscond: the raw cohort confirmed stock is a strict subset of the
+    ## occupied BVD stock everywhere, no clamp needed — the two clocks are both
+    ## referenced to admission, so the confirmed-and-present cohort can never
+    ## exceed the present cohort.
+    acc0 = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.0,
+        conf_hazard)
+    raw0 = two_clock_confirmed(A_bvd, conf_hazard, S)
+    @test all(raw0 .<= acc0.O_bvd .+ 1e-9)
+    @test all(raw0 .>= -1e-9)
+
+    ## A zero confirmation hazard leaves the confirmed sub-stock empty.
+    @test all(two_clock_confirmed(A_bvd, zeros(n), S) .== 0)
+
+    ## A just-admitted cohort is never already confirmed: with a single
+    ## admission on day 1 only, the confirmed stock on day 1 is exactly 0 (the
+    ## hazard applies from the next day), and it then rises as the cohort
+    ## confirms while it survives.
+    A1 = vcat([10.0], zeros(n - 1))
+    o1 = two_clock_confirmed(A1, fill(0.4, n), S)
+    @test o1[1] == 0
+    @test o1[2] > 0
+
+    ## Monotone in the hazard: a uniformly higher hazard confirms more of the
+    ## surviving cohort, so the confirmed stock is pointwise at least as large.
+    lo = two_clock_confirmed(A_bvd, fill(0.1, n), S)
+    hi = two_clock_confirmed(A_bvd, fill(0.5, n), S)
+    @test all(hi .>= lo .- 1e-9)
+
+    ## Fast-death tail: against the proportional-share split, the two-clock
+    ## confirmed share is lower early because cases that die before confirming
+    ## are excluded from the confirmed pool (the comparator's whole point). The
+    ## proportional split drains the confirmed pool at the pool-average discharge
+    ## rate, over-attributing confirmed deaths in the early fast-death window.
+    O_conf_prop = acc0.O_conf
+    O_bvd = acc0.O_bvd
+    early = 3:12
+    share_prop = [O_bvd[i] > 0 ? O_conf_prop[i] / O_bvd[i] : 0.0 for i in early]
+    share_tc = [O_bvd[i] > 0 ? raw0[i] / O_bvd[i] : 0.0 for i in early]
+    @test all(share_tc .<= share_prop .+ 1e-9)
+    @test sum(share_tc) < sum(share_prop)
+end
+
 @testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a

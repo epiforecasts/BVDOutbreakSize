@@ -1676,6 +1676,130 @@ function accumulate_occupancy(A_bvd::AbstractVector, A_bg::AbstractVector,
 end
 
 """
+    clinical_stay_survival(death_pmf, recover_pmf, cfr)
+
+Clinical-stay survival of the BVD discharge mixture, indexed from cohort age 0,
+matching the discharge balance [`accumulate_occupancy`](@ref) runs. An admitted
+true case leaves by death (weight `cfr`, the in-care fatality `CFR_iso`) on the
+admission→death stay or by recovery (weight `1 − cfr`) on the admission→recovery
+stay, so the cumulative discharge fraction by age `d` is `G(d) = Σ_{j=0}^{d}
+(cfr · death_pmf[j+1] + (1 − cfr) · recover_pmf[j+1])` and the survival is its
+complement
+
+```math
+S_\\text{clin}(d) = 1 - G(d) = \\Pr(\\text{still in a bed after day } d),
+```
+
+so `S_clin[d+1]` is the probability the case has not yet been discharged by the
+end of day `d`. This is exactly the per-cohort weight the running-balance BVD
+stock carries: with no absconds `O_bvd(t) = Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)`,
+because the daily discharge convolutions drain the stock by `G`. Using this
+discharge-complement survival (`P(stay > d)`, not the inclusive `P(stay ≥ d)` of
+[`convolve_survival`](@ref)) keeps the two-clock confirmed sub-stock `≤ O_bvd`
+by construction rather than by a clamp. The two PMFs need not share a length —
+each is read independently and contributes zero beyond its support (a stay
+distribution decays to a zero tail), so the result has the longer length. Type-
+stable and AD-transparent; the element type follows the inputs.
+"""
+function clinical_stay_survival(death_pmf::AbstractVector,
+        recover_pmf::AbstractVector, cfr::Real)
+    L = max(length(death_pmf), length(recover_pmf))
+    T = promote_type(eltype(death_pmf), eltype(recover_pmf), typeof(cfr))
+    S = Vector{T}(undef, L)
+    one_T = one(T)
+    cum = zero(T)
+    @inbounds for d in 1:L
+        pd = d <= length(death_pmf) ? death_pmf[d] : zero(eltype(death_pmf))
+        pr = d <= length(recover_pmf) ? recover_pmf[d] : zero(eltype(recover_pmf))
+        ## Mixed discharge mass at age `d-1`, accumulated into the discharge
+        ## CDF `G`; the survival weight is its complement `1 − G`.
+        cum += cfr * pd + (one_T - cfr) * pr
+        S[d] = one_T - cum
+    end
+    return S
+end
+
+"""
+    two_clock_confirmed(A_bvd, conf_hazard, S_clin)
+
+Exact two-clock confirmed-in-care sub-stock: the cohort-tracked confirmed-and-
+present true-case prevalence. Each true-case admission cohort admitted on day
+`u` (`A_bvd[u]`) contributes to the confirmed stock on day `t` only when it has
+both been confirmed and not yet clinically departed, so
+
+```math
+O_\\text{conf}(t) = \\sum_{u \\le t} A_\\text{bvd}(u)\\,
+    \\text{CDF}_\\text{conf}(u, t)\\, S_\\text{clin}(t - u),
+```
+
+a product of two independent clocks running from admission: the confirmation
+clock and the clinical-stay clock.
+
+The confirmation clock is the per-cohort cumulative confirmation probability
+under the same time-varying daily confirmation hazard `conf_hazard(t) = τ_test ·
+p_pos(t)` the proportional-share occupancy borrows from the lab pipeline. A
+cohort admitted on day `u` is exposed to the hazard from the day after admission
+onward (mirroring the discrete `conf_hazard(t)·(O_bvd(t-1) − O_conf(t-1))` step
+of [`accumulate_occupancy`](@ref)), so
+
+```math
+\\text{CDF}_\\text{conf}(u, t) = 1 - \\prod_{j = u+1}^{t}\\bigl(1 -
+    \\text{conf\\_hazard}(j)\\bigr),
+```
+
+a cumulative product along the cohort's age rather than a fixed CDF, because the
+hazard is time-varying. A just-admitted cohort (`u = t`) has an empty product,
+so `CDF_conf = 0` and confirmation cannot pre-date admission.
+
+The clinical clock is the BVD clinical-stay survival `S_clin(d) = P(stay > d)`,
+the discharge-complement of the death/recovery mixture
+([`clinical_stay_survival`](@ref)) built from the same admission→death and
+admission→recovery stay PMFs the discharge convolutions drain the stock with, so
+`Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)` reconstructs the abscond-free BVD stock
+exactly. The confirmed-and-present cohort is a subset of the present cohort, so
+`O_conf ≤ O_bvd` holds by construction without the proportional split's
+mean-field approximation: a true case that dies in the fast-death tail before
+its test returns is never counted as confirmed.
+
+A tight `O(n^2)` scalar double loop (the grid is short), type-stable and
+AD-transparent under Mooncake. The inner loop walks cohorts from the current day
+backward, extending the non-confirmation product by one day per step, so the
+time-varying cumulative product costs no extra allocation. Returns the length-
+`n` confirmed-in-care sub-stock; the suspect sub-stock is the demand remainder
+`D − O_conf` formed by the caller.
+"""
+function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
+        S_clin::AbstractVector)
+    n = length(A_bvd)
+    T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
+    O_conf = Vector{T}(undef, n)
+    L = length(S_clin)
+    one_T = one(T)
+    @inbounds for t in 1:n
+        acc = zero(T)
+        ## `prod_unconf` is the probability cohort `u` is still unconfirmed at
+        ## day `t`, `∏_{j=u+1}^{t}(1 − hazard_j)`. Walking `u` from `t` down to
+        ## `1`, the product starts empty (a just-admitted cohort, CDF_conf = 0)
+        ## and gains one factor `(1 − hazard_u)` per step, so the time-varying
+        ## confirmation CDF is built incrementally with no extra allocation.
+        prod_unconf = one_T
+        for u in t:-1:1
+            d = t - u
+            ## Clinical-stay survival weight at cohort age `d`; cohorts older
+            ## than the survival support have departed (weight 0).
+            s = d < L ? S_clin[d + 1] : zero(T)
+            cdf_conf = one_T - prod_unconf
+            acc += A_bvd[u] * cdf_conf * s
+            ## Extend the non-confirmation product to include day `u` for the
+            ## next (older) cohort `u − 1`, whose exposure window starts at `u`.
+            prod_unconf *= (one_T - conf_hazard[u])
+        end
+        O_conf[t] = acc
+    end
+    return O_conf
+end
+
+"""
     admission_headroom(adm_days, capacity_history, isolation_history)
 
 Per-admission-day right-censoring bound for the admissions likelihood, built
@@ -2034,11 +2158,37 @@ and replication.
     acc = accumulate_occupancy(A_bvd, A_bg, deaths_daily, recover_daily,
         ruleout_daily, κ, conf_hazard)
     demand = acc.demand
-    O_conf = acc.O_conf
-    O_susp = acc.O_susp
+    O_bvd = acc.O_bvd
     abscond_daily = acc.abscond
+
+    ## Exact two-clock confirmed-in-care (the comparator to the #344
+    ## proportional-share split). The confirmed sub-stock is the cohort-tracked
+    ## confirmed-and-present true-case prevalence: each admitted true-case cohort
+    ## `A_bvd(u)` counts toward `O_conf(t)` only when it has both been confirmed
+    ## (cumulative confirmation probability under the time-varying hazard
+    ## `conf_hazard`) and not yet clinically departed (the death/recovery mixture
+    ## survival `S_clin`). The clinical clock reuses the same admission→death and
+    ## admission→recovery stay PMFs the discharge convolutions use, mixed by the
+    ## in-care fatality `CFR_iso`. Tracking the two clocks per cohort makes the
+    ## confirmed departures exact in the fast-death tail — a true case that dies
+    ## before its test returns is never counted as confirmed — instead of the
+    ## proportional `bvd_out · O_conf/O_bvd` mean-field drain of the running
+    ## balance. The total demand `D`, the occupied true-case stock `O_bvd`, the
+    ## non-case stock and the absconds stay exactly as `accumulate_occupancy`
+    ## builds them; only `O_conf` (and hence `O_susp = D − O_conf`) changes.
+    S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
+    O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
+    ## The confirmed-and-present cohort is a subset of the present cohort, so the
+    ## two-clock construction already gives `O_conf ≤ O_bvd`; clamp into
+    ## `[0, O_bvd]` to keep that invariant exact under any prior draw (the
+    ## abscond drain on `O_bvd` is small and falls on the unconfirmed pool, so
+    ## the clamp is a guard, not a structural correction). The suspect sub-stock
+    ## is the demand remainder, so `O_conf + O_susp = D` closes without a clamp.
+    O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
+    O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
     if eltype(demand) === Any
         demand = convert(Vector{eltype(C)}, demand)
+        O_bvd = convert(Vector{eltype(C)}, O_bvd)
         O_conf = convert(Vector{eltype(C)}, O_conf)
         O_susp = convert(Vector{eltype(C)}, O_susp)
         abscond_daily = convert(Vector{eltype(C)}, abscond_daily)
