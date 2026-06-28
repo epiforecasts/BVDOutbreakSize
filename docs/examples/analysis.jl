@@ -3047,12 +3047,19 @@ suspected_daily_panel = (;
 ## level and lag reflect the admission proportion and the stays. The censored-
 ## occupancy likelihood stores its per-day predictive draws under the submodel
 ## `obs` variable (not `increments`), so the replicates are read from that key.
+## The treatment model scores the total occupancy only on the days without a
+## published confirmed/suspect split (a per-day total-or-split switch): on the
+## split days the two sub-stock census panels carry the fit instead, so the
+## `isolation.obs` predictive holds only the non-split days. Drop the split
+## days from the panel's dates and observed counts to match that length.
+_iso_split_days = Set(Int.(obs.treatment_confirmed_incare_history.days))
+_iso_keep = [!(Int(d) in _iso_split_days) for d in obs.isolation_history.days]
 isolation_panel = (;
     title = "Patients in isolation",
-    dates = _vintage_dates(obs.isolation_history.days),
+    dates = _vintage_dates(obs.isolation_history.days[_iso_keep]),
     replicates = _vintage_replicates(
         pp_joint, @varname(isolation.obs)),
-    observed = obs.isolation_history.counts,
+    observed = obs.isolation_history.counts[_iso_keep],
     colour = :darkorange, cumulative = false);
 deaths_panel = (;
     title = "Suspected deaths",
