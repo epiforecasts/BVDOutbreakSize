@@ -3277,6 +3277,72 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
+# ### Posterior correlations and stream totals
+#
+# The heatmap is the posterior correlation between each pair of headline
+# quantities: the outbreak size ($C_T$), the reproduction number ($R_T$), the
+# outbreak age ($T$), the case-fatality ratio (CFR), the DRC and Uganda
+# ascertainment fractions ($p_\text{drc}$, $p_\text{ug}$), the non-BVD
+# background rate ($\lambda_\text{bg}$), the fraction tested ($\tau_\text{test}$),
+# and the cut-off total expected for each stream. Blue is positive, red negative.
+
+#md # ```@raw html
+#md # <details><summary>Posterior correlation heatmap</summary>
+#md # ```
+
+correlation_fig = plot_correlation_heatmap(chn_joint,
+    [:C_T, :R_T, :T, :CFR, :p_drc, :p_uganda, :lambda_bg, :tau_test,
+        :expected_reports_T, :expected_deaths_T, :expected_confirmed_T];
+    labels = Dict(:C_T => raw"C_T", :R_T => raw"R_T", :T => raw"T",
+        :CFR => raw"\mathrm{CFR}", :p_drc => raw"p_\mathrm{drc}",
+        :p_uganda => raw"p_\mathrm{ug}", :lambda_bg => raw"\lambda_\mathrm{bg}",
+        :tau_test => raw"\tau_\mathrm{test}",
+        :expected_reports_T => raw"\mathrm{susp.\ cases}",
+        :expected_deaths_T => raw"\mathrm{susp.\ deaths}",
+        :expected_confirmed_T => raw"\mathrm{conf.\ cases}"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+correlation_fig #hide
+
+# The stream-total plot takes each posterior draw, sums every stream over its
+# own reporting dates, and marks the observed total with a crosshair. The
+# diagonal panels are the predictive spread of each total against the observed
+# value; the off-diagonal panels show whether the totals move together from
+# draw to draw.
+
+#md # ```@raw html
+#md # <details><summary>Stream totals against observed</summary>
+#md # ```
+
+## Per-draw modelled total of each stream, summed over its own reporting
+## vintages (the confirmed total adds the unscored first-vintage baseline),
+## reusing the posterior-predictive replicates built for the vintage panels.
+_stream_total(reps) = [sum(Float64.(collect(r))) for r in vec(reps)]
+_conf_baseline = isempty(obs.confirmed_history.counts) ? 0 :
+                 Int(obs.confirmed_history.counts[1])
+stream_totals = (;
+    suspected_cases = _stream_total(reported_panel.replicates),
+    suspected_deaths = _stream_total(deaths_panel.replicates),
+    confirmed_cases = _stream_total(confirmed_panel.replicates) .+ _conf_baseline,
+    confirmed_deaths = _stream_total(confirmed_deaths_panel.replicates),
+    analysed = _stream_total(tests_analysed_panel.replicates));
+stream_observed = (;
+    suspected_cases = Float64(obs.reported_history.counts[end]),
+    suspected_deaths = Float64(obs.deaths_history.counts[end]),
+    confirmed_cases = Float64(obs.confirmed_cases),
+    confirmed_deaths = Float64(obs.confirmed_deaths_history.counts[end]),
+    analysed = Float64(obs.lab_history.counts[end]));
+stream_pairs_fig = plot_stream_pairs(stream_totals, stream_observed);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_pairs_fig #hide
+
 # ### Counterfactual: lower bound under no further transmission
 #
 # The committed future deaths $\Delta D$ if transmission stopped at the

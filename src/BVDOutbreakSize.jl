@@ -1,6 +1,6 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean
+using Statistics: quantile, mean, cor
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
@@ -43,6 +43,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_density_overlay, plot_prior_predictive,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
+       plot_correlation_heatmap, plot_stream_pairs,
        plot_estimate_evolution, plot_projection_comparison,
        plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
