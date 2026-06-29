@@ -969,18 +969,19 @@ cfr_prior_fig #hide
 # dispersion, partially pooled across the streams so the sparse ones borrow
 # strength. Following Stan prior-choice recommendations
 # [stan_prior_choice](@cite), the dispersion is sampled on the $1/\sqrt{k}$
-# scale in non-centred log form:
+# scale, each stream's log-dispersion drawn directly from the shared population
+# (the centred form: the streams are data-rich, so this mixes better than the
+# non-centred $\mu + \tau z$, which funnels against $\tau$):
 #
 # ```math
-# \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
-# z_s \sim \mathrm{Normal}(0, 1), \qquad
+# \log\!\bigl(1/\sqrt{k_s}\bigr) \sim \mathrm{Normal}(\mu,\ \tau), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
 # \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{20}
 # ```
 #
-# so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the
-# pooling ($\tau = 0$ collapses to one shared dispersion). The population
-# value $k = 1/\exp(\mu)^2$ is the headline dispersion.
+# so $k_s = 1/\exp\!\bigl(\log(1/\sqrt{k_s})\bigr)^2$ per stream, with $\tau$
+# setting the pooling ($\tau = 0$ collapses to one shared dispersion). The
+# population value $k = 1/\exp(\mu)^2$ is the headline dispersion.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_dispersion_model</summary>
