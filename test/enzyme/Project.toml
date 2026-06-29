@@ -12,6 +12,7 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 ADTypes = "1.22.0"
 Enzyme = "0.13"
 Mooncake = "0.5.33"
+LogDensityProblems = "2.2.0"
 Turing = "0.45.0"
 [sources]
 BVDOutbreakSize = {path = "../.."}
