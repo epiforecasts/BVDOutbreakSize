@@ -34,5 +34,7 @@ logs/
 /scripts/out/*.log
 /scripts/out/*.txt
 
+*.html
+
 # Transient docs build logs captured at the repo root
 /docs_build*.log
