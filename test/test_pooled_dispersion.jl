@@ -44,6 +44,28 @@ end
     end
 end
 
+@testitem "pooled_dispersion_model: centred and non-centred both valid" begin
+    using Turing: returned
+    using Random: default_rng, seed!
+    using BVDOutbreakSize: pooled_dispersion_model
+
+    ## The default is the centred parameterisation; `centred = false` gives the
+    ## non-centred form. Both yield a valid per-stream dispersion vector with
+    ## the same `k = 1/inv_sqrt_k^2` structure.
+    n = 6
+    for centred in (true, false)
+        seed!(7)
+        m = pooled_dispersion_model(n; centred = centred)
+        rng = default_rng()
+        for _ in 1:30
+            s = returned(m, rand(rng, m))
+            @test length(s.k) == n
+            @test all(isfinite, s.k) && all(>(0), s.k)
+            @test all(isapprox.(s.k, 1.0 ./ s.inv_sqrt_k .^ 2; rtol = 1e-6))
+        end
+    end
+end
+
 @testitem "bvd_joint: exposes partially-pooled per-stream dispersions" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
