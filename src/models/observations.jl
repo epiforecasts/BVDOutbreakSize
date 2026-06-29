@@ -1811,9 +1811,7 @@ model over the window before the daily flows begin.
 The two sub-stocks are scored against the Tableau 6 census breakdown (`dont
 confirmes` / `dont suspects`) where it is published, in place of the total on
 those days (a per-day total-OR-split switch, so the total and its parts are
-never both scored on one day). A sparse reclassification break on identified
-DHIS2 harmonisation days moves mass between the two sub-stocks without changing
-the total bed count. A separate per-event overnight reporting break shifts the
+never both scored on one day). A per-event overnight reporting break shifts the
 modelled total to absorb the `au-lit-J-1` versus `Fin-J` overnight
 reclassification gap: the break days are identified from the data (the au-lit
 gap, [`occupancy_break_days`](@ref)), a step `b_j` is fitted per identified day
@@ -1821,8 +1819,8 @@ centred on that day's observed gap but free to move, and the steps accumulate
 into a cumulative additive offset `Δ(t)` ([`cumulative_break_offset`](@ref))
 added to the modelled occupancy mean, so the modelled total tracks the
 reclassified census and the residual stays smooth instead of bending Rt to
-chase the reclassification. Both are point adjustments anchored to identified
-days, not free time-varying processes.
+chase the reclassification. The break is a point adjustment anchored to
+identified days, not a free time-varying process.
 
 Exposes the cut-off occupancy, bed demand, their difference (the bed
 shortfall), the utilisation, the BVD share of demand, the in-care fatality
@@ -1903,20 +1901,6 @@ and replication.
             cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
             mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
             sd_prior = truncated(Normal(4.0, 1.5); lower = 1)),
-        ## Reporting-break days for the known DHIS2 harmonisation reports (the
-        ## `Donnees reactualisees` flag): the days that carry the total-preserving
-        ## suspect↔confirmed reclassification step (below) moving mass between the
-        ## two sub-stocks. Empty by default → the reclassification step is a no-op.
-        ## The separate overnight TOTAL-occupancy break is identified from the
-        ## au-lit gap (`aulit_history`), not this list.
-        reclass_break_days::AbstractVector{<:Integer} = Int[],
-        ## Total-preserving suspect↔confirmed reclassification step on the
-        ## identified harmonisation days: a tightly-centred relative step
-        ## `1 + δ` moving mass between the two sub-stocks without changing the
-        ## total bed count. A point adjustment on known days only, not a free
-        ## time-varying process (which would launder real signal).
-        reclass_break_prior = truncated(Normal(0.0, 0.1); lower = -0.5,
-            upper = 0.5),
         ## Material-gap threshold (beds) for flagging an overnight occupancy
         ## reclassification break day from the `au-lit-J-1` versus previous-day
         ## `Fin-J` gap. A day is a break day only where `|g_t| > break_threshold`,
@@ -1961,14 +1945,6 @@ and replication.
     ## fraction κ of the previous-day suspect occupancy.
     abscond_frac ~ abscond_prior
     κ = abscond_frac
-    ## Total-preserving suspect↔confirmed reclassification step on the known
-    ## DHIS2 harmonisation days: `1 + reclass_break` moves mass between the two
-    ## sub-stocks without changing the total bed count. A tightly-bounded point
-    ## adjustment on the identified days only, not a free time-varying process.
-    ## An empty break-day list makes it a no-op. Sampled unconditionally so the
-    ## parameter set is stable.
-    reclass_break ~ reclass_break_prior
-    reclass_days = Set(Int.(reclass_break_days))
 
     ## Per-event overnight total-occupancy reporting break. The break days are
     ## identified from the data: the `au-lit-J-1` start-of-day in-bed count
@@ -2073,20 +2049,17 @@ and replication.
     ## the flows do not explain. A re-baselining persists, so Δ is cumulative and
     ## carried forward to every later day. Applied additively to the modelled
     ## total only; demand (the diagnostic) stays the un-offset latent stock.
-    one_T = one(eltype(demand))
     occ_offset = eltype(occ_break_offset) === Any ?
                  convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
     occ_obs_total = map(1:n) do t
         demand[t] + occ_offset[t]
     end
 
-    ## --- Sub-stock relabelling break ----------------------------------------
-    ## On a known harmonisation day the confirmed sub-stock takes the relative
-    ## step `1 + reclass_break`, the suspect sub-stock the offsetting count, so
-    ## the (offset) total is preserved — a reclassification moves patients
-    ## between the two sub-stocks, it does not change the bed count.
+    ## Sub-stock census means: the confirmed sub-stock is the modelled
+    ## confirmed occupancy and the suspect sub-stock is the offsetting count, so
+    ## the two sum to the (offset) total bed count.
     conf_split = map(1:n) do t
-        (t in reclass_days) ? O_conf[t] * (one_T + reclass_break) : O_conf[t]
+        O_conf[t]
     end
     susp_split = map(1:n) do t
         max(occ_obs_total[t] - conf_split[t], zero(eltype(demand)))
@@ -2215,7 +2188,6 @@ and replication.
     expected_confirmed_incare := safe_rate(conf_incare_T)
     expected_suspect_incare := safe_rate(susp_incare_T)
     incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
-    reclass_break_step := reclass_break
     ## Cut-off cumulative occupancy reclassification offset (fitted; can be
     ## negative, so reported raw rather than through `safe_rate`). Reports how
     ## much of the observed reclassification the model absorbed as a reporting
@@ -2232,7 +2204,7 @@ and replication.
         overall_los, abscond_frac, k_isolation = k,
         demand, occupancy = min.(demand, C), isolation,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
-        reclass_break, break_steps = b, break_offset = occ_break_offset,
+        break_steps = b, break_offset = occ_break_offset,
         break_grid_days,
         occupancy_break = isempty(occ_break_offset) ? z0 :
                           last(occ_break_offset),

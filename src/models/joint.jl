@@ -163,7 +163,6 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         treatment_aulit_history = (; days = Int[], counts = Int[]),
-        treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_history = (; days = Int[], counts = Int[]),
         confirmed_cases::Union{Missing, Integer} = missing,
         lab_history = (; days = Int[], counts = Int[]),
@@ -213,8 +212,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
         aulit_history = treatment_aulit_history,
-        conf_hazard_daily = conf_hazard_daily,
-        reclass_break_days = treatment_reclass_break_days))
+        conf_hazard_daily = conf_hazard_daily))
 end
 
 """
@@ -423,7 +421,6 @@ death-confirmation positivity (`death_confirmation`).
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         treatment_aulit_history = (; days = Int[], counts = Int[]),
-        treatment_reclass_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -571,8 +568,7 @@ death-confirmation positivity (`death_confirmation`).
     ## carves the occupied true-case stock into a confirmed and a suspect
     ## sub-stock, scored against the Tableau 6 `dont confirmes` / `dont suspects`
     ## census on the days they are present (a per-day total-OR-split switch). The
-    ## known DHIS2 harmonisation days carry the reclassification and overnight
-    ## total reporting breaks.
+    ## known DHIS2 harmonisation days carry the overnight total reporting break.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
@@ -586,7 +582,6 @@ death-confirmation positivity (`death_confirmation`).
         suspect_incare_history = treatment_suspect_incare_history,
         aulit_history = treatment_aulit_history,
         conf_hazard_daily = conf_hazard_daily,
-        reclass_break_days = treatment_reclass_break_days,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases (the confirmed-and-discharged subset, not all

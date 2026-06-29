@@ -1473,19 +1473,17 @@ cfr_prior_fig #hide
 # the borrowed confirmation hazard is non-zero, that is, where the laboratory
 # pipeline of the full model supplies it.
 #
-# Two reporting artefacts are modelled, on identified days only. The first is an
-# overnight reclassification of the total: the published start-of-day in-bed count
-# is differenced against the previous report day's occupancy, and a day whose gap
+# One reporting artefact is modelled, on identified days only: an overnight
+# reclassification of the total, where the published start-of-day in-bed count is
+# differenced against the previous report day's occupancy, and a day whose gap
 # exceeds a threshold is flagged as a break day. One step is fitted per flagged
 # day, with a prior centred on that day's observed gap but free to move, so the
 # fit can attribute part of a gap to genuine change in demand; the steps
 # accumulate into a persistent additive offset on the modelled total occupancy,
 # carried forward to every later day, that absorbs the overnight gap without
-# bending the reproduction number to chase it. The second is a total-preserving
-# step on the known data-harmonisation days that moves patients between the
-# confirmed and suspected sub-stocks without changing the total bed count. The
-# split does not change the occupancy before 13 June, since no breakdown is
-# published there and the total backbone carries that window.
+# bending the reproduction number to chase it. The split does not change the
+# occupancy before 13 June, since no breakdown is published there and the total
+# backbone carries that window.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -2989,7 +2987,6 @@ pp_joint = predict(
         treatment_suspect_incare_history =
         _days_only(obs.treatment_suspect_incare_history),
         treatment_aulit_history = _days_only(obs.treatment_aulit_history),
-        treatment_reclass_break_days = obs.treatment_reclass_break_days,
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,

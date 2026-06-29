@@ -180,18 +180,6 @@ function load_observations(
     ## block falls back to the total-occupancy likelihood and is a no-op.
     treatment_confirmed_incare_history = history("treatment_confirmed_incare_history")
     treatment_suspect_incare_history = history("treatment_suspect_incare_history")
-    ## Known DHIS2 harmonisation / reclassification days for the occupancy
-    ## split: the `Donnees reactualisees`-flagged reports (SitReps 034-040,
-    ## 17-23 June) where the confirmed-vs-suspect sub-stock partition steps by
-    ## more than the flows explain (the overnight `au-lit-J-1` vs `Fin-J` gap).
-    ## Mapped to grid day-indices on or before the cut-off; the treatment-flow
-    ## submodel applies a sparse, tightly-bounded reclassification step on these
-    ## days only. Empty when frozen before the window.
-    _reclass_dates = ["2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
-        "2026-06-21", "2026-06-22", "2026-06-23"]
-    treatment_reclass_break_days = sort(Int[_index(d)
-                                            for d in _reclass_dates
-                                            if Date(String(d)) <= cutoff])
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -248,7 +236,6 @@ function load_observations(
         treatment_confirmed_incare_history =
         treatment_confirmed_incare_history,
         treatment_suspect_incare_history = treatment_suspect_incare_history,
-        treatment_reclass_break_days = treatment_reclass_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

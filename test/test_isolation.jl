@@ -288,13 +288,12 @@ end
 
     ## Occupancy on days 28-33 with a published split on the last three days.
     ## On split days the two sub-stock censuses are scored instead of the total
-    ## (a per-day total-OR-split switch); the abscond fraction, the
-    ## suspect↔confirmed reclassification step and the per-day overnight
-    ## total-occupancy break are sampled and stay in range. The au-lit start-of-
-    ## day count gaps day 32 below the previous day's occupancy by more than the
-    ## threshold, so day 32 is flagged a break day and a step is fitted. The lab /
-    ## confirmed stream is conditioned so the in-care confirmation hazard is
-    ## non-zero and the split is identified (the coherent config).
+    ## (a per-day total-OR-split switch); the abscond fraction and the per-day
+    ## overnight total-occupancy break are sampled and stay in range. The au-lit
+    ## start-of-day count gaps day 32 below the previous day's occupancy by more
+    ## than the threshold, so day 32 is flagged a break day and a step is fitted.
+    ## The lab / confirmed stream is conditioned so the in-care confirmation
+    ## hazard is non-zero and the split is identified (the coherent config).
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
@@ -309,12 +308,10 @@ end
             confirmed_history, confirmed_cases = 110, lab_history,
             treatment_confirmed_incare_history = confirmed_incare,
             treatment_suspect_incare_history = suspect_incare,
-            treatment_aulit_history = aulit,
-            treatment_reclass_break_days = [33]),
+            treatment_aulit_history = aulit),
         Prior(), 60;
         chain_type = FlexiChains.VNChain, progress = false)
     ks = string.(collect(keys(chn)))
-    @test any(k -> occursin("reclass_break", k), ks)
     ## The per-day overnight break step (non-centred z) is sampled, and the
     ## cut-off cumulative offset deterministic is exposed.
     @test any(k -> occursin("z_break", k), ks)
@@ -472,7 +469,6 @@ end
         treatment_confirmed_incare_history = confirmed_incare,
         treatment_suspect_incare_history = suspect_incare,
         treatment_aulit_history = aulit,
-        treatment_reclass_break_days = [33],
         confirmed_history, confirmed_cases = 110, lab_history)
 
     ## A prior draw plus a conditioned log-density evaluation exercises every
@@ -521,7 +517,6 @@ end
         obs.treatment_confirmed_incare_history,
         treatment_suspect_incare_history =
         obs.treatment_suspect_incare_history,
-        treatment_reclass_break_days = obs.treatment_reclass_break_days,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = breakpoint,
