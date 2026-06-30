@@ -340,8 +340,12 @@ function occupancy_break_days(iso_days, iso_obs, aulit_history;
     idays = Int.(iso_days)
     iobs = Float64.(iso_obs)
     ## Map each au-lit day to its isolation-day index and observed gap
-    ## g = au-lit − occupancy(t−1). occupancy(t−1) is the most recent
-    ## strictly-earlier isolation count (handles a missing report day).
+    ## g = au-lit − occupancy(t−1), flagging a break where |g| exceeds the
+    ## threshold. occupancy(t−1) must be the immediately preceding day: across
+    ## a reporting gap (a missing report day, e.g. 26 June absent so 27 June's
+    ## previous observation is 25 June) the gap spans the missing day and mixes
+    ## real change with reclassification, so it is not a clean overnight gap
+    ## and is not flagged.
     iso_break_idx = Int[]
     gaps = Float64[]
     for (j, ad) in enumerate(adays)
@@ -349,7 +353,9 @@ function occupancy_break_days(iso_days, iso_obs, aulit_history;
         ipos === nothing && continue
         prior = filter(x -> x < ad, idays)
         isempty(prior) && continue
-        pidx = findlast(==(maximum(prior)), idays)
+        prior_day = maximum(prior)
+        ad - prior_day == 1 || continue
+        pidx = findlast(==(prior_day), idays)
         g = acounts[j] - iobs[pidx]
         if abs(g) > threshold
             push!(iso_break_idx, ipos)

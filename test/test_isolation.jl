@@ -94,11 +94,14 @@ end
     @test brk2.iso_break_idx == [2, 5]
     @test brk2.gaps ≈ [44.0, -74.0]
 
-    ## The gap is taken against the most recent STRICTLY-earlier occupancy, so a
-    ## missing report day steps back to the last reported day, not the index.
+    ## Across a reporting gap the break is NOT flagged: the previous occupancy is
+    ## more than one day back, so au-lit − occupancy(prev) spans the missing
+    ## day(s) and mixes real change with reclassification, not a clean overnight
+    ## gap. Here 12 June is absent, so 13 June's previous report is 11 June; even
+    ## a large gap (+85) is skipped because it is not a consecutive-day step.
     iso_gap_days = [11, 13]       # 12 June absent (not published upstream)
     iso_gap_obs = [315, 363]
-    aulit_gap = (; days = [13], counts = [327])  # 327 vs 315 = +12, below thr
+    aulit_gap = (; days = [13], counts = [400])  # 400 vs 315 = +85, but cross-gap
     @test isempty(occupancy_break_days(iso_gap_days, iso_gap_obs, aulit_gap;
         threshold = 15.0).iso_break_idx)
 
@@ -148,19 +151,18 @@ end
         @test i26 ∉ getfield(obs, nm).days
     end
 
-    ## On the live isolation/au-lit series the 27 June occupancy break is taken
-    ## against the most recent strictly-earlier report (25 June), stepping back
-    ## across the missing 26 June, not against a non-existent 26 June value.
+    ## On the live isolation/au-lit series 27 June is NOT flagged as an occupancy
+    ## break: its previous report is 25 June (two days back, across the missing
+    ## 26 June), so the au-lit-vs-occupancy gap spans the hole and is not a clean
+    ## overnight reclassification. Only consecutive-day gaps are flagged.
     iso = obs.isolation_history
     brk = occupancy_break_days(iso.days, Float64.(iso.counts),
         obs.treatment_aulit_history; threshold = 15.0)
     cut_pos = findfirst(==(i27), iso.days)
     @test cut_pos !== nothing
-    pos_in_breaks = findfirst(==(cut_pos), brk.iso_break_idx)
-    @test pos_in_breaks !== nothing    # the two-day jump is a flagged break
-    aulit_27 = obs.treatment_aulit_history.counts[end]
-    iso_25 = iso.counts[findfirst(==(i25), iso.days)]
-    @test brk.gaps[pos_in_breaks] ≈ aulit_27 - iso_25
+    @test cut_pos ∉ brk.iso_break_idx   # the two-day jump is NOT flagged
+    ## The consecutive-day breaks (17/19/22/24 June) are still flagged.
+    @test !isempty(brk.iso_break_idx)
 end
 
 @testitem "cumulative_break_offset: persistent additive re-baselining" begin
