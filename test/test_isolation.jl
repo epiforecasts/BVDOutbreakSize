@@ -109,6 +109,60 @@ end
     @test isempty(occupancy_break_days(iso_days, missing, aulit).iso_break_idx)
 end
 
+@testitem "two-day reporting gap: increments bin and break step back across it" begin
+    using BVDOutbreakSize: bin_increments, occupancy_break_days,
+                           load_observations
+    using Dates: Date, value
+
+    ## A missing report day leaves a hole in the per-vintage day-indices (the
+    ## latent daily grid is unbroken; only the observations skip a day). The
+    ## vintage after the hole is two grid days on, so its increment bin must
+    ## span BOTH the missing day's and the report day's modelled values — a
+    ## two-day bin — not assume a one-day step. With `daily[t] = t` the bin
+    ## value reveals which grid days it summed.
+    daily = Float64.(collect(1:10))
+    days = [6, 7, 9]                 # day 8 absent (no report); 9 is two days on
+    binned = bin_increments(daily, days)
+    @test binned[end] == daily[8] + daily[9]   # spans the absent day + report day
+    @test binned[2] == daily[7]                # the unbroken steps stay one-day
+    ## Mass conservation: no grid day is double-counted or dropped across the hole.
+    @test sum(binned) == sum(daily[1:days[end]])
+
+    ## The same gap on the live merged manifest. SitRep 043 (26 June) was not
+    ## published, so the histories step 25 June -> 27 June and 26 June is a
+    ## latent grid day with no observation mapped to it.
+    obs = load_observations()
+    @test obs.cutoff == Date("2026-06-27")
+    ## Grid index of a calendar date: the cut-off is the last grid day, and a
+    ## day `k` before it sits at index `n - k` (the latent grid is unbroken).
+    idx_of(d) = obs.n - value(obs.cutoff - d)
+    i26 = idx_of(Date("2026-06-26"))
+    i27 = idx_of(Date("2026-06-27"))
+    i25 = idx_of(Date("2026-06-25"))
+    @test i27 == obs.n                 # the cut-off is the last grid day
+    @test i27 - i25 == 2               # a genuine two-day jump over the hole
+    ## No per-vintage history indexes the missing 26 June grid day.
+    for nm in (:confirmed_history, :confirmed_deaths_history, :isolation_history,
+        :treatment_aulit_history, :treatment_admissions_history,
+        :suspected_daily_history, :recovered_history)
+        @test i26 ∉ getfield(obs, nm).days
+    end
+
+    ## On the live isolation/au-lit series the 27 June occupancy break is taken
+    ## against the most recent strictly-earlier report (25 June), stepping back
+    ## across the missing 26 June, not against a non-existent 26 June value.
+    iso = obs.isolation_history
+    brk = occupancy_break_days(iso.days, Float64.(iso.counts),
+        obs.treatment_aulit_history; threshold = 15.0)
+    cut_pos = findfirst(==(i27), iso.days)
+    @test cut_pos !== nothing
+    pos_in_breaks = findfirst(==(cut_pos), brk.iso_break_idx)
+    @test pos_in_breaks !== nothing    # the two-day jump is a flagged break
+    aulit_27 = obs.treatment_aulit_history.counts[end]
+    iso_25 = iso.counts[findfirst(==(i25), iso.days)]
+    @test brk.gaps[pos_in_breaks] ≈ aulit_27 - iso_25
+end
+
 @testitem "cumulative_break_offset: persistent additive re-baselining" begin
     using BVDOutbreakSize: cumulative_break_offset
 
