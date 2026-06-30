@@ -412,6 +412,7 @@ death-confirmation positivity (`death_confirmation`).
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
+        onset_to_sample = nothing,
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
@@ -604,6 +605,26 @@ death-confirmation positivity (`death_confirmation`).
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
+    ## Optional external onset-to-sample constraint (default off). The
+    ## onset→confirmation convolution (onset→report ⊕ receipt) IS the
+    ## onset-to-sample delay for confirmed cases, so an external fit of that
+    ## delay (e.g. NEJM DRC 2026, see [`nejm_onset_to_sample`](@ref)) grounds
+    ## the convolution without touching either leg's prior. The latent target
+    ## is a double-censored Gamma whose mean/SD priors carry the external fit
+    ## and its uncertainty; it is tied to the convolution by an `n_obs`-weighted
+    ## cross-entropy, so the data split the pull between the report and receipt
+    ## legs subject to their existing priors. The receipt (lab-turnaround) delay
+    ## is otherwise unidentified, so this is the per-sample data that grounds it.
+    if onset_to_sample !== nothing
+        onset_to_sample_state ~ to_submodel(
+            onset_to_sample_model(length(onset_to_confirmation_pmf) - 1;
+            mean_prior = onset_to_sample.mean_prior,
+            sd_prior = onset_to_sample.sd_prior))
+        @addlogprob! delay_match_logweight(onset_to_sample_state.pmf,
+            onset_to_confirmation_pmf, onset_to_sample.n_obs)
+        onset_to_sample_mean := onset_to_sample_state.mean
+        onset_to_sample_sd := onset_to_sample_state.sd
+    end
     R0 := infection_state.R0
     r := infection_state.r
     r0 := infection_state.r0

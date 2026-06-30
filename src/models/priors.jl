@@ -101,6 +101,47 @@ PMF is truncated back to lags `0 … nmax` and renormalised. Returns
         sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean)
 end
 
+"""
+Latent onset-to-sample delay submodel. Samples a delay MEAN and SD, maps
+them to a Gamma shape and scale (`α = (mean/sd)²`, `θ = sd²/mean`) and
+discretises to a daily PMF over lags `0 … nmax` by the same double interval
+censoring as the other delays ([`discretise_censored`](@ref)), so the latent
+distribution sits on the same footing as the model's own kernels. Gamma is
+the form the external onset-to-sample fit prefers and double-censoring
+matches the marginal likelihood that produced it, so no further correction
+is needed. The mean/SD priors carry the external fit and its uncertainty.
+Returns `(; pmf, dist, mean, sd, alpha, theta)`.
+"""
+@model function onset_to_sample_model(nmax::Integer; mean_prior, sd_prior)
+    delay_mean ~ mean_prior
+    delay_sd ~ sd_prior
+    α = (delay_mean / delay_sd)^2
+    θ = delay_sd^2 / delay_mean
+    dist = Gamma(α, θ)
+    return (; pmf = discretise_censored(dist, nmax), dist,
+        mean = delay_mean, sd = delay_sd, alpha = α, theta = θ)
+end
+
+"""
+Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
+(Akilimali et al. 2026, doi:10.1056/NEJMc2608070, Table S3). The
+confirmed-positive onset-to-sample delay (N = 129) was fitted with `epidist`
+correcting for double interval censoring and right truncation; Gamma was the
+best-fitting family. The reported median (4.8 d) and 25th/75th percentiles
+imply a Gamma with mean ≈ 7.39 d and SD ≈ 7.95 d. The mean prior SD
+(`mean_sd ≈ 1.6 d`) comes from the reported median 95% CrI (3.46–7.84 d); the
+SD prior spread is weakly informative as the CrIs do not pin it directly.
+`n_obs` is the confirmed-positive sample size, the weight for the
+cross-entropy tie ([`delay_match_logweight`](@ref)). Returns a NamedTuple
+`(; mean_prior, sd_prior, n_obs)` for the `onset_to_sample` kwarg of
+[`bvd_joint`](@ref).
+"""
+function nejm_onset_to_sample(; mean::Real = 7.39, mean_sd::Real = 1.6,
+        sd::Real = 7.95, sd_sd::Real = 2.0, n_obs::Integer = 129)
+    return (; mean_prior = truncated(Normal(mean, mean_sd); lower = 1),
+        sd_prior = truncated(Normal(sd, sd_sd); lower = 1), n_obs)
+end
+
 ## --- Reproduction number ------------------------------------------------
 
 """
