@@ -1,0 +1,877 @@
+# # Sensitivity and comparison analyses
+#
+# This page continues the [main analysis](analysis.md) from the
+# one-week-ahead forecast onward: how last week's forecast held up, the
+# outbreak size each data stream implies on its own, how the estimate has
+# evolved across releases, comparisons with McCabe et al. and Chamla et al.,
+# and the delay and molecular-clock sensitivity re-fits. It renders from the
+# same fitted chains as the main analysis, loaded through the shared setup, so
+# no model is re-fit here beyond the frozen and (gated) sensitivity re-fits.
+
+#md # ```@raw html
+#md # <details><summary>Load packages, data and fitted chains</summary>
+#md # ```
+
+## Shared setup: packages, observations, the fit registry and every model fit
+## (loaded from the content-addressed cache). See docs/examples/_setup.jl.
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Forecast validation (last week versus now)
+#
+# How last week's forecast held up against the data since observed, using the
+# frozen re-fit and one-week projection defined in the methods
+# [forecast-versus-frozen evaluation](@ref
+# "Forecast-versus-frozen evaluation"). The frozen fit also conditions on
+# the isolation beds, so the projected bed occupancy is scored against the
+# beds held a week later. The bed validation is weak at a one-week-back freeze:
+# the reported occupancy rate starts only on 9 June, so the capacity has no
+# implied-capacity anchor and rides its random walk back to the freeze date,
+# widening the projected bed interval.
+
+#md # ```@raw html
+#md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
+#md # ```
+
+## frozen_lastweek is computed in the setup block above.
+validation_forecast = forecast_reported(frozen_lastweek.chn;
+    horizon = 7,
+    obs_cases = frozen_lastweek.o.reported_cases,
+    obs_deaths = frozen_lastweek.o.total_deaths,
+    obs_confirmed = frozen_lastweek.o.confirmed_cases,
+    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
+
+## The observed beds at the current cut-off (the forecast target), so the
+## frozen-fit bed forecast is scored against what the beds actually held.
+_obs_beds = isempty(obs.isolation_history.counts) ? missing :
+            obs.isolation_history.counts[end]
+validation_table = forecast_vs_truth(validation_forecast;
+    confirmed = obs.confirmed_cases,
+    confirmed_deaths = obs.confirmed_deaths,
+    isolation = _obs_beds);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Forecast-versus-observed validation table</summary>
+#md # ```
+
+validation_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The observation panels histogram the one-week-ahead cumulative forecast
+# made from the frozen fit, with the 90% predictive interval shaded and the
+# count actually observed by the current cut-off drawn as a dashed black
+# rule.
+
+#md # ```@raw html
+#md # <details><summary>Forecast-versus-observed plot</summary>
+#md # ```
+
+validation_fig = plot_forecast_vs_truth(validation_forecast;
+    confirmed = obs.confirmed_cases,
+    confirmed_deaths = obs.confirmed_deaths,
+    baseline_confirmed = frozen_lastweek.o.confirmed_cases,
+    baseline_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_fig #hide
+
+# The bed panel scores last week's projected occupancy against the beds
+# occupied now (the dashed rule).
+
+#md # ```@raw html
+#md # <details><summary>Bed forecast-versus-observed plot</summary>
+#md # ```
+
+validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
+    isolation = _obs_beds);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_beds_fig #hide
+
+# The latent quantities are not observed, so they are scored distribution
+# against distribution: what the frozen fit forecast for the past week's new
+# infections, onsets and deaths against what the current fit now estimates
+# for the same window.
+
+#md # ```@raw html
+#md # <details><summary>Forecast-versus-now latent plot</summary>
+#md # ```
+
+## Current fit's draws of the new latent counts over the past week, the last
+## seven days of each cumulative-trajectory deterministic.
+function _now_new(chn, key)
+    mat = chn[key]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    return Float64[t[end] - t[max(1, length(t) - 7)] for t in trajs]
+end
+now_latent = (;
+    infections_new = _now_new(chn_joint, :cumulative_infections),
+    onsets_new = _now_new(chn_joint, :cumulative_onsets),
+    deaths_latent_new = _now_new(chn_joint, :cumulative_expected_deaths))
+
+validation_latent_fig = plot_forecast_vs_truth_latent(
+    validation_forecast; now = now_latent);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_latent_fig #hide
+
+# ## Outbreak size estimated by each data stream
+#
+# Each data stream constrains the latent outbreak size differently.
+# The table below puts the posteriors over the infection count side by side,
+# the single-stream fits and the joint, to show what each stream implies on
+# its own and what the joint adds.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream infection-count table</summary>
+#md # ```
+
+streams_C_table = streams_table(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "joint" => posterior_C_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+streams_C_table #hide
+
+# The first figure shows each single-stream fit's cumulative-infection
+# trajectory projected to the cut-off, with a dotted rule in each stream's
+# colour marking where its data stops and the ribbon beyond it becomes a
+# forward projection.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream projected-trajectory plot</summary>
+#md # ```
+
+## Per-draw cumulative-infection trajectory carried by each single-stream
+## fit out to the cut-off on day `n`, so streams whose data ends earlier are
+## still projected to today.
+function _cuminf(chn)
+    mat = chn[:cumulative_infections]
+    return [collect(v) for v in vec(collect(mat))]
+end
+## Grid day a stream's data last reports, used for the dotted rule. The
+## suspected case and death histories freeze at 26 May; exports and confirmed
+## run to the cut-off.
+_last_day(days) = isempty(days) ? nothing : maximum(days)
+
+stream_traj_fig = plot_stream_trajectories(
+    [
+        (; label = "exports", trajs = _cuminf(chn_exports),
+            last_day = _last_day(vcat(obs.export_case_days,
+                obs.export_death_days)), colour = :seagreen),
+        (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
+            last_day = _last_day(obs.deaths_history.days),
+            colour = :firebrick),
+        (; label = "cases (DRC)", trajs = _cuminf(chn_cases),
+            last_day = _last_day(obs.reported_history.days),
+            colour = :steelblue),
+        (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
+            last_day = _last_day(obs.confirmed_history.days),
+            colour = :goldenrod),
+        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
+            last_day = _last_day(obs.isolation_history.days),
+            colour = :darkorange)];
+    n = obs.n, seeding = obs.seeding);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_traj_fig #hide
+
+# The second figure is the posterior density of each fit's cumulative
+# infection count at the cut-off; the x-axis is scaled to a multiple of the
+# joint-fit 90% upper bound so the bulk of the streams stays visible rather
+# than being flattened by the wide, ill-defined confirmed-only tail.
+
+#md # ```@raw html
+#md # <details><summary>Cut-off infection-count density plot</summary>
+#md # ```
+
+## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
+## the streams that track it read clearly while the confirmed-only tail runs
+## off the axis rather than dominating it.
+density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
+
+cumulative_density_fig = plot_cumulative_cases(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "joint" => posterior_C_joint;
+    scenarios = [], xmax = density_xmax);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+cumulative_density_fig #hide
+
+# The third figure is the reproduction number each stream implies on its own,
+# one panel per stream with the joint fit overlaid in grey as the reference.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream implied-Rt plot</summary>
+#md # ```
+
+## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
+## joint walks from `RT_WALK_LEAD` days before the first situation report; the
+## shared `display_start` is the joint renewal start so every stream reads over
+## the same established window. `ramp` matches the joint Rt figure.
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
+stream_rt_fig = plot_rt_streams(
+    [
+        (; label = "exports", chn = chn_exports, rt_start = 1,
+            rt_walk_start = 1, colour = :seagreen),
+        (; label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick),
+        (; label = "cases (DRC)", chn = chn_cases, rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue),
+        (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
+            rt_walk_start = 1, colour = :goldenrod),
+        (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
+            rt_walk_start = 1, colour = :darkorange)];
+    joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ramp = 21.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_rt_fig #hide
+
+# The frozen re-fits below freeze the renewal data to an earlier cut-off
+# and re-fit, so that a change driven by newer data can be distinguished from
+# one driven by a change of method.
+# Each uses the full headline settings (1000 draws across two chains),
+# reusing the frozen-fit helper defined above.
+
+#md # ```@raw html
+#md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
+#md # ```
+
+## Frozen re-fits and released_df are prepared in the setup block above.
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Estimate evolution across releases
+#
+# How the outbreak-size estimate moved as the situation reports accrued.
+#
+# The project publishes a tagged results release at each data cut-off
+# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
+# the posterior draws and input data.
+# The released series, in blue, is the project's published estimate at each
+# release: the closed-form integral model up to v1.3.0, then the renewal
+# model from v1.4.0 on.
+# Each release is its own fit, so it is drawn as a discrete estimate, a
+# median with nested 30/60/90% interval bars, rather than a ribbon.
+# The current model frozen at earlier cut-offs is drawn in red as discrete
+# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
+# and 27 May) and one week before the current cut-off. These are the frozen
+# joint fits already computed for the matched-in-time comparison and the
+# forecast validation, reused here, so no extra fits are run.
+# The current-data, current-model estimate is drawn in green as the
+# cumulative-infection trajectory over time, a single fit shown across the
+# period so the latest estimate reads against the earlier ones.
+# Each release date is marked with a dotted vertical rule.
+
+#md # ```@raw html
+#md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
+#md # ```
+
+## Released median and 30/60/90% intervals per release, from
+## `data/released_estimates.csv`. Each tuple is
+## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
+release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                         r.lo90, r.hi90) for r in eachrow(released_df)]
+
+## The current model frozen at earlier cut-offs, each its own discrete
+## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
+## for the matched-in-time comparison below, plus the one-week-back
+## validation fit (`frozen_lastweek`, at `validation_cutoff`) already
+## computed for the forecast validation above. Both are reused here so the
+## current-model estimate at those earlier cut-offs reads against the
+## released overlay, including a recent point one week before the cut-off.
+## No extra fits are run. Each tuple carries the median and 30/60/90%
+## credible bounds from the frozen `C_T` draws.
+function _ci369(xs)
+    q(p) = round(Int, quantile(xs, p))
+    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
+end
+frozen_by_cutoff[validation_cutoff] = frozen_lastweek
+frozen_matched = [(c, _ci369(frozen_C(c))...)
+                  for c in sort(union(frozen_cutoffs, [validation_cutoff]))]
+
+## The current-data, current-model estimate as the cumulative-infection
+## trajectory over the day grid (one calendar date per grid day, day 1 is
+## the seeding date), summarised by per-day 30/60/90% credible bounds. This
+## is the same latent quantity the cumulative-trajectory figure shows, so
+## the current estimate rises over time on the release-date axis instead of
+## sitting flat. Drawn against calendar dates, it lines up with the
+## release and frozen points.
+infection_trajectory = let
+    mat = chn_joint[:cumulative_infections]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    ## Only over the comparison window — from the earliest release date to the
+    ## cut-off — not back to the seeding date.
+    start_day = obs.n - value(obs.cutoff - Date(release_evolution[1][1]))
+    days = max(start_day, 1):obs.n
+    dates = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
+    (dates,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+evolution_fig = plot_estimate_evolution(release_evolution;
+    renewal = frozen_matched,
+    renewal_label = "Current model frozen at matched cut-offs and one week back",
+    trajectory = infection_trajectory,
+    title = "Outbreak-size estimate as data accrued");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evolution_fig #hide
+
+# ## Comparison with McCabe et al.
+#
+# Our model is a discrete-time renewal model with a time-varying
+# reproduction number and every data stream fitted jointly.
+# McCabe et al. published their estimates as scenarios at fixed
+# situation-report cut-offs, each scenario carrying a 95% confidence
+# interval.
+# We show all three, the 18 May report, the 20 May update and the 27 May
+# Lancet publication, as one panel each, with their intervals kept.
+# Within a panel each method and scenario family is a single line, carrying its
+# sweep over the nuisance assumptions: the case-fatality ratio, the geographic
+# window and the doubling time.
+# The geographic-spread scenarios come from exported cases and travel volume.
+# Their back-calculation-from-deaths scenarios differ between the reports,
+# since the 18 May report used 88 reported deaths and the 20 May update 131,
+# with a corrected set of case-fatality ratios.
+# McCabe's scenarios estimate cumulative cases at their report dates, though
+# their report is not fully explicit about whether this is symptomatic cases
+# or all infections.
+# We take the like-for-like quantity to be our cumulative symptom onsets, the
+# symptomatic cases, on the same dates, rather than the latent infections
+# (which include the not-yet-symptomatic) or our current cut-off total.
+# We read our value off the joint fit's cumulative-onset trajectory at the
+# grid day for each report date and show it with its credible interval, the
+# 18 May report against our 18 May value, the 20 May update against our
+# 20 May value, and the 27 May Lancet publication against our 27 May value,
+# so each scenario sits beside our estimate for the date it was made.
+
+#md # ```@raw html
+#md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
+#md # ```
+
+function _ci90row(xs)
+    (round(Int, quantile(xs, 0.5)),
+        round(Int, quantile(xs, 0.05)),
+        round(Int, quantile(xs, 0.95)))
+end
+
+## Our modelled cumulative symptom onsets on a McCabe report date, read off
+## the joint fit's per-draw `cumulative_onsets` trajectory. The grid runs to
+## the cut-off on day `n`, so the day-index for a date is `n` minus the days
+## from that date back to the cut-off (`grid_day("2026-06-07") = n`,
+## `"2026-05-20") = n - 18`, `"2026-05-18") = n - 20`).
+_onset_trajs = let mat = chn_joint[:cumulative_onsets]
+    [collect(v) for v in vec(collect(mat))]
+end
+## Inverse of `grid_date(day) = obs.cutoff - Day(obs.n - day)`: the day-index
+## whose calendar date is `date`, using `value` (imported above) for the
+## day count rather than the non-exported `Dates.date2epochdays`.
+_grid_day(date) = obs.n - value(obs.cutoff - Date(date))
+function _ours_on(date)
+    d = _grid_day(date)
+    _ci90row(Float64[t[d] for t in _onset_trajs])
+end
+
+## Our matched cumulative-onset estimate for each report date, keyed by date so
+## it lands beside that vintage's scenarios in its own panel.
+mccabe_ours = Dict(
+    "2026-05-18" => _ours_on("2026-05-18"),
+    "2026-05-20" => _ours_on("2026-05-20"),
+    "2026-05-27" => _ours_on("2026-05-27"))
+
+## One panel per report date; within a panel each method-and-family is one row,
+## with the case-fatality / window / doubling-time sweep dodged onto that single
+## line, so the ~40 scenarios keep their intervals without becoming ~40 rows.
+matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
+    ours = mccabe_ours,
+    date_titles = ["2026-05-18" => "18 May report",
+        "2026-05-20" => "20 May update",
+        "2026-05-27" => "27 May (Lancet)"],
+    xlabel = "Cumulative cases");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+matched_comparison_fig #hide
+
+# The McCabe scenarios are outbreak-size estimates, the same quantity our
+# renewal model and the released integral model report.
+# Their 95% confidence intervals come from exact negative-binomial counts
+# for the geographic-spread method and a Poisson likelihood profile for the
+# back-calculation from deaths.
+
+#md # ```@raw html
+#md # <details><summary>Frozen-fit C_T intervals (kept for the CSV export, not shown)</summary>
+#md # ```
+
+## The estimate-evolution figure above already shows how the size estimate
+## shifts as data accrues, so the side-by-side frozen-fit table is no longer
+## rendered in the report; it is kept only to populate the published
+## `frozen_matched_cutoffs.csv` export.
+frozen_streams_table = streams_table(
+    "frozen 20 May" => frozen_C("2026-05-20"),
+    "frozen 23 May" => frozen_C("2026-05-23"),
+    "frozen 27 May" => frozen_C("2026-05-27"),
+    "current data" => posterior_C_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Comparison with Chamla et al.
+#
+# A second group, Chamla et al. [chamla2026](@cite) at the World Health
+# Organization Regional Office for Africa, published a stochastic compartmental
+# model of the same outbreak on 25 June 2026.
+# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead
+# ensemble, recalibrated by simulation filtering to the laboratory-confirmed
+# case series, anchored on the 598 confirmed cases reported by 8 June, then run
+# forward to project the confirmed-case trajectory under a low, central and
+# high transmissibility scenario.
+#
+# Their published quantity is the cumulative confirmed-case count, with the
+# reporting fraction held at one, so it does not adjust for the cases that are
+# infected but never laboratory-confirmed.
+# This is a different quantity from the cumulative cases this analysis and
+# McCabe et al. estimate, which include the unconfirmed and unascertained, and
+# it sits below them: it is a floor on the true size rather than an estimate of
+# it.
+# The like-for-like comparison is therefore against our own confirmed-case
+# projection, not against our cumulative infection count.
+#
+# We compare forward projections rather than refitting to their assumptions.
+# We take our existing fit frozen at 27 May, the closest of our frozen vintages
+# to their 8 June calibration point and the date their own early projection
+# passes through, and roll its confirmed-case stream forward week by week with
+# the same machinery as the one-week-ahead forecast.
+# Setting our projection, their projection and the confirmed cases observed
+# since on one timeline shows how each projection has held up against the data.
+
+#md # ```@raw html
+#md # <details><summary>Project the 27 May fit forward and assemble the Chamla comparison</summary>
+#md # ```
+
+## The 27 May frozen joint fit is the nearest frozen vintage to Chamla's 8 June
+## calibration anchor, so we roll its confirmed-case stream forward with the
+## one-week-ahead forecast machinery to the dates Chamla report.
+chamla_anchor = frozen_by_cutoff["2026-05-27"]
+
+## Our projected cumulative confirmed cases at a horizon of `h` days past the
+## 27 May cut-off: a forward `forecast_reported` run (its reproduction number
+## left to keep evolving), summarised as (median, 5%, 95%).
+function _our_confirmed_h(h)
+    fc = forecast_reported(chamla_anchor.chn;
+        horizon = h,
+        obs_cases = chamla_anchor.o.reported_cases,
+        obs_deaths = chamla_anchor.o.total_deaths,
+        obs_confirmed = chamla_anchor.o.confirmed_cases,
+        obs_confirmed_deaths = chamla_anchor.o.confirmed_deaths)
+    return _ci90row(float.(fc.confirmed_cum))
+end
+
+## A week-by-week fan of our projection out to week 12 (24 June): the anchor day
+## is the fitted confirmed total at 27 May, each later week a forward forecast.
+## Reused for the matched-date table and the week-12 scenario figure.
+chamla_fan = map(0:7:28) do h
+    d = chamla_anchor.cutoff + Day(h)
+    row = h == 0 ?
+          (chamla_anchor.o.confirmed_cases, chamla_anchor.o.confirmed_cases,
+        chamla_anchor.o.confirmed_cases) : _our_confirmed_h(h)
+    (string(d), row...)
+end
+_fan_at(date) =
+    let r = first(x for x in chamla_fan if x[1] == date)
+        (r[2], r[3], r[4])
+    end
+ours_10jun = _fan_at("2026-06-10")
+ours_24jun = _fan_at("2026-06-24")
+
+## Observed confirmed cases over the comparison window: the daily cumulative
+## series read off the chain's grid from 18 May (Chamla's first projected point)
+## to the cut-off.
+chamla_obs_series = let
+    ds = [grid_date(d) for d in obs.confirmed_history.days]
+    cs = obs.confirmed_history.counts
+    [(string(ds[i]), cs[i]) for i in eachindex(ds) if ds[i] >= Date("2026-05-18")]
+end
+
+## Chamla's central confirmed-case projection over the comparison window; their
+## later, far-larger horizons are noted in the text rather than plotted so the
+## window stays legible.
+chamla_central_window = CHAMLA_CONFIRMED_CENTRAL[1:4]
+
+chamla_projection_fig = plot_projection_comparison(;
+    external = chamla_central_window,
+    ours = chamla_fan,
+    observed = chamla_obs_series,
+    external_label = "Chamla et al. central (R₀=1.71)",
+    ours_label = "Our projection (from 27 May)",
+    observed_label = "Observed confirmed",
+    title = "Confirmed-case projections versus observed, from late May");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_projection_fig #hide
+
+# By 24 June their central scenario projected just under a thousand confirmed
+# cases, and their low and high scenarios ranged from roughly 870 to 1360.
+# The figure below sets that week-12 scenario spread beside our 27 May
+# projection for the same date and the confirmed count observed by the cut-off,
+# so each reads against their three scenarios at a glance.
+
+#md # ```@raw html
+#md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
+#md # ```
+
+chamla_w12_rows = vcat(
+    [(label, m, lo, hi) for (label, m, lo, hi) in CHAMLA_CONFIRMED_W12],
+    [("Our projection (from 27 May)", ours_24jun...)],
+    [("Observed by 23 June cut-off", obs.confirmed_cases,
+        obs.confirmed_cases, obs.confirmed_cases)])
+chamla_w12_groups = vcat(fill("Chamla et al. scenarios", 3),
+    ["Our projection"], ["Observed"])
+
+chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
+    xlabel = "Cumulative confirmed cases by 24 June",
+    groups = chamla_w12_groups,
+    group_colours = ["Chamla et al. scenarios" => :steelblue,
+        "Our projection" => :firebrick,
+        "Observed" => :black]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_w12_fig #hide
+
+# The matched-date numbers behind these figures are in the dropdown below, with
+# the observed column taken to the 23 June cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
+#md # ```
+
+chamla_comparison_table = let
+    fmt(t) = string(t[1], " (", t[2], "–", t[3], ")")
+    central(date) =
+        let r = first(x for x in CHAMLA_CONFIRMED_CENTRAL
+            if x[1] == date)
+            fmt((r[2], r[3], r[4]))
+        end
+    DataFrame(
+        "Date" => ["10 June", "24 June"],
+        "Chamla central (90% PI)" => [central("2026-06-10"),
+            central("2026-06-24")],
+        "Our projection (90% CrI)" => [fmt(ours_10jun), fmt(ours_24jun)],
+        "Observed confirmed" => [
+            string(freeze_observations("2026-06-10").confirmed_cases),
+            string(obs.confirmed_cases) * " (23 June)"])
+end;
+
+chamla_comparison_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Beyond the comparison window their central scenario continues to roughly 8200
+# confirmed cases by mid-September, with the high scenario far higher; those
+# longer projections are not set against data here.
+# Their confirmed-case projections are a floor on the outbreak size, so they sit
+# below our cumulative infection count, which adds the unconfirmed and
+# unascertained cases on top.
+
+# ## Reproduction number behind the projection
+#
+# The forward projection above is carried by the reproduction-number trajectory
+# our 27 May fit estimated, a quantity we report in its own right rather than as
+# a comparison.
+# The figure shows that trajectory, the time-varying reproduction number from
+# the renewal walk with its credible intervals, as the fit saw it at 27 May.
+# It declines over the weeks leading to the cut-off, and that decline is what
+# bends the projected trajectory away from sustained early growth.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number as estimated by the 27 May fit</summary>
+#md # ```
+
+## Reconstruct the reproduction-number trajectory the 27 May fit estimated,
+## mirroring the current-data R_t figure but with the frozen vintage's own grid,
+## breakpoint and renewal start.
+chamla_rt_obs = chamla_anchor.o
+chamla_rt_breakpoint = chamla_rt_obs.n - chamla_rt_obs.who_first_sitrep_days
+chamla_rt_start = clamp(
+    chamla_rt_obs.n - round(Int, chamla_rt_obs.tmrca_days) + RENEWAL_START_LEAD,
+    1, chamla_rt_obs.n)
+chamla_rt_fig = plot_rt(chamla_anchor.chn;
+    n = chamla_rt_obs.n, breakpoint = chamla_rt_breakpoint,
+    rt_start = chamla_rt_start,
+    rt_walk_start = clamp(chamla_rt_breakpoint - RT_WALK_LEAD,
+        chamla_rt_start, chamla_rt_obs.n),
+    as_of_date = string(chamla_rt_obs.cutoff),
+    seeding = chamla_rt_obs.seeding, ramp = 21.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+chamla_rt_fig #hide
+
+# ## Delay sensitivity
+#
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the table and figure below are replaced by a short note in
+# place of the re-fit.
+#
+# The death stream dates the outbreak from how far deaths lag symptom onset,
+# so the assumed onset-to-death delay sets the implied infection count.
+# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
+# reanalysis (onset to admission then admission to death, implied mean about
+# 12 d).
+# We re-fit the joint model under the community-pathway delay from the same
+# reanalysis, the delay for deaths that occur in the community without a
+# recorded admission, which is shorter (implied mean about 8 d).
+# Both pathways come from the line list, so this varies the actual delay
+# assumption rather than an arbitrary scenario.
+# The re-fit uses the full headline settings (1000 draws across two chains).
+#
+# The infection count to date shifts with the assumed delay, and the
+# table and overlaid densities below show how far.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
+#md # ```
+
+## The sensitivity re-fits (community-delay and faster-clock variants) are
+## defined in the fit registry (`docs/fits.jl`) and loaded through the cache
+## (when enabled) in the setup block above.
+posterior_C_community_delay = RUN_SENSITIVITY ?
+                              vec(Array(chn_joint_community_delay[:C_T])) : nothing
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count table</summary>
+#md # ```
+
+delay_sensitivity_table = RUN_SENSITIVITY ?
+                          streams_table("baseline (hospital pathway)" => posterior_C_joint,
+    "community pathway" => posterior_C_community_delay) :
+                          Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+delay_sensitivity_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Delay-sensitivity infection-count density plot</summary>
+#md # ```
+
+delay_sensitivity_fig = RUN_SENSITIVITY ?
+                        plot_cumulative_cases(
+    "baseline (hospital pathway)" => posterior_C_joint,
+    "community pathway" => posterior_C_community_delay; scenarios = []) :
+                        Markdown.md"_Delay sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+delay_sensitivity_fig #hide
+
+# ## Clock-rate sensitivity
+#
+# This sensitivity re-fit runs on release docs builds only (tag pushes) and
+# is skipped on main pushes and PR previews to keep those builds fast
+# (controlled by the `BVD_RUN_SENSITIVITY` gate in the setup block). When it
+# is skipped the tables and figures below are replaced by a short note in
+# place of the re-fit.
+#
+# The whole outbreak-age estimate rests on the genetic bound, the oldest
+# date the common ancestor of the sequenced cases can sit, which is set by
+# the assumed molecular clock rate.
+# The baseline uses the slower clock rate of $1.2\times10^{-3}$
+# substitutions per site per year, the rate of the 2013-2016 West African
+# Ebola epidemic, which dates the common ancestor to 25 March 2026.
+# The sequencing source also reports a faster early-epidemic rate of
+# $1.9\times10^{-3}$ substitutions per site per year, which dates the common
+# ancestor about two and a half weeks more recently, to 11 April 2026,
+# without favouring either [virological2026](@cite).
+# We re-fit the joint model under the faster clock and compare the
+# infection count to date and the outbreak age.
+# The re-fit uses the full headline settings (1000 draws across two chains).
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint under the faster clock rate</summary>
+#md # ```
+
+## The faster-clock re-fit (and its `tmrca_days` offset) is defined in the fit
+## registry (`docs/fits.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
+posterior_C_fast_clock = RUN_SENSITIVITY ?
+                         vec(Array(chn_joint_fast_clock[:C_T])) : nothing
+T_baseline_clock = vec(Array(chn_joint[:T]))
+T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The infection count to date under the two clock rates, side by side.
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate infection-count table</summary>
+#md # ```
+
+clock_sensitivity_C_table = RUN_SENSITIVITY ?
+                            streams_table("baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock) :
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_C_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate infection-count density plot</summary>
+#md # ```
+
+clock_sensitivity_C_fig = RUN_SENSITIVITY ?
+                          plot_cumulative_cases("baseline clock" => posterior_C_joint,
+    "faster clock" => posterior_C_fast_clock; scenarios = []) :
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_C_fig #hide
+
+# The outbreak age, the number of days from seeding to the cut-off, under
+# the two clock rates.
+# A more recent common ancestor permits a younger outbreak.
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate outbreak-age table</summary>
+#md # ```
+
+clock_sensitivity_T_table = RUN_SENSITIVITY ?
+                            streams_table("baseline clock" => T_baseline_clock,
+    "faster clock" => T_fast_clock; digits = 0) :
+                            Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_T_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Clock-rate outbreak-age density plot</summary>
+#md # ```
+
+clock_sensitivity_T_fig = RUN_SENSITIVITY ?
+                          plot_density_overlay("baseline clock" => T_baseline_clock,
+    "faster clock" => T_fast_clock;
+    xlabel = "Outbreak age (days before cut-off)",
+    title = "Posterior outbreak age by clock rate") :
+                          Markdown.md"_Clock-rate sensitivity runs on release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+clock_sensitivity_T_fig #hide
+
+# ## Saving sensitivity results
+#
+# The stream-comparison and frozen-fit tables and the per-stream reproduction
+# number figure are written to the shared `output/` directory (the main
+# analysis writes the rest), so the combined release and summary dashboard
+# pick up both pages' outputs.
+
+#md # ```@raw html
+#md # <details><summary>Write sensitivity outputs</summary>
+#md # ```
+
+output_dir = get(ENV, "BVD_OUTPUT_DIR",
+    joinpath(pkgdir(BVDOutbreakSize), "output"))
+mkpath(output_dir)
+CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
+    streams_C_table)
+CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
+    frozen_streams_table)
+
+## The per-stream reproduction-number figure for the summary dashboard; the
+## main analysis writes the other three dashboard figures.
+dashboard_dir = joinpath(
+    pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+mkpath(dashboard_dir)
+CairoMakie.save(joinpath(dashboard_dir, "rt_streams.png"), stream_rt_fig)
+
+#md # ```@raw html
+#md # </details>
+#md # ```

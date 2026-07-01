@@ -1,5 +1,14 @@
 name: Documenter
 
+# The report is fanned out across CI runners instead of built in one ~5h job
+# that hit GitHub's 6h cap. `list` enumerates the fits, `fit` runs them one per
+# matrix job (content-addressed, so unchanged fits are cache hits), `render`
+# executes the two literate pages (analysis, sensitivity) from the cached
+# chains in parallel, and `combine` assembles and deploys the Vitepress site
+# and publishes the results release. Everything the jobs run lives in Julia
+# entry points (`docs/fit_one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
+# same build runs locally with `task docs`.
+
 on:
   push:
     branches:
@@ -14,15 +23,152 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docs:
-    name: Build and deploy
+  # Enumerate the fit ids for the matrix. On a tag build the two sensitivity
+  # re-fits are included; on main/PR builds they are skipped.
+  list:
+    name: List fits
     runs-on: ubuntu-latest
-    # The build runs ~11 NUTS fits, and on tag/release builds two more
-    # sensitivity refits, which land near 5h, so a 300-minute cap was killing
-    # builds that would otherwise finish. 360 is GitHub's hosted-runner job
-    # maximum, so this gives the fits the full window; a genuinely stuck run is
-    # still stopped at the runner ceiling.
-    timeout-minutes: 360
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: fit-env
+      # Warm the shared depot once here (the fan-out `fit` jobs restore this
+      # cache), so the lean fit environment precompiles a single time.
+      - name: Instantiate and precompile the lean fit environment
+        run: julia --project=fit -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
+      - id: ids
+        env:
+          BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: echo "ids=$(julia --project=fit docs/list_fits.jl)" >> "$GITHUB_OUTPUT"
+
+  # One fit per matrix job. Each fit is content-addressed and cached, so a
+  # re-run with unchanged model source and data refits nothing; the frozen
+  # historical fits stay cache hits across data-only updates.
+  fit:
+    name: Fit ${{ matrix.id }}
+    needs: list
+    runs-on: ubuntu-latest
+    # The current-data joint and the 1-week-back validation joint take ~3h;
+    # give the heaviest fits headroom under GitHub's 360-min per-job cap. The
+    # May-frozen and single-stream fits finish in under an hour.
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: fit-env
+      # Content-addressed cache of the fit: reused whenever the fit-relevant
+      # source and data are unchanged, so a re-run refits nothing.
+      - name: Restore fit cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: logs/fit_cache
+          key: >-
+            fit-${{ matrix.id }}-${{ hashFiles(
+              'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
+              'src/constants.jl', 'src/data.jl', 'docs/fits.jl', 'data/**') }}
+      - name: Fit ${{ matrix.id }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          BVD_FIT_ID: ${{ matrix.id }}
+          BVD_FIT_CACHE: logs/fit_cache
+          JULIA_NUM_THREADS: '4'
+          BVD_FIT_LOG: none
+        run: |
+          julia --project=fit -e 'using Pkg; Pkg.instantiate()'
+          julia --project=fit docs/fit_one.jl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fit-${{ matrix.id }}
+          path: logs/fit_cache/*.jls
+          if-no-files-found: error
+
+  # Execute each literate page from the cached fits, in parallel. Each render
+  # loads the chains it needs (no refitting) and emits its markdown, figures
+  # and its half of the shared output/ and summary_assets/.
+  render:
+    name: Render ${{ matrix.page }}
+    needs: fit
+    runs-on: ubuntu-latest
+    # From cached fits the render is plots/PPCs only, but the first run pays the
+    # cold docs-env precompile (~25 min); julia-actions/cache warms it after a
+    # successful run. Split across two pages, so each does about half the plots.
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        page: [analysis, sensitivity]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+      - name: Install docs dependencies
+        run: |
+          julia --project=docs -e '
+            using Pkg
+            Pkg.develop(PackageSpec(path=pwd()))
+            Pkg.instantiate()'
+      - name: Collect cached fits
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fit-*
+          path: logs/fit_cache
+          merge-multiple: true
+      # Refresh the released-estimate overlay so the sensitivity page's
+      # "Estimate evolution across releases" figure picks up the newest
+      # results-v* release. Best-effort: on any failure it uses the committed
+      # data/released_estimates.csv.
+      - name: Refresh released-estimate overlay
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
+           julia --project=scripts scripts/refresh_releases.jl) ||
+            echo "release refresh failed; using committed released_estimates.csv"
+      - name: Render ${{ matrix.page }}
+        env:
+          BVD_DOC_PAGE: ${{ matrix.page }}
+          BVD_FIT_CACHE: logs/fit_cache
+          BVD_FIT_LOG: none
+          BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: julia --project=docs docs/execute.jl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-${{ matrix.page }}
+          # The whole docs/src delta (the page markdown, its figures and its
+          # share of summary_assets/) plus its half of output/. Disjoint file
+          # names between the pages, so the combine step's merge is a union.
+          path: |
+            docs/src
+            output
+          if-no-files-found: warn
+
+  # Assemble the Vitepress site from both pre-rendered pages (a single
+  # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
+  # combined outputs as a results release.
+  combine:
+    name: Combine and deploy
+    needs: render
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: write
       statuses: write
@@ -33,41 +179,25 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
             using Pkg
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
-      # Refresh the released-estimate overlay from the live GitHub releases so
-      # the "Estimate evolution across releases" figure always picks up the
-      # newest results-v* release. Best-effort: on any failure (no network /
-      # gh / token) it leaves the committed data/released_estimates.csv in
-      # place rather than failing the build.
-      - name: Refresh released-estimate overlay
+      - name: Collect rendered pages and outputs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: render-*
+          merge-multiple: true
+          path: .
+      - name: Assemble and deploy the Vitepress site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
-           julia --project=scripts scripts/refresh_releases.jl) ||
-            echo "release refresh failed; using committed released_estimates.csv"
-      - uses: julia-actions/julia-docdeploy@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ubuntu-latest is a 4-vCPU runner. With `chains = 2`, `fit_parallel`
-          # runs `maxconc = nthreads / chains = 2` fits at once, each fitting
-          # its 2 NUTS chains in parallel via MCMCThreads, so all 4 vCPUs stay
-          # busy. At the previous `2` the fits ran one-at-a-time (maxconc = 1),
-          # leaving half the runner idle; `4` roughly halves the docs build.
-          JULIA_NUM_THREADS: '4'
-          # Skip per-fit progress/TensorBoard logging on the build; the
-          # callbacks (`fit_callback`) are for local runs, not CI artifacts.
-          BVD_FIT_LOG: none
-          # Run the slow sensitivity refits (onset-to-death delay, molecular
-          # clock) on release builds only (tag pushes, which deploy the
-          # versioned docs), skipping them on main pushes and PR previews to
-          # keep those docs builds fast.
-          BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
+          BVD_DOCS_STAGE: combine
+        run: julia --project=docs docs/make.jl
       - name: Comment PR with docs preview
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v9
@@ -125,16 +255,14 @@ jobs:
                 body: comment_body
               });
             }
-      # The docs build runs the analysis literate, which writes the
-      # model outputs to `output/` at the repo root. We publish that
-      # same run's outputs as a release rather than fitting the model
-      # a second time.
+      # The render jobs write the model outputs to `output/`. We publish that
+      # same run's outputs as a release rather than fitting the model again.
       - name: Check results outputs
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         run: |
           set -euo pipefail
           if [ ! -d output ] || [ -z "$(ls -A output)" ]; then
-            echo "::error::output/ is missing or empty after the docs build"
+            echo "::error::output/ is missing or empty after the render jobs"
             exit 1
           fi
           ls -l output
@@ -148,7 +276,7 @@ jobs:
           julia --project=docs scripts/standalone_report.jl \
             docs/build output/analysis.html
           ls -l output/analysis.html
-      # Bundle the rendered site produced by the same docs build
+      # Bundle the rendered site produced by the combine build
       # (docs/build/) so each release is a self-contained snapshot.
       - name: Zip rendered site into release bundle
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
