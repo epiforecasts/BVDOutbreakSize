@@ -2,7 +2,7 @@
 # so a full re-fit completes in roughly the wall time of the slowest single
 # fit rather than the sum, staying well under the per-job limit that the
 # single-job docs build hits. Each fit is content-addressed and cached, so
-# unchanged fits are skipped; a render job then executes the report against the
+# unchanged fits are skipped; an execute job then runs the report against the
 # cached chains (fast, no refitting) to prove the docs build consumes them.
 #
 # Trigger manually (Actions ▸ Fit matrix ▸ Run workflow). To refit the
@@ -93,7 +93,7 @@ jobs:
           path: logs/fit_cache/*.jls
           if-no-files-found: error
 
-  render:
+  execute:
     needs: fit
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -116,7 +116,7 @@ jobs:
           BVD_FIT_CACHE: logs/fit_cache
         run: |
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
-          julia --project=docs docs/hpc_execute.jl
+          julia --project=docs docs/execute.jl
       - uses: actions/upload-artifact@v4
         with:
           name: analysis-md
