@@ -96,7 +96,10 @@ jobs:
   execute:
     needs: fit
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Executes the whole report (docs-env precompile + every plot, PPC and
+    # forecast) with the fits loaded from cache; the fits themselves are not
+    # re-run here, but the render is still substantial.
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
