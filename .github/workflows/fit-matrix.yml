@@ -98,8 +98,11 @@ jobs:
     runs-on: ubuntu-latest
     # Executes the whole report (docs-env precompile + every plot, PPC and
     # forecast) with the fits loaded from cache; the fits themselves are not
-    # re-run here, but the render is still substantial.
-    timeout-minutes: 180
+    # re-run here, but the render is still substantial. The generous budget is
+    # for the FIRST (cold) run: julia-actions/cache only saves the docs-env
+    # depot cache on job success, so this job must complete once to stop paying
+    # the ~25 min cold precompile on every subsequent run.
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
       - uses: julia-actions/setup-julia@v2
