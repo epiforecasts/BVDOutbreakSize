@@ -1997,18 +1997,19 @@ prior_pair_fig #hide
 #md # <details><summary>Run the joint and per-stream NUTS fits</summary>
 #md # ```
 
-const _BREAKPOINT = obs.n - obs.who_first_sitrep_days
+## The fits are defined once in `docs/fits.jl` as a registry, so each can be
+## run and cached independently — one per CI matrix job, or an HPC task — and
+## loaded here through the content-addressed cache instead of being refitted
+## inline. `_BREAKPOINT`, `validation_cutoff` and `frozen_cutoffs` come from the
+## same registry so the report and the standalone fits agree.
+include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits.jl"))
+const _BREAKPOINT = default_breakpoint(obs)
 
-## The joint and six single-stream fits are independent, so they run through
-## `fit_parallel`: model-level parallelism bounded by the available threads
-## (sequential on CI's two threads, several at once on a many-core machine).
 ## The exports-deaths composer keeps the deaths and exports submodels only
 ## for their CFR, onset-to-death PMF and export onsets, leaving their own
 ## counts missing, which leaves two redundant sampled discrete draws, so its
 ## model check is disabled (see `nuts_sample`).
-## Setup for the single master fit pool: relocated cut-offs, frozen-fit and
-## sensitivity-variant helpers so every independent fit can run in one pool.
-validation_cutoff = string(obs.cutoff - Day(7))
+validation_cutoff = default_validation_cutoff(obs)
 
 ## Published per-release estimates, pulled from the tagged results
 ## releases by `scripts/refresh_releases.jl` into
@@ -2023,107 +2024,11 @@ released_df = CSV.read(
 ## further down. The estimate-evolution overlay relies on the published
 ## per-release estimates in `released_df`, so no per-release-date current-
 ## model re-fits are run here.
-frozen_cutoffs = ["2026-05-20", "2026-05-23", "2026-05-27"]
+frozen_cutoffs = default_frozen_cutoffs()
 
-## A joint fit at the full headline settings (1000 draws × 2 chains) to the
-## data frozen at `cutoff_date`. The frozen named tuple has the same shape as
-## the full `obs`, so the model call mirrors the headline joint fit.
-function fit_frozen_joint(cutoff_date; samples = 1000, chains = 2)
-    o = freeze_observations(cutoff_date)
-    bp = o.n - o.who_first_sitrep_days
-    chn = nuts_sample(
-        bvd_joint(
-            o.n, o.exported_cases, o.total_deaths,
-            o.reported_cases, o.exports_deaths, o.confirmed_cases,
-            o.tests_analysed;
-            confirmed_deaths = o.confirmed_deaths,
-            deaths_history = o.deaths_history,
-            reported_history = o.reported_history,
-            confirmed_history = o.confirmed_history,
-            confirmed_deaths_history = o.confirmed_deaths_history,
-            lab_history = o.lab_history,
-            lab_daily_history = o.lab_daily_history,
-            isolation_history = o.isolation_history,
-            bed_capacity_history = o.bed_capacity_history,
-            export_case_days = o.export_case_days,
-            export_death_days = o.export_death_days,
-            breakpoint = bp,
-            background_re = true,
-            confirmed_positivity_link = :composition,
-            genetic = genetic_seeding_model,
-            tmrca_days = o.tmrca_days);
-        samples = samples, chains = chains,
-        callback = fit_callback("frozen_$(cutoff_date)"))
-    return (; cutoff = o.cutoff, o, chn)
-end
-
-## One joint re-fit on the live data at the full headline settings, with hooks
-## to override the genetic-seeding bound and the deaths submodel. The deaths
-## submodel is passed the same way the genetic-seeding override is, as a
-## closure matching the joint's `deaths(history, total, onsets, k;
-## background_re)` call, so an alternative onset-to-death delay can be injected
-## without touching the package.
-function refit_joint_variant(;
-        deaths = deaths_model,
-        tmrca_days = obs.tmrca_days,
-        tmrca_days_sd = 15.0,
-        samples = 1000, chains = 2)
-    chn = nuts_sample(
-        bvd_joint(
-            obs.n, obs.exported_cases, obs.total_deaths,
-            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-            obs.tests_analysed;
-            confirmed_deaths = obs.confirmed_deaths,
-            recovered_cases = obs.recovered_cases,
-            deaths_history = obs.deaths_history,
-            reported_history = obs.reported_history,
-            confirmed_history = obs.confirmed_history,
-            confirmed_deaths_history = obs.confirmed_deaths_history,
-            lab_history = obs.lab_history,
-            lab_daily_history = obs.lab_daily_history,
-            suspected_daily_history = obs.suspected_daily_history,
-            suspected_daily_deaths_history =
-            obs.suspected_daily_deaths_history,
-            isolation_history = obs.isolation_history,
-            bed_capacity_history = obs.bed_capacity_history,
-            recovered_history = obs.recovered_history,
-            treatment_admissions_history = obs.treatment_admissions_history,
-            treatment_deaths_history = obs.treatment_deaths_history,
-            treatment_ruleout_history = obs.treatment_ruleout_history,
-            treatment_absconded_history = obs.treatment_absconded_history,
-            export_case_days = obs.export_case_days,
-            export_death_days = obs.export_death_days,
-            breakpoint = _BREAKPOINT,
-            background_re = true,
-            confirmed_positivity_link = :composition,
-            deaths = deaths,
-            genetic = genetic_seeding_model,
-            tmrca_days = tmrca_days,
-            tmrca_days_sd = tmrca_days_sd);
-        samples = samples, chains = chains,
-        callback = fit_callback("variant"))
-    return chn
-end
-
-## Community-pathway onset-to-death delay from the Isiro 2012 line-list
-## reanalysis community-death model (a single Gamma, implied mean ≈ 8 d,
-## shape ≈ 5.5), a closure that re-injects this delay on its natural Gamma
-## shape and scale into the deaths submodel while keeping its other defaults.
-deaths_community_delay = (history,
-    total,
-    onsets,
-    k;
-    kwargs...) -> deaths_model(history, total, onsets, k;
-    onset_to_death = gamma_delay_model(40;
-        alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-        theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
-    kwargs...)
-
-## The faster early-epidemic clock dates the common ancestor about 17 days
-## more recently, so the bound on the outbreak age sits that many days
-## closer to the cut-off, with a tighter spread from its narrower interval.
-clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
-tmrca_days_alt = obs.tmrca_days - clock_alt_offset
+## The frozen-joint, sensitivity-variant and delay/clock helpers used by the
+## re-fits live in `docs/fits.jl` (`build_fit_specs`), so they can be run from
+## the standalone per-fit entry point too.
 
 ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
 ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
@@ -2135,106 +2040,39 @@ tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 RUN_SENSITIVITY = lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY",
     "false"))) in ("true", "1", "yes", "on")
 
-## Every independent fit runs as one work-stealing pool so the long joint fit
-## overlaps the per-stream, frozen and (gated) sensitivity re-fits and keeps
-## all cores busy, rather than the short fits idling cores while the joint
-## finishes. The fits are data-only independent, so the schedule is free.
-_headline_thunks = [
-    () -> nuts_sample(
-        bvd_joint(
-            obs.n, obs.exported_cases, obs.total_deaths,
-            obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-            obs.tests_analysed;
-            confirmed_deaths = obs.confirmed_deaths,
-            recovered_cases = obs.recovered_cases,
-            deaths_history = obs.deaths_history,
-            reported_history = obs.reported_history,
-            confirmed_history = obs.confirmed_history,
-            confirmed_deaths_history = obs.confirmed_deaths_history,
-            lab_history = obs.lab_history,
-            lab_daily_history = obs.lab_daily_history,
-            suspected_daily_history = obs.suspected_daily_history,
-            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-            isolation_history = obs.isolation_history,
-            bed_capacity_history = obs.bed_capacity_history,
-            recovered_history = obs.recovered_history,
-            treatment_admissions_history = obs.treatment_admissions_history,
-            treatment_deaths_history = obs.treatment_deaths_history,
-            treatment_ruleout_history = obs.treatment_ruleout_history,
-            treatment_absconded_history = obs.treatment_absconded_history,
-            export_case_days = obs.export_case_days,
-            export_death_days = obs.export_death_days,
-            breakpoint = _BREAKPOINT,
-            background_re = true,
-            confirmed_positivity_link = :composition,
-            genetic = genetic_seeding_model,
-            tmrca_days = obs.tmrca_days);
-        callback = fit_callback("joint")),
-    ## Exports fit cases and deaths jointly as one "exports" stream, sharing
-    ## the travel-gated at-risk prevalence, rather than as two separate fits.
-    () -> nuts_sample(
-        exports_joint_only_model(obs.n, obs.exported_cases,
-            obs.exports_deaths;
-            export_case_days = obs.export_case_days,
-            export_death_days = obs.export_death_days,
-            breakpoint = _BREAKPOINT);
-        check_model = false, callback = fit_callback("exports")),
-    () -> nuts_sample(
-        deaths_only_model(obs.n, obs.total_deaths;
-            deaths_history = obs.deaths_history,
-            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-            breakpoint = _BREAKPOINT);
-        callback = fit_callback("deaths")),
-    () -> nuts_sample(
-        cases_only_model(obs.n, obs.reported_cases;
-            reported_history = obs.reported_history,
-            suspected_daily_history = obs.suspected_daily_history,
-            breakpoint = _BREAKPOINT);
-        callback = fit_callback("cases")),
-    () -> nuts_sample(
-        confirmed_only_model(obs.n, obs.confirmed_cases;
-            confirmed_history = obs.confirmed_history,
-            lab_history = obs.lab_history,
-            lab_daily_history = obs.lab_daily_history,
-            breakpoint = _BREAKPOINT);
-        callback = fit_callback("confirmed")),
-    () -> nuts_sample(
-        confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
-            obs.total_deaths;
-            deaths_history = obs.deaths_history,
-            confirmed_deaths_history = obs.confirmed_deaths_history,
-            breakpoint = _BREAKPOINT);
-        callback = fit_callback("confirmed_deaths")),
-    () -> nuts_sample(
-        treatment_only_model(obs.n;
-            isolation_history = obs.isolation_history,
-            bed_capacity_history = obs.bed_capacity_history,
-            treatment_admissions_history = obs.treatment_admissions_history,
-            treatment_deaths_history = obs.treatment_deaths_history,
-            treatment_ruleout_history = obs.treatment_ruleout_history,
-            treatment_absconded_history = obs.treatment_absconded_history,
-            breakpoint = _BREAKPOINT);
-        callback = fit_callback("treatment"))
-]
-_frozen_thunks = [() -> fit_frozen_joint(c) for c in frozen_cutoffs]
-_sens_thunks = RUN_SENSITIVITY ?
-               [() -> refit_joint_variant(deaths = deaths_community_delay),
-    () -> refit_joint_variant(
-        tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)] : []
-_all_fits = fit_parallel(vcat(_headline_thunks,
-    [() -> fit_frozen_joint(validation_cutoff)], _frozen_thunks, _sens_thunks))
+## Every fit is loaded through the content-addressed cache (`fit_or_load`):
+## reused when a fit with the same model source, data and settings already
+## exists — produced once by the per-fit CI matrix (`.github/workflows/
+## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set `BVD_REFIT=all`
+## to force a full refit. The loads still run through `fit_parallel`, so on a
+## cold cache the joint overlaps the per-stream, frozen and (gated) sensitivity
+## re-fits and keeps all cores busy; on a warm cache they deserialise in
+## parallel.
+_fit_cache_dir = get(ENV, "BVD_FIT_CACHE",
+    joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache"))
+_refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
+_fit_specs = build_fit_specs(obs;
+    breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
+    validation_cutoff = validation_cutoff, run_sensitivity = RUN_SENSITIVITY)
+_fit_results = fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
+                                 cache_dir = _fit_cache_dir, refit = _refit_all)
+                             for s in _fit_specs])
+_fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
-_n_head = length(_headline_thunks)
-_n_frozen = length(frozen_cutoffs)
-(chn_joint, chn_exports, chn_deaths, chn_cases, chn_confirmed,
-    chn_confirmed_deaths, chn_treatment) = _all_fits[1:_n_head]
-frozen_lastweek = _all_fits[_n_head + 1]
-frozen_results = _all_fits[(_n_head + 2):(_n_head + 1 + _n_frozen)]
+chn_joint = _fits["joint"]
+chn_exports = _fits["exports"]
+chn_deaths = _fits["deaths"]
+chn_cases = _fits["cases"]
+chn_confirmed = _fits["confirmed"]
+chn_confirmed_deaths = _fits["confirmed_deaths"]
+chn_treatment = _fits["treatment"]
+frozen_lastweek = _fits["frozen_validation"]
+frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
 frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
 frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
 if RUN_SENSITIVITY
-    chn_joint_community_delay = _all_fits[_n_head + 2 + _n_frozen]
-    chn_joint_fast_clock = _all_fits[_n_head + 3 + _n_frozen]
+    chn_joint_community_delay = _fits["sens_community_delay"]
+    chn_joint_fast_clock = _fits["sens_fast_clock"]
 end
 
 posterior_C_joint = vec(Array(chn_joint[:C_T]));
@@ -2404,8 +2242,8 @@ diagnostics_table( #hide
 #md # <details><summary>Frozen-fit helper (reused by the forecast validation and matched-in-time sections)</summary>
 #md # ```
 
-## fit_frozen_joint and the frozen re-fits are defined and run in the setup
-## block above.
+## The frozen re-fits are defined in the fit registry (`docs/fits.jl`) and
+## loaded through the cache in the setup block above.
 
 #md # ```@raw html
 #md # </details>
@@ -4162,8 +4000,9 @@ chamla_rt_fig #hide
 #md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
 #md # ```
 
-## refit_joint_variant, deaths_community_delay and the sensitivity re-fits are
-## defined and run (when enabled) in the setup block above.
+## The sensitivity re-fits (community-delay and faster-clock variants) are
+## defined in the fit registry (`docs/fits.jl`) and loaded through the cache
+## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
                               vec(Array(chn_joint_community_delay[:C_T])) : nothing
 
@@ -4228,8 +4067,9 @@ delay_sensitivity_fig #hide
 #md # <details><summary>Re-fit the joint under the faster clock rate</summary>
 #md # ```
 
-## clock_alt_offset, tmrca_days_alt and the faster-clock re-fit are defined and
-## run (when enabled) in the setup block above.
+## The faster-clock re-fit (and its `tmrca_days` offset) is defined in the fit
+## registry (`docs/fits.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
 posterior_C_fast_clock = RUN_SENSITIVITY ?
                          vec(Array(chn_joint_fast_clock[:C_T])) : nothing
 T_baseline_clock = vec(Array(chn_joint[:T]))

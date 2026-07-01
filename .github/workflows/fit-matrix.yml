@@ -1,0 +1,111 @@
+# Fan the expensive analysis fits out across a job matrix — one fit per job —
+# so a full re-fit completes in roughly the wall time of the slowest single
+# fit rather than the sum, staying well under the per-job limit that the
+# single-job docs build hits. Each fit is content-addressed and cached, so
+# unchanged fits are skipped; a render job then executes the report against the
+# cached chains (fast, no refitting) to prove the docs build consumes them.
+#
+# Trigger manually (Actions ▸ Fit matrix ▸ Run workflow). To refit the
+# sensitivity variants too, run with BVD_RUN_SENSITIVITY set (see the `env`
+# notes below). Wiring this into the deploying docs build is the follow-up:
+# point that build's BVD_FIT_CACHE at the artifacts downloaded here.
+name: Fit matrix
+
+on:
+  workflow_dispatch:
+  # Runs on pushes to this branch so the matrix can be exercised before it
+  # reaches the default branch (a workflow_dispatch trigger only becomes
+  # available once the workflow is on the default branch). Drop this `push`
+  # block once merged.
+  push:
+    branches: ["fit-cache-matrix"]
+  # A periodic refresh of the (slow, non-headline) fits can be added with:
+  #   schedule:
+  #     - cron: "0 3 * * 1"   # 03:00 every Monday
+
+concurrency:
+  group: fit-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    outputs:
+      ids: ${{ steps.ids.outputs.ids }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - id: ids
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          echo "ids=$(julia --project=docs docs/list_fits.jl)" >> "$GITHUB_OUTPUT"
+
+  fit:
+    needs: list
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.ids) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      # Content-addressed cache of the fit: reused whenever the fit-relevant
+      # source and data are unchanged, so a re-run refits nothing.
+      - name: Restore fit cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: logs/fit_cache
+          key: >-
+            fit-${{ matrix.id }}-${{ hashFiles(
+              'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
+              'src/constants.jl', 'src/data.jl', 'docs/fits.jl', 'data/**') }}
+      - name: Fit ${{ matrix.id }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          BVD_FIT_ID: ${{ matrix.id }}
+          BVD_FIT_CACHE: logs/fit_cache
+          JULIA_NUM_THREADS: "4"
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          julia --project=docs docs/fit_one.jl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fit-${{ matrix.id }}
+          path: logs/fit_cache/*.jls
+          if-no-files-found: error
+
+  render:
+    needs: fit
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: "1"
+      - uses: julia-actions/cache@v2
+      - name: Collect cached fits
+        uses: actions/download-artifact@v4
+        with:
+          pattern: fit-*
+          path: logs/fit_cache
+          merge-multiple: true
+      - name: Execute report against cached fits
+        env:
+          BVD_FIT_CACHE: logs/fit_cache
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          julia --project=docs docs/hpc_execute.jl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: analysis-md
+          path: docs/src/analysis.md
