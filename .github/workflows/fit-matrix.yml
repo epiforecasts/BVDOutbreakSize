@@ -38,15 +38,23 @@ jobs:
         with:
           version: "1"
       - uses: julia-actions/cache@v2
+        with:
+          cache-name: fit-env
+      # Warm the shared depot once here (the fan-out `fit` jobs `needs: list`
+      # and restore this cache), so the lean fit environment is precompiled a
+      # single time and reused rather than rebuilt in every matrix job.
+      - name: Instantiate and precompile the lean fit environment
+        run: julia --project=fit -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
       - id: ids
-        run: |
-          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
-          echo "ids=$(julia --project=docs docs/list_fits.jl)" >> "$GITHUB_OUTPUT"
+        run: echo "ids=$(julia --project=fit docs/list_fits.jl)" >> "$GITHUB_OUTPUT"
 
   fit:
     needs: list
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # The current-data joint and the 1-week-back validation joint take ~3h on
+    # a standard runner; give the heaviest fits headroom under GitHub's 360-min
+    # per-job cap. The May-frozen and single-stream fits finish in under an hour.
+    timeout-minutes: 350
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +65,8 @@ jobs:
         with:
           version: "1"
       - uses: julia-actions/cache@v2
+        with:
+          cache-name: fit-env
       # Content-addressed cache of the fit: reused whenever the fit-relevant
       # source and data are unchanged, so a re-run refits nothing.
       - name: Restore fit cache
@@ -75,8 +85,8 @@ jobs:
           BVD_FIT_CACHE: logs/fit_cache
           JULIA_NUM_THREADS: "4"
         run: |
-          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
-          julia --project=docs docs/fit_one.jl
+          julia --project=fit -e 'using Pkg; Pkg.instantiate()'
+          julia --project=fit docs/fit_one.jl
       - uses: actions/upload-artifact@v4
         with:
           name: fit-${{ matrix.id }}
@@ -93,6 +103,8 @@ jobs:
         with:
           version: "1"
       - uses: julia-actions/cache@v2
+        with:
+          cache-name: docs-env
       - name: Collect cached fits
         uses: actions/download-artifact@v4
         with:
