@@ -5,7 +5,7 @@
 # refitting them inline. `build_fit_specs` mirrors the model calls in
 # `docs/examples/analysis.jl`; keep the two in step.
 
-include(joinpath(@__DIR__, "fit_cache.jl"))
+include(joinpath(@__DIR__, "cache.jl"))
 
 using BVDOutbreakSize
 using Dates: Date, Day, value

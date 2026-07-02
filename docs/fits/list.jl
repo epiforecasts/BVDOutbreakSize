@@ -2,12 +2,12 @@
 # `.github/workflows/fit-matrix.yml`. Set `BVD_RUN_SENSITIVITY=true` to include
 # the sensitivity re-fits.
 #
-#   julia --project=docs docs/list_fits.jl   # ["joint","exports",...]
+#   julia --project=docs docs/fits/list.jl   # ["joint","exports",...]
 using Pkg: Pkg
 Pkg.instantiate()
 
 using BVDOutbreakSize
-include(joinpath(@__DIR__, "fits.jl"))
+include(joinpath(@__DIR__, "registry.jl"))
 
 ids = fit_ids()
 println("[", join(("\"" * id * "\"" for id in ids), ","), "]")

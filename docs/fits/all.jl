@@ -1,12 +1,12 @@
 # Fit and cache every model from the registry in one parallel pass, for a
-# local full build. Mirrors the per-fit CI matrix (`docs/fit_one.jl`) but runs
+# local full build. Mirrors the per-fit CI matrix (`docs/fits/one.jl`) but runs
 # the whole registry through `fit_parallel`, writing each chain into the
 # content-addressed cache (`BVD_FIT_CACHE`). Run this before
 # `docs/make.jl`/`task docs`, which then render from the cache instead of
 # refitting. Uses the same `docs/` environment as the render, so the chains are
 # serialized and deserialized under identical package versions.
 #
-#   julia --project=docs docs/fit_all.jl
+#   julia --project=docs docs/fits/all.jl
 #
 # Set `BVD_FIT_CACHE` to choose the cache directory (default `logs/fit_cache`),
 # `BVD_REFIT=all` to ignore existing cache entries, and `BVD_RUN_SENSITIVITY`
@@ -15,7 +15,7 @@ using Pkg: Pkg
 Pkg.instantiate()
 
 using BVDOutbreakSize
-include(joinpath(@__DIR__, "fits.jl"))
+include(joinpath(@__DIR__, "registry.jl"))
 
 const CACHE = get(ENV, "BVD_FIT_CACHE",
     joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache"))

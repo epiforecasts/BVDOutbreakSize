@@ -2096,7 +2096,7 @@ diagnostics_table( #hide
 #md # <details><summary>Frozen-fit helper (reused by the forecast validation and matched-in-time sections)</summary>
 #md # ```
 
-## The frozen re-fits are defined in the fit registry (`docs/fits.jl`) and
+## The frozen re-fits are defined in the fit registry (`docs/fits/registry.jl`) and
 ## loaded through the cache in the setup block above.
 
 #md # ```@raw html

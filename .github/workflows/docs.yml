@@ -6,7 +6,7 @@ name: Documenter
 # executes the two literate pages (analysis, sensitivity) from the cached
 # chains in parallel, and `combine` assembles and deploys the Vitepress site
 # and publishes the results release. Everything the jobs run lives in Julia
-# entry points (`docs/fit_one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
+# entry points (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
 # same build runs locally with `task docs`.
 
 on:
@@ -56,7 +56,7 @@ jobs:
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ startsWith(github.ref, 'refs/tags/') }}
-        run: echo "ids=$(julia --project=docs docs/list_fits.jl)" >> "$GITHUB_OUTPUT"
+        run: echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
       # Pin the resolved manifest for every downstream job so none re-resolves
       # (which would invalidate the shared compiled cache and could resolve a
       # different chains-library version than the fits were written with).
@@ -104,7 +104,7 @@ jobs:
           key: >-
             fit-${{ matrix.id }}-${{ hashFiles(
               'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
-              'src/constants.jl', 'src/data.jl', 'docs/fits.jl', 'data/**') }}
+              'src/constants.jl', 'src/data.jl', 'docs/fits/registry.jl', 'data/**') }}
       # Restore the resolved manifest from `list` (after the depot cache step,
       # so this job's cache key still matches) so instantiate installs those
       # exact versions instead of re-resolving and recompiling.
@@ -122,7 +122,7 @@ jobs:
           BVD_FIT_LOG: none
         run: |
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
-          julia --project=docs docs/fit_one.jl
+          julia --project=docs docs/fits/one.jl
       - uses: actions/upload-artifact@v4
         with:
           name: fit-${{ matrix.id }}

@@ -1,9 +1,9 @@
-## Tests for the content-addressed fit cache (`docs/fit_cache.jl`): a cache
+## Tests for the content-addressed fit cache (`docs/fits/cache.jl`): a cache
 ## hit reuses the serialised result, a miss (or forced refit) runs the thunk,
 ## and the content hash changes when the inputs change.
 
 @testitem "fit_or_load caches, reuses and refits" tags=[:quality] begin
-    include(joinpath(@__DIR__, "..", "docs", "fit_cache.jl"))
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     dir = mktempdir()
     calls = Ref(0)
@@ -20,7 +20,7 @@
 end
 
 @testitem "content hash reflects inputs" tags=[:quality] begin
-    include(joinpath(@__DIR__, "..", "docs", "fit_cache.jl"))
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
     h = content_hash([@__FILE__]; extra = "a")
     @test length(h) == 16

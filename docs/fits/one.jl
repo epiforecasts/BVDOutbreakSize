@@ -3,7 +3,7 @@
 # result is serialised into `BVD_FIT_CACHE` under its content-addressed key, so
 # the docs build can load it instead of refitting.
 #
-#   BVD_FIT_ID=confirmed julia --project=docs docs/fit_one.jl
+#   BVD_FIT_ID=confirmed julia --project=docs docs/fits/one.jl
 #
 # Set `BVD_FIT_CACHE` to choose the cache directory (default `logs/fit_cache`),
 # `BVD_REFIT=all` to ignore an existing cache entry, and `BVD_FIT_DRYRUN=1` to
@@ -12,7 +12,7 @@ using Pkg: Pkg
 Pkg.instantiate()
 
 using BVDOutbreakSize
-include(joinpath(@__DIR__, "fits.jl"))
+include(joinpath(@__DIR__, "registry.jl"))
 
 const ID = strip(get(ENV, "BVD_FIT_ID", ""))
 const CACHE = get(ENV, "BVD_FIT_CACHE",

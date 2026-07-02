@@ -701,7 +701,7 @@ chamla_rt_fig #hide
 #md # ```
 
 ## The sensitivity re-fits (community-delay and faster-clock variants) are
-## defined in the fit registry (`docs/fits.jl`) and loaded through the cache
+## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
                               vec(Array(chn_joint_community_delay[:C_T])) : nothing
@@ -768,7 +768,7 @@ delay_sensitivity_fig #hide
 #md # ```
 
 ## The faster-clock re-fit (and its `tmrca_days` offset) is defined in the fit
-## registry (`docs/fits.jl`) and loaded through the cache (when enabled) in the
+## registry (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
 ## setup block above.
 posterior_C_fast_clock = RUN_SENSITIVITY ?
                          vec(Array(chn_joint_fast_clock[:C_T])) : nothing

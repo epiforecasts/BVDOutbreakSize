@@ -57,10 +57,10 @@ tasks:
   fit:
     desc: >
       Run and cache a single model fit by id (BVD_FIT_ID), matching one CI
-      matrix job. List ids with `julia --project=docs docs/list_fits.jl`.
+      matrix job. List ids with `julia --project=docs docs/fits/list.jl`.
       Example: BVD_FIT_ID=deaths task fit.
     cmds:
-      - julia --project=docs docs/fit_one.jl {{.CLI_ARGS}}
+      - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
   fit-all:
     desc: >
@@ -68,7 +68,7 @@ tasks:
       from the cache without refitting. Canonical local full build:
       `task fit-all && task docs`.
     cmds:
-      - julia --project=docs docs/fit_all.jl {{.CLI_ARGS}}
+      - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
 
   format:
     desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.

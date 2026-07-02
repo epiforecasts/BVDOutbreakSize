@@ -1,7 +1,7 @@
 # Shared setup for the analysis and sensitivity report pages. This is plain
 # Julia (not a Literate page): both `analysis.jl` and `sensitivity.jl` include
 # it so each page can render on its own from the same fitted chains. It loads
-# the packages, the observations, the fit registry (`docs/fits.jl`) and every
+# the packages, the observations, the fit registry (`docs/fits/registry.jl`) and every
 # model fit through the content-addressed cache (`fit_or_load`), then unpacks
 # the named chains, cumulative-infection draws and display labels the pages
 # share. In CI the fits are pre-populated by the per-fit matrix and loaded
@@ -43,12 +43,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## run to it, or the freeze date for streams that stop earlier).
     hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
 
-    ## The fits are defined once in `docs/fits.jl` as a registry, so each can be
+    ## The fits are defined once in `docs/fits/registry.jl` as a registry, so each can be
     ## run and cached independently — one per CI matrix job, or an HPC task — and
     ## loaded here through the content-addressed cache instead of being refitted
     ## inline. `_BREAKPOINT`, `validation_cutoff` and `frozen_cutoffs` come from the
     ## same registry so the report and the standalone fits agree.
-    include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits.jl"))
+    include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
     _BREAKPOINT = default_breakpoint(obs)
 
     ## The exports-deaths composer keeps the deaths and exports submodels only
@@ -73,7 +73,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     frozen_cutoffs = default_frozen_cutoffs()
 
     ## The frozen-joint, sensitivity-variant and delay/clock helpers used by the
-    ## re-fits live in `docs/fits.jl` (`build_fit_specs`), so they can be run from
+    ## re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so they can be run from
     ## the standalone per-fit entry point too.
 
     ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
