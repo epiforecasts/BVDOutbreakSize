@@ -160,7 +160,6 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -186,8 +185,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         admissions_history = treatment_admissions_history,
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
-        absconded_history = treatment_absconded_history,
-        aulit_history = treatment_aulit_history))
+        absconded_history = treatment_absconded_history))
 end
 
 """
@@ -393,7 +391,6 @@ death-confirmation positivity (`death_confirmation`).
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -544,7 +541,6 @@ death-confirmation positivity (`death_confirmation`).
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
         absconded_history = treatment_absconded_history,
-        aulit_history = treatment_aulit_history,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases (the confirmed-and-discharged subset, not all

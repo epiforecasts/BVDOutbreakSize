@@ -14,10 +14,10 @@ Changes since v1.6.0.
 
 - Added the situation-report `Tableau 6` treatment-centre patient-movement
   flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
-  rule-outs and absconded patients (13–23 June), alongside the overnight
-  `Patients au lit (J-1)` count. Each stream is resilient: an empty history
-  is a no-op, so the model degrades to the occupancy backbone where a flow is
-  not reported. Advanced the data to situation report 040 (23 June).
+  rule-outs and absconded patients (13–23 June). Each stream is resilient: an
+  empty history is a no-op, so the model degrades to the occupancy backbone
+  where a flow is not reported. Advanced the data to situation report 040
+  (23 June).
 
 ### Model
 
@@ -28,12 +28,6 @@ Changes since v1.6.0.
   on the infection case-fatality, identified by the in-care death flow rather
   than estimated independently. The daily discharge flows are scored as
   optional negative-binomial streams (resolves #338).
-- Added a fitted occupancy reporting-break offset on the days the overnight
-  opening census departs materially from the previous day's close (the DHIS2
-  harmonisation steps on 17, 19 and 22 June). Each break is a point adjustment
-  centred on the observed gap but free to move, applied on those identified
-  days only, so reporting reclassification no longer bends the latent bed
-  demand.
 
 ### Report and forecasts
 
@@ -53,6 +47,14 @@ Changes since v1.6.0.
   fit (resolves #341).
 - Tightened the reproduction-number plot y-axis to 1.2 times the 90% upper
   bound so the credible band is legible (resolves #342).
+
+### Performance
+
+- Halved the NUTS warmup: `nuts_sample` now defaults `n_adapts` to
+  `min(250, samples ÷ 2)` (250 adaptation steps at the standard 1000
+  draws) instead of Turing's `min(1000, samples ÷ 2)` (500), cutting the
+  discarded warmup iterations on every report fit. Pass `n_adapts`
+  explicitly to override.
 
 ### Fixes
 
