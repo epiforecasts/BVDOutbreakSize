@@ -70,6 +70,11 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: fit-env
+          # All matrix jobs share the same lean env, so cache it once rather
+          # than per-id: 11 per-id copies (~419 MB each) otherwise overflow the
+          # 10 GB repo cache budget and evict the content-addressed fit chains,
+          # forcing needless refits (including the ~4h joint).
+          include-matrix: false
       # Content-addressed cache of the fit: reused whenever the fit-relevant
       # source and data are unchanged, so a re-run refits nothing.
       - name: Restore fit cache
