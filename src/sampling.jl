@@ -250,19 +250,26 @@ or [`tensorboard_callback`](@ref) for a TensorBoard backend (requires
 when non-`nothing`. Any additional `kwargs` are passed through to
 `sample`.
 
+`n_adapts` sets the NUTS warmup length (step-size and mass-matrix
+adaptation), run in addition to `samples` and discarded by default. It
+defaults to `min(250, samples ÷ 2)`, trimming the per-fit warmup from
+Turing's default of `min(1000, samples ÷ 2)` (500 at the standard 1000
+draws) to speed the report build.
+
 A callback fires only on the samples that are kept, and NUTS discards
 its adaptation phase by default, so warmup is silent. Set
 `warmup = true` to keep the adaptation steps (`discard_adapt = false`),
 which streams them to the callback so step-size adaptation and early
 divergences are visible live. Those warmup draws are then also retained
-in the returned chain, so the first `min(1000, samples ÷ 2)` draws are
-adaptation steps rather than posterior samples; raise `samples`
-accordingly or drop them before summarising.
+in the returned chain, so the first `n_adapts` draws are adaptation
+steps rather than posterior samples; raise `samples` accordingly or drop
+them before summarising.
 """
 function nuts_sample(model;
         samples::Integer = 1_000,
         chains::Integer = 2,
         target_accept::Real = 0.85,
+        n_adapts::Integer = min(250, samples ÷ 2),
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
@@ -277,7 +284,7 @@ function nuts_sample(model;
     return sample(
         rng,
         model,
-        NUTS(target_accept; adtype),
+        NUTS(n_adapts, target_accept; adtype),
         MCMCThreads(),
         samples, chains;
         initial_params = fill(init, chains),
