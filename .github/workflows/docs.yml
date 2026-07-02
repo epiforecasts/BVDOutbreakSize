@@ -64,7 +64,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: manifest
-          path: docs/Manifest.toml
+          # docs is a workspace member (root Project.toml [workspace]), so the
+          # resolved manifest is the shared one at the repo root, not docs/.
+          path: Manifest.toml
           if-no-files-found: error
 
   # One fit per matrix job. Each fit is content-addressed and cached, so a
@@ -112,7 +114,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: manifest
-          path: docs
+          path: .
       - name: Fit ${{ matrix.id }}
         if: steps.cache.outputs.cache-hit != 'true'
         env:
@@ -156,7 +158,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: manifest
-          path: docs
+          path: .
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
@@ -222,7 +224,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: manifest
-          path: docs
+          path: .
       - name: Install docs dependencies
         run: |
           julia --project=docs -e '
