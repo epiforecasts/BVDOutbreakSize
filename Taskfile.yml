@@ -29,6 +29,47 @@ tasks:
     cmds:
       - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
 
+  docs:
+    desc: >
+      Build the full docs site locally: render both literate pages (analysis
+      and sensitivity) from the cached fits and assemble the Vitepress site.
+      Missing fits are computed and cached under logs/fit_cache on first run;
+      set BVD_REFIT=all to refit. deploydocs is a no-op outside CI.
+    cmds:
+      - BVD_DOCS_STAGE=all julia --project=docs docs/make.jl {{.CLI_ARGS}}
+
+  docs-main:
+    desc: >
+      Render just the main analysis page (docs/src/analysis.md) from the
+      cached fits, without assembling the site. Fast iteration on the main
+      page.
+    cmds:
+      - BVD_DOC_PAGE=analysis julia --project=docs docs/execute.jl {{.CLI_ARGS}}
+
+  docs-sensitivity:
+    desc: >
+      Render just the sensitivity page (docs/src/sensitivity.md) from the
+      cached fits, without assembling the site.
+    cmds:
+      - BVD_DOC_PAGE=sensitivity julia --project=docs docs/execute.jl
+        {{.CLI_ARGS}}
+
+  fit:
+    desc: >
+      Run and cache a single model fit by id (BVD_FIT_ID), matching one CI
+      matrix job. List ids with `julia --project=docs docs/fits/list.jl`.
+      Example: BVD_FIT_ID=deaths task fit.
+    cmds:
+      - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
+
+  fit-all:
+    desc: >
+      Fit and cache every model in one parallel pass, then `task docs` renders
+      from the cache without refitting. Canonical local full build:
+      `task fit-all && task docs`.
+    cmds:
+      - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
+
   format:
     desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.
     cmds:

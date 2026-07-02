@@ -4,7 +4,10 @@ A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model
 fit as the full [Analysis](analysis.md) and refreshes whenever the data updates.
 See the [Analysis](analysis.md) page for the methods, assumptions and supporting
-detail behind each result.
+detail behind each result, and the [Sensitivity](sensitivity.md) page for the
+forecast validation, the outbreak size implied by each data stream, the
+comparisons with McCabe et al. and Chamla et al., and the delay and
+molecular-clock sensitivity analyses.
 
 ```@eval
 using Markdown, BVDOutbreakSize
