@@ -16,7 +16,7 @@ Pkg.instantiate()
 using Literate
 using BVDOutbreakSize
 
-const PAGE = strip(get(ENV, "BVD_DOC_PAGE", "analysis"))
+const PAGE = String(strip(get(ENV, "BVD_DOC_PAGE", "analysis")))
 PAGE in ("analysis", "sensitivity") ||
     error("BVD_DOC_PAGE must be \"analysis\" or \"sensitivity\", got \"$PAGE\"")
 
