@@ -15,10 +15,10 @@ exact data cut-off automatically.
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
 [one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
-[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Estimate-evolution-across-releases) ·
-[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-McCabe-et-al.) ·
-[comparison with Chamla et al.](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Comparison-with-Chamla-et-al.) ·
-[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Outbreak-size-estimated-by-each-data-stream) ·
+[estimate evolution across releases](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Estimate-evolution-across-releases) ·
+[comparison with McCabe et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-McCabe-et-al.) ·
+[comparison with Chamla et al.](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Comparison-with-Chamla-et-al.) ·
+[how the data streams compare](https://epiforecasts.io/BVDOutbreakSize/stable/sensitivity#Outbreak-size-estimated-by-each-data-stream) ·
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
 [full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
 
