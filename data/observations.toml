@@ -305,6 +305,25 @@ dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
 values = [327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387, 390, 382, 484, 610]
 source = "INSP situation reports 13-29 June 2026 (SitReps 030-042, 044, 046) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `Patients au lit (J-1)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 327, 361, 362, 376, 356, 398, 342, 373, 360, 335, 387, 390, 382 on 13-25 June. Start-of-day in-bed stock (before that day's admissions/discharges); the same patient stock as the end-of-day `Patients en isolement (Fin J)` occupancy read at the start of the day. The break against the previous report day's occupancy (e.g. 19 June au-lit 342 vs 18 June Fin J 416) is the between-report DHIS2 reclassification jump the treatment-flow offset absorbs. SitRep 029 (12 June) was not published upstream, so 12 June is absent. SitRep 043 (26 June) was also not published; 484 on 27 June (SitRep 044 Tableau 6 Patients au lit (J-1) Ituri 333 + Nord-Kivu 134 + Sud-Kivu 17 = 484; balance 484 + admissions 74 - total sorties 56 = 502 Fin J). SitRep 045 (28 June) was also not published; 610 on 29 June (SitRep 046 Tableau 6 Patients au lit (J-1) Ituri 449 + Nord-Kivu 138 + Sud-Kivu 23 = 610; this vintage does NOT balance - 610 + admissions 82 - total sorties 63 (printed) = 629 vs Fin J 609, and the printed total sorties 63 disagrees with its component sum 65, an internal Tableau 6 inconsistency, so the Fin J 609 is taken from the page-1 headline)."
 
+# Manual, opt-in occupancy reclassification-break days. Each listed date is a
+# day on which the treatment-flow submodel fits a single level step into the
+# modelled occupancy mean (`treatment_flow_model` / `cumulative_occupancy_
+# offset`), letting the modelled occupancy track a between-report measurement-
+# basis discontinuity in the observed `isolation_history` series without
+# bending Rt to chase it. Use it only for a known, persistent basis change
+# (e.g. the day the occupancy series switches from Tableau 6 provincial sums to
+# the page-1 headline, or a documented DHIS2 reclassification), not day-to-day
+# reporting noise, which the NegativeBinomial occupancy dispersion already
+# absorbs. Each step is sampled, centred on zero with a weakly informative
+# prior (`occupancy_break_sd`, default 25 beds), so the fit partitions it into
+# reporting artifact vs real demand. The list is deliberately empty: no break
+# is currently needed (the 29 June Tableau 6 non-closure sits in the flow rows,
+# not the occupancy stock, which takes the page-1 headline 609). Add dates here
+# to opt in. Filtered to the cut-off like the histories; empty → no-op.
+[occupancy_break_dates]
+value  = []
+source = "Manually curated occupancy reclassification-break days. Empty by default (no break applied). Populate with the date(s) of a documented, persistent measurement-basis change in the isolation occupancy series."
+
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
 # `cumulative_tests_analysed`) are derived from the final vintage of the

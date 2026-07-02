@@ -2577,6 +2577,10 @@ pp_joint = predict(
         _days_only(obs.suspected_daily_deaths_history),
         isolation_history = _days_only(obs.isolation_history),
         bed_capacity_history = _days_only(obs.bed_capacity_history),
+        ## Kept so the generator's occupancy-break dimension matches the fitted
+        ## chain when `[occupancy_break_dates]` is populated (a no-op while it
+        ## ships empty).
+        occupancy_break_days = obs.occupancy_break_days,
         recovered_history = _days_only(obs.recovered_history),
         treatment_admissions_history =
         _days_only(obs.treatment_admissions_history),

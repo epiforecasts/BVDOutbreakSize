@@ -227,6 +227,13 @@
     @test obs.export_case_days[1] < obs.export_death_days[1] <
           obs.export_case_days[2]
 
+    ## Manual occupancy break days: an opt-in dated list, empty by default and
+    ## within the grid, sorted ascending.
+    @test obs.occupancy_break_days isa AbstractVector{<:Integer}
+    @test issorted(obs.occupancy_break_days)
+    @test all(1 .<= obs.occupancy_break_days .<= obs.n)
+    @test isempty(obs.occupancy_break_days)
+
     ## Genetic TMRCA bound
     @test !ismissing(obs.tmrca_days)
     @test obs.tmrca_days isa Real

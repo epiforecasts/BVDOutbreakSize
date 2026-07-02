@@ -28,6 +28,14 @@ Changes since v1.6.0.
   on the infection case-fatality, identified by the in-care death flow rather
   than estimated independently. The daily discharge flows are scored as
   optional negative-binomial streams (resolves #338).
+- Added a manual, opt-in occupancy reclassification-break offset. Break days
+  are listed explicitly in `[occupancy_break_dates]` (empty by default, a
+  no-op), replacing the removed threshold detector that flagged too many days.
+  A level step is fitted into the modelled occupancy mean at each listed day,
+  so the fit tracks a known between-report measurement-basis discontinuity
+  (e.g. a Tableau 6-sum → page-1 headline transition) without bending Rt to
+  chase it. Each step is centred on zero, so the fit partitions it into
+  reporting artifact vs real demand.
 
 ### Report and forecasts
 
