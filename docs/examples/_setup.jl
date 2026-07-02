@@ -94,8 +94,21 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## cold cache the joint overlaps the per-stream, frozen and (gated) sensitivity
     ## re-fits and keeps all cores busy; on a warm cache they deserialise in
     ## parallel.
-    _fit_cache_dir = get(ENV, "BVD_FIT_CACHE",
-        joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache"))
+    ## Resolve the cache dir against the package root, never the working
+    ## directory: Literate executes the page with the cwd changed to docs/src,
+    ## so a relative `BVD_FIT_CACHE` (as CI passes) would point at
+    ## docs/src/logs/fit_cache, miss every cached chain and refit the whole
+    ## report. Relative overrides are resolved against `pkgdir`; absolute ones
+    ## are used as-is.
+    _fit_cache_dir = let c = strip(get(ENV, "BVD_FIT_CACHE", ""))
+        if isempty(c)
+            joinpath(pkgdir(BVDOutbreakSize), "logs", "fit_cache")
+        elseif isabspath(c)
+            String(c)
+        else
+            joinpath(pkgdir(BVDOutbreakSize), c)
+        end
+    end
     _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
     _fit_specs = build_fit_specs(obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
