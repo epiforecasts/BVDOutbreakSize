@@ -194,6 +194,7 @@
 
 ## Shared setup: packages, observations, the fit registry and every model fit
 ## (loaded from the content-addressed cache). See `docs/examples/_setup.jl`.
+using BVDOutbreakSize
 include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 
 #md # ```@raw html
