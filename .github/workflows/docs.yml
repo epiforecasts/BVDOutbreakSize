@@ -63,7 +63,7 @@ jobs:
       # The docs env is part of the root [workspace] (see Project.toml), so its
       # resolved manifest is the repo-root Manifest.toml, not docs/Manifest.toml.
       # Manifest.toml is git-ignored, hence the artifact.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: Manifest.toml
@@ -125,7 +125,7 @@ jobs:
         run: |
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           julia --project=docs docs/fits/one.jl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: fit-${{ matrix.id }}
           path: logs/fit_cache/*.jls
@@ -189,7 +189,7 @@ jobs:
           BVD_FIT_LOG: none
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/execute.jl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: render-${{ matrix.page }}
           # The whole docs/src delta (the page markdown, its figures and its
