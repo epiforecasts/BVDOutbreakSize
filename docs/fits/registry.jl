@@ -48,6 +48,10 @@ end
 default_breakpoint(obs) = obs.n - obs.who_first_sitrep_days
 default_validation_cutoff(obs) = string(obs.cutoff - Day(7))
 default_frozen_cutoffs() = ["2026-05-20", "2026-05-23", "2026-05-27"]
+## Chamla et al.'s confirmed-case calibration anchor (598 confirmed by 8 June),
+## fit separately from the McCabe frozen set so the confirmed-case projection
+## rides a vintage with testing data rather than the near-empty 27 May stream.
+default_chamla_cutoff() = "2026-06-08"
 function run_sensitivity_env()
     lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
     ("true", "1", "yes", "on")
@@ -65,6 +69,7 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
+        chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 1000, chains::Integer = 2)
@@ -259,6 +264,11 @@ function build_fit_specs(obs;
         push!(specs, (; id = "frozen_$c", kind = :frozen,
             thunk = () -> fit_frozen_joint(c)))
     end
+    ## Chamla's 8 June anchor, kept out of `frozen_cutoffs` so it does not enter
+    ## the McCabe estimate-evolution overlay or its CSV export.
+    push!(specs,
+        (; id = "frozen_$chamla_cutoff", kind = :frozen,
+            thunk = () -> fit_frozen_joint(chamla_cutoff)))
     if run_sensitivity
         push!(specs,
             (; id = "sens_community_delay", kind = :chain,

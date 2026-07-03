@@ -48,8 +48,10 @@ Changes since v1.6.0.
   streams. The treatment-centre flow methods section was rewritten, and the
   flow streams added to the data-overview table.
 - Added a comparison of the confirmed-case projection against Chamla et al.
-  as a second external comparator, forward-projected from the frozen 27 May
-  fit (resolves #340).
+  as a second external comparator, forward-projected from a dedicated frozen
+  fit at their 8 June confirmed-case calibration anchor. This carries the
+  confirmed-case testing history, replacing the poorly-identified 27 May proxy
+  that had effectively no testing data (resolves #340, #349).
 - Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
   automatically in continuous integration before each documentation deploy.
   Dropped the per-release current-model re-fits from the estimate-evolution
