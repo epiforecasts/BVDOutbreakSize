@@ -885,53 +885,46 @@ vintage_table #hide
 # It drives the laboratory analysed-specimen volume; its source is shown
 # with the laboratory submodel below.
 #
-# ##### Onset-to-sample delay (confirmed, optional)
+# ##### Onset-to-sample delay
 #
-# An optional external constraint on the confirmed-case sampling delay, off by
-# default. The confirmed timeline is onset to report to receipt, so the
-# onset-to-report and report-to-analysed (receipt) legs already convolve to an
-# onset-to-sample delay for confirmed cases,
+# The confirmed timeline is onset to report to receipt, so the onset-to-report
+# and report-to-analysed (receipt) legs already convolve to an onset-to-sample
+# delay for confirmed cases,
 #
 # ```math
 # g_{\text{conf}}(d) = (f_{\text{rep}} * f_{\text{rec}})(d)
 #     = \sum_{s \ge 0} f_{\text{rep}}(s)\, f_{\text{rec}}(d - s),
 # ```
 #
-# with an implied mean of about $9$ d. We ground that convolution on the NEJM
-# DRC 2026 Bundibugyo virus cohort [akilimali2026](@cite), whose
-# confirmed-positive onset-to-sample interval ($N = 129$) was fitted as a Gamma
-# through an `epidist` marginal model correcting for double interval censoring
-# and right truncation, chosen over lognormal and Weibull by LOOIC. The cohort
-# reports a mean of $7.4$ d ($95\%$ CrI $5.3$-$13.5$), a median of $4.8$ d
-# ($95\%$ CrI $3.46$-$7.84$) and $25$th/$75$th percentiles of $1.81$/$10.23$ d.
+# with an implied mean of about $9$ d. We fit this convolution to the
+# externally estimated confirmed onset-to-sample delay from the NEJM DRC 2026
+# Bundibugyo virus cohort [akilimali2026](@cite), whose confirmed-positive
+# interval ($N = 129$) was estimated with the marginal model of `epidist`
+# [epidist](@cite) correcting for double interval censoring and right
+# truncation [charniga2024](@cite), a Gamma preferred over lognormal and
+# Weibull by LOOIC. The cohort reports a mean of $7.4$ d ($95\%$ CrI
+# $5.3$-$13.5$), a median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$) and
+# $25$th/$75$th percentiles of $1.81$/$10.23$ d.
 #
-# Rather than editing either leg's prior, which would double-count the receipt
-# leg, we add a latent double-censored Gamma onset-to-sample delay
-# $f_{\text{sam}}$, discretised by the same double interval censoring as the
-# other kernels. The cohort reports the fitted Gamma's mean ($7.4$ d) and its
-# quantiles (median $4.8$ d, quartiles $1.81$/$10.23$ d) but not the fitted
-# Gamma's SD, so we centre the mean prior at the reported mean ($7.39$ d) and
-# back-solve the SD-prior centre ($7.95$ d) as the value that makes the
-# resulting Gamma reproduce the reported quantiles: a mean of $7.39$ d with an
-# SD of $7.95$ d gives a Gamma whose mean is $7.39$ d, median $4.81$ d and
-# quartiles $1.81$/$10.23$ d, matching every reported quantile. The priors are
+# We add a fixed target delay $f_{\text{sam}}$, the Gamma pinned by the
+# cohort's two directly-reported summaries, its mean ($7.4$ d) and median
+# ($4.8$ d). A Gamma has mean $\alpha\theta$ and median $\theta\, m(\alpha)$,
+# with $m(\alpha)$ the median of the unit-scale $\mathrm{Gamma}(\alpha, 1)$, so
+# the ratio median/mean $= m(\alpha)/\alpha$ fixes the shape and $\theta =
+# \text{mean}/\alpha$ the scale,
 #
 # ```math
-# \mu_{\text{sam}} \sim \mathrm{Normal}^{+}(7.39,\ 2.09), \qquad
-# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(7.95,\ 2.0), \tag{19}
+# f_{\text{sam}} = \mathrm{Gamma}(\alpha,\ \theta),\qquad
+# \frac{\text{median}}{\text{mean}} = \frac{m(\alpha)}{\alpha},\qquad
+# \theta = \frac{\text{mean}}{\alpha}, \tag{19}
 # ```
 #
-# with the mean-prior SD taken as the reported mean $95\%$ CrI half-width over
-# $1.96$ (the incubation-period convention) and the SD-prior spread weakly
-# informative because no reported CrI pins the SD. Both priors are
-# lower-truncated at $0$, keeping the mean and SD positive so the Gamma is
-# defined; the delay is reconstructed by double interval censoring, so there is
-# no basis to floor them at a day.
-#
-# The latent onset-to-sample PMF is tied to the modelled convolution
-# $g_{\text{conf}}$ by an $N$-weighted cross-entropy, the PMF-matching
-# log-likelihood term added to the joint log-density and implemented by
-# [`delay_match_logweight`](@ref),
+# giving $\alpha \approx 0.86$ and $\theta \approx 8.6$ d, discretised by the
+# same double interval censoring as the other kernels. The SD is then a derived
+# property of this Gamma ($\theta\sqrt{\alpha} \approx 8.0$ d, consistent with
+# the reported quartiles), so the spread is set by the cohort data rather than
+# assigned. We fit $g_{\text{conf}}$ to the target by adding an $N$-weighted
+# cross-entropy to the joint log-density,
 #
 # ```math
 # \ell_{\text{sam}} = N \sum_{d \ge 0} f_{\text{sam}}(d)\,
@@ -941,23 +934,20 @@ vintage_table #hide
 # the expected log-likelihood of $N = 129$ pseudo-observations drawn from the
 # cohort delay $f_{\text{sam}}$ under the modelled convolution
 # $g_{\text{conf}}$. The data therefore split the pull between the report and
-# receipt legs subject to their existing priors. The report-to-receipt
-# laboratory delay is otherwise unidentified, so this per-sample cohort is what
-# grounds it. This constraint grounds only the confirmed-positive sampling
-# delay. It is enabled through the `bvd_joint` keyword `onset_to_sample` (for
-# example `nejm_onset_to_sample()`); the default `nothing` drops the term, so
-# single-stream and isolation fits are unaffected.
+# receipt legs subject
+# to their existing priors, and the cohort's sampling uncertainty enters through
+# $N$, the sample size, rather than a prior spread, so there is no separate SD
+# to assign.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: onset_to_sample_model</summary>
+#md # <details><summary>Target delay: onset_to_sample_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
-#md #         mean_prior = truncated(Normal(7.39, 2.09); lower = 0),
-#md #         sd_prior = truncated(Normal(7.95, 2.0); lower = 0))), "\n```"))
+#md #         shape = 0.86, scale = 8.6)), "\n```"))
 #md # ```
 
 #md # ```@raw html

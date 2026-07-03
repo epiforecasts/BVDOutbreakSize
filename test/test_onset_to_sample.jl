@@ -1,27 +1,40 @@
-## Tests for the latent onset-to-sample delay constraint from the NEJM DRC
+## Tests for the fixed onset-to-sample delay constraint from the NEJM DRC
 ## 2026 BVD cohort (Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The
-## submodel is a double-censored Gamma whose mean/SD priors carry the SI
-## Table S3 confirmed-positive fit and its uncertainty; the constraint ties
-## it to the joint's onset-to-confirmation convolution.
+## target is a fixed double-censored Gamma pinned by the cohort's reported
+## mean and median; it is tied to the joint's onset-to-confirmation
+## convolution by an N-weighted cross-entropy, with the cohort's uncertainty
+## carried by the sample size N rather than any prior spread.
 
-@testitem "onset_to_sample_model: double-censored Gamma PMF is valid" begin
-    using Distributions: truncated, Normal
-    using BVDOutbreakSize: onset_to_sample_model
-    using Turing: returned
-    using Random: MersenneTwister
+@testitem "nejm_onset_to_sample pins the Gamma from mean and median" begin
+    using Distributions: Gamma, mean, median, std, quantile
+    using BVDOutbreakSize: nejm_onset_to_sample
 
+    cfg = nejm_onset_to_sample()
+    @test cfg.n_obs == 129
+    dist = Gamma(cfg.shape, cfg.scale)
+    ## The target reproduces the two directly-reported pinning summaries.
+    @test isapprox(mean(dist), 7.4; atol = 0.05)
+    @test isapprox(median(dist), 4.8; atol = 0.1)
+    ## The SD is a derived property near 8 d, not an input; it is consistent
+    ## with the reported quartiles 1.81 / 10.23 d (sanity check).
+    @test isapprox(std(dist), 7.95; atol = 0.6)
+    @test isapprox(quantile(dist, 0.25), 1.81; atol = 0.7)
+    @test isapprox(quantile(dist, 0.75), 10.23; atol = 1.0)
+end
+
+@testitem "onset_to_sample_model builds a valid fixed-target PMF" begin
+    using BVDOutbreakSize: onset_to_sample_model, nejm_onset_to_sample
+
+    cfg = nejm_onset_to_sample()
     nmax = 60
-    m = onset_to_sample_model(nmax;
-        mean_prior = truncated(Normal(7.39, 2.09); lower = 0),
-        sd_prior = truncated(Normal(7.95, 2.0); lower = 0))
-    out = returned(m, rand(MersenneTwister(1), m))
+    out = onset_to_sample_model(nmax; shape = cfg.shape, scale = cfg.scale)
 
     @test length(out.pmf) == nmax + 1
     @test all(out.pmf .>= 0)
     @test isapprox(sum(out.pmf), 1.0; atol = 1e-8)
-    ## The sampled delay mean/SD are surfaced and positive.
-    @test out.mean > 0
-    @test out.sd > 0
+    ## The surfaced mean/SD are the fixed Gamma's moments, not sampled draws.
+    @test isapprox(out.mean, 7.4; atol = 0.05)
+    @test isapprox(out.sd, 7.95; atol = 0.6)
 end
 
 @testitem "delay_match_logweight rewards a matching convolution" begin
@@ -43,29 +56,24 @@ end
     @test isfinite(delay_match_logweight(target, [0.1, 0.3, 0.6], 5))
 end
 
-@testitem "nejm_onset_to_sample carries the SI Table S3 confirmed fit" begin
-    using Distributions: mean
-    using BVDOutbreakSize: nejm_onset_to_sample
-
-    cfg = nejm_onset_to_sample()
-    @test cfg.n_obs == 129
-    ## Priors centred on the recovered confirmed-positive Gamma moments.
-    @test isapprox(mean(cfg.mean_prior), 7.39; atol = 0.2)
-    @test isapprox(mean(cfg.sd_prior), 7.95; atol = 0.3)
-end
-
-@testitem "onset_to_sample composes into bvd_joint via kwarg" tags=[:slow] begin
+@testitem "onset_to_sample carried by bvd_joint by default" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
-    using BVDOutbreakSize: bvd_joint, nejm_onset_to_sample
+    using BVDOutbreakSize: bvd_joint
 
+    ## Default-on: the joint constructs and samples with the fixed-target
+    ## cross-entropy term, which adds to the log-density without introducing
+    ## any latent onset-to-sample parameter.
     chn = sample(
-        bvd_joint(40, 2, 18; onset_to_sample = nejm_onset_to_sample()),
-        Prior(), 50;
+        bvd_joint(40, 2, 18), Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false)
+    r0 = vec(Array(chn[:R0]))
+    @test length(r0) == 50
+    @test all(isfinite, r0)
 
-    mean_draws = vec(Array(chn[:onset_to_sample_mean]))
-    @test length(mean_draws) == 50
-    @test all(isfinite, mean_draws)
-    @test all(mean_draws .> 0)
+    ## Explicitly dropping the term with `nothing` also constructs and samples.
+    chn0 = sample(
+        bvd_joint(40, 2, 18; onset_to_sample = nothing), Prior(), 10;
+        chain_type = FlexiChains.VNChain, progress = false)
+    @test length(vec(Array(chn0[:R0]))) == 10
 end

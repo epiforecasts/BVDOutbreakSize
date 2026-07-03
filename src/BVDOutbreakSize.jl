@@ -17,7 +17,8 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, Binomial, Normal, LogNormal, Beta,
-                     Gamma, truncated, censored, product_distribution
+                     Gamma, truncated, censored, product_distribution,
+                     quantile
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
 import CairoMakie

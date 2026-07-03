@@ -102,60 +102,66 @@ PMF is truncated back to lags `0 … nmax` and renormalised. Returns
 end
 
 """
-Latent onset-to-sample delay submodel. Samples a delay MEAN and SD, maps
-them to a Gamma shape and scale (`α = (mean/sd)²`, `θ = sd²/mean`) and
-discretises to a daily PMF over lags `0 … nmax` by the same double interval
-censoring as the other delays ([`discretise_censored`](@ref)), so the latent
-distribution sits on the same footing as the model's own kernels. Gamma is
-the form the external onset-to-sample fit prefers and double-censoring
-matches the marginal likelihood that produced it, so no further correction
-is needed. The mean/SD priors carry the external fit and its uncertainty.
-Returns `(; pmf, mean, sd)`; the sampled `delay_mean`/`delay_sd` are also
-reachable from the parent through the submodel prefix, and the Gamma shape
-and scale are recovered from `mean`/`sd` where needed.
+Recover a Gamma shape `α` and scale `θ` from a target `mean` and `median`. A
+`Gamma(α, θ)` has mean `α·θ` and median `θ·m(α)`, where `m(α)` is the median
+of the unit-scale `Gamma(α, 1)`, so `median / mean = m(α) / α` pins `α` on its
+own; `θ = mean / α` then sets the scale. `m(α) / α` rises monotonically in
+`α`, so a bracketing bisection on `[10⁻³, 10³]` solves it. This is a one-off
+deterministic construction step (outside any gradient path), so the small
+numeric solve is inexpensive. Returns `(; shape, scale)`.
 """
-@model function onset_to_sample_model(nmax::Integer; mean_prior, sd_prior)
-    delay_mean ~ mean_prior
-    delay_sd ~ sd_prior
-    α = (delay_mean / delay_sd)^2
-    θ = delay_sd^2 / delay_mean
-    pmf = discretise_censored(Gamma(α, θ), nmax)
-    return (; pmf, mean = delay_mean, sd = delay_sd)
+function gamma_from_mean_median(mean::Real, median::Real)
+    r = median / mean
+    f(α) = quantile(Gamma(α, 1), 0.5) / α - r
+    lo, hi = 1.0e-3, 1.0e3
+    for _ in 1:200
+        mid = sqrt(lo * hi)
+        f(mid) > 0 ? (hi = mid) : (lo = mid)
+    end
+    shape = sqrt(lo * hi)
+    return (; shape, scale = mean / shape)
 end
 
 """
-Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
+Fixed onset-to-sample target delay. Builds the daily PMF of the cohort's
+`Gamma(shape, scale)` over lags `0 … nmax` by the same double interval
+censoring as the other delays ([`discretise_censored`](@ref)), so the target
+sits on the same footing as the model's own kernels. The delay is a fixed
+external estimate rather than a latent quantity, so nothing is sampled here;
+the cohort's sampling uncertainty enters through the observation count `n_obs`
+in the cross-entropy tie ([`delay_match_logweight`](@ref)), not a prior
+spread. Returns `(; pmf, mean, sd)` with the Gamma's mean `shape·scale` and
+SD `scale·√shape` surfaced for reference.
+"""
+function onset_to_sample_model(nmax::Integer; shape::Real, scale::Real)
+    pmf = discretise_censored(Gamma(shape, scale), nmax)
+    return (; pmf, mean = shape * scale, sd = scale * sqrt(shape))
+end
+
+"""
+Onset-to-sample target configuration from the NEJM DRC 2026 BVD cohort
 (Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
-onset-to-sample interval (N = 129) was fitted as a Gamma through the
+onset-to-sample interval (N = 129) was estimated as a Gamma through the
 `epidist` marginal model correcting for double interval censoring and right
 truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
 mean of 7.4 d (95% CrI 5.3–13.5), a median of 4.8 d (95% CrI 3.46–7.84) and
 25th/75th percentiles of 1.81/10.23 d.
 
-The cohort reports the fitted Gamma's MEAN (7.4 d) and its QUANTILES (median
-4.8 d, quartiles 1.81/10.23 d) but NOT the fitted Gamma's SD. The mean prior
-is therefore centred at the reported mean (`mean = 7.39 d`) and the SD prior
-is centred at `sd = 7.95 d`, the value BACK-SOLVED to make the resulting
-Gamma reproduce the reported quantiles rather than a directly reported
-number: `mean = 7.39` with `sd = 7.95` gives a Gamma (`α ≈ 0.864`,
-`θ ≈ 8.55`) whose mean is 7.39 d, median 4.81 d and quartiles 1.81/10.23 d,
-matching all the reported quantiles. The mean-prior SD (`mean_sd ≈ 2.09 d`)
-is the reported mean 95% CrI half-width over 1.96 (`(13.5 − 5.3)/2 / 1.96`),
-following the incubation-period convention; the SD-prior spread
-(`sd_sd = 2.0 d`) is weakly informative because no reported CrI pins the SD.
-Both priors are lower-truncated at 0, keeping the mean and SD positive so the
-Gamma (`α = (mean/sd)²`, `θ = sd²/mean`) is defined; the delay is
-reconstructed by double interval censoring, so there is no basis to floor
-them at a day. `n_obs` is the
-confirmed-positive sample size, the weight for the cross-entropy tie
-([`delay_match_logweight`](@ref)). Returns a NamedTuple
-`(; mean_prior, sd_prior, n_obs)` for the `onset_to_sample` kwarg of
+The fixed target is the Gamma pinned by the two directly-reported summaries,
+the mean (7.4 d) and median (4.8 d): [`gamma_from_mean_median`](@ref) solves
+the shape `α ≈ 0.86` and scale `θ ≈ 8.6 d` from them, so the SD is not an
+input but a derived property of that Gamma (`θ·√α ≈ 8.0 d`, consistent with
+the reported quartiles 1.81/10.23 d). The spread is therefore set by the
+cohort data, not assigned. `n_obs` is the confirmed-positive sample size, the
+weight for the cross-entropy tie ([`delay_match_logweight`](@ref)) through
+which the cohort's uncertainty enters. Returns a NamedTuple
+`(; shape, scale, n_obs)` for the `onset_to_sample` argument of
 [`bvd_joint`](@ref).
 """
-function nejm_onset_to_sample(; mean::Real = 7.39, mean_sd::Real = 2.09,
-        sd::Real = 7.95, sd_sd::Real = 2.0, n_obs::Integer = 129)
-    return (; mean_prior = truncated(Normal(mean, mean_sd); lower = 0),
-        sd_prior = truncated(Normal(sd, sd_sd); lower = 0), n_obs)
+function nejm_onset_to_sample(; mean::Real = 7.4, median::Real = 4.8,
+        n_obs::Integer = 129)
+    (; shape, scale) = gamma_from_mean_median(mean, median)
+    return (; shape, scale, n_obs)
 end
 
 """
