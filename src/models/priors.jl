@@ -110,36 +110,72 @@ distribution sits on the same footing as the model's own kernels. Gamma is
 the form the external onset-to-sample fit prefers and double-censoring
 matches the marginal likelihood that produced it, so no further correction
 is needed. The mean/SD priors carry the external fit and its uncertainty.
-Returns `(; pmf, dist, mean, sd, alpha, theta)`.
+Returns `(; pmf, mean, sd)`; the sampled `delay_mean`/`delay_sd` are also
+reachable from the parent through the submodel prefix, and the Gamma shape
+and scale are recovered from `mean`/`sd` where needed.
 """
 @model function onset_to_sample_model(nmax::Integer; mean_prior, sd_prior)
     delay_mean ~ mean_prior
     delay_sd ~ sd_prior
     α = (delay_mean / delay_sd)^2
     θ = delay_sd^2 / delay_mean
-    dist = Gamma(α, θ)
-    return (; pmf = discretise_censored(dist, nmax), dist,
-        mean = delay_mean, sd = delay_sd, alpha = α, theta = θ)
+    pmf = discretise_censored(Gamma(α, θ), nmax)
+    return (; pmf, mean = delay_mean, sd = delay_sd)
 end
 
 """
 Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
-(Akilimali et al. 2026, doi:10.1056/NEJMc2608070, Table S3). The
-confirmed-positive onset-to-sample delay (N = 129) was fitted with `epidist`
-correcting for double interval censoring and right truncation; Gamma was the
-best-fitting family. The reported median (4.8 d) and 25th/75th percentiles
-imply a Gamma with mean ≈ 7.39 d and SD ≈ 7.95 d. The mean prior SD
-(`mean_sd ≈ 1.6 d`) comes from the reported median 95% CrI (3.46–7.84 d); the
-SD prior spread is weakly informative as the CrIs do not pin it directly.
-`n_obs` is the confirmed-positive sample size, the weight for the
-cross-entropy tie ([`delay_match_logweight`](@ref)). Returns a NamedTuple
+(Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
+onset-to-sample interval (N = 129) was fitted as a Gamma through the
+`epidist` marginal model correcting for double interval censoring and right
+truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
+mean of 7.4 d (95% CrI 5.3–13.5), a median of 4.8 d (95% CrI 3.46–7.84) and
+25th/75th percentiles of 1.81/10.23 d.
+
+The priors are centred so the implied Gamma reproduces the reported summary:
+`mean = 7.39` with `sd = 7.95` gives a Gamma (`α ≈ 0.864`, `θ ≈ 8.55`) whose
+mean is 7.39 d, median 4.81 d and quartiles 1.81/10.23 d, matching all the
+reported quantiles. The mean-prior SD (`mean_sd ≈ 2.09 d`) is the reported
+mean 95% CrI half-width over 1.96 (`(13.5 − 5.3)/2 / 1.96`), following the
+incubation-period convention; the SD-prior spread (`sd_sd`) is weakly
+informative as the reported CrIs do not pin the SD directly. Both priors are
+lower-truncated at 1 day, so the mean and SD of a delay resolved to whole
+days stay at least one day (the same truncation as the other mean/SD-
+parameterised delay priors, e.g. the incubation period), not because the
+parameters are bounded away from zero on positivity grounds. `n_obs` is the
+confirmed-positive sample size, the weight for the cross-entropy tie
+([`delay_match_logweight`](@ref)). Returns a NamedTuple
 `(; mean_prior, sd_prior, n_obs)` for the `onset_to_sample` kwarg of
 [`bvd_joint`](@ref).
 """
-function nejm_onset_to_sample(; mean::Real = 7.39, mean_sd::Real = 1.6,
+function nejm_onset_to_sample(; mean::Real = 7.39, mean_sd::Real = 2.09,
         sd::Real = 7.95, sd_sd::Real = 2.0, n_obs::Integer = 129)
     return (; mean_prior = truncated(Normal(mean, mean_sd); lower = 1),
         sd_prior = truncated(Normal(sd, sd_sd); lower = 1), n_obs)
+end
+
+"""
+Weighted cross-entropy of a `target` delay PMF against a `modelled` delay
+PMF, `weight · Σ target[d] · log(modelled[d])` over the shared support. This
+is the expected log-likelihood of `weight` draws from `target` under
+`modelled` (up to the target's own entropy), so maximising it pulls
+`modelled` toward `target`; it scales linearly in `weight`, the effective
+number of observations behind `target`. Used to tie the joint's onset-to-
+confirmation convolution to the externally fitted onset-to-sample
+distribution ([`onset_to_sample_model`](@ref)). A small floor guards the log
+against empty `modelled` bins, and differing lengths are matched on the
+leading shared support.
+"""
+function delay_match_logweight(target::AbstractVector,
+        modelled::AbstractVector, weight::Real)
+    m = min(length(target), length(modelled))
+    Tp = promote_type(eltype(target), eltype(modelled))
+    ϵ = eps(float(Tp))
+    acc = zero(Tp)
+    @inbounds for d in 1:m
+        acc += target[d] * log(modelled[d] + ϵ)
+    end
+    return weight * acc
 end
 
 ## --- Reproduction number ------------------------------------------------

@@ -328,29 +328,6 @@ function convolve_pmf(a::AbstractVector, b::AbstractVector)
 end
 
 """
-Weighted cross-entropy of a `target` delay PMF against a `modelled` delay
-PMF, `weight * Σ target[d] · log(modelled[d])` over the shared support. This
-is the expected log-likelihood of `weight` draws from `target` under
-`modelled` (up to the target's own entropy), so maximising it pulls
-`modelled` toward `target`; it scales linearly in `weight`, which is the
-effective number of observations behind `target`. Used to tie the joint's
-onset-to-confirmation convolution to an externally fitted onset-to-sample
-distribution. A small floor guards the log against empty `modelled` bins,
-and differing lengths are matched on the leading shared support.
-"""
-function delay_match_logweight(target::AbstractVector,
-        modelled::AbstractVector, weight::Real)
-    m = min(length(target), length(modelled))
-    Tp = promote_type(eltype(target), eltype(modelled))
-    ϵ = eps(float(Tp))
-    acc = zero(Tp)
-    @inbounds for d in 1:m
-        acc += target[d] * log(modelled[d] + ϵ)
-    end
-    return weight * acc
-end
-
-"""
 Day indices of the weekly reproduction-number knots over an `n`-day grid.
 The first knot sits on day `start` (default 1) and the last knot on day
 `n`, with regular knots every `week` days, so a knot is pinned to `start`

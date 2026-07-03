@@ -891,32 +891,56 @@ vintage_table #hide
 # default. The confirmed timeline is onset to report to receipt, so the
 # onset-to-report and report-to-analysed (receipt) legs already convolve to an
 # onset-to-sample delay for confirmed cases,
-# `onset_to_confirmation_pmf = report_pmf` convolved with `receipt_pmf`
-# (implied mean about 9 d). We ground that convolution on the NEJM DRC 2026
-# Bundibugyo virus cohort [akilimali2026](@cite), whose confirmed-positive
-# onset-to-sample delay ($N = 129$) was fitted with a double-interval-censored,
-# right-truncated `epidist` reanalysis, with Gamma the preferred family (median
-# $4.8$ d, implied mean about $7.39$ d, SD about $7.95$ d). Rather than editing
-# either leg's prior, which would double-count the receipt leg, we add a latent
-# double-censored Gamma onset-to-sample delay, discretised by the same double
-# interval censoring as the other kernels, with mean and SD priors carrying the
-# cohort fit,
 #
 # ```math
-# \mu_{\text{sam}} \sim \mathrm{Normal}^{+}(7.39,\ 1.6), \qquad
-# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(7.95,\ 2.0),
+# g_{\text{conf}}(d) = (f_{\text{rep}} * f_{\text{rec}})(d)
+#     = \sum_{s \ge 0} f_{\text{rep}}(s)\, f_{\text{rec}}(d - s),
 # ```
 #
-# the mean-prior spread taken from the reported median $95\%$ credible
-# interval. The latent delay is tied to the convolution by an $N$-weighted
-# cross-entropy, so the data split the pull between the report and receipt legs
-# subject to their existing priors. The report-to-receipt laboratory delay is
-# otherwise unidentified, so this per-sample cohort is what grounds it. Only the
-# confirmed-positive delay is used here; the test-negative delay onto the
-# suspected stream is left for follow-up. The constraint is enabled through the
-# `bvd_joint` keyword `onset_to_sample` (for example `nejm_onset_to_sample()`);
-# the default `nothing` drops the term, so the single-stream and isolation fits
-# are unaffected.
+# with an implied mean of about $9$ d. We ground that convolution on the NEJM
+# DRC 2026 Bundibugyo virus cohort [akilimali2026](@cite), whose
+# confirmed-positive onset-to-sample interval ($N = 129$) was fitted as a Gamma
+# through an `epidist` marginal model correcting for double interval censoring
+# and right truncation, chosen over lognormal and Weibull by LOOIC. The cohort
+# reports a mean of $7.4$ d ($95\%$ CrI $5.3$-$13.5$), a median of $4.8$ d
+# ($95\%$ CrI $3.46$-$7.84$) and $25$th/$75$th percentiles of $1.81$/$10.23$ d.
+#
+# Rather than editing either leg's prior, which would double-count the receipt
+# leg, we add a latent double-censored Gamma onset-to-sample delay
+# $f_{\text{sam}}$, discretised by the same double interval censoring as the
+# other kernels. Its mean and SD priors are centred so the implied Gamma
+# reproduces the reported summary: a mean of $7.39$ d with an SD of $7.95$ d
+# gives a Gamma whose mean is $7.39$ d, median $4.81$ d and quartiles
+# $1.81$/$10.23$ d, matching every reported quantile. The priors are
+#
+# ```math
+# \mu_{\text{sam}} \sim \mathrm{Normal}^{+}(7.39,\ 2.09), \qquad
+# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(7.95,\ 2.0), \tag{19}
+# ```
+#
+# with the mean-prior SD taken as the reported mean $95\%$ CrI half-width over
+# $1.96$ (the incubation-period convention), and both priors lower-truncated at
+# $1$ day so a day-resolved delay keeps a mean and SD of at least one day, the
+# same truncation as the other mean/SD-parameterised delay priors.
+#
+# The latent delay is tied to the convolution by an $N$-weighted cross-entropy
+# added to the log-density,
+#
+# ```math
+# \ell_{\text{sam}} = N \sum_{d \ge 0} f_{\text{sam}}(d)\,
+#     \log g_{\text{conf}}(d), \tag{20}
+# ```
+#
+# the expected log-likelihood of $N = 129$ pseudo-observations drawn from the
+# cohort delay $f_{\text{sam}}$ under the modelled convolution
+# $g_{\text{conf}}$. The data therefore split the pull between the report and
+# receipt legs subject to their existing priors. The report-to-receipt
+# laboratory delay is otherwise unidentified, so this per-sample cohort is what
+# grounds it. Only the confirmed-positive delay is used here; the test-negative
+# delay onto the suspected stream is left for follow-up. The constraint is
+# enabled through the `bvd_joint` keyword `onset_to_sample` (for example
+# `nejm_onset_to_sample()`); the default `nothing` drops the term, so the
+# single-stream and isolation fits are unaffected.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_to_sample_model</summary>
@@ -926,7 +950,7 @@ vintage_table #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
-#md #         mean_prior = truncated(Normal(7.39, 1.6); lower = 1),
+#md #         mean_prior = truncated(Normal(7.39, 2.09); lower = 1),
 #md #         sd_prior = truncated(Normal(7.95, 2.0); lower = 1))), "\n```"))
 #md # ```
 
@@ -947,7 +971,7 @@ vintage_table #hide
 # prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{19}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{21}
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$. The mean
@@ -1003,7 +1027,7 @@ cfr_prior_fig #hide
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
 # z_s \sim \mathrm{Normal}(0, 1), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{20}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{22}
 # ```
 #
 # so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the
@@ -1038,13 +1062,13 @@ cfr_prior_fig #hide
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{21}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{23}
 # ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{22}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{24}
 # ```
 #
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
@@ -1099,7 +1123,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{23}
+# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{25}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
@@ -1237,7 +1261,7 @@ cfr_prior_fig #hide
 # population is kept fixed (census):
 #
 # ```math
-# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{24}
+# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{26}
 # ```
 
 #md # ```@raw html
@@ -1306,7 +1330,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{25}
+#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{27}
 # ```
 #
 # From SitRep 013 (27 May) INSP reclassifies suspects, so the national
@@ -1470,7 +1494,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{26}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{28}
 # ```
 
 #md # ```@raw html
@@ -1525,7 +1549,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{27}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{29}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
@@ -1558,7 +1582,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{28}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{30}
 # ```
 #
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the
@@ -1571,7 +1595,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{29}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{31}
 # ```
 
 #md # ```@raw html
@@ -1656,7 +1680,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{30}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{32}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the
@@ -1765,7 +1789,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{31}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{33}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate
@@ -1783,7 +1807,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{32}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{34}
 # ```
 
 #md # ```@raw html
@@ -1819,7 +1843,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{33}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{35}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a
@@ -1831,7 +1855,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{34}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{36}
 # ```
 
 #md # ```@raw html
@@ -2082,7 +2106,7 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{35}
+#         \Pr(X_d - X_c \le T - t)}, \tag{37}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$
