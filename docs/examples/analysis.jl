@@ -885,6 +885,55 @@ vintage_table #hide
 # It drives the laboratory analysed-specimen volume; its source is shown
 # with the laboratory submodel below.
 #
+# ##### Onset-to-sample delay (confirmed, optional)
+#
+# An optional external constraint on the confirmed-case sampling delay, off by
+# default. The confirmed timeline is onset to report to receipt, so the
+# onset-to-report and report-to-analysed (receipt) legs already convolve to an
+# onset-to-sample delay for confirmed cases,
+# `onset_to_confirmation_pmf = report_pmf` convolved with `receipt_pmf`
+# (implied mean about 9 d). We ground that convolution on the NEJM DRC 2026
+# Bundibugyo virus cohort [akilimali2026](@cite), whose confirmed-positive
+# onset-to-sample delay ($N = 129$) was fitted with a double-interval-censored,
+# right-truncated `epidist` reanalysis, with Gamma the preferred family (median
+# $4.8$ d, implied mean about $7.39$ d, SD about $7.95$ d). Rather than editing
+# either leg's prior, which would double-count the receipt leg, we add a latent
+# double-censored Gamma onset-to-sample delay, discretised by the same double
+# interval censoring as the other kernels, with mean and SD priors carrying the
+# cohort fit,
+#
+# ```math
+# \mu_{\text{sam}} \sim \mathrm{Normal}^{+}(7.39,\ 1.6), \qquad
+# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(7.95,\ 2.0),
+# ```
+#
+# the mean-prior spread taken from the reported median $95\%$ credible
+# interval. The latent delay is tied to the convolution by an $N$-weighted
+# cross-entropy, so the data split the pull between the report and receipt legs
+# subject to their existing priors. The report-to-receipt laboratory delay is
+# otherwise unidentified, so this per-sample cohort is what grounds it. Only the
+# confirmed-positive delay is used here; the test-negative delay onto the
+# suspected stream is left for follow-up. The constraint is enabled through the
+# `bvd_joint` keyword `onset_to_sample` (for example `nejm_onset_to_sample()`);
+# the default `nothing` drops the term, so the single-stream and isolation fits
+# are unaffected.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: onset_to_sample_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
+#md #         mean_prior = truncated(Normal(7.39, 1.6); lower = 1),
+#md #         sd_prior = truncated(Normal(7.95, 2.0); lower = 1))), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Case-fatality ratio
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for

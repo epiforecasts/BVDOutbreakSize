@@ -38,6 +38,13 @@ Changes since v1.6.0.
   361, confirmed by the au-lit start-of-day stock) is listed; the joint fit
   with the isolation stream had been bending Rt up and down to chase this and
   the later missing-SitRep steps, which no single-stream fit shows.
+- Added an optional external constraint grounding the confirmed onset-to-sample
+  delay on the NEJM DRC 2026 cohort (Akilimali et al.). The onset-to-report and
+  report-to-receipt legs already convolve to onset-to-sample for confirmed
+  cases, so a latent double-censored Gamma carrying the cohort fit is tied to
+  that convolution by an `n_obs`-weighted cross-entropy, grounding the
+  otherwise-unidentified laboratory-turnaround delay. Off by default, enabled
+  with the `bvd_joint` keyword `onset_to_sample` (resolves #359).
 
 ### Report and forecasts
 
