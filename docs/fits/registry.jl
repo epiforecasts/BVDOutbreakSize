@@ -31,17 +31,10 @@ const FIT_SOURCE_FILES = [
 ## Bump when the cache layout changes in a way that must invalidate old files.
 const FIT_CACHE_SCHEMA = "v1"
 
-## Data files under `data/` that are not fit inputs and so must not bust the
-## cache. `released_estimates.csv` is a published-estimate overlay used only by
-## the sensitivity page's evolution figure; the render job rewrites it before
-## rendering, which would otherwise change every fit key and force a refit.
-const FIT_DATA_EXCLUDE = ("released_estimates.csv",)
-
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)
     return content_hash(FIT_SOURCE_FILES;
         data_dir = joinpath(_PKG, "data"),
-        data_exclude = FIT_DATA_EXCLUDE,
         extra = string(FIT_CACHE_SCHEMA, ":", samples, "x", chains))
 end
 
@@ -55,6 +48,10 @@ end
 default_breakpoint(obs) = obs.n - obs.who_first_sitrep_days
 default_validation_cutoff(obs) = string(obs.cutoff - Day(7))
 default_frozen_cutoffs() = ["2026-05-20", "2026-05-23", "2026-05-27"]
+## Chamla et al.'s confirmed-case calibration anchor (598 confirmed by 8 June),
+## fit separately from the McCabe frozen set so the confirmed-case projection
+## rides a vintage with testing data rather than the near-empty 27 May stream.
+default_chamla_cutoff() = "2026-06-08"
 function run_sensitivity_env()
     lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
     ("true", "1", "yes", "on")
@@ -72,6 +69,7 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
+        chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 1000, chains::Integer = 2)
@@ -266,6 +264,11 @@ function build_fit_specs(obs;
         push!(specs, (; id = "frozen_$c", kind = :frozen,
             thunk = () -> fit_frozen_joint(c)))
     end
+    ## Chamla's 8 June anchor, kept out of the McCabe-matched `frozen_cutoffs`;
+    ## the estimate-evolution overlay pulls it in explicitly.
+    push!(specs,
+        (; id = "frozen_$chamla_cutoff", kind = :frozen,
+            thunk = () -> fit_frozen_joint(chamla_cutoff)))
     if run_sensitivity
         push!(specs,
             (; id = "sens_community_delay", kind = :chain,

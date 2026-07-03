@@ -39,24 +39,19 @@ function file_sha256(path::AbstractString)
 end
 
 """
-    tree_sha256(dir; exts = (".csv",), exclude = ()) -> String
+    tree_sha256(dir; exts = (".csv",)) -> String
 
 SHA-256 hex digest over every file under `dir` (recursively) whose name ends in
 one of `exts`, hashing the sorted `(relative path, contents)` pairs so the
 result is order-independent and reproducible. Returns `"absent"` for a missing
-directory. Files whose basename or path relative to `dir` matches an entry of
-`exclude` are skipped, so a directory can hold non-input files (e.g. a
-published-estimate overlay) without them contributing to the digest.
+directory.
 """
-function tree_sha256(dir::AbstractString; exts = (".csv",), exclude = ())
+function tree_sha256(dir::AbstractString; exts = (".csv",))
     isdir(dir) || return "absent"
     files = String[]
     for (root, _, fs) in walkdir(dir), f in fs
 
-        any(endswith(f, e) for e in exts) || continue
-        path = joinpath(root, f)
-        (f in exclude || relpath(path, dir) in exclude) && continue
-        push!(files, path)
+        any(endswith(f, e) for e in exts) && push!(files, joinpath(root, f))
     end
     ctx = SHA256_CTX()
     for path in sort(files)
@@ -67,24 +62,20 @@ function tree_sha256(dir::AbstractString; exts = (".csv",), exclude = ())
 end
 
 """
-    content_hash(source_files; data_dir = nothing, data_exclude = (),
-                 extra = "", len = 16) -> String
+    content_hash(source_files; data_dir = nothing, extra = "", len = 16) -> String
 
 Short content hash combining the digests of each file in `source_files`, the
-`tree_sha256` of `data_dir` (when given, skipping any file matched by
-`data_exclude`) and an `extra` string (sampler settings, a schema version, ...).
-Used to build cache keys so any change to the model source, data or settings
-yields a fresh key.
+`tree_sha256` of `data_dir` (when given) and an `extra` string (sampler
+settings, a schema version, ...). Used to build cache keys so any change to the
+model source, data or settings yields a fresh key.
 """
 function content_hash(source_files;
-        data_dir = nothing, data_exclude = (),
-        extra::AbstractString = "", len::Integer = 16)
+        data_dir = nothing, extra::AbstractString = "", len::Integer = 16)
     ctx = SHA256_CTX()
     for f in source_files
         update!(ctx, codeunits(file_sha256(f)))
     end
-    data_dir === nothing ||
-        update!(ctx, codeunits(tree_sha256(data_dir; exclude = data_exclude)))
+    data_dir === nothing || update!(ctx, codeunits(tree_sha256(data_dir)))
     update!(ctx, codeunits(extra))
     return bytes2hex(digest!(ctx))[1:len]
 end

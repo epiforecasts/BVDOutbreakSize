@@ -48,8 +48,11 @@ Changes since v1.6.0.
   streams. The treatment-centre flow methods section was rewritten, and the
   flow streams added to the data-overview table.
 - Added a comparison of the confirmed-case projection against Chamla et al.
-  as a second external comparator, forward-projected from the frozen 27 May
-  fit (resolves #340).
+  as a second external comparator, forward-projected from a dedicated frozen
+  fit at their 8 June confirmed-case calibration anchor. This carries the
+  confirmed-case testing history, replacing the poorly-identified 27 May proxy
+  that had effectively no testing data. The 8 June fit also shows as a vintage
+  in the estimate-evolution overlay (resolves #340, #349).
 - Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
   automatically in continuous integration before each documentation deploy.
   Dropped the per-release current-model re-fits from the estimate-evolution
@@ -117,13 +120,10 @@ Changes since v1.6.0.
   and resolves the root manifest rather than `docs/Manifest.toml`, so the
   `fit`, `render` and `combine` jobs resolve the same package set (resolves
   #368).
-- Excluded the published `released_estimates.csv` overlay from the fit content
-  hash, so the render jobs reuse the matrix fits instead of refitting every
-  model. The render step rewrites that overlay before rendering, which changed
-  the data-tree digest and busted every fit cache key; the overlay feeds only
-  the estimate-evolution figure and is not a fit input. `tree_sha256` and
-  `content_hash` gained an exclude for non-input data files, and genuine data
-  changes still refit.
+- Set `include-matrix: false` on the `render` job's env-cache step so the two
+  render jobs restore the precompiled depot shared by `list` and `fit` instead
+  of keying on the matrix `page`, which missed the shared cache and made each
+  render re-precompile the whole stack (~530 deps) before rendering.
 
 ## v1.6.0
 
