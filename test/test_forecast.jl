@@ -184,3 +184,51 @@ end
         @test row["Within 90% PI"] == (covered ? "yes" : "no")
     end
 end
+
+@testitem "forecast cumulative streams never fall below the cut-off" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    import FlexiChains
+    using Statistics: median
+    using BVDOutbreakSize: forecast_reported
+
+    ## A DECLINING chain (growth rate r < 0, R_T < 1): the regime where the
+    ## previous stock-scaling projection (`cumulative_T * exp(r * horizon)`)
+    ## shrank the cumulative below the observed cut-off — an impossible
+    ## decreasing cumulative. The outbreak age `:T` is carried so the daily
+    ## incidence at the cut-off is inferred from the cumulative total.
+    @model function _forecast_decline_test()
+        r ~ truncated(Normal(-0.05, 0.01); upper = -1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        T := 100.0
+        expected_reports_T ~ truncated(Normal(900.0, 80.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(40.0, 6.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(2000.0, 200.0); lower = 1.0)
+        R_T ~ truncated(Normal(0.7, 0.1); lower = 1e-3, upper = 1.0)
+        expected_confirmed_T ~ truncated(Normal(800.0, 60.0); lower = 1.0)
+        expected_confirmed_deaths_T ~ truncated(Normal(30.0, 5.0); lower = 0.5)
+        return nothing
+    end
+    chn = sample(_forecast_decline_test(), Prior(), 400;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    obs_cases, obs_deaths, obs_confirmed = 1205, 60, 1203
+    fc(h) = forecast_reported(chn; horizon = h,
+        obs_cases = obs_cases, obs_deaths = obs_deaths,
+        obs_confirmed = obs_confirmed, obs_confirmed_deaths = 35)
+    f7, f21 = fc(7), fc(21)
+
+    ## Every draw's projected cumulative stays at or above the observed
+    ## cut-off, even though the outbreak is shrinking.
+    @test all(f7.cases_cum .>= obs_cases)
+    @test all(f7.deaths_cum .>= obs_deaths)
+    @test all(f7.confirmed_cum .>= obs_confirmed)
+    @test all(f21.confirmed_cum .>= obs_confirmed)
+
+    ## The cumulative grows with the horizon (more new counts accrue), rather
+    ## than decaying as the buggy stock-scaling did.
+    @test median(f21.cases_cum) >= median(f7.cases_cum)
+    @test median(f21.deaths_cum) >= median(f7.deaths_cum)
+    @test median(f21.confirmed_cum) >= median(f7.confirmed_cum)
+end
