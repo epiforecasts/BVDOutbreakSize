@@ -310,88 +310,31 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
 end
 
 """
-    occupancy_break_days(iso_days, iso_obs, aulit_history; threshold = 15.0)
+    cumulative_occupancy_offset(iso_days, break_days, b)
 
-Identify the occupancy reporting-break days from data, returning the observed
-gap on each. The Tableau 6 start-of-day in-bed count (`aulit_history`,
-"Patients au lit (J-1)") should equal the previous report day's end-of-day
-occupancy; where it does not, the gap `g_t = au-lit(t) − occupancy(t−1)` is a
-between-report DHIS2 reclassification step (`occupancy(t−1)` is the most recent
-earlier isolation count, so a reporting gap steps back to the last reported
-day). A day is flagged a break when `|g_t|` exceeds `threshold` beds, so the
-model estimates a step only where the data shows a material discontinuity. The
-break days are derived from the data, not a hardcoded date list, so the set
-extends automatically as new situation reports add au-lit values.
-
-This identifies break days and supplies the observed gap as the centre of the
-fitted break prior — it does not impose the value: the break step is sampled in
-[`treatment_flow_model`](@ref), so the fit can attribute part of a step to real
-demand change. Returns `(; iso_break_idx, gaps)`: `iso_break_idx` the indices
-into `iso_days` of the flagged break days (ascending) and `gaps` the matching
-observed `g_t`. An empty `aulit_history` (no counts, or the days-only
-predictive generator) or a `missing` `iso_obs` returns no break days, a no-op.
-"""
-function occupancy_break_days(iso_days, iso_obs, aulit_history;
-        threshold = 15.0)
-    adays = Int.(aulit_history.days)
-    acounts = Float64.(aulit_history.counts)
-    (isempty(acounts) || iso_obs === missing || isempty(iso_days)) &&
-        return (; iso_break_idx = Int[], gaps = Float64[])
-    idays = Int.(iso_days)
-    iobs = Float64.(iso_obs)
-    ## Map each au-lit day to its isolation-day index and observed gap
-    ## g = au-lit − occupancy(t−1), flagging a break where |g| exceeds the
-    ## threshold. occupancy(t−1) must be the immediately preceding day: across
-    ## a reporting gap (a missing report day, e.g. 26 June absent so 27 June's
-    ## previous observation is 25 June) the gap spans the missing day and mixes
-    ## real change with reclassification, so it is not a clean overnight gap
-    ## and is not flagged.
-    iso_break_idx = Int[]
-    gaps = Float64[]
-    for (j, ad) in enumerate(adays)
-        ipos = findfirst(==(ad), idays)
-        ipos === nothing && continue
-        prior = filter(x -> x < ad, idays)
-        isempty(prior) && continue
-        prior_day = maximum(prior)
-        ad - prior_day == 1 || continue
-        pidx = findlast(==(prior_day), idays)
-        g = acounts[j] - iobs[pidx]
-        if abs(g) > threshold
-            push!(iso_break_idx, ipos)
-            push!(gaps, g)
-        end
-    end
-    ord = sortperm(iso_break_idx)
-    return (; iso_break_idx = iso_break_idx[ord], gaps = gaps[ord])
-end
-
-"""
-    cumulative_break_offset(iso_days, iso_break_idx, b)
-
-Per-isolation-day cumulative reclassification offset `Δ` from the fitted
-break steps `b` on the break days `iso_break_idx` (indices into `iso_days`).
-`Δ(t)` sums `b_j` over the break days at or before `iso_days[t]`, zero before
-the first break day. Added to the modelled occupancy mean in the censored-
-occupancy likelihood so the modelled occupancy tracks the reclassified series
-and the residual stays smooth. Each `b_j` is sampled (centred on the observed
-gap but free to move), so `Δ` is a fitted quantity, not a constant. The
-re-baselining persists: a reclassification re-bases the census, so the shift
-carries forward to every later day, not just the break day itself. Returns a
+Per-isolation-day cumulative occupancy reclassification offset `Δ` from the
+fitted break steps `b` on the manually specified `break_days` (grid day-
+indices). `Δ(t)` sums `b_j` over the break days at or before `iso_days[t]`,
+zero before the first break day. Added to the modelled occupancy mean in the
+censored-occupancy likelihood so the modelled occupancy tracks a between-report
+measurement-basis discontinuity in the observed series (e.g. a Tableau 6-sum →
+page-1 headline transition) and the residual stays smooth. Each `b_j` is
+sampled in [`treatment_flow_model`](@ref), so `Δ` is a fitted quantity: the fit
+partitions each step into reporting artifact vs real demand change. Returns a
 length-`length(iso_days)` vector of `eltype(b)` (zeros when there are no break
 days, a no-op).
 """
-function cumulative_break_offset(iso_days, iso_break_idx, b)
+function cumulative_occupancy_offset(iso_days, break_days, b)
     m = length(iso_days)
     T = isempty(b) ? Float64 : eltype(b)
     Δ = zeros(T, m)
-    isempty(iso_break_idx) && return Δ
+    isempty(break_days) && return Δ
     idays = Int.(iso_days)
-    break_days = idays[iso_break_idx]
+    bdays = Int.(break_days)
     ## Cumulative sum of the fitted steps up to and including each iso day.
     @inbounds for t in 1:m
         s = zero(T)
-        for (j, bd) in enumerate(break_days)
+        for (j, bd) in enumerate(bdays)
             bd <= idays[t] && (s += b[j])
         end
         Δ[t] = s
@@ -1817,16 +1760,13 @@ model over the window before the daily flows begin.
 The two sub-stocks are scored against the Tableau 6 census breakdown (`dont
 confirmes` / `dont suspects`) where it is published, in place of the total on
 those days (a per-day total-OR-split switch, so the total and its parts are
-never both scored on one day). A per-event overnight reporting break shifts the
-modelled total to absorb the `au-lit-J-1` versus `Fin-J` overnight
-reclassification gap: the break days are identified from the data (the au-lit
-gap, [`occupancy_break_days`](@ref)), a step `b_j` is fitted per identified day
-centred on that day's observed gap but free to move, and the steps accumulate
-into a cumulative additive offset `Δ(t)` ([`cumulative_break_offset`](@ref))
-added to the modelled occupancy mean, so the modelled total tracks the
-reclassified census and the residual stays smooth instead of bending Rt to
-chase the reclassification. The break is a point adjustment anchored to
-identified days, not a free time-varying process.
+never both scored on one day). An opt-in cumulative occupancy reclassification
+offset Δ(t) is added to the modelled total on the manually supplied
+`occupancy_break_days` ([`cumulative_occupancy_offset`](@ref)), absorbing a
+between-report measurement-basis discontinuity in the observed isolation series
+(the `au-lit-J-1` versus `Fin-J` reclassification). A level step is fitted at
+each break day, sampled non-centred and centred on zero, so the fit partitions
+it into reporting artifact vs real demand. Empty (the default) is a no-op.
 
 Exposes the cut-off occupancy, bed demand, their difference (the bed
 shortfall), the utilisation, the BVD share of demand, the in-care fatality
@@ -1846,14 +1786,6 @@ and replication.
         deaths_history = (; days = Int[], counts = Int[]),
         ruleout_history = (; days = Int[], counts = Int[]),
         absconded_history = (; days = Int[], counts = Int[]),
-        ## Start-of-day in-bed count ("Patients au lit (J-1)"), differenced
-        ## against the previous report day's occupancy to identify the overnight
-        ## reclassification break days ([`occupancy_break_days`](@ref)) and to
-        ## centre a fitted per-day break-step prior. The sampled steps accumulate
-        ## into a cumulative additive offset `Δ(t)` added to the modelled total
-        ## occupancy mean. Empty (or the days-only predictive generator) → no
-        ## break days, `Δ = 0`, a no-op.
-        aulit_history = (; days = Int[], counts = Int[]),
         ## Tableau 6 occupancy split (`dont confirmes` / `dont suspects`): two
         ## prevalence sub-stock census series scored in place of the total
         ## occupancy on the days they are present (a per-day total-OR-split
@@ -1907,11 +1839,16 @@ and replication.
             cdf_nmax(lognormal_meansd(4.5, 4.0); q = 0.99);
             mean_prior = truncated(Normal(4.5, 2.0); lower = 1),
             sd_prior = truncated(Normal(4.0, 1.5); lower = 1)),
-        ## Material-gap threshold (beds) for flagging an overnight occupancy
-        ## reclassification break day from the `au-lit-J-1` versus previous-day
-        ## `Fin-J` gap. A day is a break day only where `|g_t| > break_threshold`,
-        ## so the model fits a step only at a genuine discontinuity.
-        break_threshold::Real = 15.0)
+        ## Manually specified occupancy reclassification-break days (grid day-
+        ## indices, opt-in). A level step is fitted into the modelled occupancy
+        ## total at each, absorbing a between-report measurement-basis
+        ## discontinuity in the observed isolation series. Empty → no break
+        ## days, a no-op (the default). See `cumulative_occupancy_offset`.
+        occupancy_break_days::AbstractVector{<:Integer} = Int[],
+        ## Prior sd of each occupancy break step (beds). Weakly informative and
+        ## centred on zero, so the fit decides how much of the step is a
+        ## reporting artifact vs real demand change.
+        occupancy_break_sd::Real = 25.0)
     adm_state ~ to_submodel(admission)
     p_iso = adm_state.p_iso
     sev_state ~ to_submodel(severity)
@@ -1952,35 +1889,31 @@ and replication.
     abscond_frac ~ abscond_prior
     κ = abscond_frac
 
-    ## Per-event overnight total-occupancy reporting break. The break days are
-    ## identified from the data: the `au-lit-J-1` start-of-day in-bed count
-    ## differenced against the previous report day's occupancy
-    ## (`occupancy_break_days`), flagging a day where `|g_t| > break_threshold`.
-    ## One step `b_j` per identified break day is sampled non-centred (mirroring
-    ## the Rt walk), `b_j = g_j + max(10, 0.5·|g_j|)·z_j`, so the step prior is
-    ## centred on the observed gap but free to move — the fit can attribute part
-    ## of a step to real demand change. The steps accumulate into a cumulative
-    ## additive offset `Δ(t)` added to the modelled total occupancy below, so the
-    ## modelled total tracks the reclassified census without bending Rt to chase
-    ## it. The localised one-day step against the smooth demand identifies it.
-    ## `iso_obs_full` keeps the full observed occupancy (the split filter later
-    ## only chooses which days are scored, not which days inform the gap).
-    iso_obs_full = isempty(isolation_history.counts) ? missing :
-                   collect(Int.(isolation_history.counts))
-    brk = occupancy_break_days(isolation_history.days, iso_obs_full,
-        aulit_history; threshold = break_threshold)
-    nbrk = length(brk.iso_break_idx)
-    ## `max(nbrk, 1)` keeps the prior non-empty when there are no break days,
-    ## where `b` is empty and the offset is a no-op.
-    z_break ~ product_distribution(fill(Normal(0, 1), max(nbrk, 1)))
-    b = [brk.gaps[j] + max(10.0, 0.5 * abs(brk.gaps[j])) * z_break[j]
-         for j in 1:nbrk]
-    ## Grid days carrying a break (the grid-day number of each flagged day) and
-    ## the per-grid-day cumulative offset Δ over the whole 1:n grid. On the 1:n
-    ## grid the day number is its own index, so the flagged grid days double as
-    ## the index argument into `1:n`.
-    break_grid_days = Int.(isolation_history.days)[brk.iso_break_idx]
-    occ_break_offset = cumulative_break_offset(1:n, break_grid_days, b)
+    ## Opt-in cumulative occupancy reclassification-break offset Δ(t) added to
+    ## the modelled total occupancy, absorbing a between-report measurement-
+    ## basis discontinuity in the observed isolation series (the `au-lit-J-1`
+    ## versus `Fin-J` reclassification) on the manually supplied
+    ## `occupancy_break_days`. A level step is fitted at each break day, sampled
+    ## non-centred and centred on zero, so the fit partitions it into reporting
+    ## artifact vs real demand. Applied additively to the modelled total only;
+    ## demand (the diagnostic) stays the un-offset latent stock. Empty (the
+    ## default) → no sampled step, Δ = 0, a no-op. Only break days on or before
+    ## an observed occupancy day can move the likelihood; later ones are dropped
+    ## so no inert step is sampled. See `cumulative_occupancy_offset`.
+    iso_last = isempty(isolation_history.days) ? 0 :
+               maximum(Int.(isolation_history.days))
+    brk_days = [Int(d) for d in occupancy_break_days if Int(d) <= iso_last]
+    if isempty(brk_days)
+        b = Float64[]
+    else
+        occupancy_step ~ product_distribution(
+            fill(Normal(0, 1), length(brk_days)))
+        b = occupancy_break_sd .* occupancy_step
+    end
+    ## Grid days carrying a break; the cumulative offset Δ over the whole 1:n
+    ## grid (on the 1:n grid the day number is its own index).
+    break_grid_days = brk_days
+    occ_break_offset = cumulative_occupancy_offset(1:n, break_grid_days, b)
 
     ## Admission inflow carried through the short suspected→admission delay,
     ## split into a BVD true-case inflow (admitted at `p_iso_bvd`) and a non-BVD
@@ -2050,11 +1983,12 @@ and replication.
         abscond_daily = convert(Vector{eltype(C)}, abscond_daily)
     end
 
-    ## Cumulative overnight reporting-break offset Δ(t) added to the modelled
-    ## total occupancy, absorbing the `au-lit-J-1` vs `Fin-J` reclassification
-    ## the flows do not explain. A re-baselining persists, so Δ is cumulative and
-    ## carried forward to every later day. Applied additively to the modelled
-    ## total only; demand (the diagnostic) stays the un-offset latent stock.
+    ## Cumulative occupancy reclassification offset Δ(t) added to the modelled
+    ## total occupancy on the manually supplied break days, absorbing the
+    ## between-report measurement-basis discontinuity the flows do not explain.
+    ## A re-baselining persists, so Δ is cumulative and carried forward to every
+    ## later day. Applied additively to the modelled total only; demand (the
+    ## diagnostic) stays the un-offset latent stock.
     occ_offset = eltype(occ_break_offset) === Any ?
                  convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
     occ_obs_total = map(1:n) do t

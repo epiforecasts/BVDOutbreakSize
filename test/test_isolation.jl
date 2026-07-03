@@ -74,47 +74,8 @@ end
     @test censoring_cap([12], [300], capacity_history) == [452.0]
 end
 
-@testitem "occupancy_break_days: flags material au-lit gaps from the data" begin
-    using BVDOutbreakSize: occupancy_break_days
-
-    ## Occupancy (Fin J) and start-of-day au-lit (J-1). au-lit(t) differenced
-    ## against the previous report-day occupancy: |g| > 15 flags a break.
-    iso_days = [11, 12, 13, 14, 15]
-    iso_obs = [315, 359, 379, 416, 361]
-    ## au-lit on 12-15: gaps 359-315=44 (FLAG), 379-359=20 (FLAG),
-    ## 360-379=-19 (FLAG), 342-416=-74 (FLAG). Day 11 has no prior, skipped.
-    aulit = (; days = [12, 13, 14, 15], counts = [359, 379, 360, 342])
-    brk = occupancy_break_days(iso_days, iso_obs, aulit; threshold = 15.0)
-    ## All four au-lit days exceed the threshold; their iso-day indices are 2-5.
-    @test brk.iso_break_idx == [2, 3, 4, 5]
-    @test brk.gaps ≈ [44.0, 20.0, -19.0, -74.0]
-
-    ## A higher threshold drops the two small gaps, keeping only |g| > 25.
-    brk2 = occupancy_break_days(iso_days, iso_obs, aulit; threshold = 25.0)
-    @test brk2.iso_break_idx == [2, 5]
-    @test brk2.gaps ≈ [44.0, -74.0]
-
-    ## Across a reporting gap the break is NOT flagged: the previous occupancy is
-    ## more than one day back, so au-lit − occupancy(prev) spans the missing
-    ## day(s) and mixes real change with reclassification, not a clean overnight
-    ## gap. Here 12 June is absent, so 13 June's previous report is 11 June; even
-    ## a large gap (+85) is skipped because it is not a consecutive-day step.
-    iso_gap_days = [11, 13]       # 12 June absent (not published upstream)
-    iso_gap_obs = [315, 363]
-    aulit_gap = (; days = [13], counts = [400])  # 400 vs 315 = +85, but cross-gap
-    @test isempty(occupancy_break_days(iso_gap_days, iso_gap_obs, aulit_gap;
-        threshold = 15.0).iso_break_idx)
-
-    ## Empty au-lit (or the days-only predictive generator) or a missing
-    ## occupancy is a no-op: no break days.
-    @test isempty(occupancy_break_days(iso_days, iso_obs,
-        (; days = Int[], counts = Int[])).iso_break_idx)
-    @test isempty(occupancy_break_days(iso_days, missing, aulit).iso_break_idx)
-end
-
-@testitem "two-day reporting gap: increments bin and break step back across it" begin
-    using BVDOutbreakSize: bin_increments, occupancy_break_days,
-                           load_observations
+@testitem "two-day reporting gap: increments bin across the missing day" begin
+    using BVDOutbreakSize: bin_increments, load_observations
     using Dates: Date, value
 
     ## A missing report day leaves a hole in the per-vintage day-indices (the
@@ -146,39 +107,10 @@ end
     @test i27 - i25 == 2               # a genuine two-day jump over the hole
     ## No per-vintage history indexes the missing 26 June grid day.
     for nm in (:confirmed_history, :confirmed_deaths_history, :isolation_history,
-        :treatment_aulit_history, :treatment_admissions_history,
+        :treatment_admissions_history,
         :suspected_daily_history, :recovered_history)
         @test i26 ∉ getfield(obs, nm).days
     end
-
-    ## On the live isolation/au-lit series 27 June is NOT flagged as an occupancy
-    ## break: its previous report is 25 June (two days back, across the missing
-    ## 26 June), so the au-lit-vs-occupancy gap spans the hole and is not a clean
-    ## overnight reclassification. Only consecutive-day gaps are flagged.
-    iso = obs.isolation_history
-    brk = occupancy_break_days(iso.days, Float64.(iso.counts),
-        obs.treatment_aulit_history; threshold = 15.0)
-    cut_pos = findfirst(==(i27), iso.days)
-    @test cut_pos !== nothing
-    @test cut_pos ∉ brk.iso_break_idx   # the two-day jump is NOT flagged
-    ## The consecutive-day breaks (17/19/22/24 June) are still flagged.
-    @test !isempty(brk.iso_break_idx)
-end
-
-@testitem "cumulative_break_offset: persistent additive re-baselining" begin
-    using BVDOutbreakSize: cumulative_break_offset
-
-    ## Two fitted steps on days 2 and 4 of a 5-day grid: Δ(t) sums the steps at
-    ## or before each day, zero before the first, and the re-baselining persists
-    ## (a step carries forward to every later day).
-    Δ = cumulative_break_offset(1:5, [2, 4], [-30.0, 10.0])
-    @test Δ == [0.0, -30.0, -30.0, -20.0, -20.0]
-
-    ## No break days (or no steps) is a zero offset, a no-op.
-    @test cumulative_break_offset(1:5, Int[], Float64[]) == zeros(5)
-
-    ## The element type follows the (sampled) steps so the offset differentiates.
-    @test eltype(cumulative_break_offset(1:3, [2], [1.0f0])) === Float32
 end
 
 @testitem "bed_capacity_walk: positive capacity path over the grid" tags=[:slow] begin
@@ -344,10 +276,9 @@ end
 
     ## Occupancy on days 28-33 with a published split on the last three days.
     ## On split days the two sub-stock censuses are scored instead of the total
-    ## (a per-day total-OR-split switch); the abscond fraction and the per-day
-    ## overnight total-occupancy break are sampled and stay in range. The au-lit
-    ## start-of-day count gaps day 32 below the previous day's occupancy by more
-    ## than the threshold, so day 32 is flagged a break day and a step is fitted.
+    ## (a per-day total-OR-split switch); the abscond fraction and the manual
+    ## occupancy break-day step are sampled and stay in range. Day 32 is passed
+    ## as a manual `occupancy_break_days`, so a break step is fitted there.
     ## The lab / confirmed stream is conditioned so the in-care confirmation
     ## hazard is non-zero and the split is identified (the coherent config).
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
@@ -356,21 +287,18 @@ end
     suspect_incare = (; days = [31, 32, 33], counts = [147, 153, 169])
     confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
     lab_history = (; days = [28, 30, 32], counts = [120, 200, 320])
-    ## au-lit (start-of-day) counts; day 32's 240 vs day-31 occupancy 267 is a
-    ## gap of -27 (|g| > 15), the one flagged break day.
-    aulit = (; days = [31, 32, 33], counts = [268, 240, 312])
     chn = sample(
         treatment_only_model(33; isolation_history,
             confirmed_history, confirmed_cases = 110, lab_history,
             treatment_confirmed_incare_history = confirmed_incare,
             treatment_suspect_incare_history = suspect_incare,
-            treatment_aulit_history = aulit),
+            occupancy_break_days = [32]),
         Prior(), 60;
         chain_type = FlexiChains.VNChain, progress = false)
     ks = string.(collect(keys(chn)))
-    ## The per-day overnight break step (non-centred z) is sampled, and the
+    ## The manual occupancy break step (non-centred) is sampled, and the
     ## cut-off cumulative offset deterministic is exposed.
-    @test any(k -> occursin("z_break", k), ks)
+    @test any(k -> occursin("occupancy_step", k), ks)
     @test any(k -> occursin("occupancy_break", k), ks)
     @test !any(k -> occursin("total_break", k), ks)
     @test any(k -> occursin("abscond_frac", k), ks)
@@ -511,11 +439,9 @@ end
     ## and the split census is identified (scored, not the guarded no-op path).
     confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
     lab_history = (; days = [28, 30, 32], counts = [120, 200, 320])
-    ## au-lit (start-of-day) ending at day 33, two days short of the grid: day
-    ## 33's 250 vs day-32 occupancy 309 is a gap of -59, a flagged break day a
-    ## couple of days before the grid end. The per-day break offset must stay
-    ## finite across the trailing no-flow days, not index past the grid.
-    aulit = (; days = [31, 32, 33], counts = [266, 281, 250])
+    ## A manual occupancy break day (33), two days short of the grid end. The
+    ## per-day break offset must stay finite across the trailing no-flow days,
+    ## not index past the grid.
 
     model = treatment_only_model(n; isolation_history,
         treatment_admissions_history = admissions,
@@ -524,7 +450,7 @@ end
         treatment_absconded_history = absconded,
         treatment_confirmed_incare_history = confirmed_incare,
         treatment_suspect_incare_history = suspect_incare,
-        treatment_aulit_history = aulit,
+        occupancy_break_days = [33],
         confirmed_history, confirmed_cases = 110, lab_history)
 
     ## A prior draw plus a conditioned log-density evaluation exercises every
@@ -546,6 +472,62 @@ end
         vi_s = DynamicPPL.VarInfo(model)
         @test isfinite(logdensity(ldf, collect(vi_s[:])))
     end
+end
+
+@testitem "cumulative_occupancy_offset: steps accumulate from the break day" begin
+    using BVDOutbreakSize: cumulative_occupancy_offset
+    iso_days = [10, 11, 12, 13, 14]
+    ## Two manual break days: +5 from day 12, −3 from day 14. Δ is zero before
+    ## the first break, then cumulates the steps at or before each iso day.
+    Δ = cumulative_occupancy_offset(iso_days, [12, 14], [5.0, -3.0])
+    @test Δ == [0.0, 0.0, 5.0, 5.0, 2.0]
+    ## No break days is a no-op (all zeros).
+    @test cumulative_occupancy_offset(iso_days, Int[], Float64[]) ==
+          zeros(5)
+end
+
+@testitem "isolation occupancy: no break days sample no offset step" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    chn = sample(
+        treatment_only_model(33; isolation_history),
+        Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    ks = collect(keys(chn))
+    ## The opt-in offset is off by default: no sampled step, offset pinned zero.
+    @test !any(k -> occursin("occupancy_step", string(k)), ks)
+    occ = only(filter(k -> occursin("occupancy_break", string(k)), ks))
+    brk = vec(Array(chn[occ]))
+    @test all(==(0), brk)
+end
+
+@testitem "isolation occupancy: a manual break day fits an offset step" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    ## Opt in to a single break on day 31; a step is sampled and the cut-off
+    ## cumulative offset is finite (non-zero prior draws).
+    chn = sample(
+        treatment_only_model(33; isolation_history,
+            occupancy_break_days = [31]),
+        Prior(), 100;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    ks = collect(keys(chn))
+    @test any(k -> occursin("occupancy_step", string(k)), ks)
+    occ = only(filter(k -> occursin("occupancy_break", string(k)), ks))
+    brk = vec(Array(chn[occ]))
+    @test length(brk) == 100
+    @test all(isfinite, brk)
+    @test any(!=(0), brk)
 end
 
 @testitem "isolation occupancy: joint prior runs with the live data" tags=[:slow] begin

@@ -2664,6 +2664,9 @@ pp_joint = predict(
         _days_only(obs.suspected_daily_deaths_history),
         isolation_history = _days_only(obs.isolation_history),
         bed_capacity_history = _days_only(obs.bed_capacity_history),
+        ## Kept so the generator's occupancy-break dimension matches the fitted
+        ## chain (the offset step on the `[occupancy_break_dates]` days).
+        occupancy_break_days = obs.occupancy_break_days,
         recovered_history = _days_only(obs.recovered_history),
         treatment_admissions_history =
         _days_only(obs.treatment_admissions_history),
@@ -2675,7 +2678,6 @@ pp_joint = predict(
         _days_only(obs.treatment_confirmed_incare_history),
         treatment_suspect_incare_history =
         _days_only(obs.treatment_suspect_incare_history),
-        treatment_aulit_history = _days_only(obs.treatment_aulit_history),
         confirmed_history = obs.confirmed_history,
         confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
         lab_history = obs.lab_history,
