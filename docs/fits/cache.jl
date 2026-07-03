@@ -9,6 +9,42 @@
 using SHA: SHA256_CTX, update!, digest!, sha256
 using Serialization: serialize, deserialize
 
+# A FlexiChain serialised by a fit job and deserialised by the render job can
+# carry `VarName` keys whose type differs subtly from the ones the render
+# environment constructs — a version-skew artefact of Julia's `Serialization`.
+# The chain deserialises, but its `OrderedDict` then can't be indexed, so
+# `chn[:C_T]` throws a `KeyError` even though the key is present. Rebuilding
+# every key's `VarName` in THIS environment restores all access. `map_keys`
+# iterates the dict (rather than indexing it) and rehashes into a fresh dict, so
+# it works on the otherwise-unindexable chain; only the ~few-hundred keys are
+# re-wrapped, the draw matrices are untouched.
+_looks_like_chain(x) = hasfield(typeof(x), :_data) &&
+    hasfield(typeof(x), :_metadata) && hasfield(typeof(x), :_structures)
+
+function _rebuild_varname(vn)
+    APL = parentmodule(typeof(vn))          # AbstractPPL
+    return APL.VarName{APL.getsym(vn)}(APL.getoptic(vn))
+end
+
+"""
+Re-key any deserialised `FlexiChain` (bare, or nested as the `chn` field of a
+frozen fit's named tuple) so its parameter keys are constructed in the current
+environment, making `chn[:name]` lookups work regardless of the version that
+wrote it.
+"""
+function repair_chain_keys(x)
+    if _looks_like_chain(x)
+        FC = parentmodule(typeof(x))        # FlexiChains
+        return FC.map_keys(
+            k -> k isa FC.Parameter ? FC.Parameter(_rebuild_varname(FC.get_name(k))) : k,
+            x)
+    elseif x isa NamedTuple && haskey(x, :chn)
+        return merge(x, (; chn = repair_chain_keys(x.chn)))
+    else
+        return x
+    end
+end
+
 "SHA-256 hex digest of a file's bytes, or `\"absent\"` when the file is missing."
 function file_sha256(path::AbstractString)
     isfile(path) || return "absent"
@@ -73,7 +109,7 @@ function fit_or_load(key::AbstractString, thunk;
     path = joinpath(cache_dir, key * ".jls")
     if !refit && isfile(path)
         @info "fit cache hit" key
-        return deserialize(path)
+        return repair_chain_keys(deserialize(path))
     end
     @info "fit cache miss — fitting" key
     result = thunk()
