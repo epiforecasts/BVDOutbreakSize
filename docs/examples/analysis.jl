@@ -1387,30 +1387,54 @@ cfr_prior_fig #hide
 # hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ — the share of suspects routed to
 # the laboratory times the day's positivity — borrowed from the confirmed-case
 # pipeline rather than re-estimated, so the in-care confirmed stock is a subset of
-# the total confirmed by construction. The confirmed-in-care stock is itself a
-# running balance: today it equals yesterday's stock, plus the day's
-# confirmations of the still-unconfirmed occupied cases, less the confirmed
-# departures,
+# the total confirmed by construction. The confirmed-in-care stock is tracked by
+# admission cohort. Each true-case admission carries two clocks from the day it
+# enters a bed, a confirmation clock and a clinical-stay clock, and it counts
+# toward the confirmed census only once it has been confirmed and while it is
+# still in a bed,
 #
 # ```math
-# O_{\text{conf},t} = O_{\text{conf},t-1}
-#     + \tau_{\text{test}}\,p_{\text{pos},t}\,
-#       (O_{\text{bvd},t-1} - O_{\text{conf},t-1})
-#     - (\text{deaths}_t + \text{recoveries}_t)\,
-#       \frac{O_{\text{conf},t-1}}{O_{\text{bvd},t-1}}. \tag{30}
+# O_{\text{conf},t} = \sum_{u \le t} A_{\text{bvd},u}\,
+#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{30}
 # ```
 #
-# The departures are the day's total in-care BVD discharges scaled by the
-# confirmed fraction of the occupied BVD pool. This proportional split is used
-# because deaths and recoveries are observed combined across the two labels — the
-# data do not say which departing patients had already been confirmed — and it is
-# accurate here because confirmation is fast relative to the clinical course, so a
-# patient's confirmed status is settled well before they leave. The suspected
-# sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$,
-# holding the not-yet-confirmed BVD occupancy together with the non-case occupancy
-# awaiting rule-out. Recoveries among the confirmed (the published recovery total)
-# are the confirmed subset of recoveries and are modelled as a separate
-# confirmed-recovery stream (below).
+# with $F_{\text{conf}}$ the cumulative confirmation probability of a cohort
+# admitted on day $u$,
+#
+# ```math
+# F_{\text{conf}}(u, t) = 1 - \prod_{j = u+1}^{t}
+#     \bigl(1 - \tau_{\text{test}}\,p_{\text{pos},j}\bigr),
+# ```
+#
+# a cumulative product along the cohort's age rather than a fixed distribution
+# because the hazard is time-varying, and $S_{\text{clin}}$ the clinical-stay
+# survival,
+#
+# ```math
+# S_{\text{clin}}(d) = 1 - \sum_{j=0}^{d}
+#     \bigl(\text{CFR}_{\text{iso}}\, f^{\text{death}}_j
+#     + (1 - \text{CFR}_{\text{iso}})\, f^{\text{rec}}_j\bigr),
+# ```
+#
+# the probability an admitted case is still in a bed after $d$ days, the
+# discharge-complement of the death/recovery mixture built from the same
+# admission-to-death and admission-to-recovery stays the discharge flows use.
+# Because $\sum_{u \le t} A_{\text{bvd},u}\, S_{\text{clin}}(t - u)$ reconstructs
+# the occupied true-case stock, the confirmed-and-present cohort is a subset of
+# it and $O_{\text{conf}} \le O_{\text{bvd}} \le D$ holds by construction.
+#
+# Cohort tracking is needed because deaths and recoveries are observed combined
+# across the two labels, so the data do not say which departing patients had
+# already been confirmed. Draining a single confirmed running balance at the
+# pool-average discharge rate over-attributes confirmed departures whenever a
+# true case dies before its test returns; carrying the confirmation and stay
+# clocks separately excludes those fast-death cases from the confirmed pool
+# exactly. The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t -
+# O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with
+# the non-case occupancy awaiting rule-out, and the abscond outflow drains this
+# suspected stock at the daily fraction $\kappa$. Recoveries among the confirmed
+# (the published recovery total) are the confirmed subset of recoveries and are
+# modelled as a separate confirmed-recovery stream (below).
 #
 # Capacity enters only as a censored observation; the latent demand is never
 # capped, because the demand is the quantity of interest. The bed capacity is a
