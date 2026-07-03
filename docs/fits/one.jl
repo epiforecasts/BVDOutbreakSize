@@ -21,7 +21,10 @@ const REFIT = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1"
 const DRYRUN = lowercase(strip(get(ENV, "BVD_FIT_DRYRUN", ""))) in ("1", "true", "yes")
 
 obs = load_observations()
-specs = build_fit_specs(obs)
+# Build the full spec set (including the sensitivity re-fits) so this job can
+# resolve any id the `list` matrix enumerates — the matrix decides which fits
+# run; here we only fit the single requested `id`, so listing all is cheap.
+specs = build_fit_specs(obs; run_sensitivity = true)
 isempty(ID) && error("set BVD_FIT_ID to one of: " *
                      join((s.id for s in specs), ", "))
 i = findfirst(s -> s.id == ID, specs)
