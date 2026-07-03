@@ -162,12 +162,12 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_absconded_history = (; days = Int[], counts = Int[]),
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
         confirmed_history = (; days = Int[], counts = Int[]),
         confirmed_cases::Union{Missing, Integer} = missing,
         lab_history = (; days = Int[], counts = Int[]),
         lab_daily_history = (; days = Int[], counts = Int[]),
         tests_analysed::Union{Missing, Integer} = missing,
+        occupancy_break_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -211,7 +211,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
-        aulit_history = treatment_aulit_history,
+        occupancy_break_days = occupancy_break_days,
         conf_hazard_daily = conf_hazard_daily))
 end
 
@@ -420,7 +420,7 @@ death-confirmation positivity (`death_confirmation`).
         treatment_absconded_history = (; days = Int[], counts = Int[]),
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
-        treatment_aulit_history = (; days = Int[], counts = Int[]),
+        occupancy_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -580,7 +580,7 @@ death-confirmation positivity (`death_confirmation`).
         absconded_history = treatment_absconded_history,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
-        aulit_history = treatment_aulit_history,
+        occupancy_break_days = occupancy_break_days,
         conf_hazard_daily = conf_hazard_daily,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled

@@ -107,6 +107,14 @@ function load_observations(
     export_case_days = event_days("export_case_dates")
     export_death_days = event_days("export_death_dates")
 
+    ## Manually specified occupancy reclassification-break days (opt-in): grid
+    ## days on which the treatment-flow model fits a level step into the
+    ## modelled occupancy mean, absorbing a between-report measurement-basis
+    ## discontinuity in the observed isolation series (e.g. a Tableau 6-sum →
+    ## page-1 headline transition) without bending Rt. A dated list filtered to
+    ## the cut-off like the histories; absent or empty → no break days, a no-op.
+    occupancy_break_days = event_days("occupancy_break_dates")
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -169,7 +177,6 @@ function load_observations(
     ## occupancy tracks the reclassification without bending Rt while still
     ## partitioning each step into reporting-artifact vs real demand. Optional:
     ## an empty block leaves the offset at zero, a no-op.
-    treatment_aulit_history = history("treatment_aulit_history")
     ## Tableau 6 occupancy split (13-23 June): the `dont confirmes (NC+AC)` and
     ## `dont suspects` sub-rows of the `Patients en isolement (Fin J)` stock.
     ## Census (prevalence) sub-stocks, not flows: each is the count of that
@@ -232,10 +239,10 @@ function load_observations(
         treatment_deaths_history = treatment_deaths_history,
         treatment_ruleout_history = treatment_ruleout_history,
         treatment_absconded_history = treatment_absconded_history,
-        treatment_aulit_history = treatment_aulit_history,
         treatment_confirmed_incare_history =
         treatment_confirmed_incare_history,
         treatment_suspect_incare_history = treatment_suspect_incare_history,
+        occupancy_break_days = occupancy_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

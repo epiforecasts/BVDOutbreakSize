@@ -625,10 +625,11 @@ occupancy catching up as capacity is expanded), so the modelled occupancy is
 the demand passed through a soft cap at `capacity` rather than tracking
 demand directly.
 
-The default `truncated(Normal(450, 200); lower = 1)` is weakly informative,
-centred on the bed count implied by the reported occupancy rates (the
-"Taux d'occupation" gives `capacity = occupancy / rate ≈ 400–452` over
-9–13 June). The capacity is identified by the implied-capacity series the
+The default `LogNormal(log 450, 0.42)` is weakly informative and positive by
+construction (no truncation boundary), with median 450 and a ≈0.44
+coefficient of variation, centred on the bed count implied by the reported
+occupancy rates (the "Taux d'occupation" gives `capacity = occupancy / rate
+≈ 400–452` over 9–13 June). The capacity is identified by the implied-capacity series the
 isolation submodel fits, so the prior only has to bracket it. A single
 national capacity is a limitation: it cannot represent local saturation (one
 province full while another has slack), which is the level the supply
@@ -636,7 +637,7 @@ constraint operates at, and it averages over a growing capacity. Pass
 `capacity_prior` to override. Returns `(; capacity)`.
 """
 @model function bed_capacity_model(;
-        capacity_prior = truncated(Normal(450.0, 200.0); lower = 1))
+        capacity_prior = LogNormal(log(450.0), 0.42))
     capacity ~ capacity_prior
     return (; capacity)
 end
@@ -658,10 +659,10 @@ cumsum(z)))` with `z ~ Normal(0, 1)` per knot and a tight innovation SD
 `σ_cap`, keeping capacity a gentle drift rather than per-day jumps. Knots
 need far fewer innovations than a daily walk, avoiding the high-dimensional
 funnel. The baseline carries the same weakly-informative
-`truncated(Normal(450, 200); lower = 1)` prior as the scalar model, centred
-on the bed count implied by the reported occupancy rates (≈ 400–452 over
-9–13 June), and the implied-capacity series the isolation submodel fits pins
-`C(t)` on the days a rate is published.
+`LogNormal(log 450, 0.42)` prior as the scalar model (median 450 beds, ≈0.44
+CV), so `C0` is sampled on the log scale and the whole capacity
+`log C(t) = log C0 + walk` is fully log-scale; the implied-capacity series the
+isolation submodel fits pins `C(t)` on the days a rate is published.
 
 Knots run only from `start`, the first day with occupancy or capacity data;
 capacity is flat at `C0` before it. Off-window capacity carries no
@@ -676,7 +677,7 @@ with `C` a length-`n` vector.
 """
 @model function bed_capacity_walk_model(n::Integer; start::Integer = 1,
         week::Integer = 7,
-        baseline_prior = truncated(Normal(450.0, 200.0); lower = 1),
+        baseline_prior = LogNormal(log(450.0), 0.42),
         innovation_prior = truncated(Normal(0.0, 0.05); lower = 0))
     C0 ~ baseline_prior
     σ_cap ~ innovation_prior
