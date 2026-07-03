@@ -362,20 +362,27 @@ end
         0.6, 0.4; conf_hazard_daily = conf_hazard)
     st = returned(model, rand(MersenneTwister(1), model))
     ab = st.abscond_daily
-    susp = st.suspect_incare
     κ = st.abscond_frac
+    ## The suspect stock the abscond flow multiplies is the demand remainder
+    ## after the two-clock confirmed sub-stock, `O_susp = D − O_conf`.
+    ## Reconstruct it from the returned demand and confirmed census, not from
+    ## `suspect_incare`, so the pin still holds under a non-zero occupancy-break
+    ## offset (the census carries the offset; the abscond stock does not).
+    O_susp = st.demand .- st.confirmed_incare
     ## Day 1 has no prior stock, so no abscond outflow.
     @test ab[1] == 0
     ## Every later day is exactly the two-clock suspect lagged one day, scaled
     ## by the abscond fraction — the definitional link to the two-clock split.
-    @test all(abs(ab[i] - κ * susp[i - 1]) < 1e-9 for i in 2:n)
+    @test all(abs(ab[i] - κ * O_susp[i - 1]) < 1e-9 for i in 2:n)
+    ## With no occupancy break the returned suspect census is that same stock.
+    @test st.suspect_incare ≈ O_susp
     ## The flow genuinely responds to the two-clock confirmed pool: with a
     ## non-zero hazard the confirmed sub-stock is populated, so the suspect
     ## stock sits strictly below the total demand and the abscond outflow is
     ## below `κ · demand(t-1)` — it consumes the two-clock, not the total,
     ## occupancy.
     @test any(>(0), st.confirmed_incare)
-    @test any(susp[i] < st.demand[i] - 1e-9 for i in 1:n)
+    @test any(O_susp[i] < st.demand[i] - 1e-9 for i in 1:n)
 end
 
 @testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
