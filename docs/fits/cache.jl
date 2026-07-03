@@ -18,8 +18,10 @@ using Serialization: serialize, deserialize
 # iterates the dict (rather than indexing it) and rehashes into a fresh dict, so
 # it works on the otherwise-unindexable chain; only the ~few-hundred keys are
 # re-wrapped, the draw matrices are untouched.
-_looks_like_chain(x) = hasfield(typeof(x), :_data) &&
-    hasfield(typeof(x), :_metadata) && hasfield(typeof(x), :_structures)
+function _looks_like_chain(x)
+    hasfield(typeof(x), :_data) &&
+        hasfield(typeof(x), :_metadata) && hasfield(typeof(x), :_structures)
+end
 
 function _rebuild_varname(vn)
     APL = parentmodule(typeof(vn))          # AbstractPPL
