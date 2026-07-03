@@ -71,8 +71,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## per-release estimates in `released_df`, so no per-release-date current-
     ## model re-fits are run here.
     frozen_cutoffs = default_frozen_cutoffs()
-    ## Chamla et al.'s 8 June confirmed-case anchor, kept out of `frozen_cutoffs`
-    ## so it feeds only the Chamla comparison, not the McCabe overlay/CSV.
+    ## Chamla et al.'s 8 June confirmed-case anchor, kept out of the
+    ## McCabe-matched `frozen_cutoffs` but reused for the Chamla comparison and
+    ## the estimate-evolution overlay.
     chamla_cutoff = default_chamla_cutoff()
 
     ## The frozen-joint, sensitivity-variant and delay/clock helpers used by the

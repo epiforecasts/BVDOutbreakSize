@@ -301,9 +301,10 @@ stream_rt_fig #hide
 # median with nested 30/60/90% interval bars, rather than a ribbon.
 # The current model frozen at earlier cut-offs is drawn in red as discrete
 # estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
-# and 27 May) and one week before the current cut-off. These are the frozen
-# joint fits already computed for the matched-in-time comparison and the
-# forecast validation, reused here, so no extra fits are run.
+# and 27 May), Chamla et al.'s 8 June confirmed-case calibration date, and
+# one week before the current cut-off. These are the frozen joint fits
+# already computed for the matched-in-time comparison, the Chamla comparison
+# and the forecast validation, reused here, so no extra fits are run.
 # The current-data, current-model estimate is drawn in green as the
 # cumulative-infection trajectory over time, a single fit shown across the
 # period so the latest estimate reads against the earlier ones.
@@ -321,10 +322,11 @@ release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 
 ## The current model frozen at earlier cut-offs, each its own discrete
 ## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
-## for the matched-in-time comparison below, plus the one-week-back
-## validation fit (`frozen_lastweek`, at `validation_cutoff`) already
-## computed for the forecast validation above. Both are reused here so the
-## current-model estimate at those earlier cut-offs reads against the
+## for the matched-in-time comparison below, the 8 June Chamla
+## confirmed-case anchor computed for the Chamla comparison, and the
+## one-week-back validation fit (`frozen_lastweek`, at `validation_cutoff`)
+## already computed for the forecast validation above. All are reused here so
+## the current-model estimate at those earlier cut-offs reads against the
 ## released overlay, including a recent point one week before the cut-off.
 ## No extra fits are run. Each tuple carries the median and 30/60/90%
 ## credible bounds from the frozen `C_T` draws.
@@ -334,7 +336,8 @@ function _ci369(xs)
 end
 frozen_by_cutoff[validation_cutoff] = frozen_lastweek
 frozen_matched = [(c, _ci369(frozen_C(c))...)
-                  for c in sort(union(frozen_cutoffs, [validation_cutoff]))]
+                  for c in sort(union(frozen_cutoffs,
+    [validation_cutoff, default_chamla_cutoff()]))]
 
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
@@ -360,7 +363,7 @@ end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
     renewal = frozen_matched,
-    renewal_label = "Current model frozen at matched cut-offs and one week back",
+    renewal_label = "Current model frozen at earlier cut-offs",
     trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
@@ -466,6 +469,7 @@ frozen_streams_table = streams_table(
     "frozen 20 May" => frozen_C("2026-05-20"),
     "frozen 23 May" => frozen_C("2026-05-23"),
     "frozen 27 May" => frozen_C("2026-05-27"),
+    "frozen 8 June" => frozen_C(default_chamla_cutoff()),
     "current data" => posterior_C_joint);
 
 #md # ```@raw html

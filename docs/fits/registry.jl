@@ -264,8 +264,8 @@ function build_fit_specs(obs;
         push!(specs, (; id = "frozen_$c", kind = :frozen,
             thunk = () -> fit_frozen_joint(c)))
     end
-    ## Chamla's 8 June anchor, kept out of `frozen_cutoffs` so it does not enter
-    ## the McCabe estimate-evolution overlay or its CSV export.
+    ## Chamla's 8 June anchor, kept out of the McCabe-matched `frozen_cutoffs`;
+    ## the estimate-evolution overlay pulls it in explicitly.
     push!(specs,
         (; id = "frozen_$chamla_cutoff", kind = :frozen,
             thunk = () -> fit_frozen_joint(chamla_cutoff)))

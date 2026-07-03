@@ -51,7 +51,8 @@ Changes since v1.6.0.
   as a second external comparator, forward-projected from a dedicated frozen
   fit at their 8 June confirmed-case calibration anchor. This carries the
   confirmed-case testing history, replacing the poorly-identified 27 May proxy
-  that had effectively no testing data (resolves #340, #349).
+  that had effectively no testing data. The 8 June fit also shows as a vintage
+  in the estimate-evolution overlay (resolves #340, #349).
 - Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
   automatically in continuous integration before each documentation deploy.
   Dropped the per-release current-model re-fits from the estimate-evolution
