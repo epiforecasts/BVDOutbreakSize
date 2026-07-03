@@ -310,6 +310,39 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
 end
 
 """
+    cumulative_occupancy_offset(iso_days, break_days, b)
+
+Per-isolation-day cumulative occupancy reclassification offset `Δ` from the
+fitted break steps `b` on the manually specified `break_days` (grid day-
+indices). `Δ(t)` sums `b_j` over the break days at or before `iso_days[t]`,
+zero before the first break day. Added to the modelled occupancy mean in the
+censored-occupancy likelihood so the modelled occupancy tracks a between-report
+measurement-basis discontinuity in the observed series (e.g. a Tableau 6-sum →
+page-1 headline transition) and the residual stays smooth. Each `b_j` is
+sampled in [`treatment_flow_model`](@ref), so `Δ` is a fitted quantity: the fit
+partitions each step into reporting artifact vs real demand change. Returns a
+length-`length(iso_days)` vector of `eltype(b)` (zeros when there are no break
+days, a no-op).
+"""
+function cumulative_occupancy_offset(iso_days, break_days, b)
+    m = length(iso_days)
+    T = isempty(b) ? Float64 : eltype(b)
+    Δ = zeros(T, m)
+    isempty(break_days) && return Δ
+    idays = Int.(iso_days)
+    bdays = Int.(break_days)
+    ## Cumulative sum of the fitted steps up to and including each iso day.
+    @inbounds for t in 1:m
+        s = zero(T)
+        for (j, bd) in enumerate(bdays)
+            bd <= idays[t] && (s += b[j])
+        end
+        Δ[t] = s
+    end
+    return Δ
+end
+
+"""
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
 daily onsets with the sampled onset-to-death delay, scales by the CFR and
 the death ascertainment `p_death`, and reads the modelled cumulative deaths
@@ -1518,6 +1551,16 @@ mixture mean) and the daily series for forecasting and replication.
         deaths_history = (; days = Int[], counts = Int[]),
         ruleout_history = (; days = Int[], counts = Int[]),
         absconded_history = (; days = Int[], counts = Int[]),
+        ## Manually specified occupancy reclassification-break days (grid day-
+        ## indices, opt-in). A level step is fitted into the modelled occupancy
+        ## mean at each, absorbing a between-report measurement-basis
+        ## discontinuity in the observed isolation series. Empty → no break
+        ## days, a no-op (the default). See `cumulative_occupancy_offset`.
+        occupancy_break_days::AbstractVector{<:Integer} = Int[],
+        ## Prior sd of each occupancy break step (beds). Weakly informative and
+        ## centred on zero, so the fit decides how much of the step is a
+        ## reporting artifact vs real demand change.
+        occupancy_break_sd::Real = 25.0,
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
@@ -1619,12 +1662,33 @@ mixture mean) and the daily series for forecasting and replication.
     ## Occupancy likelihood: each day's bed count is a NegativeBinomial around
     ## the latent demand, right-censored at the fixed implied-capacity bound.
     ## Day-to-day reporting noise is absorbed by the NegativeBinomial
-    ## dispersion rather than by fitted reclassification steps.
+    ## dispersion. A manually specified, opt-in cumulative reclassification
+    ## offset Δ is added to the modelled mean only on the supplied
+    ## `occupancy_break_days`, so the fit tracks a between-report measurement-
+    ## basis discontinuity in the observed series without bending Rt to chase
+    ## it. Each step is sampled non-centred and centred on zero, so the fit
+    ## partitions it into reporting artifact vs real demand. Empty (the
+    ## default) → no sampled step, Δ = 0, a no-op.
     iso_days = isolation_history.days
     iso_obs = isempty(isolation_history.counts) ? missing :
               collect(Int.(isolation_history.counts))
     iso_demand = [demand[clamp(Int(d), 1, n)] for d in iso_days]
-    iso_means = iso_demand
+    ## Only break days that fall on or before an observed occupancy day can move
+    ## the likelihood; drop any later ones so no inert step is sampled.
+    iso_last = isempty(iso_days) ? 0 : maximum(iso_days)
+    brk_days = isempty(iso_days) ? Int[] :
+               [Int(d) for d in occupancy_break_days if Int(d) <= iso_last]
+    occ_break_val = zero(eltype(C))
+    if isempty(brk_days)
+        iso_means = iso_demand
+    else
+        occupancy_step ~ product_distribution(
+            fill(Normal(0, 1), length(brk_days)))
+        b = occupancy_break_sd .* occupancy_step
+        occ_offset = cumulative_occupancy_offset(iso_days, brk_days, b)
+        iso_means = iso_demand .+ occ_offset
+        occ_break_val = isempty(occ_offset) ? occ_break_val : last(occ_offset)
+    end
     iso_ceil = censoring_cap(iso_days, iso_obs, capacity_history)
     isolation ~ to_submodel(
         censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
@@ -1693,6 +1757,9 @@ mixture mean) and the daily series for forecasting and replication.
     incare_cfr := CFR_iso
     incare_cfr_modifier := β_iso
     treatment_overall_los := overall_los
+    ## Cumulative occupancy reclassification offset at the cut-off (fitted; can
+    ## be negative, so reported raw). Zero unless `occupancy_break_days` is set.
+    occupancy_break := occ_break_val
 
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
@@ -1701,7 +1768,7 @@ mixture mean) and the daily series for forecasting and replication.
         ruleout_los_mean = ruleout_los_state.mean,
         admission_delay_mean = adm_delay_state.mean,
         overall_los, abscond_frac, k_isolation = k,
-        demand, occupancy, isolation,
+        demand, occupancy, isolation, occupancy_break = occ_break_val,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
         expected_isolation = safe_rate(occ_T),
         expected_bed_demand = safe_rate(dem_T),

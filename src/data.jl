@@ -104,6 +104,14 @@ function load_observations(
     export_case_days = event_days("export_case_dates")
     export_death_days = event_days("export_death_dates")
 
+    ## Manually specified occupancy reclassification-break days (opt-in): grid
+    ## days on which the treatment-flow model fits a level step into the
+    ## modelled occupancy mean, absorbing a between-report measurement-basis
+    ## discontinuity in the observed isolation series (e.g. a Tableau 6-sum →
+    ## page-1 headline transition) without bending Rt. A dated list filtered to
+    ## the cut-off like the histories; absent or empty → no break days, a no-op.
+    occupancy_break_days = event_days("occupancy_break_dates")
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -209,6 +217,7 @@ function load_observations(
         treatment_deaths_history = treatment_deaths_history,
         treatment_ruleout_history = treatment_ruleout_history,
         treatment_absconded_history = treatment_absconded_history,
+        occupancy_break_days = occupancy_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
