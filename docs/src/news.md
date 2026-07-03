@@ -16,8 +16,10 @@ Changes since v1.6.0.
   flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
   rule-outs and absconded patients (13–23 June). Each stream is resilient: an
   empty history is a no-op, so the model degrades to the occupancy backbone
-  where a flow is not reported. Advanced the data to situation report 040
-  (23 June).
+  where a flow is not reported. Advanced the data through situation report
+  047 (30 June). SitRep 047 publishes no `Tableau 6` table, so the
+  treatment-flow streams stay at their 29 June values while the occupancy
+  and the other daily series advance to 30 June.
 
 ### Model
 
@@ -57,6 +59,12 @@ Changes since v1.6.0.
   fit (resolves #341).
 - Tightened the reproduction-number plot y-axis to 1.2 times the 90% upper
   bound so the credible band is legible (resolves #342).
+- Added a posterior correlation heatmap across the key estimates (outbreak
+  size, reproduction number, outbreak age, CFR, ascertainment, background,
+  fraction tested and each stream's expected total) and a pairs plot of the
+  per-stream modelled totals against each other and the observed value, so
+  the size-versus-ascertainment trade-off and per-stream over/undershoot are
+  visible in one place (resolves #346).
 
 ### Performance
 
@@ -65,6 +73,16 @@ Changes since v1.6.0.
   draws) instead of Turing's `min(1000, samples ÷ 2)` (500), cutting the
   discarded warmup iterations on every report fit. Pass `n_adapts`
   explicitly to override.
+- Centred the per-stream pooled negative-binomial dispersion
+  (`pooled_dispersion_model`) instead of drawing it non-centred, and made
+  centred the default. The surveillance streams are data-rich, so the
+  non-centred pooling funnelled as `τ → 0`; the centred form is an exact
+  reparameterisation that removes the funnel (resolves #352).
+- Put the bed-capacity baseline `C0` on the log scale (`LogNormal(log 450,
+  0.42)` in `bed_capacity_model` and `bed_capacity_walk_model`) instead of a
+  truncated normal, so the whole capacity `C(t) = C0·exp(walk)` is
+  log-consistent with no hard boundary, improving the worst-mixing capacity
+  block (resolves #358).
 
 ### Fixes
 
@@ -72,6 +90,35 @@ Changes since v1.6.0.
   the realised cut-off death-testing intensity (analysed over suspected, a
   diagnostic computed independently of the death volume), which is not a
   probability and can exceed one in a backlog regime.
+- Widened the per-stream dispersion pooling-SD prior `τ` in
+  `pooled_dispersion_model` from `HalfNormal(0.3)` to `HalfNormal(0.6)`,
+  resolving a prior-data conflict where the posterior `τ` sat entirely above
+  the old prior's tail because the stream dispersions genuinely span ~9×
+  (resolves #336).
+- Fixed the one-week-ahead forecast to project new counts over the horizon
+  and add them to the cut-off cumulative, instead of scaling the cumulative
+  stock by `exp(r·horizon)`, which made a below-one reproduction number
+  imply an impossible shrinking cumulative in the Chamla comparison
+  (`cases_cum`, `deaths_cum`, `confirmed_cum`, `confirmed_deaths_cum` and
+  `recovered_cum`; resolves #351).
+
+### Documentation and infrastructure
+
+- Split the report into two literate pages rendered from a shared setup: an
+  analysis page (methods, results, one-week-ahead forecast) and a sensitivity
+  page (forecast validation, per-stream outbreak size, estimate evolution,
+  McCabe and Chamla comparisons, delay and clock sensitivity), so the deploy
+  no longer renders one 4.3k-line file in a single job (resolves #364).
+- Fanned the documentation build into a `list → fit → render → combine` CI
+  grid: one content-addressed, cached NUTS fit per matrix job, the two pages
+  rendered in parallel from the cached chains, and a combine job that deploys
+  and publishes, dropping the critical path from all fits serialised behind
+  one runner to roughly the slowest single fit.
+- Pinned the shared workspace-root `Manifest.toml` as the artifact the docs
+  grid uploads and restores, since `docs/Project.toml` is a workspace member
+  and resolves the root manifest rather than `docs/Manifest.toml`, so the
+  `fit`, `render` and `combine` jobs resolve the same package set (resolves
+  #368).
 
 ## v1.6.0
 
