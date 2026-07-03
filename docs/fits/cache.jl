@@ -9,6 +9,29 @@
 using SHA: SHA256_CTX, update!, digest!, sha256
 using Serialization: serialize, deserialize
 
+# Rebuild a deserialised FlexiChain's parameter keys in the current environment
+# so a FlexiChains version skew between the fit and render jobs doesn't break
+# `chn[:name]` lookups (the chain loads but its keys can't be indexed).
+function _is_chain(x)
+    hasfield(typeof(x), :_data) && hasfield(typeof(x), :_metadata) &&
+        hasfield(typeof(x), :_structures)
+end
+function _rebuild_varname(vn)
+    (APL = parentmodule(typeof(vn));
+        APL.VarName{APL.getsym(vn)}(APL.getoptic(vn)))
+end
+function repair_chain_keys(x)
+    if _is_chain(x)
+        FC = parentmodule(typeof(x))
+        return FC.map_keys(
+            k -> k isa FC.Parameter ? FC.Parameter(_rebuild_varname(FC.get_name(k))) :
+                 k, x)
+    elseif x isa NamedTuple && haskey(x, :chn)
+        return merge(x, (; chn = repair_chain_keys(x.chn)))
+    end
+    return x
+end
+
 "SHA-256 hex digest of a file's bytes, or `\"absent\"` when the file is missing."
 function file_sha256(path::AbstractString)
     isfile(path) || return "absent"
@@ -73,7 +96,7 @@ function fit_or_load(key::AbstractString, thunk;
     path = joinpath(cache_dir, key * ".jls")
     if !refit && isfile(path)
         @info "fit cache hit" key
-        return deserialize(path)
+        return repair_chain_keys(deserialize(path))
     end
     @info "fit cache miss — fitting" key
     result = thunk()
