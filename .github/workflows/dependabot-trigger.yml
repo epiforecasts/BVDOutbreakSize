@@ -1,0 +1,41 @@
+name: Trigger Dependabot
+
+# On-demand trigger for Dependabot version updates. Dependabot has no native
+# workflow_dispatch and GitHub exposes no API to run it off-schedule, so this
+# makes a content-neutral change to .github/dependabot.yml (flipping its
+# executable bit) and pushes it to the default branch: Dependabot re-reads its
+# config whenever the file changes and re-runs the updates for every configured
+# ecosystem. This is the same effect as the "Check for updates" button under
+# Insights -> Dependency graph -> Dependabot, for when that button is not
+# available.
+#
+# Note: pushes made with the default GITHUB_TOKEN may not always cause
+# Dependabot to re-run. If a manual run does not produce update jobs, set a
+# repository secret DEPENDABOT_TRIGGER_PAT (a fine-grained PAT with contents
+# write) and swap it into the checkout token below.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Flip the dependabot.yml mode to re-trigger Dependabot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -x .github/dependabot.yml ]; then
+            chmod -x .github/dependabot.yml
+          else
+            chmod +x .github/dependabot.yml
+          fi
+          git add .github/dependabot.yml
+          git commit -m "chore: re-trigger Dependabot version updates [skip ci]"
+          git push
