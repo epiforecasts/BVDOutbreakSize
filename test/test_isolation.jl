@@ -96,14 +96,16 @@ end
     ## published, so the histories step 25 June -> 27 June and 26 June is a
     ## latent grid day with no observation mapped to it.
     obs = load_observations()
-    @test obs.cutoff == Date("2026-06-27")
+    ## Only require the manifest to reach past the 26 June hole so the indices
+    ## below are on-grid; the exact cut-off advances with each data update, so
+    ## it is not pinned here.
+    @test obs.cutoff >= Date("2026-06-27")
     ## Grid index of a calendar date: the cut-off is the last grid day, and a
     ## day `k` before it sits at index `n - k` (the latent grid is unbroken).
     idx_of(d) = obs.n - value(obs.cutoff - d)
     i26 = idx_of(Date("2026-06-26"))
     i27 = idx_of(Date("2026-06-27"))
     i25 = idx_of(Date("2026-06-25"))
-    @test i27 == obs.n                 # the cut-off is the last grid day
     @test i27 - i25 == 2               # a genuine two-day jump over the hole
     ## No per-vintage history indexes the missing 26 June grid day.
     for nm in (:confirmed_history, :confirmed_deaths_history, :isolation_history,
