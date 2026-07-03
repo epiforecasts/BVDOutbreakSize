@@ -28,6 +28,16 @@ Changes since v1.6.0.
   on the infection case-fatality, identified by the in-care death flow rather
   than estimated independently. The daily discharge flows are scored as
   optional negative-binomial streams (resolves #338).
+- Added a manual, opt-in occupancy reclassification-break offset. Break days
+  are listed explicitly in `[occupancy_break_dates]`, replacing the removed
+  threshold detector that flagged too many days. A level step is fitted into
+  the modelled occupancy mean at each listed day, so the fit tracks a known
+  between-report measurement-basis discontinuity without bending Rt to chase
+  it. Each step is centred on zero, so the fit partitions it into reporting
+  artifact vs real demand. The 19 June DHIS2 reclassification (occupancy 416 →
+  361, confirmed by the au-lit start-of-day stock) is listed; the joint fit
+  with the isolation stream had been bending Rt up and down to chase this and
+  the later missing-SitRep steps, which no single-stream fit shows.
 
 ### Report and forecasts
 
