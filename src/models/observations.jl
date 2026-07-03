@@ -2092,13 +2092,14 @@ and replication.
     ## Event-accumulation occupancy: build the total demand as a forward running
     ## balance of admission, discharge and abscond events, and carve it into the
     ## confirmed and suspect sub-stocks with the confirmation overlay. The
-    ## abscond outflow `κ · O_susp(t-1)` is computed inside the recursion off the
-    ## previous suspect stock.
+    ## abscond outflow `κ · O_susp(t-1)` drains the previous suspect stock. The
+    ## demand and BVD/non-case stocks are read from the recursion; the scored
+    ## abscond flow is recomputed below off the two-clock suspect stock so it
+    ## tracks the two-clock split rather than the proportional-share one.
     acc = accumulate_occupancy(A_bvd, A_bg, deaths_daily, recover_daily,
         ruleout_daily, κ, conf_hazard)
     demand = acc.demand
     O_bvd = acc.O_bvd
-    abscond_daily = acc.abscond
 
     ## Exact two-clock confirmed-in-care (the comparator to the #344
     ## proportional-share split). The confirmed sub-stock is the cohort-tracked
@@ -2112,9 +2113,10 @@ and replication.
     ## confirmed departures exact in the fast-death tail — a true case that dies
     ## before its test returns is never counted as confirmed — instead of the
     ## proportional `bvd_out · O_conf/O_bvd` mean-field drain of the running
-    ## balance. The total demand `D`, the occupied true-case stock `O_bvd`, the
-    ## non-case stock and the absconds stay exactly as `accumulate_occupancy`
-    ## builds them; only `O_conf` (and hence `O_susp = D − O_conf`) changes.
+    ## balance. The total demand `D`, the occupied true-case stock `O_bvd` and
+    ## the non-case stock stay exactly as `accumulate_occupancy` builds them;
+    ## `O_conf` (and hence `O_susp = D − O_conf`) changes, and the abscond flow
+    ## is recomputed off that two-clock `O_susp` below.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     ## The confirmed-and-present cohort is a subset of the present cohort, so the
@@ -2125,9 +2127,15 @@ and replication.
     ## is the demand remainder, so `O_conf + O_susp = D` closes without a clamp.
     O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
     O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
+    ## Abscond outflow scored against the two-clock suspect stock: the same
+    ## daily fraction `κ · O_susp(t-1)` that `accumulate_occupancy` applies,
+    ## but off the two-clock `O_susp = D − O_conf` rather than its
+    ## proportional-share suspect, so the abscond likelihood tracks the
+    ## two-clock split. Day 1 has no prior stock, so its outflow is zero.
+    abscond_daily = [t == 1 ? zero(eltype(demand)) : κ * O_susp[t - 1]
+                     for t in 1:n]
     if eltype(demand) === Any
         demand = convert(Vector{eltype(C)}, demand)
-        O_bvd = convert(Vector{eltype(C)}, O_bvd)
         O_conf = convert(Vector{eltype(C)}, O_conf)
         O_susp = convert(Vector{eltype(C)}, O_susp)
         abscond_daily = convert(Vector{eltype(C)}, abscond_daily)
@@ -2294,6 +2302,7 @@ and replication.
         overall_los, abscond_frac, k_isolation = k,
         demand, occupancy = min.(demand, C), isolation,
         deaths_daily, recover_daily, ruleout_daily, admit_daily,
+        abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
         break_grid_days,
         occupancy_break = isempty(occ_break_offset) ? z0 :

@@ -340,6 +340,44 @@ end
     @test sum(share_tc) < sum(share_prop)
 end
 
+@testitem "isolation abscond: driven by the two-clock suspect stock" begin
+    using BVDOutbreakSize: treatment_flow_model
+    using Turing: returned
+    using Random: MersenneTwister
+    ## The scored abscond flow is `κ · O_susp(t-1)` off the two-clock suspect
+    ## stock `O_susp = demand − two-clock O_conf`, not the proportional-share
+    ## suspect `accumulate_occupancy` carries. With no manual occupancy break
+    ## the returned `suspect_incare` census IS that two-clock `O_susp` (no
+    ## offset), so the abscond flow must be a one-day-lagged multiple of it. A
+    ## non-zero confirmation hazard makes the two-clock and proportional splits
+    ## differ, so this pins the wiring onto the two-clock stock.
+    n = 40
+    t = 1:n
+    bvd_reports_daily = @. 20.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    bg_daily = @. 12.0 * exp(-((t - 18.0)^2) / (2 * 6.0^2))
+    conf_hazard = fill(0.25, n)
+    isolation_history = (; days = collect(10:2:38),
+        counts = fill(50, length(10:2:38)))
+    model = treatment_flow_model(isolation_history, bvd_reports_daily, bg_daily,
+        0.6, 0.4; conf_hazard_daily = conf_hazard)
+    st = returned(model, rand(MersenneTwister(1), model))
+    ab = st.abscond_daily
+    susp = st.suspect_incare
+    κ = st.abscond_frac
+    ## Day 1 has no prior stock, so no abscond outflow.
+    @test ab[1] == 0
+    ## Every later day is exactly the two-clock suspect lagged one day, scaled
+    ## by the abscond fraction — the definitional link to the two-clock split.
+    @test all(abs(ab[i] - κ * susp[i - 1]) < 1e-9 for i in 2:n)
+    ## The flow genuinely responds to the two-clock confirmed pool: with a
+    ## non-zero hazard the confirmed sub-stock is populated, so the suspect
+    ## stock sits strictly below the total demand and the abscond outflow is
+    ## below `κ · demand(t-1)` — it consumes the two-clock, not the total,
+    ## occupancy.
+    @test any(>(0), st.confirmed_incare)
+    @test any(susp[i] < st.demand[i] - 1e-9 for i in 1:n)
+end
+
 @testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a
