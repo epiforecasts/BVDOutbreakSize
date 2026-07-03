@@ -17,9 +17,7 @@ Changes since v1.6.0.
   rule-outs and absconded patients (13–23 June). Each stream is resilient: an
   empty history is a no-op, so the model degrades to the occupancy backbone
   where a flow is not reported. Advanced the data through situation report
-  047 (30 June). SitRep 047 publishes no `Tableau 6` table, so the
-  treatment-flow streams stay at their 29 June values while the occupancy
-  and the other daily series advance to 30 June.
+  046 (29 June).
 
 ### Model
 
