@@ -42,7 +42,7 @@ Changes since v1.6.0.
   (Akilimali et al.) as a standard part of the joint model. The onset-to-report
   and report-to-receipt legs already convolve to onset-to-sample for confirmed
   cases, so this convolution is fitted to a latent double-censored Gamma whose
-  mean is fixed to the reported 7.4 d and whose SD is inferred by fitting the
+  mean is fixed to the reported 7.4 d and whose SD is approximated by matching
   Gamma median to the reported median (4.8 d) as an observation with the
   reported credible interval, then tied to the model by an `n_obs`-weighted
   cross-entropy, grounding the otherwise-unidentified laboratory-turnaround

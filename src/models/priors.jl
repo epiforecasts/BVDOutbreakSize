@@ -118,8 +118,8 @@ the delay Gamma's location and the SD is the single free parameter, sampled
 from `sd_prior`; together they set the shape `α = (mean/sd)²` and scale
 `θ = sd²/mean`. The Gamma's median (Wilson–Hilferty, [`gamma_median_wh`](@ref))
 is fitted to the reported cohort median `median_obs`, observed with SD
-`median_sd`, so the SD is inferred from the median rather than assigned and its
-posterior spread is propagated from the median's credible interval. The Gamma
+`median_sd`, so the SD is approximated by matching the median rather than
+assigned; its spread follows the median's credible interval. The Gamma
 is discretised over lags `0 … nmax` by the same double interval censoring as
 the other kernels ([`discretise_censored`](@ref)). Returns `(; pmf, mean, sd)`.
 """
@@ -143,8 +143,8 @@ reports a mean of 7.4 d (95% CrI 5.3–13.5), a median of 4.8 d (95% CrI
 3.46–7.84) and 25th/75th percentiles of 1.81/10.23 d.
 
 The reported mean fixes the delay Gamma's location; the SD is the free
-parameter, drawn from a weakly-informative `sd_prior` and inferred by fitting
-the Gamma's median to the reported `median` as an observation with SD
+parameter, drawn from a weakly-informative `sd_prior` and approximated by
+matching the Gamma's median to the reported `median` as an observation with SD
 `median_sd`, the reported median 95% CrI half-width over 1.96
 (`(7.84 − 3.46)/2 / 1.96 ≈ 1.12`). The SD therefore carries the median's
 reported uncertainty rather than an assigned spread. `n_obs` is the

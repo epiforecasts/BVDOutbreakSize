@@ -910,8 +910,8 @@ vintage_table #hide
 # the reported $7.4$ d, leaving the SD $\sigma_{\text{sam}}$ as the single free
 # parameter (shape $\alpha = (\text{mean}/\sigma_{\text{sam}})^2$, scale
 # $\theta = \sigma_{\text{sam}}^2/\text{mean}$). We give $\sigma_{\text{sam}}$ a
-# weakly-informative prior and infer it by fitting the Gamma's median to the
-# reported median, treated as an observation with the reported uncertainty,
+# weakly-informative prior and approximate it by matching the Gamma's median to
+# the reported median, treated as an observation with the reported uncertainty,
 #
 # ```math
 # \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(8,\ 4), \qquad
@@ -925,10 +925,10 @@ vintage_table #hide
 # half-width, and $\mathrm{med}(\mu, \sigma) = \mu\,(1 - \sigma^2/(9\mu^2))^3$
 # the Wilson–Hilferty approximation [wilson1931](@cite) to the Gamma median,
 # smooth in $\sigma$ and accurate to a few percent for these shapes. The SD is
-# therefore inferred from the median rather than assigned, and its posterior
-# spread is propagated from
-# the median's credible interval. The Gamma is discretised by the same double
-# interval censoring as the other kernels. We fit $g_{\text{conf}}$ to this
+# therefore approximated by matching this median rather than assigned, and its
+# spread follows the reported median's credible interval. The Gamma is
+# discretised by the same double interval censoring as the other kernels. We
+# fit $g_{\text{conf}}$ to this
 # delay by adding an $N$-weighted cross-entropy to the joint log-density,
 #
 # ```math
