@@ -132,17 +132,21 @@ truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
 mean of 7.4 d (95% CrI 5.3–13.5), a median of 4.8 d (95% CrI 3.46–7.84) and
 25th/75th percentiles of 1.81/10.23 d.
 
-The priors are centred so the implied Gamma reproduces the reported summary:
-`mean = 7.39` with `sd = 7.95` gives a Gamma (`α ≈ 0.864`, `θ ≈ 8.55`) whose
-mean is 7.39 d, median 4.81 d and quartiles 1.81/10.23 d, matching all the
-reported quantiles. The mean-prior SD (`mean_sd ≈ 2.09 d`) is the reported
-mean 95% CrI half-width over 1.96 (`(13.5 − 5.3)/2 / 1.96`), following the
-incubation-period convention; the SD-prior spread (`sd_sd`) is weakly
-informative as the reported CrIs do not pin the SD directly. Both priors are
-lower-truncated at 1 day, so the mean and SD of a delay resolved to whole
-days stay at least one day (the same truncation as the other mean/SD-
-parameterised delay priors, e.g. the incubation period), not because the
-parameters are bounded away from zero on positivity grounds. `n_obs` is the
+The cohort reports the fitted Gamma's MEAN (7.4 d) and its QUANTILES (median
+4.8 d, quartiles 1.81/10.23 d) but NOT the fitted Gamma's SD. The mean prior
+is therefore centred at the reported mean (`mean = 7.39 d`) and the SD prior
+is centred at `sd = 7.95 d`, the value BACK-SOLVED to make the resulting
+Gamma reproduce the reported quantiles rather than a directly reported
+number: `mean = 7.39` with `sd = 7.95` gives a Gamma (`α ≈ 0.864`,
+`θ ≈ 8.55`) whose mean is 7.39 d, median 4.81 d and quartiles 1.81/10.23 d,
+matching all the reported quantiles. The mean-prior SD (`mean_sd ≈ 2.09 d`)
+is the reported mean 95% CrI half-width over 1.96 (`(13.5 − 5.3)/2 / 1.96`),
+following the incubation-period convention; the SD-prior spread
+(`sd_sd = 2.0 d`) is weakly informative because no reported CrI pins the SD.
+Both priors are lower-truncated at 0, keeping the mean and SD positive so the
+Gamma (`α = (mean/sd)²`, `θ = sd²/mean`) is defined; the delay is
+reconstructed by double interval censoring, so there is no basis to floor
+them at a day. `n_obs` is the
 confirmed-positive sample size, the weight for the cross-entropy tie
 ([`delay_match_logweight`](@ref)). Returns a NamedTuple
 `(; mean_prior, sd_prior, n_obs)` for the `onset_to_sample` kwarg of
@@ -150,8 +154,8 @@ confirmed-positive sample size, the weight for the cross-entropy tie
 """
 function nejm_onset_to_sample(; mean::Real = 7.39, mean_sd::Real = 2.09,
         sd::Real = 7.95, sd_sd::Real = 2.0, n_obs::Integer = 129)
-    return (; mean_prior = truncated(Normal(mean, mean_sd); lower = 1),
-        sd_prior = truncated(Normal(sd, sd_sd); lower = 1), n_obs)
+    return (; mean_prior = truncated(Normal(mean, mean_sd); lower = 0),
+        sd_prior = truncated(Normal(sd, sd_sd); lower = 0), n_obs)
 end
 
 """

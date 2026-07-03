@@ -908,10 +908,13 @@ vintage_table #hide
 # Rather than editing either leg's prior, which would double-count the receipt
 # leg, we add a latent double-censored Gamma onset-to-sample delay
 # $f_{\text{sam}}$, discretised by the same double interval censoring as the
-# other kernels. Its mean and SD priors are centred so the implied Gamma
-# reproduces the reported summary: a mean of $7.39$ d with an SD of $7.95$ d
-# gives a Gamma whose mean is $7.39$ d, median $4.81$ d and quartiles
-# $1.81$/$10.23$ d, matching every reported quantile. The priors are
+# other kernels. The cohort reports the fitted Gamma's mean ($7.4$ d) and its
+# quantiles (median $4.8$ d, quartiles $1.81$/$10.23$ d) but not the fitted
+# Gamma's SD, so we centre the mean prior at the reported mean ($7.39$ d) and
+# back-solve the SD-prior centre ($7.95$ d) as the value that makes the
+# resulting Gamma reproduce the reported quantiles: a mean of $7.39$ d with an
+# SD of $7.95$ d gives a Gamma whose mean is $7.39$ d, median $4.81$ d and
+# quartiles $1.81$/$10.23$ d, matching every reported quantile. The priors are
 #
 # ```math
 # \mu_{\text{sam}} \sim \mathrm{Normal}^{+}(7.39,\ 2.09), \qquad
@@ -919,12 +922,16 @@ vintage_table #hide
 # ```
 #
 # with the mean-prior SD taken as the reported mean $95\%$ CrI half-width over
-# $1.96$ (the incubation-period convention), and both priors lower-truncated at
-# $1$ day so a day-resolved delay keeps a mean and SD of at least one day, the
-# same truncation as the other mean/SD-parameterised delay priors.
+# $1.96$ (the incubation-period convention) and the SD-prior spread weakly
+# informative because no reported CrI pins the SD. Both priors are
+# lower-truncated at $0$, keeping the mean and SD positive so the Gamma is
+# defined; the delay is reconstructed by double interval censoring, so there is
+# no basis to floor them at a day.
 #
-# The latent delay is tied to the convolution by an $N$-weighted cross-entropy
-# added to the log-density,
+# The latent onset-to-sample PMF is tied to the modelled convolution
+# $g_{\text{conf}}$ by an $N$-weighted cross-entropy, the PMF-matching
+# log-likelihood term added to the joint log-density and implemented by
+# [`delay_match_logweight`](@ref),
 #
 # ```math
 # \ell_{\text{sam}} = N \sum_{d \ge 0} f_{\text{sam}}(d)\,
@@ -936,10 +943,9 @@ vintage_table #hide
 # $g_{\text{conf}}$. The data therefore split the pull between the report and
 # receipt legs subject to their existing priors. The report-to-receipt
 # laboratory delay is otherwise unidentified, so this per-sample cohort is what
-# grounds it. Only the confirmed-positive delay is used here; the test-negative
-# delay onto the suspected stream is left for follow-up. The constraint is
-# enabled through the `bvd_joint` keyword `onset_to_sample` (for example
-# `nejm_onset_to_sample()`); the default `nothing` drops the term, so the
+# grounds it. This constraint grounds only the confirmed-positive sampling
+# delay. It is enabled through the `bvd_joint` keyword `onset_to_sample` (for
+# example `nejm_onset_to_sample()`); the default `nothing` drops the term, so
 # single-stream and isolation fits are unaffected.
 
 #md # ```@raw html
@@ -950,8 +956,8 @@ vintage_table #hide
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
-#md #         mean_prior = truncated(Normal(7.39, 2.09); lower = 1),
-#md #         sd_prior = truncated(Normal(7.95, 2.0); lower = 1))), "\n```"))
+#md #         mean_prior = truncated(Normal(7.39, 2.09); lower = 0),
+#md #         sd_prior = truncated(Normal(7.95, 2.0); lower = 0))), "\n```"))
 #md # ```
 
 #md # ```@raw html

@@ -12,8 +12,8 @@
 
     nmax = 60
     m = onset_to_sample_model(nmax;
-        mean_prior = truncated(Normal(7.39, 2.09); lower = 1),
-        sd_prior = truncated(Normal(7.95, 2.0); lower = 1))
+        mean_prior = truncated(Normal(7.39, 2.09); lower = 0),
+        sd_prior = truncated(Normal(7.95, 2.0); lower = 0))
     out = returned(m, rand(MersenneTwister(1), m))
 
     @test length(out.pmf) == nmax + 1
