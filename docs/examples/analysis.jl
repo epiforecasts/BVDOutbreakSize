@@ -901,30 +901,35 @@ vintage_table #hide
 # Bundibugyo virus cohort [akilimali2026](@cite), whose confirmed-positive
 # interval ($N = 129$) was estimated with the marginal model of `epidist`
 # [epidist](@cite) correcting for double interval censoring and right
-# truncation [charniga2024](@cite), a Gamma preferred over lognormal and
-# Weibull by LOOIC. The cohort reports a mean of $7.4$ d ($95\%$ CrI
+# truncation [charniga2024](@cite), a Gamma that is preferred over lognormal
+# and Weibull by LOOIC. The cohort reports a mean of $7.4$ d ($95\%$ CrI
 # $5.3$-$13.5$), a median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$) and
 # $25$th/$75$th percentiles of $1.81$/$10.23$ d.
 #
-# We add a fixed target delay $f_{\text{sam}}$, the Gamma pinned by the
-# cohort's two directly-reported summaries, its mean ($7.4$ d) and median
-# ($4.8$ d). A Gamma has mean $\alpha\theta$ and median $\theta\, m(\alpha)$,
-# with $m(\alpha)$ the median of the unit-scale $\mathrm{Gamma}(\alpha, 1)$, so
-# the ratio median/mean $= m(\alpha)/\alpha$ fixes the shape and $\theta =
-# \text{mean}/\alpha$ the scale,
+# We represent the cohort delay as a Gamma $f_{\text{sam}}$ whose mean is set to
+# the reported $7.4$ d, leaving the SD $\sigma_{\text{sam}}$ as the single free
+# parameter (shape $\alpha = (\text{mean}/\sigma_{\text{sam}})^2$, scale
+# $\theta = \sigma_{\text{sam}}^2/\text{mean}$). We give $\sigma_{\text{sam}}$ a
+# weakly-informative prior and infer it by fitting the Gamma's median to the
+# reported median, treated as an observation with the reported uncertainty,
 #
 # ```math
-# f_{\text{sam}} = \mathrm{Gamma}(\alpha,\ \theta),\qquad
-# \frac{\text{median}}{\text{mean}} = \frac{m(\alpha)}{\alpha},\qquad
-# \theta = \frac{\text{mean}}{\alpha}, \tag{19}
+# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(8,\ 4), \qquad
+# \text{median}_{\text{obs}} \sim \mathrm{Normal}\!\left(
+#     \mathrm{med}(\text{mean},\, \sigma_{\text{sam}}),\ s_{\text{med}}
+#     \right), \tag{19}
 # ```
 #
-# giving $\alpha \approx 0.86$ and $\theta \approx 8.6$ d, discretised by the
-# same double interval censoring as the other kernels. The SD is then a derived
-# property of this Gamma ($\theta\sqrt{\alpha} \approx 8.0$ d, consistent with
-# the reported quartiles), so the spread is set by the cohort data rather than
-# assigned. We fit $g_{\text{conf}}$ to the target by adding an $N$-weighted
-# cross-entropy to the joint log-density,
+# with $\text{median}_{\text{obs}} = 4.8$ d and $s_{\text{med}} =
+# (7.84 - 3.46)/2/1.96 \approx 1.12$ d the reported median $95\%$ CrI
+# half-width, and $\mathrm{med}(\mu, \sigma) = \mu\,(1 - \sigma^2/(9\mu^2))^3$
+# the Wilson–Hilferty approximation [wilson1931](@cite) to the Gamma median,
+# smooth in $\sigma$ and accurate to a few percent for these shapes. The SD is
+# therefore inferred from the median rather than assigned, and its posterior
+# spread is propagated from
+# the median's credible interval. The Gamma is discretised by the same double
+# interval censoring as the other kernels. We fit $g_{\text{conf}}$ to this
+# delay by adding an $N$-weighted cross-entropy to the joint log-density,
 #
 # ```math
 # \ell_{\text{sam}} = N \sum_{d \ge 0} f_{\text{sam}}(d)\,
@@ -933,21 +938,20 @@ vintage_table #hide
 #
 # the expected log-likelihood of $N = 129$ pseudo-observations drawn from the
 # cohort delay $f_{\text{sam}}$ under the modelled convolution
-# $g_{\text{conf}}$. The data therefore split the pull between the report and
-# receipt legs subject
-# to their existing priors, and the cohort's sampling uncertainty enters through
-# $N$, the sample size, rather than a prior spread, so there is no separate SD
-# to assign.
+# $g_{\text{conf}}$, so the data split the pull between the report and receipt
+# legs subject to their existing priors.
 
 #md # ```@raw html
-#md # <details><summary>Target delay: onset_to_sample_model</summary>
+#md # <details><summary>Submodel: onset_to_sample_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
-#md #         shape = 0.86, scale = 8.6)), "\n```"))
+#md #         mean_obs = 7.4, median_obs = 4.8, median_sd = 1.12,
+#md #         sd_prior = truncated(Normal(8.0, 4.0); lower = 0.5,
+#md #             upper = 20.0))), "\n```"))
 #md # ```
 
 #md # ```@raw html

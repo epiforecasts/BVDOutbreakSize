@@ -41,11 +41,13 @@ Changes since v1.6.0.
 - Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
   (Akilimali et al.) as a standard part of the joint model. The onset-to-report
   and report-to-receipt legs already convolve to onset-to-sample for confirmed
-  cases, so this convolution is fitted to a fixed double-censored Gamma pinned
-  by the cohort's reported mean (7.4 d) and median (4.8 d) via an
-  `n_obs`-weighted cross-entropy, grounding the otherwise-unidentified
-  laboratory-turnaround delay; the cohort's uncertainty enters through the
-  sample size rather than a prior spread. On by default in the joint fit; the
+  cases, so this convolution is fitted to a latent double-censored Gamma whose
+  mean is fixed to the reported 7.4 d and whose SD is inferred by fitting the
+  Gamma median to the reported median (4.8 d) as an observation with the
+  reported credible interval, then tied to the model by an `n_obs`-weighted
+  cross-entropy, grounding the otherwise-unidentified laboratory-turnaround
+  delay. The SD therefore carries the median's reported uncertainty rather than
+  an assigned spread. On by default in the joint fit; the
   single-stream and isolation fits lack the laboratory receipt leg and so do
   not carry it (resolves #359).
 

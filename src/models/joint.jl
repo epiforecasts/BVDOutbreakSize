@@ -610,20 +610,23 @@ death-confirmation positivity (`death_confirmation`).
     ## [`nejm_onset_to_sample`](@ref)). The onset→confirmation convolution
     ## (onset→report ⊕ receipt) IS the onset-to-sample delay for confirmed
     ## cases, so the external fit grounds the convolution without touching
-    ## either leg's prior. The target is the fixed cohort Gamma (a double-
-    ## censored PMF); `g_conf` is fitted to it by an `n_obs`-weighted
-    ## cross-entropy, so the data split the pull between the report and receipt
-    ## legs subject to their existing priors and the cohort's uncertainty
-    ## enters through `n_obs`. The receipt (lab-turnaround) delay is otherwise
-    ## unidentified, so this is the per-sample data that grounds it. The target
-    ## only exists on the confirmed report⊕receipt path, so single-stream and
-    ## isolation composers carry no such term; passing `nothing` drops it here
-    ## (e.g. for prior-predictive checks).
+    ## either leg's prior. The cohort delay is a latent Gamma whose SD is
+    ## inferred by fitting its median to the reported value (see
+    ## [`onset_to_sample_model`](@ref)); `g_conf` is then fitted to that delay
+    ## by an `n_obs`-weighted cross-entropy, so the data split the pull between
+    ## the report and receipt legs subject to their existing priors. The
+    ## receipt (lab-turnaround) delay is otherwise unidentified, so this is the
+    ## per-sample data that grounds it. The term only exists on the confirmed
+    ## report⊕receipt path, so single-stream and isolation composers carry none;
+    ## passing `nothing` drops it here (e.g. for prior-predictive checks).
     if onset_to_sample !== nothing
-        onset_to_sample_target = onset_to_sample_model(
-            length(onset_to_confirmation_pmf) - 1;
-            shape = onset_to_sample.shape, scale = onset_to_sample.scale)
-        @addlogprob! delay_match_logweight(onset_to_sample_target.pmf,
+        onset_to_sample_state ~ to_submodel(
+            onset_to_sample_model(length(onset_to_confirmation_pmf) - 1;
+            mean_obs = onset_to_sample.mean_obs,
+            median_obs = onset_to_sample.median_obs,
+            median_sd = onset_to_sample.median_sd,
+            sd_prior = onset_to_sample.sd_prior))
+        @addlogprob! delay_match_logweight(onset_to_sample_state.pmf,
             onset_to_confirmation_pmf, onset_to_sample.n_obs)
     end
     R0 := infection_state.R0
