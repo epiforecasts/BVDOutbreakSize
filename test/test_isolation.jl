@@ -145,6 +145,62 @@ end
     @test all(C_T .> 0)
 end
 
+@testitem "cumulative_occupancy_offset: steps accumulate from the break day" begin
+    using BVDOutbreakSize: cumulative_occupancy_offset
+    iso_days = [10, 11, 12, 13, 14]
+    ## Two manual break days: +5 from day 12, −3 from day 14. Δ is zero before
+    ## the first break, then cumulates the steps at or before each iso day.
+    Δ = cumulative_occupancy_offset(iso_days, [12, 14], [5.0, -3.0])
+    @test Δ == [0.0, 0.0, 5.0, 5.0, 2.0]
+    ## No break days is a no-op (all zeros).
+    @test cumulative_occupancy_offset(iso_days, Int[], Float64[]) ==
+          zeros(5)
+end
+
+@testitem "isolation occupancy: no break days sample no offset step" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    chn = sample(
+        treatment_only_model(33; isolation_history),
+        Prior(), 50;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    ks = collect(keys(chn))
+    ## The opt-in offset is off by default: no sampled step, offset pinned zero.
+    @test !any(k -> occursin("occupancy_step", string(k)), ks)
+    occ = only(filter(k -> occursin("occupancy_break", string(k)), ks))
+    brk = vec(Array(chn[occ]))
+    @test all(==(0), brk)
+end
+
+@testitem "isolation occupancy: a manual break day fits an offset step" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: treatment_only_model
+
+    isolation_history = (; days = [28, 29, 30, 31, 32, 33],
+        counts = [206, 233, 258, 267, 283, 309])
+    ## Opt in to a single break on day 31; a step is sampled and the cut-off
+    ## cumulative offset is finite (non-zero prior draws).
+    chn = sample(
+        treatment_only_model(33; isolation_history,
+            occupancy_break_days = [31]),
+        Prior(), 100;
+        chain_type = FlexiChains.VNChain, progress = false
+    )
+    ks = collect(keys(chn))
+    @test any(k -> occursin("occupancy_step", string(k)), ks)
+    occ = only(filter(k -> occursin("occupancy_break", string(k)), ks))
+    brk = vec(Array(chn[occ]))
+    @test length(brk) == 100
+    @test all(isfinite, brk)
+    @test any(!=(0), brk)
+end
+
 @testitem "isolation occupancy: joint prior runs with the live data" tags=[:slow] begin
     using Turing: sample, Prior
     import FlexiChains
