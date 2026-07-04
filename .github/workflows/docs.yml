@@ -111,7 +111,7 @@ jobs:
       # so this job's cache key still matches) so instantiate installs those
       # exact versions instead of re-resolving and recompiling.
       - name: Pin the resolved manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: manifest
           path: .
@@ -155,7 +155,7 @@ jobs:
         with:
           cache-name: docs-env
       - name: Pin the resolved manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: manifest
           path: .
@@ -166,7 +166,7 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
       - name: Collect cached fits
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: fit-*
           path: logs/fit_cache
@@ -221,7 +221,7 @@ jobs:
         with:
           cache-name: docs-env
       - name: Pin the resolved manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: manifest
           path: .
@@ -232,7 +232,7 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()'
       - name: Collect rendered pages and outputs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: render-*
           merge-multiple: true
