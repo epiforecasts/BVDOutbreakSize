@@ -36,6 +36,13 @@ Changes since v1.6.0.
   the in-care confirmation hazard borrowed from the lab pipeline; the suspect
   sub-stock is the remainder. Identified only where the lab stream supplies a
   non-zero hazard, otherwise a no-op (#344).
+- Scaled the borrowed in-care confirmation hazard by a sampled
+  confirmation-rate modifier `ρ = exp(γ_conf)`, identified by the
+  confirmed/suspected-in-care split. Admitted suspects are held for repeated
+  exclusion testing before their status settles, so in-care confirmation runs
+  slower than the community rate (`ρ < 1`); without the modifier the split was
+  forced to the borrowed community hazard and systematically over-confirmed the
+  in-care census.
 - Added a manual, opt-in occupancy reclassification-break offset. Break days
   are listed explicitly in `[occupancy_break_dates]`, replacing the removed
   threshold detector that flagged too many days. A level step is fitted into

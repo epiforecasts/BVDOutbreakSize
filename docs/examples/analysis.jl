@@ -1384,17 +1384,26 @@ cfr_prior_fig #hide
 #
 # The laboratory label carves the census into a confirmed and a suspected
 # sub-stock. Confirmation relabels a true case already in a bed at the daily
+# hazard $\rho\,\tau_{\text{test}}\,p_{\text{pos},t}$: the community confirmation
 # hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ — the share of suspects routed to
-# the laboratory times the day's positivity — borrowed from the confirmed-case
-# pipeline rather than re-estimated, so the in-care confirmed stock is a subset of
-# the total confirmed by construction. The confirmed-in-care stock is itself a
-# running balance: today it equals yesterday's stock, plus the day's
+# the laboratory times the day's positivity, borrowed from the confirmed-case
+# pipeline so the in-care confirmed stock is a subset of the total confirmed by
+# construction — scaled by an in-care confirmation-rate modifier
+# $\rho = e^{\gamma_{\text{conf}}}$. An admitted suspect is held for repeated
+# exclusion testing and laboratory turnaround before their status settles, so
+# in-care confirmation runs slower than the community rate ($\rho < 1$) and most
+# occupied patients stay classified suspected pending confirmation. The modifier
+# is the one free parameter of the split, sampled with a log-scale prior centred
+# on no change and identified by the confirmed/suspected-in-care census; without
+# it the split is forced to whatever the borrowed community hazard implies, which
+# systematically over-confirms the census. The confirmed-in-care stock is itself
+# a running balance: today it equals yesterday's stock, plus the day's
 # confirmations of the still-unconfirmed occupied cases, less the confirmed
 # departures,
 #
 # ```math
 # O_{\text{conf},t} = O_{\text{conf},t-1}
-#     + \tau_{\text{test}}\,p_{\text{pos},t}\,
+#     + \rho\,\tau_{\text{test}}\,p_{\text{pos},t}\,
 #       (O_{\text{bvd},t-1} - O_{\text{conf},t-1})
 #     - (\text{deaths}_t + \text{recoveries}_t)\,
 #       \frac{O_{\text{conf},t-1}}{O_{\text{bvd},t-1}}. \tag{30}
@@ -1402,11 +1411,10 @@ cfr_prior_fig #hide
 #
 # The departures are the day's total in-care BVD discharges scaled by the
 # confirmed fraction of the occupied BVD pool. This proportional split is used
-# because deaths and recoveries are observed combined across the two labels — the
-# data do not say which departing patients had already been confirmed — and it is
-# accurate here because confirmation is fast relative to the clinical course, so a
-# patient's confirmed status is settled well before they leave. The suspected
-# sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$,
+# because deaths and recoveries are observed combined across the two labels: the
+# data do not say which departing patients had already been confirmed. The
+# suspected sub-stock is the remainder
+# $O_{\text{susp},t} = D_t - O_{\text{conf},t}$,
 # holding the not-yet-confirmed BVD occupancy together with the non-case occupancy
 # awaiting rule-out. Recoveries among the confirmed (the published recovery total)
 # are the confirmed subset of recoveries and are modelled as a separate
@@ -2590,7 +2598,8 @@ surveillance_summary = summary_table(chn_joint,
         :death_confirmation, :expected_confirmed_deaths_T,
         :isolation_admission, :isolation_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
-        :incare_cfr, :incare_cfr_modifier, :isolation_death_los_mean,
+        :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
+        :isolation_death_los_mean,
         :isolation_recovery_los_mean, :abscond_fraction,
         :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);
