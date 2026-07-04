@@ -1435,6 +1435,33 @@ cfr_prior_fig #hide
 # The exposed BVD share is the true-BVD fraction of demand (BVD-confirmed plus
 # BVD-suspect), not the report's confirmed/suspect split. The fitted occupancy
 # series is the all-patients column from 1 June (SitRep 018) onward.
+#
+# A small set of curated days carry an overnight reclassification of who is
+# counted in the occupancy. On such a day the reported start-of-day in-bed count
+# ("Patients au lit (J-1)") falls below the previous report's end-of-day
+# occupancy ("Fin J") by more than that day's admissions and discharges can
+# bridge — an operational de-registration of ruled-out suspects rather than a
+# fall in transmission — which the smooth survival demand cannot reproduce. We
+# read these days off the situation reports rather than flagging them
+# automatically. Two are carried: 9 June, where the start-of-day stock 268 sits
+# 29 below the previous day's 297 and the drop is concentrated in the suspected
+# pool (dont suspects $184 \to 143$ against dont confirmés $113 \to 117$), and
+# 19 June, where the start-of-day stock 342 sits 74 below the previous 416.
+# A level step $b_j$ is fitted at each reclassification day $d_j$, and the
+# cumulative offset added to the modelled occupancy on day $t$ is
+#
+# ```math
+# \Delta_t = \sum_{j\,:\,d_j \le t} b_j,
+# \qquad b_j = \sigma_{\text{brk}}\, z_j,
+# \quad z_j \sim \mathrm{Normal}(0,\ 1), \tag{28}
+# ```
+#
+# so the censored occupancy likelihood above scores $D_{t_j} + \Delta_{t_j}$ in
+# place of $D_{t_j}$. Each step is centred on zero with a weakly informative
+# scale $\sigma_{\text{brk}} = 25$ beds, so the fit partitions each
+# reclassification into reporting artefact and genuine change in demand, and the
+# persistent offset, carried forward to every later day, absorbs the overnight
+# gap without bending the reproduction number to chase it.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: treatment_flow_model</summary>
@@ -1480,7 +1507,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{28}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{29}
 # ```
 
 #md # ```@raw html
@@ -1535,7 +1562,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{29}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{30}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
@@ -1568,7 +1595,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{30}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{31}
 # ```
 #
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the
@@ -1581,7 +1608,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{31}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{32}
 # ```
 
 #md # ```@raw html
@@ -1666,7 +1693,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{32}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{33}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the
@@ -1775,7 +1802,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{33}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{34}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate
@@ -1793,7 +1820,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{34}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{35}
 # ```
 
 #md # ```@raw html
@@ -1829,7 +1856,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{35}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{36}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a
@@ -1841,7 +1868,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{36}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{37}
 # ```
 
 #md # ```@raw html
@@ -2092,7 +2119,7 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{37}
+#         \Pr(X_d - X_c \le T - t)}, \tag{38}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$

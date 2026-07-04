@@ -301,9 +301,10 @@ stream_rt_fig #hide
 # median with nested 30/60/90% interval bars, rather than a ribbon.
 # The current model frozen at earlier cut-offs is drawn in red as discrete
 # estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
-# and 27 May) and one week before the current cut-off. These are the frozen
-# joint fits already computed for the matched-in-time comparison and the
-# forecast validation, reused here, so no extra fits are run.
+# and 27 May), Chamla et al.'s 8 June confirmed-case calibration date, and
+# one week before the current cut-off. These are the frozen joint fits
+# already computed for the matched-in-time comparison, the Chamla comparison
+# and the forecast validation, reused here, so no extra fits are run.
 # The current-data, current-model estimate is drawn in green as the
 # cumulative-infection trajectory over time, a single fit shown across the
 # period so the latest estimate reads against the earlier ones.
@@ -321,10 +322,11 @@ release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 
 ## The current model frozen at earlier cut-offs, each its own discrete
 ## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
-## for the matched-in-time comparison below, plus the one-week-back
-## validation fit (`frozen_lastweek`, at `validation_cutoff`) already
-## computed for the forecast validation above. Both are reused here so the
-## current-model estimate at those earlier cut-offs reads against the
+## for the matched-in-time comparison below, the 8 June Chamla
+## confirmed-case anchor computed for the Chamla comparison, and the
+## one-week-back validation fit (`frozen_lastweek`, at `validation_cutoff`)
+## already computed for the forecast validation above. All are reused here so
+## the current-model estimate at those earlier cut-offs reads against the
 ## released overlay, including a recent point one week before the cut-off.
 ## No extra fits are run. Each tuple carries the median and 30/60/90%
 ## credible bounds from the frozen `C_T` draws.
@@ -334,7 +336,8 @@ function _ci369(xs)
 end
 frozen_by_cutoff[validation_cutoff] = frozen_lastweek
 frozen_matched = [(c, _ci369(frozen_C(c))...)
-                  for c in sort(union(frozen_cutoffs, [validation_cutoff]))]
+                  for c in sort(union(frozen_cutoffs,
+    [validation_cutoff, default_chamla_cutoff()]))]
 
 ## The current-data, current-model estimate as the cumulative-infection
 ## trajectory over the day grid (one calendar date per grid day, day 1 is
@@ -360,7 +363,7 @@ end
 
 evolution_fig = plot_estimate_evolution(release_evolution;
     renewal = frozen_matched,
-    renewal_label = "Current model frozen at matched cut-offs and one week back",
+    renewal_label = "Current model frozen at earlier cut-offs",
     trajectory = infection_trajectory,
     title = "Outbreak-size estimate as data accrued");
 
@@ -466,6 +469,7 @@ frozen_streams_table = streams_table(
     "frozen 20 May" => frozen_C("2026-05-20"),
     "frozen 23 May" => frozen_C("2026-05-23"),
     "frozen 27 May" => frozen_C("2026-05-27"),
+    "frozen 8 June" => frozen_C(default_chamla_cutoff()),
     "current data" => posterior_C_joint);
 
 #md # ```@raw html
@@ -494,24 +498,24 @@ frozen_streams_table = streams_table(
 # projection, not against our cumulative infection count.
 #
 # We compare forward projections rather than refitting to their assumptions.
-# We take our existing fit frozen at 27 May, the closest of our frozen vintages
-# to their 8 June calibration point and the date their own early projection
-# passes through, and roll its confirmed-case stream forward week by week with
-# the same machinery as the one-week-ahead forecast.
+# We take our fit frozen at 8 June, the exact date of their confirmed-case
+# calibration anchor, and roll its confirmed-case stream forward to the dates
+# Chamla report with the same machinery as the one-week-ahead forecast.
 # Setting our projection, their projection and the confirmed cases observed
 # since on one timeline shows how each projection has held up against the data.
 
 #md # ```@raw html
-#md # <details><summary>Project the 27 May fit forward and assemble the Chamla comparison</summary>
+#md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>
 #md # ```
 
-## The 27 May frozen joint fit is the nearest frozen vintage to Chamla's 8 June
-## calibration anchor, so we roll its confirmed-case stream forward with the
-## one-week-ahead forecast machinery to the dates Chamla report.
-chamla_anchor = frozen_by_cutoff["2026-05-27"]
+## The 8 June frozen joint fit matches Chamla's confirmed-case calibration
+## anchor exactly and carries the confirmed-case testing history through then,
+## so we roll its confirmed-case stream forward with the one-week-ahead forecast
+## machinery to the dates Chamla report.
+chamla_anchor = frozen_by_cutoff["2026-06-08"]
 
 ## Our projected cumulative confirmed cases at a horizon of `h` days past the
-## 27 May cut-off: a forward `forecast_reported` run (its reproduction number
+## 8 June cut-off: a forward `forecast_reported` run (its reproduction number
 ## left to keep evolving), summarised as (median, 5%, 95%).
 function _our_confirmed_h(h)
     fc = forecast_reported(chamla_anchor.chn;
@@ -523,15 +527,15 @@ function _our_confirmed_h(h)
     return _ci90row(float.(fc.confirmed_cum))
 end
 
-## A week-by-week fan of our projection out to week 12 (24 June): the anchor day
-## is the fitted confirmed total at 27 May, each later week a forward forecast.
-## Reused for the matched-date table and the week-12 scenario figure.
-chamla_fan = map(0:7:28) do h
-    d = chamla_anchor.cutoff + Day(h)
+## Our projection at Chamla's forward report dates (10 and 24 June, week 12):
+## the anchor day is the fitted confirmed total at 8 June, each later date a
+## forward forecast. Reused for the matched-date table and the week-12 figure.
+chamla_fan = map(["2026-06-08", "2026-06-10", "2026-06-24"]) do d
+    h = value(Date(d) - chamla_anchor.cutoff)
     row = h == 0 ?
           (chamla_anchor.o.confirmed_cases, chamla_anchor.o.confirmed_cases,
         chamla_anchor.o.confirmed_cases) : _our_confirmed_h(h)
-    (string(d), row...)
+    (d, row...)
 end
 _fan_at(date) =
     let r = first(x for x in chamla_fan if x[1] == date)
@@ -559,9 +563,9 @@ chamla_projection_fig = plot_projection_comparison(;
     ours = chamla_fan,
     observed = chamla_obs_series,
     external_label = "Chamla et al. central (R₀=1.71)",
-    ours_label = "Our projection (from 27 May)",
+    ours_label = "Our projection (from 8 June)",
     observed_label = "Observed confirmed",
-    title = "Confirmed-case projections versus observed, from late May");
+    title = "Confirmed-case projections versus observed, from mid-May");
 
 #md # ```@raw html
 #md # </details>
@@ -571,7 +575,7 @@ chamla_projection_fig #hide
 
 # By 24 June their central scenario projected just under a thousand confirmed
 # cases, and their low and high scenarios ranged from roughly 870 to 1360.
-# The figure below sets that week-12 scenario spread beside our 27 May
+# The figure below sets that week-12 scenario spread beside our 8 June
 # projection for the same date and the confirmed count observed by the cut-off,
 # so each reads against their three scenarios at a glance.
 
@@ -581,7 +585,7 @@ chamla_projection_fig #hide
 
 chamla_w12_rows = vcat(
     [(label, m, lo, hi) for (label, m, lo, hi) in CHAMLA_CONFIRMED_W12],
-    [("Our projection (from 27 May)", ours_24jun...)],
+    [("Our projection (from 8 June)", ours_24jun...)],
     [("Observed by 23 June cut-off", obs.confirmed_cases,
         obs.confirmed_cases, obs.confirmed_cases)])
 chamla_w12_groups = vcat(fill("Chamla et al. scenarios", 3),
@@ -640,18 +644,18 @@ chamla_comparison_table #hide
 # ## Reproduction number behind the projection
 #
 # The forward projection above is carried by the reproduction-number trajectory
-# our 27 May fit estimated, a quantity we report in its own right rather than as
+# our 8 June fit estimated, a quantity we report in its own right rather than as
 # a comparison.
 # The figure shows that trajectory, the time-varying reproduction number from
-# the renewal walk with its credible intervals, as the fit saw it at 27 May.
+# the renewal walk with its credible intervals, as the fit saw it at 8 June.
 # It declines over the weeks leading to the cut-off, and that decline is what
 # bends the projected trajectory away from sustained early growth.
 
 #md # ```@raw html
-#md # <details><summary>Reproduction number as estimated by the 27 May fit</summary>
+#md # <details><summary>Reproduction number as estimated by the 8 June fit</summary>
 #md # ```
 
-## Reconstruct the reproduction-number trajectory the 27 May fit estimated,
+## Reconstruct the reproduction-number trajectory the 8 June fit estimated,
 ## mirroring the current-data R_t figure but with the frozen vintage's own grid,
 ## breakpoint and renewal start.
 chamla_rt_obs = chamla_anchor.o
