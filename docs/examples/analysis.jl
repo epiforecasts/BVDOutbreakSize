@@ -893,7 +893,7 @@ vintage_table #hide
 #
 # ```math
 # g_{\text{conf}}(d) = (f_{\text{rep}} * f_{\text{rec}})(d)
-#     = \sum_{s \ge 0} f_{\text{rep}}(s)\, f_{\text{rec}}(d - s),
+#     = \sum_{s \ge 0} f_{\text{rep}}(s)\, f_{\text{rec}}(d - s), \tag{19}
 # ```
 #
 # with an implied mean of about $9$ d. We fit this convolution to the
@@ -906,30 +906,16 @@ vintage_table #hide
 # $5.3$-$13.5$), a median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$) and
 # $25$th/$75$th percentiles of $1.81$/$10.23$ d.
 #
-# We represent the cohort delay as a Gamma $f_{\text{sam}}$ whose mean is set to
-# the reported $7.4$ d, leaving the SD $\sigma_{\text{sam}}$ as the single free
-# parameter (shape $\alpha = (\text{mean}/\sigma_{\text{sam}})^2$, scale
-# $\theta = \sigma_{\text{sam}}^2/\text{mean}$). We give $\sigma_{\text{sam}}$ a
-# weakly-informative prior and approximate it by matching the Gamma's median to
-# the reported median, treated as an observation with the reported uncertainty,
+# We ground this convolution on a fixed cohort delay $f_{\text{sam}}$: the Gamma
+# pinned by the two directly-reported summaries, the mean ($7.4$ d) and median
+# ($4.8$ d). Solving for the shape and scale that reproduce both gives
+# $\alpha \approx 0.86$ and $\theta \approx 8.6$ d, so the SD
+# ($\theta\sqrt{\alpha} \approx 8$ d) is a derived property of the reported mean
+# and median rather than a separately chosen spread. The Gamma is discretised by
+# the same double interval censoring as the other kernels.
 #
-# ```math
-# \sigma_{\text{sam}} \sim \mathrm{Normal}^{+}(8,\ 4), \qquad
-# \text{median}_{\text{obs}} \sim \mathrm{Normal}\!\left(
-#     \mathrm{med}(\text{mean},\, \sigma_{\text{sam}}),\ s_{\text{med}}
-#     \right), \tag{19}
-# ```
-#
-# with $\text{median}_{\text{obs}} = 4.8$ d and $s_{\text{med}} =
-# (7.84 - 3.46)/2/1.96 \approx 1.12$ d the reported median $95\%$ CrI
-# half-width, and $\mathrm{med}(\mu, \sigma) = \mu\,(1 - \sigma^2/(9\mu^2))^3$
-# the Wilson–Hilferty approximation [wilson1931](@cite) to the Gamma median,
-# smooth in $\sigma$ and accurate to a few percent for these shapes. The SD is
-# therefore approximated by matching this median rather than assigned, and its
-# spread follows the reported median's credible interval. The Gamma is
-# discretised by the same double interval censoring as the other kernels. We
-# fit $g_{\text{conf}}$ to this
-# delay by adding an $N$-weighted cross-entropy to the joint log-density,
+# We fit $g_{\text{conf}}$ to this cohort delay by adding an $N$-weighted
+# cross-entropy to the joint log-density,
 #
 # ```math
 # \ell_{\text{sam}} = N \sum_{d \ge 0} f_{\text{sam}}(d)\,
@@ -937,21 +923,21 @@ vintage_table #hide
 # ```
 #
 # the expected log-likelihood of $N = 129$ pseudo-observations drawn from the
-# cohort delay $f_{\text{sam}}$ under the modelled convolution
-# $g_{\text{conf}}$, so the data split the pull between the report and receipt
-# legs subject to their existing priors.
+# cohort delay $f_{\text{sam}}$ under the modelled convolution $g_{\text{conf}}$.
+# The cohort's finite-sample uncertainty enters through the weight $N$: the
+# constraint carries the strength of its $129$ observations. The report and
+# receipt legs then adjust, subject to their existing priors, so the confirmed
+# onset-to-sample convolution reproduces the cohort delay.
 
 #md # ```@raw html
-#md # <details><summary>Submodel: onset_to_sample_model</summary>
+#md # <details><summary>Target delay: onset_to_sample_model</summary>
 #md # ```
 
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown, Distributions
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.onset_to_sample_model(30;
-#md #         mean_obs = 7.4, median_obs = 4.8, median_sd = 1.12,
-#md #         sd_prior = truncated(Normal(8.0, 4.0); lower = 0.5,
-#md #             upper = 20.0))), "\n```"))
+#md #         shape = 0.86, scale = 8.6)), "\n```"))
 #md # ```
 
 #md # ```@raw html
