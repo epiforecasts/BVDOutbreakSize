@@ -102,90 +102,55 @@ PMF is truncated back to lags `0 … nmax` and renormalised. Returns
 end
 
 """
-Recover a Gamma shape `α` and scale `θ` from a target `mean` and `median`. A
-`Gamma(α, θ)` has mean `α·θ` and median `θ·m(α)`, where `m(α)` is the median
-of the unit-scale `Gamma(α, 1)`, so `median / mean = m(α) / α` pins `α` on its
-own; `θ = mean / α` then sets the scale. `m(α) / α` rises monotonically in
-`α`, so a bracketing bisection on `[10⁻³, 10³]` solves it. This is a one-off
-deterministic construction step (outside any gradient path), so the small
-numeric solve is inexpensive. Returns `(; shape, scale)`.
+Wilson–Hilferty approximation to the continuous median of a `Gamma` as a
+function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`. Smooth in
+the mean and SD with no quantile inversion, so it enters a gradient-based
+likelihood cleanly, and accurate to a few percent for the shapes here. Used to
+match the confirmed onset-to-sample convolution's continuous median to the
+cohort's reported median.
 """
-function gamma_from_mean_median(mean::Real, median::Real)
-    r = median / mean
-    f(α) = quantile(Gamma(α, 1), 0.5) / α - r
-    lo, hi = 1.0e-3, 1.0e3
-    for _ in 1:200
-        mid = sqrt(lo * hi)
-        f(mid) > 0 ? (hi = mid) : (lo = mid)
-    end
-    shape = sqrt(lo * hi)
-    return (; shape, scale = mean / shape)
-end
+gamma_median_wh(mean::Real, sd::Real) = mean * (1 - sd^2 / (9 * mean^2))^3
 
 """
-Fixed onset-to-sample target delay. Builds the daily PMF of the cohort's
-`Gamma(shape, scale)` over lags `0 … nmax` by the same double interval
-censoring as the other delays ([`discretise_censored`](@ref)), so the target
-sits on the same footing as the model's own kernels. The delay is a fixed
-external estimate rather than a latent quantity, so nothing is sampled here;
-the cohort's sampling uncertainty enters through the observation count `n_obs`
-in the cross-entropy tie ([`delay_match_logweight`](@ref)), not a prior
-spread. Returns `(; pmf, mean, sd)` with the Gamma's mean `shape·scale` and
-SD `scale·√shape` surfaced for reference.
-"""
-function onset_to_sample_model(nmax::Integer; shape::Real, scale::Real)
-    pmf = discretise_censored(Gamma(shape, scale), nmax)
-    return (; pmf, mean = shape * scale, sd = scale * sqrt(shape))
-end
-
-"""
-Onset-to-sample target configuration from the NEJM DRC 2026 BVD cohort
+Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
 (Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
-onset-to-sample interval (N = 129) was estimated as a Gamma through the
-`epidist` marginal model correcting for double interval censoring and right
+onset-to-sample interval (N = 129) was estimated as a continuous Gamma through
+the `epidist` marginal model correcting for double interval censoring and right
 truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
-mean of 7.4 d (95% CrI 5.3–13.5), a median of 4.8 d (95% CrI 3.46–7.84) and
-25th/75th percentiles of 1.81/10.23 d.
+continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
+3.46–7.84).
 
-The fixed target is the Gamma pinned by the two directly-reported summaries,
-the mean (7.4 d) and median (4.8 d): [`gamma_from_mean_median`](@ref) solves
-the shape `α ≈ 0.86` and scale `θ ≈ 8.6 d` from them, so the SD is not an
-input but a derived property of that Gamma (`θ·√α ≈ 8.0 d`, consistent with
-the reported quartiles 1.81/10.23 d). The spread is therefore set by the
-cohort data, not assigned. `n_obs` is the confirmed-positive sample size, the
-weight for the cross-entropy tie ([`delay_match_logweight`](@ref)) through
-which the cohort's uncertainty enters. Returns a NamedTuple
-`(; shape, scale, n_obs)` for the `onset_to_sample` argument of
-[`bvd_joint`](@ref).
+The reported summaries describe the CONTINUOUS delay (epidist corrects the
+censoring), so the confirmed onset→report→receipt convolution is grounded on
+its own continuous mean and median rather than a discretised or double-censored
+version. The continuous mean is the sum of the two legs' means and the
+continuous variance the sum of their variances; the continuous median follows
+by [`gamma_median_wh`](@ref). Each is fitted to the reported value as a Normal
+observation whose SD is the reported 95% CrI half-width over 1.96 (`mean_se`,
+`median_se`), so the cohort's uncertainty enters directly and the constraint is
+soft. Returns a NamedTuple `(; mean_obs, mean_se, median_obs, median_se)` for
+the `onset_to_sample` argument of [`bvd_joint`](@ref).
 """
-function nejm_onset_to_sample(; mean::Real = 7.4, median::Real = 4.8,
-        n_obs::Integer = 129)
-    (; shape, scale) = gamma_from_mean_median(mean, median)
-    return (; shape, scale, n_obs)
+function nejm_onset_to_sample(; mean::Real = 7.4,
+        mean_se::Real = (13.5 - 5.3) / 2 / 1.96, median::Real = 4.8,
+        median_se::Real = (7.84 - 3.46) / 2 / 1.96)
+    return (; mean_obs = mean, mean_se, median_obs = median, median_se)
 end
 
 """
-Weighted cross-entropy of a `target` delay PMF against a `modelled` delay
-PMF, `weight · Σ target[d] · log(modelled[d])` over the shared support. This
-is the expected log-likelihood of `weight` draws from `target` under
-`modelled` (up to the target's own entropy), so maximising it pulls
-`modelled` toward `target`; it scales linearly in `weight`, the effective
-number of observations behind `target`. Used to tie the joint's onset-to-
-confirmation convolution to the externally fitted onset-to-sample
-distribution ([`onset_to_sample_model`](@ref)). A small floor guards the log
-against empty `modelled` bins, and differing lengths are matched on the
-leading shared support.
+Log-density grounding the confirmed onset-to-sample convolution on the cohort:
+soft Normal fits of the convolution's continuous mean (the sum of the report
+and receipt leg means) and continuous median (from [`gamma_median_wh`](@ref) of
+the summed leg variances) to the reported `mean_obs`/`median_obs` with SDs
+`mean_se`/`median_se`. The fixed Gaussian normalising constants are dropped.
 """
-function delay_match_logweight(target::AbstractVector,
-        modelled::AbstractVector, weight::Real)
-    m = min(length(target), length(modelled))
-    Tp = promote_type(eltype(target), eltype(modelled))
-    ϵ = eps(float(Tp))
-    acc = zero(Tp)
-    @inbounds for d in 1:m
-        acc += target[d] * log(modelled[d] + ϵ)
-    end
-    return weight * acc
+function onset_to_sample_logweight(report_mean::Real, report_sd::Real,
+        receipt_mean::Real, receipt_sd::Real, cfg)
+    μ = report_mean + receipt_mean
+    sd = sqrt(report_sd^2 + receipt_sd^2)
+    med = gamma_median_wh(μ, sd)
+    return -0.5 * ((cfg.mean_obs - μ) / cfg.mean_se)^2 -
+           0.5 * ((cfg.median_obs - med) / cfg.median_se)^2
 end
 
 ## --- Reproduction number ------------------------------------------------

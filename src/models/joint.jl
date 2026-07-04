@@ -607,24 +607,23 @@ death-confirmation positivity (`death_confirmation`).
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     ## External onset-to-sample constraint on the confirmed sampling delay
     ## (grounded on the NEJM DRC 2026 cohort by default, see
-    ## [`nejm_onset_to_sample`](@ref)). The onset→confirmation convolution
-    ## (onset→report ⊕ receipt) IS the onset-to-sample delay for confirmed
-    ## cases, so the external fit grounds the convolution without touching
-    ## either leg's prior. The target is the fixed cohort Gamma (a double-
-    ## censored PMF); `g_conf` is fitted to it by an `n_obs`-weighted
-    ## cross-entropy, so the data split the pull between the report and receipt
-    ## legs subject to their existing priors and the cohort's uncertainty
-    ## enters through `n_obs`. The receipt (lab-turnaround) delay is otherwise
-    ## unidentified, so this is the per-sample data that grounds it. The target
-    ## only exists on the confirmed report⊕receipt path, so single-stream and
-    ## isolation composers carry no such term; passing `nothing` drops it here
-    ## (e.g. for prior-predictive checks).
+    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt legs
+    ## convolve to the confirmed onset-to-sample delay, so its continuous mean is
+    ## the sum of the two legs' means and its continuous SD the root-sum of their
+    ## variances; both are exposed here. The cohort's reported (continuous) mean
+    ## and median are fitted to these as soft Normal observations
+    ## ([`onset_to_sample_logweight`](@ref)), grounding the otherwise-
+    ## unidentified receipt (lab-turnaround) leg without touching either prior.
+    ## The term only exists on the confirmed report⊕receipt path, so single-
+    ## stream and isolation composers carry none; passing `nothing` drops it.
+    onset_to_sample_mean := cases_state.report_mean +
+                            confirmed_state.receipt_mean
+    onset_to_sample_sd := sqrt(cases_state.report_sd^2 +
+                               confirmed_state.receipt_sd^2)
     if onset_to_sample !== nothing
-        onset_to_sample_target = onset_to_sample_model(
-            length(onset_to_confirmation_pmf) - 1;
-            shape = onset_to_sample.shape, scale = onset_to_sample.scale)
-        @addlogprob! delay_match_logweight(onset_to_sample_target.pmf,
-            onset_to_confirmation_pmf, onset_to_sample.n_obs)
+        @addlogprob! onset_to_sample_logweight(cases_state.report_mean,
+            cases_state.report_sd, confirmed_state.receipt_mean,
+            confirmed_state.receipt_sd, onset_to_sample)
     end
     R0 := infection_state.R0
     r := infection_state.r

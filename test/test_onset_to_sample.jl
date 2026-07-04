@@ -1,59 +1,57 @@
-## Tests for the fixed onset-to-sample delay constraint from the NEJM DRC
-## 2026 BVD cohort (Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The
-## target is a fixed double-censored Gamma pinned by the cohort's reported
-## mean and median; it is tied to the joint's onset-to-confirmation
-## convolution by an N-weighted cross-entropy, with the cohort's uncertainty
-## carried by the sample size N rather than any prior spread.
+## Tests for the onset-to-sample delay constraint from the NEJM DRC 2026 BVD
+## cohort (Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The reported
+## mean and median are continuous (epidist censoring-corrected), so the
+## confirmed onset→report→receipt convolution is grounded on its own
+## continuous mean (sum of the leg means) and median (Wilson-Hilferty of the
+## summed variances) by soft Normal observations.
 
-@testitem "nejm_onset_to_sample pins the Gamma from mean and median" begin
-    using Distributions: Gamma, mean, median, std, quantile
+@testitem "nejm_onset_to_sample returns the cohort summaries and SEs" begin
     using BVDOutbreakSize: nejm_onset_to_sample
 
     cfg = nejm_onset_to_sample()
-    @test cfg.n_obs == 129
-    dist = Gamma(cfg.shape, cfg.scale)
-    ## The target reproduces the two directly-reported pinning summaries.
-    @test isapprox(mean(dist), 7.4; atol = 0.05)
-    @test isapprox(median(dist), 4.8; atol = 0.1)
-    ## The SD is a derived property near 8 d, not an input; it is consistent
-    ## with the reported quartiles 1.81 / 10.23 d (sanity check).
-    @test isapprox(std(dist), 7.95; atol = 0.6)
-    @test isapprox(quantile(dist, 0.25), 1.81; atol = 0.7)
-    @test isapprox(quantile(dist, 0.75), 10.23; atol = 1.0)
+    @test cfg.mean_obs == 7.4
+    @test cfg.median_obs == 4.8
+    ## SEs are the reported 95% CrI half-widths over 1.96.
+    @test isapprox(cfg.mean_se, (13.5 - 5.3) / 2 / 1.96; atol = 1e-9)
+    @test isapprox(cfg.median_se, (7.84 - 3.46) / 2 / 1.96; atol = 1e-9)
 end
 
-@testitem "onset_to_sample_model builds a valid fixed-target PMF" begin
-    using BVDOutbreakSize: onset_to_sample_model, nejm_onset_to_sample
+@testitem "gamma_median_wh: continuous median under the mean" begin
+    using BVDOutbreakSize: gamma_median_wh
+
+    ## At mean 7.4 and SD ~7.95 (the Gamma matching the reported summaries) the
+    ## Wilson-Hilferty continuous median is within a few percent of 4.8.
+    @test isapprox(gamma_median_wh(7.4, 7.95), 4.8; atol = 0.2)
+    ## Monotone: a larger SD (more right-skew) lowers the median below the mean.
+    @test gamma_median_wh(7.4, 9.0) < gamma_median_wh(7.4, 6.0) < 7.4
+end
+
+@testitem "onset_to_sample_logweight peaks at the reported summaries" begin
+    using BVDOutbreakSize: onset_to_sample_logweight, nejm_onset_to_sample,
+                           gamma_median_wh
 
     cfg = nejm_onset_to_sample()
-    nmax = 60
-    out = onset_to_sample_model(nmax; shape = cfg.shape, scale = cfg.scale)
-
-    @test length(out.pmf) == nmax + 1
-    @test all(out.pmf .>= 0)
-    @test isapprox(sum(out.pmf), 1.0; atol = 1e-8)
-    ## The surfaced mean/SD are the fixed Gamma's moments, not sampled draws.
-    @test isapprox(out.mean, 7.4; atol = 0.05)
-    @test isapprox(out.sd, 7.95; atol = 0.6)
-end
-
-@testitem "delay_match_logweight rewards a matching convolution" begin
-    using BVDOutbreakSize: delay_match_logweight
-
-    target = [0.1, 0.3, 0.4, 0.2]
-    close = [0.12, 0.28, 0.4, 0.2]
-    far = [0.4, 0.3, 0.2, 0.1]
-
-    ## Closer modelled PMF scores higher, and the exact match is the best.
-    @test delay_match_logweight(target, close, 10) >
-          delay_match_logweight(target, far, 10)
-    @test delay_match_logweight(target, target, 1) >
-          delay_match_logweight(target, close, 1)
-    ## Weight scales the term linearly (it is N pseudo-observations).
-    @test isapprox(delay_match_logweight(target, close, 20),
-        2 * delay_match_logweight(target, close, 10); rtol = 1e-12)
-    ## Tolerates differing lengths by matching the shared support.
-    @test isfinite(delay_match_logweight(target, [0.1, 0.3, 0.6], 5))
+    ## Split the reported mean/median across two legs whose convolution
+    ## reproduces them exactly: mean = μ_rep + μ_rec, and an SD whose WH median
+    ## equals the reported median. Solve the SD from the WH relation.
+    r = (cfg.median_obs / cfg.mean_obs)^(1 / 3)
+    sd_star = 3 * cfg.mean_obs * sqrt(1 - r)          # WH-median SD at 4.8
+    @test isapprox(gamma_median_wh(cfg.mean_obs, sd_star), cfg.median_obs;
+        atol = 1e-6)
+    ## Two legs summing to mean_obs and var sd_star^2.
+    rep_m, rec_m = 3.0, cfg.mean_obs - 3.0
+    rep_v = 0.4 * sd_star^2
+    rec_v = sd_star^2 - rep_v
+    at_target = onset_to_sample_logweight(rep_m, sqrt(rep_v), rec_m,
+        sqrt(rec_v), cfg)
+    ## Perturbing either leg away from the matched mean lowers the log-weight.
+    off_mean = onset_to_sample_logweight(rep_m + 2.0, sqrt(rep_v), rec_m,
+        sqrt(rec_v), cfg)
+    off_spread = onset_to_sample_logweight(rep_m, sqrt(rep_v * 3), rec_m,
+        sqrt(rec_v * 3), cfg)
+    @test at_target > off_mean
+    @test at_target > off_spread
+    @test at_target ≈ 0 atol = 1e-6      # both residuals zero at the target
 end
 
 @testitem "onset_to_sample carried by bvd_joint by default" tags=[:slow] begin
@@ -61,15 +59,16 @@ end
     import FlexiChains
     using BVDOutbreakSize: bvd_joint
 
-    ## Default-on: the joint constructs and samples with the fixed-target
-    ## cross-entropy term, which adds to the log-density without introducing
-    ## any latent onset-to-sample parameter.
+    ## Default-on: the joint constructs and samples with the onset-to-sample
+    ## mean/median soft constraint, which adds to the log-density without any
+    ## new latent parameter. The modelled convolution mean is exposed.
     chn = sample(
         bvd_joint(40, 2, 18), Prior(), 50;
         chain_type = FlexiChains.VNChain, progress = false)
     r0 = vec(Array(chn[:R0]))
     @test length(r0) == 50
     @test all(isfinite, r0)
+    @test all(isfinite, vec(Array(chn[:onset_to_sample_mean])))
 
     ## Explicitly dropping the term with `nothing` also constructs and samples.
     chn0 = sample(
