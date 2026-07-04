@@ -527,11 +527,13 @@ Its days fall strictly after the cumulative series ends, so the two suspected
 likelihoods cover disjoint days.
 
 An optional `contact_covariate` (a length-`n` observed series, e.g. the
-contact-tracing follow-up rate expanded by [`expand_covariate`](@ref)) adds
-a fixed-data background term `β_contact · covariate` sampled by
-[`contact_background_model`](@ref), so the non-BVD background can scale with
-surge-driven case-finding effort without the `p_drc` confounding a
-latent-scaled term would carry. Absent (`nothing`) by default.
+contact-tracing follow-up rate expanded by [`expand_covariate`](@ref))
+MULTIPLIES the non-BVD background by `exp(β_contact · z̃)`, with `z̃` the
+covariate mean-centred over its reported days and `β_contact` sampled by
+[`contact_background_model`](@ref). Contact tracing is a detection process,
+so it scales the background with surge-driven case-finding effort rather
+than adding to it, and only touches the non-BVD background (not `p_drc`), so
+it carries no `p_drc` confounding. Absent (`nothing`) by default.
 
 The background and testing fraction
 are sampled by an injected [`test_positivity_model`](@ref), and the
@@ -597,19 +599,29 @@ sitrep.
         bg_daily = bg_state.λ
     end
 
-    ## Optional observed contact-tracing intensity covariate. Adds an additive
-    ## per-day non-BVD background `β_contact · covariate` proportional to the
-    ## surge-driven contact follow-up effort. The covariate is FIXED observed
-    ## data, not the latent BVD signal, so this outbreak-scaled background term
-    ## does not reopen the ascertainment `p_drc` / outbreak-size degeneracy a
-    ## latent-scaled background would (issue #374). Absent by default, where the
-    ## fit is bit-identical to the covariate-free model.
+    ## Optional observed contact-tracing intensity covariate. Contact tracing
+    ## is a detection process, so it SCALES the non-BVD background rather than
+    ## adding to it: the daily background is multiplied by
+    ## `exp(β_contact · z̃)`, where `z̃` is the covariate mean-centred over the
+    ## days it is reported (zero elsewhere, giving factor 1 off-window). The
+    ## covariate is FIXED observed data, not the latent BVD signal, and scales
+    ## only the non-BVD background (not `p_drc`), so this does not reopen the
+    ## ascertainment / outbreak-size degeneracy a latent-scaled background
+    ## would (issue #374). Absent by default, where the fit is bit-identical to
+    ## the covariate-free model.
     if contact_covariate === nothing
         β_contact = zero(λ_bg_base)
     else
         contact_state ~ to_submodel(contact_effect)
         β_contact = contact_state.β_contact
-        bg_daily = bg_daily .+ β_contact .* contact_covariate
+        ## Mean-centre over the reported (nonzero) days so β is an elasticity
+        ## around the mean intensity and the background level stays with λ_bg /
+        ## the walk; off-window days stay zero (factor 1).
+        cov_nz = count(!iszero, contact_covariate)
+        cov_mean = cov_nz == 0 ? zero(eltype(contact_covariate)) :
+                   sum(contact_covariate) / cov_nz
+        cov_dev = [iszero(c) ? zero(c) : c - cov_mean for c in contact_covariate]
+        bg_daily = bg_daily .* exp.(β_contact .* cov_dev)
     end
 
     ## Suspected daily cases add the p_drc-scaled BVD signal and the

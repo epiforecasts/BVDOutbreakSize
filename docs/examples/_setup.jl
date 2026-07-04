@@ -138,7 +138,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_fast_clock = _fits["sens_fast_clock"]
-        chn_joint_contact_bg = _fits["sens_contact_bg"]
+        chn_joint_no_contact = _fits["sens_no_contact"]
     end
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]));

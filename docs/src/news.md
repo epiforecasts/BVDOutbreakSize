@@ -26,16 +26,17 @@ Changes since v1.6.0.
 
 ### Model
 
-- Added an optional contact-tracing background covariate. When an observed
-  case-finding covariate is supplied (the daily contact follow-up rate,
-  expanded onto the grid by `expand_covariate` and gated to zero outside its
-  reported span), the non-BVD suspected-case background gains a fixed offset
-  `β_contact · covariate` sampled by `contact_background_model`, so the
-  background can scale with surge-driven case-finding effort. The covariate is
-  observed data, not the latent BVD signal, so it avoids the ascertainment
-  `p_drc` / outbreak-size degeneracy a latent-scaled background would reopen.
-  Off in the headline model; exercised by the `sens_contact_bg` sensitivity
-  re-fit (addresses #374).
+- The headline model now grounds the non-BVD suspected-case background in
+  observed contact-tracing effort. Contact tracing is a detection process, so
+  the daily contact follow-up rate (`contact_followup_history`, expanded onto
+  the grid by `expand_covariate`) MULTIPLIES the background by
+  `exp(β_contact · z̃)` with `z̃` the mean-centred covariate — the background
+  scales with surge-driven case-finding rather than a calendar-time random
+  walk having to absorb it. The covariate is observed data, not the latent BVD
+  signal, and scales only the non-BVD background (not `p_drc`), so it avoids
+  the ascertainment / outbreak-size degeneracy a latent-scaled background would
+  reopen. The `sens_no_contact` sensitivity re-fit turns it off for comparison
+  (addresses #374).
 - Reworked the isolation submodel into a treatment-centre flow model that
   fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
   outcome mixture, with the death and recovery branches weighted by an in-care

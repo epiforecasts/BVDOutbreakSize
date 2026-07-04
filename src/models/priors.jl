@@ -860,25 +860,25 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
-Contact-tracing background coefficient submodel. Scales an observed
-contact-tracing intensity covariate (the daily `taux de suivi des
-contacts` follow-up rate as a fraction, see the `contact_followup_history`
-manifest block) into an additive per-day non-BVD suspected-case background
-`β_contact · covariate`. `β_contact` is the extra background suspected
-cases per day per unit follow-up rate, so a surge-driven rise in
-case-finding effort raises the non-BVD background over the window the
-covariate is observed. It is non-negative (more case-finding surfaces
-more, not fewer, non-BVD suspects) with a weakly-informative half-normal
-prior on the natural scale, matched in order to the scalar `λ_bg`
-background so the covariate can carry a comparable share of the background
-without out-explaining the BVD signal. Because the covariate is OBSERVED
-data rather than the latent BVD signal, this outbreak-scaled background
-component does not reopen the ascertainment `p_drc` / outbreak-size
-degeneracy a latent-scaled background would (issue #374). Returns
-`(; β_contact)`.
+Contact-tracing background coefficient submodel. `β_contact` is the
+log-linear elasticity of the non-BVD suspected-case background to an
+observed contact-tracing intensity covariate (the mean-centred daily `taux
+de suivi des contacts` follow-up rate, see the `contact_followup_history`
+manifest block): the background is MULTIPLIED by `exp(β_contact · z̃)`, so
+contact tracing scales detection of non-BVD suspects rather than adding a
+fixed count. Detection is a rate multiplier, so a surge-driven rise in
+case-finding effort scales the non-BVD background up over the window the
+covariate is observed, and the term is a no-op (factor 1) where the
+covariate is zero. It is non-negative (more case-finding surfaces more, not
+fewer, non-BVD suspects) with a weakly-informative half-normal prior on the
+log scale, so a peak intensity deviation scales the background by up to
+roughly `exp(0.15·β_contact)`. Because the covariate is OBSERVED data rather
+than the latent BVD signal, and scales only the non-BVD background (not
+`p_drc`), it does not reopen the ascertainment / outbreak-size degeneracy a
+latent-scaled background would (issue #374). Returns `(; β_contact)`.
 """
 @model function contact_background_model(;
-        coef_prior = truncated(Normal(0.0, 8.0); lower = 0))
+        coef_prior = truncated(Normal(0.0, 2.0); lower = 0))
     β_contact ~ coef_prior
     return (; β_contact)
 end

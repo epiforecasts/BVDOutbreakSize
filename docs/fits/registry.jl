@@ -74,6 +74,17 @@ function build_fit_specs(obs;
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 1000, chains::Integer = 2)
 
+    ## Headline contact-tracing background covariate for an observation set: the
+    ## observed daily contact follow-up rate expanded onto the grid (zero
+    ## outside its reported span), which the suspected-case background scales by
+    ## `exp(β_contact · z̃)`. Returns `nothing` when the (possibly frozen) data
+    ## carries no contact vintages, so an empty covariate never adds an
+    ## unidentified coefficient. This is part of the headline model, not a
+    ## sensitivity toggle.
+    _contact_cov(o) = isempty(o.contact_followup_history.days) ? nothing :
+                      expand_covariate(o.contact_followup_history.days,
+        o.contact_followup_history.values, o.n)
+
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     function fit_frozen_joint(cutoff_date)
         o = freeze_observations(cutoff_date)
@@ -97,6 +108,7 @@ function build_fit_specs(obs;
                 export_death_days = o.export_death_days,
                 breakpoint = bp,
                 background_re = true,
+                contact_covariate = _contact_cov(o),
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
@@ -109,7 +121,7 @@ function build_fit_specs(obs;
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
             tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0,
-            contact_covariate = nothing)
+            contact_covariate = _contact_cov(obs))
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -147,14 +159,6 @@ function build_fit_specs(obs;
             samples = samples, chains = chains,
             callback = fit_callback("variant"))
     end
-
-    ## Contact-tracing background covariate: the observed daily contact
-    ## follow-up rate expanded onto the grid (zero outside its 7 June-1 July
-    ## span), fed to the suspected-case background as a fixed offset. Empty when
-    ## the manifest carries no contact series.
-    contact_covariate = expand_covariate(
-        obs.contact_followup_history.days,
-        obs.contact_followup_history.values, obs.n)
 
     ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
     deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
@@ -199,6 +203,7 @@ function build_fit_specs(obs;
                     export_death_days = obs.export_death_days,
                     breakpoint = breakpoint,
                     background_re = true,
+                    contact_covariate = _contact_cov(obs),
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
@@ -286,9 +291,9 @@ function build_fit_specs(obs;
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
-            (; id = "sens_contact_bg", kind = :chain,
+            (; id = "sens_no_contact", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    contact_covariate = contact_covariate)))
+                    contact_covariate = nothing)))
     end
     return specs
 end

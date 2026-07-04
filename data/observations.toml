@@ -143,15 +143,16 @@ source = "INSP situation reports 4-30 June 2026 (SitReps 021-024 `Nouveaux cas s
 # here as a fraction. This is an OBSERVED proxy for surge-driven case-finding
 # intensity: contact tracing is organised around confirmed cases and scales
 # with the outbreak, so a rising follow-up effort surfaces more suspects
-# (including non-BVD ones) into the suspected stream. The model expands it onto
-# the grid with `expand_covariate` and feeds it to the suspected-case
-# background as a fixed covariate (`contact_background_model`), capturing an
-# outbreak-scaled non-BVD background component without the ascertainment
-# `p_drc` confounding a latent-scaled background would carry (see issue #374).
-# Being a fixed offset on observed data, it is used only in the contact-
-# background sensitivity fit and is absent from the headline model. SitReps
-# 029 (12 June), 043 (26 June) and 045 (28 June) were not published upstream,
-# so those dates are absent; the series is zero outside the 7 June-1 July span.
+# (including non-BVD ones) into the suspected stream. Detection is a rate
+# multiplier, so the model expands it onto the grid with `expand_covariate`
+# and SCALES the non-BVD suspected-case background by `exp(β_contact · z̃)`
+# (mean-centred covariate; `contact_background_model`), capturing an
+# outbreak-scaled non-BVD background without the ascertainment `p_drc`
+# confounding a latent-scaled background would carry (see issue #374). This is
+# part of the HEADLINE model (the `sens_no_contact` fit turns it off for
+# comparison). SitReps 029 (12 June), 043 (26 June) and 045 (28 June) were not
+# published upstream, so those dates are absent; the series is zero outside the
+# 7 June-1 July span (factor 1, a no-op there).
 [contact_followup_history]
 dates  = ["2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
           "2026-06-11", "2026-06-13", "2026-06-14", "2026-06-15",
