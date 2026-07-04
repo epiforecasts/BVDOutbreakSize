@@ -6,9 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## v1.7.0
+## v1.8.0
 
-Changes since v1.6.0.
+Changes since v1.7.0.
 
 ### Data
 
@@ -17,12 +17,6 @@ Changes since v1.6.0.
   fraction from the confirmed-based situation-report banners. An observed
   proxy for surge-driven case-finding intensity, read by the model as a fixed
   covariate for the non-BVD suspected-case background.
-- Added the situation-report `Tableau 6` treatment-centre patient-movement
-  flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
-  rule-outs and absconded patients (13–23 June). Each stream is resilient: an
-  empty history is a no-op, so the model degrades to the occupancy backbone
-  where a flow is not reported. Advanced the data through situation report
-  046 (29 June).
 
 ### Model
 
@@ -37,6 +31,22 @@ Changes since v1.6.0.
   the ascertainment / outbreak-size degeneracy a latent-scaled background would
   reopen. The `sens_no_contact` sensitivity re-fit turns it off for comparison
   (addresses #374).
+
+## v1.7.0
+
+Changes since v1.6.0.
+
+### Data
+
+- Added the situation-report `Tableau 6` treatment-centre patient-movement
+  flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
+  rule-outs and absconded patients (13–23 June). Each stream is resilient: an
+  empty history is a no-op, so the model degrades to the occupancy backbone
+  where a flow is not reported. Advanced the data through situation report
+  046 (29 June).
+
+### Model
+
 - Reworked the isolation submodel into a treatment-centre flow model that
   fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
   outcome mixture, with the death and recovery branches weighted by an in-care
