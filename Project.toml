@@ -1,6 +1,6 @@
 name = "BVDOutbreakSize"
 uuid = "7c2a1f8e-9d4b-4a16-bf3e-1f5c8c3a90e2"
-version = "1.7.0"
+version = "1.8.0"
 authors = ["Sam Abbott <sam.abbott@lshtm.ac.uk>", "Samuel P. C. Brand"]
 
 [workspace]
