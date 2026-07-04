@@ -1,10 +1,11 @@
 # Trial the lowered NUTS target_accept on the real-data renewal joint.
 #
-# Fits the full `bvd_joint` (the analysis configuration) at target_accept
-# 0.90 (the new default) and 0.95 (the previous value) with a reduced
-# sample budget, and compares divergences, convergence (max R-hat, min bulk
-# ESS) and the headline C_T. A lower target acceptance should cut leapfrog
-# steps without reintroducing divergences if the geometry is benign.
+# Fits the full `bvd_joint` (the analysis configuration) at two target
+# acceptance values and compares divergences, convergence (max R-hat, min
+# bulk ESS) and the headline C_T. A lower target acceptance should cut
+# leapfrog steps without reintroducing divergences if the geometry is
+# benign. The package default is `target_accept = 0.85` (see `nuts_sample`
+# in `src/sampling.jl`); this script trials 0.90 and 0.95 against it.
 #
 # Run: julia --project=. scripts/trial_target_accept.jl
 

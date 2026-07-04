@@ -111,8 +111,14 @@ const REPORT_SCENARIOS_CI = [
     M_PRIOR_BASE_DATE
 
 Base date for the doubling-count prior centre: McCabe et al.'s first
-report (18 May 2026), whose Method 2 central scenario of 501 cases implies
-`m ≈ log2(501) ≈ 9`. Used by [`m_prior_centre`](@ref).
+report (18 May 2026). Used by [`m_prior_centre`](@ref).
+
+Note: in the renewal model `m` counts ONLY the cryptic-phase doublings
+(origin → renewal start), not the total to the cut-off, so the cryptic
+seed at the renewal start is `2^m` and the observation-window growth is
+added separately as `τ_obs` in [`infection_model`](@ref). The centre is
+`M_PRIOR_BASE = 3` (a ≈60-day cryptic phase at the 20-day doubling), NOT
+the `log2(501) ≈ 9` of the earlier total-doublings parameterisation.
 """
 const M_PRIOR_BASE_DATE = "2026-05-18"
 

@@ -261,13 +261,20 @@ m_0 = m_\\text{base} +
     \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
 ```
 
-The base is McCabe et al.'s first report (18 May 2026; Method 2 central
-501 cases ⇒ `m ≈ 9`), advancing at the central 20-day doubling time
-(`M_PRIOR_DOUBLING_DAYS`, the molecular-clock estimate of
-cuomodannenburg2026), so the prior stays centred on the plausible outbreak
-size as the cut-off moves. `C_T = 2^m` is the cumulative *infection*
-count; 9 is a weakly-informative centre of the same order. Passed into
-[`exponential_growth_model`](@ref) as the centre of the wide `m` prior.
+The base is McCabe et al.'s first report (18 May 2026), advancing at the
+central 20-day doubling time (`M_PRIOR_DOUBLING_DAYS`, the molecular-clock
+estimate of cuomodannenburg2026).
+
+!!! warning "Superseded by the cryptic-phase `m` interpretation"
+    This helper predates the two-phase renewal seeding. In the current
+    model `m` counts ONLY the cryptic-phase doublings (origin → renewal
+    start); the observation-window growth is already added separately as
+    `τ_obs` in [`infection_model`](@ref), so advancing the *cryptic* centre
+    with calendar time here would double-count that growth. The joint
+    therefore uses the FIXED `Normal(M_PRIOR_BASE, 3)` centre
+    (`M_PRIOR_BASE = 3`), not this advancing centre. Retained for reference
+    and for the frozen-cut-off scripts; do not pass its result as the
+    `m_prior` centre of the two-phase joint without accounting for `τ_obs`.
 """
 function m_prior_centre(as_of_date::Union{Date, AbstractString};
         base_date::AbstractString = M_PRIOR_BASE_DATE,
