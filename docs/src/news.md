@@ -6,6 +6,26 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.8.0
+
+Changes since v1.7.0.
+
+### Model
+
+- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
+  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
+  and report-to-receipt legs already convolve to onset-to-sample for confirmed
+  cases. The cohort's reported mean and median are continuous (epidist
+  censoring-corrected), so the convolution's own continuous mean (the sum of the
+  report and receipt leg means) and continuous median (Wilson-Hilferty of the
+  summed leg variances) are fitted to the reported 7.4 d and 4.8 d as soft
+  Normal observations, with the reported 95% credible intervals as their SDs.
+  This grounds the otherwise-unidentified laboratory-turnaround delay directly
+  from the cohort's own uncertainty, adds no latent parameter, and involves no
+  discretisation. On by default in the joint fit; the single-stream and
+  isolation fits lack the laboratory receipt leg and so do not carry it
+  (resolves #359).
+
 ## v1.7.0
 
 Changes since v1.6.0.
@@ -38,19 +58,6 @@ Changes since v1.6.0.
   361, confirmed by the au-lit start-of-day stock) is listed; the joint fit
   with the isolation stream had been bending Rt up and down to chase this and
   the later missing-SitRep steps, which no single-stream fit shows.
-- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
-  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
-  and report-to-receipt legs already convolve to onset-to-sample for confirmed
-  cases. The cohort's reported mean and median are continuous (epidist
-  censoring-corrected), so the convolution's own continuous mean (the sum of the
-  report and receipt leg means) and continuous median (Wilson-Hilferty of the
-  summed leg variances) are fitted to the reported 7.4 d and 4.8 d as soft
-  Normal observations, with the reported 95% credible intervals as their SDs.
-  This grounds the otherwise-unidentified laboratory-turnaround delay directly
-  from the cohort's own uncertainty, adds no latent parameter, and involves no
-  discretisation. On by default in the joint fit; the single-stream and
-  isolation fits lack the laboratory receipt leg and so do not carry it
-  (resolves #359).
 
 ### Report and forecasts
 
