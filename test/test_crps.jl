@@ -45,10 +45,7 @@ end
     function crps_bruteforce(y, x)
         m = length(x)
         mae = sum(abs.(x .- y)) / m
-        pair = 0.0
-        for xi in x, xj in x
-            pair += abs(xi - xj)
-        end
+        pair = sum(abs(xi - xj) for xi in x, xj in x)
         return mae - pair / (2 * m^2)
     end
 
