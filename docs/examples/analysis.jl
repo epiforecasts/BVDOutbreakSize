@@ -2854,11 +2854,14 @@ joint_vintage_incidence_fig #hide
 # We score each stream's per-vintage conditional predictions against the
 # observed counts. `bias` is the mean forecast bias over the vintages
 # (negative = under-predicted, positive = over-predicted, zero = the observed
-# counts sit at the predictive median); `50%/90% coverage` are the fractions
+# counts sit at the predictive median); `CRPS` is the mean continuous ranked
+# probability score (a strictly proper score in the stream's own count units,
+# lower is better, comparable across vintages of the same stream but not across
+# streams of different magnitude); `50%/90% coverage` are the fractions
 # of vintages whose observed count falls inside the central 50% and 90%
 # predictive intervals, which a well-calibrated stream keeps near those nominal
-# levels. Streams with a large bias or coverage far from nominal are the ones
-# the joint fit reproduces less well.
+# levels. Streams with a large bias, a high CRPS or coverage far from nominal
+# are the ones the joint fit reproduces less well.
 
 stream_calibration_table = stream_calibration(vintage_panels);
 

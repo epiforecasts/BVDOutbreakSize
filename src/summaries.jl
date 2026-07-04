@@ -36,7 +36,7 @@ const _PRETTY_COLS = Dict(
     "lower_90" => "Lower 90%", "lower_60" => "Lower 60%",
     "lower_30" => "Lower 30%", "upper_30" => "Upper 30%",
     "upper_60" => "Upper 60%", "upper_90" => "Upper 90%",
-    "n" => "Vintages", "bias" => "Bias",
+    "n" => "Vintages", "bias" => "Bias", "crps" => "CRPS",
     "coverage_50" => "50% coverage", "coverage_90" => "90% coverage"
 )
 
@@ -284,6 +284,54 @@ function _covered(observed::Real, predicted::AbstractVector{<:Real}, level::Real
     return lo <= observed <= hi
 end
 
+@doc raw"""
+Sample-based continuous ranked probability score (CRPS) for a single
+observation `observed` against a predictive sample `predicted`, following
+`scoringutils::crps_sample`. CRPS is a strictly proper score generalising the
+absolute error to a full predictive distribution — it rewards both sharpness
+and calibration and, unlike interval coverage or [`bias_sample`](@ref), returns
+a single number a forecast can be optimised against. It is reported in the units
+of the observation (lower is better), and for a deterministic forecast (every
+draw equal) reduces to the absolute error.
+
+For predictive draws ``x_1, \dots, x_m`` and observation ``y`` the estimator is
+
+```math
+\mathrm{CRPS} = \frac{1}{m}\sum_{i=1}^{m} |x_i - y|
+    \;-\; \frac{1}{2 m^2}\sum_{i=1}^{m}\sum_{j=1}^{m} |x_i - x_j|,
+```
+
+the energy-form empirical CRPS (Zamo & Naveau 2018; the estimator
+`scoringutils` uses). The double sum is evaluated in ``O(m \log m)`` by sorting:
+for ascending ``x_{(1)} \le \dots \le x_{(m)}``,
+``\sum_{i,j} |x_i - x_j| = 2 \sum_{i} (2i - m - 1)\, x_{(i)}``, so no quadratic
+pairwise loop is formed. Because it is scale-dependent, CRPS is comparable
+across vintages or forecasts of the SAME stream, not across streams of
+different magnitude. Returns `NaN` for an empty predictive sample (matching
+[`bias_sample`](@ref)).
+"""
+function crps_sample(observed::Real, predicted::AbstractVector{<:Real})
+    m = length(predicted)
+    m == 0 && return NaN
+    y = float(observed)
+    ## First term: mean absolute error of the draws against the observation.
+    mae = zero(y)
+    @inbounds for x in predicted
+        mae += abs(float(x) - y)
+    end
+    mae /= m
+    ## Second term: half the mean absolute pairwise difference, via the sorted
+    ## identity Σ_{i,j}|x_i − x_j| = 2 Σ_i (2i − m − 1) x_(i), so the whole
+    ## score is O(m log m) rather than O(m^2).
+    xs = sort(float.(predicted))
+    spread = zero(y)
+    @inbounds for i in 1:m
+        spread += (2 * i - m - 1) * xs[i]
+    end
+    ## (1/(2 m^2)) · 2 Σ_i (2i − m − 1) x_(i) = Σ_i (2i − m − 1) x_(i) / m^2.
+    return mae - spread / (m^2)
+end
+
 # Per-vintage conditional predictive samples for one PPC panel, mirroring
 # `plot_vintage_conditional_ppc`: each cumulative-stream draw at vintage `v`
 # is the observed previous cumulative plus the drawn increment (baseline
@@ -311,21 +359,26 @@ observed count, and the per-vintage scores are averaged into one row.
 
 Columns: `stream`, the number of scored vintages `n`, the mean forecast
 `bias` (see [`bias_sample`](@ref); negative = the stream is under-predicted,
-positive = over-predicted), and the empirical `coverage_50`/`coverage_90`
-— the fraction of vintages whose observed count falls inside the central
-50% and 90% predictive intervals. A well-calibrated stream has bias near
-zero and coverage near its nominal level; departures flag the streams the
-joint fit reproduces less well.
+positive = over-predicted), the mean `crps` (the proper score of
+[`crps_sample`](@ref), in the stream's own count units, lower is better —
+comparable across vintages of the SAME stream, not across streams), and the
+empirical `coverage_50`/`coverage_90` — the fraction of vintages whose observed
+count falls inside the central 50% and 90% predictive intervals. A
+well-calibrated stream has bias near zero, coverage near its nominal level and
+the lowest CRPS its sharpness allows; departures flag the streams the joint fit
+reproduces less well.
 """
 function stream_calibration(panels::AbstractVector)
     rows = map(panels) do panel
         c = _panel_conditional(panel)
         n = length(c.observed)
         biases = [bias_sample(c.observed[v], c.samples[v]) for v in 1:n]
+        crpss = [crps_sample(c.observed[v], c.samples[v]) for v in 1:n]
         cov50 = [_covered(c.observed[v], c.samples[v], 0.5) for v in 1:n]
         cov90 = [_covered(c.observed[v], c.samples[v], 0.9) for v in 1:n]
         (stream = panel.title, n = n,
             bias = round(n == 0 ? NaN : mean(biases); digits = 2),
+            crps = round(n == 0 ? NaN : mean(crpss); digits = 2),
             coverage_50 = round(n == 0 ? NaN : mean(cov50); digits = 2),
             coverage_90 = round(n == 0 ? NaN : mean(cov90); digits = 2))
     end

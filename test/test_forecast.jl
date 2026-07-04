@@ -175,13 +175,16 @@ end
     @test nrow(tbl) == 2
     @test names(tbl) ==
           ["Stream", "Observed", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
+        "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI", "CRPS"]
     @test Set(tbl[!, "Stream"]) ==
           Set(["DRC confirmed cases", "DRC confirmed deaths"])
 
     for row in eachrow(tbl)
         covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]
         @test row["Within 90% PI"] == (covered ? "yes" : "no")
+        ## Every scored stream carries a finite, non-negative CRPS.
+        @test isfinite(row["CRPS"])
+        @test row["CRPS"] >= 0
     end
 end
 

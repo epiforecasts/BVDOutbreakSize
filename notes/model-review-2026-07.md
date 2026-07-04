@@ -92,6 +92,12 @@ so the published build fails loudly if geometry degrades; (b) add a proper
 scoring rule (CRPS or WIS via a small helper, or `scoringutils`) and score the
 one-week-ahead forecast over a rolling set of frozen cut-offs, not one.
 
+Partially addressed in this PR: a sample-based `crps_sample` (mirroring
+`scoringutils::crps_sample`) is added and wired into both `stream_calibration`
+(per-stream mean CRPS in the calibration table) and `forecast_vs_truth` (a CRPS
+column on the held-out forecast). The remaining work is scoring over *rolling*
+freezes and the convergence-gating assertion (a).
+
 ### P2 — Overlapping streams scored as conditionally independent (tracked, quantify it)
 
 Already issue #307. Suspected cases, analysed volume, confirmed cases, isolation

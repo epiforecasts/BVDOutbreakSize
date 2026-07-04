@@ -37,12 +37,15 @@ end
     df = stream_calibration([panel])
     @test df isa DataFrame
     @test names(df) ==
-          ["Stream", "Vintages", "Bias", "50% coverage", "90% coverage"]
+          ["Stream", "Vintages", "Bias", "CRPS", "50% coverage", "90% coverage"]
     @test nrow(df) == 1
     @test df[1, "Stream"] == "Calibrated"
     @test df[1, "Vintages"] == length(observed)
     @test abs(df[1, "Bias"]) < 0.1
     @test df[1, "90% coverage"] == 1.0
+    ## A calibrated ±5 uniform increment scores a small, finite CRPS.
+    @test df[1, "CRPS"] >= 0
+    @test df[1, "CRPS"] < 5
 end
 
 @testitem "stream_calibration detects over- and under-prediction" begin
@@ -64,6 +67,13 @@ end
     @test df[1, "90% coverage"] == 0.0
     @test df[2, "Bias"] == -1.0
     @test df[2, "90% coverage"] == 0.0
+    ## Deterministic replicates → CRPS is the absolute error. The cumulative
+    ## conditional sample at vintage v is `observed[v-1] + increment`, so for
+    ## the "Over" panel (increment 40) the samples are [40, 50, 60] against
+    ## observed [10, 20, 30] → a constant 30-count error; the "Under" panel
+    ## (increment 1) gives samples [1, 11, 21] → a constant 9-count error.
+    @test df[1, "CRPS"] == 30.0
+    @test df[2, "CRPS"] == 9.0
 end
 
 @testitem "stream_calibration handles a non-cumulative daily panel" begin

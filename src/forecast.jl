@@ -469,8 +469,10 @@ supply-limited occupancy is scored against it too — a last-week's-forecast
 versus what the beds actually held. Returns a `DataFrame` with one row per
 scored stream giving the observed count, the equal-tailed 30/60/90%
 predictive intervals (the same endpoints as the other summary tables), and
-whether the observed count falls inside the 90% interval. The suspected
-reported streams are no longer reported, so they are not scored.
+whether the observed count falls inside the 90% interval, and the proper
+`CRPS` score of the predictive against the observed count (see
+[`crps_sample`](@ref); count units, lower is better). The suspected reported
+streams are no longer reported, so they are not scored.
 
 Note that at a one-week-back freeze the bed capacity is weakly informed (the
 reported occupancy rate starts only on 9 June), so the projected bed
@@ -491,7 +493,8 @@ function forecast_vs_truth(fc::DataFrame;
             lower_90 = lo, lower_60 = round(s.lo60; digits),
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
             upper_60 = round(s.hi60; digits), upper_90 = hi,
-            within_90 = lo <= obs <= hi ? "yes" : "no")
+            within_90 = lo <= obs <= hi ? "yes" : "no",
+            crps = round(crps_sample(obs, float.(draws)); digits))
     end
     rows = NamedTuple[]
     :confirmed_cum in propertynames(fc) &&
