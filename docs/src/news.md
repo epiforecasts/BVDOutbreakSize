@@ -120,6 +120,10 @@ Changes since v1.6.0.
   and resolves the root manifest rather than `docs/Manifest.toml`, so the
   `fit`, `render` and `combine` jobs resolve the same package set (resolves
   #368).
+- Set `include-matrix: false` on the `render` job's env-cache step so the two
+  render jobs restore the precompiled depot shared by `list` and `fit` instead
+  of keying on the matrix `page`, which missed the shared cache and made each
+  render re-precompile the whole stack (~530 deps) before rendering.
 
 ## v1.6.0
 

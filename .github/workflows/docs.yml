@@ -154,6 +154,11 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Restore the one env cache warmed by `list` (and reused by `fit`)
+          # rather than keying per-page. Without this the matrix `page` value
+          # enters the cache key, so each render misses the shared depot and
+          # re-precompiles the whole stack (~530 deps) before rendering.
+          include-matrix: false
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:
