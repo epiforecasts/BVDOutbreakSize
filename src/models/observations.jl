@@ -122,6 +122,32 @@ function expand_vintage_rate(rate::AbstractVector,
 end
 
 """
+Expand an observed real-valued covariate sampled on the ascending grid
+day-indices `days` (with `values`) onto a length-`n` daily grid. Values
+are linearly interpolated between the reported days (see
+[`interpolate_knots`](@ref)) across the covered span `days[1]…days[end]`
+and set to zero outside it, so the covariate contributes nothing before
+the first report or after the last. Returns a zero vector when `days` is
+empty. Used to turn the dated contact-tracing follow-up-rate series into
+the additive background covariate the suspected-case stream consumes
+([`contact_background_model`](@ref)). Pure and AD-transparent; the element
+type follows `values`.
+"""
+function expand_covariate(days::AbstractVector{<:Integer},
+        values::AbstractVector, n::Integer)
+    T = float(eltype(values))
+    out = zeros(T, n)
+    isempty(days) && return out
+    interp = interpolate_knots(collect(T, values), collect(Int, days), n)
+    lo = clamp(Int(first(days)), 1, n)
+    hi = clamp(Int(last(days)), 1, n)
+    @inbounds for t in lo:hi
+        out[t] = interp[t]
+    end
+    return out
+end
+
+"""
 Group a sorted event-day list `event_days` (grid day-indices, ascending,
 one entry per dated event, possibly with repeats) into its unique days and
 the per-day occupancy count, clamped to `[1, n]`. Returns `(days, counts)`
@@ -500,6 +526,13 @@ pipeline and dispersion with the cumulative stream and is empty by default.
 Its days fall strictly after the cumulative series ends, so the two suspected
 likelihoods cover disjoint days.
 
+An optional `contact_covariate` (a length-`n` observed series, e.g. the
+contact-tracing follow-up rate expanded by [`expand_covariate`](@ref)) adds
+a fixed-data background term `β_contact · covariate` sampled by
+[`contact_background_model`](@ref), so the non-BVD background can scale with
+surge-driven case-finding effort without the `p_drc` confounding a
+latent-scaled term would carry. Absent (`nothing`) by default.
+
 The background and testing fraction
 are sampled by an injected [`test_positivity_model`](@ref), and the
 onset-to-report delay is injected, defaulting to a weakly-informative
@@ -520,6 +553,8 @@ sitrep.
         suspected_daily_history = (; days = Int[], counts = Int[]),
         positivity = test_positivity_model(),
         background_re = nothing,
+        contact_covariate = nothing,
+        contact_effect = contact_background_model(),
         ## Onset to a suspected case being detected/reported, from the
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
@@ -562,6 +597,21 @@ sitrep.
         bg_daily = bg_state.λ
     end
 
+    ## Optional observed contact-tracing intensity covariate. Adds an additive
+    ## per-day non-BVD background `β_contact · covariate` proportional to the
+    ## surge-driven contact follow-up effort. The covariate is FIXED observed
+    ## data, not the latent BVD signal, so this outbreak-scaled background term
+    ## does not reopen the ascertainment `p_drc` / outbreak-size degeneracy a
+    ## latent-scaled background would (issue #374). Absent by default, where the
+    ## fit is bit-identical to the covariate-free model.
+    if contact_covariate === nothing
+        β_contact = zero(λ_bg_base)
+    else
+        contact_state ~ to_submodel(contact_effect)
+        β_contact = contact_state.β_contact
+        bg_daily = bg_daily .+ β_contact .* contact_covariate
+    end
+
     ## Suspected daily cases add the p_drc-scaled BVD signal and the
     ## non-BVD background.
     reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
@@ -597,7 +647,7 @@ sitrep.
 
     return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf, bvd_reports_daily,
         reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
-        bg_total)
+        bg_total, β_contact)
 end
 
 """

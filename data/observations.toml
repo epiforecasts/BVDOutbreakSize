@@ -135,6 +135,35 @@ dates  = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07",
 values = [153, 119, 117, 94, 138, 119, 119, 168, 136, 165, 235, 192, 151, 238, 162, 201, 202, 131, 138, 154, 265, 239, 309, 301, 150]
 source = "INSP situation reports 4-30 June 2026 (SitReps 021-024 `Nouveaux cas suspects du jour`; SitReps 025-028, 030-042, 044, 046, 047 `Cas suspects du jour`), read from the PDFs; recorded in the new_daily_suspects column of data/insp_sitrep_scanned.csv. National per-day count of newly reported suspected cases (24h): 153, 119, 117, 94, 138, 119, 119, 168 on 4-11 June, 136 on 13 June, 165 on 14 June, 235 on 15 June, 192 on 16 June, 151 on 17 June, 238 on 18 June, 162 on 19 June, 201 on 20 June, 202 on 21 June, 131 on 22 June, 138 on 23 June, 154 on 24 June and 265 on 25 June (cross-checks the INRB-UMIE national_cumulative_suspected_cases DRC values, which despite the name are the daily-new series for June dates: 16 June 192, 17 June 151, 18 June 238, 19 June 162, 20 June 201, 21 June 202, 22 June 131, 23 June 138, 24 June 154, 25 June 265). SitReps 015-020 (29 May-3 June) do not publish a national new-suspect-of-the-day total, so the series begins 4 June; SitRep 029 (12 June) was not published upstream, so 12 June is absent. SitRep 043 (26 June) was also not published, so the series steps 25 June -> 27 June; 27 June (SitRep 044) prints cas suspects du jour 239 (cross-checks the INRB-UMIE national_cumulative_suspected_cases DRC daily-new value 239). SitRep 045 (28 June) was also not published, so the series steps 27 June -> 29 June; 29 June (SitRep 046) prints cas suspects du jour 309 (Tableau 3 Total des cas suspects du jour Ituri 222 + Nord-Kivu 87 + Sud-Kivu 0 = 309; cross-checks the INRB-UMIE national_cumulative_suspected_cases DRC daily-new value 309). SitRep 047 (30 June) prints cas suspects du jour 301 (page-1 tile and section-4.2 narrative '301 cas suspects dont 90 deces'; Tableau 3 Total des cas suspects du jour Ituri 211 + Nord-Kivu 90 + Sud-Kivu 0 = 301; cross-checks the INRB-UMIE national_cumulative_suspected_cases DRC daily-new value 301). SitRep 048 (1 July) directly follows 047 (30 June), no gap; prints cas suspects du jour 150 (page-1 tile and section 4.2), a fresh distinct value down from 301 on 30 June; cross-checks the INRB-UMIE national_cumulative_suspected_cases DRC daily-new value 150."
 
+# Daily contact-tracing follow-up rate ("taux de suivi des contacts"): the
+# share of listed contacts under active follow-up on the reporting day,
+# printed in the page-1 banner of the confirmed-based SitReps (SitReps
+# 024-048, 7 June-1 July) and recorded verbatim in the notes column of
+# data/insp_sitrep_scanned.csv (e.g. "taux de suivi contacts 64.4%"). Stored
+# here as a fraction. This is an OBSERVED proxy for surge-driven case-finding
+# intensity: contact tracing is organised around confirmed cases and scales
+# with the outbreak, so a rising follow-up effort surfaces more suspects
+# (including non-BVD ones) into the suspected stream. The model expands it onto
+# the grid with `expand_covariate` and feeds it to the suspected-case
+# background as a fixed covariate (`contact_background_model`), capturing an
+# outbreak-scaled non-BVD background component without the ascertainment
+# `p_drc` confounding a latent-scaled background would carry (see issue #374).
+# Being a fixed offset on observed data, it is used only in the contact-
+# background sensitivity fit and is absent from the headline model. SitReps
+# 029 (12 June), 043 (26 June) and 045 (28 June) were not published upstream,
+# so those dates are absent; the series is zero outside the 7 June-1 July span.
+[contact_followup_history]
+dates  = ["2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10",
+          "2026-06-11", "2026-06-13", "2026-06-14", "2026-06-15",
+          "2026-06-16", "2026-06-17", "2026-06-18", "2026-06-19",
+          "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23",
+          "2026-06-24", "2026-06-25", "2026-06-27", "2026-06-29",
+          "2026-06-30", "2026-07-01"]
+values = [0.644, 0.563, 0.611, 0.718, 0.697, 0.565, 0.631, 0.644,
+          0.716, 0.711, 0.723, 0.693, 0.670, 0.708, 0.728, 0.771,
+          0.792, 0.828, 0.871, 0.827, 0.825, 0.827]
+source = "INSP situation reports 7 June-1 July 2026 (SitReps 024-028, 030-042, 044, 046-048), page-1 banner `taux de suivi des contacts`, read from the PDFs and recorded in the notes column of data/insp_sitrep_scanned.csv as a percentage; stored here as a fraction. National share of listed contacts under active follow-up (24h): 64.4% on 7 June, 56.3% on 8 June, 61.1% on 9 June, 71.8% on 10 June, 69.7% on 11 June, 56.5% on 13 June, 63.1% on 14 June, 64.4% on 15 June, 71.6% on 16 June, 71.1% on 17 June, 72.3% on 18 June, 69.3% on 19 June, 67.0% on 20 June, 70.8% on 21 June, 72.8% on 22 June, 77.1% on 23 June, 79.2% on 24 June, 82.8% on 25 June, 87.1% on 27 June, 82.7% on 29 June, 82.5% on 30 June and 82.7% on 1 July. SitReps 029 (12 June), 043 (26 June) and 045 (28 June) were not published upstream, so those dates are absent."
+
 # Patients currently in isolation/hospitalisation: a daily count of how many
 # patients are in a bed. This is the headline "Patients en isolement -
 # hospitalisation" figure on page 1 of the confirmed-based SitReps (SitReps

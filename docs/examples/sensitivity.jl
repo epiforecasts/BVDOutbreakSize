@@ -849,6 +849,80 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
+# ## Contact-tracing background sensitivity
+#
+# This sensitivity re-fit runs on main and release docs builds only and is
+# skipped on PR previews to keep the preview builds fast (controlled by the
+# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the table
+# and figure below are replaced by a short note in place of the re-fit.
+#
+# The headline model treats the non-BVD suspected-case background as a smooth
+# random walk in calendar time, which absorbs the observed rise in suspected
+# reports but cannot tie it to the outbreak. The situation reports show that
+# active case-finding and contact tracing are organised around confirmed cases
+# and scale with the outbreak, so the non-BVD share of the suspect net should
+# grow with case-finding effort rather than sit at a fixed additive level
+# [see issue #374].
+# We re-fit the joint model with an extra background term proportional to an
+# observed case-finding covariate, the daily contact-tracing follow-up rate
+# ("taux de suivi des contacts", 7 June-1 July), added as a fixed offset to the
+# non-BVD background. Because the covariate is observed data rather than the
+# latent BVD signal, it captures an outbreak-scaled background component
+# without the ascertainment `p_drc` confounding a latent-scaled background
+# would carry.
+# The re-fit uses the full headline settings (1000 draws across two chains).
+#
+# If the covariate carries background variation the headline walk already
+# absorbs, the infection count to date should be close to the baseline; a
+# large shift would flag that the background specification matters for the
+# estimate. The table and overlaid densities below show how far it moves.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint with the contact-tracing background covariate</summary>
+#md # ```
+
+## The contact-background re-fit is defined in the fit registry
+## (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
+posterior_C_contact_bg = RUN_SENSITIVITY ?
+                         vec(Array(chn_joint_contact_bg[:C_T])) : nothing
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Contact-background infection-count table</summary>
+#md # ```
+
+contact_bg_sensitivity_table = RUN_SENSITIVITY ?
+                               streams_table(
+    "baseline (calendar-time walk)" => posterior_C_joint,
+    "contact-tracing covariate" => posterior_C_contact_bg) :
+                               Markdown.md"_Contact-background sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+contact_bg_sensitivity_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Contact-background infection-count density plot</summary>
+#md # ```
+
+contact_bg_sensitivity_fig = RUN_SENSITIVITY ?
+                             plot_cumulative_cases(
+    "baseline (calendar-time walk)" => posterior_C_joint,
+    "contact-tracing covariate" => posterior_C_contact_bg; scenarios = []) :
+                             Markdown.md"_Contact-background sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+contact_bg_sensitivity_fig #hide
+
 # ## Saving sensitivity results
 #
 # The stream-comparison and frozen-fit tables and the per-stream reproduction

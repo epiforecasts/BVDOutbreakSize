@@ -860,6 +860,30 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
+Contact-tracing background coefficient submodel. Scales an observed
+contact-tracing intensity covariate (the daily `taux de suivi des
+contacts` follow-up rate as a fraction, see the `contact_followup_history`
+manifest block) into an additive per-day non-BVD suspected-case background
+`β_contact · covariate`. `β_contact` is the extra background suspected
+cases per day per unit follow-up rate, so a surge-driven rise in
+case-finding effort raises the non-BVD background over the window the
+covariate is observed. It is non-negative (more case-finding surfaces
+more, not fewer, non-BVD suspects) with a weakly-informative half-normal
+prior on the natural scale, matched in order to the scalar `λ_bg`
+background so the covariate can carry a comparable share of the background
+without out-explaining the BVD signal. Because the covariate is OBSERVED
+data rather than the latent BVD signal, this outbreak-scaled background
+component does not reopen the ascertainment `p_drc` / outbreak-size
+degeneracy a latent-scaled background would (issue #374). Returns
+`(; β_contact)`.
+"""
+@model function contact_background_model(;
+        coef_prior = truncated(Normal(0.0, 8.0); lower = 0))
+    β_contact ~ coef_prior
+    return (; β_contact)
+end
+
+"""
 PCR sensitivity prior. `Beta(10, 1.76)` is centred near a mean of about 0.85
 with a spread of roughly 0.1; being a Beta it is not symmetric and carries
 somewhat more mass toward high sensitivity. Confirmation runs on the altona

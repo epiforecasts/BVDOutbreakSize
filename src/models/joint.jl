@@ -355,7 +355,11 @@ recovery probability and lagged by a confirmation-to-recovery delay (see
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. Tracked deterministics:
+seeding submodel when `tmrca_days` is given. `contact_covariate` optionally
+passes a length-`n` observed case-finding series (the contact-tracing
+follow-up rate) to the suspected-case background as a fixed offset
+([`reported_cases_model`](@ref)); `nothing` (the default) leaves the
+headline background unchanged. Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), the single established
 reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
@@ -410,6 +414,7 @@ death-confirmation positivity (`death_confirmation`).
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        contact_covariate = nothing,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
@@ -501,7 +506,8 @@ death-confirmation positivity (`death_confirmation`).
     ## and to the laboratory pipeline.
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k_cases, p_drc;
-        suspected_daily_history, background_re = case_bg_re))
+        suspected_daily_history, background_re = case_bg_re,
+        contact_covariate))
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))

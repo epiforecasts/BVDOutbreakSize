@@ -108,7 +108,8 @@ function build_fit_specs(obs;
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
-            tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0)
+            tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0,
+            contact_covariate = nothing)
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -137,6 +138,7 @@ function build_fit_specs(obs;
                 export_death_days = obs.export_death_days,
                 breakpoint = breakpoint,
                 background_re = true,
+                contact_covariate = contact_covariate,
                 confirmed_positivity_link = :composition,
                 deaths = deaths,
                 genetic = genetic_seeding_model,
@@ -145,6 +147,14 @@ function build_fit_specs(obs;
             samples = samples, chains = chains,
             callback = fit_callback("variant"))
     end
+
+    ## Contact-tracing background covariate: the observed daily contact
+    ## follow-up rate expanded onto the grid (zero outside its 7 June-1 July
+    ## span), fed to the suspected-case background as a fixed offset. Empty when
+    ## the manifest carries no contact series.
+    contact_covariate = expand_covariate(
+        obs.contact_followup_history.days,
+        obs.contact_followup_history.values, obs.n)
 
     ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
     deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
@@ -275,7 +285,10 @@ function build_fit_specs(obs;
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
+            (; id = "sens_contact_bg", kind = :chain,
+                thunk = () -> refit_joint_variant(
+                    contact_covariate = contact_covariate)))
     end
     return specs
 end

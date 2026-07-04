@@ -12,6 +12,11 @@ Changes since v1.6.0.
 
 ### Data
 
+- Added the daily contact-tracing follow-up rate ("taux de suivi des
+  contacts", 7 June–1 July) as `[contact_followup_history]`, recorded as a
+  fraction from the confirmed-based situation-report banners. An observed
+  proxy for surge-driven case-finding intensity, read by the model as a fixed
+  covariate for the non-BVD suspected-case background.
 - Added the situation-report `Tableau 6` treatment-centre patient-movement
   flows (CTE/CT/CI) as optional daily streams: admissions, in-care deaths,
   rule-outs and absconded patients (13–23 June). Each stream is resilient: an
@@ -21,6 +26,16 @@ Changes since v1.6.0.
 
 ### Model
 
+- Added an optional contact-tracing background covariate. When an observed
+  case-finding covariate is supplied (the daily contact follow-up rate,
+  expanded onto the grid by `expand_covariate` and gated to zero outside its
+  reported span), the non-BVD suspected-case background gains a fixed offset
+  `β_contact · covariate` sampled by `contact_background_model`, so the
+  background can scale with surge-driven case-finding effort. The covariate is
+  observed data, not the latent BVD signal, so it avoids the ascertainment
+  `p_drc` / outbreak-size degeneracy a latent-scaled background would reopen.
+  Off in the headline model; exercised by the `sens_contact_bg` sensitivity
+  re-fit (addresses #374).
 - Reworked the isolation submodel into a treatment-centre flow model that
   fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
   outcome mixture, with the death and recovery branches weighted by an in-care
