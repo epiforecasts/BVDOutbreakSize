@@ -9,7 +9,7 @@ include(joinpath(@__DIR__, "cache.jl"))
 
 using BVDOutbreakSize
 using Dates: Date, Day, value
-using Distributions: truncated, Normal
+using Distributions: truncated, Normal, Beta
 
 const _PKG = pkgdir(BVDOutbreakSize)
 
@@ -108,6 +108,7 @@ function build_fit_specs(obs;
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
+            confirmed = confirmed_cases_model,
             tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0)
         return nuts_sample(
             bvd_joint(
@@ -139,6 +140,7 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 deaths = deaths,
+                confirmed = confirmed,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
@@ -152,6 +154,23 @@ function build_fit_specs(obs;
         onset_to_death = gamma_delay_model(40;
             alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
             theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
+        kwargs...)
+
+    ## Rule-out is investigative, not a single negative PCR: a suspect is
+    ## confirmed/ruled out through a deep investigation with repeat control
+    ## tests, so the effective sensitivity of the confirmation PROCESS is higher
+    ## than one analytical assay draw. The headline `test_sensitivity_model`
+    ## (Beta(10, 1.76), mean about 0.85) is the single-assay prior; two
+    ## independent control tests would lift the effective sensitivity to about
+    ## 1 - (1 - 0.85)^2 = 0.98. This variant re-fits the confirmed stream with a
+    ## higher, tighter process-sensitivity prior (Beta(38, 2), mean 0.95) to
+    ## check whether the confirmed-case level and outbreak size respond to
+    ## crediting the repeat-control confirmation process (issue #374).
+    confirmed_process_sensitivity = (history, cc, onsets, k, p_drc, bg, tau,
+        bvd; kwargs...) -> confirmed_cases_model(
+        history, cc, onsets, k, p_drc, bg, tau, bvd;
+        sensitivity = test_sensitivity_model(
+            sensitivity_prior = Beta(38.0, 2.0)),
         kwargs...)
 
     ## Faster early-epidemic clock: common ancestor ~17 days more recent.
@@ -275,7 +294,10 @@ function build_fit_specs(obs;
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
+            (; id = "sens_ruleout_sensitivity", kind = :chain,
+                thunk = () -> refit_joint_variant(
+                    confirmed = confirmed_process_sensitivity)))
     end
     return specs
 end

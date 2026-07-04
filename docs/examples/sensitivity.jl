@@ -849,6 +849,76 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
+# ## Rule-out / confirmation-process sensitivity
+#
+# This sensitivity re-fit runs on main and release docs builds only and is
+# skipped on PR previews to keep the preview builds fast (controlled by the
+# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the table
+# and figure below are replaced by a short note in place of the re-fit.
+#
+# The confirmed stream scales true BVD infections by the assay sensitivity, a
+# single-analytical-draw prior centred near 0.85. But the situation reports
+# show rule-out is an investigative decision, not one negative PCR: suspects
+# are confirmed or reclassified through a deep investigation with repeat
+# control tests (discharge itself needs two negatives), a probable category
+# absorbs untested deaths, and the non-cas label is reversible
+# [see issue #374]. Crediting that repeat-control process, the effective
+# sensitivity of confirmation is higher than a single assay: two independent
+# control tests would lift it to about $1-(1-0.85)^2\approx0.98$.
+# We re-fit the joint model with a higher, tighter process-sensitivity prior
+# on the confirmed stream (mean 0.95) and compare the infection count to date.
+# The re-fit uses the full headline settings (1000 draws across two chains).
+#
+# A higher sensitivity means each confirmed case implies fewer true
+# infections, so the infection count should if anything edge down; a large
+# shift would flag that the single-assay sensitivity assumption matters for
+# the estimate.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint with the higher confirmation-process sensitivity</summary>
+#md # ```
+
+## The rule-out (process-sensitivity) re-fit is defined in the fit registry
+## (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
+posterior_C_ruleout = RUN_SENSITIVITY ?
+                      vec(Array(chn_joint_ruleout_sensitivity[:C_T])) : nothing
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Rule-out sensitivity infection-count table</summary>
+#md # ```
+
+ruleout_sensitivity_table = RUN_SENSITIVITY ?
+                            streams_table("baseline (single-assay s)" => posterior_C_joint,
+    "repeat-control process s" => posterior_C_ruleout) :
+                            Markdown.md"_Rule-out sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+ruleout_sensitivity_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Rule-out sensitivity infection-count density plot</summary>
+#md # ```
+
+ruleout_sensitivity_fig = RUN_SENSITIVITY ?
+                          plot_cumulative_cases(
+    "baseline (single-assay s)" => posterior_C_joint,
+    "repeat-control process s" => posterior_C_ruleout; scenarios = []) :
+                          Markdown.md"_Rule-out sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+ruleout_sensitivity_fig #hide
+
 # ## Saving sensitivity results
 #
 # The stream-comparison and frozen-fit tables and the per-stream reproduction
