@@ -6,6 +6,28 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.8.0
+
+Changes since v1.7.0.
+
+### Model
+
+- Split the modelled in-care occupancy into confirmed and suspected sub-
+  stocks, fit as separate prevalence series and scored against the `Tableau 6`
+  `dont confirmes` / `dont suspects` census in place of the total on the days
+  it is published (a per-day total-or-split switch). The confirmed sub-stock
+  is the confirmed subset of the occupied BVD true-case stock, carved out by
+  the in-care confirmation hazard borrowed from the lab pipeline; the suspect
+  sub-stock is the remainder. Identified only where the lab stream supplies a
+  non-zero hazard, otherwise a no-op (#344).
+- Scaled the borrowed in-care confirmation hazard by a sampled
+  confirmation-rate modifier `ρ = exp(γ_conf)`, identified by the
+  confirmed/suspected-in-care split. Admitted suspects are held for repeated
+  exclusion testing before their status settles, so in-care confirmation runs
+  slower than the community rate (`ρ < 1`); without the modifier the split was
+  forced to the borrowed community hazard and systematically over-confirmed the
+  in-care census.
+
 ## v1.7.0
 
 Changes since v1.6.0.
@@ -28,21 +50,6 @@ Changes since v1.6.0.
   on the infection case-fatality, identified by the in-care death flow rather
   than estimated independently. The daily discharge flows are scored as
   optional negative-binomial streams (resolves #338).
-- Split the modelled in-care occupancy into confirmed and suspected sub-
-  stocks, fit as separate prevalence series and scored against the `Tableau 6`
-  `dont confirmes` / `dont suspects` census in place of the total on the days
-  it is published (a per-day total-or-split switch). The confirmed sub-stock
-  is the confirmed subset of the occupied BVD true-case stock, carved out by
-  the in-care confirmation hazard borrowed from the lab pipeline; the suspect
-  sub-stock is the remainder. Identified only where the lab stream supplies a
-  non-zero hazard, otherwise a no-op (#344).
-- Scaled the borrowed in-care confirmation hazard by a sampled
-  confirmation-rate modifier `ρ = exp(γ_conf)`, identified by the
-  confirmed/suspected-in-care split. Admitted suspects are held for repeated
-  exclusion testing before their status settles, so in-care confirmation runs
-  slower than the community rate (`ρ < 1`); without the modifier the split was
-  forced to the borrowed community hazard and systematically over-confirmed the
-  in-care census.
 - Added a manual, opt-in occupancy reclassification-break offset. Break days
   are listed explicitly in `[occupancy_break_dates]`, replacing the removed
   threshold detector that flagged too many days. A level step is fitted into
