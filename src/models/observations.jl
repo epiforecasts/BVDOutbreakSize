@@ -1847,19 +1847,25 @@ treatment effect.
 
 The label overlay carves the occupied stock into a confirmed and a suspect
 sub-stock without removing anyone from the total. Confirmation is a
-RELABELLING of an occupied true case at the daily hazard `τ_test · p_pos`
-borrowed from the confirmed lab pipeline ([`confirmed_cases_model`](@ref)),
-NOT a separate compartment a patient must enter before dying. The confirmed
-sub-stock is the confirmed subset of the occupied BVD true-case stock,
-accumulated forward as `O_conf(t) = O_conf(t-1) + τ_test · p_pos(t) ·
+RELABELLING of an occupied true case at the daily hazard `ρ · τ_test · p_pos`:
+the community confirmation hazard `τ_test · p_pos` borrowed from the confirmed
+lab pipeline ([`confirmed_cases_model`](@ref)), scaled by a sampled in-care
+confirmation-rate modifier `ρ = exp(γ_conf)`. It is NOT a separate compartment
+a patient must enter before dying. An admitted suspect is held for repeated
+exclusion testing and laboratory turnaround before their status settles, so
+in-care confirmation runs slower than the community rate (`ρ < 1`) and most
+occupied patients stay classified suspected pending confirmation; the modifier
+is the free lever the confirmed/suspect-in-care census identifies, without
+which the split is forced to whatever the borrowed community hazard implies.
+The confirmed sub-stock is the confirmed subset of the occupied BVD true-case
+stock, accumulated forward as `O_conf(t) = O_conf(t-1) + ρ · τ_test · p_pos(t) ·
 (O_bvd(t-1) − O_conf(t-1)) − \\text{BVD discharges} · O_conf(t-1)/O_bvd(t-1)`,
 and the suspect sub-stock is the remainder `O_susp(t) = D(t) − O_conf(t)` (all
 non-BVD rule-out occupancy plus the not-yet-confirmed BVD occupancy). A true
 case that dies before confirmation is therefore a suspect death, included in
 the single combined deaths flow. Gueris (confirmed recoveries) is the
-confirmed subset of recoveries; confirmation (~1.8 d) is far faster than
-recovery (~14 d), so it is ~all true-case recoveries, computed as the
-confirmed subset for correctness.
+confirmed subset of recoveries, computed as the confirmed subset for
+correctness.
 
 Capacity enters only as a fixed, data-derived censoring bound on the
 observations — the latent demand stays UNCAPPED (it is the demand). The
@@ -1940,6 +1946,12 @@ and replication.
         cfr_modifier_prior = Normal(0.0, 0.5),
         ## Small abscond / loss-to-follow-up fraction of occupancy per day.
         abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
+        ## In-care confirmation-rate modifier prior (log scale): γ_conf scales
+        ## the borrowed community confirmation hazard τ_test·p_pos to the
+        ## effective in-care rate ρ = exp(γ_conf). Centred on zero (ρ = 1, the
+        ## borrowed rate unchanged) so the confirmed/suspect-in-care split, not
+        ## the prior, sets it; weakly informative.
+        incare_confirm_log_prior = Normal(0.0, 0.5),
         ## Short suspected→admission delay (report → reaching a bed: triage,
         ## transport, bed-wait), distinct from the report→lab receipt delay.
         admission_delay = censored_delay_model(
@@ -2064,12 +2076,12 @@ and replication.
     ruleout_daily = convolve_delay(A_bg, ruleout_los_state.pmf)
     admit_daily = A_bvd .+ A_bg
 
-    ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from the lab
-    ## pipeline: the rate at which an occupied, not-yet-confirmed BVD true case
-    ## is relabelled confirmed. `nothing` (standalone, no lab stream) ⇒ a zero
+    ## Daily community confirmation hazard `τ_test · p_pos` borrowed from the lab
+    ## pipeline: the community rate at which a not-yet-confirmed BVD suspect is
+    ## relabelled confirmed. `nothing` (standalone, no lab stream) ⇒ a zero
     ## hazard, so the confirmed sub-stock stays empty and the suspect sub-stock
     ## carries the whole occupancy.
-    conf_hazard = if conf_hazard_daily === nothing
+    borrowed_hazard = if conf_hazard_daily === nothing
         zeros(eltype(A_bvd), n)
     elseif eltype(conf_hazard_daily) === Any
         convert(Vector{eltype(C)}, conf_hazard_daily)
@@ -2087,7 +2099,28 @@ and replication.
     ## the lab pipeline supplies a non-zero hazard. Detected from the hazard
     ## itself (a structural zero), not a flag, so it degrades like the other
     ## optional streams do when their input is absent.
-    split_active = any(>(zero(eltype(conf_hazard))), conf_hazard)
+    split_active = any(>(zero(eltype(borrowed_hazard))), borrowed_hazard)
+
+    ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed
+    ## community hazard: the effective daily rate at which an occupied,
+    ## not-yet-confirmed true case is relabelled confirmed is `ρ · τ_test · p_pos`.
+    ## An admitted suspect is held for repeated exclusion testing and laboratory
+    ## turnaround before their status settles, so in-care confirmation proceeds
+    ## slower than the community routing-times-positivity rate (ρ < 1) and most
+    ## occupied patients remain classified suspected pending confirmation. Without
+    ## it the split census is forced to whatever the borrowed community hazard
+    ## implies — systematically over-confirming the census — so ρ is the free
+    ## lever the confirmed/suspect-in-care split identifies. Sampled only when the
+    ## borrowed hazard is non-zero (no lab stream ⇒ ρ = 1, a no-op on the zero
+    ## hazard), matching the `k_external` conditional-sampling pattern, so no
+    ## unidentified dimension is added when the split is absent.
+    if split_active
+        incare_confirm_log ~ incare_confirm_log_prior
+    else
+        incare_confirm_log = zero(eltype(borrowed_hazard))
+    end
+    ρ_conf = exp(incare_confirm_log)
+    conf_hazard = ρ_conf .* borrowed_hazard
 
     ## Event-accumulation occupancy: build the total demand as a forward running
     ## balance of admission, discharge and abscond events, and carve it into the
@@ -2286,6 +2319,10 @@ and replication.
     expected_confirmed_incare := safe_rate(conf_incare_T)
     expected_suspect_incare := safe_rate(susp_incare_T)
     incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
+    ## In-care confirmation-rate modifier ρ (raw; can exceed one, so reported
+    ## directly). ρ < 1 means occupied suspects are confirmed slower than the
+    ## borrowed community hazard, held for repeated exclusion testing.
+    incare_confirm_modifier := ρ_conf
     ## Cut-off cumulative occupancy reclassification offset (fitted; can be
     ## negative, so reported raw rather than through `safe_rate`). Reports how
     ## much of the observed reclassification the model absorbed as a reporting
@@ -2308,7 +2345,7 @@ and replication.
         occupancy_break = isempty(occ_break_offset) ? z0 :
                           last(occ_break_offset),
         confirmed_incare = conf_split, suspect_incare = susp_split,
-        confirmed_incare_deaths_daily,
+        confirmed_incare_deaths_daily, incare_confirm_modifier = ρ_conf,
         expected_confirmed_incare = safe_rate(conf_incare_T),
         expected_suspect_incare = safe_rate(susp_incare_T),
         expected_isolation = safe_rate(occ_T),

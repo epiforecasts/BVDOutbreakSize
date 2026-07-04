@@ -698,6 +698,9 @@ death-confirmation positivity (`death_confirmation`).
     incare_cfr := treatment_state.CFR_iso
     incare_cfr_modifier := treatment_state.β_iso
     abscond_fraction := treatment_state.abscond_frac
+    ## In-care confirmation-rate modifier ρ on the borrowed community
+    ## confirmation hazard, identified by the confirmed/suspected-in-care split.
+    incare_confirm_modifier := treatment_state.incare_confirm_modifier
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean

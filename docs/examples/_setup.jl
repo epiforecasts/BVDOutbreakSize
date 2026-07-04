@@ -71,6 +71,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## per-release estimates in `released_df`, so no per-release-date current-
     ## model re-fits are run here.
     frozen_cutoffs = default_frozen_cutoffs()
+    ## Chamla et al.'s 8 June confirmed-case anchor, kept out of the
+    ## McCabe-matched `frozen_cutoffs` but reused for the Chamla comparison and
+    ## the estimate-evolution overlay.
+    chamla_cutoff = default_chamla_cutoff()
 
     ## The frozen-joint, sensitivity-variant and delay/clock helpers used by the
     ## re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so they can be run from
@@ -112,6 +116,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
     _fit_specs = build_fit_specs(obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
+        chamla_cutoff = chamla_cutoff,
         validation_cutoff = validation_cutoff, run_sensitivity = RUN_SENSITIVITY)
     _fit_results = fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
                                      cache_dir = _fit_cache_dir, refit = _refit_all)
@@ -128,6 +133,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     frozen_lastweek = _fits["frozen_validation"]
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
+    frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
     frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
@@ -169,6 +175,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
         :incare_cfr => "in-care fatality (CFR_iso)",
         :incare_cfr_modifier => "in-care fatality log-odds modifier",
+        :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
         Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");

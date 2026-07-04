@@ -6,6 +6,28 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.8.0
+
+Changes since v1.7.0.
+
+### Model
+
+- Split the modelled in-care occupancy into confirmed and suspected sub-
+  stocks, fit as separate prevalence series and scored against the `Tableau 6`
+  `dont confirmes` / `dont suspects` census in place of the total on the days
+  it is published (a per-day total-or-split switch). The confirmed sub-stock
+  is the confirmed subset of the occupied BVD true-case stock, carved out by
+  the in-care confirmation hazard borrowed from the lab pipeline; the suspect
+  sub-stock is the remainder. Identified only where the lab stream supplies a
+  non-zero hazard, otherwise a no-op (#344).
+- Scaled the borrowed in-care confirmation hazard by a sampled
+  confirmation-rate modifier `ρ = exp(γ_conf)`, identified by the
+  confirmed/suspected-in-care split. Admitted suspects are held for repeated
+  exclusion testing before their status settles, so in-care confirmation runs
+  slower than the community rate (`ρ < 1`); without the modifier the split was
+  forced to the borrowed community hazard and systematically over-confirmed the
+  in-care census.
+
 ## v1.7.0
 
 Changes since v1.6.0.
@@ -28,14 +50,6 @@ Changes since v1.6.0.
   on the infection case-fatality, identified by the in-care death flow rather
   than estimated independently. The daily discharge flows are scored as
   optional negative-binomial streams (resolves #338).
-- Split the modelled in-care occupancy into confirmed and suspected sub-
-  stocks, fit as separate prevalence series and scored against the `Tableau 6`
-  `dont confirmes` / `dont suspects` census in place of the total on the days
-  it is published (a per-day total-or-split switch). The confirmed sub-stock
-  is the confirmed subset of the occupied BVD true-case stock, carved out by
-  the in-care confirmation hazard borrowed from the lab pipeline; the suspect
-  sub-stock is the remainder. Identified only where the lab stream supplies a
-  non-zero hazard, otherwise a no-op (#344).
 - Added a manual, opt-in occupancy reclassification-break offset. Break days
   are listed explicitly in `[occupancy_break_dates]`, replacing the removed
   threshold detector that flagged too many days. A level step is fitted into
@@ -56,8 +70,11 @@ Changes since v1.6.0.
   streams. The treatment-centre flow methods section was rewritten, and the
   flow streams added to the data-overview table.
 - Added a comparison of the confirmed-case projection against Chamla et al.
-  as a second external comparator, forward-projected from the frozen 27 May
-  fit (resolves #340).
+  as a second external comparator, forward-projected from a dedicated frozen
+  fit at their 8 June confirmed-case calibration anchor. This carries the
+  confirmed-case testing history, replacing the poorly-identified 27 May proxy
+  that had effectively no testing data. The 8 June fit also shows as a vintage
+  in the estimate-evolution overlay (resolves #340, #349).
 - Refreshed the released-estimate evolution overlay to v1.6.0 and refresh it
   automatically in continuous integration before each documentation deploy.
   Dropped the per-release current-model re-fits from the estimate-evolution
@@ -125,6 +142,10 @@ Changes since v1.6.0.
   and resolves the root manifest rather than `docs/Manifest.toml`, so the
   `fit`, `render` and `combine` jobs resolve the same package set (resolves
   #368).
+- Set `include-matrix: false` on the `render` job's env-cache step so the two
+  render jobs restore the precompiled depot shared by `list` and `fit` instead
+  of keying on the matrix `page`, which missed the shared cache and made each
+  render re-precompile the whole stack (~530 deps) before rendering.
 
 ## v1.6.0
 

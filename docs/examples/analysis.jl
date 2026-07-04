@@ -1384,6 +1384,7 @@ cfr_prior_fig #hide
 #
 # The laboratory label carves the census into a confirmed and a suspected
 # sub-stock. Confirmation relabels a true case already in a bed at the daily
+# hazard $\rho\,\tau_{\text{test}}\,p_{\text{pos},t}$: the community confirmation
 # hazard $\tau_{\text{test}}\,p_{\text{pos},t}$ — the share of suspects routed to
 # the laboratory times the day's positivity — borrowed from the confirmed-case
 # pipeline rather than re-estimated, so the in-care confirmed stock is a subset of
@@ -2614,7 +2615,8 @@ surveillance_summary = summary_table(chn_joint,
         :death_confirmation, :expected_confirmed_deaths_T,
         :isolation_admission, :isolation_dispersion, :expected_isolation_T,
         :expected_bed_demand_T, :bed_capacity, :bed_shortfall_T,
-        :incare_cfr, :incare_cfr_modifier, :isolation_death_los_mean,
+        :incare_cfr, :incare_cfr_modifier, :incare_confirm_modifier,
+        :isolation_death_los_mean,
         :isolation_recovery_los_mean, :abscond_fraction,
         :recovery_probability, :recovered_dispersion, :expected_recovered_T];
     digits = 3);

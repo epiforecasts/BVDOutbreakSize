@@ -441,6 +441,15 @@ end
     @test any(k -> occursin("occupancy_break", k), ks)
     @test !any(k -> occursin("total_break", k), ks)
     @test any(k -> occursin("abscond_frac", k), ks)
+    ## With a non-zero borrowed hazard the in-care confirmation-rate modifier is
+    ## sampled (its log parameter) and exposed as a finite positive deterministic
+    ## ρ, the free lever the confirmed/suspected-in-care split identifies.
+    @test any(k -> occursin("incare_confirm_log", k), ks)
+    ρ_key = first(k for k in keys(chn)
+    if occursin("incare_confirm_modifier", string(k)))
+    ρ = vec(Array(chn[ρ_key]))
+    @test all(isfinite, ρ)
+    @test all(ρ .> 0)
     C_T = vec(Array(chn[:C_T]))
     @test all(isfinite, C_T)
     @test all(C_T .> 0)
@@ -531,6 +540,10 @@ end
     ## The split census is unscored (no sampled or scored sub-stock increments).
     @test !any(k -> occursin("confirmed_incare_obs.increments", k), ks)
     @test !any(k -> occursin("suspect_incare_obs.increments", k), ks)
+    ## With a structurally-zero borrowed hazard the in-care confirmation-rate
+    ## modifier is unidentified, so it is not sampled (ρ = 1, a no-op) rather
+    ## than adding a vestigial dimension that only follows its prior.
+    @test !any(k -> occursin("incare_confirm_log", k), ks)
     ## The total-occupancy backbone still runs and stays finite (no 1e45 blow-up
     ## from scoring against a structurally-zero confirmed sub-stock).
     C_T = vec(Array(chn[:C_T]))
