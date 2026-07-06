@@ -31,6 +31,15 @@ Changes since v1.7.0.
   the ascertainment / outbreak-size degeneracy a latent-scaled background would
   reopen. The `sens_no_contact` sensitivity re-fit turns it off for comparison
   (addresses #374).
+### Documentation and infrastructure
+
+- Excluded the published `released_estimates.csv` overlay from the fit
+  content hash, so the render jobs reuse the matrix fits instead of
+  refitting every model. The render step rewrites that overlay before
+  rendering, which changed the data-tree digest and busted every fit
+  cache key; the overlay feeds only the estimate-evolution figure and is
+  not a fit input. `tree_sha256` and `content_hash` gained an exclude for
+  non-input data files, and genuine data changes still refit.
 
 ## v1.7.0
 
