@@ -10,6 +10,22 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.7.0.
 
+### Model
+
+- Scored the confirmed-case laboratory positives as an overdispersed
+  `BetaBinomial` of the observed analysed denominator instead of a plain
+  `Binomial`. A plain `Binomial` on denominators of several hundred
+  specimens gave posterior-predictive intervals far too tight, so the
+  confirmed stream was systematically under-covered: the smooth pooled /
+  composition-linked per-window positivity does not capture the day-to-day
+  laboratory batching and within-window positivity heterogeneity the
+  confirmed counts carry. A single intra-window overdispersion `ρ`
+  (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`)
+  inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`,
+  identified across the laboratory windows, and recovers the `Binomial` as
+  `ρ → 0`. The mean structure and the composition link that identifies the
+  background `λ_bg` are unchanged.
+
 ## v1.7.0
 
 Changes since v1.6.0.

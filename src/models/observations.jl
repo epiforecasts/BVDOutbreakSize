@@ -29,6 +29,36 @@ function safe_nbinomial(k, μ)
 end
 
 """
+NaN / Inf-safe overdispersed-`Binomial` (`BetaBinomial`) constructor
+parameterised by the trial count `n`, the mean positive probability `p`
+and an intra-window overdispersion `ρ ∈ (0, 1)`. The `BetaBinomial(n, α, β)`
+has mean `n·p` and variance `n·p·(1 − p)·(1 + (n − 1)·ρ)` with `α = s·p`,
+`β = s·(1 − p)` and concentration `s = (1 − ρ)/ρ`, so `ρ → 0` (`s → ∞`)
+recovers the plain `Binomial(n, p)` and larger `ρ` inflates the variance
+above the Binomial. This adds the extra-Binomial variation the confirmed
+positives carry (day-to-day laboratory batching and within-window
+positivity heterogeneity the pooled per-window `p` does not capture),
+mirroring how the count streams use the overdispersed `NegativeBinomial`
+rather than a Poisson. `ρ` is floored away from `0` (capping `s`) and `p`
+clamped into `(0, 1)` so the distribution stays defined under extreme NUTS
+proposals during warmup. Shared by the confirmed-positives windows.
+"""
+function safe_betabinomial(n::Integer, p, ρ)
+    T = float(promote_type(typeof(p), typeof(ρ)))
+    lo = eps(T)
+    ## Clamp the positivity into the open unit interval.
+    pc = isfinite(p) ? clamp(T(p), lo, one(T) - lo) : one(T) / 2
+    ## Floor ρ at 1e-6 (cap the concentration `s` at ≈1e6) so a near-zero
+    ## draw stays a well-conditioned near-Binomial rather than an infinite
+    ## `s`, and cap it below 1 so `s` stays positive.
+    ρc = isfinite(ρ) ? clamp(T(ρ), T(1e-6), one(T) - T(1e-6)) : T(1e-6)
+    s = (one(T) - ρc) / ρc
+    α = max(s * pc, lo)
+    β = max(s * (one(T) - pc), lo)
+    return BetaBinomial(n, α, β)
+end
+
+"""
 Modelled between-vintage increments of a daily series `daily`, summed
 directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
@@ -603,8 +633,12 @@ end
 """
 Per-window confirmed-positives likelihood, expressed as a vector
 likelihood scored against the observed analysed denominators. Given the
-per-window analysed counts `analysed` and positivities `p_pos`, scores the
-observed `positives` with one `Binomial(analysed[i], p_pos[i])` per window.
+per-window analysed counts `analysed`, positivities `p_pos` and the
+intra-window overdispersion `ρ`, scores the observed `positives` with one
+`BetaBinomial(analysed[i], p_pos[i], ρ)` per window (see
+[`safe_betabinomial`](@ref)). The overdispersion adds the extra-Binomial
+variation the confirmed counts carry; `ρ → 0` recovers the plain
+`Binomial(analysed[i], p_pos[i])`.
 `positives` is the model argument on the LHS of `~`, so a supplied vector
 is observed data DynamicPPL conditions on (mirroring
 [`vintage_increments_model`](@ref)) and a `missing` argument is sampled,
@@ -614,13 +648,14 @@ observed (or sampled) positives.
 """
 @model function confirmed_positives_model(
         positives::Union{Missing, AbstractVector{<:Integer}},
-        analysed::AbstractVector{<:Integer}, p_pos::AbstractVector)
+        analysed::AbstractVector{<:Integer}, p_pos::AbstractVector,
+        ρ::Real = 0.0)
     nv = length(analysed)
     if ismissing(positives)
         positives = Vector{Union{Missing, Int}}(missing, nv)
     end
     for i in 1:nv
-        positives[i] ~ Binomial(analysed[i], p_pos[i])
+        positives[i] ~ safe_betabinomial(analysed[i], p_pos[i], ρ)
     end
     return (; positives)
 end
@@ -629,10 +664,11 @@ end
 Late confirmed-vintage likelihood, one per-window confirmed increment over
 the days after the last cumulative laboratory date. Each window scores its
 increment two ways depending on whether a 24h analysed denominator was
-published for that day (`analysed[i] > 0`): an anchored day is a
-`Binomial(analysed[i], p_pos[i])` of the observed denominator (like an
-observed window), a unanchored day a `NegativeBinomial` of the modelled
-laboratory volume `modelled[i]` sharing the surveillance dispersion `k`.
+published for that day (`analysed[i] > 0`): an anchored day is an
+overdispersed `BetaBinomial(analysed[i], p_pos[i], ρ)` of the observed
+denominator (like an observed window, see [`safe_betabinomial`](@ref)), a
+unanchored day a `NegativeBinomial` of the modelled laboratory volume
+`modelled[i]` sharing the surveillance dispersion `k`.
 Keeping both in one submodel preserves a single per-window predict-key
 vector (`<prefix>.increments[i]`) over all late days in order, so the
 posterior-predictive trajectory reconstructs without interleaving.
@@ -647,14 +683,14 @@ no-extrapolation probe.
 @model function late_confirmed_model(
         increments::Union{Missing, AbstractVector},
         modelled::AbstractVector, analysed::AbstractVector{<:Integer},
-        p_pos::AbstractVector, k::Real)
+        p_pos::AbstractVector, k::Real, ρ::Real = 0.0)
     n = length(modelled)
     if ismissing(increments)
         increments = Vector{Union{Missing, Int}}(missing, n)
     end
     for i in 1:n
         if analysed[i] > 0
-            increments[i] ~ Binomial(analysed[i], p_pos[i])
+            increments[i] ~ safe_betabinomial(analysed[i], p_pos[i], ρ)
         else
             increments[i] ~ safe_nbinomial(k, safe_rate(modelled[i]))
         end
@@ -843,10 +879,14 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   analysed count is observed. The specimens-received series is not
   modelled: analysed is the throughput that actually produces confirmed
   cases, and received overshoots it by the laboratory backlog.
-- Confirmed positives. The confirmed counts are scored as a `Binomial` of
-  the observed specimens-*analysed* denominator in each laboratory window
-  ([`confirmed_positivity_windows`](@ref)), with a partially-pooled
-  per-window positivity ([`confirmed_positivity_model`](@ref)).
+- Confirmed positives. The confirmed counts are scored as an overdispersed
+  `BetaBinomial` of the observed specimens-*analysed* denominator in each
+  laboratory window ([`confirmed_positivity_windows`](@ref),
+  [`safe_betabinomial`](@ref)), with a partially-pooled per-window
+  positivity ([`confirmed_positivity_model`](@ref)) and a shared
+  intra-window overdispersion ([`confirmed_overdispersion_model`](@ref)) so
+  the confirmed intervals capture the extra-Binomial day-to-day laboratory
+  variation rather than the far-too-tight plain Binomial spread.
   Conditioning the positives on the observed analysed denominator (rather
   than a modelled count scaled by `p_drc · s_test · τ_test`) removes the
   multiplicative ascertainment ridge that basin-split the joint, so the
@@ -897,6 +937,7 @@ quantities.
         severity_enrichment = severity_enrichment_model(),
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
+        overdispersion = confirmed_overdispersion_model(),
         ## When false, the early/late windows (confirmed vintages with NO
         ## observed analysed denominator) are not scored — only the
         ## observed-denominator Binomial windows contribute, so confirmed
@@ -907,6 +948,15 @@ quantities.
     ## `missing` cut-off scalar means generator mode: observed increments are
     ## left missing so `predict` resamples them.
     have_data = !ismissing(confirmed_cases)
+
+    ## Intra-window overdispersion for the confirmed positives. The observed
+    ## and anchored-late windows are scored as an overdispersed BetaBinomial
+    ## of the observed analysed denominator (`safe_betabinomial`), so the
+    ## confirmed intervals are not the far-too-tight plain Binomial. Sampled
+    ## once and shared across all confirmed windows regardless of the
+    ## positivity link.
+    od_state ~ to_submodel(overdispersion, false)
+    ρ_conf = od_state.ρ
 
     ## Laboratory capacity onset. No specimens are analysed before testing
     ## existed, so the modelled analysed volume is gated to zero before the
@@ -1047,8 +1097,8 @@ quantities.
             qe = clamp(qf, lo, hi)
             p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
             ## Final guard: clamp into (0,1) and replace any non-finite value
-            ## with the composition so the confirmed Binomial always sees a
-            ## valid probability even under an AD perturbation.
+            ## with the composition so the confirmed BetaBinomial always sees
+            ## a valid probability even under an AD perturbation.
             clamp(isfinite(p) ? p : φ, lo, hi)
         end
     else
@@ -1073,17 +1123,20 @@ quantities.
     early_increments ~ to_submodel(
         vintage_increments_model(early_mean, early_obs, k))
 
-    ## Observed windows: Binomial of the observed analysed denominator.
+    ## Observed windows: overdispersed BetaBinomial of the observed analysed
+    ## denominator (`ρ_conf` the intra-window overdispersion).
     obs_p = p_pos[(n_early + 1):(n_early + n_obs)]
     obs_positives = (have_data && n_obs > 0) ? collect(windows.obs_positives) :
                     missing
     confirmed_positives ~ to_submodel(
-        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p))
+        confirmed_positives_model(obs_positives, windows.obs_analysed, obs_p,
+        ρ_conf))
 
     ## Late windows: confirmed-only vintages after the last laboratory date.
     ## A day that publishes a 24h analysed count (`late_analysed > 0`) is
-    ## scored as a Binomial of that observed denominator — like an observed
-    ## window, anchoring its positivity to data — and each remaining unanchored day
+    ## scored as an overdispersed BetaBinomial of that observed denominator —
+    ## like an observed window, anchoring its positivity to data — and each
+    ## remaining unanchored day
     ## as NegBinomial(positivity × modelled volume). The modelled volume is
     ## binned over each late window's own day range, with the running edge
     ## PINNED at the last laboratory day (`late_start`): `bin_increments`
@@ -1121,7 +1174,7 @@ quantities.
     end
     late_increments ~ to_submodel(
         late_confirmed_model(late_obs, late_mean, windows.late_analysed,
-        late_p, k))
+        late_p, k, ρ_conf))
 
     expected_analysed := safe_rate(sum(analysed_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
