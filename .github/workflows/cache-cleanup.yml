@@ -1,0 +1,34 @@
+name: Cleanup PR caches
+
+# GitHub scopes Actions caches to the branch that created them and enforces a
+# 10 GB per-repo budget, evicting least-recently-used caches when it is
+# exceeded. Each PR run of the Test/Code coverage/docs workflows saves several
+# ~500-900 MB Julia depot caches (one per OS, Julia version and job), and these
+# linger after the PR merges. They accumulate quickly (a single busy PR can hold
+# 30+ caches) and crowd out the shared `docs-env` depot that main's docs build
+# restores, forcing render jobs to re-precompile the whole stack. Delete a PR's
+# caches when it closes so they do not pile up against the budget.
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete caches scoped to the closed PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF: refs/pull/${{ github.event.pull_request.number }}/merge
+        run: |
+          echo "Deleting caches scoped to $REF"
+          ids=$(gh cache list -R "$REPO" --ref "$REF" --limit 100 \
+            --json id --jq '.[].id')
+          for id in $ids; do
+            gh cache delete "$id" -R "$REPO" && echo "deleted $id" || true
+          done
