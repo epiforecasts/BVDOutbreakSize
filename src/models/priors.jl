@@ -120,15 +120,13 @@ truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
 continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
 3.46–7.84).
 
-The reported summaries describe the CONTINUOUS delay (epidist corrects the
-censoring), so the confirmed onset→report→receipt convolution is grounded on
-its own continuous mean and median rather than a discretised or double-censored
-version. The continuous mean is the sum of the two legs' means and the
-continuous variance the sum of their variances; the continuous median follows
-by [`gamma_median_wh`](@ref). Each is fitted to the reported value as a Normal
-observation whose SD is the reported 95% CrI half-width over 1.96 (`mean_se`,
-`median_se`), so the cohort's uncertainty enters directly and the constraint is
-soft. Returns a NamedTuple `(; mean_obs, mean_se, median_obs, median_se)` for
+The confirmed onset→report→receipt convolution is grounded on its mean and
+median. The mean is the sum of the two legs' means and the variance the sum of
+their variances; the median follows by [`gamma_median_wh`](@ref). Each is fitted
+to the reported value as a Normal observation whose SD is the reported 95% CrI
+half-width over 1.96 (`mean_se`, `median_se`), so the cohort's uncertainty
+enters directly and the constraint is soft. Returns a NamedTuple
+`(; mean_obs, mean_se, median_obs, median_se)` for
 the `onset_to_sample` argument of [`bvd_joint`](@ref).
 """
 function nejm_onset_to_sample(; mean::Real = 7.4,

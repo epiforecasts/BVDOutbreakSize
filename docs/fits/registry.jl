@@ -100,7 +100,7 @@ function build_fit_specs(obs;
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
     end
@@ -142,7 +142,7 @@ function build_fit_specs(obs;
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("variant"))
     end
 
@@ -192,7 +192,7 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains,
+                samples = samples, chains = chains, target_accept = 0.95,
                 callback = fit_callback("joint"))),
         (; id = "exports",
             kind = :chain,

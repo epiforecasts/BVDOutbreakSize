@@ -902,15 +902,12 @@ vintage_table #hide
 # interval ($N = 129$) was estimated with the marginal model of `epidist`
 # [epidist](@cite) correcting for double interval censoring and right
 # truncation [charniga2024](@cite), a Gamma that is preferred over lognormal
-# and Weibull by LOOIC. The cohort reports a continuous mean of $7.4$ d ($95\%$
-# CrI $5.3$-$13.5$) and median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$).
+# and Weibull by LOOIC. The cohort reports a mean of $7.4$ d ($95\%$ CrI
+# $5.3$-$13.5$) and median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$).
 #
-# Because these summaries describe the continuous delay, we ground the
-# convolution's own continuous mean and median, not a discretised or
-# double-censored version. The continuous mean is the sum of the two legs'
-# means and the continuous variance the sum of their variances, and the
-# continuous median follows by the Wilson–Hilferty approximation
-# [wilson1931](@cite),
+# We ground the convolution on its mean and median. The mean is the sum of the
+# two legs' means, the variance the sum of their variances, and the median
+# follows by the Wilson–Hilferty approximation [wilson1931](@cite),
 #
 # ```math
 # \mu_{\text{sam}} = \mu_{\text{rep}} + \mu_{\text{rec}}, \qquad
