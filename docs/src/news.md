@@ -10,6 +10,22 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.7.0.
 
+### Model
+
+- Added an opt-in suspected-case reporting-effort term
+  (`suspected_reporting_effort`, default off), a smooth weekly random walk
+  centred at one that multiplies the suspected-case expected counts alone.
+  It gives the suspected stream the same time-flexibility the confirmed
+  stream already has, so a suspected-specific change in case-finding effort is
+  carried by effort rather than by the reproduction number. With the flag off
+  the suspected likelihood is unchanged, so the headline fit is unaffected.
+
+### Analysis
+
+- Added a reporting-effort sensitivity re-fit and section on the sensitivity
+  page (gated behind `BVD_RUN_SENSITIVITY` like the other re-fits), comparing
+  the current reproduction number with and without the reporting-effort term.
+
 ## v1.7.0
 
 Changes since v1.6.0.

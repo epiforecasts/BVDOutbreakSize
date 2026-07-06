@@ -410,6 +410,13 @@ death-confirmation positivity (`death_confirmation`).
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        ## Opt-in: give the suspected-case stream a smooth time-varying
+        ## reporting-effort multiplier ([`reporting_effort_walk_model`](@ref)) so
+        ## a suspected-specific reporting slowdown is absorbed as changing
+        ## case-finding effort rather than forced onto the reproduction-number
+        ## walk. Default `false` keeps the constant-ascertainment suspected
+        ## likelihood, so the headline fit is unchanged.
+        suspected_reporting_effort::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         tmrca_days::Union{Missing, Real} = missing,
@@ -496,12 +503,27 @@ death-confirmation positivity (`death_confirmation`).
         case_bg_re = nothing
     end
 
+    ## Optional suspected-case reporting-effort walk, gated to the surveillance
+    ## window (from the first suspected-case report). Injected into the cases
+    ## submodel so a suspected-specific reporting slowdown is absorbed as
+    ## changing case-finding effort rather than by the shared reproduction-number
+    ## walk. `false` (default) passes `nothing`, leaving the suspected likelihood
+    ## unchanged.
+    if suspected_reporting_effort
+        eff_onset = isempty(reported_history.days) ? 1 :
+                    clamp(Int(reported_history.days[1]), 1, n)
+        case_effort_re = nn -> reporting_effort_walk_model(nn; onset = eff_onset)
+    else
+        case_effort_re = nothing
+    end
+
     ## Cases first so the suspected-case background `bg_daily` is available to
     ## the deaths stream (which scales it by `cfr_bg` for the death background)
     ## and to the laboratory pipeline.
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k_cases, p_drc;
-        suspected_daily_history, background_re = case_bg_re))
+        suspected_daily_history, background_re = case_bg_re,
+        reporting_effort = case_effort_re))
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))

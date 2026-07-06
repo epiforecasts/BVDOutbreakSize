@@ -108,7 +108,8 @@ function build_fit_specs(obs;
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
-            tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0)
+            tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0,
+            suspected_reporting_effort = false)
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -138,6 +139,7 @@ function build_fit_specs(obs;
                 breakpoint = breakpoint,
                 background_re = true,
                 confirmed_positivity_link = :composition,
+                suspected_reporting_effort = suspected_reporting_effort,
                 deaths = deaths,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
@@ -275,7 +277,10 @@ function build_fit_specs(obs;
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
+            (; id = "sens_reporting_effort", kind = :chain,
+                thunk = () -> refit_joint_variant(
+                    suspected_reporting_effort = true)))
     end
     return specs
 end

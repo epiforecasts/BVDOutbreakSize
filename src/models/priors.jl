@@ -860,6 +860,49 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
+Suspected-case reporting-effort multiplier as a SMOOTH weekly lognormal random
+walk over the surveillance window, centred at one. It multiplies the BVD
+component of the suspected-case expected counts in [`reported_cases_model`](@ref)
+ONLY — not the shared BVD onset-to-report series `bvd_reports_daily` the
+laboratory, treatment and death streams reuse — so it captures how the
+case-finding EFFORT behind the DRC suspected counts changed over the outbreak
+(surveillance teams, testing throughput, suspect reclassification) without
+touching the shared latent onsets. It is identified by the discrepancy between
+the suspected-case series and the onset trajectory the other streams pin, so it
+absorbs a suspected-specific reporting slowdown that would otherwise be forced
+onto the reproduction-number walk (the joint reads a flattening suspect inflow
+as a transmission slowdown when only a constant ascertainment reconciles it).
+
+The log-multiplier follows a non-centred weekly random walk anchored at zero on
+the first knot (effort = 1 at the window onset), linearly interpolated to the
+daily grid, the same parameterisation as [`background_walk_model`](@ref) and the
+reproduction-number walk. `σ_eff` is the per-knot innovation SD on the log
+scale; the prior is a tight half-normal so the effort is a gentle drift rather
+than week-to-week jumps, and `σ_eff → 0` recovers a constant effort of one
+exactly. Before the window `onset` the multiplier is one (a no-op there, where
+there are no suspected data). Returns `(; effort, σ_eff, z)` with `effort` a
+length-`n` daily multiplier.
+"""
+@model function reporting_effort_walk_model(n::Integer;
+        onset::Integer = 1, week::Integer = 7,
+        sigma_prior = truncated(Normal(0.0, 0.15); lower = 0))
+    t0 = clamp(Int(onset), 1, n)
+    days = knot_days(n; week = week, start = t0)
+    nb = length(days)
+    σ_eff ~ sigma_prior
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
+    steps = σ_eff .* z[1:max(nb - 1, 0)]
+    log_knots = vcat(zero(σ_eff), cumsum(steps))
+    walk = interpolate_knots(log_knots, days, n)
+    T = promote_type(eltype(walk), typeof(σ_eff))
+    effort = ones(T, n)
+    @inbounds for t in t0:n
+        effort[t] = exp(walk[t])
+    end
+    return (; effort, σ_eff, z = z[1:max(nb - 1, 0)])
+end
+
+"""
 PCR sensitivity prior. `Beta(10, 1.76)` is centred near a mean of about 0.85
 with a spread of roughly 0.1; being a Beta it is not symmetric and carries
 somewhat more mass toward high sensitivity. Confirmation runs on the altona

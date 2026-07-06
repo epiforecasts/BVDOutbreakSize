@@ -520,6 +520,13 @@ sitrep.
         suspected_daily_history = (; days = Int[], counts = Int[]),
         positivity = test_positivity_model(),
         background_re = nothing,
+        ## Optional suspected-case reporting-effort multiplier submodel
+        ## ([`reporting_effort_walk_model`](@ref)), applied to the BVD suspected
+        ## component only. `nothing` (the default) keeps a constant effort of
+        ## one, so the likelihood is unchanged; when injected, a
+        ## suspected-specific reporting slowdown is absorbed here rather than by
+        ## the shared reproduction-number walk.
+        reporting_effort = nothing,
         ## Onset to a suspected case being detected/reported, from the
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
@@ -563,8 +570,20 @@ sitrep.
     end
 
     ## Suspected daily cases add the p_drc-scaled BVD signal and the
-    ## non-BVD background.
-    reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+    ## non-BVD background. With a reporting-effort submodel injected, the BVD
+    ## component carries a smooth time-varying effort multiplier
+    ## ([`reporting_effort_walk_model`](@ref)) applied HERE only, not to the
+    ## returned `bvd_reports_daily` the laboratory/treatment/death streams
+    ## reuse, so it is a suspected-case-specific reporting term. `nothing`
+    ## leaves the expected counts identical to the constant-ascertainment form.
+    if reporting_effort === nothing
+        effort_series = nothing
+        reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+    else
+        effort_state ~ to_submodel(reporting_effort(n))
+        effort_series = effort_state.effort
+        reports_daily = (p_drc .* effort_series) .* bvd_reports_daily .+ bg_daily
+    end
 
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
@@ -597,7 +616,7 @@ sitrep.
 
     return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf, bvd_reports_daily,
         reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
-        bg_total)
+        bg_total, reporting_effort = effort_series)
 end
 
 """

@@ -849,6 +849,97 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
+# ## Reporting-effort sensitivity
+#
+# This sensitivity re-fit runs on main and release docs builds only and is
+# skipped on PR previews to keep the preview builds fast (controlled by the
+# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the table
+# and figure below are replaced by a short note in place of the re-fit.
+#
+# The current reproduction number `R_T` rests on how the suspected-case stream
+# is reconciled with the other streams.
+# In the headline model the suspected cases are tied to the shared infection
+# onsets by a single constant ascertainment fraction and a smooth, tightly
+# regularised non-BVD background.
+# Neither term can absorb a change over time in how many suspects the
+# surveillance system reports, so a suspected-case inflow that grows more slowly
+# than the confirmed-case count is reconciled by lowering the reproduction
+# number rather than by a change in reporting.
+# The daily new-suspect inflow through June grows about half as fast as the
+# confirmed cases over the same window, so the headline `R_T` is pulled down
+# toward the slower suspected growth.
+#
+# We re-fit the joint model with an optional reporting-effort term for the
+# suspected-case stream (`suspected_reporting_effort = true`).
+# The term is a smooth weekly random walk centred at one that multiplies the
+# suspected-case expected counts alone, leaving the shared onsets and every
+# other stream untouched, so a suspected-specific change in reporting is carried
+# by effort rather than by the reproduction number.
+# It is identified by the difference between the suspected series and the onset
+# trajectory the confirmed, death, export and isolation streams pin.
+# The re-fit uses the full headline settings (1000 draws across two chains).
+#
+# The current reproduction number under the two treatments is compared below.
+
+#md # ```@raw html
+#md # <details><summary>Re-fit the joint with the suspected-case reporting-effort term</summary>
+#md # ```
+
+## The reporting-effort re-fit is defined in the fit registry
+## (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
+## setup block above.
+RTd_baseline_effort = vec(Array(chn_joint[:R_T]))
+RTd_reporting_effort = RUN_SENSITIVITY ?
+                       vec(Array(chn_joint_reporting_effort[:R_T])) : nothing
+effectd_reporting_effort = RUN_SENSITIVITY ?
+                           vec(Array(chn_joint_reporting_effort[Symbol(
+    "rt_state.intervention_effect")])) : nothing
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Reporting-effort reproduction-number table</summary>
+#md # ```
+
+reporting_effort_table = RUN_SENSITIVITY ?
+                         streams_table(
+    "constant ascertainment (baseline)" => RTd_baseline_effort,
+    "with reporting effort" => RTd_reporting_effort) :
+                         Markdown.md"_Reporting-effort sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+reporting_effort_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Reporting-effort reproduction-number density plot</summary>
+#md # ```
+
+reporting_effort_fig = RUN_SENSITIVITY ?
+                       plot_density_overlay(
+    "constant ascertainment (baseline)" => RTd_baseline_effort,
+    "with reporting effort" => RTd_reporting_effort;
+    xlabel = "Current reproduction number R_T",
+    title = "Posterior R_T with and without a suspected-case reporting-effort term") :
+                       Markdown.md"_Reporting-effort sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+reporting_effort_fig #hide
+
+# Allowing the suspected-case reporting to drift lifts the current reproduction
+# number back toward the established value and widens its interval, so the
+# apparent decline in the headline fit is not separable from a change in
+# suspected-case reporting.
+# The infection count to date is little changed, because the other streams still
+# pin the outbreak size.
+
 # ## Saving sensitivity results
 #
 # The stream-comparison and frozen-fit tables and the per-stream reproduction
