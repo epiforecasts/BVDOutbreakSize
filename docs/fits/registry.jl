@@ -31,10 +31,17 @@ const FIT_SOURCE_FILES = [
 ## Bump when the cache layout changes in a way that must invalidate old files.
 const FIT_CACHE_SCHEMA = "v1"
 
+## Data files under `data/` that are not fit inputs and so must not bust the
+## cache. `released_estimates.csv` is a published-estimate overlay used only by
+## the sensitivity page's evolution figure; the render job rewrites it before
+## rendering, which would otherwise change every fit key and force a refit.
+const FIT_DATA_EXCLUDE = ("released_estimates.csv",)
+
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)
     return content_hash(FIT_SOURCE_FILES;
         data_dir = joinpath(_PKG, "data"),
+        data_exclude = FIT_DATA_EXCLUDE,
         extra = string(FIT_CACHE_SCHEMA, ":", samples, "x", chains))
 end
 

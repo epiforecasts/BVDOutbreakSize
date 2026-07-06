@@ -6,6 +6,32 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.8.0
+
+Changes since v1.7.0.
+
+### Model
+
+- Added a rule-out / confirmation-process sensitivity re-fit
+  (`sens_ruleout_sensitivity`, gated by `BVD_RUN_SENSITIVITY`). Rule-out is
+  investigative rather than a single negative PCR (repeat control tests, a
+  probable category for untested deaths, reversible non-cas labels), so the
+  effective sensitivity of confirmation is higher than one analytical assay
+  draw. The variant re-fits the confirmed stream with a higher, tighter
+  process-sensitivity prior (Beta(38, 2), mean 0.95 vs the single-assay
+  0.85) and reports the infection-count comparison on the sensitivity page
+  (addresses the retesting/rule-out part of #374). No headline-model change.
+
+### Documentation and infrastructure
+
+- Excluded the published `released_estimates.csv` overlay from the fit
+  content hash, so the render jobs reuse the matrix fits instead of
+  refitting every model. The render step rewrites that overlay before
+  rendering, which changed the data-tree digest and busted every fit
+  cache key; the overlay feeds only the estimate-evolution figure and is
+  not a fit input. `tree_sha256` and `content_hash` gained an exclude for
+  non-input data files, and genuine data changes still refit.
+
 ## v1.7.0
 
 Changes since v1.6.0.
@@ -21,15 +47,6 @@ Changes since v1.6.0.
 
 ### Model
 
-- Added a rule-out / confirmation-process sensitivity re-fit
-  (`sens_ruleout_sensitivity`, gated by `BVD_RUN_SENSITIVITY`). Rule-out is
-  investigative rather than a single negative PCR (repeat control tests, a
-  probable category for untested deaths, reversible non-cas labels), so the
-  effective sensitivity of confirmation is higher than one analytical assay
-  draw. The variant re-fits the confirmed stream with a higher, tighter
-  process-sensitivity prior (Beta(38, 2), mean 0.95 vs the single-assay
-  0.85) and reports the infection-count comparison on the sensitivity page
-  (addresses the retesting/rule-out part of #374). No headline-model change.
 - Reworked the isolation submodel into a treatment-centre flow model that
   fits the Tableau 6 flows alongside occupancy. The bed length-of-stay is an
   outcome mixture, with the death and recovery branches weighted by an in-care
