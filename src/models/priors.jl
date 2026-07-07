@@ -947,6 +947,30 @@ background `λ_bg` rather than only the BVD signal. Returns `(; spec)`.
 end
 
 """
+Confirmed-positives overdispersion prior. The confirmed positives in each
+laboratory window are scored as an overdispersed `BetaBinomial` of the
+observed analysed denominator (see [`safe_betabinomial`](@ref) and
+[`confirmed_cases_model`](@ref)) rather than a plain `Binomial`, because the
+per-window positivity `p_pos` is a smooth pooled / composition-linked curve
+that does not capture the day-to-day laboratory batching and within-window
+positivity heterogeneity the confirmed counts carry. A plain `Binomial` on
+denominators of several hundred specimens gives predictive intervals far
+too tight, so the confirmed stream is systematically under-covered. The
+intra-window correlation `ρ ∈ (0, 1)` inflates the window variance to
+`n·p·(1 − p)·(1 + (n − 1)·ρ)`, with `ρ → 0` recovering the `Binomial`. The
+default `Beta(1, 24)` (mean ≈ 0.04, 90% ≈ 0.002–0.12) is weakly informative:
+it favours a small overdispersion and shrinks toward the `Binomial` when the
+data support it, while a single scalar identified across the laboratory
+windows lets the confirmed positives themselves set the spread. Returns
+`(; ρ)`.
+"""
+@model function confirmed_overdispersion_model(;
+        overdispersion_prior = Beta(1.0, 24.0))
+    ρ ~ overdispersion_prior
+    return (; ρ)
+end
+
+"""
 Report-to-laboratory-confirmation (lab-turnaround) delay submodel. The
 delay from a suspected case being reported to its specimen being
 laboratory confirmed, discretised to a daily PMF over lags `0 … nmax`
