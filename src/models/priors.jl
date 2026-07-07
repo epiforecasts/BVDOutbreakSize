@@ -1062,6 +1062,33 @@ following the Stan prior-choice recommendations. Returns
 end
 
 """
+Separate negative-binomial dispersions for the two analysed-specimen volume
+streams: the cumulative laboratory series (`tests_analysed_history`) and the
+post-cut-off 24h counts (`tests_analysed_daily_history`). The two are the same
+throughput measured on different timescales, and they carry different noise: the
+early cumulative vintages are lumpy (an operational analysis stall, a batch
+catch-up between report dates) so their between-vintage increments need a small
+`k` (high dispersion), while the later 24h counts are steadier and sit close to
+the modelled daily volume, so they need a large `k` (near-Poisson). Sharing a
+single dispersion with each other, and with the confirmed-count windows, forces
+one compromise that under-covers the cumulative series and over-covers the 24h
+series. Each dispersion is sampled on its own `1/sqrt(k)` scale with the same
+weakly-informative half-normal (support running from the Poisson limit at
+`inv_sqrt_k → 0` up to a coefficient of variation near one), so the data set
+each stream's spread. Returns `(; k_cumulative, k_daily, inv_sqrt_k_cumulative,
+inv_sqrt_k_daily)`.
+"""
+@model function analysed_volume_dispersion_model(;
+        inv_sqrt_k_prior = truncated(Normal(0, 0.5); lower = 0))
+    inv_sqrt_k_cumulative ~ inv_sqrt_k_prior
+    inv_sqrt_k_daily ~ inv_sqrt_k_prior
+    k_cumulative := 1.0 /
+                    (inv_sqrt_k_cumulative^2 + eps(typeof(inv_sqrt_k_cumulative)))
+    k_daily := 1.0 / (inv_sqrt_k_daily^2 + eps(typeof(inv_sqrt_k_daily)))
+    return (; k_cumulative, k_daily, inv_sqrt_k_cumulative, inv_sqrt_k_daily)
+end
+
+"""
 Partially-pooled negative-binomial dispersions for the `n_streams`
 passive-surveillance count streams in the joint model (suspected cases,
 suspected deaths, confirmed cases and confirmed deaths). Each stream draws

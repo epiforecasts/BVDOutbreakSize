@@ -112,6 +112,43 @@ end
     for k in keys(pp))
 end
 
+@testitem "analysed volume streams take separate dispersions" begin
+    using BVDOutbreakSize: analysed_volume_dispersion_model
+    using Turing: @model, to_submodel, returned
+    using Random: MersenneTwister
+
+    @model function _wrap()
+        st ~ to_submodel(analysed_volume_dispersion_model(), false)
+        return st
+    end
+    m = _wrap()
+    st = returned(m, rand(MersenneTwister(1), m))
+    ## Two positive dispersions, one per analysed-volume stream.
+    @test st.k_cumulative > 0
+    @test st.k_daily > 0
+    ## Sampled from two independent draws, so (almost surely) distinct — the
+    ## cumulative and 24h streams no longer share one dispersion.
+    @test st.k_cumulative != st.k_daily
+end
+
+@testitem "confirmed_cases_model samples both analysed dispersions" begin
+    using BVDOutbreakSize: confirmed_only_model
+    using Turing
+    using Turing.DynamicPPL: predict
+    using Random: MersenneTwister
+
+    hist = (; confirmed_history = (; days = [20, 30, 35], counts = [5, 9, 14]),
+        lab_history = (; days = [10, 20], counts = [12, 28]),
+        lab_daily_history = (; days = [35], counts = [30]))
+    m_fit = confirmed_only_model(40, 14; hist...)
+    chn = sample(MersenneTwister(1), m_fit, Prior(), 8; progress = false)
+    ks = string.(keys(chn))
+    ## Both analysed-volume dispersions are sampled inside the confirmed
+    ## pipeline, so the fit carries a cumulative and a 24h `k`.
+    @test any(occursin("vol_disp_state.inv_sqrt_k_cumulative", k) for k in ks)
+    @test any(occursin("vol_disp_state.inv_sqrt_k_daily", k) for k in ks)
+end
+
 @testitem "bvd_joint fits the analysed volume without a received stream" tags=[:slow] begin
     using BVDOutbreakSize: bvd_joint, load_observations
     using Turing.DynamicPPL: logjoint

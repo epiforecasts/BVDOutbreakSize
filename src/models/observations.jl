@@ -871,14 +871,20 @@ onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
   through a sampled report-to-analysed delay and thinned by the tested
   fraction `τ_test`, giving the expected daily analysed-specimen volume.
   Its between-vintage increments are fitted against `lab_history`
-  (specimens analysed) as observed `~` data with a NegativeBinomial
-  sharing the surveillance dispersion `k`, identifying `τ_test` and the
-  delay. This single suspected->analysed volume is also the denominator
-  proxy reused in the early and unanchored late windows below, so the volume
-  that is fitted is the same quantity used as the denominator where no
-  analysed count is observed. The specimens-received series is not
-  modelled: analysed is the throughput that actually produces confirmed
-  cases, and received overshoots it by the laboratory backlog.
+  (specimens analysed) as observed `~` data with a NegativeBinomial whose
+  dispersion is the cumulative analysed-volume `k`, and the post-cut-off 24h
+  counts (`lab_daily_history`) with a separate 24h analysed-volume `k`
+  ([`analysed_volume_dispersion_model`](@ref)); both identify `τ_test` and the
+  delay. The two analysed streams take their own dispersions rather than the
+  confirmed count dispersion `k`, because the lumpy early cumulative series and
+  the steady later 24h counts carry different noise and one shared value
+  under-covers the former while over-covering the latter. This single
+  suspected->analysed volume is also the denominator proxy reused in the early
+  and unanchored late windows below, so the volume that is fitted is the same
+  quantity used as the denominator where no analysed count is observed. The
+  specimens-received series is not modelled: analysed is the throughput that
+  actually produces confirmed cases, and received overshoots it by the
+  laboratory backlog.
 - Confirmed positives. The confirmed counts are scored as an overdispersed
   `BetaBinomial` of the observed specimens-*analysed* denominator in each
   laboratory window ([`confirmed_positivity_windows`](@ref),
@@ -938,6 +944,7 @@ quantities.
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
         overdispersion = confirmed_overdispersion_model(),
+        analysed_dispersion = analysed_volume_dispersion_model(),
         ## When false, the early/late windows (confirmed vintages with NO
         ## observed analysed denominator) are not scored — only the
         ## observed-denominator Binomial windows contribute, so confirmed
@@ -989,13 +996,22 @@ quantities.
     end
     ## Gate the capacity to the testing window: zero before `cap_start`.
     analysed_daily = gate_before(analysed_daily, cap_start)
+    ## Separate dispersions for the analysed-volume streams. The lumpy early
+    ## cumulative series and the steady later 24h counts carry different noise,
+    ## so each takes its own negative-binomial `k` rather than the confirmed
+    ## dispersion shared with the count windows (see
+    ## [`analysed_volume_dispersion_model`](@ref)). `k` still scores the
+    ## early/late confirmed COUNT windows below, which are a different quantity.
+    vol_disp_state ~ to_submodel(analysed_dispersion)
+    k_cumulative = vol_disp_state.k_cumulative
+    k_daily = vol_disp_state.k_daily
     rvobs = vintage_obs(lab_history, tests_analysed, n)
     analysed_inc = bin_increments(analysed_daily, rvobs.days)
     ## Generator mode leaves the volume increments missing so `predict`
     ## resamples them, like the early/late windows below.
     vol_obs = have_data ? rvobs.obs_increments : missing
     analysed_increments ~ to_submodel(
-        vintage_increments_model(analysed_inc, vol_obs, k))
+        vintage_increments_model(analysed_inc, vol_obs, k_cumulative))
 
     ## Post-cutoff 24h analysed volume. After the national cumulative analysed
     ## series stops, INSP publishes a 24h analysed count on some days; the
@@ -1008,7 +1024,7 @@ quantities.
                      [analysed_daily[d] for d in daily_days]
     daily_obs = have_data ? lab_daily_history.counts : missing
     analysed_daily_increments ~ to_submodel(
-        vintage_increments_model(daily_modelled, daily_obs, k))
+        vintage_increments_model(daily_modelled, daily_obs, k_daily))
 
     ## Confirmed positives in three groups sharing one partially-pooled
     ## positivity: early windows (before the first lab date, no observed

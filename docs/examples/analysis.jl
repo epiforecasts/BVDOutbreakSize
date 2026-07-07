@@ -1499,11 +1499,16 @@ cfr_prior_fig #hide
 # share the laboratory capacity onset.
 #
 # The per-vintage increments are scored against the cumulative analysed
-# series with a NegBinomial sharing the dispersion $k$:
+# series with a NegBinomial whose dispersion $k_{\text{cum}}$ is specific to
+# this stream, while the post-cut-off 24h analysed counts take a separate
+# dispersion $k_{\text{24h}}$. The lumpy early cumulative increments (an
+# operational analysis stall, batch catch-up between vintages) and the steady
+# later 24h counts carry different noise, so each stream sets its own spread
+# rather than sharing the confirmed count dispersion $k$:
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{28}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k_{\text{cum}}\Bigr). \tag{28}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a
