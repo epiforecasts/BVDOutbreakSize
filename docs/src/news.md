@@ -12,6 +12,19 @@ Changes since v1.7.0.
 
 ### Model
 
+- Scored the confirmed-case laboratory positives as an overdispersed
+  `BetaBinomial` of the observed analysed denominator instead of a plain
+  `Binomial`. A plain `Binomial` on denominators of several hundred
+  specimens gave posterior-predictive intervals far too tight, so the
+  confirmed stream was systematically under-covered: the smooth pooled /
+  composition-linked per-window positivity does not capture the day-to-day
+  laboratory batching and within-window positivity heterogeneity the
+  confirmed counts carry. A single intra-window overdispersion `ρ`
+  (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`)
+  inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`,
+  identified across the laboratory windows, and recovers the `Binomial` as
+  `ρ → 0`. The mean structure and the composition link that identifies the
+  background `λ_bg` are unchanged.
 - Added an opt-in suspected-case reporting-effort term
   (`suspected_reporting_effort`, default off), a smooth weekly random walk
   centred at one that multiplies the suspected-case expected counts alone.
@@ -25,6 +38,16 @@ Changes since v1.7.0.
 - Added a reporting-effort sensitivity re-fit and section on the sensitivity
   page (gated behind `BVD_RUN_SENSITIVITY` like the other re-fits), comparing
   the current reproduction number with and without the reporting-effort term.
+
+### Documentation and infrastructure
+
+- Excluded the published `released_estimates.csv` overlay from the fit
+  content hash, so the render jobs reuse the matrix fits instead of
+  refitting every model. The render step rewrites that overlay before
+  rendering, which changed the data-tree digest and busted every fit
+  cache key; the overlay feeds only the estimate-evolution figure and is
+  not a fit input. `tree_sha256` and `content_hash` gained an exclude for
+  non-input data files, and genuine data changes still refit.
 
 ## v1.7.0
 
