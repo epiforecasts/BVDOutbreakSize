@@ -9,7 +9,7 @@ include(joinpath(@__DIR__, "cache.jl"))
 
 using BVDOutbreakSize
 using Dates: Date, Day, value
-using Distributions: truncated, Normal, Beta
+using Distributions: truncated, Normal
 
 const _PKG = pkgdir(BVDOutbreakSize)
 
@@ -163,22 +163,6 @@ function build_fit_specs(obs;
             theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
         kwargs...)
 
-    ## Rule-out is investigative, not a single negative PCR: a suspect is
-    ## confirmed/ruled out through a deep investigation with repeat control
-    ## tests, so the effective sensitivity of the confirmation PROCESS is higher
-    ## than one analytical assay draw. The headline `test_sensitivity_model`
-    ## now credits that process (Beta(38, 2), mean about 0.95). This variant
-    ## re-fits the confirmed stream with the single-assay analytical prior
-    ## (Beta(10, 1.76), mean 0.85) as the downside check: if the confirmation
-    ## process were no better than one assay draw, does the confirmed-case level
-    ## and outbreak size shift (issue #374)?
-    confirmed_single_assay = (history, cc, onsets, k, p_drc, bg, tau,
-        bvd; kwargs...) -> confirmed_cases_model(
-        history, cc, onsets, k, p_drc, bg, tau, bvd;
-        sensitivity = test_sensitivity_model(
-            sensitivity_prior = Beta(10.0, 1.76)),
-        kwargs...)
-
     ## Faster early-epidemic clock: common ancestor ~17 days more recent.
     clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
@@ -300,10 +284,7 @@ function build_fit_specs(obs;
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
-            (; id = "sens_ruleout_sensitivity", kind = :chain,
-                thunk = () -> refit_joint_variant(
-                    confirmed = confirmed_single_assay)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)))
     end
     return specs
 end

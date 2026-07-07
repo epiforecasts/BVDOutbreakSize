@@ -1034,17 +1034,17 @@ cfr_prior_fig #hide
 # $q_{\text{death}}$. Confirmation runs
 # on the altona RealStar Filovirus Screen RT-PCR rather than the
 # Zaire-specific GeneXpert Ebola assay, which does not reliably detect
-# Bundibugyo virus. Sensitivity for Bundibugyo virus is less well
-# characterised than for Zaire ebolavirus, so we centre the sensitivity prior
-# below the values reported for other strains and give it a wide
-# spread. The specificity is high but imperfect; the
+# Bundibugyo virus. Because a suspect is confirmed or ruled out through repeat
+# control tests rather than one assay draw, the prior credits the higher
+# effective sensitivity of that confirmation process (#374). The specificity is
+# high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
 # never down); the death testing-intensity scaling is a tight log-normal
 # centred on one, since no death-testing data grounds it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# s \sim \mathrm{Beta}(10,\ 1.76), \qquad
+# s \sim \mathrm{Beta}(38,\ 2), \qquad
 # \mathrm{spec} \sim \mathrm{Beta}(60,\ 2),
 # ```
 #
