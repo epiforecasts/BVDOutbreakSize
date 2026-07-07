@@ -860,32 +860,47 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
-Suspected-case reporting-effort multiplier as a SMOOTH weekly lognormal random
-walk over the surveillance window, centred at one. It multiplies the BVD
-component of the suspected-case expected counts in [`reported_cases_model`](@ref)
-ONLY — not the shared BVD onset-to-report series `bvd_reports_daily` the
-laboratory, treatment and death streams reuse — so it captures how the
-case-finding EFFORT behind the DRC suspected counts changed over the outbreak
-(surveillance teams, testing throughput, suspect reclassification) without
-touching the shared latent onsets. It is identified by the discrepancy between
-the suspected-case series and the onset trajectory the other streams pin, so it
-absorbs a suspected-specific reporting slowdown that would otherwise be forced
-onto the reproduction-number walk (the joint reads a flattening suspect inflow
-as a transmission slowdown when only a constant ascertainment reconciles it).
+Suspected-case reporting-effort (BVD ascertainment) multiplier, the
+case-finding-effort complement of the non-BVD-background scaling in
+[`contact_background_model`](@ref). It multiplies the BVD component of the
+suspected-case expected counts in [`reported_cases_model`](@ref) ONLY — not
+the shared BVD onset-to-report series `bvd_reports_daily` the laboratory,
+treatment and death streams reuse — so it captures how the case-finding effort
+behind the DRC suspected counts changed over the outbreak (surveillance teams,
+testing throughput, suspect reclassification) without touching the shared
+latent onsets.
 
-The log-multiplier follows a non-centred weekly random walk anchored at zero on
-the first knot (effort = 1 at the window onset), linearly interpolated to the
-daily grid, the same parameterisation as [`background_walk_model`](@ref) and the
-reproduction-number walk. `σ_eff` is the per-knot innovation SD on the log
-scale; the prior is a tight half-normal so the effort is a gentle drift rather
-than week-to-week jumps, and `σ_eff → 0` recovers a constant effort of one
-exactly. Before the window `onset` the multiplier is one (a no-op there, where
-there are no suspected data). Returns `(; effort, σ_eff, z)` with `effort` a
-length-`n` daily multiplier.
+The log-multiplier has two parts,
+
+```math
+\\text{effort}_t = \\exp(\\beta_\\text{asc}\\, \\tilde z_t + w_t),
+```
+
+an OBSERVED contact-tracing anchor `β_asc · z̃_t` and a smooth random-walk
+deviation `w_t`. `z̃_t` is the mean-centred contact-tracing follow-up rate
+covariate (the same `taux de suivi des contacts` series
+[`contact_background_model`](@ref) scales the non-BVD background by), zero off
+its reported window, so at mean intensity and off-window the anchor is factor
+one. `β_asc` is a non-negative log-linear elasticity (more contact tracing
+detects more, not fewer, true BVD suspects), so a surge in case-finding
+intensity lifts the suspected-case ascertainment in step with the observed
+tracing effort rather than leaving the reproduction-number walk to absorb it.
+The random walk `w_t` carries the residual time-variation the covariate does
+not explain and covers the windows where the covariate is unobserved; it is a
+non-centred weekly walk anchored at zero on the first knot, linearly
+interpolated to the daily grid, the same parameterisation as
+[`background_walk_model`](@ref). `σ_eff` is the per-knot innovation SD (a tight
+half-normal prior keeps the walk a gentle drift), and with `σ_eff → 0` and no
+covariate the effort is a constant one. `contact_covariate = nothing` drops the
+anchor, leaving the free walk. Before the window `onset` the multiplier is one.
+Returns `(; effort, σ_eff, β_asc, z)` with `effort` a length-`n` daily
+multiplier.
 """
 @model function reporting_effort_walk_model(n::Integer;
         onset::Integer = 1, week::Integer = 7,
-        sigma_prior = truncated(Normal(0.0, 0.15); lower = 0))
+        contact_covariate = nothing,
+        sigma_prior = truncated(Normal(0.0, 0.15); lower = 0),
+        coef_prior = truncated(Normal(0.0, 2.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
@@ -894,12 +909,98 @@ length-`n` daily multiplier.
     steps = σ_eff .* z[1:max(nb - 1, 0)]
     log_knots = vcat(zero(σ_eff), cumsum(steps))
     walk = interpolate_knots(log_knots, days, n)
-    T = promote_type(eltype(walk), typeof(σ_eff))
+    ## Contact-tracing anchor: mean-centre the follow-up rate over its reported
+    ## (nonzero) days so `β_asc` is an elasticity around mean intensity, factor
+    ## one at the mean and off-window. Matches the centring
+    ## [`contact_background_model`](@ref) uses for the background.
+    if contact_covariate === nothing
+        β_asc = zero(σ_eff)
+        anchor = zeros(promote_type(eltype(walk), typeof(σ_eff)), n)
+    else
+        β_asc ~ coef_prior
+        cov_nz = count(!iszero, contact_covariate)
+        cov_mean = cov_nz == 0 ? zero(eltype(contact_covariate)) :
+                   sum(contact_covariate) / cov_nz
+        anchor = [iszero(c) ? zero(β_asc) : β_asc * (c - cov_mean)
+                  for c in contact_covariate]
+    end
+    T = promote_type(eltype(walk), typeof(σ_eff), eltype(anchor))
     effort = ones(T, n)
     @inbounds for t in t0:n
-        effort[t] = exp(walk[t])
+        effort[t] = exp(walk[t] + anchor[t])
     end
-    return (; effort, σ_eff, z = z[1:max(nb - 1, 0)])
+    return (; effort, σ_eff, β_asc, z = z[1:max(nb - 1, 0)])
+end
+
+"""
+Contact-tracing background coefficient submodel. `β_contact` is the
+log-linear elasticity of the non-BVD suspected-case background to an
+observed contact-tracing intensity covariate (the mean-centred daily `taux
+de suivi des contacts` follow-up rate, see the `contact_followup_history`
+manifest block): the background is MULTIPLIED by `exp(β_contact · z̃)`, so
+contact tracing scales detection of non-BVD suspects rather than adding a
+fixed count. Detection is a rate multiplier, so a surge-driven rise in
+case-finding effort scales the non-BVD background up over the window the
+covariate is observed, and the term is a no-op (factor 1) where the
+covariate is zero. It is non-negative (more case-finding surfaces more, not
+fewer, non-BVD suspects) with a weakly-informative half-normal prior on the
+log scale, so a peak intensity deviation scales the background by up to
+roughly `exp(0.15·β_contact)`. Because the covariate is OBSERVED data rather
+than the latent BVD signal, and scales only the non-BVD background (not
+`p_drc`), it does not reopen the ascertainment / outbreak-size degeneracy a
+latent-scaled background would (issue #374). Returns `(; β_contact)`.
+"""
+@model function contact_background_model(;
+        coef_prior = truncated(Normal(0.0, 2.0); lower = 0))
+    β_contact ~ coef_prior
+    return (; β_contact)
+end
+
+"""
+Latent contact-tracing follow-up-rate process. The observed daily `taux de
+suivi des contacts` is modelled as a smooth LATENT rate on the logistic scale,
+so it is defined over the WHOLE grid — inferred before the reported window and
+projected into the forecast horizon under its own dynamics — rather than a
+fixed covariate that stops with the data (which would drop the case-finding
+anchor discontinuously at the forecast boundary). A non-centred weekly random
+walk `h_t` on the logit scale (interpolated to the daily grid) gives the latent
+rate `q_t = logistic(h_t)`; the observed follow-up rates are scored as noisy
+observations of `h` on the logit scale at their report days, with the
+`logit_obs` transform kept outside the model so the likelihood is a plain
+Normal (AD-safe, and `q` bounded in (0, 1) by construction). Both the
+suspected-case reporting effort ([`reporting_effort_walk_model`](@ref)) and the
+non-BVD background ([`contact_background_model`](@ref)) anchor to this one
+shared latent rate, so a change in case-finding intensity is carried
+consistently across the two channels and continues under the walk where the
+data stop. Pass `obs_days` (grid indices) and `logit_obs` (the logit of the
+observed rates). Returns `(; q, h, h0, σ_walk, σ_obs, z)` with `q` a length-`n`
+daily rate.
+"""
+@model function contact_tracing_model(n::Integer;
+        obs_days::AbstractVector{<:Integer} = Int[],
+        logit_obs::AbstractVector{<:Real} = Float64[],
+        week::Integer = 7,
+        level_prior = Normal(1.0, 1.5),
+        walk_sd_prior = truncated(Normal(0.0, 0.3); lower = 0),
+        obs_sd_prior = truncated(Normal(0.0, 0.5); lower = 0.01))
+    days = knot_days(n; week = week, start = 1)
+    nb = length(days)
+    h0 ~ level_prior
+    σ_walk ~ walk_sd_prior
+    z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
+    steps = σ_walk .* z[1:max(nb - 1, 0)]
+    knots = h0 .+ vcat(zero(h0), cumsum(steps))
+    h = interpolate_knots(knots, days, n)
+    q := logistic.(h)
+    σ_obs ~ obs_sd_prior
+    ## Observed follow-up rates as noisy observations of the latent logit-rate
+    ## at their report days. Empty history → a pure prior process (a no-op
+    ## likelihood), so the anchor is off but still defined everywhere.
+    if !isempty(obs_days)
+        h_at = [h[clamp(Int(d), 1, n)] for d in obs_days]
+        logit_obs ~ product_distribution([Normal(m, σ_obs) for m in h_at])
+    end
+    return (; q, h, h0, σ_walk, σ_obs, z = z[1:max(nb - 1, 0)])
 end
 
 """

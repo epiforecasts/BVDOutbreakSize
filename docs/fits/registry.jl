@@ -104,6 +104,8 @@ function build_fit_specs(obs;
                 export_death_days = o.export_death_days,
                 breakpoint = bp,
                 background_re = true,
+                contact_followup_history = o.contact_followup_history,
+                suspected_reporting_effort = true,
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
@@ -116,7 +118,8 @@ function build_fit_specs(obs;
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
             tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0,
-            suspected_reporting_effort = false)
+            contact_followup_history = obs.contact_followup_history,
+            suspected_reporting_effort = true)
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -145,8 +148,9 @@ function build_fit_specs(obs;
                 export_death_days = obs.export_death_days,
                 breakpoint = breakpoint,
                 background_re = true,
-                confirmed_positivity_link = :composition,
+                contact_followup_history = contact_followup_history,
                 suspected_reporting_effort = suspected_reporting_effort,
+                confirmed_positivity_link = :composition,
                 deaths = deaths,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
@@ -198,6 +202,8 @@ function build_fit_specs(obs;
                     export_death_days = obs.export_death_days,
                     breakpoint = breakpoint,
                     background_re = true,
+                    contact_followup_history = obs.contact_followup_history,
+                    suspected_reporting_effort = true,
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
@@ -285,9 +291,18 @@ function build_fit_specs(obs;
             (; id = "sens_fast_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
-            (; id = "sens_reporting_effort", kind = :chain,
+            ## Drop the contact-tracing grounding entirely (empty follow-up
+            ## history): the background is no longer contact-scaled and the
+            ## reporting effort falls back to a free walk.
+            (; id = "sens_no_contact", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    suspected_reporting_effort = true)))
+                    contact_followup_history =
+                (; days = Int[], values = Float64[]))),
+            ## Drop the BVD-ascertainment effort channel (keep the
+            ## contact-scaled background): isolates the effort's contribution.
+            (; id = "sens_no_effort", kind = :chain,
+                thunk = () -> refit_joint_variant(
+                    suspected_reporting_effort = false)))
     end
     return specs
 end

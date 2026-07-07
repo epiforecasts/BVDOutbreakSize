@@ -849,96 +849,130 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_T_fig #hide
 
-# ## Reporting-effort sensitivity
+# ## Contact-tracing case-finding sensitivity
 #
-# This sensitivity re-fit runs on main and release docs builds only and is
+# These sensitivity re-fits run on main and release docs builds only and are
 # skipped on PR previews to keep the preview builds fast (controlled by the
-# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the table
-# and figure below are replaced by a short note in place of the re-fit.
+# `BVD_RUN_SENSITIVITY` gate in the setup block). When they are skipped the
+# tables and figures below are replaced by a short note in place of the re-fit.
 #
-# The current reproduction number `R_T` rests on how the suspected-case stream
-# is reconciled with the other streams.
-# In the headline model the suspected cases are tied to the shared infection
-# onsets by a single constant ascertainment fraction and a smooth, tightly
-# regularised non-BVD background.
-# Neither term can absorb a change over time in how many suspects the
-# surveillance system reports, so a suspected-case inflow that grows more slowly
-# than the confirmed-case count is reconciled by lowering the reproduction
-# number rather than by a change in reporting.
-# The daily new-suspect inflow through June grows about half as fast as the
-# confirmed cases over the same window, so the headline `R_T` is pulled down
-# toward the slower suspected growth.
+# The headline model grounds the suspected-case surveillance in observed
+# contact-tracing effort on both channels case-finding acts through.
+# The daily contact follow-up rate ("taux de suivi des contacts", 7 June-1
+# July) is modelled as a shared latent rate `q_t`, a logistic random walk over
+# the whole grid fitted to the reported rate, so the anchor is defined before
+# the reported window and projects into forecasts rather than stopping with the
+# data.
+# The non-BVD background scales with it (`exp(β_contact · (q − q̄))`) and the
+# BVD suspected ascertainment carries a reporting-effort multiplier anchored to
+# the same rate plus a random-walk deviation (`exp(β_asc · (q − q̄) + w)`).
+# Both touch the suspected likelihood only, not the shared onsets or `p_drc`,
+# so they carry no ascertainment / outbreak-size confounding [see issue #374].
 #
-# We re-fit the joint model with an optional reporting-effort term for the
-# suspected-case stream (`suspected_reporting_effort = true`).
-# The term is a smooth weekly random walk centred at one that multiplies the
-# suspected-case expected counts alone, leaving the shared onsets and every
-# other stream untouched, so a suspected-specific change in reporting is carried
-# by effort rather than by the reproduction number.
-# It is identified by the difference between the suspected series and the onset
-# trajectory the confirmed, death, export and isolation streams pin.
-# The re-fit uses the full headline settings (1000 draws across two chains).
-#
-# The current reproduction number under the two treatments is compared below.
+# Two re-fits isolate the two channels: `sens_no_contact` drops the
+# contact grounding entirely (the effort falls back to a free walk and the
+# background to the calendar-time walk), and `sens_no_effort` keeps the
+# contact-scaled background but drops the BVD-ascertainment effort.
+# Each uses the full headline settings (1000 draws across two chains).
+# The current reproduction number and the infection count to date under each
+# are compared with the headline below.
 
 #md # ```@raw html
-#md # <details><summary>Re-fit the joint with the suspected-case reporting-effort term</summary>
+#md # <details><summary>Load the contact-tracing sensitivity re-fits</summary>
 #md # ```
 
-## The reporting-effort re-fit is defined in the fit registry
-## (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
-## setup block above.
-RTd_baseline_effort = vec(Array(chn_joint[:R_T]))
-RTd_reporting_effort = RUN_SENSITIVITY ?
-                       vec(Array(chn_joint_reporting_effort[:R_T])) : nothing
-effectd_reporting_effort = RUN_SENSITIVITY ?
-                           vec(Array(chn_joint_reporting_effort[Symbol(
-    "rt_state.intervention_effect")])) : nothing
+## The re-fits are defined in the fit registry (`docs/fits/registry.jl`) and
+## loaded through the cache (when enabled) in the setup block above.
+RTd_headline_contact = vec(Array(chn_joint[:R_T]))
+RTd_no_contact = RUN_SENSITIVITY ?
+                 vec(Array(chn_joint_no_contact[:R_T])) : nothing
+RTd_no_effort = RUN_SENSITIVITY ?
+                vec(Array(chn_joint_no_effort[:R_T])) : nothing
+posterior_C_no_contact = RUN_SENSITIVITY ?
+                         vec(Array(chn_joint_no_contact[:C_T])) : nothing
+posterior_C_no_effort = RUN_SENSITIVITY ?
+                        vec(Array(chn_joint_no_effort[:C_T])) : nothing
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
 #md # ```@raw html
-#md # <details><summary>Reporting-effort reproduction-number table</summary>
+#md # <details><summary>Case-finding reproduction-number table</summary>
 #md # ```
 
-reporting_effort_table = RUN_SENSITIVITY ?
-                         streams_table(
-    "constant ascertainment (baseline)" => RTd_baseline_effort,
-    "with reporting effort" => RTd_reporting_effort) :
-                         Markdown.md"_Reporting-effort sensitivity runs on main and release builds only; skipped on this build._"
+contact_rt_table = RUN_SENSITIVITY ?
+                   streams_table(
+    "headline (contact-grounded)" => RTd_headline_contact,
+    "without contact grounding" => RTd_no_contact,
+    "without ascertainment effort" => RTd_no_effort) :
+                   Markdown.md"_Contact-tracing sensitivity runs on main and release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-reporting_effort_table #hide
+contact_rt_table #hide
 
 #md # ```@raw html
-#md # <details><summary>Reporting-effort reproduction-number density plot</summary>
+#md # <details><summary>Case-finding reproduction-number density plot</summary>
 #md # ```
 
-reporting_effort_fig = RUN_SENSITIVITY ?
-                       plot_density_overlay(
-    "constant ascertainment (baseline)" => RTd_baseline_effort,
-    "with reporting effort" => RTd_reporting_effort;
+contact_rt_fig = RUN_SENSITIVITY ?
+                 plot_density_overlay(
+    "headline (contact-grounded)" => RTd_headline_contact,
+    "without contact grounding" => RTd_no_contact,
+    "without ascertainment effort" => RTd_no_effort;
     xlabel = "Current reproduction number R_T",
-    title = "Posterior R_T with and without a suspected-case reporting-effort term") :
-                       Markdown.md"_Reporting-effort sensitivity runs on main and release builds only; skipped on this build._"
+    title = "Posterior R_T under the contact-tracing case-finding channels") :
+                 Markdown.md"_Contact-tracing sensitivity runs on main and release builds only; skipped on this build._"
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-reporting_effort_fig #hide
+contact_rt_fig #hide
 
-# Allowing the suspected-case reporting to drift lifts the current reproduction
-# number back toward the established value and widens its interval, so the
-# apparent decline in the headline fit is not separable from a change in
-# suspected-case reporting.
-# The infection count to date is little changed, because the other streams still
-# pin the outbreak size.
+#md # ```@raw html
+#md # <details><summary>Case-finding infection-count table</summary>
+#md # ```
+
+contact_C_table = RUN_SENSITIVITY ?
+                  streams_table(
+    "headline (contact-grounded)" => posterior_C_joint,
+    "without contact grounding" => posterior_C_no_contact,
+    "without ascertainment effort" => posterior_C_no_effort) :
+                  Markdown.md"_Contact-tracing sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+contact_C_table #hide
+
+#md # ```@raw html
+#md # <details><summary>Case-finding infection-count density plot</summary>
+#md # ```
+
+contact_C_fig = RUN_SENSITIVITY ?
+                plot_cumulative_cases(
+    "headline (contact-grounded)" => posterior_C_joint,
+    "without contact grounding" => posterior_C_no_contact,
+    "without ascertainment effort" => posterior_C_no_effort; scenarios = []) :
+                Markdown.md"_Contact-tracing sensitivity runs on main and release builds only; skipped on this build._"
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+contact_C_fig #hide
+
+# Grounding the suspected-case ascertainment in the observed case-finding rate
+# lifts the current reproduction number toward the established value and widens
+# its interval, so the apparent decline in the ungrounded fit is not separable
+# from a change in case-finding reporting.
+# The infection count to date stays close across the three, because the other
+# streams still pin the outbreak size.
 
 # ## Saving sensitivity results
 #

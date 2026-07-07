@@ -2398,6 +2398,21 @@ rt_fig = plot_rt(chn_joint;
 
 rt_fig #hide
 
+# The reproduction number is identified alongside the suspected-case
+# case-finding, not in place of it.
+# Both the non-BVD suspected-case background and the suspected-case
+# ascertainment are grounded in the observed contact-tracing follow-up rate
+# (the "taux de suivi des contacts"), a shared latent case-finding-intensity
+# process that scales detection of non-BVD and BVD suspects alike.
+# A change in case-finding reporting is therefore carried by that channel
+# rather than by the reproduction number, so the reproduction number tracks
+# transmission rather than reporting.
+# The reporting-effort multiplier on the BVD ascertainment carries a
+# random-walk deviation on top of the contact anchor, and the anchor is defined
+# over the whole grid so it continues under the walk when the follow-up data
+# stop (see the contact-tracing case-finding sensitivity on the
+# [sensitivity page](sensitivity.md)).
+#
 # The table reports the posterior of the response effect on the
 # reproduction number as a multiplier, where a value below one is the factor
 # by which the response lowers the reproduction number once the scale-up
@@ -2519,6 +2534,7 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test, :lambda_bg,
+        :background_contact_coef,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,

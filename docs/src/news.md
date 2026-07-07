@@ -10,6 +10,13 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.7.0.
 
+### Data
+
+- Added the daily contact-tracing follow-up rate ("taux de suivi des
+  contacts", 7 June–1 July) as `[contact_followup_history]`, recorded as a
+  fraction from the confirmed-based situation-report banners. An observed
+  proxy for surge-driven case-finding intensity.
+
 ### Model
 
 - Scored the confirmed-case laboratory positives as an overdispersed
@@ -25,20 +32,31 @@ Changes since v1.7.0.
   identified across the laboratory windows, and recovers the `Binomial` as
   `ρ → 0`. The mean structure and the composition link that identifies the
   background `λ_bg` are unchanged.
-- Added an opt-in suspected-case reporting-effort term
-  (`suspected_reporting_effort`, default off), a smooth weekly random walk
-  centred at one that multiplies the suspected-case expected counts alone.
-  It gives the suspected stream the same time-flexibility the confirmed
-  stream already has, so a suspected-specific change in case-finding effort is
-  carried by effort rather than by the reproduction number. With the flag off
-  the suspected likelihood is unchanged, so the headline fit is unaffected.
+- The headline model now grounds the suspected-case surveillance in observed
+  contact-tracing effort, on BOTH channels case-finding acts through.
+  Case-finding intensity is a shared LATENT follow-up-rate process
+  (`contact_tracing_model`): the observed daily contact follow-up rate is
+  modelled as a logistic random walk `q_t` over the whole grid, fitted to the
+  reported rate where it exists, so the anchor is defined before the reported
+  window and projects into forecasts under its own dynamics rather than
+  stopping with the data. The non-BVD background scales with it
+  (`exp(β_contact · (q − q̄))`, `contact_background_model`), and the BVD
+  suspected ascertainment carries a reporting-effort multiplier anchored to the
+  same rate plus a random-walk deviation (`exp(β_asc · (q − q̄) + w)`,
+  `reporting_effort_walk_model`, `suspected_reporting_effort = true`). Contact
+  tracing is a detection process, so it scales detection of both non-BVD and
+  BVD suspects rather than shifting the outbreak size; the effort touches the
+  suspected likelihood only, not the shared onsets or `p_drc`, so it does not
+  reopen the ascertainment / outbreak-size degeneracy (addresses #374). This
+  stops a change in case-finding reporting being read as a change in
+  transmission (the reproduction-number decline in the joint fit).
 
 ### Analysis
 
-- Added a reporting-effort sensitivity re-fit and section on the sensitivity
-  page (gated behind `BVD_RUN_SENSITIVITY` like the other re-fits), comparing
-  the current reproduction number with and without the reporting-effort term.
-
+- Two gated sensitivity re-fits on the sensitivity page: `sens_no_contact`
+  (drop the contact grounding entirely) and `sens_no_effort` (drop the BVD
+  ascertainment effort, keeping the contact-scaled background), each compared
+  to the headline for the reproduction number and outbreak size.
 ### Documentation and infrastructure
 
 - Excluded the published `released_estimates.csv` overlay from the fit

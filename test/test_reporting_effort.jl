@@ -1,6 +1,8 @@
-## Tests for the opt-in suspected-case reporting-effort multiplier
-## ([`reporting_effort_walk_model`](@ref)) and its wiring into the suspected-case
-## likelihood ([`reported_cases_model`](@ref)) and the joint composer.
+## Tests for the suspected-case reporting-effort (BVD ascertainment) multiplier
+## ([`reporting_effort_walk_model`](@ref)): its contact-tracing anchor plus
+## random-walk deviation, the free-walk fallback when no covariate is given, and
+## its wiring into the suspected-case likelihood
+## ([`reported_cases_model`](@ref)) and the joint composer.
 
 @testitem "reporting effort: multiplier is one before onset and positive" begin
     using BVDOutbreakSize: reporting_effort_walk_model
@@ -13,6 +15,21 @@
     @test all(ret.effort .> 0)
     ## Before the window onset the multiplier is exactly one (a no-op there).
     @test all(ret.effort[1:(onset - 1)] .== 1)
+    ## With no covariate the anchor elasticity is exactly zero (free walk).
+    @test ret.β_asc == 0
+end
+
+@testitem "reporting effort: contact anchor samples a non-negative elasticity" begin
+    using BVDOutbreakSize: reporting_effort_walk_model
+
+    n = 40
+    ## A smooth all-nonzero covariate (a latent follow-up rate) turns on the
+    ## anchor: the elasticity is sampled and non-negative.
+    cov = [0.6 + 0.2 * sin(t / 6) for t in 1:n]
+    ret = reporting_effort_walk_model(n; onset = 5, contact_covariate = cov)()
+    @test length(ret.effort) == n
+    @test all(ret.effort .> 0)
+    @test ret.β_asc >= 0
 end
 
 @testitem "reporting effort: sigma to zero recovers constant effort one" begin
