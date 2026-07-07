@@ -250,6 +250,48 @@
     @test breakpoint <= obs.n
 end
 
+@testitem "repeated daily confirmed-death vintages are dropped" begin
+    using BVDOutbreakSize: load_observations, freeze_observations
+    using Dates: Date
+    obs = load_observations()
+    h = obs.confirmed_deaths_history
+    _day(d) = obs.n - (Date(obs.cutoff) - Date(d)).value
+
+    ## The daily confirmed deaths (between-vintage increments of the
+    ## cumulative confirmed-death total) come out at exactly +39 on three
+    ## consecutive reports — 321→360 (27 June), 360→399 (29 June) and
+    ## 399→438 (30 June). Three identical daily jumps from three different day
+    ## compositions read as a round-number back-fill, not a genuine daily
+    ## count, so the two repeats after the first (29, 30 June) are dropped.
+    ## The 27 June vintage is kept and the next genuine total (1 July, 452) is
+    ## differenced against it across the gap.
+    @test _day("2026-06-27") in h.days
+    @test !(_day("2026-06-29") in h.days)
+    @test !(_day("2026-06-30") in h.days)
+    @test _day("2026-07-01") in h.days
+
+    ## With 29-30 June dropped the three consecutive +39 daily increments
+    ## collapse to a single +39 (27 June) followed by +92 over the
+    ## 27 June - 1 July gap. Only the first +39 survives; the two repeats are
+    ## gone. (Early-May zeros from the flat reconstruction window are genuine
+    ## no-new-death days and are not what this guards, so the check targets
+    ## the +39 run specifically.)
+    inc = diff(vcat(0, collect(h.counts)))
+    @test count(==(39), inc) == 1
+    @test 92 in inc
+    ## The series stays non-decreasing with its endpoint at the cut-off scalar.
+    @test issorted(h.counts)
+    @test h.counts[end] == obs.confirmed_deaths
+
+    ## Freezing past the dropped window still excludes 29-30 June: the frozen
+    ## series jumps 360 (27 June) straight to 452 (1 July, the frozen cut-off).
+    fh = freeze_observations("2026-07-01").confirmed_deaths_history
+    @test 360 in fh.counts
+    @test 452 in fh.counts
+    @test !(399 in fh.counts)
+    @test !(438 in fh.counts)
+end
+
 @testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()

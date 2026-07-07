@@ -42,6 +42,16 @@ const SERIES = [
         :confirmed_deaths, "confirmed_death_history", "confirmed deaths")
 ]
 
+# Vintages the loader excludes from the fit (`drop_dates`): a cumulative
+# whose between-vintage increment (the daily confirmed deaths) is a repeated
+# round value rather than a genuine daily count. The upstream CSV carries
+# these totals, so the block is regenerated with the dates present and this
+# list re-emits the `drop_dates` key that marks them. Keyed by TOML block.
+# The confirmed-death daily increment is +39 on 27, 29 and 30 June; the
+# 29 and 30 June repeats after the first are dropped.
+const DROP_DATES = Dict(
+    "confirmed_death_history" => ["2026-06-29", "2026-06-30"])
+
 # Latest non-missing scanned value per report date. The scanned file can
 # carry two rows for one date (e.g. SitRep 012 and its revised re-issue
 # 012_v2); take the last vintage that reports the column.
@@ -86,6 +96,10 @@ function print_block(key, df)
     println("[$key]")
     print_wrapped("dates", ("\"$(d)\"" for d in df.date), 4)
     print_wrapped("values", df.upstream, 14)
+    if haskey(DROP_DATES, key)
+        print_wrapped("drop_dates",
+            ("\"$(d)\"" for d in DROP_DATES[key]), 4)
+    end
     println()
 end
 

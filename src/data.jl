@@ -73,11 +73,20 @@ function load_observations(
     ## oldest-first so the model differences consecutive vintages into
     ## daily increments. Empty when the block is absent. Vintages dated
     ## after the cut-off are dropped, so freezing to an earlier date
-    ## keeps only the data that was available by then.
+    ## keeps only the data that was available by then. An optional
+    ## `drop_dates` list marks vintages whose printed cumulative is a stale
+    ## carried-forward headline rather than a genuine same-day total (see the
+    ## confirmed-death 27-28 May reports); those vintages are excluded so the
+    ## model differences across them instead of scoring a fabricated zero
+    ## increment and compressing the later catch-up onto a single day.
     function history(key)
         haskey(raw, key) || return (; days = Int[], counts = Int[])
         block = raw[key]
-        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        dropped = haskey(block, "drop_dates") ?
+                  Set(Date(String(d)) for d in block["drop_dates"]) :
+                  Set{Date}()
+        keep = [Date(String(d)) <= cutoff && !(Date(String(d)) in dropped)
+                for d in block["dates"]]
         idx = Int[_index(d) for d in block["dates"][keep]]
         vals = Int.(block["values"][keep])
         ord = sortperm(idx)
