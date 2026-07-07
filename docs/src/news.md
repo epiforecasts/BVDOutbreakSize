@@ -12,15 +12,20 @@ Changes since v1.7.0.
 
 ### Model
 
-- Added a rule-out / confirmation-process sensitivity re-fit
-  (`sens_ruleout_sensitivity`, gated by `BVD_RUN_SENSITIVITY`). Rule-out is
-  investigative rather than a single negative PCR (repeat control tests, a
-  probable category for untested deaths, reversible non-cas labels), so the
-  effective sensitivity of confirmation is higher than one analytical assay
-  draw. The variant re-fits the confirmed stream with a higher, tighter
-  process-sensitivity prior (Beta(38, 2), mean 0.95 vs the single-assay
-  0.85) and reports the infection-count comparison on the sensitivity page
-  (addresses the retesting/rule-out part of #374). No headline-model change.
+- Credited the repeat-control confirmation process in the headline
+  confirmation-sensitivity prior. Rule-out is investigative rather than a
+  single negative PCR (repeat control tests, a probable category for untested
+  deaths, reversible non-cas labels), so the effective sensitivity of
+  confirmation is higher than one analytical assay draw: two independent
+  control tests lift it to about 1 − (1 − 0.85)² ≈ 0.98. The headline
+  `test_sensitivity_model` prior moves from the single-assay `Beta(10, 1.76)`
+  (mean 0.85) to `Beta(38, 2)` (mean 0.95), applied to both the confirmed and
+  confirmed-deaths streams. Because the sensitivity enters the multiplicative
+  ascertainment ridge (`p_drc · s_test · τ_test`), the outbreak-size estimate
+  is robust to the change and the ascertainment posterior re-centres. The
+  single-assay prior is retained as the `sens_ruleout_sensitivity` downside
+  re-fit (gated by `BVD_RUN_SENSITIVITY`) on the sensitivity page
+  (resolves the retesting/rule-out part of #374).
 
 - Scored the confirmed-case laboratory positives as an overdispersed
   `BetaBinomial` of the observed analysed denominator instead of a plain

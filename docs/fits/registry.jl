@@ -167,17 +167,16 @@ function build_fit_specs(obs;
     ## confirmed/ruled out through a deep investigation with repeat control
     ## tests, so the effective sensitivity of the confirmation PROCESS is higher
     ## than one analytical assay draw. The headline `test_sensitivity_model`
-    ## (Beta(10, 1.76), mean about 0.85) is the single-assay prior; two
-    ## independent control tests would lift the effective sensitivity to about
-    ## 1 - (1 - 0.85)^2 = 0.98. This variant re-fits the confirmed stream with a
-    ## higher, tighter process-sensitivity prior (Beta(38, 2), mean 0.95) to
-    ## check whether the confirmed-case level and outbreak size respond to
-    ## crediting the repeat-control confirmation process (issue #374).
-    confirmed_process_sensitivity = (history, cc, onsets, k, p_drc, bg, tau,
+    ## now credits that process (Beta(38, 2), mean about 0.95). This variant
+    ## re-fits the confirmed stream with the single-assay analytical prior
+    ## (Beta(10, 1.76), mean 0.85) as the downside check: if the confirmation
+    ## process were no better than one assay draw, does the confirmed-case level
+    ## and outbreak size shift (issue #374)?
+    confirmed_single_assay = (history, cc, onsets, k, p_drc, bg, tau,
         bvd; kwargs...) -> confirmed_cases_model(
         history, cc, onsets, k, p_drc, bg, tau, bvd;
         sensitivity = test_sensitivity_model(
-            sensitivity_prior = Beta(38.0, 2.0)),
+            sensitivity_prior = Beta(10.0, 1.76)),
         kwargs...)
 
     ## Faster early-epidemic clock: common ancestor ~17 days more recent.
@@ -304,7 +303,7 @@ function build_fit_specs(obs;
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)),
             (; id = "sens_ruleout_sensitivity", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    confirmed = confirmed_process_sensitivity)))
+                    confirmed = confirmed_single_assay)))
     end
     return specs
 end
