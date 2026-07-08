@@ -412,6 +412,7 @@ death-confirmation positivity (`death_confirmation`).
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
+        onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
@@ -604,6 +605,26 @@ death-confirmation positivity (`death_confirmation`).
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
     onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
+    ## External onset-to-sample constraint on the confirmed sampling delay
+    ## (grounded on the NEJM DRC 2026 cohort by default, see
+    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt legs
+    ## convolve to the confirmed onset-to-sample delay, so its continuous mean is
+    ## the sum of the two legs' means and its continuous SD the root-sum of their
+    ## variances; both are exposed here. The cohort's reported (continuous) mean
+    ## and median are fitted to these as soft Normal observations
+    ## ([`onset_to_sample_logweight`](@ref)), grounding the otherwise-
+    ## unidentified receipt (lab-turnaround) leg without touching either prior.
+    ## The term only exists on the confirmed report⊕receipt path, so single-
+    ## stream and isolation composers carry none; passing `nothing` drops it.
+    onset_to_sample_mean := cases_state.report_mean +
+                            confirmed_state.receipt_mean
+    onset_to_sample_sd := sqrt(cases_state.report_sd^2 +
+                               confirmed_state.receipt_sd^2)
+    if onset_to_sample !== nothing
+        @addlogprob! onset_to_sample_logweight(cases_state.report_mean,
+            cases_state.report_sd, confirmed_state.receipt_mean,
+            confirmed_state.receipt_sd, onset_to_sample)
+    end
     R0 := infection_state.R0
     r := infection_state.r
     r0 := infection_state.r0

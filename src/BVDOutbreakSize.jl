@@ -9,7 +9,7 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
-using Turing: @model, MCMCThreads, NUTS, sample, to_submodel
+using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior
 import AbstractMCMC
 import FlexiChains
@@ -69,6 +69,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        safe_rate,
 # prior / latent submodels
        censored_delay_model, gamma_delay_model, onset_to_death_model,
+       nejm_onset_to_sample,
        generation_interval_model, rt_walk_model,
        seed_model, exponential_growth_model, infection_model,
        onset_incidence_model,

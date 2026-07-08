@@ -625,7 +625,9 @@ sitrep.
     ## comparison with the observed suspected total.
     bg_total = sum(bg_daily)
 
-    return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf, bvd_reports_daily,
+    return (; p_drc, λ_bg = λ_bg_base, τ_test, report_pmf,
+        report_mean = report_state.mean, report_sd = report_state.sd,
+        bvd_reports_daily,
         reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
         bg_total)
 end
@@ -1217,6 +1219,7 @@ quantities.
     return (; τ_test, bg_daily, p_pos, windows, analysed_daily,
         confirmed_daily,
         receipt_pmf = receipt_state.pmf,
+        receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
         expected_analysed, expected_confirmed, p_positive)
 end
 
