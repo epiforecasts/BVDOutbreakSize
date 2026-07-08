@@ -21,6 +21,17 @@ Changes since v1.7.0.
   because the sensitivity enters the multiplicative ascertainment ridge
   (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves
   the retesting/rule-out part of #374).
+- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
+  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
+  and report-to-receipt legs already convolve to onset-to-sample for confirmed
+  cases. The convolution's mean (the sum of the report and receipt leg means)
+  and median (Wilson-Hilferty of the summed leg variances) are fitted to the
+  reported 7.4 d and 4.8 d as soft Normal observations, with the reported 95%
+  credible intervals as their SDs. This grounds the otherwise-unidentified
+  laboratory-turnaround delay directly from the cohort's own uncertainty and
+  adds no latent parameter. On by default in the joint fit; the single-stream
+  and isolation fits lack the laboratory receipt leg and so do not carry it
+  (resolves #359).
 
 - Scored the confirmed-case laboratory positives as an overdispersed
   `BetaBinomial` of the observed analysed denominator instead of a plain

@@ -101,6 +101,56 @@ PMF is truncated back to lags `0 … nmax` and renormalised. Returns
         sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean)
 end
 
+"""
+Wilson–Hilferty approximation to the continuous median of a `Gamma` as a
+function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`. Smooth in
+the mean and SD with no quantile inversion, so it enters a gradient-based
+likelihood cleanly, and accurate to a few percent for the shapes here. Used to
+match the confirmed onset-to-sample convolution's continuous median to the
+cohort's reported median.
+"""
+gamma_median_wh(mean::Real, sd::Real) = mean * (1 - sd^2 / (9 * mean^2))^3
+
+"""
+Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
+(Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
+onset-to-sample interval (N = 129) was estimated as a continuous Gamma through
+the `epidist` marginal model correcting for double interval censoring and right
+truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
+continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
+3.46–7.84).
+
+The confirmed onset→report→receipt convolution is grounded on its mean and
+median. The mean is the sum of the two legs' means and the variance the sum of
+their variances; the median follows by [`gamma_median_wh`](@ref). Each is fitted
+to the reported value as a Normal observation whose SD is the reported 95% CrI
+half-width over 1.96 (`mean_se`, `median_se`), so the cohort's uncertainty
+enters directly and the constraint is soft. Returns a NamedTuple
+`(; mean_obs, mean_se, median_obs, median_se)` for
+the `onset_to_sample` argument of [`bvd_joint`](@ref).
+"""
+function nejm_onset_to_sample(; mean::Real = 7.4,
+        mean_se::Real = (13.5 - 5.3) / 2 / 1.96, median::Real = 4.8,
+        median_se::Real = (7.84 - 3.46) / 2 / 1.96)
+    return (; mean_obs = mean, mean_se, median_obs = median, median_se)
+end
+
+"""
+Log-density grounding the confirmed onset-to-sample convolution on the cohort:
+soft Normal fits of the convolution's continuous mean (the sum of the report
+and receipt leg means) and continuous median (from [`gamma_median_wh`](@ref) of
+the summed leg variances) to the reported `mean_obs`/`median_obs` with SDs
+`mean_se`/`median_se`. The fixed Gaussian normalising constants are dropped.
+"""
+function onset_to_sample_logweight(report_mean::Real, report_sd::Real,
+        receipt_mean::Real, receipt_sd::Real, cfg)
+    μ = report_mean + receipt_mean
+    sd = sqrt(report_sd^2 + receipt_sd^2)
+    med = gamma_median_wh(μ, sd)
+    return -0.5 * ((cfg.mean_obs - μ) / cfg.mean_se)^2 -
+           0.5 * ((cfg.median_obs - med) / cfg.median_se)^2
+end
+
 ## --- Reproduction number ------------------------------------------------
 
 """
