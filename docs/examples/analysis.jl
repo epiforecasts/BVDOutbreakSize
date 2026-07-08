@@ -1036,7 +1036,7 @@ cfr_prior_fig #hide
 # Zaire-specific GeneXpert Ebola assay, which does not reliably detect
 # Bundibugyo virus. Because a suspect is confirmed or ruled out through repeat
 # control tests rather than one assay draw, the prior credits the higher
-# effective sensitivity of that confirmation process (#374). The specificity is
+# effective sensitivity of that confirmation process. The specificity is
 # high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
 # never down); the death testing-intensity scaling is a tight log-normal
