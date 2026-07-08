@@ -16,7 +16,7 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
-                     NegativeBinomial, Binomial, BetaBinomial, Normal,
+                     NegativeBinomial, BetaBinomial, Normal,
                      LogNormal, Beta,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
@@ -79,8 +79,9 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        bed_capacity_walk_model, recovery_probability_model,
        death_background_model, death_ascertainment_model, background_cfr_model,
        background_re_model, background_pooling_model,
-       background_walk_model,
-       expand_vintage_rate,
+       background_walk_model, reporting_effort_walk_model,
+       contact_background_model, contact_tracing_model,
+       expand_vintage_rate, expand_covariate,
        test_sensitivity_model, test_specificity_model, lab_delay_model,
        confirmed_positivity_model, confirmed_overdispersion_model,
        severity_enrichment_model,

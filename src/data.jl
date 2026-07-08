@@ -39,6 +39,9 @@ length-of-stay submodel), `bed_capacity_history` from the implied bed
 capacity (occupancy / reported occupancy rate),
 `recovered_history` from the cumulative recovered-among-confirmed series
 ("cumul guéris"),
+`contact_followup_history` from the daily contact-tracing follow-up rate
+("taux de suivi des contacts", a fraction; an observed case-finding-intensity
+covariate for the suspected-case background),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
@@ -82,6 +85,21 @@ function load_observations(
         vals = Int.(block["values"][keep])
         ord = sortperm(idx)
         return (; days = idx[ord], counts = vals[ord])
+    end
+
+    ## Float-valued analogue of `history` for an observed real-valued
+    ## covariate series (the contact-tracing follow-up rate): same date
+    ## filtering, grid indexing and ascending sort, but the values stay
+    ## Float64 rather than integer counts. Vintages after the cut-off are
+    ## dropped like the count histories.
+    function history_float(key)
+        haskey(raw, key) || return (; days = Int[], values = Float64[])
+        block = raw[key]
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        vals = Float64.(block["values"][keep])
+        ord = sortperm(idx)
+        return (; days = idx[ord], values = vals[ord])
     end
 
     ## A dated list of event dates (not a cumulative block) → the grid
@@ -154,6 +172,14 @@ function load_observations(
     ## submodel. Begins 6 June, where the confirmed-based reports first print
     ## the running total.
     recovered_history = history("recovered_history")
+    ## Post-cutoff daily contact-tracing follow-up rate ("taux de suivi des
+    ## contacts", the share of listed contacts under active follow-up),
+    ## recorded as a fraction. An observed proxy for surge-driven case-finding
+    ## intensity, expanded onto the grid by `expand_covariate` and fed to the
+    ## suspected-case background as a fixed covariate (see
+    ## `contact_background_model`). Begins 7 June, where the confirmed-based
+    ## reports first print the rate. Absent block loads empty (a no-op).
+    contact_followup_history = history_float("contact_followup_history")
     ## Post-cutoff daily treatment-centre patient-movement flows (Tableau 6
     ## "Mouvement des patients", national): per-day counts (not cumulative) of
     ## admissions, in-care deaths (suspects + confirmed), rule-out discharges
@@ -213,6 +239,7 @@ function load_observations(
         bed_capacity_history = bed_capacity_history,
         recovered_history = recovered_history,
         recovered_cases = _scalar("recovered_cases", recovered_history),
+        contact_followup_history = contact_followup_history,
         treatment_admissions_history = treatment_admissions_history,
         treatment_deaths_history = treatment_deaths_history,
         treatment_ruleout_history = treatment_ruleout_history,

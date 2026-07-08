@@ -152,6 +152,32 @@ function expand_vintage_rate(rate::AbstractVector,
 end
 
 """
+Expand an observed real-valued covariate sampled on the ascending grid
+day-indices `days` (with `values`) onto a length-`n` daily grid. Values
+are linearly interpolated between the reported days (see
+[`interpolate_knots`](@ref)) across the covered span `days[1]…days[end]`
+and set to zero outside it, so the covariate contributes nothing before
+the first report or after the last. Returns a zero vector when `days` is
+empty. Used to turn the dated contact-tracing follow-up-rate series into
+the additive background covariate the suspected-case stream consumes
+([`contact_background_model`](@ref)). Pure and AD-transparent; the element
+type follows `values`.
+"""
+function expand_covariate(days::AbstractVector{<:Integer},
+        values::AbstractVector, n::Integer)
+    T = float(eltype(values))
+    out = zeros(T, n)
+    isempty(days) && return out
+    interp = interpolate_knots(collect(T, values), collect(Int, days), n)
+    lo = clamp(Int(first(days)), 1, n)
+    hi = clamp(Int(last(days)), 1, n)
+    @inbounds for t in lo:hi
+        out[t] = interp[t]
+    end
+    return out
+end
+
+"""
 Group a sorted event-day list `event_days` (grid day-indices, ascending,
 one entry per dated event, possibly with repeats) into its unique days and
 the per-day occupancy count, clamped to `[1, n]`. Returns `(days, counts)`
@@ -530,6 +556,19 @@ pipeline and dispersion with the cumulative stream and is empty by default.
 Its days fall strictly after the cumulative series ends, so the two suspected
 likelihoods cover disjoint days.
 
+An optional `contact_followup_history` (the observed daily contact-tracing
+follow-up rate) drives a shared latent follow-up-rate process
+([`contact_tracing_model`](@ref)) `q_t ∈ (0, 1)` defined over the whole grid.
+Case-finding is a detection process, so the latent rate scales BOTH the non-BVD
+background (`exp(β_contact · (q − q̄))`, [`contact_background_model`](@ref)) and,
+when a `reporting_effort` submodel is injected, the BVD suspected ascertainment
+([`reporting_effort_walk_model`](@ref)) which multiplies the BVD component of
+the expected counts by `exp(β_asc · (q − q̄) + w)`. Both touch the suspected
+likelihood only, not the shared onsets or `p_drc`, so they carry no `p_drc`
+confounding. Because `q_t` is latent over the whole grid it is inferred before
+the reported window and projects into forecasts rather than stopping with the
+data. Empty history / `nothing` leave each term off.
+
 The background and testing fraction
 are sampled by an injected [`test_positivity_model`](@ref), and the
 onset-to-report delay is injected, defaulting to a weakly-informative
@@ -550,6 +589,22 @@ sitrep.
         suspected_daily_history = (; days = Int[], counts = Int[]),
         positivity = test_positivity_model(),
         background_re = nothing,
+        ## Observed daily contact-tracing follow-up rate ("taux de suivi des
+        ## contacts", a fraction) as `(; days, values)`. When present it drives
+        ## a shared LATENT follow-up-rate process ([`contact_tracing_model`](@ref))
+        ## defined over the whole grid, so the case-finding anchor is inferred
+        ## before the reported window and projected into forecasts rather than
+        ## stopping with the data. Empty (the default) leaves the anchor off.
+        contact_followup_history = (; days = Int[], values = Float64[]),
+        contact_tracing = contact_tracing_model,
+        ## Non-BVD background elasticity to the contact rate (detection scales
+        ## the non-BVD background: `exp(β_contact · (q − q̄))`).
+        contact_effect = contact_background_model(),
+        ## Optional suspected-case reporting-effort (BVD ascertainment) submodel
+        ## constructor ([`reporting_effort_walk_model`](@ref)), anchored to the
+        ## same latent contact rate plus a walk and applied to the BVD suspected
+        ## component only. `nothing` (the default) keeps a constant effort.
+        reporting_effort = nothing,
         ## Onset to a suspected case being detected/reported, from the
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
@@ -592,9 +647,57 @@ sitrep.
         bg_daily = bg_state.λ
     end
 
-    ## Suspected daily cases add the p_drc-scaled BVD signal and the
-    ## non-BVD background.
-    reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+    ## Shared LATENT contact-tracing follow-up rate. When the follow-up-rate
+    ## series is supplied it drives a logistic random-walk process
+    ## ([`contact_tracing_model`](@ref)) defined over the whole grid `q_t ∈
+    ## (0, 1)`, fitted to the observed rate at its report days. Both the non-BVD
+    ## background and the BVD reporting effort anchor to this ONE rate, so
+    ## case-finding intensity is carried consistently and continues under the
+    ## walk where the data stop. Empty history → no latent process (anchor off).
+    has_contact = !isempty(contact_followup_history.days)
+    if has_contact
+        ct_days = [clamp(Int(d), 1, n) for d in contact_followup_history.days]
+        ct_logit = [logit(clamp(Float64(v), 1.0e-3, 1.0 - 1.0e-3))
+                    for v in contact_followup_history.values]
+        contact_state ~ to_submodel(
+            contact_tracing(n; obs_days = ct_days, logit_obs = ct_logit))
+        q_contact = contact_state.q
+        q_mean = sum(q_contact) / n
+    else
+        q_contact = nothing
+    end
+
+    ## Non-BVD background scaled by contact-tracing intensity. Contact tracing
+    ## is a detection process, so it SCALES the non-BVD background rather than
+    ## adding to it: `bg_t · exp(β_contact · (q_t − q̄))`, mean-centred so
+    ## `β_contact` is an elasticity around mean intensity and the level stays
+    ## with λ_bg / the walk. It scales only the non-BVD background (not
+    ## `p_drc`), so it does not reopen the ascertainment / outbreak-size
+    ## degeneracy a latent-scaled background would (issue #374).
+    if q_contact === nothing
+        β_contact = zero(λ_bg_base)
+    else
+        contact_bg_state ~ to_submodel(contact_effect)
+        β_contact = contact_bg_state.β_contact
+        bg_daily = bg_daily .* exp.(β_contact .* (q_contact .- q_mean))
+    end
+
+    ## Suspected daily cases add the p_drc-scaled BVD signal and the non-BVD
+    ## background. With a reporting-effort submodel injected, the BVD component
+    ## carries a case-finding-effort multiplier ([`reporting_effort_walk_model`]
+    ## (@ref)) anchored to the SAME latent contact rate plus a walk, applied
+    ## HERE only (not to the returned `bvd_reports_daily` the laboratory /
+    ## treatment / death streams reuse), so it is a suspected-case-specific
+    ## ascertainment term. `nothing` leaves the constant-ascertainment form.
+    if reporting_effort === nothing
+        effort_series = nothing
+        reports_daily = p_drc .* bvd_reports_daily .+ bg_daily
+    else
+        effort_state ~ to_submodel(
+            reporting_effort(n; contact_covariate = q_contact))
+        effort_series = effort_state.effort
+        reports_daily = (p_drc .* effort_series) .* bvd_reports_daily .+ bg_daily
+    end
 
     modelled_increments = bin_increments(reports_daily, vobs.days)
     reported_increments ~ to_submodel(
@@ -629,7 +732,8 @@ sitrep.
         report_mean = report_state.mean, report_sd = report_state.sd,
         bvd_reports_daily,
         reports_daily, expected_reports, positivity, bg_daily, bg_sigma,
-        bg_total)
+        bg_total, β_contact, reporting_effort = effort_series,
+        contact_rate = q_contact)
 end
 
 """

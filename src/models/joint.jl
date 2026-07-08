@@ -355,7 +355,11 @@ recovery probability and lagged by a confirmation-to-recovery delay (see
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. Tracked deterministics:
+seeding submodel when `tmrca_days` is given. `contact_covariate` optionally
+passes a length-`n` observed case-finding series (the contact-tracing
+follow-up rate) to the suspected-case background as a fixed offset
+([`reported_cases_model`](@ref)); `nothing` (the default) leaves the
+headline background unchanged. Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), the single established
 reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
@@ -410,6 +414,17 @@ death-confirmation positivity (`death_confirmation`).
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
+        ## Observed daily contact-tracing follow-up rate `(; days, values)`.
+        ## Passed to the suspected-case stream, where it drives a shared latent
+        ## follow-up-rate process ([`contact_tracing_model`](@ref)) that anchors
+        ## both the non-BVD background scaling and the BVD reporting effort.
+        ## Empty (the default) leaves the anchor off.
+        contact_followup_history = (; days = Int[], values = Float64[]),
+        ## Give the suspected-case stream a case-finding reporting-effort
+        ## multiplier ([`reporting_effort_walk_model`](@ref)) on the BVD
+        ## ascertainment, anchored to the latent contact rate plus a walk.
+        ## Default `false` keeps the constant-ascertainment suspected likelihood.
+        suspected_reporting_effort::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
@@ -497,12 +512,31 @@ death-confirmation positivity (`death_confirmation`).
         case_bg_re = nothing
     end
 
+    ## Optional suspected-case reporting-effort walk, gated to the surveillance
+    ## window (from the first suspected-case report). Injected into the cases
+    ## submodel so a suspected-specific reporting slowdown is absorbed as
+    ## changing case-finding effort rather than by the shared reproduction-number
+    ## walk. `false` (default) passes `nothing`, leaving the suspected likelihood
+    ## unchanged.
+    ## The effort closure accepts the latent contact rate at call time (built
+    ## inside the cases submodel), anchoring the BVD ascertainment to it plus a
+    ## walk gated to the surveillance window.
+    if suspected_reporting_effort
+        eff_onset = isempty(reported_history.days) ? 1 :
+                    clamp(Int(reported_history.days[1]), 1, n)
+        case_effort_re = (nn; contact_covariate = nothing) -> reporting_effort_walk_model(
+            nn; onset = eff_onset, contact_covariate)
+    else
+        case_effort_re = nothing
+    end
+
     ## Cases first so the suspected-case background `bg_daily` is available to
     ## the deaths stream (which scales it by `cfr_bg` for the death background)
     ## and to the laboratory pipeline.
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, onsets, k_cases, p_drc;
-        suspected_daily_history, background_re = case_bg_re))
+        suspected_daily_history, background_re = case_bg_re,
+        contact_followup_history, reporting_effort = case_effort_re))
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
@@ -685,6 +719,8 @@ death-confirmation positivity (`death_confirmation`).
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
     background_total := cases_state.bg_total
+    ## Contact-tracing background elasticity (0 when no follow-up data).
+    background_contact_coef := cases_state.β_contact
     death_ascertainment := deaths_state.p_death
     background_cfr := deaths_state.cfr_bg
     lambda_bg_death := deaths_state.λ_bg_death
