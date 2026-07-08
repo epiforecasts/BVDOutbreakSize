@@ -910,22 +910,19 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
-PCR sensitivity prior. `Beta(10, 1.76)` is centred near a mean of about 0.85
-with a spread of roughly 0.1; being a Beta it is not symmetric and carries
-somewhat more mass toward high sensitivity. Confirmation runs on the altona
-RealStar Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA
-copies per reaction; the rapid Cepheid GeneXpert Ebola assay is
-Zaire-ebolavirus-specific and does not reliably detect Bundibugyo. The prior
-centres on a good analytical sensitivity while allowing modest downside for
-early low-viral-load specimens and field handling. Under the severe-first
-backlog model the first vintage's analysed batch is near-pure BVD (`q ≈ 1`
-when selection is strong), so the v1 positivity ≈ `s` identifies the
-sensitivity from the early data. Scales the confirmed-case stream so the
-confirmed counts reflect imperfect detection of true BVD infections.
-Returns `(; s_test)`.
+Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean of
+0.95 with a tight spread. Confirmation runs on the altona RealStar Filovirus
+Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA copies per reaction;
+the Zaire-specific GeneXpert Ebola assay does not reliably detect Bundibugyo. A
+single assay draw is sensitive to about 0.85, but a suspect is confirmed or
+ruled out through repeat control tests rather than one PCR, so the effective
+process sensitivity is higher (two controls give about 0.98) and `Beta(38, 2)`
+credits that process (issue #374). Under the severe-first backlog the first
+vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1 positivity ≈ `s`
+identifies the sensitivity from the early data. Returns `(; s_test)`.
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(10.0, 1.76))
+        sensitivity_prior = Beta(38.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
 end

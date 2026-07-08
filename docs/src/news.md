@@ -12,6 +12,15 @@ Changes since v1.7.0.
 
 ### Model
 
+- Credited the repeat-control confirmation process in the confirmation
+  sensitivity prior. Rule-out is investigative rather than a single negative
+  PCR, so the effective sensitivity is higher than one assay draw (two controls
+  give about 0.98). The headline `test_sensitivity_model` prior moves from the
+  single-assay `Beta(10, 1.76)` (mean 0.85) to `Beta(38, 2)` (mean 0.95) on the
+  confirmed and confirmed-deaths streams. The outbreak-size estimate is robust
+  because the sensitivity enters the multiplicative ascertainment ridge
+  (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves
+  the retesting/rule-out part of #374).
 - Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
   (Akilimali et al.) as a standard part of the joint model. The onset-to-report
   and report-to-receipt legs already convolve to onset-to-sample for confirmed
