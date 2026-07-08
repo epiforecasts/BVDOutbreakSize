@@ -27,6 +27,40 @@ Changes since v1.7.0.
   slower than the community rate (`ρ < 1`); without the modifier the split was
   forced to the borrowed community hazard and systematically over-confirmed the
   in-care census.
+- Credited the repeat-control confirmation process in the confirmation
+  sensitivity prior. Rule-out is investigative rather than a single negative
+  PCR, so the effective sensitivity is higher than one assay draw (two controls
+  give about 0.98). The headline `test_sensitivity_model` prior moves from the
+  single-assay `Beta(10, 1.76)` (mean 0.85) to `Beta(38, 2)` (mean 0.95) on the
+  confirmed and confirmed-deaths streams. The outbreak-size estimate is robust
+  because the sensitivity enters the multiplicative ascertainment ridge
+  (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves
+  the retesting/rule-out part of #374).
+- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
+  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
+  and report-to-receipt legs already convolve to onset-to-sample for confirmed
+  cases. The convolution's mean (the sum of the report and receipt leg means)
+  and median (Wilson-Hilferty of the summed leg variances) are fitted to the
+  reported 7.4 d and 4.8 d as soft Normal observations, with the reported 95%
+  credible intervals as their SDs. This grounds the otherwise-unidentified
+  laboratory-turnaround delay directly from the cohort's own uncertainty and
+  adds no latent parameter. On by default in the joint fit; the single-stream
+  and isolation fits lack the laboratory receipt leg and so do not carry it
+  (resolves #359).
+
+- Scored the confirmed-case laboratory positives as an overdispersed
+  `BetaBinomial` of the observed analysed denominator instead of a plain
+  `Binomial`. A plain `Binomial` on denominators of several hundred
+  specimens gave posterior-predictive intervals far too tight, so the
+  confirmed stream was systematically under-covered: the smooth pooled /
+  composition-linked per-window positivity does not capture the day-to-day
+  laboratory batching and within-window positivity heterogeneity the
+  confirmed counts carry. A single intra-window overdispersion `ρ`
+  (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`)
+  inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`,
+  identified across the laboratory windows, and recovers the `Binomial` as
+  `ρ → 0`. The mean structure and the composition link that identifies the
+  background `λ_bg` are unchanged.
 
 ### Documentation and infrastructure
 

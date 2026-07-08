@@ -107,7 +107,7 @@ function build_fit_specs(obs;
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
     end
@@ -115,6 +115,7 @@ function build_fit_specs(obs;
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
+            confirmed = confirmed_cases_model,
             tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0)
         return nuts_sample(
             bvd_joint(
@@ -146,10 +147,11 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 deaths = deaths,
+                confirmed = confirmed,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("variant"))
     end
 
@@ -199,7 +201,7 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains,
+                samples = samples, chains = chains, target_accept = 0.95,
                 callback = fit_callback("joint"))),
         (; id = "exports",
             kind = :chain,

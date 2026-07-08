@@ -888,6 +888,67 @@ vintage_table #hide
 # It drives the laboratory analysed-specimen volume; its source is shown
 # with the laboratory submodel below.
 #
+# ##### Onset-to-sample delay
+#
+# The confirmed timeline is onset to report to receipt, so the onset-to-report
+# and report-to-analysed (receipt) legs already convolve to an onset-to-sample
+# delay for confirmed cases,
+#
+# ```math
+# g_{\text{conf}}(d) = (f_{\text{rep}} * f_{\text{rec}})(d)
+#     = \sum_{s \ge 0} f_{\text{rep}}(s)\, f_{\text{rec}}(d - s), \tag{19}
+# ```
+#
+# with an implied mean of about $9$ d. We ground this convolution on the
+# externally estimated confirmed onset-to-sample delay from the NEJM DRC 2026
+# Bundibugyo virus cohort [akilimali2026](@cite), whose confirmed-positive
+# interval ($N = 129$) was estimated with the marginal model of `epidist`
+# [epidist](@cite) correcting for double interval censoring and right
+# truncation [charniga2024](@cite), a Gamma that is preferred over lognormal
+# and Weibull by LOOIC. The cohort reports a mean of $7.4$ d ($95\%$ CrI
+# $5.3$-$13.5$) and median of $4.8$ d ($95\%$ CrI $3.46$-$7.84$).
+#
+# We ground the convolution on its mean and median. The mean is the sum of the
+# two legs' means, the variance the sum of their variances, and the median
+# follows by the Wilson–Hilferty approximation [wilson1931](@cite),
+#
+# ```math
+# \mu_{\text{sam}} = \mu_{\text{rep}} + \mu_{\text{rec}}, \qquad
+# \sigma_{\text{sam}}^2 = \sigma_{\text{rep}}^2 + \sigma_{\text{rec}}^2, \qquad
+# m_{\text{sam}} = \mu_{\text{sam}}\bigl(1 - \sigma_{\text{sam}}^2 /
+#     (9\,\mu_{\text{sam}}^2)\bigr)^3. \tag{20}
+# ```
+#
+# The reported mean and median are fitted to $\mu_{\text{sam}}$ and
+# $m_{\text{sam}}$ as soft Normal observations whose SDs are the reported
+# $95\%$ CrI half-widths over $1.96$,
+#
+# ```math
+# 7.4 \sim \mathrm{Normal}(\mu_{\text{sam}},\ 2.09), \qquad
+# 4.8 \sim \mathrm{Normal}(m_{\text{sam}},\ 1.12). \tag{21}
+# ```
+#
+# The cohort's uncertainty enters directly through these credible intervals.
+# The report and receipt legs adjust, subject to their existing priors, so the
+# confirmed onset-to-sample convolution reproduces the cohort delay; the
+# receipt (lab-turnaround) leg is otherwise unidentified, so this is what
+# grounds it.
+
+#md # ```@raw html
+#md # <details><summary>Grounding: onset_to_sample_logweight</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.onset_to_sample_logweight(5.0, 4.0,
+#md #         4.5, 4.0, BVDOutbreakSize.nejm_onset_to_sample())), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Case-fatality ratio
 #
 # The US Centers for Disease Control and Prevention (CDC) summary for
@@ -901,7 +962,7 @@ vintage_table #hide
 # prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{19}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{22}
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$. The mean
@@ -957,7 +1018,7 @@ cfr_prior_fig #hide
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
 # z_s \sim \mathrm{Normal}(0, 1), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{20}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{23}
 # ```
 #
 # so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the
@@ -992,13 +1053,13 @@ cfr_prior_fig #hide
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{21}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{24}
 # ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{22}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{25}
 # ```
 #
 # The cases likelihood uses $p_{\text{DRC}}$; the two Uganda-side
@@ -1037,23 +1098,23 @@ cfr_prior_fig #hide
 # $q_{\text{death}}$. Confirmation runs
 # on the altona RealStar Filovirus Screen RT-PCR rather than the
 # Zaire-specific GeneXpert Ebola assay, which does not reliably detect
-# Bundibugyo virus. Sensitivity for Bundibugyo virus is less well
-# characterised than for Zaire ebolavirus, so we centre the sensitivity prior
-# below the values reported for other strains and give it a wide
-# spread. The specificity is high but imperfect; the
+# Bundibugyo virus. Because a suspect is confirmed or ruled out through repeat
+# control tests rather than one assay draw, the prior credits the higher
+# effective sensitivity of that confirmation process. The specificity is
+# high but imperfect; the
 # severity enrichment is moderate and one-sided (triage upsamples BVD,
 # never down); the death testing-intensity scaling is a tight log-normal
 # centred on one, since no death-testing data grounds it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# s \sim \mathrm{Beta}(10,\ 1.76), \qquad
+# s \sim \mathrm{Beta}(38,\ 2), \qquad
 # \mathrm{spec} \sim \mathrm{Beta}(60,\ 2),
 # ```
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{23}
+# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{26}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case
@@ -1191,7 +1252,7 @@ cfr_prior_fig #hide
 # population is kept fixed (census):
 #
 # ```math
-# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{24}
+# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{27}
 # ```
 
 #md # ```@raw html
@@ -1260,7 +1321,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{25}
+#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{28}
 # ```
 #
 # From SitRep 013 (27 May) INSP reclassifies suspects, so the national
