@@ -10,6 +10,10 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.8.0.
 
+### Data 
+
+- Updated data including movement flows for those in isolation.
+
 ### Model
 
 - Updated the molecular-clock time estimate to use the outbreak-specific
