@@ -664,8 +664,35 @@ source = "McCabe et al. Table 1 — Ituri Province population"
 # Both dates are converted to days before `as_of_date` at load time, so they
 # track changes to the cut-off.
 [genetic_tmrca]
+[genetic_tmrca]
 date        = "2026-03-15"
 days_sd     = 16
 alt_date    = "2026-03-08"
 alt_days_sd = 16
 source = "BEAST X v10.6.0 analysis of 139 BDBV genomes (mbalaplacide2026, 2026-07-10 virological.org post; GTR substitution model, strict molecular clock, Skygrid and Exponential growth coalescent priors). Skygrid baseline: mean TMRCA 2026-03-15, 95% HPD 2026-02-09 to 2026-04-12. Exponential growth sensitivity: mean TMRCA 2026-03-08, 95% HPD 2026-02-01 to 2026-04-05. Both at the outbreak-specific ~1.1E-3 substitutions/site/year rate. Estimates sample 139 genomes across 16 health zones and are a lower bound on the outbreak age, since further sequencing only pushes the TMRCA older. Using the genetic TMRCA as a seeding bound follows a suggestion of N. Ferguson (ferguson2026)."
+
+# Per-province cumulative confirmed-case histories from Tableau 1 spatial
+# tables (cases/deaths format, cases column). Begins 18 June (SitRep 035)
+# where the spatial table first appears. Dates match the confirmed_history
+# dates from that point.
+#
+# Each value is the Tableau 1 spatial-table cumulative confirmed cases for
+# that province. The Ituri/Nord-Kivu/Sud-Kivu sums cross-check exactly
+# against the national confirmed_history totals (see the confirmed_case_history
+# source notes for the explicit spatial table entries and daily per-province
+# new-confirmed breakdowns for the derived entries). Sud-Kivu is a constant
+# 3 throughout this window: a single confirmed cluster in Bunia ZS that never
+# added a new spatial-table case over the period.
+[province_confirmed_history]
+dates  = ["2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21",
+          "2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25",
+          "2026-06-27", "2026-06-29", "2026-06-30", "2026-07-01",
+          "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05",
+          "2026-07-06"]
+ituri   = [853, 874, 916, 954, 997, 1020, 1054, 1096, 1165, 1214,
+           1283, 1333, 1366, 1387, 1417, 1477, 1556]
+nord_kivu = [77, 79, 84, 91, 94, 95, 98, 104, 106, 116,
+             120, 124, 133, 138, 141, 144, 149]
+sud_kivu  = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+             3, 3, 3, 3, 3, 3, 3]
+source = "INSP situation reports Tableau 1 spatial table per-province confirmed case totals, read from the PDFs. Spatial tables explicitly recorded in the confirmed_case_history source notes for 18-19, 22-24, 27, 29 Jun and 1-6 Jul. Values for 20-21, 25 and 30 Jun derived from the day's per-ZS new-confirmed breakdown (Ituri + Nord-Kivu sums equal the national increment, with Sud-Kivu 3 constant throughout). Every entry cross-checks against the national confirmed_history total at each date."

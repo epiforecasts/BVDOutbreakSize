@@ -3412,7 +3412,7 @@ Returns `(; patch_confirmed_daily, expected_patch_confirmed)`.
     modelled_inc = bin_increments(confirmed_daily, vobs.days)
     confirmed_increments ~ to_submodel(
         vintage_increments_model(modelled_inc, vobs.obs_increments, k_confirmed))
-    expected_patch_confirmed := sum(confirmed_daily)
+    expected_patch_confirmed = sum(confirmed_daily)
     return (; patch_confirmed_daily = confirmed_daily,
         expected_patch_confirmed)
 end
