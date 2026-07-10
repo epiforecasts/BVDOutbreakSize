@@ -58,8 +58,8 @@ end
     ## cryptic duration stays uncertain.
     @test 3.5 < mean(m) < 4.8
     @test 2.3 < std(m) < 3.2
-    ## The growth rate is centred on the ≈20-day doubling (r ≈ 0.0347).
-    @test 0.025 < mean(r) < 0.045
+    ## The growth rate is centred on the BEAST X 11.7-day doubling (r ≈ 0.059).
+    @test 0.05 < mean(r) < 0.08
     ## The induced cryptic duration T = m·τ is correspondingly wide.
     @test std(T) > 30.0
 end
