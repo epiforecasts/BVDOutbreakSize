@@ -589,15 +589,15 @@ vintage_table #hide
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs. The
-# genetic reanalysis reports the epidemic doubling time as 15.2 to 24.5 d
-# across substitution-rate assumptions, with a centre near 20 d. We put a
+# outbreak-specific BEAST X analysis reports the epidemic doubling time as
+# 11.7 d (95\% HPD 6.8--17.5, Exponential growth model). We put a
 # log-normal prior on $r$ equivalent to a log-normal prior on the doubling
-# time centred on 20 d, with its log spread read from that range and
+# time centred on 11.7 d, with its log spread read from that range and
 # inflated a little, so the prior is slightly wider in spread than the
 # source but unbiased relative to it:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{20},\ 0.15\right). \tag{9}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.3\right). \tag{9}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward

@@ -262,11 +262,11 @@ start, and the magnitude is independent of `r`. The composer
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.15)`, centred on Cuomo-Dannenburg & Ghafari's
-molecular-clock doubling time for this outbreak (mean 15.2–24.5 d across six
-substitution-rate assumptions, centre 20 d), equivalent to a
-`LogNormal(log(20), 0.15)` prior on the doubling time. The log-SD 0.15 reads
-the 15.2–24.5 d spread as roughly a 95% interval (log-SD ≈ 0.12) and inflates
+M_PRIOR_DOUBLING_DAYS), 0.3)`, centred on the outbreak-specific BEAST X
+doubling time for this outbreak (mbalaplacide2026, Exponential growth
+model, mean 11.7 d, 95% HPD 6.8–17.5), equivalent to a
+`LogNormal(log(11.7), 0.3)` prior on the doubling time. The log-SD 0.3 reads
+the 6.8–17.5 d spread as roughly a 95% interval (log-SD ≈ 0.24) and inflates
 it a little to allow for the wide per-assumption intervals, so the prior is
 slightly inflated in SD but unbiased relative to the source. The first
 reproduction number is then derived FORWARD from this `r` and OUR generation
@@ -279,9 +279,9 @@ under our generation interval rather than pinned by a separate `R0` prior.
 `m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)` is deliberately WIDE.
 Since `m` now counts only the CRYPTIC doublings (not the cut-off case
 total), its centre is much lower than the integral model's: with the
-≈20-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
+≈11.7-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
 days, placing the origin in the genetically-plausible window (origin roughly
-Feb–Mar). The spread keeps the cryptic duration wide.
+late Mar). The spread keeps the cryptic duration wide.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override
@@ -290,7 +290,7 @@ whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.15),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.3),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
