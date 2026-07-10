@@ -1023,25 +1023,28 @@ in the return tuple for diagnostics and downstream extension. See also
         patch_state.incubation_pmf;
         export_death_days))
     ## Exports from Ituri (patch 1) only, matching the single-patch model.
-    ## 6. Treatment flows (isolation, bed capacity, LOS).
-    treatment_state ~ to_submodel(treatment(n, isolation_history, onsets,
-        deaths_state.onsets_to_deaths, deaths_state.CFR;
-        bed_capacity_history,
-        treatment_admissions_history, treatment_deaths_history,
-        treatment_ruleout_history, treatment_absconded_history,
-        occupancy_break_days,
-        k_isolation))
+    ## 6. Treatment flows (isolation, bed capacity, LOS). Uses the summed
+    ##    (national) suspected-case inflow, matching the national-level data.
+    treatment_state ~ to_submodel(treatment(isolation_history,
+        cases_state.bvd_reports_daily, cases_state.bg_daily, p_drc,
+        deaths_state.CFR;
+        capacity_history = bed_capacity_history,
+        admissions_history = treatment_admissions_history,
+        deaths_history = treatment_deaths_history,
+        ruleout_history = treatment_ruleout_history,
+        absconded_history = treatment_absconded_history,
+        occupancy_break_days = occupancy_break_days,
+        k_external = k_isolation))
     ## 7. Recovered (among confirmed).
     recovered_state ~ to_submodel(recovered(recovered_history,
         recovered_cases, confirmed_state.confirmed_daily,
         deaths_state.CFR))
     ## --- Deterministics surfaced for reporting --------------------------
+    ## Patch-level parameters are already traced by the submodel; we surface
+    ## only those that are NOT already `:=` or `~` inside the nested models.
     R0 := patch_state.R0
     r := patch_state.r
     δ_patch := patch_state.δ_patch
-    σ_region := patch_state.σ_region
-    importation_epsilon := patch_state.importation_epsilon
-    C_T_total := latent.C_T_total
     k := dispersion_state.k_pop
     k_cases := kv[1]
     k_deaths := kv[2]
