@@ -635,20 +635,18 @@ vintage_table #hide
 
 # ##### Genetic bound on outbreak age
 #
-# A BEAST X v10.6.0 analysis of 139 sequenced genomes from the outbreak
-# [mbalaplacide2026](@cite) places the TMRCA, the age of the oldest
-# internal node of the tree, at a mean of 15 March 2026 under the
-# Skygrid non-parametric coalescent prior ($95\%$ HPD 09 Feb -- 12 Apr).
-# The outbreak now has its own evolutionary-rate estimate ($\sim 1.1\times
-# 10^{-3}$ substitutions/site/year, based on 139 BDBV genomes across 16
-# health zones), replacing the earlier reliance on cross-outbreak
-# literature rates. The report also fits an Exponential growth tree prior,
-# giving a slightly earlier mean TMRCA of 08 March 2026 ($95\%$ HPD 01
-# Feb -- 05 Apr); the Sensitivity page compares the two.
-# The TMRCA is a lower bound on the outbreak age: adding sequences, or
-# more geographically representative ones, can only push it earlier, never
-# later. Using the genetic TMRCA as a one-sided seeding bound rather than
-# a point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+# A BEAST X v10.6.0 analysis of 139 sequenced genomes [mbalaplacide2026](@cite)
+# places the TMRCA, the age of the oldest internal node of the tree, at a
+# mean of 15 March 2026 under the Skygrid non-parametric coalescent prior
+# ($95\%$ HPD 09 Feb -- 12 Apr). The evolutionary-rate estimate is $\sim
+# 1.1\times 10^{-3}$ substitutions/site/year (139 BDBV genomes across 16
+# health zones). The report also fits an Exponential growth tree prior,
+# giving a mean TMRCA of 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr); the
+# Sensitivity page compares the two. The TMRCA is a lower bound on the
+# outbreak age: adding sequences, or more geographically representative
+# ones, can only push it earlier, never later. Using the genetic TMRCA
+# as a one-sided seeding bound rather than a point estimate follows a
+# suggestion of N. Ferguson [ferguson2026](@cite).
 #
 # We treat the TMRCA day as a right-censored, noisy reading of the total
 # outbreak age $T$ (the cryptic duration plus the observed window, defined

@@ -10,7 +10,7 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.8.0.
 
-### Data 
+### Data
 
 - Updated data including movement flows for those in isolation.
 

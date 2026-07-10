@@ -4,10 +4,9 @@
 # one-week-ahead forecast onward: how last week's forecast held up, the
 # outbreak size each data stream implies on its own, how the estimate has
 # evolved across releases, comparisons with McCabe et al. and Chamla et al.,
-# and the delay and tree-prior sensitivity re-fits. The genetic bound now
-# uses the outbreak-specific rate estimate [mbalaplacide2026](@cite)
-# (~1.1E-3 substitutions/site/year) from 139 BDBV genomes; the tree-prior
-# sensitivity compares the Skygrid and Exponential growth TMRCA estimates.
+# and the delay and tree-prior sensitivity re-fits. The tree-prior
+# sensitivity compares the Skygrid and Exponential growth TMRCA estimates
+# [mbalaplacide2026](@cite) (~1.1E-3 subs/site/year, 139 BDBV genomes).
 # It renders from the same fitted chains as the main analysis, loaded through
 # the shared setup, so no model is re-fit here beyond the frozen and (gated)
 # sensitivity re-fits.
@@ -754,8 +753,7 @@ delay_sensitivity_fig #hide
 # [mbalaplacide2026](@cite). Both priors give very similar evolutionary
 # rates ($\sim 1.1\times10^{-3}$ subs/site/year). We re-fit the joint
 # model under the Exponential growth TMRCA and compare the infection
-# count to date and the outbreak age. The re-fit uses the full headline
-# settings (1000 draws across two chains).
+# count to date and the outbreak age.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
