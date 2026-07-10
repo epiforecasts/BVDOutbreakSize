@@ -414,7 +414,7 @@ death-confirmation positivity (`death_confirmation`).
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
-        tmrca_days_sd::Real = 15.0,
+        tmrca_days_sd::Real = 16.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
         rt_walk_lead::Integer = RT_WALK_LEAD)
     ## The renewal start sits `renewal_start_lead` days AFTER the genetic

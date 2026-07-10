@@ -262,13 +262,12 @@ start, and the magnitude is independent of `r`. The composer
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.15)`, centred on Cuomo-Dannenburg & Ghafari's
-molecular-clock doubling time for this outbreak (mean 15.2–24.5 d across six
-substitution-rate assumptions, centre 20 d), equivalent to a
-`LogNormal(log(20), 0.15)` prior on the doubling time. The log-SD 0.15 reads
-the 15.2–24.5 d spread as roughly a 95% interval (log-SD ≈ 0.12) and inflates
-it a little to allow for the wide per-assumption intervals, so the prior is
-slightly inflated in SD but unbiased relative to the source. The first
+M_PRIOR_DOUBLING_DAYS), 0.28)`, with median doubling time (11.7 d)
+matching the BEAST X estimate (mbalaplacide2026, Exponential growth
+model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the asymmetric HPD as
+roughly a 95% interval (log-SD ≈ 0.24 from the HPD ratio) and slightly
+inflates it to cover the skew towards shorter doubling times, so the
+prior is modestly wider than the source but unbiased. The first
 reproduction number is then derived FORWARD from this `r` and OUR generation
 interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
@@ -279,9 +278,9 @@ under our generation interval rather than pinned by a separate `R0` prior.
 `m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)` is deliberately WIDE.
 Since `m` now counts only the CRYPTIC doublings (not the cut-off case
 total), its centre is much lower than the integral model's: with the
-≈20-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
+≈11.7-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
 days, placing the origin in the genetically-plausible window (origin roughly
-Feb–Mar). The spread keeps the cryptic duration wide.
+late Mar). The spread keeps the cryptic duration wide.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override
@@ -290,7 +289,7 @@ whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.15),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
@@ -464,7 +463,7 @@ it older; the likelihood contributes `P(read ≥ tmrca_days)`. Passing
 `tmrca_days = missing` makes the submodel a no-op.
 """
 @model function genetic_seeding_model(T::Real,
-        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 15.0)
+        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 16.0)
     if !ismissing(tmrca_days)
         tmrca_days ~ censored(Normal(T, tmrca_days_sd); upper = tmrca_days)
     end

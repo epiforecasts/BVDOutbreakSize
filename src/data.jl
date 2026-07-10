@@ -262,9 +262,9 @@ m_0 = m_\\text{base} +
 ```
 
 The base is McCabe et al.'s first report (18 May 2026; Method 2 central
-501 cases ⇒ `m ≈ 9`), advancing at the central 20-day doubling time
-(`M_PRIOR_DOUBLING_DAYS`, the molecular-clock estimate of
-cuomodannenburg2026), so the prior stays centred on the plausible outbreak
+501 cases ⇒ `m ≈ 9`), advancing at the outbreak-specific doubling time
+(`M_PRIOR_DOUBLING_DAYS`, the BEAST X estimate of mbalaplacide2026,
+mean 11.7 d), so the prior stays centred on the plausible outbreak
 size as the cut-off moves. `C_T = 2^m` is the cumulative *infection*
 count; 9 is a weakly-informative centre of the same order. Passed into
 [`exponential_growth_model`](@ref) as the centre of the wide `m` prior.

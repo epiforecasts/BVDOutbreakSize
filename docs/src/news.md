@@ -10,7 +10,31 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.8.0.
 
+### Data
+
 - Updated data including movement flows for those in isolation.
+
+### Model
+
+- Updated the molecular-clock time estimate to use the outbreak-specific
+  BEAST X analysis (mbalaplacide2026, 139 BDBV genomes from 16 health
+  zones, ~1.1E-3 subs/site/year). The genetic TMRCA baseline moves from
+  2026-03-25 (SD 15, fixed 1.2E-3 EBOV rate) to **2026-03-15** (SD 16,
+  95% HPD 09 Feb--12 Apr) under the Skygrid coalescent prior. Added a
+  tree-prior sensitivity comparing the Exponential growth estimate
+  (2026-03-08, SD 16, 95% HPD 01 Feb--05 Apr).
+- Updated the growth-rate prior to the outbreak-specific doubling time
+  from the same analysis: centre moves from 20 d (Cuomo-Dannenburg &
+  Ghafari) to **11.7 d** (95% HPD 6.8--17.5, mbalaplacide2026), with the
+  log-SD widened from 0.15 to 0.3 to match the wider credible interval.
+
+### Documentation
+
+- Updated all prose references to the genetic bound and growth-rate prior
+  to cite the new virological.org report (v1045, mbalaplacide2026) and
+  the outbreak-specific rate and doubling time.
+- Added a tree-prior sensitivity section comparing the Skygrid and
+  Exponential growth TMRCA estimates.
 
 ## v1.8.0
 

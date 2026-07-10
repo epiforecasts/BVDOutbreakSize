@@ -313,6 +313,20 @@
   howpublished = {\url{https://github.com/seabbs/a-workflow-for-infectious-disease-modelling}},
 }
 
+@misc{mbalaplacide2026,
+  title        = {Genomic epidemiology of the ongoing 2026 Bundibugyo virus
+                  disease outbreak in the Democratic Republic of the Congo},
+  author       = {Mbala-Kingebeni, Placide and others},
+  year         = {2026},
+  howpublished = {\url{https://virological.org/t/genomic-epidemiology-of-the-ongoing-2026-bundibugyo-virus-disease-outbreak-in-the-democratic-republic-of-the-congo/1045}},
+  note         = {Virological.org post, July 2026. BEAST X v10.6.0 analysis of
+                  139 BDBV genomes; evolutionary rate ~1.1E-3 subs/site/year
+                  with Skygrid and Exponential growth tree priors; tMRCA
+                  estimates 15 Mar (Skygrid, baseline) and 08 Mar (ExpGrowth,
+                  sensitivity); Exponential growth doubling time 11.7 d
+                  (95% HPD 6.8--17.5).},
+}
+
 @misc{virological2026,
   title        = {Initial genomes from May 2026 Bundibugyo Virus Disease
                   Outbreak in the Democratic Republic of the Congo and
@@ -354,7 +368,9 @@
                   the initial BDBV genomes; the 2026-05-21 update adds a
                   BEAST v10.5.0 temporal tree of the first ten genomes
                   (HKY, strict clock fixed to literature EBOV rates,
-                  exponential coalescent) reporting the TMRCA.},
+                  exponential coalescent) reporting the TMRCA. Superseded
+                  for rate estimates by the 139-genome BEAST X analysis
+                  (mbalaplacide2026).},
 }
 
 @misc{cuomodannenburg2026,
@@ -370,7 +386,9 @@
                   epidemic doubling time of 15.2-24.5 days (wide
                   intervals that include zero), basic reproduction number
                   1.31-1.55, a 9.6-day generation time, and a TMRCA
-                  between 01 and 15 March 2026.},
+                  between 01 and 15 March 2026. The outbreak-specific rate
+                  (mbalaplacide2026, 139 genomes) now supersedes the
+                  substitution-rate assumptions used here.},
 }
 
 @article{holmes2016,
@@ -395,7 +413,9 @@
                   the genetic TMRCA with the other data streams as a
                   lower bound on the seeding time, originally via the
                   root-to-tip distance of the first BDBV genomes
-                  (virological2026) and the holmes2016 clock rate.},
+                  (virological2026) and the holmes2016 clock rate, now
+                  grounded on the outbreak-specific estimates of
+                  mbalaplacide2026.},
 }
 
 @article{semper2016,

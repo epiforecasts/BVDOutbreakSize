@@ -555,21 +555,21 @@ source = "McCabe et al. Table 1 — Ituri Province population"
 
 # Genetic TMRCA. A soft lower bound on the seeding time T, the time to
 # the most recent common ancestor of the first sequenced cases. It is a
-# lower bound because adding sequences only pushes the TMRCA older, and
-# the sampled tree is geographically narrow (9 of 10 genomes from
-# Bunia), so broader sampling could move it earlier. `date` is the
-# BEAST mean TMRCA reported in the 2026-05-21 temporal-tree update.
-# `days_sd` is the SD on the location of the floor (uncertainty in the
-# estimate, in either direction), not a constraint on how old T can be;
-# it is derived from the reported 95% HPD interval (about +/- 30 days,
-# so SD ~ 15 days). `alt_date` / `alt_days_sd` carry the same estimate
-# under the faster 1.9e-3 early-epidemic clock rate (mean 2026-04-11,
-# 95% HPD 2026-03-23 to 2026-04-28, so SD ~ 9 days), used by the
-# clock-rate sensitivity. Both dates are converted to days before
-# `as_of_date` at load time, so they track changes to the cut-off.
+# lower bound because adding sequences, or more geographically
+# representative ones, only pushes the TMRCA older. `date` is the BEAST X
+# v10.6.0 mean TMRCA under the Skygrid non-parametric coalescent prior
+# (mbalaplacide2026), the more flexible of the two tree-prior models
+# reported. `days_sd` is the SD on the location of the floor (uncertainty
+# in the estimate, in either direction), derived from the reported 95%
+# HPD interval (09 Feb to 12 Apr: 62 days / 3.92 ~ 16 days).
+# `alt_date` / `alt_days_sd` carry the same estimate under the Exponential
+# growth tree prior (mean 2026-03-08, 95% HPD 2026-02-01 to 2026-04-05,
+# SD ~ 16 days), used by the tree-prior sensitivity analysis.
+# Both dates are converted to days before `as_of_date` at load time, so they
+# track changes to the cut-off.
 [genetic_tmrca]
-date        = "2026-03-25"
-days_sd     = 15
-alt_date    = "2026-04-11"
-alt_days_sd = 9
-source = "BEAST v10.5.0 temporal tree of the first 10 BDBV genomes (virological2026, 2026-05-21 update; HKY substitution model, strict molecular clock, exponential coalescent prior). Mean TMRCA 2026-03-25, 95% HPD 2026-02-20 to 2026-04-20, at the 1.2e-3 substitutions/site/year clock rate (holmes2016, all public 2013-2016 EBOV data) matching this analysis. The faster 1.9e-3 early-epidemic rate gives a more recent mean TMRCA of 2026-04-11 (HPD 2026-03-23 to 2026-04-28). Estimate is Bunia-specific and a lower bound, since further or geographically broader sequencing only pushes the TMRCA older. Using the genetic TMRCA as a seeding bound follows a suggestion of N. Ferguson (ferguson2026)."
+date        = "2026-03-15"
+days_sd     = 16
+alt_date    = "2026-03-08"
+alt_days_sd = 16
+source = "BEAST X v10.6.0 analysis of 139 BDBV genomes (mbalaplacide2026, 2026-07-10 virological.org post; GTR substitution model, strict molecular clock, Skygrid and Exponential growth coalescent priors). Skygrid baseline: mean TMRCA 2026-03-15, 95% HPD 2026-02-09 to 2026-04-12. Exponential growth sensitivity: mean TMRCA 2026-03-08, 95% HPD 2026-02-01 to 2026-04-05. Both at the outbreak-specific ~1.1E-3 substitutions/site/year rate. Estimates sample 139 genomes across 16 health zones and are a lower bound on the outbreak age, since further sequencing only pushes the TMRCA older. Using the genetic TMRCA as a seeding bound follows a suggestion of N. Ferguson (ferguson2026)."

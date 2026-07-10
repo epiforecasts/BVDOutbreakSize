@@ -113,7 +113,7 @@ C = plots. D = results/summary. E = process/release. Cross-refs to issues #224/#
 - **Forecast**: Rt evolves (see A6).
 - **Delay sensitivity**: do it over the DIFFERENT DELAYS as on main (read main's
   delay-sensitivity), NOT a made-up shorter/longer scenario.
-- **Clock-rate sensitivity**: state what the clock rates ARE.
+# **Clock-rate sensitivity**: removed — outbreak now has its own rate estimate (mbalaplacide2026, ~1.1E-3 subs/site/year).
 - **Cumulative infections by data stream**: scale the x-axis by a multiple of the
   joint-fit 90% bound (the confirmed-cases-only stream is ill-defined and useless
   on its own; the current cap hides the mass).
