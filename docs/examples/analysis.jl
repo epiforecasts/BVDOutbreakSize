@@ -591,14 +591,11 @@ vintage_table #hide
 # The growth rate $r$ carries the prior the genetic source informs. The
 # BEAST X analysis [mbalaplacide2026](@cite) reports the epidemic doubling
 # time as 11.7 d (95\% HPD 6.8--17.5, Exponential growth model). The
-# growth-rate prior is set so the **mean** doubling time matches that
-# estimate, with a $\sigma^2/2$ offset to correct the LogNormal skew
-# ($\mathbb{E}[\tau] = \log(2)\cdot\exp(-\mu_r + \sigma^2/2)$), and
+# growth-rate prior puts the median doubling time at that estimate, with
 # its spread read from the HPD and slightly inflated:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7} +
-#   \tfrac{0.28^2}{2},\ 0.28\right). \tag{9}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.28\right). \tag{9}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward
