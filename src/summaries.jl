@@ -351,7 +351,7 @@ function patch_summary_table(chn, n_patches::Integer = 3;
     params = [:C_T_patch_1, :C_T_patch_2, :C_T_patch_3,
         :R_T_patch_1, :R_T_patch_2, :R_T_patch_3,
         :infections_T_patch_1, :infections_T_patch_2,
-        :infections_T_patch_3, :δ_patch]
+        :infections_T_patch_3]
     ## Check which deterministics the chain carries
     has_all = all(k -> try
             chn[k];
@@ -378,13 +378,21 @@ function patch_summary_table(chn, n_patches::Integer = 3;
            for i in 1:min(n_patches, 3)]
     inf_T = [posterior_summary(_draws(chn, Symbol("infections_T_patch_", i)))
              for i in 1:min(n_patches, 3)]
-    ## δ_patch is a vector, extract per-element summaries
-    δ_raw = _draws(chn, :δ_patch)
-    n_draws = length(δ_raw)
-    first_el = δ_raw[1]
-    n_δ = length(first_el)
-    δ_el = [posterior_summary([δ_raw[i][p] for i in 1:n_draws])
-            for p in 1:min(n_δ, n_patches)]
+    ## sigma_rw from MV walk: extract per-patch step SDs (optional, only
+    ## present when chain is from the MV walk model)
+    has_sigma = try
+        chn[:sigma_rw_patch];
+        true
+    catch
+        false
+    end
+    sigma_el = has_sigma ?
+    begin
+        sigma_raw = _draws(chn, :sigma_rw_patch)
+        nd = length(sigma_raw)
+        [posterior_summary([sigma_raw[i][p] for i in 1:nd])
+         for p in 1:min(n_patches, 3)]
+    end : nothing
     rows = [(
                 patch = patch_names[i],
                 C_T_med = round(C_T[i].lo60 + (C_T[i].hi60 - C_T[i].lo60) / 2; digits = 0),
@@ -396,10 +404,14 @@ function patch_summary_table(chn, n_patches::Integer = 3;
                 R_T_hi90 = round(R_T[i].hi90; digits = digits),
                 inf_T_daily = round(inf_T[i].lo60 + (inf_T[i].hi60 - inf_T[i].lo60) / 2;
                     digits = 0),
-                δ_med = round(δ_el[i].lo60 + (δ_el[i].hi60 - δ_el[i].lo60) / 2;
-                    digits = digits),
-                δ_lo90 = round(δ_el[i].lo90; digits = digits),
-                δ_hi90 = round(δ_el[i].hi90; digits = digits)
+                sigma_med = sigma_el !== nothing ?
+                            round(
+                    sigma_el[i].lo60 + (sigma_el[i].hi60 - sigma_el[i].lo60) / 2;
+                    digits = digits) : NaN,
+                sigma_lo90 = sigma_el !== nothing ?
+                             round(sigma_el[i].lo90; digits = digits) : NaN,
+                sigma_hi90 = sigma_el !== nothing ?
+                             round(sigma_el[i].hi90; digits = digits) : NaN
             ) for i in 1:min(n_patches, 3)]
     df = DataFrame(rows)
     df = rename(df,
@@ -410,8 +422,8 @@ function patch_summary_table(chn, n_patches::Integer = 3;
             :R_T_med => "R_T median", :R_T_lo90 => "R_T lower 90%",
             :R_T_hi90 => "R_T upper 90%",
             :inf_T_daily => "Daily inf. at cut-off",
-            :δ_med => "δ median", :δ_lo90 => "δ lower 90%",
-            :δ_hi90 => "δ upper 90%"
+            :sigma_med => "sigma_rw median", :sigma_lo90 => "sigma_rw lower 90%",
+            :sigma_hi90 => "sigma_rw upper 90%"
         ])
     return df
 end
