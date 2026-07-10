@@ -165,8 +165,8 @@
 #   zoonotic seed, an assumed generation interval, no spatial structure
 #   beyond the Ituri / Nord Kivu split, and no depletion of
 #   susceptibles. The onset-to-death delay is grounded on Isiro 2012 and
-#   the genetic seeding bound on an external clock rate, neither
-#   propagating cross-outbreak or clock uncertainty.
+#   the genetic seeding bound on the outbreak-specific clock rate, not
+#   propagating clock uncertainty.
 # - *Intervention ramp is weakly identified.* With only a few sitreps
 #   straddling it, the ramp effect and the pre-ramp reproduction number
 #   are not well separated.
@@ -637,17 +637,20 @@ vintage_table #hide
 
 # ##### Genetic bound on outbreak age
 #
-# A BEAST time tree of the first ten sequenced genomes
-# [virological2026](@cite) places the TMRCA, the age of the oldest
-# internal node of the tree, at a mean of 25 March 2026. The temporal
-# sampling range is too short to estimate the molecular clock, so we fix it
-# to the $1.2\times10^{-3}$ substitutions/site/year rate of the 2013-2016
-# West African Ebola epidemic [holmes2016](@cite). The TMRCA is a lower
-# bound on the outbreak age. Adding sequences, or more geographically
-# representative ones, can only push it earlier, never later, as the
-# sampled tree is almost entirely from Bunia. Using the genetic TMRCA as a
-# one-sided seeding bound rather than a point estimate follows a suggestion
-# of N. Ferguson [ferguson2026](@cite).
+# A BEAST X v10.6.0 analysis of 139 sequenced genomes from the outbreak
+# [mbalaplacide2026](@cite) places the TMRCA, the age of the oldest
+# internal node of the tree, at a mean of 15 March 2026 under the
+# Skygrid non-parametric coalescent prior ($95\%$ HPD 09 Feb -- 12 Apr).
+# The outbreak now has its own evolutionary-rate estimate ($\sim 1.1\times
+# 10^{-3}$ substitutions/site/year, based on 139 BDBV genomes across 16
+# health zones), replacing the earlier reliance on cross-outbreak
+# literature rates. The report also fits an Exponential growth tree prior,
+# giving a slightly earlier mean TMRCA of 08 March 2026 ($95\%$ HPD 01
+# Feb -- 05 Apr); the Sensitivity page compares the two.
+# The TMRCA is a lower bound on the outbreak age: adding sequences, or
+# more geographically representative ones, can only push it earlier, never
+# later. Using the genetic TMRCA as a one-sided seeding bound rather than
+# a point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
 #
 # We treat the TMRCA day as a right-censored, noisy reading of the total
 # outbreak age $T$ (the cryptic duration plus the observed window, defined
@@ -657,7 +660,7 @@ vintage_table #hide
 # \text{tmrca}_{\text{days}} \sim
 #   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
 #   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
-# \qquad \sigma = 15\ \text{d}. \tag{10}
+# \qquad \sigma = 16\ \text{d}. \tag{10}
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins
@@ -667,8 +670,7 @@ vintage_table #hide
 # TMRCA age. The bound therefore stays informative on the cryptic duration,
 # pulling the origin to sit at or before the most recent common ancestor and
 # bounding the cryptic phase from below. It is one-sided, leaving the age
-# free above the TMRCA. We fix the clock and do not propagate cross-outbreak
-# or clock uncertainty.
+# free above the TMRCA.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -2081,7 +2083,7 @@ diagnostics_table( #hide
     "frozen (1wk back)" => frozen_lastweek.chn, #hide
     (RUN_SENSITIVITY ? #hide
      ["delay sensitivity" => chn_joint_community_delay, #hide
-        "clock sensitivity" => chn_joint_fast_clock] : [])...) #hide
+        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] : [])...) #hide
 
 #md # ```@raw html
 #md # </details>

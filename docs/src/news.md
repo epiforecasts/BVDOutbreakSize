@@ -6,6 +6,28 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.9.0
+
+Changes since v1.8.0.
+
+### Model
+
+- Updated the molecular-clock time estimate to use the outbreak-specific
+  BEAST X analysis (mbalaplacide2026, 139 BDBV genomes from 16 health
+  zones, ~1.1E-3 subs/site/year). The genetic TMRCA baseline moves from
+  2026-03-25 (SD 15, fixed 1.2E-3 EBOV rate) to **2026-03-15** (SD 16,
+  95% HPD 09 Feb--12 Apr) under the Skygrid coalescent prior. Added a
+  tree-prior sensitivity comparing the Exponential growth estimate
+  (2026-03-08, SD 16, 95% HPD 01 Feb--05 Apr).
+
+### Documentation
+
+- Updated all prose references to the genetic bound to cite the new
+  virological.org report (v1045, mbalaplacide2026) and the outbreak-
+  specific rate.
+- Added a tree-prior sensitivity section comparing the Skygrid and
+  Exponential growth TMRCA estimates.
+
 ## v1.8.0
 
 Changes since v1.7.0.

@@ -464,7 +464,7 @@ it older; the likelihood contributes `P(read ≥ tmrca_days)`. Passing
 `tmrca_days = missing` makes the submodel a no-op.
 """
 @model function genetic_seeding_model(T::Real,
-        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 15.0)
+        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 16.0)
     if !ismissing(tmrca_days)
         tmrca_days ~ censored(Normal(T, tmrca_days_sd); upper = tmrca_days)
     end
