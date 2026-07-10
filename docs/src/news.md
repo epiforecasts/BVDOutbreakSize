@@ -6,6 +6,12 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.9.0
+
+Changes since v1.8.0.
+
+- Updated data including movement flows for those in isolation.
+
 ## v1.8.0
 
 Changes since v1.7.0.
