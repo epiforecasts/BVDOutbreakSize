@@ -1,6 +1,7 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor
+using LinearAlgebra: cholesky, I
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
@@ -17,7 +18,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
-                     LogNormal, Beta,
+                     LogNormal, Beta, LKJ,
                      Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic

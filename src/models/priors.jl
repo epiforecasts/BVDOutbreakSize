@@ -1277,6 +1277,88 @@ modifiers and the pooling SD.
 end
 
 """
+Per-patch reproduction numbers via a multivariate normal random walk on
+log-Rt. Each patch evolves its own log-Rt trajectory through weekly knots,
+and the innovations at each knot are drawn from a multivariate normal with
+a learned covariance, so patches share correlation structure but can
+diverge arbitrarily.
+
+For each weekly knot k, the length-n_patches log-Rt vector evolves as:
+
+    log R_k ~ MVN(log R_{k-1}, Sigma)
+
+where Sigma_ij = sigma_i * sigma_j * Omega_ij, sigma_i is the step SD for
+patch i, and Omega is the correlation matrix with an LKJ(2) prior.
+
+Knot values are linearly interpolated to the daily grid via
+[`interpolate_knots`](@ref), and days before the first knot hold flat at
+the initial value.
+
+Returns `(; Rt_matrix, log_Rt_patches, sigma_rw_patch, Omega, L)` where
+`Rt_matrix[p, t]` is the daily Rt for patch `p` on day `t`.
+"""
+@model function patch_rt_mvwalk_model(n::Integer, n_patches::Integer,
+        log_R0_base::Real;
+        breakpoint::Union{Missing, Real} = missing,
+        week::Integer = 7,
+        rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
+        ramp::Real = 21.0,
+        sigma_prior = truncated(Normal(0, 0.1); lower = 0),
+        r0_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        lkj_prior = LKJ(n_patches, 2.0))
+    nb = length(knot_days(n; week, start = rt_walk_start))
+    Tp = float(promote_type(typeof(log_R0_base), Float64))
+    ## Per-patch step SDs
+    sigma_rw_patch = zeros(Tp, n_patches)
+    for p in 1:n_patches
+        sigma_rw_patch[p] ~ sigma_prior
+    end
+    ## Initial log-Rt: each patch starts near log_R0_base with variation.
+    sigma_R0 ~ r0_sd_prior
+    z0 ~ product_distribution(fill(Normal(0, 1), n_patches))
+    log_R0_patch = log_R0_base .+ sigma_R0 .* z0
+    ## Correlation matrix
+    Omega ~ lkj_prior
+    L = cholesky(Omega).L
+    ## Build the square-root covariance: Sigma^{1/2} = diag(sigma) * L
+    Sigma_half = zeros(Tp, n_patches, n_patches)
+    for i in 1:n_patches, j in 1:n_patches
+
+        Sigma_half[i, j] = sigma_rw_patch[i] * L[i, j]
+    end
+    ## Multivariate random walk on log-Rt at weekly knots.
+    ## Sample all innovations upfront as an (n_patches x (nb-1)) matrix.
+    z_mv_rw ~ product_distribution(
+        fill(Normal(0, 1), max(n_patches * (nb - 1), 1)))
+    log_Rt_knots = zeros(Tp, n_patches, nb)
+    for p in 1:n_patches
+        log_Rt_knots[p, 1] = log_R0_patch[p]
+    end
+    for k in 2:nb
+        for p in 1:n_patches
+            innov = zero(Tp)
+            for q in 1:n_patches
+                idx = q + n_patches * (k - 2)
+                innov += Sigma_half[p, q] * z_mv_rw[idx]
+            end
+            log_Rt_knots[p, k] = log_Rt_knots[p, k - 1] + innov
+        end
+    end
+    ## Interpolate knots to daily grid
+    ramp_vec = sigmoid_ramp(n, breakpoint; ramp)
+    knot_days_vec = knot_days(n; week, start = rt_walk_start)
+    Rt_matrix = zeros(Tp, n_patches, n)
+    for p in 1:n_patches
+        daily_log = interpolate_knots(log_Rt_knots[p, :], knot_days_vec, n)
+        for t in 1:n
+            Rt_matrix[p, t] = exp(daily_log[t] + ramp_vec[t] * 0.0)
+        end
+    end
+    return (; Rt_matrix, log_Rt_patches = log_Rt_knots, sigma_rw_patch, Omega, L)
+end
+
+"""
 Multi-patch latent infection process. Runs independent renewal equations
 for each spatial patch (e.g. Ituri, Nord-Kivu, Sud-Kivu) with a
 between-patch importation kernel and a shared generation interval and
@@ -1319,16 +1401,18 @@ per-patch observation submodels.
 ### Returns
 
 `(; infections_matrix, cumulative_matrix, Rt_matrix, onsets_matrix, g,
-R0, r, m, τ, importation_epsilon, δ_patch, σ_region,
-seed_at_ren_start, C_T_patch, C_T_total)`, where `C_T_patch[p]`
-is the cut-off cumulative for patch `p` and `C_T_total` is the sum
-across patches (the national total).
+R0, r, m, tau, importation_epsilon, seed_at_ren_start, C_T_patch,
+C_T_total, implied_Rt_national, sigma_rw_patch, Omega, incubation_pmf)`,
+where `C_T_patch[p]` is the cut-off cumulative for patch `p`,
+`C_T_total` is the sum across patches (the national total), and
+`implied_Rt_national` is the reproduction number derived from the summed
+patch infections via [`implied_national_Rt`](@ref).
 """
 @model function patch_infection_model(n::Integer, n_patches::Integer;
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
-        rt = patch_rt_model,
+        rt = patch_rt_mvwalk_model,
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
@@ -1352,12 +1436,11 @@ across patches (the national total).
     growth_state ~ to_submodel(growth())
     r = growth_state.r
     R0 = r_to_R0(r, g)
-    ## 3. Hierarchical Rt model with the national walk + per-patch modifiers.
+    ## 3. Multivariate normal random walk for per-patch log-Rt.
     rt_state ~ to_submodel(
         rt(n, n_patches, log(R0); breakpoint, rt_start, rt_walk_start), false)
     Rt_matrix = rt_state.Rt_matrix
-    δ_patch = rt_state.δ_patch
-    σ_region = rt_state.σ_region
+    sigma_rw_patch = rt_state.sigma_rw_patch
     ## 4. Patch-specific seeds.
     ##    Primary patch (Ituri, p=1): the existing cryptic-exponential seed.
     ##    Secondary patches (p≥2): tiny seed that grows through importation.
@@ -1407,12 +1490,18 @@ across patches (the national total).
         @views onsets_matrix[p, :] = convolve_delay(
             infections_matrix[p, :], inc_state.pmf)
     end
-    ## 9. Current growth rate at the cut-off, derived from the national
-    ##    Rt at the cut-off (Rt_national_traj[n]) through forward Euler–Lotka.
-    Rt_national_traj = rt_state.Rt_national_traj
-    r_current = euler_lotka_r(@inbounds(Rt_national_traj[n]), g)
+    ## 9. Derived national Rt from summed patch infections, using the
+    ##    renewal equation in reverse on the total infection trajectory.
+    infections_total = vec(sum(infections_matrix; dims = 1))
+    implied_Rt_national = implied_national_Rt(infections_total, g)
+    implied_Rt_national_T := @inbounds(implied_Rt_national[n])
+    ## 10. Current growth rate at the cut-off, derived from the implied
+    ##     national Rt through forward Euler-Lotka.
+    r_current = euler_lotka_r(@inbounds(implied_Rt_national[n]), g)
     return (; infections_matrix, cumulative_matrix, Rt_matrix, onsets_matrix,
         g, R0, r = r_current, m = growth_state.m, τ = growth_state.τ,
-        importation_epsilon, δ_patch, σ_region, seed_at_ren_start,
-        C_T_patch, C_T_total, incubation_pmf = inc_state.pmf)
+        importation_epsilon, seed_at_ren_start,
+        C_T_patch, C_T_total, implied_Rt_national,
+        sigma_rw_patch = sigma_rw_patch, Omega = rt_state.Omega,
+        incubation_pmf = inc_state.pmf)
 end

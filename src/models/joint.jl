@@ -1044,7 +1044,9 @@ in the return tuple for diagnostics and downstream extension. See also
     ## only those that are NOT already `:=` or `~` inside the nested models.
     R0 := patch_state.R0
     r := patch_state.r
-    δ_patch := patch_state.δ_patch
+    ## Derived national Rt at the cut-off (exposed here with a distinct name
+    ## since the inner `:=` is hidden by to_submodel(..., false)).
+    implied_Rt_national_cutoff := patch_state.implied_Rt_national[n]
     ## Per-patch outbreak summaries at the cut-off.
     C_T_patch_1 := patch_state.C_T_patch[1]
     C_T_patch_2 := patch_state.C_T_patch[2]

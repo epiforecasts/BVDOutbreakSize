@@ -559,3 +559,33 @@ function interpolate_knots(knot_vals::AbstractVector,
     end
     return out
 end
+
+"""
+Derive the implied national reproduction number from a summed infection
+trajectory by inverting the renewal equation:
+
+    Rt_national(t) = I_total(t) / sum_s I_total(t-s) * g_s
+
+This reconstructs what a single-patch model would estimate as the national
+Rt from the aggregated infection count. The first day is set to zero (no
+prior infections to divide by). Days where the force of infection is zero
+(no prior infections) also return zero. AD-transparent under Mooncake
+(only arithmetic and `@inbounds` loops).
+"""
+function implied_national_Rt(infections_total::AbstractVector,
+        g::AbstractVector)
+    n = length(infections_total)
+    Tp = promote_type(eltype(infections_total), eltype(g))
+    Rt = zeros(Tp, n)
+    @inbounds for t in 2:n
+        force = zero(Tp)
+        kmax = min(t - 1, length(g))
+        for s in 1:kmax
+            force += infections_total[t - s] * g[s]
+        end
+        if force > zero(Tp)
+            Rt[t] = safe_rate(infections_total[t]) / force
+        end
+    end
+    return Rt
+end
