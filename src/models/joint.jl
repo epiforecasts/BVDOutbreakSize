@@ -190,6 +190,7 @@ on the confirmed-death likelihood alone. See
         n::Integer, confirmed_deaths::Union{Missing, Integer},
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
@@ -210,7 +211,8 @@ on the confirmed-death likelihood alone. See
         k, p_drc))
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, latent.onsets, k;
-        case_bg_daily = cases_state.bg_daily))
+        case_bg_daily = cases_state.bg_daily,
+        suspected_daily_deaths_history))
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
