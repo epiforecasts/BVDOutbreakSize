@@ -276,6 +276,7 @@ the dates of the national sitreps.
 6. [x] Fix wiring: treatment model call, duplicate `:=` deterministics
 7. [x] Wire up exports in `BVDOutbreakSize.jl`
 8. [x] Verify prior predictive (patch_infection_model + bvd_patch_joint)
+9. [x] Add per-patch outbreak summaries (`patch_summary_table`)
 
 ## Per-location forecasts (next priority)
 
