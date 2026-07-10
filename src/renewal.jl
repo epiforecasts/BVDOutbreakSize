@@ -221,6 +221,10 @@ a pre-computed `seed` of length `L < n` filling the first `L` days (see
 `Rt[1]` (used to imply the seeding growth) and the seed are mutually
 consistent. Returns the length-`n` infection trajectory. The output
 element type is promoted from `Rt`, `g` and `seed`.
+
+!!! note "Multi-patch analogue"
+    See [`patch_infections`](@ref) for the meta-population extension
+    with between-patch importation.
 """
 function renewal_infections(Rt::AbstractVector, g::AbstractVector,
         seed::AbstractVector)
@@ -238,6 +242,125 @@ function renewal_infections(Rt::AbstractVector, g::AbstractVector,
             force += I[t - s] * g[s]
         end
         I[t] = Rt[t] * force
+    end
+    return I
+end
+
+## --- Multi-patch (meta-population) renewal primitives --------------------
+
+"""
+    importation_from_kernel(K, I_prev, epsilon)
+
+Per-patch importation into each of `n_patches` patches on a single day,
+given the `n_patches x n_patches` importation kernel `K`, the previous
+day's infections per patch `I_prev` (length `n_patches`), and the
+importation intensity `epsilon`.
+
+```math
+\\text{importation}_p = \\varepsilon \\sum_{q} K_{p,q} I_{q,t-1}
+```
+
+`K[p, q]` is the per-capita daily travel rate from patch `q` to patch `p`
+(the first index is the destination). Diagonal entries should be zero (no
+self-importation). Each entry is unitless (a rate per day per traveller in
+the source patch).
+
+Returns a length-`n_patches` vector of imported infections expected on the
+current day. Pure and AD-transparent: only arithmetic and `@inbounds` loops,
+no allocations of tracked containers.
+"""
+function importation_from_kernel(K::AbstractMatrix, I_prev::AbstractVector,
+        epsilon::Real)
+    np = size(K, 1)
+    Tp = promote_type(eltype(K), eltype(I_prev), typeof(float(epsilon)))
+    imp = zeros(Tp, np)
+    @inbounds for p in 1:np
+        acc = zero(Tp)
+        for q in 1:np
+            acc += K[p, q] * I_prev[q]
+        end
+        imp[p] = epsilon * acc
+    end
+    return imp
+end
+
+"""
+    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
+
+Multi-patch (meta-population) renewal with between-patch importation.
+Each patch `p` follows a modified renewal equation on a shared daily grid:
+
+```math
+I_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t}
+```
+
+where the importation term couples patches through a kernel `K`:
+
+```math
+\\text{importation}_{p,t} =
+    \\varepsilon \\sum_{q} K_{p,q}\\, I_{q,t-1}.
+```
+
+# Arguments
+
+- `Rt_matrix`: `n_patches x n_days` matrix whose `[p, t]` entry is the
+  reproduction number in patch `p` on day `t`. Each row is one patch's
+  daily `R_t` trajectory.
+- `g`: shared generation-interval PMF (indexed from lag 1, so `g[1]` is
+  the probability of a one-day generation interval). Same for all patches.
+- `seeds_matrix`: `n_patches x L` matrix whose `[p, :]` row is the
+  pre-computed seed infection trajectory for patch `p` (see
+  [`seed_infections`](@ref)). The seed fills days `1 ... L` and the renewal
+  recursion begins on day `L+1`.
+- `importation_kernel`: `n_patches x n_patches` matrix `K` where
+  `K[p, q]` is the per-capita daily travel rate from patch `q` to patch
+  `p`. The diagonal should be zero. The importation term sums over all
+  source patches `q` in kernel-weighted infections from the previous day.
+- `epsilon`: importation intensity -- the fraction of travellers who are
+  infectious and successfully establish a secondary infection. A scalar.
+
+# Returns
+
+Matrix `I` of shape `(n_patches, n_days)` where row `p` is the daily
+infection trajectory for patch `p`. The first `L` days are copied from
+`seeds_matrix`; the remaining days are the renewal recursion with
+importation. The element type is promoted from all input types.
+
+# AD transparency
+
+Uses only basic arithmetic and `@inbounds` loops. No `push!`, `append!`,
+closures that capture mutated variables, or other constructs that would
+obscure Mooncake's AD reverse pass. The importation is computed inline
+in each day's patch loop (no closure allocation).
+"""
+function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        epsilon::Real)
+    np, n = size(Rt_matrix)
+    L = size(seeds_matrix, 2)
+    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
+        eltype(importation_kernel), typeof(float(epsilon)))
+    I = zeros(Tp, np, n)
+    @inbounds for p in 1:np
+        for j in 1:min(L, n)
+            I[p, j] = seeds_matrix[p, j]
+        end
+    end
+    @inbounds for t in (L + 1):n
+        for p in 1:np
+            ## Renewal force (local infections): sum_s I[p, t-s] * g[s]
+            force = zero(Tp)
+            kmax = min(t - 1, length(g))
+            for s in 1:kmax
+                force += I[p, t - s] * g[s]
+            end
+            ## Importation: epsilon * sum_q K[p, q] * I[q, t-1]
+            imp = zero(Tp)
+            for q in 1:np
+                imp += importation_kernel[p, q] * I[q, t - 1]
+            end
+            I[p, t] = Rt_matrix[p, t] * force + epsilon * imp
+        end
     end
     return I
 end

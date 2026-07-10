@@ -1211,3 +1211,208 @@ Ebola response. A lower ascertainment inflates the inferred infections
     p_uganda := logistic(logit_p_uganda)
     return (; μ_logit, τ_logit, p_drc, p_uganda)
 end
+
+## --- Patch (multi-population) models -----------------------------------
+
+"""
+Hierarchical reproduction-number model for multiple spatial patches
+(e.g. Ituri, Nord-Kivu, Sud-Kivu). Each patch has a CONSTANT modifier
+on the log-Rt scale, so
+
+```math
+\\log R_{p,t} = \\log R_{\\mathrm{national}}(t) + \\delta_p,
+\\qquad \\delta_p \\sim N(0, \\sigma_{\\mathrm{region}}),
+```
+
+where `R_\\text{national}(t)` is the existing weekly-knot random walk
+([`rt_walk_model`](@ref)): a non-centred random walk on weekly knots
+with a sigmoid intervention ramp at the first situation report. The
+per-patch modifiers are sampled in non-centred form (`z_p ~ N(0,1)`;
+`δ_p = σ_region · z_p`) to avoid the funnel geometry. `σ_region` is
+the pooling SD, defaulting to a half-normal `N⁺(0, 0.15)` that allows
+moderate variation between patches (95% support roughly 0–0.3 on the
+log scale, a ≈30% multiplicative difference).
+
+Passes every keyword through to [`rt_walk_model`](@ref) except
+`sigma_prior` (which stays the national walk SD) and the new
+`region_sd_prior` / `region_offset_prior` for the patch hierarchy.
+Returns the national and per-patch Rt trajectories, the per-patch
+modifiers and the pooling SD.
+"""
+@model function patch_rt_model(n::Integer, n_patches::Integer,
+        log_R0_base::Real;
+        breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
+        rt = rt_walk_model,
+        region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
+        region_offset_prior = Normal(0, 1))
+    ## National Rt walk (existing model).
+    ## The `rt_walk_start` is the day the Rt walk begins moving; it maps to
+    ## `rt_start` in the inner `rt_walk_model` (same convention as the
+    ## existing [`infection_model`](@ref)). Days before the first knot hold
+    ## flat at `R0`.
+    rt_state ~ to_submodel(
+        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start), false)
+    ## The existing `rt_walk_model` returns `Rt` (daily interpolated
+    ## reproduction numbers) but not `log_Rt`; compute it here for the
+    ## additive log-scale patch modifiers.
+    Rt_national = rt_state.Rt
+    log_Rt_national = log.(Rt_national)
+    ## Per-patch modifiers in non-centred form.
+    σ_region ~ region_sd_prior
+    z_patch ~ product_distribution(fill(region_offset_prior, max(n_patches, 1)))
+    δ_patch = σ_region .* z_patch[1:n_patches]
+    ## Build the Rt matrix: (n_patches × n)
+    Tp = promote_type(typeof(float(log_R0_base)), eltype(Rt_national),
+        typeof(float(σ_region)))
+    Rt_matrix = zeros(Tp, n_patches, n)
+    @inbounds for p in 1:n_patches
+        @inbounds for t in 1:n
+            Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_patch[p])
+        end
+    end
+    Rt_national_traj := Rt_national
+    return (; Rt_matrix, log_Rt_national, δ_patch, σ_region, Rt_national_traj)
+end
+
+"""
+Multi-patch latent infection process. Runs independent renewal equations
+for each spatial patch (e.g. Ituri, Nord-Kivu, Sud-Kivu) with a
+between-patch importation kernel and a shared generation interval and
+incubation period.
+
+### Structure
+
+For patch `p` on day `t`:
+
+```math
+I_{p,t} = R_{p,t} \\cdot \\sum_{s \\ge 1} I_{p,t-s}\\, g_s
+          + \\varepsilon \\sum_{q \\neq p} K_{p,q}\\, I_{q,t-1}
+```
+
+where:
+- `g_s` is the **shared** generation-interval PMF (sampled once).
+- `R_{p,t}` comes from [`patch_rt_model`](@ref): the national Rt walk
+  plus a constant per-patch log-modifier `δ_p`.
+- `K` is the importation kernel `(n_patches × n_patches)`, where
+  `K[p, q]` is the per-capita travel rate from `q` to `p`.
+- `ε` is the importation intensity (fraction of travellers who are
+  infectious and establish a secondary infection).
+
+### Seeding
+
+The primary patch (assumed to be patch 1, Ituri) uses the existing
+cryptic-exponential seed: an exponential growth at the sampled molecular
+clock rate `r` over the cryptic window giving `seed0 = 2^m` infections
+at the renewal start. Secondary patches (p ≥ 2) use a much smaller seed
+(drawn from `seed_scale_prior`, default `N⁺(0.01, 0.01)`) and grow
+primarily through importation from the primary patch.
+
+### Per-patch onsets
+
+The incubation PMF is sampled once (the biology is shared) and applied
+to each patch's infections via [`convolve_delay`](@ref), giving a
+`(n_patches × n)` onsets matrix that the composer can route into
+per-patch observation submodels.
+
+### Returns
+
+`(; infections_matrix, cumulative_matrix, Rt_matrix, onsets_matrix, g,
+R0, r, m, τ, importation_epsilon, δ_patch, σ_region,
+seed_at_ren_start, C_T_patch, C_T_total)`, where `C_T_patch[p]`
+is the cut-off cumulative for patch `p` and `C_T_total` is the sum
+across patches (the national total).
+"""
+@model function patch_infection_model(n::Integer, n_patches::Integer;
+        breakpoint::Union{Missing, Real} = missing,
+        rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
+        rt = patch_rt_model,
+        gi = generation_interval_model,
+        growth = exponential_growth_model,
+        gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
+        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches),
+        importation_epsilon_prior = Beta(1, 100),
+        seed_scale_prior = truncated(Normal(0.01, 0.01); lower = 0),
+        incubation = (nmax) -> censored_delay_model(nmax;
+            mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
+            sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
+        incubation_nmax::Integer = cdf_nmax(lognormal_meansd(6.3, 3.5)))
+    ## 1. Shared generation interval (the biology of transmission is the same
+    ##    regardless of patch).
+    gi_state ~ to_submodel(gi(gi_nmax))
+    g = gi_state.g
+    ## 2. ONE growth source for the primary patch (Ituri): the prior is on the
+    ##    cryptic exponential growth rate `r` (sampled in `growth`), and the
+    ##    SINGLE established reproduction number `R0` (= the walk base, the
+    ##    first `R_t`) is derived FORWARD from that `r` and the generation
+    ##    interval through Euler–Lotka. The cryptic phase of the primary patch
+    ##    and its established renewal therefore share `r`.
+    growth_state ~ to_submodel(growth())
+    r = growth_state.r
+    R0 = r_to_R0(r, g)
+    ## 3. Hierarchical Rt model with the national walk + per-patch modifiers.
+    rt_state ~ to_submodel(
+        rt(n, n_patches, log(R0); breakpoint, rt_start, rt_walk_start), false)
+    Rt_matrix = rt_state.Rt_matrix
+    δ_patch = rt_state.δ_patch
+    σ_region = rt_state.σ_region
+    ## 4. Patch-specific seeds.
+    ##    Primary patch (Ituri, p=1): the existing cryptic-exponential seed.
+    ##    Secondary patches (p≥2): tiny seed that grows through importation.
+    renewal_start = clamp(rt_start, 1, n)
+    seed0_primary = seed_at_renewal_start(growth_state.C_T)
+    seed_primary = seed_infections(seed0_primary, r, renewal_start)
+    Tp = promote_type(eltype(Rt_matrix), eltype(g), typeof(float(r)))
+    seeds_matrix = zeros(Tp, n_patches, renewal_start)
+    @inbounds for j in 1:renewal_start
+        seeds_matrix[1, j] = seed_primary[j]
+    end
+    if n_patches > 1
+        ## Sample a seed scale for each secondary patch.
+        seed_scale ~ product_distribution(
+            fill(seed_scale_prior, n_patches - 1))
+        for p in 2:n_patches
+            I0_p = seed_scale[p - 1]
+            s_p = seed_infections(I0_p, r, renewal_start)
+            @inbounds for j in 1:renewal_start
+                seeds_matrix[p, j] = s_p[j]
+            end
+        end
+    end
+    ## 5. Importation intensity.
+    ε ~ importation_epsilon_prior
+    importation_epsilon := ε
+    ## 6. Multi-patch renewal with between-patch importation.
+    infections_matrix = patch_infections(Rt_matrix, g, seeds_matrix,
+        importation_kernel, ε)
+    ## 7. Per-patch cumulative sums.
+    cumulative_matrix = zeros(Tp, n_patches, n)
+    @inbounds for p in 1:n_patches
+        acc = zero(Tp)
+        @inbounds for t in 1:n
+            acc += infections_matrix[p, t]
+            cumulative_matrix[p, t] = acc
+        end
+    end
+    C_T_patch = [@inbounds(cumulative_matrix[p, n]) for p in 1:n_patches]
+    C_T_total := sum(C_T_patch)
+    seed_at_ren_start := seed0_primary
+    ## 8. Per-patch onsets via the SHARED incubation PMF (sampled once
+    ##    because the biology is the same).
+    inc_state ~ to_submodel(incubation(incubation_nmax))
+    onsets_matrix = zeros(Tp, n_patches, n)
+    @inbounds for p in 1:n_patches
+        @views onsets_matrix[p, :] = convolve_delay(
+            infections_matrix[p, :], inc_state.pmf)
+    end
+    ## 9. Current growth rate at the cut-off, derived from the national
+    ##    Rt at the cut-off (Rt_national_traj[n]) through forward Euler–Lotka.
+    Rt_national_traj = rt_state.Rt_national_traj
+    r_current = euler_lotka_r(@inbounds(Rt_national_traj[n]), g)
+    return (; infections_matrix, cumulative_matrix, Rt_matrix, onsets_matrix,
+        g, R0, r = r_current, m = growth_state.m, τ = growth_state.τ,
+        importation_epsilon, δ_patch, σ_region, seed_at_ren_start,
+        C_T_patch, C_T_total)
+end
