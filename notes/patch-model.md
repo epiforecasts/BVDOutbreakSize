@@ -269,10 +269,39 @@ the dates of the national sitreps.
 ## Next steps
 
 1. [x] Write this design document
-2. [ ] Implement `patch_infections()` in `renewal.jl`
-3. [ ] Implement `patch_rt_model()` in `models/priors.jl`
-4. [ ] Implement `patch_infection_model()` in `models/priors.jl`
-5. [ ] Add `_patch_latent()` and `bvd_patch_joint()` to `models/joint.jl`
-6. [ ] Add per-province observation models to `models/observations.jl`
-7. [ ] Wire up exports in `BVDOutbreakSize.jl`
-8. [ ] Verify the model compiles and runs a prior predictive
+2. [x] Implement `patch_infections()` in `renewal.jl`
+3. [x] Implement `patch_rt_model()` in `models/priors.jl`
+4. [x] Implement `patch_infection_model()` in `models/priors.jl`
+5. [x] Add `_patch_latent()` and `bvd_patch_joint()` to `models/joint.jl`
+6. [x] Fix wiring: treatment model call, duplicate `:=` deterministics
+7. [x] Wire up exports in `BVDOutbreakSize.jl`
+8. [x] Verify prior predictive (patch_infection_model + bvd_patch_joint)
+
+## Per-location forecasts (next priority)
+
+Once the patch model runs, add per-patch forecast capability:
+
+### 9. Add `forecast_patch()` to `forecast.jl`
+
+A per-patch analogue of `forecast_reported` that projects each patch's
+latent infections, onsets, and deaths over the forecast horizon. The
+per-patch reproduction number continues evolving (same terminal drift
+as the national walk, plus the per-patch modifier). Key differences:
+- Reads `patch_state.infections_matrix[p, :]`, `patch_state.onsets_matrix[p, :]`
+  from the chain for per-patch daily incidence
+- Uses the evolving national Rt (same `_evolving_rates`) plus the constant
+  `δ_patch[p]` modifier to get per-patch future Rt
+- Returns a `DataFrame` with per-patch columns
+
+### 10. Add `forecast_vs_truth_patch()` to `forecast.jl`
+
+Validates per-patch forecasts against observed per-province data. Uses the
+same pattern as `forecast_vs_truth` but checks against spatial-table data
+(confirmed cases by province, isolation by province).
+
+### 11. Data: per-province observations for forecast validation
+
+The per-province spatial-table data (confirmed cases by province from
+Tableau 1, isolation by province from Tableau 6 Fin J) needs to be loaded
+for the forecast-vs-truth comparison. This can come from the existing
+INRB-UMIE per-province CSVs or the scanned data.
