@@ -1414,5 +1414,5 @@ across patches (the national total).
     return (; infections_matrix, cumulative_matrix, Rt_matrix, onsets_matrix,
         g, R0, r = r_current, m = growth_state.m, τ = growth_state.τ,
         importation_epsilon, δ_patch, σ_region, seed_at_ren_start,
-        C_T_patch, C_T_total)
+        C_T_patch, C_T_total, incubation_pmf = inc_state.pmf)
 end

@@ -868,3 +868,187 @@ the implied per-suspected (`suspected_positivity`) and per-test
     death_composition := confirmed_deaths_state.q_death
     death_confirmation := confirmed_deaths_state.p_death_conf
 end
+
+## --- Patch (multi-population) joint models ------------------------------
+
+"""
+Patch latent process: run [`patch_infection_model`](@ref) and expose
+per-patch infections, onsets, and the total (summed-across-patches)
+infection trajectory that feeds the national observation submodels.
+
+Returns `(; patch_state, onsets_total, cumulative_total, C_T_total)` where
+`C_T_total` is the national total (sum of patch cut-off cumulatives).
+"""
+@model function _patch_latent(n::Integer, n_patches::Integer,
+        breakpoint, patch_infection;
+        rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
+        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches))
+    patch_state ~ to_submodel(
+        patch_infection(n, n_patches;
+            breakpoint, rt_start, rt_walk_start,
+            importation_kernel), false)
+    ## Sum the per-patch onsets to get the national total.
+    onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
+    cumulative_total = vec(sum(patch_state.cumulative_matrix; dims = 1))
+    C_T_total_out := patch_state.C_T_total
+    return (; patch_state, onsets_total, cumulative_total, C_T_total = C_T_total_out)
+end
+
+"""
+Joint composer over all data streams using the PATCH (meta-population)
+latent process. Runs [`patch_infection_model`](@ref) with the given
+number of patches and importation kernel, sums the patch onsets into a
+national trajectory, then conditions on all the existing national-level
+observation submodels: DRC suspected cases, deaths, confirmed cases and
+deaths, laboratory pipeline, treatment flows, and Uganda exports.
+
+Per-province observation models are NOT yet wired; only national-level
+streams are fitted, but the per-patch state (`patch_state`) is surfaced
+in the return tuple for diagnostics and downstream extension. See also
+[`bvd_joint`](@ref) for the single-patch analogue and
+[`patch_infection_model`](@ref) for the patch latent process.
+"""
+@model function bvd_patch_joint(
+        n::Integer, n_patches::Integer,
+        exported_cases::Union{Missing, Integer},
+        total_deaths::Union{Missing, Integer},
+        reported_cases::Union{Missing, Integer} = missing,
+        exports_deaths::Union{Missing, Integer} = missing,
+        confirmed_cases::Union{Missing, Integer} = missing,
+        tests_analysed::Union{Missing, Integer} = missing;
+        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches),
+        confirmed_deaths::Union{Missing, Integer} = missing,
+        recovered_cases::Union{Missing, Integer} = missing,
+        deaths_history = (; days = Int[], counts = Int[]),
+        reported_history = (; days = Int[], counts = Int[]),
+        confirmed_history = (; days = Int[], counts = Int[]),
+        confirmed_deaths_history = (; days = Int[], counts = Int[]),
+        lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
+        suspected_daily_history = (; days = Int[], counts = Int[]),
+        suspected_daily_deaths_history = (; days = Int[], counts = Int[]),
+        isolation_history = (; days = Int[], counts = Int[]),
+        bed_capacity_history = (; days = Int[], counts = Int[]),
+        recovered_history = (; days = Int[], counts = Int[]),
+        treatment_admissions_history = (; days = Int[], counts = Int[]),
+        treatment_deaths_history = (; days = Int[], counts = Int[]),
+        treatment_ruleout_history = (; days = Int[], counts = Int[]),
+        treatment_absconded_history = (; days = Int[], counts = Int[]),
+        occupancy_break_days::AbstractVector{<:Integer} = Int[],
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        export_death_days::AbstractVector{<:Integer} = Int[],
+        breakpoint::Union{Missing, Real} = missing,
+        source_population::Real = ITURI_POPULATION,
+        patch_infection = patch_infection_model,
+        exports = exports_model,
+        deaths = deaths_model,
+        cases = reported_cases_model,
+        confirmed = confirmed_cases_model,
+        confirmed_deaths_stream = confirmed_deaths_model,
+        treatment = treatment_flow_model,
+        recovered = recovered_model,
+        dispersion = pooled_dispersion_model,
+        ascertainment = pooled_ascertainment_model(),
+        background_re::Bool = false,
+        confirmed_positivity_link::Symbol = :composition,
+        genetic = nothing,
+        onset_to_sample = nejm_onset_to_sample(),
+        tmrca_days::Union{Missing, Real} = missing,
+        tmrca_days_sd::Real = 15.0,
+        renewal_start_lead::Integer = RENEWAL_START_LEAD,
+        rt_walk_lead::Integer = RT_WALK_LEAD)
+    ## Renewal-start and walk-start: same logic as [`bvd_joint`](@ref).
+    rt_start = ismissing(tmrca_days) ? 1 :
+               clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
+    rt_walk_start = ismissing(breakpoint) ? rt_start :
+                    clamp(round(Int, breakpoint) - rt_walk_lead, rt_start, n)
+    latent ~ to_submodel(
+        _patch_latent(n, n_patches, breakpoint, patch_infection;
+            rt_start, rt_walk_start, importation_kernel), false)
+    patch_state = latent.patch_state
+    onsets = latent.onsets_total
+    ## Partially-pooled per-stream dispersions (same layout as bvd_joint).
+    dispersion_state ~ to_submodel(dispersion(6))
+    asc_state ~ to_submodel(ascertainment)
+    kv = dispersion_state.k
+    k_cases = kv[1]
+    k_deaths = kv[2]
+    k_confirmed = kv[3]
+    k_confirmed_deaths = kv[4]
+    k_isolation = kv[5]
+    k_recovered = kv[6]
+    p_drc = asc_state.p_drc
+    p_uganda = asc_state.p_uganda
+    ## Background (same path as bvd_joint).
+    case_bg_re = background_re ?
+    begin
+        bg_pool ~ to_submodel(background_pooling_model())
+        σ_rw_shared = bg_pool.σ_bg
+        nn -> background_walk_model(nn, σ_rw_shared;
+            onset = min(first(reported_history.days), first(deaths_history.days)),
+            onset_ramp = 7.0)
+    end : nothing
+    ## --- Observation submodels (all national-level, same as bvd_joint) ---
+    ## 1. Reported (suspected) cases.
+    cases_state ~ to_submodel(cases(reported_history, reported_cases,
+        onsets, k_cases, p_drc;
+        suspected_daily_history, background_re = case_bg_re))
+    ## 2. Deaths (suspected).
+    deaths_state ~ to_submodel(deaths(deaths_history, total_deaths, onsets, k_deaths;
+        suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
+    ## 3. Confirmed cases (laboratory pipeline).
+    confirmed_state ~ to_submodel(confirmed(confirmed_history,
+        confirmed_cases, onsets, k_confirmed, p_drc,
+        cases_state.bg_daily, cases_state.τ_test,
+        cases_state.bvd_reports_daily;
+        lab_history, lab_daily_history, tests_analysed,
+        positivity_link = confirmed_positivity_link))
+    ## 4. Confirmed deaths.
+    confirmed_deaths_state ~ to_submodel(
+        confirmed_deaths_stream(confirmed_deaths, total_deaths,
+        deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
+        deaths_state.bg_death_daily, k_confirmed_deaths;
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        case_analysed_daily = confirmed_state.analysed_daily,
+        case_suspected_daily = cases_state.reports_daily))
+    ## 5. Uganda exports (cases and deaths).
+    exports_state ~ to_submodel(exports(exported_cases,
+        patch_state.infections_matrix[1, :], p_uganda;
+        export_case_days, incubation_pmf = patch_state.incubation_pmf,
+        source_population))
+    exports_deaths_state ~ to_submodel(exports_deaths_model(
+        exports_deaths, exports_state.travelled_prevalence,
+        deaths_state.CFR, deaths_state.od_pmf,
+        patch_state.incubation_pmf;
+        export_death_days))
+    ## Exports from Ituri (patch 1) only, matching the single-patch model.
+    ## 6. Treatment flows (isolation, bed capacity, LOS).
+    treatment_state ~ to_submodel(treatment(n, isolation_history, onsets,
+        deaths_state.onsets_to_deaths, deaths_state.CFR;
+        bed_capacity_history,
+        treatment_admissions_history, treatment_deaths_history,
+        treatment_ruleout_history, treatment_absconded_history,
+        occupancy_break_days,
+        k_isolation))
+    ## 7. Recovered (among confirmed).
+    recovered_state ~ to_submodel(recovered(recovered_history,
+        recovered_cases, confirmed_state.confirmed_daily,
+        deaths_state.CFR))
+    ## --- Deterministics surfaced for reporting --------------------------
+    R0 := patch_state.R0
+    r := patch_state.r
+    δ_patch := patch_state.δ_patch
+    σ_region := patch_state.σ_region
+    importation_epsilon := patch_state.importation_epsilon
+    C_T_total := latent.C_T_total
+    k := dispersion_state.k_pop
+    k_cases := kv[1]
+    k_deaths := kv[2]
+    k_confirmed := kv[3]
+    k_confirmed_deaths := kv[4]
+    dispersion_sd := dispersion_state.τ
+    p_drc := asc_state.p_drc
+    p_uganda := asc_state.p_uganda
+    CFR := deaths_state.CFR
+end
