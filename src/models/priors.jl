@@ -1306,7 +1306,8 @@ Returns `(; Rt_matrix, log_Rt_patches, sigma_rw_patch, Omega, L)` where
         ramp::Real = 21.0,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         r0_sd_prior = truncated(Normal(0, 0.3); lower = 0),
-        lkj_prior = LKJ(n_patches, 2.0))
+        lkj_prior = LKJ(n_patches, 2.0),
+        effect_prior = truncated(Normal(0, 0.3); lower = 0))
     nb = length(knot_days(n; week, start = rt_walk_start))
     Tp = float(promote_type(typeof(log_R0_base), Float64))
     ## Per-patch step SDs
@@ -1323,7 +1324,7 @@ Returns `(; Rt_matrix, log_Rt_patches, sigma_rw_patch, Omega, L)` where
     L = cholesky(Omega).L
     ## Build the square-root covariance: Sigma^{1/2} = diag(sigma) * L
     Sigma_half = zeros(Tp, n_patches, n_patches)
-    for i in 1:n_patches, j in 1:n_patches
+    @inbounds for i in 1:n_patches, j in 1:n_patches
 
         Sigma_half[i, j] = sigma_rw_patch[i] * L[i, j]
     end
@@ -1335,7 +1336,7 @@ Returns `(; Rt_matrix, log_Rt_patches, sigma_rw_patch, Omega, L)` where
     for p in 1:n_patches
         log_Rt_knots[p, 1] = log_R0_patch[p]
     end
-    for k in 2:nb
+    @inbounds for k in 2:nb
         for p in 1:n_patches
             innov = zero(Tp)
             for q in 1:n_patches
@@ -1348,14 +1349,16 @@ Returns `(; Rt_matrix, log_Rt_patches, sigma_rw_patch, Omega, L)` where
     ## Interpolate knots to daily grid
     ramp_vec = sigmoid_ramp(n, breakpoint; ramp)
     knot_days_vec = knot_days(n; week, start = rt_walk_start)
+    intervention_effect ~ effect_prior
     Rt_matrix = zeros(Tp, n_patches, n)
-    for p in 1:n_patches
+    @inbounds for p in 1:n_patches
         daily_log = interpolate_knots(log_Rt_knots[p, :], knot_days_vec, n)
         for t in 1:n
-            Rt_matrix[p, t] = exp(daily_log[t] + ramp_vec[t] * 0.0)
+            Rt_matrix[p, t] = exp(daily_log[t] + intervention_effect * ramp_vec[t])
         end
     end
-    return (; Rt_matrix, log_Rt_patches = log_Rt_knots, sigma_rw_patch, Omega, L)
+    return (; Rt_matrix, log_Rt_patches = log_Rt_knots,
+        sigma_rw_patch, Omega, L, intervention_effect)
 end
 
 """

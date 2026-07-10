@@ -108,6 +108,29 @@ the data available.
 **Recommendation**: Start with Option A, the constant modifier. If the
 per-province data are informative enough, extend to Option B.
 
+**Option C — independent multivariate-normal random walk (implemented):**
+
+The current implementation uses `patch_rt_mvwalk_model`, which replaces
+the national Rt walk + patch modifiers with a single multivariate-normal
+random walk on joint log-Rt for all patches at weekly knots:
+
+```
+log R_1(t_k)       \nlog R_2(t_k)        ∼ MVN( log R_1(t_{k-1}), Σ )
+...                 \nlog R_p(t_k)       /
+```
+
+The covariance matrix Σ is decomposed as `diag(σ_patch) · Ω · diag(σ_patch)`
+where `σ_patch[p]` is the patch-specific step SD (sampled) and Ω is a
+correlation matrix with an LKJ(2.0) prior. This lets the walk learn
+cross-patch correlation from the data — patches whose log-Rt co-move
+(e.g. both reacting to the same national intervention) share strength
+through Ω. An `intervention_effect` with a half-normal prior
+`N⁺(0, 0.3)` is applied via a sigmoid ramp at the breakpoint, allowing
+a post-intervention decline in Rt across all patches.
+
+Per-patch initial log-Rt `log_R0_patch[p]` is centred on `log_R0_base`
+with patch-specific variation `σ_R0 · z0[p]`.
+
 ### Importation kernel
 
 ```

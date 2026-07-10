@@ -980,14 +980,19 @@ in the return tuple for diagnostics and downstream extension. See also
     k_recovered = kv[6]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
-    ## Background (same path as bvd_joint).
+    ## Background (safe `bg_onset` with guard against empty histories,
+    ## matching the pattern from bvd_joint). The lead is the MAX lag of
+    ## the report-to-receipt kernel (its truncation `nmax`), using 7 as
+    ## an approximation for `cdf_nmax(lognormal_meansd(4.5, 4.0))`.
     case_bg_re = background_re ?
     begin
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
+        bg_lead = 7
+        bg_onset = isempty(reported_history.days) ? 1 :
+                   clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
         nn -> background_walk_model(nn, σ_rw_shared;
-            onset = min(first(reported_history.days), first(deaths_history.days)),
-            onset_ramp = 7.0)
+            onset = bg_onset)
     end : nothing
     ## --- Observation submodels (all national-level, same as bvd_joint) ---
     ## 1. Reported (suspected) cases.
