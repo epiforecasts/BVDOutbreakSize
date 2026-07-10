@@ -119,9 +119,10 @@ const M_PRIOR_BASE_DATE = "2026-05-18"
 """
     M_PRIOR_DOUBLING_DAYS
 
-Central doubling time (days) for the size and growth priors, from the
-outbreak-specific BEAST X analysis (mbalaplacide2026, Exponential growth
-model, mean 11.7 d, 95% HPD 6.8-17.5). The doubling-count prior centre
+Mean doubling time (days) for the size and growth priors, from the
+BEAST X analysis (mbalaplacide2026, Exponential growth model,
+11.7 d, 95% HPD 6.8-17.5). The r prior uses a σ²/2 offset so its mean
+doubling time matches this value. The doubling-count prior centre
 advances by one doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to
 the cut-off.
 """

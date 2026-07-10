@@ -262,12 +262,14 @@ start, and the magnitude is independent of `r`. The composer
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.28)`, with median doubling time matching the
-BEAST X estimate (mbalaplacide2026, Exponential growth model, 11.7 d,
-95% HPD 6.8–17.5). The 95% HPD on the growth rate gives log-SD ≈ 0.24
-from the ratio of the HPD endpoints; 0.28 slightly inflates it to cover
-the asymmetric HPD, so the prior is slightly wider in SD but unbiased
-relative to the source. The first
+M_PRIOR_DOUBLING_DAYS) + σ²/2, σ)` with σ = 0.28, so the mean doubling
+time matches the BEAST X estimate (mbalaplacide2026, Exponential growth
+model, 11.7 d, 95% HPD 6.8–17.5). The σ²/2 offset corrects the
+LogNormal skew: the mean of `τ = log(2)/r` is `log(2)·exp(−μ_r + σ²/2)`,
+and setting it to 11.7 gives `μ_r = log(log(2)/11.7) + σ²/2`. The
+log-SD 0.28 reads the asymmetric HPD as roughly a 95% interval
+(log-SD ≈ 0.24 from the HPD ratio) and slightly inflates it, so the
+prior is modestly wider than the source but unbiased. The first
 reproduction number is then derived FORWARD from this `r` and OUR generation
 interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
@@ -289,7 +291,7 @@ whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS) + 0.28^2 / 2, 0.28),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
