@@ -941,6 +941,13 @@ in the return tuple for diagnostics and downstream extension. See also
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
+        patch_confirmed = confirmed_cases_patch_model,
+        province_confirmed_history = Dict{
+            String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(
+            "ituri" => (; days = Int[], counts = Int[]),
+            "nord_kivu" => (; days = Int[], counts = Int[]),
+            "sud_kivu" => (; days = Int[], counts = Int[])),
+        province_names = ["ituri", "nord_kivu", "sud_kivu"],
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -1027,6 +1034,26 @@ in the return tuple for diagnostics and downstream extension. See also
         deaths_state.CFR, deaths_state.od_pmf,
         patch_state.incubation_pmf;
         export_death_days))
+    ## 3b. Per-province confirmed cases from spatial tables.
+    ##     Each patch uses the SAME receipt delay and test sensitivity
+    ##     as the national confirmed stream. Shares k_confirmed from
+    ##     the pooled dispersion model. Per-province data comes from
+    ##     Tableau 1 spatial tables in the INSP situation reports.
+    for p in 1:n_patches
+        pname = province_names[p]
+        phist = get(province_confirmed_history, pname,
+            (; days = Int[], counts = Int[]))
+        if !isempty(phist.days)
+            ps ~ to_submodel(
+                patch_confirmed(
+                    phist, missing,
+                    vec(patch_state.onsets_matrix[p, :]),
+                    k_confirmed,
+                    confirmed_state.receipt_pmf,
+                    confirmed_state.s_test),
+                false)
+        end
+    end
     ## Exports from Ituri (patch 1) only, matching the single-patch model.
     ## 6. Treatment flows (isolation, bed capacity, LOS). Uses the summed
     ##    (national) suspected-case inflow, matching the national-level data.

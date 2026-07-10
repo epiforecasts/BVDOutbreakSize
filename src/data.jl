@@ -408,6 +408,11 @@ function load_observations(
         tests_received_history = tests_received_history,
         onset_curve_history = onset_curve_history,
         onset_report_history = onset_report_history,
+        province_confirmed_history = Dict{
+            String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(
+            "ituri" => (; days = Int[], counts = Int[]),
+            "nord_kivu" => (; days = Int[], counts = Int[]),
+            "sud_kivu" => (; days = Int[], counts = Int[])),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end

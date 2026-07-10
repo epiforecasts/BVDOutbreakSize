@@ -1439,6 +1439,7 @@ quantities.
 
     return (; τ_test, bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
+        s_test, spec,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
         expected_analysed, expected_confirmed, p_positive)
@@ -3386,4 +3387,32 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a)
+end
+
+
+"""
+Per-province confirmed cases observation model. Takes a single patch's
+onset trajectory and fits against that province's confirmed case history
+from the spatial tables (Tableau 1). Shares receipt delay and test
+sensitivity with the national confirmed stream — only the patch-specific
+trajectory and the per-province data differ.
+
+Returns `(; patch_confirmed_daily, expected_patch_confirmed)`.
+"""
+@model function confirmed_cases_patch_model(
+        patch_confirmed_history,
+        patch_confirmed_total::Union{Missing, Integer},
+        patch_onsets::AbstractVector,
+        k_confirmed::Real,
+        receipt_pmf::AbstractVector,
+        s_test::Real)
+    confirmed_daily = s_test .* convolve_delay(patch_onsets, receipt_pmf)
+    n = length(patch_onsets)
+    vobs = vintage_obs(patch_confirmed_history, patch_confirmed_total, n)
+    modelled_inc = bin_increments(confirmed_daily, vobs.days)
+    confirmed_increments ~ to_submodel(
+        vintage_increments_model(modelled_inc, vobs.obs_increments, k_confirmed))
+    expected_patch_confirmed := sum(confirmed_daily)
+    return (; patch_confirmed_daily = confirmed_daily,
+        expected_patch_confirmed)
 end
