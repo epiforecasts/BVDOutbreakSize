@@ -2164,7 +2164,6 @@ _headline_thunks = [
         confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
             obs.total_deaths;
             deaths_history = obs.deaths_history,
-            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
             confirmed_deaths_history = obs.confirmed_deaths_history,
             breakpoint = _BREAKPOINT);
         callback = fit_callback("confirmed_deaths")),

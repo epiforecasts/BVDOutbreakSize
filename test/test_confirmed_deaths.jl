@@ -164,17 +164,6 @@ end
     @test isfinite(logjoint(m, draw))
 end
 
-@testitem "confirmed_deaths_only_model with daily deaths conditions and stays finite" begin
-    using BVDOutbreakSize: confirmed_deaths_only_model
-    using Turing.DynamicPPL: logjoint
-    using Random: MersenneTwister
-    m = confirmed_deaths_only_model(40, 17, 246;
-        deaths_history = (; days = [20, 40], counts = [120, 246]),
-        suspected_daily_deaths_history = (; days = [30, 35], counts = [5, 8]))
-    draw = rand(MersenneTwister(42), m)
-    @test isfinite(logjoint(m, draw))
-end
-
 @testitem "deaths_model background is the lagged scaled case background" begin
     using BVDOutbreakSize: deaths_model, background_walk_model, convolve_delay
     using Turing: returned
