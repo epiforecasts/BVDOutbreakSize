@@ -331,3 +331,87 @@ function stream_calibration(panels::AbstractVector)
     end
     return _prettify(DataFrame(rows))
 end
+
+"""
+Per-patch outbreak summary for the patch model. Returns a `DataFrame`
+with one row per patch and columns
+`Patch, C_T (cumul infections), R_T (terminal Rt),
+infections_T (daily at cut-off), δ (log-Rt modifier)`,
+each with the posterior median and 30/60/90% credible intervals.
+
+Accepts the same chain format as [`summary_table`](@ref) and expects
+the per-patch deterministics exposed by [`bvd_patch_joint`](@ref)
+(`C_T_patch_1` … `C_T_patch_3`, `R_T_patch_1` … `R_T_patch_3`,
+`infections_T_patch_1` … `infections_T_patch_3`, `δ_patch`).
+`n_patches` must be passed explicitly (default 3).
+"""
+function patch_summary_table(chn, n_patches::Integer = 3;
+        digits::Integer = 2)
+    patch_names = ["Ituri", "Nord-Kivu", "Sud-Kivu"]
+    params = [:C_T_patch_1, :C_T_patch_2, :C_T_patch_3,
+        :R_T_patch_1, :R_T_patch_2, :R_T_patch_3,
+        :infections_T_patch_1, :infections_T_patch_2,
+        :infections_T_patch_3, :δ_patch]
+    ## Check which deterministics the chain carries
+    has_all = all(k -> try
+            chn[k];
+            true
+        catch
+            ;
+            false
+        end, params)
+    if !has_all
+        missing_keys = filter(k -> try
+                chn[k];
+                false
+            catch
+                ;
+                true
+            end, params)
+        error("Chain missing per-patch deterministics: $(missing_keys). " *
+              "This chain was not sampled from bvd_patch_joint.")
+    end
+    ## Per-patch C_T
+    C_T = [posterior_summary(_draws(chn, Symbol("C_T_patch_", i)))
+           for i in 1:min(n_patches, 3)]
+    R_T = [posterior_summary(_draws(chn, Symbol("R_T_patch_", i)))
+           for i in 1:min(n_patches, 3)]
+    inf_T = [posterior_summary(_draws(chn, Symbol("infections_T_patch_", i)))
+             for i in 1:min(n_patches, 3)]
+    ## δ_patch is a vector, extract per-element summaries
+    δ_raw = _draws(chn, :δ_patch)
+    n_draws = length(δ_raw)
+    first_el = δ_raw[1]
+    n_δ = length(first_el)
+    δ_el = [posterior_summary([δ_raw[i][p] for i in 1:n_draws])
+            for p in 1:min(n_δ, n_patches)]
+    rows = [(
+                patch = patch_names[i],
+                C_T_med = round(C_T[i].lo60 + (C_T[i].hi60 - C_T[i].lo60) / 2; digits = 0),
+                C_T_lo90 = round(C_T[i].lo90; digits = 0),
+                C_T_hi90 = round(C_T[i].hi90; digits = 0),
+                R_T_med = round(R_T[i].lo60 + (R_T[i].hi60 - R_T[i].lo60) / 2;
+                    digits = digits),
+                R_T_lo90 = round(R_T[i].lo90; digits = digits),
+                R_T_hi90 = round(R_T[i].hi90; digits = digits),
+                inf_T_daily = round(inf_T[i].lo60 + (inf_T[i].hi60 - inf_T[i].lo60) / 2;
+                    digits = 0),
+                δ_med = round(δ_el[i].lo60 + (δ_el[i].hi60 - δ_el[i].lo60) / 2;
+                    digits = digits),
+                δ_lo90 = round(δ_el[i].lo90; digits = digits),
+                δ_hi90 = round(δ_el[i].hi90; digits = digits)
+            ) for i in 1:min(n_patches, 3)]
+    df = DataFrame(rows)
+    df = rename(df,
+        [
+            :patch => "Patch",
+            :C_T_med => "C_T median", :C_T_lo90 => "C_T lower 90%",
+            :C_T_hi90 => "C_T upper 90%",
+            :R_T_med => "R_T median", :R_T_lo90 => "R_T lower 90%",
+            :R_T_hi90 => "R_T upper 90%",
+            :inf_T_daily => "Daily inf. at cut-off",
+            :δ_med => "δ median", :δ_lo90 => "δ lower 90%",
+            :δ_hi90 => "δ upper 90%"
+        ])
+    return df
+end

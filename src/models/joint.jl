@@ -1045,6 +1045,16 @@ in the return tuple for diagnostics and downstream extension. See also
     R0 := patch_state.R0
     r := patch_state.r
     δ_patch := patch_state.δ_patch
+    ## Per-patch outbreak summaries at the cut-off.
+    C_T_patch_1 := patch_state.C_T_patch[1]
+    C_T_patch_2 := patch_state.C_T_patch[2]
+    C_T_patch_3 := patch_state.C_T_patch[3]
+    R_T_patch_1 := patch_state.Rt_matrix[1, n]
+    R_T_patch_2 := patch_state.Rt_matrix[2, n]
+    R_T_patch_3 := patch_state.Rt_matrix[3, n]
+    infections_T_patch_1 := patch_state.infections_matrix[1, n]
+    infections_T_patch_2 := patch_state.infections_matrix[2, n]
+    infections_T_patch_3 := patch_state.infections_matrix[3, n]
     k := dispersion_state.k_pop
     k_cases := kv[1]
     k_deaths := kv[2]
