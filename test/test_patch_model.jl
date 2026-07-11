@@ -508,3 +508,42 @@ end
              sum(lab["nord_kivu_analysed"].counts)
     @test it_pos > 3 * nk_pos
 end
+
+@testitem "patch_rt_model: the drift prior permits real divergence" tags=[:slow] begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: patch_rt_model, knot_days
+    using Distributions: Normal, truncated
+    using Statistics: median, mean
+    using Random: seed!
+
+    ## The headline spatial claim is read off `region_drift_sd`: a posterior
+    ## near zero is reported as "the provinces share one temporal Rt shape".
+    ## That claim is only meaningful if the PRIOR would have allowed them to
+    ## diverge. If the prior were tight, a near-zero posterior would be an
+    ## artefact of the prior, not a finding about the outbreak.
+    ##
+    ## So pin the prior predictive: under the default drift prior, the change
+    ## in the Ituri / Nord-Kivu Rt RATIO across the fitted window must have a
+    ## substantial chance of exceeding 25%.
+    obs = load_observations()
+    n = obs.n
+    bp = obs.who_first_sitrep_days
+    rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
+    rt_walk_start = clamp(round(Int, bp) - RT_WALK_LEAD, rt_start, n)
+
+    m = patch_rt_model(n, 3, log(1.5); breakpoint = bp, rt_start, rt_walk_start)
+    seed!(1)
+    ratios = Float64[]
+    for _ in 1:600
+        r = m()
+        c0 = r.δ_patch[2, rt_walk_start] - r.δ_patch[1, rt_walk_start]
+        c1 = r.δ_patch[2, n] - r.δ_patch[1, n]
+        push!(ratios, exp(abs(c1 - c0)))
+    end
+
+    ## Not a straitjacket: a real chance of >25% divergence in the Rt ratio.
+    @test mean(ratios .> 1.25) > 0.15
+    ## And not vacuous either: the prior is still centred near "no divergence",
+    ## so it shrinks toward a shared shape rather than assuming divergence.
+    @test median(ratios) < 1.4
+end
