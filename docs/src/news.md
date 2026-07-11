@@ -22,6 +22,55 @@ Changes since v1.13.0
 
 ## v1.13.0
 
+### Model
+
+- Added a **patch (meta-population) model**, `bvd_patch_joint`, over the
+  three affected provinces (Ituri, Nord-Kivu, Sud-Kivu). Every national
+  data stream is fitted exactly as in `bvd_joint`, against the summed
+  per-patch onsets, so the national headline is unchanged in structure;
+  the spatial information enters as one extra term. Headline quantities
+  (`C_T`, `R_T`, `r`, `T`, `CFR`, `R0`, `doubling_time`) are surfaced
+  under the same names, so a patch chain drops into the existing summary
+  machinery. Uganda exports are driven by the Ituri patch alone.
+- Per-patch reproduction numbers vary in space **and** in time: a common
+  national trend (the existing `rt_walk_model`, unchanged) plus per-patch
+  deviations that sum to zero, with multivariate-normal innovations and a
+  learned cross-patch correlation (`LKJ(2)`). The deviation scale
+  (`region_drift_sd`) is sampled, so whether the provinces share one
+  temporal `Rt` shape is *estimated* rather than assumed: the limit
+  `region_drift_sd → 0` recovers a fixed `Rt` ratio between provinces.
+- The per-province confirmed cases are scored as a **composition**
+  conditional on the national total (`province_composition_model`), not as
+  a second count likelihood. They are an exact partition of the national
+  confirmed counts, so fitting them as counts alongside the national
+  stream would put the same observations into the joint density twice.
+- Between-patch importation is available (`importation_kernel`) but off by
+  default. There is no mobility data for this outbreak, and importation is
+  confounded with the secondary-patch seeds, so the intensity `ε` is
+  sampled only when a non-zero kernel is supplied.
+
+### Data
+
+- Added `[province_confirmed_history]`: per-province cumulative confirmed
+  cases from the Tableau 1 spatial tables (19 vintages, 18 Jun -- 8 Jul).
+  Every vintage sums exactly to the national confirmed total.
+- Added `[province_lab_daily_history]`: per-province laboratory throughput
+  (samples analysed and positives) from section 4.3 of the situation
+  reports (18 vintages, 18 Jun -- 8 Jul), scanned by
+  `scripts/scan_province_lab.jl` (`task province-lab-data`). The scan is
+  gated on the per-province analysed counts summing exactly to the
+  national `tests_analysed_daily_history` on every date; all 18 reconcile.
+- These data show that test positivity differs sharply and persistently
+  between provinces: over the window Ituri ran 2112 tests for 671
+  positives (31.8%) against Nord-Kivu's 1340 for 74 (5.5%), a 5.8x gap
+  (~18 tests per case found in Nord-Kivu against ~3 in Ituri). The
+  provinces are testing very differently-selected pools, so per-province
+  confirmed counts are **not** proportional to per-province infections.
+  Wiring this denominator into the likelihood, which would separate
+  provincial ascertainment from provincial `Rt`, is tracked in #410.
+
+
+## v1.13.0
 Changes since v1.12.0
 
 ### Data
@@ -121,6 +170,7 @@ Changes since v1.12.0
   open items are filed as issues #544 to #549.
 - Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
   `scripts/README.md`, so a session starts with the rules in context.
+
 
 ## v1.12.0
 
@@ -256,6 +306,8 @@ Changes since v1.9.0.
   Distributions (0.25.129), LogDensityProblems (2.2.0), Integrals (4, 5.4),
   StatsFuns (2.2.0), SHA (0.7.0), Aqua (0.8.16), TestItemRunner (1.1.5),
   CensoredDistributions (0.2.22), and TestItems (1.0.0).
+
+||||||| parent of fcb943f4 (data: advance province series to SitRep 055 (8 July); add news entry)
 
 ## v1.9.0
 
