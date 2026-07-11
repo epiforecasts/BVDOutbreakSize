@@ -3391,28 +3391,118 @@ end
 
 
 """
-Per-province confirmed cases observation model. Takes a single patch's
-onset trajectory and fits against that province's confirmed case history
-from the spatial tables (Tableau 1). Shares receipt delay and test
-sensitivity with the national confirmed stream — only the patch-specific
-trajectory and the per-province data differ.
+Per-province composition of the confirmed cases, from the Tableau 1
+spatial tables.
 
-Returns `(; patch_confirmed_daily, expected_patch_confirmed)`.
+### Why a composition and not per-province counts
+
+The per-province confirmed totals are an exact partition of the national
+confirmed totals: at every one of the 17 shared vintages, Ituri +
+Nord-Kivu + Sud-Kivu equals the national confirmed count that
+[`confirmed_cases_model`](@ref) already scores. Fitting the per-province
+counts with their own count likelihood would therefore put the same
+observations into the joint density twice, double-weighting the confirmed
+stream against every other stream in the model.
+
+The information the spatial tables add over the national series is
+purely *spatial*: how the confirmed cases divide between provinces. So
+the likelihood factorises as
+
+```math
+P(y_1, y_2, y_3) = P(N) \\; P(y_1, y_2, y_3 \\mid N),
+\\qquad N = \\textstyle\\sum_p y_p,
+```
+
+where the national confirmed stream supplies the total term `P(N)` and
+this model supplies only the conditional composition term. The vintage
+totals are conditioned on, never scored, so nothing is counted twice.
+
+### Likelihood
+
+The composition is scored by stick-breaking over the patches with the
+overdispersed-Binomial [`safe_betabinomial`](@ref), which is the
+sequential form of a Dirichlet-multinomial. For each vintage the
+observed count in patch `p` is drawn from the cases not yet allocated to
+patches `1 … p−1`, at the conditional share implied by the modelled
+per-patch confirmed increments:
+
+```math
+y_{p} \\sim \\mathrm{BetaBinomial}\\Bigl(
+    N - \\textstyle\\sum_{q<p} y_q, \\;\\;
+    \\pi_p \\big/ \\textstyle\\sum_{q \\ge p} \\pi_q, \\;\\; \\rho \\Bigr),
+```
+
+with the last patch taking the remainder. `ρ` is an overdispersion,
+shared across provinces and vintages, that absorbs the extra-Binomial
+variation in how cases are attributed to provinces (reporting lags
+between the provincial and national tables, reassignment of cases
+between health zones). `ρ → 0` recovers a plain Multinomial split.
+
+### Arguments
+
+- `obs_increments`: `(n_patches × n_vintages)` observed per-province
+  new-confirmed counts, or `missing` for the predictive path.
+- `modelled_confirmed`: `(n_patches × n_vintages)` modelled expected
+  per-province confirmed increments, binned to the same vintages.
+- `rho_prior`: prior on the composition overdispersion.
+
+Returns `(; shares, rho, obs_increments)` where `shares[p, i]` is the
+modelled expected share of patch `p` at vintage `i`.
 """
-@model function confirmed_cases_patch_model(
-        patch_confirmed_history,
-        patch_confirmed_total::Union{Missing, Integer},
-        patch_onsets::AbstractVector,
-        k_confirmed::Real,
-        receipt_pmf::AbstractVector,
-        s_test::Real)
-    confirmed_daily = s_test .* convolve_delay(patch_onsets, receipt_pmf)
-    n = length(patch_onsets)
-    vobs = vintage_obs(patch_confirmed_history, patch_confirmed_total, n)
-    modelled_inc = bin_increments(confirmed_daily, vobs.days)
-    confirmed_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, vobs.obs_increments, k_confirmed))
-    expected_patch_confirmed = sum(confirmed_daily)
-    return (; patch_confirmed_daily = confirmed_daily,
-        expected_patch_confirmed)
+@model function province_composition_model(
+        obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
+        modelled_confirmed::AbstractMatrix;
+        rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1))
+    np, nv = size(modelled_confirmed)
+    ρ ~ rho_prior
+    ## Expected share of each patch at each vintage. `safe_rate` floors the
+    ## modelled increments away from zero so an early vintage with no
+    ## modelled cases in a patch still gives a defined (tiny) share rather
+    ## than a 0/0.
+    shares = zeros(eltype(modelled_confirmed), np, nv)
+    @inbounds for i in 1:nv
+        tot = zero(eltype(modelled_confirmed))
+        for p in 1:np
+            tot += safe_rate(modelled_confirmed[p, i])
+        end
+        for p in 1:np
+            shares[p, i] = safe_rate(modelled_confirmed[p, i]) / tot
+        end
+    end
+    ## The totals are CONDITIONED ON, not scored: they are already in the
+    ## joint density through the national confirmed stream. On the
+    ## predictive path there is no observed total, so the modelled column
+    ## sums stand in for it and the composition is generated against those.
+    predictive = ismissing(obs_increments)
+    if predictive
+        totals = [round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
+                  for i in 1:nv]
+        obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
+    else
+        totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
+    end
+    ## Stick-breaking: allocate each vintage's total across the patches.
+    ## The final patch takes the remainder and carries no free draw, so the
+    ## composition has `np - 1` degrees of freedom per vintage, as it must.
+    for i in 1:nv
+        remaining = totals[i]
+        tail = one(eltype(shares))
+        for p in 1:(np - 1)
+            ## Conditional share of patch `p` among patches `p … np`.
+            p_cond = clamp(shares[p, i] / tail, 0.0, 1.0)
+            obs_increments[p, i] ~ safe_betabinomial(
+                max(remaining, 0), p_cond, ρ)
+            remaining -= obs_increments[p, i]
+            ## Guard the running tail against round-off driving it to zero
+            ## or negative on the last step.
+            tail = max(tail - shares[p, i], 1e-10)
+        end
+        ## The last patch is the remainder, not a free draw. Filled in only
+        ## on the predictive path; on the fitting path it is already the
+        ## observed count and must not be written over.
+        if predictive
+            obs_increments[np, i] = max(remaining, 0)
+        end
+    end
+    return (; shares, rho = ρ, obs_increments)
 end

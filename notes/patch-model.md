@@ -2,330 +2,196 @@
 
 ## Motivation
 
-The current model treats the DRC outbreak as a single well-mixed population.
-In reality, transmission is spatially structured: the outbreak began in Ituri
-Province and has since spread to Nord-Kivu and (to a much lesser extent)
-Sud-Kivu. The INSP sitreps publish per-province spatial tables (Tableau 1 &
-Tableau 6) for confirmed cases, confirmed deaths, isolation occupancy and
-laboratory throughput. A patch model lets us:
+The headline model treats the DRC outbreak as a single well-mixed population.
+Transmission is spatially structured: the outbreak began in Ituri Province and
+has since spread to Nord-Kivu and, marginally, Sud-Kivu.
+The INSP sitreps publish per-province spatial tables (Tableau 1) giving
+confirmed cases by province.
+A patch model lets us estimate province-specific reproduction numbers and
+per-province outbreak sizes while still fitting every national data stream.
 
-1. **Fit per-province data streams directly** — confirmed cases by province,
-   lab analysed by province, isolation occupancy by province — instead of
-   only the national aggregates.
-2. **Estimate province-specific reproduction numbers** that share strength
-   through a hierarchical national `Rt`.
-3. **Model between-province spread** via an importation term, capturing how
-   the outbreak moves from the Ituri epicentre into Nord-Kivu and Sud-Kivu.
-4. **Keep fitting the national aggregates** by summing the patch trajectories,
-   so the model still talks to the headline numbers.
+## What the province data can and cannot support
 
-## Patch structure
+Before choosing a structure, look at what the spatial tables actually contain
+over the fitted window (18 June to 6 July, 17 vintages).
 
-Three patches matching the INSP spatial-table provinces:
+| | 18 Jun | 6 Jul | growth |
+|---|---|---|---|
+| Ituri | 853 | 1556 | 1.82x |
+| Nord-Kivu | 77 | 149 | 1.94x |
+| Sud-Kivu | 3 | 3 | 1.00x |
+| Ituri share | 91.4% | 91.1% | — |
 
-| Patch | Province | Population | Role |
-|-------|----------|------------|------|
-| 1     | Ituri    | ~4.4M      | Epicentre (first cases, largest burden) |
-| 2     | Nord-Kivu | ~6.6M      | Secondary spread |
-| 3     | Sud-Kivu  | ~5.8M      | Low-level incursions |
+Three facts follow, and they drive every design decision below.
 
-Note: The national model's source population `ITURI_POPULATION` (4.39M) and
-travel volume `ITURI_DAILY_TRAVEL` (1871) are Ituri-specific. The patch model
-will need population estimates for each province, and a travel/mobility matrix
-for the importation kernel.
+1. **The provincial shares are flat.**
+Ituri's share of confirmed cases sits between 91.0% and 91.4% at every one of
+the 17 vintages.
+Ituri and Nord-Kivu have grown at very nearly the same rate.
+The data therefore carry a strong signal about the *level* of the split and no
+signal at all about a *time-varying divergence* between provincial Rts.
+
+2. **Sud-Kivu is static.**
+A constant 3 confirmed cases, so zero increments in every interval.
+It informs the model that transmission there is negligible, and nothing else.
+
+3. **The province counts are an exact partition of the national counts.**
+At every vintage, Ituri + Nord-Kivu + Sud-Kivu equals the national confirmed
+total that the existing `confirmed_cases_model` already fits.
+This is verified, not assumed.
 
 ## Latent process
 
-### Per-patch renewal with importation
+### Per-patch renewal
 
 For each patch `p` on day `t`:
 
 ```
-I_{p,t} = R_{p,t} · Σ_s I_{p,t−s} · g_s  +  import_{p,t}
+I_{p,t} = R_{p,t} · Σ_s I_{p,t−s} · g_s  +  ε · Σ_q K_{p,q} · I_{q,t−1}
 ```
 
-where:
+with `g_s` the shared generation-interval PMF (the biology of transmission does
+not depend on province, so it is sampled once) and the incubation PMF likewise
+shared.
+`patch_infections()` in `renewal.jl` implements this and reduces exactly to
+`renewal_infections()` per row when the kernel is zero.
 
-- `g_s` is the **shared** generation-interval PMF (same gi for all patches,
-  sampled once from the existing [`generation_interval_model`](@ref)).
-- `R_{p,t}` is the **patch-specific** reproduction number.
-- `import_{p,t}` is imported infections arriving in patch `p` from other
-  patches on day `t`.
+### Reproduction numbers: reference-coded constant modifiers
 
-### Seeding
-
-Each patch has its own cryptically-growing seed:
-
-- Ituri gets the existing `seed_model` (I0 ~ N⁺(0.1, 0.1), exponential growth
-  at the sampled `r`). The doubling-count prior `m ~ N⁺(3, 3)` applies to the
-  Ituri patch only — Ituri is the origin patch.
-- Nord-Kivu and Sud-Kivu are seeded later, at or after the first confirmed case
-  appears in that province. The seeding time for each secondary patch is a
-  sampled offset from the Ituri renewal start, with a prior that reflects the
-  date of the first confirmed case in that province.
-
-A simpler alternative for the first pass: all three patches share the same
-renewal-start day but the secondary patches initialise from a much smaller
-seed (e.g. `I0 ~ N⁺(0.01, 0.01)`) so their early trajectory is near-zero and
-grows only through importation from Ituri.
-
-### Reproduction numbers
+`patch_rt_model` builds the per-patch Rt from the existing national weekly-knot
+random walk (`rt_walk_model`, unchanged) plus a constant per-patch modifier on
+the log scale:
 
 ```
-log R_{p,t} = log R_national(t) + δ_p(t)
+log R_{p,t} = log R_{1,t} + δ_p,   δ_1 ≡ 0,   δ_p ~ N(0, σ_region)  (p ≥ 2)
 ```
 
-where:
+Two choices here are deliberate.
 
-- `log R_national(t)` is the **national** log-Rt trajectory from the existing
-  `rt_walk_model` — a weekly-knot random walk with a sigmoid intervention
-  ramp at the first sitrep date.
-- `δ_p(t)` is a **patch modifier** on log-Rt, allowing province-specific
-  deviations from the national trend.
+**The modifier is constant in time.**
+Given the flat shares (fact 1), a time-varying per-patch walk has nothing to
+learn.
+An earlier version of this branch used a multivariate-normal random walk on
+joint per-patch log-Rt with an LKJ correlation prior, replacing the national
+walk entirely.
+That added roughly thirty parameters (weekly innovations per patch, per-patch
+step SDs, per-patch initial offsets, a correlation matrix) to fit a signal the
+data do not contain, and it discarded the national Rt walk that the headline
+model and all its diagnostics depend on.
+It was removed.
+If a future window shows the provinces genuinely diverging, the extension is to
+give `δ_p` its own slow walk — but that should be motivated by the shares
+actually moving.
 
-**Option A — constant modifier (simpler, better-identified):**
+**The primary patch is the reference (`δ_1 ≡ 0`), not a free hierarchical
+draw.**
+If every patch gets a free modifier, only `log R_national(t) + δ_p` reaches the
+likelihood, so the walk level and the mean of `δ` are confounded and the
+posterior has a ridge along it.
+Reference coding removes the ridge, and it makes `δ_2` and `δ_3` mean exactly
+what the composition data measure: the log-Rt of each secondary province
+relative to Ituri.
 
-```
-δ_p ~ Normal(0, σ_region)
-```
+The reported national `R_T` is the incidence-weighted aggregate implied by the
+summed patch infections (`implied_national_Rt`), which inverts the renewal
+equation on the total.
+This is provably the force-of-infection-weighted mean of the patch Rts, so it
+is the reproduction number that reproduces the national trajectory.
 
-The modifier is constant over time, so the patch Rt inherits the national
-shape (same growth/decay pattern) but scaled up or down. This captures
-persistent differences in transmission (e.g. higher density in Bunia,
-different response effectiveness).
+### Importation: off by default, and honest about why
 
-**Option B — time-varying modifier (richer, harder to identify):**
+There is **no mobility or origin-destination data** for this outbreak.
+Worse, importation is not identifiable here even in principle: with flat shares
+(fact 1), any pair of (importation rate `ε`, secondary-patch seed) that
+reproduces the observed Nord-Kivu level fits equally well.
+The two are confounded.
 
-```
-δ_p(t) interpolated from weekly knots with a random walk
-δ_p ~ Normal(δ_p(t−1), σ_patch_rw)
-```
+So `ε` is sampled **only when a non-zero `importation_kernel` is supplied**.
+The default kernel is all-zero, the patches are uncoupled, and no `ε` enters the
+parameter space.
+Sampling `ε` against a zero kernel — as an earlier version of this branch did —
+adds a dimension the likelihood never touches, giving a parameter whose
+posterior is exactly its prior and which only slows the sampler.
 
-This lets the province-specific trajectory diverge from the national shape,
-at the cost of P×K additional knot parameters. Likely over-parameterised for
-the data available.
-
-**Recommendation**: Start with Option A, the constant modifier. If the
-per-province data are informative enough, extend to Option B.
-
-**Option C — independent multivariate-normal random walk (implemented):**
-
-The current implementation uses `patch_rt_mvwalk_model`, which replaces
-the national Rt walk + patch modifiers with a single multivariate-normal
-random walk on joint log-Rt for all patches at weekly knots:
-
-```
-log R_1(t_k)       \nlog R_2(t_k)        ∼ MVN( log R_1(t_{k-1}), Σ )
-...                 \nlog R_p(t_k)       /
-```
-
-The covariance matrix Σ is decomposed as `diag(σ_patch) · Ω · diag(σ_patch)`
-where `σ_patch[p]` is the patch-specific step SD (sampled) and Ω is a
-correlation matrix with an LKJ(2.0) prior. This lets the walk learn
-cross-patch correlation from the data — patches whose log-Rt co-move
-(e.g. both reacting to the same national intervention) share strength
-through Ω. An `intervention_effect` with a half-normal prior
-`N⁺(0, 0.3)` is applied via a sigmoid ramp at the breakpoint, allowing
-a post-intervention decline in Rt across all patches.
-
-Per-patch initial log-Rt `log_R0_patch[p]` is centred on `log_R0_base`
-with patch-specific variation `σ_R0 · z0[p]`.
-
-### Importation kernel
-
-```
-import_{p,t} = ε · Σ_{q ≠ p} ( I_{q,t−1} · m_{q→p} )
-```
-
-where:
-
-- `m_{q→p}` is the daily **per-capita travel rate** from province `q` to
-  province `p`, derived from known mobility data (road networks, PoE flows).
-- `ε` is the **importation intensity** — the fraction of travellers who are
-  infectious and successfully establish a secondary infection. Sampled with a
-  strong prior (e.g. `ε ~ Beta(1, 100)` — rare events).
-
-For the first pass, a simplified isotropic kernel:
-
-```
-import_{p,t} = ε · Σ_{q ≠ p} I_{q,t−1} · (w_q / Σ w_q)
-```
-
-where `w_q` weights each source patch by its population (more people = more
-travellers). This avoids needing a full O-D matrix.
-
-Even simpler: one-directional importation from Ituri only, since Ituri is the
-epicentre and the Nord-Kivu / Sud-Kivu cases are overwhelmingly Ituri-linked:
-
-```
-import_{NK,t} = ε · I_IT,t−1 · (travel_volume / pop_IT)
-import_{SK,t} = ε · I_IT,t−1 · (travel_volume / pop_IT) · r_SK
-```
-
-where `r_SK < 1` reflects much lower travel volume to South Kivu.
+With the default, each secondary patch is explained by its own sampled seed
+(standing in for the unobserved introductions from Ituri) and its own `R_t`.
+The kernel machinery is retained and tested, so a mobility-informed kernel can
+be passed as a sensitivity analysis if data ever appear.
 
 ## Data streams
 
-### National-level (sum of patches)
+### National (unchanged)
 
-These are the existing national data streams, fitted to the sum of patch
-trajectories. No change to the observation model structure.
+Every national stream is fitted exactly as in `bvd_joint`, against the summed
+patch onsets: suspected cases, suspected deaths, confirmed cases, confirmed
+deaths, the laboratory pipeline, treatment flows and recoveries.
+Uganda exports are driven by the **primary patch alone**, since the border
+crossings that stream describes are Ituri-to-Uganda.
 
-| Stream | Patch sum |
-|--------|-----------|
-| Reported (suspected) cases | Σ_p onsets_p (through ascertainment) |
-| Suspected deaths | Σ_p deaths_p (through CFR) |
-| Confirmed cases (national) | Σ_p confirmed_p (through lab) |
-| Confirmed deaths (national) | Σ_p confirmed_deaths_p |
-| Exports to Uganda | Ituri-only (exports are Ituri → Uganda) |
+### Province-level: a composition, not a second count likelihood
 
-### Province-level (individual patches)
+Because the province counts are an exact partition of the national counts
+(fact 3), fitting them with their own count likelihood would put the same
+observations into the joint density **twice**, double-weighting the confirmed
+stream against every other stream in the model.
+The first version of this branch did exactly that.
 
-New observation models that fit per-province data from the spatial tables.
+The information the spatial tables add over the national series is purely
+*spatial*.
+So the likelihood is factorised:
 
-| Stream | Patch | Observation model |
-|--------|-------|-------------------|
-| Confirmed cases by province | Each p | Per-province cumulative confirmed (spatial table) fitted through the same lab-positivity model but with province-specific positivity |
-| Lab analysed by province | Each p | Per-province 24h analysed counts (section 4.3) fitted as Binomial denominator against the province's new confirmed |
-| Isolation occupancy by province | Each p | Per-province isolation (Tableau 6 Fin J) fitted through the length-of-stay model |
-| Treatment flows by province | Each p | Per-province admissions / deaths / ruleouts (Tableau 6) |
-
-## Implementation plan
-
-### 1. Add `patch_infections()` to `renewal.jl`
-
-A new multi-patch renewal function that takes a matrix of patch-Rts
-(`n_patches × n_days`) and returns a matrix of patch infections
-(`n_patches × n_days`), with an importation kernel:
-
-```julia
-function patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel)
+```
+P(y_1, y_2, y_3) = P(N) · P(y_1, y_2, y_3 | N),    N = Σ_p y_p
 ```
 
-- Each row is one patch's daily infection trajectory.
-- Between-patch importation: `import_{p,t} = ε · Σ_q K_{p,q} · I_{q,t−1}`
-  where `K` is the importation kernel.
-- The same generation interval `g` is shared.
+The existing national `confirmed_cases_model` supplies the total term `P(N)`.
+`province_composition_model` supplies **only** the conditional composition term,
+scored by stick-breaking over the patches with an overdispersed Binomial
+(`safe_betabinomial`), the sequential form of a Dirichlet-multinomial.
+The vintage totals are conditioned on and never scored, so nothing is counted
+twice.
+A shared overdispersion `ρ` absorbs extra-Binomial variation in how cases are
+attributed to provinces (reporting lag between the provincial and national
+tables, reassignment between health zones).
 
-AD-transparent under Mooncake.
+The test suite pins this down directly: the composition's log-density is
+invariant to rescaling the modelled confirmed level (it sees only normalised
+shares) but responds to a change in the split.
 
-### 2. Add `patch_rt_model()` to `models/priors.jl`
+## Identifiability summary
 
-A hierarchical Rt model that samples the national Rt walk and per-patch
-modifiers, combining them into a `n_patches × n_days` Rt matrix:
+| Quantity | Identified by | Status |
+|---|---|---|
+| `δ_2` (Nord-Kivu log-Rt offset) | level of the confirmed-case split | well identified |
+| `δ_3` (Sud-Kivu) | zero increments throughout | weakly identified, pinned low |
+| secondary-patch seeds | early provincial level | identified given `ε = 0` |
+| `ε` (importation) | nothing | **not identified**; off by default |
+| `ρ` (composition overdispersion) | vintage-to-vintage scatter in shares | identified |
 
-```julia
-@model function patch_rt_model(n, n_patches; ...)
-    # National Rt walk (existing)
-    # Per-patch constant modifiers δ_p ~ Normal(0, σ_region)
-    # Rt_matrix[p, t] = Rt_national[t] * exp(δ_p)
-end
-```
+## Status
 
-### 3. Add `patch_infection_model()` to `models/priors.jl`
-
-The latent infection process for the patch model. Builds per-patch
-seeds, runs the multi-patch renewal, and computes per-patch onsets:
-
-```julia
-@model function patch_infection_model(n, n_patches, breakpoint; ...)
-    # Generation interval (shared, sampled once)
-    # Patch Rt matrix from patch_rt_model
-    # Per-patch seeds
-    # Multi-patch renewal via patch_infections()
-    # Per-patch onsets via onset_incidence_model per patch
-end
-```
-
-### 4. Add `_patch_latent()` and `bvd_patch_joint()` to `models/joint.jl`
-
-The joint composer that:
-1. Runs `patch_infection_model` for all patches
-2. Sums patch onsets → national-level streams (existing observation models)
-3. Routes individual patch onsets → per-province observation models
-
-### 5. Add per-province observation models to `models/observations.jl`
-
-New observation submodels that consume a per-patch trajectory:
-
-- `confirmed_cases_patch_model` — per-province confirmed cases from spatial
-  tables (Tableau 1 in sitreps)
-- `isolation_patch_model` — per-province isolation occupancy (Tableau 6
-  "Patients en isolement Fin J")
-- `lab_analysed_patch_model` — per-province daily lab analysed counts
-  (section 4.3)
-
-These mirror the national observation models but consume a single patch's
-onset/confirmed trajectory.
-
-### 6. Data loading
-
-The per-province data lives in `data/insp_sitrep_scanned.csv` (the LLM-scanned
-sitrep values) and in the INRB-UMIE per-province daily CSVs. A new loading
-function `load_patch_observations()` in `data.jl` would parse these alongside
-the national data.
-
-For the first exploration pass, the per-province spatial table figures can
-be hard-coded as constants or loaded directly from the scanned CSV, matching
-the dates of the national sitreps.
-
-## Identifiability considerations
-
-1. **The importation rate `ε` and the seed sizes for secondary patches**
-   are both informed by the lag between Ituri's growth and Nord-Kivu's.
-   If Nord-Kivu cases only appear weeks after Ituri cases, `ε` is small
-   and/or the NK seed is delayed.
-
-2. **Constant patch modifiers `δ_p` vs. time-varying national `Rt`**:
-   The national `Rt` already captures the overall growth/decline shape.
-   The constant modifier captures a persistent offset (e.g. NK's Rt
-   is consistently 10% lower than the national average). These are
-   identified by the relative case counts — higher case counts in Ituri
-   than NK at the same time imply Rt_IT > Rt_NK.
-
-3. **Importation vs. local seeding in secondary patches**: If Nord-Kivu
-   grows faster than importation from Ituri can explain, the model will
-   infer a larger NK seed or a higher NK patch modifier. The prior on
-   `ε` (rare events) and the strong link to travel volume help separate
-   these.
+- [x] `patch_infections()`, `importation_from_kernel()`, `implied_national_Rt()`
+  in `renewal.jl`
+- [x] `patch_rt_model()` (reference-coded constant modifiers) in `priors.jl`
+- [x] `patch_infection_model()` in `priors.jl`
+- [x] `province_composition_model()` in `observations.jl`
+- [x] `_patch_latent()` and `bvd_patch_joint()` in `joint.jl`
+- [x] Per-province data pipeline: `province_confirmed_history` in
+  `observations.toml` → `load_observations()` → `province_increment_matrix()`
+- [x] Headline quantities (`C_T`, `R_T`, `r`, `T`, `CFR`, `R0`,
+  `doubling_time`) surfaced under the same names as `bvd_joint`, so a patch
+  chain drops into `summary_table` and the existing reporting unchanged
+- [x] `patch_summary_table()` for per-patch outbreak sizes and Rts
+- [x] Test suite (`test/test_patch_model.jl`)
 
 ## Next steps
 
-1. [x] Write this design document
-2. [x] Implement `patch_infections()` in `renewal.jl`
-3. [x] Implement `patch_rt_model()` in `models/priors.jl`
-4. [x] Implement `patch_infection_model()` in `models/priors.jl`
-5. [x] Add `_patch_latent()` and `bvd_patch_joint()` to `models/joint.jl`
-6. [x] Fix wiring: treatment model call, duplicate `:=` deterministics
-7. [x] Wire up exports in `BVDOutbreakSize.jl`
-8. [x] Verify prior predictive (patch_infection_model + bvd_patch_joint)
-9. [x] Add per-patch outbreak summaries (`patch_summary_table`)
-
-## Per-location forecasts (next priority)
-
-Once the patch model runs, add per-patch forecast capability:
-
-### 9. Add `forecast_patch()` to `forecast.jl`
-
-A per-patch analogue of `forecast_reported` that projects each patch's
-latent infections, onsets, and deaths over the forecast horizon. The
-per-patch reproduction number continues evolving (same terminal drift
-as the national walk, plus the per-patch modifier). Key differences:
-- Reads `patch_state.infections_matrix[p, :]`, `patch_state.onsets_matrix[p, :]`
-  from the chain for per-patch daily incidence
-- Uses the evolving national Rt (same `_evolving_rates`) plus the constant
-  `δ_patch[p]` modifier to get per-patch future Rt
-- Returns a `DataFrame` with per-patch columns
-
-### 10. Add `forecast_vs_truth_patch()` to `forecast.jl`
-
-Validates per-patch forecasts against observed per-province data. Uses the
-same pattern as `forecast_vs_truth` but checks against spatial-table data
-(confirmed cases by province, isolation by province).
-
-### 11. Data: per-province observations for forecast validation
-
-The per-province spatial-table data (confirmed cases by province from
-Tableau 1, isolation by province from Tableau 6 Fin J) needs to be loaded
-for the forecast-vs-truth comparison. This can come from the existing
-INRB-UMIE per-province CSVs or the scanned data.
+1. Per-location forecasts (`forecast_patch`): project each patch over the
+   horizon using the national walk's terminal drift plus the constant `δ_p`.
+2. Forecast-vs-truth against the per-province spatial tables.
+3. Wire the patch model into `docs/examples/analysis.jl` as a spatial section
+   alongside the national headline fit.
+4. Further province-level streams if the sitreps support them: isolation
+   occupancy by province (Tableau 6) and lab throughput by province would each
+   need the same composition treatment, since they too are partitions of
+   national totals that the model already fits.

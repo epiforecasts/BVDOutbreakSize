@@ -332,98 +332,69 @@ function stream_calibration(panels::AbstractVector)
     return _prettify(DataFrame(rows))
 end
 
-"""
-Per-patch outbreak summary for the patch model. Returns a `DataFrame`
-with one row per patch and columns
-`Patch, C_T (cumul infections), R_T (terminal Rt),
-infections_T (daily at cut-off), δ (log-Rt modifier)`,
-each with the posterior median and 30/60/90% credible intervals.
-
-Accepts the same chain format as [`summary_table`](@ref) and expects
-the per-patch deterministics exposed by [`bvd_patch_joint`](@ref)
-(`C_T_patch_1` … `C_T_patch_3`, `R_T_patch_1` … `R_T_patch_3`,
-`infections_T_patch_1` … `infections_T_patch_3`, `δ_patch`).
-`n_patches` must be passed explicitly (default 3).
-"""
-function patch_summary_table(chn, n_patches::Integer = 3;
-        digits::Integer = 2)
-    patch_names = ["Ituri", "Nord-Kivu", "Sud-Kivu"]
-    params = [:C_T_patch_1, :C_T_patch_2, :C_T_patch_3,
-        :R_T_patch_1, :R_T_patch_2, :R_T_patch_3,
-        :infections_T_patch_1, :infections_T_patch_2,
-        :infections_T_patch_3]
-    ## Check which deterministics the chain carries
-    has_all = all(k -> try
-            chn[k];
-            true
-        catch
-            ;
-            false
-        end, params)
-    if !has_all
-        missing_keys = filter(k -> try
-                chn[k];
-                false
-            catch
-                ;
-                true
-            end, params)
-        error("Chain missing per-patch deterministics: $(missing_keys). " *
-              "This chain was not sampled from bvd_patch_joint.")
-    end
-    ## Per-patch C_T
-    C_T = [posterior_summary(_draws(chn, Symbol("C_T_patch_", i)))
-           for i in 1:min(n_patches, 3)]
-    R_T = [posterior_summary(_draws(chn, Symbol("R_T_patch_", i)))
-           for i in 1:min(n_patches, 3)]
-    inf_T = [posterior_summary(_draws(chn, Symbol("infections_T_patch_", i)))
-             for i in 1:min(n_patches, 3)]
-    ## sigma_rw from MV walk: extract per-patch step SDs (optional, only
-    ## present when chain is from the MV walk model)
-    has_sigma = try
-        chn[:sigma_rw_patch];
-        true
+## Whether a chain carries a given key. Chain types throw on a missing key
+## rather than returning a sentinel, so presence has to be probed.
+function _has_key(chn, key::Symbol)
+    try
+        chn[key]
+        return true
     catch
-        false
+        return false
     end
-    sigma_el = has_sigma ?
-    begin
-        sigma_raw = _draws(chn, :sigma_rw_patch)
-        nd = length(sigma_raw)
-        [posterior_summary([sigma_raw[i][p] for i in 1:nd])
-         for p in 1:min(n_patches, 3)]
-    end : nothing
-    rows = [(
-                patch = patch_names[i],
-                C_T_med = round(C_T[i].lo60 + (C_T[i].hi60 - C_T[i].lo60) / 2; digits = 0),
-                C_T_lo90 = round(C_T[i].lo90; digits = 0),
-                C_T_hi90 = round(C_T[i].hi90; digits = 0),
-                R_T_med = round(R_T[i].lo60 + (R_T[i].hi60 - R_T[i].lo60) / 2;
-                    digits = digits),
-                R_T_lo90 = round(R_T[i].lo90; digits = digits),
-                R_T_hi90 = round(R_T[i].hi90; digits = digits),
-                inf_T_daily = round(inf_T[i].lo60 + (inf_T[i].hi60 - inf_T[i].lo60) / 2;
-                    digits = 0),
-                sigma_med = sigma_el !== nothing ?
-                            round(
-                    sigma_el[i].lo60 + (sigma_el[i].hi60 - sigma_el[i].lo60) / 2;
-                    digits = digits) : NaN,
-                sigma_lo90 = sigma_el !== nothing ?
-                             round(sigma_el[i].lo90; digits = digits) : NaN,
-                sigma_hi90 = sigma_el !== nothing ?
-                             round(sigma_el[i].hi90; digits = digits) : NaN
-            ) for i in 1:min(n_patches, 3)]
-    df = DataFrame(rows)
-    df = rename(df,
-        [
-            :patch => "Patch",
-            :C_T_med => "C_T median", :C_T_lo90 => "C_T lower 90%",
-            :C_T_hi90 => "C_T upper 90%",
-            :R_T_med => "R_T median", :R_T_lo90 => "R_T lower 90%",
-            :R_T_hi90 => "R_T upper 90%",
-            :inf_T_daily => "Daily inf. at cut-off",
-            :sigma_med => "sigma_rw median", :sigma_lo90 => "sigma_rw lower 90%",
-            :sigma_hi90 => "sigma_rw upper 90%"
-        ])
-    return df
+end
+
+"""
+Per-patch outbreak summary for the patch model: one row per province, with
+the cut-off cumulative infections `C_T`, the cut-off reproduction number
+`R_T`, the daily infections at the cut-off, and the log-Rt modifier `δ`
+relative to the primary patch. Each is reported as the same 90/60/30%
+credible intervals [`summary_table`](@ref) uses.
+
+The primary patch is the reference, so its `δ` is identically zero (see
+[`patch_rt_model`](@ref)); it is shown for completeness.
+
+Expects a chain from [`bvd_patch_joint`](@ref), which stores the per-patch
+quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
+`infections_T_patch`, `delta_patch`), one entry per patch.
+"""
+function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 2,
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"])
+    required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+        "not sampled from `bvd_patch_joint`.")
+    np = min(n_patches, length(patch_labels))
+    ## `_draw_vectors` gives one vector per draw; transpose to per-patch
+    ## draw vectors so each patch can be summarised independently.
+    per_patch(sym) =
+        let vs = _draw_vectors(chn, sym)
+            [[v[p] for v in vs] for p in 1:np]
+        end
+    C_T = per_patch(:C_T_patch)
+    R_T = per_patch(:R_T_patch)
+    inf_T = per_patch(:infections_T_patch)
+    δ = per_patch(:delta_patch)
+    df = DataFrame(
+        patch = String[],
+        quantity = String[],
+        lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
+        upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
+    )
+    for p in 1:np
+        for (label, draws, dg) in (
+            ("Cumulative infections", C_T[p], 0),
+            ("Reproduction number", R_T[p], digits),
+            ("Daily infections at cut-off", inf_T[p], 0),
+            ("log-Rt modifier", δ[p], digits))
+            s = posterior_summary(draws)
+            push!(df,
+                (patch_labels[p], label,
+                    round(s.lo90; digits = dg), round(s.lo60; digits = dg),
+                    round(s.lo30; digits = dg), round(s.hi30; digits = dg),
+                    round(s.hi60; digits = dg), round(s.hi90; digits = dg)))
+        end
+    end
+    return _prettify(rename(df, [:patch => "Patch", :quantity => "Quantity"]))
 end

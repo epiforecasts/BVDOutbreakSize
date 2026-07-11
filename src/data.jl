@@ -436,6 +436,48 @@ function load_observations(
 end
 
 """
+    province_increment_matrix(province_history, province_names, n_patches)
+
+Reshape the per-province cumulative histories loaded by
+[`load_observations`](@ref) into the `(n_patches × n_vintages)` matrix of
+new-confirmed counts that [`province_composition_model`](@ref) scores,
+together with the shared vintage day indices.
+
+Every province must be reported on the SAME vintage days (the spatial
+tables share one `dates` array), which the patch composition likelihood
+requires: it allocates each vintage's national total across the provinces,
+so a province missing from a vintage would silently shift cases into the
+others. A mismatch is an error, not a silent reshape.
+
+Returns `(; days, increments)`. When no per-province data is supplied,
+`days` is empty and the caller skips the composition term.
+"""
+function province_increment_matrix(province_history,
+        province_names::AbstractVector, n_patches::Integer)
+    empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
+    isempty(province_history) && return empty
+    names = province_names[1:min(n_patches, length(province_names))]
+    any(nm -> !haskey(province_history, nm), names) && return empty
+    hists = [province_history[nm] for nm in names]
+    days = hists[1].days
+    isempty(days) && return empty
+    for (nm, h) in zip(names, hists)
+        h.days == days || error(
+            "province `$(nm)` is reported on different vintage days to " *
+            "`$(first(names))`; the composition likelihood needs every " *
+            "province on the same vintages.")
+    end
+    ## Cumulative -> per-vintage increments. The first increment is the
+    ## cumulative to the first vintage day, matching `bin_increments`,
+    ## which bins the modelled daily series from day 1 to `days[1]`.
+    increments = Matrix{Int}(undef, length(names), length(days))
+    for (p, h) in enumerate(hists)
+        increments[p, :] = diff(vcat(0, collect(h.counts)))
+    end
+    return (; days, increments)
+end
+
+"""
     freeze_observations(cutoff_date; path = default manifest)
 
 Load the observation manifest frozen to `cutoff_date`: the cut-off is

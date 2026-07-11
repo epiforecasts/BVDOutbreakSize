@@ -1,7 +1,6 @@
 module BVDOutbreakSize
 
 using Statistics: quantile, mean, cor
-using LinearAlgebra: cholesky, I
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
@@ -17,6 +16,7 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
+<<<<<<< HEAD
                      NegativeBinomial, BetaBinomial, Normal,
                      LogNormal, Beta, LKJ,
                      Gamma, TDist, truncated, censored, product_distribution
@@ -119,7 +119,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
        exports_deaths_only_model, exports_joint_only_model, bvd_joint,
-       onsets_only_model, confirmed_cases_patch_model
+       onsets_only_model,
+       PROVINCE_NAMES, province_increment_matrix,
+       patch_infections, importation_from_kernel, implied_national_Rt,
+       patch_rt_model, patch_infection_model,
+       province_composition_model, bvd_patch_joint
 
 include("docstrings.jl")
 include("constants.jl")

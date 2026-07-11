@@ -872,12 +872,9 @@ end
 ## --- Patch (multi-population) joint models ------------------------------
 
 """
-Patch latent process: run [`patch_infection_model`](@ref) and expose
-per-patch infections, onsets, and the total (summed-across-patches)
-infection trajectory that feeds the national observation submodels.
-
-Returns `(; patch_state, onsets_total, cumulative_total, C_T_total)` where
-`C_T_total` is the national total (sum of patch cut-off cumulatives).
+Patch latent process: run [`patch_infection_model`](@ref) and expose the
+per-patch state alongside the national aggregates (summed onsets and
+infections) that the national observation submodels consume.
 """
 @model function _patch_latent(n::Integer, n_patches::Integer,
         breakpoint, patch_infection;
@@ -888,26 +885,66 @@ Returns `(; patch_state, onsets_total, cumulative_total, C_T_total)` where
         patch_infection(n, n_patches;
             breakpoint, rt_start, rt_walk_start,
             importation_kernel), false)
-    ## Sum the per-patch onsets to get the national total.
     onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
-    cumulative_total = vec(sum(patch_state.cumulative_matrix; dims = 1))
-    C_T_total_out := patch_state.C_T_total
-    return (; patch_state, onsets_total, cumulative_total, C_T_total = C_T_total_out)
+    return (; patch_state, onsets_total)
+end
+
+"""
+Modelled per-province confirmed increments, binned to the vintages of the
+per-province spatial tables. Each patch's onsets are pushed through the
+SAME report-to-receipt delay and test sensitivity as the national
+confirmed stream — the laboratory pipeline is national, only the incidence
+feeding it is provincial — and then binned onto the shared vintage days.
+
+`province_days` are the (shared) grid-day indices of the spatial-table
+vintages. Returns an `(n_patches × n_vintages)` matrix.
+"""
+function _patch_confirmed_increments(onsets_matrix::AbstractMatrix,
+        receipt_pmf::AbstractVector, s_test::Real,
+        province_days::AbstractVector{<:Integer})
+    np = size(onsets_matrix, 1)
+    nv = length(province_days)
+    first_daily = s_test .* convolve_delay(
+        vec(@view onsets_matrix[1, :]), receipt_pmf)
+    out = Matrix{eltype(first_daily)}(undef, np, nv)
+    @inbounds out[1, :] = bin_increments(first_daily, province_days)
+    @inbounds for p in 2:np
+        daily = s_test .* convolve_delay(
+            vec(@view onsets_matrix[p, :]), receipt_pmf)
+        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
 end
 
 """
 Joint composer over all data streams using the PATCH (meta-population)
-latent process. Runs [`patch_infection_model`](@ref) with the given
-number of patches and importation kernel, sums the patch onsets into a
-national trajectory, then conditions on all the existing national-level
-observation submodels: DRC suspected cases, deaths, confirmed cases and
-deaths, laboratory pipeline, treatment flows, and Uganda exports.
+latent process.
 
-Per-province observation models are NOT yet wired; only national-level
-streams are fitted, but the per-patch state (`patch_state`) is surfaced
-in the return tuple for diagnostics and downstream extension. See also
-[`bvd_joint`](@ref) for the single-patch analogue and
-[`patch_infection_model`](@ref) for the patch latent process.
+Runs [`patch_infection_model`](@ref) over `n_patches` provinces, sums the
+per-patch onsets into a national trajectory, and conditions on exactly the
+national observation submodels that [`bvd_joint`](@ref) uses: DRC suspected
+cases, deaths, confirmed cases and deaths, the laboratory pipeline,
+treatment flows and Uganda exports. The national streams therefore see the
+same latent onset trajectory they would in the single-patch model.
+
+The spatial information enters through one extra term:
+[`province_composition_model`](@ref), which scores how the confirmed cases
+divide between provinces, conditional on the national total. The
+per-province spatial-table counts are an exact partition of the national
+confirmed counts, so scoring them with their own count likelihood would put
+the same data into the joint density twice; the composition term adds only
+the spatial signal that the national series does not carry.
+
+Uganda exports are driven by the primary patch (Ituri) alone, since the
+border crossings the export stream describes are Ituri-to-Uganda.
+
+Headline quantities (`C_T`, `R_T`, `r`, `T`, `doubling_time`, `R0`) are
+surfaced under the same names as [`bvd_joint`](@ref), so a patch chain
+summarises through [`summary_table`](@ref) exactly like a single-patch one.
+`R_T` is the incidence-weighted aggregate reproduction number implied by
+the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
+`delta_patch`) are surfaced as vector deterministics for
+[`patch_summary_table`](@ref).
 """
 @model function bvd_patch_joint(
         n::Integer, n_patches::Integer,
@@ -941,13 +978,10 @@ in the return tuple for diagnostics and downstream extension. See also
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
-        patch_confirmed = confirmed_cases_patch_model,
+        composition = province_composition_model,
         province_confirmed_history = Dict{
-            String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(
-            "ituri" => (; days = Int[], counts = Int[]),
-            "nord_kivu" => (; days = Int[], counts = Int[]),
-            "sud_kivu" => (; days = Int[], counts = Int[])),
-        province_names = ["ituri", "nord_kivu", "sud_kivu"],
+            String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(),
+        province_names = PROVINCE_NAMES,
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -959,7 +993,6 @@ in the return tuple for diagnostics and downstream extension. See also
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
-        genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
         tmrca_days_sd::Real = 15.0,
@@ -987,10 +1020,8 @@ in the return tuple for diagnostics and downstream extension. See also
     k_recovered = kv[6]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
-    ## Background (safe `bg_onset` with guard against empty histories,
-    ## matching the pattern from bvd_joint). The lead is the MAX lag of
-    ## the report-to-receipt kernel (its truncation `nmax`), using 7 as
-    ## an approximation for `cdf_nmax(lognormal_meansd(4.5, 4.0))`.
+    ## Background random effect, guarded against an empty reported history.
+    ## The lead is the max lag of the report-to-receipt kernel.
     case_bg_re = background_re ?
     begin
         bg_pool ~ to_submodel(background_pooling_model())
@@ -998,18 +1029,19 @@ in the return tuple for diagnostics and downstream extension. See also
         bg_lead = 7
         bg_onset = isempty(reported_history.days) ? 1 :
                    clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
-        nn -> background_walk_model(nn, σ_rw_shared;
-            onset = bg_onset)
+        nn -> background_walk_model(nn, σ_rw_shared; onset = bg_onset)
     end : nothing
-    ## --- Observation submodels (all national-level, same as bvd_joint) ---
+    ## --- National observation submodels (identical to bvd_joint) --------
     ## 1. Reported (suspected) cases.
     cases_state ~ to_submodel(cases(reported_history, reported_cases,
         onsets, k_cases, p_drc;
         suspected_daily_history, background_re = case_bg_re))
     ## 2. Deaths (suspected).
-    deaths_state ~ to_submodel(deaths(deaths_history, total_deaths, onsets, k_deaths;
+    deaths_state ~ to_submodel(deaths(deaths_history, total_deaths, onsets,
+        k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
-    ## 3. Confirmed cases (laboratory pipeline).
+    ## 3. Confirmed cases (laboratory pipeline). This scores the national
+    ##    confirmed TOTAL; the provincial split is scored separately below.
     confirmed_state ~ to_submodel(confirmed(confirmed_history,
         confirmed_cases, onsets, k_confirmed, p_drc,
         cases_state.bg_daily, cases_state.τ_test,
@@ -1024,9 +1056,10 @@ in the return tuple for diagnostics and downstream extension. See also
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
-    ## 5. Uganda exports (cases and deaths).
+    ## 5. Uganda exports, from the primary patch (Ituri) only: the border
+    ##    crossings this stream describes are Ituri-to-Uganda.
     exports_state ~ to_submodel(exports(exported_cases,
-        patch_state.infections_matrix[1, :], p_uganda;
+        vec(patch_state.infections_matrix[1, :]), p_uganda;
         export_case_days, incubation_pmf = patch_state.incubation_pmf,
         source_population))
     exports_deaths_state ~ to_submodel(exports_deaths_model(
@@ -1034,29 +1067,8 @@ in the return tuple for diagnostics and downstream extension. See also
         deaths_state.CFR, deaths_state.od_pmf,
         patch_state.incubation_pmf;
         export_death_days))
-    ## 3b. Per-province confirmed cases from spatial tables.
-    ##     Each patch uses the SAME receipt delay and test sensitivity
-    ##     as the national confirmed stream. Shares k_confirmed from
-    ##     the pooled dispersion model. Per-province data comes from
-    ##     Tableau 1 spatial tables in the INSP situation reports.
-    for p in 1:n_patches
-        pname = province_names[p]
-        phist = get(province_confirmed_history, pname,
-            (; days = Int[], counts = Int[]))
-        if !isempty(phist.days)
-            ps ~ to_submodel(
-                patch_confirmed(
-                    phist, missing,
-                    vec(patch_state.onsets_matrix[p, :]),
-                    k_confirmed,
-                    confirmed_state.receipt_pmf,
-                    confirmed_state.s_test),
-                false)
-        end
-    end
-    ## Exports from Ituri (patch 1) only, matching the single-patch model.
-    ## 6. Treatment flows (isolation, bed capacity, LOS). Uses the summed
-    ##    (national) suspected-case inflow, matching the national-level data.
+    ## 6. Treatment flows (isolation, bed capacity, LOS), on the national
+    ##    suspected-case inflow, matching the national-level data.
     treatment_state ~ to_submodel(treatment(isolation_history,
         cases_state.bvd_reports_daily, cases_state.bg_daily, p_drc,
         deaths_state.CFR;
@@ -1071,24 +1083,41 @@ in the return tuple for diagnostics and downstream extension. See also
     recovered_state ~ to_submodel(recovered(recovered_history,
         recovered_cases, confirmed_state.confirmed_daily,
         deaths_state.CFR))
+    ## --- Spatial observation submodel -----------------------------------
+    ## 8. Per-province composition of the confirmed cases. Conditional on the
+    ##    national total (already scored above), so no observation is counted
+    ##    twice. Skipped when no spatial-table data is supplied.
+    prov = province_increment_matrix(province_confirmed_history,
+        province_names, n_patches)
+    if !isempty(prov.days)
+        modelled_prov = _patch_confirmed_increments(
+            patch_state.onsets_matrix, confirmed_state.receipt_pmf,
+            confirmed_state.s_test, prov.days)
+        composition_state ~ to_submodel(
+            composition(prov.increments, modelled_prov))
+        province_shares := composition_state.shares
+        province_composition_rho := composition_state.rho
+    end
     ## --- Deterministics surfaced for reporting --------------------------
-    ## Patch-level parameters are already traced by the submodel; we surface
-    ## only those that are NOT already `:=` or `~` inside the nested models.
+    ## Headline quantities, under the same names as bvd_joint so a patch
+    ## chain drops into the existing summary and forecast machinery.
     R0 := patch_state.R0
     r := patch_state.r
-    ## Derived national Rt at the cut-off (exposed here with a distinct name
-    ## since the inner `:=` is hidden by to_submodel(..., false)).
-    implied_Rt_national_cutoff := patch_state.implied_Rt_national[n]
-    ## Per-patch outbreak summaries at the cut-off.
-    C_T_patch_1 := patch_state.C_T_patch[1]
-    C_T_patch_2 := patch_state.C_T_patch[2]
-    C_T_patch_3 := patch_state.C_T_patch[3]
-    R_T_patch_1 := patch_state.Rt_matrix[1, n]
-    R_T_patch_2 := patch_state.Rt_matrix[2, n]
-    R_T_patch_3 := patch_state.Rt_matrix[3, n]
-    infections_T_patch_1 := patch_state.infections_matrix[1, n]
-    infections_T_patch_2 := patch_state.infections_matrix[2, n]
-    infections_T_patch_3 := patch_state.infections_matrix[3, n]
+    r0 := patch_state.r0
+    doubling_time := patch_state.doubling_time
+    T := patch_state.T
+    C_T := patch_state.C_T
+    R_T := patch_state.R_T
+    expected_infections_T := @inbounds(patch_state.infections_total[n])
+    cumulative_onsets := cumsum(onsets)
+    Rt_national_implied := patch_state.Rt_national_implied
+    ## Per-patch quantities, as vector deterministics (one entry per patch).
+    C_T_patch := patch_state.C_T_patch
+    R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]
+    infections_T_patch := [@inbounds(patch_state.infections_matrix[p, n])
+                           for p in 1:n_patches]
+    delta_patch := patch_state.δ_patch
+    ## Shared observation-model parameters.
     k := dispersion_state.k_pop
     k_cases := kv[1]
     k_deaths := kv[2]
