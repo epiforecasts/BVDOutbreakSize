@@ -231,6 +231,46 @@ key the per-province blocks of `data/observations.toml`.
 const PROVINCE_NAMES = ["ituri", "nord_kivu", "sud_kivu"]
 
 """
+    PROVINCE_POPULATIONS
+
+Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order. Used
+to put the per-province testing effort on a per-capita scale (the covariate
+for the provincial ascertainment) and to weight the between-province
+importation kernel.
+"""
+const PROVINCE_POPULATIONS = [4_392_200, 6_655_000, 5_772_000]
+
+"""
+    province_importation_kernel(pops = PROVINCE_POPULATIONS)
+
+Between-province importation kernel `K`, where `K[p, q]` is the relative
+rate of infectious travel from province `q` into province `p`. Diagonal is
+zero (no self-importation) and each entry is scaled by the DESTINATION
+population share, so a larger province absorbs proportionally more
+introductions. The overall intensity is carried by the sampled `ε` in
+[`patch_infection_model`](@ref), so only the relative structure matters
+here.
+
+This is a gravity kernel without a distance term, which is the most that is
+defensible: there is no origin-destination or mobility data for this
+outbreak. It is a structural assumption, and `ε` is weakly identified
+against the secondary-patch seeds (both can raise a secondary province's
+early incidence), so treat the split between imported and locally-seeded
+infections as poorly determined even though their sum is not.
+"""
+function province_importation_kernel(pops::AbstractVector = PROVINCE_POPULATIONS)
+    np = length(pops)
+    tot = sum(pops)
+    K = zeros(Float64, np, np)
+    @inbounds for p in 1:np, q in 1:np
+
+        p == q && continue
+        K[p, q] = pops[p] / tot
+    end
+    return K
+end
+
+"""
     ITURI_DAILY_TRAVEL
 
 Default prior mean for the daily outbound traveller volume from

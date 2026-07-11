@@ -880,7 +880,8 @@ infections) that the national observation submodels consume.
         breakpoint, patch_infection;
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
-        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches))
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]))
     patch_state ~ to_submodel(
         patch_infection(n, n_patches;
             breakpoint, rt_start, rt_walk_start,
@@ -899,24 +900,31 @@ is provincial — and then binned onto the shared vintage days.
 `province_days` are the (shared) grid-day indices of the spatial-table
 vintages. Returns an `(n_patches × n_vintages)` matrix.
 
-!!! note "Province-invariant ascertainment"
-    [`province_composition_model`](@ref) consumes this matrix only through
-    NORMALISED shares, so every factor common to all provinces — `s_test`
-    here, and ascertainment, background and test positivity in the national
-    confirmed stream — cancels out. That is what keeps the composition from
-    re-scoring the national total, but it also encodes an assumption: that
-    the probability of a true infection becoming a *confirmed* case is the
-    same in every province.
+!!! note "Ascertainment and incidence are confounded by province"
+    This matrix reaches [`province_composition_model`](@ref) only through
+    NORMALISED shares, so every factor common to all provinces (`s_test`
+    here; ascertainment, background and positivity in the national confirmed
+    stream) cancels. That is what keeps the composition from re-scoring the
+    national total.
 
-    If it is not — if Nord-Kivu ascertains a smaller fraction of its
-    infections than Ituri — then its confirmed share understates its true
-    share of infections, and the model has no way to tell that apart from a
-    genuinely lower Nord-Kivu `Rt`. The bias would be absorbed into `δ_2`,
-    and the per-patch outbreak sizes would be correspondingly skewed toward
-    Ituri. There is no per-province denominator (tests performed by
-    province, or province-level suspected cases) in the current data to
-    identify a province-specific ascertainment, so this cannot be relaxed
-    without new data. Treat the per-patch `C_T` split as conditional on it.
+    What it does NOT do is fix the case-finding probability across provinces.
+    The composition weights each patch by `asc_p * lambda_p` — its relative
+    ascertainment times its modelled incidence — and the data identify only
+    that PRODUCT. A province with fewer infections but better case-finding
+    looks exactly like one with more infections and worse case-finding.
+
+    That is a property of the data, not of this code. The per-province
+    laboratory series shows the provinces are testing very
+    differently-selected pools (Ituri 31.8% positivity against Nord-Kivu's
+    5.5%), so assuming equal ascertainment would push the whole difference
+    into the provincial `Rt` and report a case-finding artefact as
+    epidemiology. `asc_p` is therefore sampled and partially pooled toward
+    equality rather than fixed, which widens the per-patch `Rt` contrast and
+    `C_T` split to their honest width.
+
+    Read `log_rt_contrast` and `province_ascertainment` together; neither is
+    interpretable alone. The NATIONAL headline does not depend on the split
+    and is unaffected by the confound.
 """
 function _patch_confirmed_increments(onsets_matrix::AbstractMatrix,
         receipt_pmf::AbstractVector, s_test::Real,
@@ -980,7 +988,8 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         exports_deaths::Union{Missing, Integer} = missing,
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
-        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches),
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]),
         confirmed_deaths::Union{Missing, Integer} = missing,
         recovered_cases::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),
@@ -1128,6 +1137,14 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
             composition(province_increments, modelled_prov))
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
+        ## Relative province ascertainment (the probability an infection there
+        ## becomes a CONFIRMED case), partially pooled and sum-to-one on the
+        ## log scale. Read it alongside `log_rt_contrast`: the composition
+        ## identifies only the PRODUCT of ascertainment and incidence, so a
+        ## province with a low Rt contrast and a high ascertainment is
+        ## observationally equivalent to the reverse.
+        province_ascertainment := composition_state.province_ascertainment
+        province_ascertainment_sd := composition_state.ascertainment_sd
     end
     ## --- Deterministics surfaced for reporting --------------------------
     ## Headline quantities, under the same names as bvd_joint so a patch
@@ -1160,6 +1177,13 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     ## See [`patch_rt_model`](@ref).
     region_sd := patch_state.σ_level
     region_drift_sd := patch_state.σ_δ
+    ## `seed_fraction` (each secondary patch's seed as a fraction of the
+    ## primary patch's) is sampled inside the latent submodel and already
+    ## reaches the chain under that name, so it is NOT re-surfaced here. Read
+    ## it alongside `log_rt_contrast`: the seed fraction sets the LEVEL of the
+    ## provincial case split, and if it were pinned far below what the data
+    ## need, the Rt contrast would silently absorb the difference and the
+    ## provincial Rt gap would be an artefact of the seed prior.
     ## Learned cross-patch correlation of the deviation innovations. With
     ## three patches only the Ituri / Nord-Kivu entry carries real
     ## information (Sud-Kivu has no signal), so the rest tracks the LKJ prior.

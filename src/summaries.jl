@@ -346,12 +346,17 @@ end
 """
 Per-patch outbreak summary for the patch model: one row per province, with
 the cut-off cumulative infections `C_T`, the cut-off reproduction number
-`R_T`, the daily infections at the cut-off, and the log-Rt modifier `δ`
-relative to the primary patch. Each is reported as the same 90/60/30%
+`R_T`, the daily infections at the cut-off, and the log-Rt deviation `δ`
+from the common national trend. Each is reported as the same 90/60/30%
 credible intervals [`summary_table`](@ref) uses.
 
-The primary patch is the reference, so its `δ` is identically zero (see
-[`patch_rt_model`](@ref)); it is shown for completeness.
+The deviations are SUM-TO-ZERO contrasts around the national trend (see
+[`patch_rt_model`](@ref)), so `δ` is read relative to the national average
+across provinces, not relative to any one patch: a negative `δ` means that
+province transmits below the national trend. Every patch, including the
+primary, carries its own deviation, and they sum to zero in every draw.
+For the log-Rt of a province relative to ITURI specifically, read the
+chain's `log_rt_contrast` instead.
 
 Expects a chain from [`bvd_patch_joint`](@ref), which stores the per-patch
 quantities as vector deterministics (`C_T_patch`, `R_T_patch`,

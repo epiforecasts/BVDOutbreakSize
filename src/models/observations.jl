@@ -3452,21 +3452,54 @@ modelled expected share of patch `p` at vintage `i`.
 @model function province_composition_model(
         obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
         modelled_confirmed::AbstractMatrix;
-        rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1))
+        rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
+        ascertainment_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        ascertainment_offset_prior = Normal(0, 1))
     np, nv = size(modelled_confirmed)
     ρ ~ rho_prior
+    ## --- Province-specific ascertainment, partially pooled ---------------
+    ## The share of confirmed cases falling in province `p` is
+    ##
+    ##     pi_p  ∝  asc_p * lambda_p,
+    ##
+    ## where `lambda_p` is the modelled BVD incidence in `p` and `asc_p` the
+    ## probability that an infection there becomes a CONFIRMED case. Only the
+    ## PRODUCT is identified: the data cannot separate "more infections" from
+    ## "better case-finding". That is not a defect of this parameterisation,
+    ## it is a property of the data — the per-province laboratory series pins
+    ## `asc_p * lambda_p` and nothing finer.
+    ##
+    ## Fixing `asc_p` equal across provinces would hide that. It is also known
+    ## to be wrong here: over the fitted window Ituri ran 2112 tests for 671
+    ## positives (31.8% positivity) against Nord-Kivu's 1340 for 74 (5.5%),
+    ## so the provinces are testing very differently-selected pools. Forcing
+    ## equal ascertainment would push that entire difference into the
+    ## provincial `Rt`, reporting a case-finding artefact as epidemiology.
+    ##
+    ## So `asc_p` is sampled, partially pooled toward equality on the log
+    ## scale, and constrained to sum to zero (only RELATIVE ascertainment
+    ## enters a composition; the overall level belongs to the national
+    ## ascertainment). `tau_asc -> 0` recovers the equal-ascertainment model.
+    ## The pooling prior is what identifies `asc_p`, so the per-patch results
+    ## are correspondingly wider — which is the honest width, not a loss.
+    τ_asc ~ ascertainment_sd_prior
+    z_asc ~ product_distribution(fill(ascertainment_offset_prior, np))
+    log_asc_raw = τ_asc .* z_asc
+    log_asc = log_asc_raw .- (sum(log_asc_raw) / np)
+    asc = exp.(log_asc)
     ## Expected share of each patch at each vintage. `safe_rate` floors the
     ## modelled increments away from zero so an early vintage with no
     ## modelled cases in a patch still gives a defined (tiny) share rather
     ## than a 0/0.
-    shares = zeros(eltype(modelled_confirmed), np, nv)
+    Ts = promote_type(eltype(modelled_confirmed), eltype(asc))
+    shares = zeros(Ts, np, nv)
     @inbounds for i in 1:nv
-        tot = zero(eltype(modelled_confirmed))
+        tot = zero(Ts)
         for p in 1:np
-            tot += safe_rate(modelled_confirmed[p, i])
+            tot += asc[p] * safe_rate(modelled_confirmed[p, i])
         end
         for p in 1:np
-            shares[p, i] = safe_rate(modelled_confirmed[p, i]) / tot
+            shares[p, i] = asc[p] * safe_rate(modelled_confirmed[p, i]) / tot
         end
     end
     ## The totals are CONDITIONED ON, not scored: they are already in the
@@ -3504,5 +3537,6 @@ modelled expected share of patch `p` at vintage `i`.
             obs_increments[np, i] = max(remaining, 0)
         end
     end
-    return (; shares, rho = ρ, obs_increments)
+    return (; shares, rho = ρ, obs_increments,
+        province_ascertainment = asc, ascertainment_sd = τ_asc)
 end

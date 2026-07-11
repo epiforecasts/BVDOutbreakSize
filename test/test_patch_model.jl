@@ -261,22 +261,36 @@ end
     @test obs == before
 end
 
-@testitem "patch_infection_model: epsilon only enters with a coupling kernel" begin
+@testitem "patch_infection_model: importation is on by default, off if uncoupled" begin
+    using BVDOutbreakSize
     using BVDOutbreakSize: patch_infection_model
     using Turing: DynamicPPL
     using Random: Xoshiro
 
-    ## An all-zero kernel makes the importation term identically zero, so a
-    ## sampled epsilon would be a dimension the likelihood never touches.
-    ## It must not be in the parameter space at all.
     n, np = 80, 3
     has_eps(m) = any(
         k -> occursin("ε", string(k)) || occursin("epsilon", string(k)),
         keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
 
-    @test !has_eps(patch_infection_model(n, np))
-    K = [0.0 0.0 0.0; 1e-4 0.0 0.0; 1e-5 0.0 0.0]
-    @test has_eps(patch_infection_model(n, np; importation_kernel = K))
+    ## Provinces are COUPLED by default: the outbreak spread from Ituri into
+    ## Nord-Kivu and Sud-Kivu, so a meta-population model that cannot move
+    ## infections between patches is not describing what happened.
+    @test has_eps(patch_infection_model(n, np))
+
+    ## The kernel is a gravity kernel weighted by DESTINATION population, with
+    ## a zero diagonal (no self-importation).
+    K = province_importation_kernel()
+    @test size(K) == (3, 3)
+    @test all(iszero, [K[p, p] for p in 1:3])
+    @test all(>(0), [K[p, q] for p in 1:3, q in 1:3 if p != q])
+    ## A bigger destination province absorbs proportionally more.
+    @test K[2, 1] > K[1, 2]          ## Nord-Kivu (6.7M) > Ituri (4.4M)
+
+    ## Passing an all-zero kernel switches the coupling off, and then epsilon
+    ## must NOT be sampled: it would multiply zero and be a dimension the
+    ## likelihood never touches, whose posterior is exactly its prior.
+    @test !has_eps(patch_infection_model(n, np;
+        importation_kernel = zeros(np, np)))
 end
 
 @testitem "patch_infection_model: national aggregates are the patch sums" begin
@@ -546,4 +560,68 @@ end
     ## And not vacuous either: the prior is still centred near "no divergence",
     ## so it shrinks toward a shared shape rather than assuming divergence.
     @test median(ratios) < 1.4
+end
+
+@testitem "patch_infection_model: the seed prior can reach the observed split" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: patch_infections, seed_infections,
+                           seed_at_renewal_start, generation_interval_model,
+                           r_to_R0, cdf_nmax
+    using Distributions: Gamma, LogNormal, quantile
+    using Random: seed!
+
+    ## With importation off (the default), a secondary patch has only two
+    ## routes to infections: its own seed and its own Rt. So the seed prior
+    ## MUST be able to reach the observed provincial split on its own, at
+    ## zero Rt difference. If it cannot, the log-Rt deviation is forced to
+    ## absorb the level difference and the reported provincial Rt gap becomes
+    ## an artefact of the seed prior -- which is the one thing the patch model
+    ## exists to estimate.
+    ##
+    ## An earlier version used an ABSOLUTE seed prior N+(0.01, 0.01) against
+    ## the primary patch's 2^m ~ 164: a seed ratio of ~13,700:1, reaching only
+    ## 0.007% of infections where the data want ~9%. Reaching 9% then needed a
+    ## 3.4-sigma draw on the deviation prior. The seed is now a FRACTION of the
+    ## primary seed, so the level is explained by the seed and the deviation is
+    ## identified by the time trend.
+    obs = load_observations()
+    n = obs.n
+    rt_start = clamp(n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, n)
+
+    ## The observed Nord-Kivu share of confirmed cases.
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    it = sum(prov.increments[1, :])
+    nk = sum(prov.increments[2, :])
+    obs_share = nk / (it + nk)
+    @test 0.05 < obs_share < 0.15          ## ~9%, guards the fixture
+
+    seed!(1)
+    g = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))().g
+    r = 0.0593
+    Rtv = fill(r_to_R0(r, g), n)
+    seed0 = seed_at_renewal_start(2.0^m_prior_centre(obs.cutoff))
+
+    ## Share of infections in patch 2 at ZERO Rt difference, for a given seed
+    ## fraction of the primary patch's seed.
+    function share(frac)
+        Rtm = [Rtv'; Rtv'; Rtv']
+        seeds = zeros(3, rt_start)
+        seeds[1, :] = seed_infections(seed0, r, rt_start)
+        seeds[2, :] = seed_infections(frac * seed0, r, rt_start)
+        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0)
+        a, b = sum(I[1, :]), sum(I[2, :])
+        return b / (a + b)
+    end
+
+    ## The default prior on the seed fraction must BRACKET the observed share
+    ## at zero Rt difference: the 5th percentile below it, the 95th above.
+    prior = LogNormal(log(0.05), 1.0)
+    lo, hi = quantile(prior, 0.05), quantile(prior, 0.95)
+    @test share(lo) < obs_share
+    @test share(hi) > obs_share
+
+    ## And the prior median must be within an order of magnitude of what the
+    ## data need, so the seed is not fighting the likelihood from the start.
+    @test 0.1 * obs_share < share(quantile(prior, 0.5)) < 10 * obs_share
 end

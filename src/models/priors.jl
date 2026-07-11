@@ -1425,8 +1425,36 @@ default, each secondary patch is explained by its own seed and its own
 The primary patch (`p = 1`, Ituri) uses the existing cryptic-exponential
 seed: growth at the sampled molecular-clock rate `r` over the cryptic
 window, reaching `seed_at_renewal_start(C_T)` at the renewal start.
-Secondary patches take a small sampled seed (`seed_scale_prior`), which
-stands in for the unobserved introductions from Ituri.
+
+Each secondary patch is seeded as a FRACTION of the primary patch's seed
+(`seed_fraction_prior`), not as an absolute count. The fraction stands in
+for the unobserved early introductions from Ituri, and it is the natural
+scale because it is what the data speak to: with importation off, the
+per-province *level* of the case split is set by the relative seed, so the
+observed Nord-Kivu share (~9% of confirmed, near-constant across the
+window) maps almost directly onto a seed fraction of roughly the same size.
+
+This matters more than it looks. An absolute seed prior on the secondary
+patches — an earlier version of this model used
+`N⁺(0.01, 0.01)` — puts them ~4 orders of magnitude below the primary
+patch's `2^m ≈ 164`, a seed ratio of about 13,700 : 1. With importation off
+by default, a secondary patch then has only two routes to infections: its
+own seed and its own `R_t`. If the seed is pinned that far below what the
+data need, the log-Rt deviation `δ_p` is forced to absorb the entire
+shortfall: reaching a 9% Nord-Kivu share requires `δ ≈ 1.0` (an `Rt` ratio
+of 2.7), which is a 3.4-sigma draw on the deviation prior, and the mapping
+from `δ` to the share is a knife-edge (`δ = 0.5` gives 0.5%, `δ = 1.0`
+gives 54%). The reported provincial `Rt` difference would then be an
+artefact of the seed prior rather than an epidemiological finding, which is
+precisely the quantity the patch model exists to estimate.
+
+Parameterising the seed as a fraction decouples the two: the seed explains
+the LEVEL of the provincial split and `δ_p` is identified by its TIME
+TREND. That is the decomposition the data actually support.
+
+The default `LogNormal(log(0.05), 1)` has a median of 5% of the primary
+seed and a 90% interval of roughly 1% to 26%, so it spans the observed
+share comfortably without asserting it.
 
 ### Returns
 
@@ -1446,9 +1474,10 @@ patch chain carries the same headline quantities as a single-patch one.
         gi = generation_interval_model,
         growth = exponential_growth_model,
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)),
-        importation_kernel::AbstractMatrix = zeros(n_patches, n_patches),
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]),
         importation_epsilon_prior = Beta(1, 100),
-        seed_scale_prior = truncated(Normal(0.01, 0.01); lower = 0),
+        seed_fraction_prior = LogNormal(log(0.05), 1.0),
         incubation = (nmax) -> censored_delay_model(nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
             sd_prior = truncated(Normal(3.5, 0.8); lower = 1)),
@@ -1463,27 +1492,37 @@ patch chain carries the same headline quantities as a single-patch one.
     growth_state ~ to_submodel(growth())
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
-    ## 3. Per-patch Rt: national walk plus constant patch modifiers.
+    ## 3. Per-patch Rt: national trend plus per-patch deviations.
     rt_state ~ to_submodel(
         rt(n, n_patches, log(R0); breakpoint, rt_start, rt_walk_start), false)
     Rt_matrix = rt_state.Rt_matrix
     δ_patch = rt_state.δ_patch
-    ## 4. Per-patch seeds. Primary patch: the cryptic exponential. Secondary
-    ##    patches: a small sampled seed standing in for the introductions.
+    ## 4. Per-patch seeds. The primary patch takes the cryptic exponential.
+    ##    Each secondary patch takes a FRACTION of that seed, which is the
+    ##    scale the data speak to: with importation off, the relative seed
+    ##    sets the LEVEL of the provincial case split, leaving `δ_p` to be
+    ##    identified by its TIME TREND. An absolute seed prior pinned far
+    ##    below the primary's `2^m` would force `δ_p` to absorb the whole
+    ##    level difference, making the reported provincial Rt gap an artefact
+    ##    of the seed prior (see the docstring).
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0_primary = seed_at_renewal_start(growth_state.C_T)
     seed_primary = seed_infections(seed0_primary, r_clock, renewal_start)
-    seed_scale ~ product_distribution(
-        fill(seed_scale_prior, max(n_patches - 1, 1)))
+    seed_fraction ~ product_distribution(
+        fill(seed_fraction_prior, max(n_patches - 1, 1)))
     Tp = promote_type(eltype(Rt_matrix), eltype(g), typeof(float(r_clock)),
-        eltype(seed_scale))
+        eltype(seed_fraction), typeof(float(seed0_primary)))
     seeds_matrix = zeros(Tp, n_patches, renewal_start)
     @inbounds for j in 1:renewal_start
         seeds_matrix[1, j] = seed_primary[j]
     end
     @inbounds for p in 2:n_patches
-        s_p = seed_infections(seed_scale[p - 1], r_clock, renewal_start)
+        ## A scaled copy of the primary patch's cryptic curve: the secondary
+        ## province is a fraction of the same epidemic, so it grows at the
+        ## same clock rate `r` over the cryptic window.
+        s_p = seed_infections(
+            seed_fraction[p - 1] * seed0_primary, r_clock, renewal_start)
         for j in 1:renewal_start
             seeds_matrix[p, j] = s_p[j]
         end
@@ -1542,7 +1581,7 @@ patch chain carries the same headline quantities as a single-patch one.
         m = growth_state.m, τ = growth_state.τ,
         T = T_total, C_T = @inbounds(cumulative_total[n]),
         doubling_time = doubling_time(r),
-        seed_at_renewal_start = seed0_primary,
+        seed_at_renewal_start = seed0_primary, seed_fraction,
         seeding_age = seeding_age(cumulative_total, n),
         incubation_pmf = inc_state.pmf)
 end
