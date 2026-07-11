@@ -56,47 +56,88 @@ shared.
 `patch_infections()` in `renewal.jl` implements this and reduces exactly to
 `renewal_infections()` per row when the kernel is zero.
 
-### Reproduction numbers: reference-coded constant modifiers
+### Reproduction numbers: common trend + correlated MVN deviations
 
-`patch_rt_model` builds the per-patch Rt from the existing national weekly-knot
-random walk (`rt_walk_model`, unchanged) plus a constant per-patch modifier on
-the log scale:
+`patch_rt_model` builds the per-patch Rt from the existing national
+weekly-knot random walk (`rt_walk_model`, unchanged) plus per-patch
+deviations that vary in space AND in time, drawn from a multivariate-normal
+random walk with a learned cross-patch correlation:
 
 ```
-log R_{p,t} = log R_{1,t} + δ_p,   δ_1 ≡ 0,   δ_p ~ N(0, σ_region)  (p ≥ 2)
+log R_{p,t} = mu(t) + delta_p(t),          sum_p delta_p(t) = 0
+Delta delta(t_k) ~ MVN(0, Sigma)
+Sigma = diag(sigma_delta) . Omega . diag(sigma_delta),   Omega ~ LKJ(2)
 ```
 
-Two choices here are deliberate.
+Three choices here are deliberate.
 
-**The modifier is constant in time.**
-Given the flat shares (fact 1), a time-varying per-patch walk has nothing to
-learn.
-An earlier version of this branch used a multivariate-normal random walk on
-joint per-patch log-Rt with an LKJ correlation prior, replacing the national
-walk entirely.
-That added roughly thirty parameters (weekly innovations per patch, per-patch
-step SDs, per-patch initial offsets, a correlation matrix) to fit a signal the
-data do not contain, and it discarded the national Rt walk that the headline
-model and all its diagnostics depend on.
-It was removed.
-If a future window shows the provinces genuinely diverging, the extension is to
-give `δ_p` its own slow walk — but that should be motivated by the shares
-actually moving.
+**Rt varies in time as well as in space, and by how much is estimated.**
+An earlier version of this branch fixed the per-patch modifier to be constant
+in time, on the grounds that the confirmed-case shares are flat over the
+observed window.
+That was the wrong direction of inference: the flatness of the shares is a
+fact to be *estimated*, not a constraint to impose.
+A constant modifier makes "the provinces share one temporal Rt shape" a
+structural assumption, so the model could never detect divergence even once it
+appeared — and the window is short.
+It also forbids the leading hypothesis outright: the response is concentrated
+on the Ituri epicentre, so Ituri's Rt falling faster than Nord-Kivu's is
+exactly what one would expect, and a constant modifier cannot represent it.
+`sigma_delta -> 0` recovers the constant modifier exactly, so nothing is lost
+if the provinces really are moving together.
+`sigma_delta` is therefore the headline spatial diagnostic (surfaced as
+`region_drift_sd`): a posterior pushed away from zero is direct evidence that
+provincial Rt trajectories are separating.
 
-**The primary patch is the reference (`δ_1 ≡ 0`), not a free hierarchical
-draw.**
-If every patch gets a free modifier, only `log R_national(t) + δ_p` reaches the
-likelihood, so the walk level and the mean of `δ` are confounded and the
-posterior has a ridge along it.
-Reference coding removes the ridge, and it makes `δ_2` and `δ_3` mean exactly
-what the composition data measure: the log-Rt of each secondary province
-relative to Ituri.
+**A common trend, not independent walks.**
+The model keeps the national walk `mu(t)` as the pooling target.
+An unstructured multivariate walk — one free log-Rt trajectory per province,
+correlated only through an LKJ prior, with no common trend — is strictly more
+flexible, but it shrinks the wrong way.
+`LKJ(eta)` has density proportional to `det(Omega)^(eta-1)`, maximised at
+`Omega = I`, so `eta = 2` mildly favours *independent* provincial walks.
+The provinces are not equally observed: over the fitted window Nord-Kivu
+contributes 74 laboratory positives and Sud-Kivu contributes none at all.
+Shrinking toward independence estimates their Rt almost entirely from that;
+shrinking toward a common trend lets them borrow strength from Ituri and
+deviate only where the data insist.
+For a meta-population under one national response, partial pooling toward a
+shared trend is the right inductive bias.
+
+This costs nothing in generality.
+With `mu(t)` present the deviation covariance `Sigma` is still free, so the
+cross-patch correlation is *learned* rather than assumed.
+The model **is** a multivariate-normal random walk; it simply carries a common
+factor rather than leaving the correlation structure to carry it.
+(Writing the increments out: `Cov(dlog R_p, dlog R_q) = sigma_rw^2 + Sigma_pq`,
+a one-factor-plus-free-residual covariance.)
+
+**Sum-to-zero, not a reference patch.**
+The deviations are centred at every knot, so no province is privileged.
+Fixing `delta_1 = 0` (reference coding) also identifies the model, but it
+forces the primary patch to have no idiosyncratic deviation at all: Ituri
+would *be* the national trend by construction while the other provinces carry
+their own noise.
+That asymmetry is an artefact of the identifiability fix, not epidemiology.
+Centring introduces one redundant coordinate per knot (the mean of the raw
+innovations, which the likelihood never sees); it is drawn from its proper
+prior and is Gaussian and well-conditioned, so it costs a few cheap sampled
+dimensions rather than a posterior ridge.
 
 The reported national `R_T` is the incidence-weighted aggregate implied by the
 summed patch infections (`implied_national_Rt`), which inverts the renewal
 equation on the total.
 This is provably the force-of-infection-weighted mean of the patch Rts, so it
 is the reproduction number that reproduces the national trajectory.
+
+**What the data can identify.**
+The per-province composition identifies the *contrast* between provinces.
+With three patches that is essentially one number, the Ituri / Nord-Kivu
+contrast, since Sud-Kivu carries no signal.
+Expect `Omega` to be largely prior-driven and Sud-Kivu's Rt to be pinned by
+the deviation prior rather than by data.
+That is honest, and it is why `Sigma` gets a proper shrinkage prior rather
+than a flat one.
 
 ### Importation: off by default, and honest about why
 

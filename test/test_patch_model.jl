@@ -92,7 +92,7 @@ end
     @test all(isfinite, implied_national_Rt([0.0, 0.0, 3.0, 4.0], [0.5, 0.5]))
 end
 
-@testitem "patch_rt_model: primary patch is the reference (delta_1 = 0)" begin
+@testitem "patch_rt_model: deviations sum to zero, no privileged patch" begin
     using BVDOutbreakSize: patch_rt_model
     using Random: seed!
 
@@ -101,18 +101,32 @@ end
     for s in 1:5
         seed!(s)
         res = m()
-        ## The primary patch carries no modifier at ANY time, so its Rt IS
-        ## the national walk; each secondary patch is offset from it by
-        ## exp(delta_p(t)), which is free to move over time.
-        @test all(iszero, res.δ_patch[1, :])
-        @test res.Rt_matrix[1, :] ≈ res.Rt_national
-        for p in 2:np
+        ## Sum-to-zero at EVERY time: the national walk is the common trend
+        ## and the deviations are contrasts around it.
+        @test maximum(abs, sum(res.δ_patch; dims = 1)) < 1e-10
+        ## Every patch, INCLUDING the primary, carries its own deviation.
+        ## Reference coding (delta_1 = 0) also identifies the model, but it
+        ## forces Ituri to BE the national trend while the other provinces
+        ## carry noise -- an artefact of the identifiability fix, not
+        ## epidemiology.
+        @test any(!iszero, res.δ_patch[1, :])
+        ## Rt is the common trend times the patch deviation.
+        for p in 1:np
             @test res.Rt_matrix[p, :] ≈
                   res.Rt_national .* exp.(res.δ_patch[p, :])
         end
-        ## Rt is strictly positive everywhere: it is exp of the log scale.
         @test all(>(0), res.Rt_matrix)
         @test size(res.δ_patch) == (np, n)
+        ## Omega is a genuine correlation matrix: symmetric, unit diagonal,
+        ## entries in [-1, 1]. It is reconstructed as L * L', so allow the
+        ## round-off that puts the diagonal a few ulps either side of 1.
+        for i in 1:np
+            @test res.Ω[i, i] ≈ 1
+            for j in 1:np
+                @test res.Ω[i, j] ≈ res.Ω[j, i]
+                @test -1 - 1e-12 <= res.Ω[i, j] <= 1 + 1e-12
+            end
+        end
     end
 end
 
@@ -121,32 +135,35 @@ end
     using Distributions: Normal, truncated
     using Random: seed!
 
-    ## The per-patch modifier is a random walk whose step SD is itself
-    ## sampled, so the model NESTS both hypotheses and lets the data choose.
-    ## Pin both limits: the whole point of this parameterisation is that
+    ## The deviations follow a multivariate-normal random walk whose scale is
+    ## itself sampled, so the model NESTS both hypotheses and lets the data
+    ## choose. Pin both limits: the point of this parameterisation is that
     ## neither is hard-coded.
     n, np = 120, 3
 
-    ## sigma_region_rw -> 0 recovers the constant-modifier special case: the
-    ## provinces keep a fixed Rt ratio and share one temporal shape.
+    ## sigma_delta -> 0: every province collapses onto the common national
+    ## trend, so they share one temporal Rt shape at a fixed ratio.
     flat = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_rw_sd_prior = truncated(Normal(0, 1e-12); lower = 0))
-    seed!(7)
+        region_sd_prior = truncated(Normal(0, 1e-12); lower = 0),
+        region_drift_sd_prior = truncated(Normal(0, 1e-12); lower = 0))
+    seed!(9)
     rf = flat()
-    for p in 2:np
-        δ = rf.δ_patch[p, 20:n]
-        @test maximum(δ) - minimum(δ) < 1e-8
+    @test maximum(abs, rf.δ_patch) < 1e-8
+    for p in 1:np
+        @test rf.Rt_matrix[p, :] ≈ rf.Rt_national
     end
 
-    ## A large step SD lets the provincial trajectories genuinely separate,
-    ## which a constant modifier could not represent at all.
+    ## A large drift scale lets the provincial trajectories genuinely
+    ## separate over time, which a constant modifier could not represent.
     wide = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
-        region_rw_sd_prior = truncated(Normal(0.5, 0.01); lower = 0))
+        region_drift_sd_prior = truncated(Normal(0.5, 0.01); lower = 0))
     seed!(3)
     rw = wide()
-    @test abs(rw.δ_patch[2, n] - rw.δ_patch[2, 20]) > 0.2
-    ## The reference patch stays pinned at zero however wide the walk.
-    @test all(iszero, rw.δ_patch[1, :])
+    ## The Ituri / Nord-Kivu contrast must actually move over the window.
+    contrast(t) = rw.δ_patch[2, t] - rw.δ_patch[1, t]
+    @test abs(contrast(n) - contrast(20)) > 0.2
+    ## Sum-to-zero survives however wide the walk.
+    @test maximum(abs, sum(rw.δ_patch; dims = 1)) < 1e-10
 end
 
 @testitem "province_increment_matrix: differences cumulative province counts" begin
@@ -384,12 +401,22 @@ end
     @test nrow(summary_table(chn, [:C_T, :R_T, :r, :T, :CFR])) == 5
 
     ## Per-patch vector deterministics, one entry per patch.
-    for q in (:C_T_patch, :R_T_patch, :delta_patch, :infections_T_patch)
+    for q in (:C_T_patch, :R_T_patch, :delta_patch, :infections_T_patch,
+        :region_drift_sd, :log_rt_contrast)
         @test all(v -> length(v) == 3, vec(collect(chn[q])))
     end
-    ## The primary patch is the reference, so its modifier is exactly zero in
-    ## every draw; the aggregate C_T is the sum over patches.
-    @test all(v -> v[1] == 0, vec(collect(chn[:delta_patch])))
+    ## The deviations are contrasts around the common trend, so they sum to
+    ## zero in every draw.
+    @test all(v -> abs(sum(v)) < 1e-10, vec(collect(chn[:delta_patch])))
+    ## The contrast is measured against the primary patch, so its own entry
+    ## is identically zero and the others are log Rt relative to Ituri.
+    @test all(v -> v[1] == 0, vec(collect(chn[:log_rt_contrast])))
+    ## The spatial diagnostics the fit is read off.
+    @test all(isfinite, vec(Array(chn[:region_sd])))
+    @test all(c -> -1 <= c <= 1,
+        vec(Array(chn[:region_corr_primary_secondary])))
+
+    ## The aggregate C_T is the sum over patches.
     C_T = vec(Array(chn[:C_T]))
     per_patch = vec(collect(chn[:C_T_patch]))
     @test all(i -> isapprox(C_T[i], sum(per_patch[i]); rtol = 1e-8),

@@ -1153,13 +1153,25 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     delta_patch := [@inbounds(patch_state.δ_patch[p, n]) for p in 1:n_patches]
     delta_patch_start := [@inbounds(patch_state.δ_patch[p, rt_walk_start])
                           for p in 1:n_patches]
-    ## THE spatial diagnostic: how fast the provincial log-Rt modifiers are
-    ## allowed to drift apart. A posterior concentrated near zero says the
-    ## provinces share one temporal Rt shape (a constant ratio between them);
-    ## a posterior pushed away from zero is direct evidence that provincial
-    ## Rt trajectories are separating. See [`patch_rt_model`](@ref).
-    region_sd := patch_state.σ_region
-    region_rw_sd := patch_state.σ_region_rw
+    ## THE spatial diagnostic: the per-patch scale of the log-Rt deviation
+    ## walk. A posterior concentrated near zero says the provinces share one
+    ## temporal Rt shape (a fixed ratio between them); pushed away from zero
+    ## it is direct evidence that provincial Rt trajectories are separating.
+    ## See [`patch_rt_model`](@ref).
+    region_sd := patch_state.σ_level
+    region_drift_sd := patch_state.σ_δ
+    ## Learned cross-patch correlation of the deviation innovations. With
+    ## three patches only the Ituri / Nord-Kivu entry carries real
+    ## information (Sud-Kivu has no signal), so the rest tracks the LKJ prior.
+    region_corr_primary_secondary := @inbounds(patch_state.Ω[1, 2])
+    ## The provincial log-Rt CONTRASTS at the cut-off: what the per-province
+    ## composition data actually measure. Entry p is log R_p - log R_1, so a
+    ## negative value means province p is transmitting less than the primary
+    ## patch. Sum-to-zero deviations make these the interpretable quantity
+    ## rather than the deviations themselves.
+    log_rt_contrast := [@inbounds(patch_state.δ_patch[p, n] -
+                                  patch_state.δ_patch[1, n])
+                        for p in 1:n_patches]
     ## Shared observation-model parameters.
     k := dispersion_state.k_pop
     k_cases := kv[1]

@@ -16,9 +16,8 @@ import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
-<<<<<<< HEAD
                      NegativeBinomial, BetaBinomial, Normal,
-                     LogNormal, Beta, LKJ,
+                     LogNormal, Beta, LKJCholesky,
                      Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
