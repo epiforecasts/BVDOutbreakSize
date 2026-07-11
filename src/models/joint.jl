@@ -892,12 +892,31 @@ end
 """
 Modelled per-province confirmed increments, binned to the vintages of the
 per-province spatial tables. Each patch's onsets are pushed through the
-SAME report-to-receipt delay and test sensitivity as the national
-confirmed stream — the laboratory pipeline is national, only the incidence
-feeding it is provincial — and then binned onto the shared vintage days.
+SAME report-to-receipt delay and test sensitivity as the national confirmed
+stream — the laboratory pipeline is national, only the incidence feeding it
+is provincial — and then binned onto the shared vintage days.
 
 `province_days` are the (shared) grid-day indices of the spatial-table
 vintages. Returns an `(n_patches × n_vintages)` matrix.
+
+!!! note "Province-invariant ascertainment"
+    [`province_composition_model`](@ref) consumes this matrix only through
+    NORMALISED shares, so every factor common to all provinces — `s_test`
+    here, and ascertainment, background and test positivity in the national
+    confirmed stream — cancels out. That is what keeps the composition from
+    re-scoring the national total, but it also encodes an assumption: that
+    the probability of a true infection becoming a *confirmed* case is the
+    same in every province.
+
+    If it is not — if Nord-Kivu ascertains a smaller fraction of its
+    infections than Ituri — then its confirmed share understates its true
+    share of infections, and the model has no way to tell that apart from a
+    genuinely lower Nord-Kivu `Rt`. The bias would be absorbed into `δ_2`,
+    and the per-patch outbreak sizes would be correspondingly skewed toward
+    Ituri. There is no per-province denominator (tests performed by
+    province, or province-level suspected cases) in the current data to
+    identify a province-specific ascertainment, so this cannot be relaxed
+    without new data. Treat the per-patch `C_T` split as conditional on it.
 """
 function _patch_confirmed_increments(onsets_matrix::AbstractMatrix,
         receipt_pmf::AbstractVector, s_test::Real,

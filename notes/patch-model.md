@@ -158,15 +158,46 @@ The test suite pins this down directly: the composition's log-density is
 invariant to rescaling the modelled confirmed level (it sees only normalised
 shares) but responds to a change in the split.
 
+## The province-invariant ascertainment assumption
+
+The composition consumes the modelled per-patch confirmed cases only through
+*normalised shares*, so every factor common to all provinces cancels: test
+sensitivity, ascertainment, background, test positivity.
+That cancellation is what stops the composition re-scoring the national total.
+It also encodes an assumption, and it is the model's main soft spot.
+
+**The probability that a true infection becomes a confirmed case is assumed
+the same in every province.**
+
+If Nord-Kivu ascertains a smaller fraction of its infections than Ituri, its
+confirmed share understates its true share of infections, and the model cannot
+tell that apart from a genuinely lower Nord-Kivu `Rt`.
+The bias lands in `δ_2`, and the per-patch `C_T` split is skewed toward Ituri.
+Given that Ituri is the epicentre with the response concentrated there, a
+lower Nord-Kivu ascertainment is plausible, so this is not a hypothetical.
+
+**The fix needs a per-province denominator**, and one may exist.
+The sitreps appear to carry per-province laboratory throughput (samples
+analysed by province, section 4.3 / Tableau 6), which is exactly the
+denominator that would identify a province-specific test positivity and so
+separate provincial ascertainment from provincial `Rt`.
+It has not been scanned: `data/insp_sitrep_scanned.csv` currently holds only
+national `samples_analysed`.
+Extracting it is the single highest-value addition to this model.
+Until then, read the per-patch `C_T` split as conditional on province-invariant
+ascertainment, and the national headline (which does not depend on the split)
+as unaffected.
+
 ## Identifiability summary
 
 | Quantity | Identified by | Status |
 |---|---|---|
-| `δ_2` (Nord-Kivu log-Rt offset) | level of the confirmed-case split | well identified |
+| `δ_2` (Nord-Kivu log-Rt offset) | level of the confirmed-case split | identified, but **confounded with province ascertainment** |
 | `δ_3` (Sud-Kivu) | zero increments throughout | weakly identified, pinned low |
 | secondary-patch seeds | early provincial level | identified given `ε = 0` |
 | `ε` (importation) | nothing | **not identified**; off by default |
 | `ρ` (composition overdispersion) | vintage-to-vintage scatter in shares | identified |
+| national `C_T`, `R_T` | all national streams, as before | unaffected by the split |
 
 ## Status
 
@@ -186,12 +217,14 @@ shares) but responds to a change in the split.
 
 ## Next steps
 
-1. Per-location forecasts (`forecast_patch`): project each patch over the
+1. **Scan the per-province laboratory throughput** from the sitreps. This is
+   the highest-value item: it is the denominator that separates provincial
+   ascertainment from provincial `Rt`, and without it `δ_2` carries both.
+2. Per-location forecasts (`forecast_patch`): project each patch over the
    horizon using the national walk's terminal drift plus the constant `δ_p`.
-2. Forecast-vs-truth against the per-province spatial tables.
-3. Wire the patch model into `docs/examples/analysis.jl` as a spatial section
+3. Forecast-vs-truth against the per-province spatial tables.
+4. Wire the patch model into `docs/examples/analysis.jl` as a spatial section
    alongside the national headline fit.
-4. Further province-level streams if the sitreps support them: isolation
-   occupancy by province (Tableau 6) and lab throughput by province would each
+5. Further province-level streams (isolation occupancy by province, Tableau 6)
    need the same composition treatment, since they too are partitions of
-   national totals that the model already fits.
+   national totals the model already fits. Do not add them as raw counts.
