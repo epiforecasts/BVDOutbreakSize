@@ -260,32 +260,36 @@ end
     obs = load_observations()
     n, np = obs.n, 3
 
-    build(pch) = bvd_patch_joint(n, np,
-        obs.exported_cases, obs.total_deaths, obs.reported_cases,
-        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
-        confirmed_deaths = obs.confirmed_deaths,
-        recovered_cases = obs.recovered_cases,
-        deaths_history = obs.deaths_history,
-        reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = obs.confirmed_deaths_history,
-        lab_history = obs.lab_history,
-        lab_daily_history = obs.lab_daily_history,
-        suspected_daily_history = obs.suspected_daily_history,
-        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
-        isolation_history = obs.isolation_history,
-        bed_capacity_history = obs.bed_capacity_history,
-        recovered_history = obs.recovered_history,
-        treatment_admissions_history = obs.treatment_admissions_history,
-        treatment_deaths_history = obs.treatment_deaths_history,
-        treatment_ruleout_history = obs.treatment_ruleout_history,
-        treatment_absconded_history = obs.treatment_absconded_history,
-        occupancy_break_days = obs.occupancy_break_days,
-        export_case_days = obs.export_case_days,
-        export_death_days = obs.export_death_days,
-        breakpoint = obs.who_first_sitrep_days,
-        province_confirmed_history = pch,
-        tmrca_days = obs.tmrca_days)
+    function build(pch)
+        prov = province_increment_matrix(pch, PROVINCE_NAMES, np)
+        return bvd_patch_joint(n, np,
+            obs.exported_cases, obs.total_deaths, obs.reported_cases,
+            obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+            confirmed_deaths = obs.confirmed_deaths,
+            recovered_cases = obs.recovered_cases,
+            deaths_history = obs.deaths_history,
+            reported_history = obs.reported_history,
+            confirmed_history = obs.confirmed_history,
+            confirmed_deaths_history = obs.confirmed_deaths_history,
+            lab_history = obs.lab_history,
+            lab_daily_history = obs.lab_daily_history,
+            suspected_daily_history = obs.suspected_daily_history,
+            suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+            isolation_history = obs.isolation_history,
+            bed_capacity_history = obs.bed_capacity_history,
+            recovered_history = obs.recovered_history,
+            treatment_admissions_history = obs.treatment_admissions_history,
+            treatment_deaths_history = obs.treatment_deaths_history,
+            treatment_ruleout_history = obs.treatment_ruleout_history,
+            treatment_absconded_history = obs.treatment_absconded_history,
+            occupancy_break_days = obs.occupancy_break_days,
+            export_case_days = obs.export_case_days,
+            export_death_days = obs.export_death_days,
+            breakpoint = obs.who_first_sitrep_days,
+            province_increments = prov.increments,
+            province_days = prov.days,
+            tmrca_days = obs.tmrca_days)
+    end
 
     pch = obs.province_confirmed_history
     m = build(pch)
@@ -318,13 +322,16 @@ end
     ## keys off these names. Missing any of them silently breaks analysis.jl,
     ## so assert on a real chain rather than on the model's return value.
     obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
     m = bvd_patch_joint(obs.n, 3,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        province_confirmed_history = obs.province_confirmed_history,
+        province_increments = prov.increments,
+        province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days)
 
@@ -362,13 +369,16 @@ end
     using DataFrames: DataFrame, nrow
 
     obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
     m = bvd_patch_joint(obs.n, 3,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        province_confirmed_history = obs.province_confirmed_history,
+        province_increments = prov.increments,
+        province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
         tmrca_days = obs.tmrca_days)
     chn = sample(m, Prior(), 100; chain_type = FlexiChains.VNChain,

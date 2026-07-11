@@ -935,6 +935,13 @@ confirmed counts, so scoring them with their own count likelihood would put
 the same data into the joint density twice; the composition term adds only
 the spatial signal that the national series does not carry.
 
+Pass that data as `province_increments` (an `n_patches × n_vintages` matrix
+of new-confirmed counts) and `province_days` (the shared vintage day
+indices), which [`province_increment_matrix`](@ref) builds from the
+per-province histories that [`load_observations`](@ref) returns. Omit them
+and the composition term is skipped, leaving a purely national fit over a
+patch latent process.
+
 Uganda exports are driven by the primary patch (Ituri) alone, since the
 border crossings the export stream describes are Ituri-to-Uganda.
 
@@ -979,9 +986,8 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         source_population::Real = ITURI_POPULATION,
         patch_infection = patch_infection_model,
         composition = province_composition_model,
-        province_confirmed_history = Dict{
-            String, @NamedTuple{days::Vector{Int}, counts::Vector{Int}}}(),
-        province_names = PROVINCE_NAMES,
+        province_increments::Union{Missing, AbstractMatrix{<:Integer}} = missing,
+        province_days::AbstractVector{<:Integer} = Int[],
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -1087,14 +1093,20 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     ## 8. Per-province composition of the confirmed cases. Conditional on the
     ##    national total (already scored above), so no observation is counted
     ##    twice. Skipped when no spatial-table data is supplied.
-    prov = province_increment_matrix(province_confirmed_history,
-        province_names, n_patches)
-    if !isempty(prov.days)
+    ##
+    ##    `province_increments` and `province_days` are the already-reshaped
+    ##    spatial-table data (see [`province_increment_matrix`](@ref)), NOT the
+    ##    raw per-province history dict. The reshaping is pure data handling
+    ##    with no dependence on any parameter, and it looks provinces up by
+    ##    name in a `Dict{String}`; doing that inside the model body puts a
+    ##    string comparison (`memcmp`) on the AD tape, which Mooncake has no
+    ##    rule for and which aborts the gradient. It must stay hoisted out.
+    if !isempty(province_days)
         modelled_prov = _patch_confirmed_increments(
             patch_state.onsets_matrix, confirmed_state.receipt_pmf,
-            confirmed_state.s_test, prov.days)
+            confirmed_state.s_test, province_days)
         composition_state ~ to_submodel(
-            composition(prov.increments, modelled_prov))
+            composition(province_increments, modelled_prov))
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
     end
