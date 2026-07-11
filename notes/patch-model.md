@@ -24,12 +24,16 @@ over the fitted window (18 June to 6 July, 17 vintages).
 
 Three facts follow, and they drive every design decision below.
 
-1. **The provincial shares are flat.**
+1. **The provincial shares are flat over this window.**
 Ituri's share of confirmed cases sits between 91.0% and 91.4% at every one of
-the 17 vintages.
-Ituri and Nord-Kivu have grown at very nearly the same rate.
-The data therefore carry a strong signal about the *level* of the split and no
-signal at all about a *time-varying divergence* between provincial Rts.
+the 17 vintages, and Ituri and Nord-Kivu have grown at very nearly the same
+rate.
+This is a *finding*, not a licence to hard-code a constant Rt ratio: the window
+is short, the response is concentrated on Ituri (so divergence is expected), and
+a model that cannot represent divergence cannot detect it either.
+The model therefore lets the provincial Rt trajectories separate and *estimates*
+how much they do (`region_drift_sd`), rather than assuming they cannot.
+See "Reproduction numbers" below.
 
 2. **Sud-Kivu is static.**
 A constant 3 confirmed cases, so zero increments in every interval.
