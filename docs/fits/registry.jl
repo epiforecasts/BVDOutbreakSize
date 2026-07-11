@@ -280,6 +280,8 @@ function build_fit_specs(obs;
     ## gradient of the whole joint.
     patch_prov = province_increment_matrix(
         obs.province_confirmed_history, PROVINCE_NAMES, 3)
+    patch_prov_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES, 3)
 
     specs = Any[
         (; id = "joint",
@@ -369,6 +371,8 @@ function build_fit_specs(obs;
                     breakpoint = breakpoint,
                     province_increments = patch_prov.increments,
                     province_days = patch_prov.days,
+                    province_death_increments = patch_prov_deaths.increments,
+                    province_death_days = patch_prov_deaths.days,
                     tmrca_days = obs.tmrca_days);
                 samples = samples, chains = chains, target_accept = 0.95,
                 callback = fit_callback("patch"))),

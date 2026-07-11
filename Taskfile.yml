@@ -30,6 +30,18 @@ tasks:
     cmds:
       - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
 
+  province-tableau1:
+    desc: >
+      Regenerate the [province_confirmed_history] and [province_death_history]
+      blocks for data/observations.toml by scanning Tableau 1 of the INSP
+      situation reports (per-province confirmed cases AND deaths). Fails
+      unless the per-province figures sum exactly to the national
+      confirmed_case_history and confirmed_death_history on every date. The
+      deaths column is what makes the per-province ascertainment identifiable.
+      Needs the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_province_tableau1.jl {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for

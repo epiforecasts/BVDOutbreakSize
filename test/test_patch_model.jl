@@ -625,3 +625,46 @@ end
     ## data need, so the seed is not fighting the likelihood from the start.
     @test 0.1 * obs_share < share(quantile(prior, 0.5)) < 10 * obs_share
 end
+
+@testitem "province deaths: the split that identifies ascertainment" begin
+    using BVDOutbreakSize
+
+    ## The per-province CASE count is the product of ascertainment and
+    ## incidence, and only the product is observed, so the case split alone
+    ## can never separate "more infections" from "better case-finding".
+    ##
+    ## The DEATH split breaks that. Deaths are far harder to miss than cases,
+    ## and the case-fatality ratio and death-confirmation probability belong to
+    ## the virus and to a national laboratory, not to a province -- so they are
+    ## common factors and cancel out of the normalised death shares, leaving
+    ## the provincial INCIDENCE split free of case-ascertainment.
+    obs = load_observations()
+    cases = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    deaths = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, 3)
+
+    ## Both are exact partitions of their national totals (the scanner gates
+    ## on this), and they share a vintage grid so the two compositions line up.
+    @test deaths.days == cases.days
+    @test size(deaths.increments) == size(cases.increments)
+    natc = Dict(zip(obs.confirmed_history.days, obs.confirmed_history.counts))
+    natd = Dict(zip(obs.confirmed_deaths_history.days,
+        obs.confirmed_deaths_history.counts))
+    for (i, d) in enumerate(cases.days)
+        haskey(natc, d) && @test sum(cases.increments[:, i]) ==
+              (i == 1 ? natc[d] : natc[d] - natc[cases.days[i - 1]])
+    end
+
+    ## THE identifying signal: Nord-Kivu holds a far larger share of the
+    ## confirmed DEATHS than of the confirmed CASES, at every vintage. If this
+    ## gap ever vanishes the deaths stop identifying ascertainment, and the
+    ## per-patch split silently falls back to being prior-driven -- so pin it.
+    ct = sum(cases.increments; dims = 2)
+    dt = sum(deaths.increments; dims = 2)
+    nk_case_share = ct[2] / sum(ct)
+    nk_death_share = dt[2] / sum(dt)
+    @test 0.05 < nk_case_share < 0.12          ## ~9%
+    @test 0.12 < nk_death_share < 0.22         ## ~14%
+    @test nk_death_share > 1.4 * nk_case_share ## the gap that does the work
+end

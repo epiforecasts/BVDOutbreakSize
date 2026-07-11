@@ -891,6 +891,44 @@ infections) that the national observation submodels consume.
 end
 
 """
+Modelled per-province confirmed-DEATH increments, binned to the vintages of
+the Tableau 1 spatial tables. Each patch's onsets are pushed through the
+onset-to-death delay and then the report-to-receipt delay (so `kernel` is
+the convolution of the two), giving the deaths CONFIRMED by each vintage.
+
+This is the term that makes the provincial split identifiable. The
+composition of DEATHS across provinces weights each patch by its
+delay-convolved incidence and by nothing else: the case-fatality ratio and
+the death-confirmation probability are properties of the virus and of a
+national laboratory pipeline, not of a province, so they are common factors
+and cancel out of the normalised shares. What remains is the provincial
+INCIDENCE split — free of case-ascertainment.
+
+Convolving through the onset-to-death delay (rather than comparing raw
+death-to-case ratios) is what separates ascertainment from epidemic phase. A
+fast-growing province has proportionally fewer deaths *to date* than a flat
+one at the same true CFR, simply because its recent cases have not died yet.
+Ituri grows faster than Nord-Kivu, so a naive CFR comparison would read that
+right-censoring as a difference in case-finding. The delay convolution
+predicts each province's deaths-to-date from its own incidence curve, so the
+censoring is accounted for and only the residual is ascertainment.
+"""
+function _patch_death_increments(onsets_matrix::AbstractMatrix,
+        kernel::AbstractVector,
+        province_days::AbstractVector{<:Integer})
+    np = size(onsets_matrix, 1)
+    nv = length(province_days)
+    first_daily = convolve_delay(vec(@view onsets_matrix[1, :]), kernel)
+    out = Matrix{eltype(first_daily)}(undef, np, nv)
+    @inbounds out[1, :] = bin_increments(first_daily, province_days)
+    @inbounds for p in 2:np
+        daily = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
+        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
+end
+
+"""
 Modelled per-province confirmed increments, binned to the vintages of the
 per-province spatial tables. Each patch's onsets are pushed through the
 SAME report-to-receipt delay and test sensitivity as the national confirmed
@@ -1016,6 +1054,12 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         composition = province_composition_model,
         province_increments::Union{Missing, AbstractMatrix{<:Integer}} = missing,
         province_days::AbstractVector{<:Integer} = Int[],
+        province_death_increments::Union{
+            Missing, AbstractMatrix{<:Integer}} = missing,
+        province_death_days::AbstractVector{<:Integer} = Int[],
+        death_composition = province_composition_model,
+        death_ascertainment_sd_prior = truncated(
+            Normal(0, 0.1); lower = 0),
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -1137,14 +1181,49 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
             composition(province_increments, modelled_prov))
         province_shares := composition_state.shares
         province_composition_rho := composition_state.rho
-        ## Relative province ascertainment (the probability an infection there
-        ## becomes a CONFIRMED case), partially pooled and sum-to-one on the
-        ## log scale. Read it alongside `log_rt_contrast`: the composition
-        ## identifies only the PRODUCT of ascertainment and incidence, so a
-        ## province with a low Rt contrast and a high ascertainment is
-        ## observationally equivalent to the reverse.
+        ## Relative province CASE ascertainment: the probability an infection
+        ## there becomes a CONFIRMED case, partially pooled and sum-to-zero on
+        ## the log scale. On its own the case composition identifies only the
+        ## PRODUCT of ascertainment and incidence. The DEATH composition below
+        ## is what separates them.
         province_ascertainment := composition_state.province_ascertainment
         province_ascertainment_sd := composition_state.ascertainment_sd
+    end
+    ## 9. Per-province composition of the confirmed DEATHS. This is the term
+    ##    that identifies the provincial split.
+    ##
+    ##    The case composition weights each patch by `asc_p * lambda_p` and can
+    ##    never separate the two: a province with fewer infections but better
+    ##    case-finding is observationally identical to one with more infections
+    ##    and worse case-finding.
+    ##
+    ##    Deaths break the tie. They are far harder to miss than cases, and the
+    ##    case-fatality ratio and the death-confirmation probability belong to
+    ##    the virus and to a national laboratory pipeline, not to a province —
+    ##    so they are common factors and cancel out of the normalised death
+    ##    shares. What is left weights each patch by its delay-convolved
+    ##    INCIDENCE alone, free of case-ascertainment. The deaths therefore pin
+    ##    `lambda_p`, and the case composition then identifies `asc_p` as the
+    ##    residual.
+    ##
+    ##    `death_ascertainment_sd_prior` is deliberately TIGHT: the identifying
+    ##    assumption is that death ascertainment is near-uniform across
+    ##    provinces, which is far weaker and more defensible than assuming case
+    ##    ascertainment is. It is not fixed at zero, so the assumption can bend
+    ##    where the data insist rather than snapping.
+    ##
+    ##    The data say this matters: Nord-Kivu holds a steady 8-9% of confirmed
+    ##    cases but 14-19% of confirmed deaths at every vintage.
+    if !isempty(province_death_days)
+        death_kernel = convolve_pmf(
+            deaths_state.od_pmf, confirmed_state.receipt_pmf)
+        modelled_deaths_prov = _patch_death_increments(
+            patch_state.onsets_matrix, death_kernel, province_death_days)
+        death_composition_state ~ to_submodel(
+            death_composition(province_death_increments, modelled_deaths_prov;
+            ascertainment_sd_prior = death_ascertainment_sd_prior))
+        province_death_shares := death_composition_state.shares
+        province_death_ascertainment := death_composition_state.province_ascertainment
     end
     ## --- Deterministics surfaced for reporting --------------------------
     ## Headline quantities, under the same names as bvd_joint so a patch

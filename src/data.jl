@@ -435,6 +435,7 @@ function load_observations(
         onset_curve_history = onset_curve_history,
         onset_report_history = onset_report_history,
         province_confirmed_history = province_history("province_confirmed_history"),
+        province_death_history = province_history("province_death_history"),
         province_lab_daily_history = province_history("province_lab_daily_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
