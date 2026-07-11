@@ -273,6 +273,14 @@ function build_fit_specs(obs;
     clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
+    ## Per-province spatial-table data for the patch fit, reshaped ONCE here.
+    ## It must not be built inside the model body: it looks provinces up by
+    ## name in a `Dict{String}`, and a string compare on the AD tape is a
+    ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
+    ## gradient of the whole joint.
+    patch_prov = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES, 3)
+
     specs = Any[
         (; id = "joint",
             kind = :chain,
@@ -321,6 +329,49 @@ function build_fit_specs(obs;
                     tmrca_days = obs.tmrca_days);
                 samples = samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
+        ## The patch (meta-population) fit. Registered so that it is fitted
+        ## end-to-end in CI like every other stream: the two defects that the
+        ## patch model shipped with (a seed prior that forced the provincial
+        ## Rt to absorb the case-split level, and an AD-breaking Dict lookup
+        ## inside the model body) were invisible to the unit tests and only
+        ## surfaced on a real fit. A standing fit makes the
+        ## posterior-predictive check a gate rather than a manual step.
+        (; id = "patch",
+            kind = :chain,
+            thunk = () -> nuts_sample(
+                bvd_patch_joint(
+                    obs.n, 3, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    confirmed_deaths = obs.confirmed_deaths,
+                    recovered_cases = obs.recovered_cases,
+                    deaths_history = obs.deaths_history,
+                    reported_history = obs.reported_history,
+                    confirmed_history = obs.confirmed_history,
+                    confirmed_deaths_history = obs.confirmed_deaths_history,
+                    lab_history = obs.lab_history,
+                    lab_daily_history = obs.lab_daily_history,
+                    suspected_daily_history = obs.suspected_daily_history,
+                    suspected_daily_deaths_history =
+                    obs.suspected_daily_deaths_history,
+                    isolation_history = obs.isolation_history,
+                    bed_capacity_history = obs.bed_capacity_history,
+                    recovered_history = obs.recovered_history,
+                    treatment_admissions_history =
+                    obs.treatment_admissions_history,
+                    treatment_deaths_history = obs.treatment_deaths_history,
+                    treatment_ruleout_history = obs.treatment_ruleout_history,
+                    treatment_absconded_history =
+                    obs.treatment_absconded_history,
+                    occupancy_break_days = obs.occupancy_break_days,
+                    export_case_days = obs.export_case_days,
+                    export_death_days = obs.export_death_days,
+                    breakpoint = breakpoint,
+                    province_increments = patch_prov.increments,
+                    province_days = patch_prov.days,
+                    tmrca_days = obs.tmrca_days);
+                samples = samples, chains = chains, target_accept = 0.95,
+                callback = fit_callback("patch"))),
         (; id = "exports",
             kind = :chain,
             thunk = () -> nuts_sample(
