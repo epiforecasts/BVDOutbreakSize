@@ -1217,45 +1217,74 @@ end
 """
 Reproduction numbers for several spatial patches (Ituri, Nord-Kivu,
 Sud-Kivu), built from the national weekly-knot random walk
-([`rt_walk_model`](@ref)) plus a constant per-patch modifier on the
-log-Rt scale:
+([`rt_walk_model`](@ref)) plus a per-patch modifier on the log-Rt scale
+that is itself free to drift over time:
 
 ```math
-\\log R_{p,t} = \\log R_{1,t} + \\delta_p, \\qquad
-\\delta_1 \\equiv 0, \\qquad
-\\delta_p \\sim N(0, \\sigma_{\\mathrm{region}}) \\;\\; (p \\ge 2).
+\\log R_{p,t} = \\log R_{1,t} + \\delta_p(t), \\qquad
+\\delta_1(t) \\equiv 0,
 ```
 
-The primary patch (`p = 1`, Ituri) is the REFERENCE: its modifier is
-fixed at zero, so the national walk *is* the primary patch's log-Rt and
-each `δ_p` is the log-Rt of a secondary patch relative to it. Giving
-every patch a free modifier (`δ_p ~ N(0, σ_region)` for all `p`, the
-symmetric hierarchical form) leaves the walk level and the mean of `δ`
-confounded, since only their sum reaches the likelihood; that puts a
-ridge in the posterior. Reference coding removes it, and `δ_2`, `δ_3`
-are then identified directly by the per-province composition of the
-confirmed cases, which is exactly what the spatial-table data measure.
+```math
+\\delta_p(t_1) \\sim N(0, \\sigma_{\\mathrm{region}}), \\qquad
+\\delta_p(t_k) \\sim N\\bigl(\\delta_p(t_{k-1}),\\;
+    \\sigma_{\\mathrm{region}}^{\\mathrm{rw}}\\bigr) \\;\\; (p \\ge 2),
+```
 
-The modifier is constant in time. Across the observed window the Ituri
-share of confirmed cases is flat (91.4% on 18 June, 91.1% on 6 July),
-so the provinces have grown at very nearly the same rate and the data
-carry no signal for a time-varying divergence between them; a per-patch
-random walk on log-Rt would be fitting noise. `σ_region` defaults to a
-half-normal `N⁺(0, 0.15)`, which allows roughly a 30% multiplicative
-difference in `Rt` between provinces at the 95% level.
+on the same weekly knots as the national walk, linearly interpolated to
+the daily grid.
 
-Keywords pass through to [`rt_walk_model`](@ref); `region_sd_prior` and
-`region_offset_prior` govern the patch hierarchy. Returns the Rt matrix
-`(n_patches × n)`, the national (= primary-patch) trajectory, the
-modifiers `δ_patch`, and the pooling SD.
+### Rt varies in space AND in time
+
+`σ_region` sets how far the provinces start apart; `σ_region_rw` sets how
+fast they may drift apart thereafter. Both are sampled with half-normal
+priors, so the model *learns* how much spatial structure there is rather
+than having it imposed.
+
+The `σ_region_rw → 0` limit recovers a constant per-patch modifier: the
+provinces keep a fixed Rt ratio and share one temporal shape. That is a
+special case of this model, not an assumption baked into it. So if the
+provinces really are moving together, the posterior for `σ_region_rw`
+concentrates near zero, the modifier flattens, and nothing is lost; and if
+they diverge, the model can say so.
+
+Hard-coding the constant modifier instead would be a mistake, even though
+the confirmed-case shares happen to be flat over the currently observed
+window (Ituri 91.4% on 18 June, 91.1% on 6 July). The window is short, and
+the response is concentrated on the Ituri epicentre — so Ituri's `Rt`
+falling faster than Nord-Kivu's is a leading hypothesis, and a constant
+modifier cannot represent it, let alone detect it. The flatness of the
+shares is a fact to be *estimated*, through `σ_region_rw`, not a constraint
+to impose. `σ_region_rw` is therefore the headline spatial diagnostic: a
+posterior pushed away from zero is direct evidence that provincial `Rt`
+trajectories are separating.
+
+### Reference coding
+
+The primary patch (`p = 1`, Ituri) is the REFERENCE: `δ_1(t) ≡ 0`, so the
+national walk *is* the primary patch's log-Rt and each `δ_p(t)` is the
+log-Rt of a secondary province relative to it. Giving every patch a free
+modifier (the symmetric hierarchical form) leaves the walk level and the
+mean of `δ` confounded, since only their sum reaches the likelihood, which
+puts a ridge in the posterior. Reference coding removes it, and makes
+`δ_2`, `δ_3` mean exactly what the per-province composition data measure.
+
+All draws are non-centred (`δ = σ · z` with `z ~ N(0, 1)`) to avoid the
+funnel geometry that a hierarchical scale otherwise induces.
+
+Returns the Rt matrix `(n_patches × n)`, the national (= primary-patch)
+trajectory, the full modifier trajectory `δ_patch` `(n_patches × n)`, and
+both pooling SDs.
 """
 @model function patch_rt_model(n::Integer, n_patches::Integer,
         log_R0_base::Real;
         breakpoint::Union{Missing, Real} = missing,
+        week::Integer = 7,
         rt_start::Integer = 1,
         rt_walk_start::Integer = rt_start,
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
+        region_rw_sd_prior = truncated(Normal(0, 0.05); lower = 0),
         region_offset_prior = Normal(0, 1))
     ## National Rt walk: the existing single-patch model, unchanged, so the
     ## national streams see exactly the Rt process the headline model fits.
@@ -1265,25 +1294,47 @@ modifiers `δ_patch`, and the pooling SD.
         rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start), false)
     Rt_national = rt_state.Rt
     log_Rt_national = log.(Rt_national)
-    ## Secondary-patch modifiers, non-centred (`δ = σ · z`) to avoid the
-    ## funnel geometry. The primary patch is the reference: `δ_1 ≡ 0`.
+    ## The patch modifiers live on the SAME weekly knots as the national
+    ## walk, so the two processes are described at the same resolution.
+    days = knot_days(n; week, start = rt_walk_start)
+    nb = length(days)
     n_free = max(n_patches - 1, 1)
+    ## Level: how far apart the provinces start.
     σ_region ~ region_sd_prior
-    z_patch ~ product_distribution(fill(region_offset_prior, n_free))
+    ## Drift: how fast they may move apart. Shrinks to zero -> constant
+    ## modifier -> the provinces share one temporal shape.
+    σ_region_rw ~ region_rw_sd_prior
+    z_level ~ product_distribution(fill(region_offset_prior, n_free))
+    z_drift ~ product_distribution(
+        fill(region_offset_prior, max(n_free * (nb - 1), 1)))
     Tp = promote_type(eltype(Rt_national), typeof(float(σ_region)),
-        eltype(z_patch))
-    δ_patch = zeros(Tp, n_patches)
+        typeof(float(σ_region_rw)), eltype(z_level), eltype(z_drift))
+    ## Modifier knots. The primary patch is the reference and stays at zero
+    ## for every knot; the secondaries start at `σ_region · z` and then walk.
+    δ_knots = zeros(Tp, n_patches, nb)
     @inbounds for p in 2:n_patches
-        δ_patch[p] = σ_region * z_patch[p - 1]
-    end
-    Rt_matrix = zeros(Tp, n_patches, n)
-    @inbounds for p in 1:n_patches
-        for t in 1:n
-            Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_patch[p])
+        δ_knots[p, 1] = σ_region * z_level[p - 1]
+        for k in 2:nb
+            idx = (p - 2) * (nb - 1) + (k - 1)
+            δ_knots[p, k] = δ_knots[p, k - 1] + σ_region_rw * z_drift[idx]
         end
     end
-    return (; Rt_matrix, Rt_national, log_Rt_national, δ_patch, σ_region,
-        sigma_rw = rt_state.sigma_rw, log_R0 = rt_state.log_R0,
+    ## Interpolate each patch's modifier to the daily grid and build Rt.
+    δ_patch = zeros(Tp, n_patches, n)
+    Rt_matrix = zeros(Tp, n_patches, n)
+    @inbounds for t in 1:n
+        Rt_matrix[1, t] = Rt_national[t]
+    end
+    @inbounds for p in 2:n_patches
+        δ_daily = interpolate_knots(δ_knots[p, :], days, n)
+        for t in 1:n
+            δ_patch[p, t] = δ_daily[t]
+            Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
+        end
+    end
+    return (; Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
+        σ_region, σ_region_rw, sigma_rw = rt_state.sigma_rw,
+        log_R0 = rt_state.log_R0,
         intervention_effect = rt_state.intervention_effect)
 end
 
@@ -1434,6 +1485,8 @@ patch chain carries the same headline quantities as a single-patch one.
     T_total = growth_state.T + τ_obs
     return (; infections_matrix, cumulative_matrix, onsets_matrix,
         Rt_matrix, δ_patch, C_T_patch,
+        σ_region = rt_state.σ_region,
+        σ_region_rw = rt_state.σ_region_rw,
         infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,
         Rt_national_implied, g, R0, r0 = r_clock, r, R_T,

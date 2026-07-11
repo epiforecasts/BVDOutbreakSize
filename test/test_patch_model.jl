@@ -101,17 +101,52 @@ end
     for s in 1:5
         seed!(s)
         res = m()
-        ## The primary patch carries no modifier, so its Rt IS the national
-        ## walk; the secondary patches are offset from it by exp(delta_p).
-        @test res.δ_patch[1] == 0
+        ## The primary patch carries no modifier at ANY time, so its Rt IS
+        ## the national walk; each secondary patch is offset from it by
+        ## exp(delta_p(t)), which is free to move over time.
+        @test all(iszero, res.δ_patch[1, :])
         @test res.Rt_matrix[1, :] ≈ res.Rt_national
         for p in 2:np
-            offset = exp(res.δ_patch[p])
-            @test res.Rt_matrix[p, :] ≈ res.Rt_national .* offset
+            @test res.Rt_matrix[p, :] ≈
+                  res.Rt_national .* exp.(res.δ_patch[p, :])
         end
         ## Rt is strictly positive everywhere: it is exp of the log scale.
         @test all(>(0), res.Rt_matrix)
+        @test size(res.δ_patch) == (np, n)
     end
+end
+
+@testitem "patch_rt_model: Rt may vary across space AND over time" begin
+    using BVDOutbreakSize: patch_rt_model
+    using Distributions: Normal, truncated
+    using Random: seed!
+
+    ## The per-patch modifier is a random walk whose step SD is itself
+    ## sampled, so the model NESTS both hypotheses and lets the data choose.
+    ## Pin both limits: the whole point of this parameterisation is that
+    ## neither is hard-coded.
+    n, np = 120, 3
+
+    ## sigma_region_rw -> 0 recovers the constant-modifier special case: the
+    ## provinces keep a fixed Rt ratio and share one temporal shape.
+    flat = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        region_rw_sd_prior = truncated(Normal(0, 1e-12); lower = 0))
+    seed!(7)
+    rf = flat()
+    for p in 2:np
+        δ = rf.δ_patch[p, 20:n]
+        @test maximum(δ) - minimum(δ) < 1e-8
+    end
+
+    ## A large step SD lets the provincial trajectories genuinely separate,
+    ## which a constant modifier could not represent at all.
+    wide = patch_rt_model(n, np, log(1.5); rt_start = 20, breakpoint = 60.0,
+        region_rw_sd_prior = truncated(Normal(0.5, 0.01); lower = 0))
+    seed!(3)
+    rw = wide()
+    @test abs(rw.δ_patch[2, n] - rw.δ_patch[2, 20]) > 0.2
+    ## The reference patch stays pinned at zero however wide the walk.
+    @test all(iszero, rw.δ_patch[1, :])
 end
 
 @testitem "province_increment_matrix: differences cumulative province counts" begin
@@ -404,4 +439,45 @@ end
     plain = sample(_no_patches(), Prior(), 5;
         chain_type = FlexiChains.VNChain, progress = false)
     @test_throws ErrorException patch_summary_table(plain, 3)
+end
+
+@testitem "province lab data: an exact partition of the national analysed" begin
+    using BVDOutbreakSize
+
+    ## The per-province laboratory throughput (sitrep section 4.3) sums, on
+    ## every date, to the national `tests_analysed_daily_history` the model
+    ## already fits. That is what makes it a COMPOSITION rather than a new
+    ## count stream, exactly like the per-province confirmed cases. If this
+    ## ever fails, either the scan drifted or the national series moved, and
+    ## the two must be reconciled before the data is used.
+    obs = load_observations()
+    lab = obs.province_lab_daily_history
+    @test !isempty(lab)
+    for k in ("ituri_analysed", "ituri_positive", "nord_kivu_analysed",
+        "nord_kivu_positive", "sud_kivu_analysed", "sud_kivu_positive")
+        @test haskey(lab, k)
+    end
+
+    nat = Dict(zip(obs.lab_daily_history.days, obs.lab_daily_history.counts))
+    an = [lab["$(p)_analysed"] for p in ("ituri", "nord_kivu", "sud_kivu")]
+    days = an[1].days
+    @test all(a -> a.days == days, an)
+    for (i, d) in enumerate(days)
+        haskey(nat, d) || continue
+        @test sum(a.counts[i] for a in an) == nat[d]
+    end
+
+    ## Positives never exceed the samples analysed in the same province.
+    for p in ("ituri", "nord_kivu", "sud_kivu")
+        @test all(lab["$(p)_positive"].counts .<= lab["$(p)_analysed"].counts)
+    end
+
+    ## The finding that motivates using this data at all: the provinces test
+    ## very differently-selected pools, so confirmed-case share is NOT
+    ## infection share. Ituri runs ~32% positivity against Nord-Kivu's ~6%.
+    it_pos = sum(lab["ituri_positive"].counts) /
+             sum(lab["ituri_analysed"].counts)
+    nk_pos = sum(lab["nord_kivu_positive"].counts) /
+             sum(lab["nord_kivu_analysed"].counts)
+    @test it_pos > 3 * nk_pos
 end

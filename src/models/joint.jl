@@ -1147,7 +1147,19 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]
     infections_T_patch := [@inbounds(patch_state.infections_matrix[p, n])
                            for p in 1:n_patches]
-    delta_patch := patch_state.δ_patch
+    ## The per-patch log-Rt modifier at the cut-off (one entry per patch),
+    ## and its spread at the START of the walk, so a change in the provincial
+    ## Rt gap over the window is visible as the difference between them.
+    delta_patch := [@inbounds(patch_state.δ_patch[p, n]) for p in 1:n_patches]
+    delta_patch_start := [@inbounds(patch_state.δ_patch[p, rt_walk_start])
+                          for p in 1:n_patches]
+    ## THE spatial diagnostic: how fast the provincial log-Rt modifiers are
+    ## allowed to drift apart. A posterior concentrated near zero says the
+    ## provinces share one temporal Rt shape (a constant ratio between them);
+    ## a posterior pushed away from zero is direct evidence that provincial
+    ## Rt trajectories are separating. See [`patch_rt_model`](@ref).
+    region_sd := patch_state.σ_region
+    region_rw_sd := patch_state.σ_region_rw
     ## Shared observation-model parameters.
     k := dispersion_state.k_pop
     k_cases := kv[1]

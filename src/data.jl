@@ -179,11 +179,15 @@ function load_observations(
     confirmed_break_gross_cases = break_gross("gross_cases")
     confirmed_break_gross_deaths = break_gross("gross_deaths")
 
-    ## Per-province cumulative history from a TOML block with per-province
-    ## arrays (e.g. province_confirmed_history). The block has a shared
-    ## `dates` array and per-province `values` arrays. Returns a Dict
-    ## mapping province name (string) to the same (; days, counts) shape
-    ## as history(). Empty when the block is absent.
+    ## Per-province history from a TOML block with one shared `dates` array
+    ## and one array per series. Used for the cumulative confirmed counts
+    ## (`province_confirmed_history`, keyed by province) and for the daily
+    ## laboratory throughput (`province_lab_daily_history`, keyed by
+    ## province-and-measure, e.g. `ituri_analysed` / `ituri_positive`).
+    ## Returns a Dict mapping each series name to the same (; days, counts)
+    ## shape as history(). Empty when the block is absent. The counts are
+    ## cumulative or daily according to the block; the caller knows which.
+
     function province_history(key)
         ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
         !haskey(raw, key) && return Dict{String, ProvHistory}()
@@ -431,6 +435,7 @@ function load_observations(
         onset_curve_history = onset_curve_history,
         onset_report_history = onset_report_history,
         province_confirmed_history = province_history("province_confirmed_history"),
+        province_lab_daily_history = province_history("province_lab_daily_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end

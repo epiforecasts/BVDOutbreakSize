@@ -30,6 +30,18 @@ tasks:
     cmds:
       - julia --project=scripts scripts/confirm_insp_data.jl {{.CLI_ARGS}}
 
+  province-lab-data:
+    desc: >
+      Regenerate the [province_lab_daily_history] block for
+      data/observations.toml by scanning section 4.3 (Laboratoire) of the
+      INSP situation-report PDFs for the per-province samples analysed and
+      positives. Validates that the per-province analysed counts sum exactly
+      to the national tests_analysed_daily_history on every date (they are an
+      exact partition of it) and exits non-zero on any disagreement. Needs
+      the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_province_lab.jl {{.CLI_ARGS}}
+
   docs:
     desc: >
       Build the full docs site locally: render both literate pages (analysis
