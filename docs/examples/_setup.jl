@@ -137,6 +137,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
     chn_joint = _fits["joint"]
+    ## The patch (meta-population) fit. It is a full drop-in for the joint --
+    ## it carries every deterministic a single-patch chain does -- so it feeds
+    ## the same summary, forecast and plotting machinery. It is exposed
+    ## alongside `chn_joint` rather than replacing it, so the spatial sections
+    ## can be reported against the single-patch fit and any divergence between
+    ## the two headlines is visible rather than silently swapped in.
+    chn_patch = _fits["patch"]
     chn_exports = _fits["exports"]
     chn_deaths = _fits["deaths"]
     chn_cases = _fits["cases"]
@@ -176,6 +183,14 @@ if !@isdefined(_BVD_SETUP_LOADED)
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
     end
+
+    ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
+    ## inside a model body puts a memcmp foreigncall on the AD tape).
+    province_cases = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES, 3);
+    province_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES, 3);
+    posterior_C_patch = vec(Array(chn_patch[:C_T]));
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))
     posterior_C_exports = vec(Array(chn_exports[:C_T]))
