@@ -3514,27 +3514,40 @@ modelled expected share of patch `p` at vintage `i`.
     else
         totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
     end
-    ## Stick-breaking: allocate each vintage's total across the patches.
-    ## The final patch takes the remainder and carries no free draw, so the
+    ## Stick-breaking: allocate each vintage's total across the patches. The
+    ## final patch takes the remainder and carries no free draw, so the
     ## composition has `np - 1` degrees of freedom per vintage, as it must.
-    for i in 1:nv
-        remaining = totals[i]
-        tail = one(eltype(shares))
-        for p in 1:(np - 1)
-            ## Conditional share of patch `p` among patches `p … np`.
-            p_cond = clamp(shares[p, i] / tail, 0.0, 1.0)
-            obs_increments[p, i] ~ safe_betabinomial(
-                max(remaining, 0), p_cond, ρ)
-            remaining -= obs_increments[p, i]
-            ## Guard the running tail against round-off driving it to zero
-            ## or negative on the last step.
-            tail = max(tail - shares[p, i], 1e-10)
-        end
-        ## The last patch is the remainder, not a free draw. Filled in only
-        ## on the predictive path; on the fitting path it is already the
-        ## observed count and must not be written over.
-        if predictive
-            obs_increments[np, i] = max(remaining, 0)
+    ##
+    ## The loop runs over PATCHES on the outside and scores every vintage in
+    ## ONE `~` statement, rather than a scalar `~` per (patch, vintage). Within
+    ## a vintage the patches are sequential — patch `p`'s trial count is what
+    ## patches `1 … p-1` left behind — but ACROSS vintages they are
+    ## independent, so the vintages vectorise.
+    ##
+    ## This is a performance fix, not a style one. Each `~` puts DynamicPPL
+    ## bookkeeping on the Mooncake tape, and with two compositions over 20
+    ## vintages the scalar form emitted 80 of them. That inflated the tape
+    ## enough to push the gradient COMPILE past an hour and the fit past CI's
+    ## job cap. The vectorised form emits `2 * (np - 1)` = 4.
+    remaining = copy(totals)
+    tail = ones(eltype(shares), nv)
+    for p in 1:(np - 1)
+        ## Conditional share of patch `p` among the patches not yet allocated.
+        p_cond = [clamp(shares[p, i] / tail[i], 0.0, 1.0) for i in 1:nv]
+        trials = [max(remaining[i], 0) for i in 1:nv]
+        obs_increments[p, :] ~ product_distribution(
+            [safe_betabinomial(trials[i], p_cond[i], ρ) for i in 1:nv])
+        remaining = [remaining[i] - obs_increments[p, i] for i in 1:nv]
+        ## Guard the running tail against round-off driving it to zero or
+        ## negative on the last step.
+        tail = [max(tail[i] - shares[p, i], 1e-10) for i in 1:nv]
+    end
+    ## The last patch is the remainder, not a free draw. Filled in only on the
+    ## predictive path; on the fitting path it is already the observed count
+    ## and must not be written over.
+    if predictive
+        for i in 1:nv
+            obs_increments[np, i] = max(remaining[i], 0)
         end
     end
     return (; shares, rho = ρ, obs_increments,

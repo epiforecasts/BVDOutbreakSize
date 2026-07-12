@@ -1275,6 +1275,115 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     log_rt_contrast := [@inbounds(patch_state.δ_patch[p, n] -
                                   patch_state.δ_patch[1, n])
                         for p in 1:n_patches]
+    ## --- The full bvd_joint deterministic set --------------------------
+    ## The patch model is the headline joint, so a patch chain must carry
+    ## EVERY quantity a single-patch chain does: `analysis.jl`, the forecast
+    ## machinery (`forecast_reported` reads `expected_reports_T`,
+    ## `cumulative_confirmed`, ...) and the plots all key off these names. The
+    ## observation submodels are identical to bvd_joint's, so the states are
+    ## already here; only the latent-derived quantities differ, and those are
+    ## surfaced above from the patch state.
+    cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
+    ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
+    ## the per-window tested-positive probability applied to the modelled,
+    ## testing-onset-gated analysed volume), so the cumulative trajectory carries
+    ## the confirmed-case timing for the delay-corrected confirmed-CFR
+    ## reconstruction. The onset-to-confirmation kernel (onset-to-report ⊕
+    ## receipt) and the onset-to-death-confirmation kernel (onset-to-death ⊕
+    ## receipt) are exposed alongside so the residual delay between a confirmed
+    ## case and its confirmed death can be rebuilt per draw off the chain.
+    ## Re-add the testing-onset baseline: the laboratory capacity is gated to
+    ## zero before testing began and the first confirmed vintage is treated as
+    ## the initial condition (a baseline the early windows do not score), so the
+    ## reconstructed cumulative counts only the fitted increments. Adding the
+    ## first observed confirmed count back from the testing onset onward makes
+    ## the trajectory comparable to the observed confirmed total (and keeps the
+    ## delay-corrected confirmed-CFR denominator on the right level).
+    _conf_inc_cum = cumsum(confirmed_state.confirmed_daily)
+    _conf_base = isempty(confirmed_history.counts) ? 0 :
+                 Int(confirmed_history.counts[1])
+    _conf_cap = isempty(confirmed_history.days) ? 1 :
+                clamp(Int(confirmed_history.days[1]), 1, n)
+    _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
+    cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
+    onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+    onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
+    ## External onset-to-sample constraint on the confirmed sampling delay
+    ## (grounded on the NEJM DRC 2026 cohort by default, see
+    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt legs
+    ## convolve to the confirmed onset-to-sample delay, so its continuous mean is
+    ## the sum of the two legs' means and its continuous SD the root-sum of their
+    ## variances; both are exposed here. The cohort's reported (continuous) mean
+    ## and median are fitted to these as soft Normal observations
+    ## ([`onset_to_sample_logweight`](@ref)), grounding the otherwise-
+    ## unidentified receipt (lab-turnaround) leg without touching either prior.
+    ## The term only exists on the confirmed report⊕receipt path, so single-
+    ## stream and isolation composers carry none; passing `nothing` drops it.
+    onset_to_sample_mean := cases_state.report_mean +
+                            confirmed_state.receipt_mean
+    onset_to_sample_sd := sqrt(cases_state.report_sd^2 +
+                               confirmed_state.receipt_sd^2)
+    if onset_to_sample !== nothing
+        @addlogprob! onset_to_sample_logweight(cases_state.report_mean,
+            cases_state.report_sd, confirmed_state.receipt_mean,
+            confirmed_state.receipt_sd, onset_to_sample)
+    end
+    ## Population-level dispersion (`k`, the headline scalar) plus the
+    ## partially-pooled per-stream dispersions and the pooling SD.
+    expected_deaths_T := deaths_state.expected_deaths_T
+    expected_reports_T := cases_state.expected_reports
+    expected_confirmed_T := confirmed_state.expected_confirmed
+    expected_analysed_T := confirmed_state.expected_analysed
+    _ecd = confirmed_deaths_state.expected_confirmed_deaths
+    expected_confirmed_deaths_T := _ecd
+    expected_exports_T := exports_state.expected_exports
+    expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
+    expected_isolation_T := treatment_state.expected_isolation
+    expected_bed_demand_T := treatment_state.expected_bed_demand
+    bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
+                                 treatment_state.expected_isolation)
+    ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
+    expected_admissions_T := treatment_state.expected_admissions
+    expected_incare_deaths_T := treatment_state.expected_incare_deaths
+    expected_ruleouts_T := treatment_state.expected_ruleouts
+    bed_capacity := treatment_state.capacity
+    isolation_admission := treatment_state.p_iso
+    isolation_bvd_admission := treatment_state.p_iso_bvd
+    isolation_severity := treatment_state.δ_iso
+    ## BVD bed stay is now the outcome mixture; `isolation_bvd_los_mean`
+    ## reports the mixture mean (overall length-of-stay), with the death and
+    ## recovery branch means surfaced separately.
+    isolation_bvd_los_mean := treatment_state.overall_los
+    isolation_death_los_mean := treatment_state.death_los_mean
+    isolation_recovery_los_mean := treatment_state.recovery_los_mean
+    isolation_ruleout_los_mean := treatment_state.ruleout_los_mean
+    isolation_admission_delay_mean := treatment_state.admission_delay_mean
+    isolation_dispersion := treatment_state.k_isolation
+    ## In-care fatality CFR_iso (a modifier on the infection CFR) and the
+    ## abscond fraction.
+    incare_cfr := treatment_state.CFR_iso
+    incare_cfr_modifier := treatment_state.β_iso
+    abscond_fraction := treatment_state.abscond_frac
+    expected_recovered_T := recovered_state.expected_recovered
+    recovery_probability := recovered_state.p_recover
+    recovery_delay_mean := recovered_state.recovery_delay_mean
+    recovered_dispersion := recovered_state.k_recovered
+    tau_test := cases_state.τ_test
+    lambda_bg := cases_state.λ_bg
+    bg_sigma := cases_state.bg_sigma
+    background_total := cases_state.bg_total
+    death_ascertainment := deaths_state.p_death
+    background_cfr := deaths_state.cfr_bg
+    lambda_bg_death := deaths_state.λ_bg_death
+    bg_death_sigma := deaths_state.bg_death_sigma
+    background_death_total := deaths_state.bg_death_total
+    tau_death := confirmed_deaths_state.τ_death
+    death_testing_scaling := confirmed_deaths_state.scaling
+    suspected_positivity := cases_state.positivity
+    test_positivity := confirmed_state.p_positive
+    death_composition := confirmed_deaths_state.q_death
+    death_confirmation := confirmed_deaths_state.p_death_conf
+
     ## Shared observation-model parameters.
     k := dispersion_state.k_pop
     k_cases := kv[1]

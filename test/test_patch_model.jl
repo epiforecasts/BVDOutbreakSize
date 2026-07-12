@@ -668,3 +668,76 @@ end
     @test 0.12 < nk_death_share < 0.22         ## ~14%
     @test nk_death_share > 1.4 * nk_case_share ## the gap that does the work
 end
+
+@testitem "bvd_patch_joint is a drop-in for bvd_joint (headline model)" tags=[:slow] begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+
+    ## The patch model is the HEADLINE joint, not a side analysis. So a patch
+    ## chain must carry every quantity a single-patch chain does: analysis.jl,
+    ## the forecast machinery and the plots all key off these names, and a
+    ## missing one is a silent failure at report-render time rather than a
+    ## test failure here.
+    ##
+    ## `forecast_reported` in particular reads a long list of `expected_*_T`
+    ## deterministics off the chain; if any is absent the one-week-ahead
+    ## forecast cannot be produced from a patch fit at all.
+    obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    provd = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, 3)
+
+    m = bvd_patch_joint(obs.n, 3,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        recovered_cases = obs.recovered_cases,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        recovered_history = obs.recovered_history,
+        treatment_admissions_history = obs.treatment_admissions_history,
+        treatment_deaths_history = obs.treatment_deaths_history,
+        treatment_ruleout_history = obs.treatment_ruleout_history,
+        treatment_absconded_history = obs.treatment_absconded_history,
+        occupancy_break_days = obs.occupancy_break_days,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        breakpoint = obs.who_first_sitrep_days,
+        province_increments = prov.increments, province_days = prov.days,
+        province_death_increments = provd.increments,
+        province_death_days = provd.days,
+        tmrca_days = obs.tmrca_days)
+
+    chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
+        progress = false)
+
+    ## Every deterministic the forecast machinery reads off a chain.
+    for q in (:r, :R_T, :T, :k, :expected_infections_T, :expected_reports_T,
+        :expected_deaths_T, :expected_confirmed_T, :expected_confirmed_deaths_T,
+        :expected_recovered_T, :expected_admissions_T, :expected_bed_demand_T,
+        :expected_incare_deaths_T, :expected_ruleouts_T, :bed_capacity,
+        :isolation_dispersion, :recovered_dispersion)
+        d = vec(Array(chn[q]))
+        @test length(d) == 40
+        @test all(isfinite, d)
+    end
+
+    ## And the vector trajectories the plots and the CFR machinery read.
+    for q in (:cumulative_onsets, :cumulative_confirmed,
+        :cumulative_expected_deaths, :onset_to_confirmation_pmf)
+        @test !isempty(vec(collect(chn[q]))[1])
+    end
+
+    ## Plus the headline summary set.
+    for q in (:C_T, :R0, :r0, :doubling_time, :CFR, :p_drc, :p_uganda)
+        @test all(isfinite, vec(Array(chn[q])))
+    end
+end
