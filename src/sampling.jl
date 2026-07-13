@@ -269,6 +269,7 @@ function nuts_sample(model;
         samples::Integer = 1_000,
         chains::Integer = 2,
         target_accept::Real = 0.85,
+        max_depth::Integer = 10,
         n_adapts::Integer = min(250, samples ÷ 2),
         seed::Integer = 20260518,
         progress::Bool = false,
@@ -284,7 +285,7 @@ function nuts_sample(model;
     return sample(
         rng,
         model,
-        NUTS(n_adapts, target_accept; adtype),
+        NUTS(n_adapts, target_accept; max_depth, adtype),
         MCMCThreads(),
         samples, chains;
         initial_params = fill(init, chains),
