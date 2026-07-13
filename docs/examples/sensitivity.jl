@@ -1242,6 +1242,48 @@ chamla_rt_fig = plot_rt(chamla_anchor.chn;
 
 chamla_rt_fig #hide
 
+# ## Spatial structure sensitivity
+#
+# The headline model is a meta-population: a renewal equation per province,
+# coupled by importation, with every national stream fitted against the summed
+# patches.
+# Setting `n_patches = 1` collapses it exactly onto a single well-mixed
+# population, which is the model the earlier releases used.
+# Because the patch model is a different generative story, the national
+# outbreak size is a genuine check on it rather than a restatement: if the
+# spatial structure were distorting the national fit, the two posteriors would
+# part company.
+#
+# The per-province split rests on the confirmed deaths.
+# A province's case count is the product of its incidence and its case-finding
+# and only the product is observed, so the case split alone cannot separate
+# them; the death split can, because the case-fatality ratio and the
+# death-confirmation probability belong to the virus and to a national
+# laboratory rather than to a province.
+# The sensitivity below is therefore also a check on that identification: with
+# the patches off, the provincial ascertainment cannot be estimated at all, and
+# the national estimate is what remains.
+
+spatial_sensitivity_table = streams_table(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population (n_patches = 1)" => posterior_C_no_patches);
+spatial_sensitivity_table
+
+#md # ```@raw html
+#md # <details><summary>Spatial-structure density overlay</summary>
+#md # ```
+
+spatial_sensitivity_fig = plot_density_overlay(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population" => posterior_C_no_patches;
+    xlabel = "Cumulative infections");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_sensitivity_fig #hide
+
 # ## Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
