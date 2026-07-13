@@ -206,8 +206,8 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.85,
-                max_depth = 8,
+                samples = samples, chains = chains, target_accept = 0.90,
+                max_depth = 9,
                 callback = fit_callback("joint"))),
         (; id = "exports",
             kind = :chain,
