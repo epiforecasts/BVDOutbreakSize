@@ -1654,6 +1654,12 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     C_T := patch_state.C_T
     R_T := patch_state.R_T
     expected_infections_T := @inbounds(patch_state.infections_total[n])
+    ## The national cumulative infection trajectory, summed over patches. The
+    ## single-population composer surfaced this from its `_latent` submodel
+    ## rather than from its own body, so a diff of the two function bodies does
+    ## not show it as missing -- which is exactly how it was dropped. The docs
+    ## read it off the chain for the headline ribbon panels.
+    cumulative_infections := patch_state.cumulative_total
     cumulative_onsets := cumsum(onsets)
     Rt_national_implied := patch_state.Rt_national_implied
     ## Per-patch quantities, as vector deterministics (one entry per patch).

@@ -732,26 +732,38 @@ end
     chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
         progress = false)
 
-    ## Every deterministic the forecast machinery reads off a chain.
-    for q in (:r, :R_T, :T, :k, :expected_infections_T, :expected_reports_T,
-        :expected_deaths_T, :expected_confirmed_T, :expected_confirmed_deaths_T,
-        :expected_recovered_T, :expected_admissions_T, :expected_bed_demand_T,
-        :expected_incare_deaths_T, :expected_ruleouts_T, :bed_capacity,
-        :isolation_dispersion, :recovered_dispersion)
-        d = vec(Array(chn[q]))
-        @test length(d) == 40
-        @test all(isfinite, d)
+    ## EVERY chain key that src/ or docs/ reads off a joint chain. This list is
+    ## the contract: the analysis, the forecast machinery, the plots and the
+    ## CFR calculation all key off these names, and a missing one fails at
+    ## render time in CI rather than here.
+    ##
+    ## `cumulative_infections` is in this list for a reason. The single-
+    ## population composer surfaced it from its `_latent` submodel rather than
+    ## from its own body, so a diff of the two FUNCTION BODIES showed every
+    ## other deterministic as missing but not that one -- and it was dropped,
+    ## and CI failed rendering the analysis. Diffing bodies is not enough; the
+    ## test has to assert against the keys that are actually read.
+    for q in (:bed_capacity, :CFR, :C_T, :cumulative_confirmed,
+        :cumulative_infections, :cumulative_onsets, :doubling_time,
+        :expected_admissions_T, :expected_bed_demand_T,
+        :expected_confirmed_deaths_T, :expected_confirmed_T,
+        :expected_deaths_T, :expected_incare_deaths_T, :expected_infections_T,
+        :expected_recovered_T, :expected_reports_T, :expected_ruleouts_T,
+        :isolation_dispersion, :k, :onset_to_confirmation_pmf,
+        :onset_to_death_confirmation_pmf, :p_drc, :p_uganda, :r, :r0, :R0,
+        :recovered_dispersion, :R_T, :T, :cumulative_expected_deaths)
+        v = chn[q]
+        @test v !== nothing
     end
 
-    ## And the vector trajectories the plots and the CFR machinery read.
-    for q in (:cumulative_onsets, :cumulative_confirmed,
-        :cumulative_expected_deaths, :onset_to_confirmation_pmf)
-        @test !isempty(vec(collect(chn[q]))[1])
-    end
-
-    ## Plus the headline summary set.
-    for q in (:C_T, :R0, :r0, :doubling_time, :CFR, :p_drc, :p_uganda)
+    ## The scalars must be finite; the trajectories must be non-empty.
+    for q in (:C_T, :R_T, :r, :r0, :R0, :doubling_time, :CFR, :p_drc,
+        :p_uganda, :k)
         @test all(isfinite, vec(Array(chn[q])))
+    end
+    for q in (:cumulative_infections, :cumulative_onsets,
+        :cumulative_confirmed, :onset_to_confirmation_pmf)
+        @test !isempty(vec(collect(chn[q]))[1])
     end
 end
 
