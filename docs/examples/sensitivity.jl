@@ -4,9 +4,12 @@
 # one-week-ahead forecast onward: how last week's forecast held up, the
 # outbreak size each data stream implies on its own, how the estimate has
 # evolved across releases, comparisons with McCabe et al. and Chamla et al.,
-# and the delay and molecular-clock sensitivity re-fits. It renders from the
-# same fitted chains as the main analysis, loaded through the shared setup, so
-# no model is re-fit here beyond the frozen and (gated) sensitivity re-fits.
+# and the delay and tree-prior sensitivity re-fits. The tree-prior
+# sensitivity compares the Skygrid and Exponential growth TMRCA estimates
+# [mbalaplacide2026](@cite) (~1.1E-3 subs/site/year, 139 BDBV genomes).
+# It renders from the same fitted chains as the main analysis, loaded through
+# the shared setup, so no model is re-fit here beyond the frozen and (gated)
+# sensitivity re-fits.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -679,11 +682,6 @@ chamla_rt_fig #hide
 
 # ## Delay sensitivity
 #
-# This sensitivity re-fit runs on main and release docs builds only and is
-# skipped on PR previews to keep the preview builds fast (controlled by the
-# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the table
-# and figure below are replaced by a short note in place of the re-fit.
-#
 # The death stream dates the outbreak from how far deaths lag symptom onset,
 # so the assumed onset-to-death delay sets the implied infection count.
 # The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
@@ -703,7 +701,7 @@ chamla_rt_fig #hide
 #md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
 #md # ```
 
-## The sensitivity re-fits (community-delay and faster-clock variants) are
+## The sensitivity re-fits (community-delay variant) are
 ## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
@@ -720,7 +718,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity runs on main and release builds only; skipped on this build._"
+                          Markdown.md"_Delay sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -736,7 +734,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity runs on main and release builds only; skipped on this build._"
+                        Markdown.md"_Delay sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -744,53 +742,48 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
 
 delay_sensitivity_fig #hide
 
-# ## Clock-rate sensitivity
+# ## Tree-prior sensitivity
 #
-# This sensitivity re-fit runs on main and release docs builds only and is
-# skipped on PR previews to keep the preview builds fast (controlled by the
-# `BVD_RUN_SENSITIVITY` gate in the setup block). When it is skipped the tables
-# and figures below are replaced by a short note in place of the re-fit.
-#
-# The whole outbreak-age estimate rests on the genetic bound, the oldest
-# date the common ancestor of the sequenced cases can sit, which is set by
-# the assumed molecular clock rate.
-# The baseline uses the slower clock rate of $1.2\times10^{-3}$
-# substitutions per site per year, the rate of the 2013-2016 West African
-# Ebola epidemic, which dates the common ancestor to 25 March 2026.
-# The sequencing source also reports a faster early-epidemic rate of
-# $1.9\times10^{-3}$ substitutions per site per year, which dates the common
-# ancestor about two and a half weeks more recently, to 11 April 2026,
-# without favouring either [virological2026](@cite).
-# We re-fit the joint model under the faster clock and compare the
-# infection count to date and the outbreak age.
-# The re-fit uses the full headline settings (1000 draws across two chains).
+# The outbreak-age estimate depends on the coalescent tree prior assumed
+# in the BEAST X analysis. The baseline uses the more flexible Skygrid
+# non-parametric model, which dates the common ancestor to 15 March 2026
+# ($95\%$ HPD 09 Feb -- 12 Apr). The report also fits an Exponential
+# growth tree prior, which dates the common ancestor about a week earlier
+# to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr)
+# [mbalaplacide2026](@cite). Both priors give very similar evolutionary
+# rates ($\sim 1.1\times10^{-3}$ subs/site/year). We re-fit the joint
+# model under the Exponential growth TMRCA and compare the infection
+# count to date and the outbreak age.
 
 #md # ```@raw html
-#md # <details><summary>Re-fit the joint under the faster clock rate</summary>
+#md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
 #md # ```
 
-## The faster-clock re-fit (and its `tmrca_days` offset) is defined in the fit
+## The Exponential-growth re-fit (and its `tmrca_days` offset) is defined in the fit
 ## registry (`docs/fits/registry.jl`) and loaded through the cache (when enabled) in the
 ## setup block above.
-posterior_C_fast_clock = RUN_SENSITIVITY ?
-                         vec(Array(chn_joint_fast_clock[:C_T])) : nothing
-T_baseline_clock = vec(Array(chn_joint[:T]))
-T_fast_clock = RUN_SENSITIVITY ? vec(Array(chn_joint_fast_clock[:T])) : nothing
+posterior_C_exp_growth = RUN_SENSITIVITY ?
+                         vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
+T_skygrid = vec(Array(chn_joint[:T]))
+T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The infection count to date under the two clock rates, side by side.
+# The infection count to date under the two tree priors, side by side.
+# A slightly earlier common ancestor (Exponential growth) permits a
+# marginally older outbreak, though the difference is small because the
+# evolutionary rates are nearly identical.
 
 #md # ```@raw html
-#md # <details><summary>Clock-rate infection-count table</summary>
+#md # <details><summary>Tree-prior infection-count table</summary>
 #md # ```
 
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
-                            streams_table("baseline clock" => posterior_C_joint,
-    "faster clock" => posterior_C_fast_clock) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds only; skipped on this build._"
+                            streams_table("Skygrid (baseline)" => posterior_C_joint,
+    "Exponential growth" => posterior_C_exp_growth) :
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -799,13 +792,13 @@ clock_sensitivity_C_table = RUN_SENSITIVITY ?
 clock_sensitivity_C_table #hide
 
 #md # ```@raw html
-#md # <details><summary>Clock-rate infection-count density plot</summary>
+#md # <details><summary>Tree-prior infection-count density plot</summary>
 #md # ```
 
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
-                          plot_cumulative_cases("baseline clock" => posterior_C_joint,
-    "faster clock" => posterior_C_fast_clock; scenarios = []) :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds only; skipped on this build._"
+                          plot_cumulative_cases("Skygrid (baseline)" => posterior_C_joint,
+    "Exponential growth" => posterior_C_exp_growth; scenarios = []) :
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -814,17 +807,16 @@ clock_sensitivity_C_fig = RUN_SENSITIVITY ?
 clock_sensitivity_C_fig #hide
 
 # The outbreak age, the number of days from seeding to the cut-off, under
-# the two clock rates.
-# A more recent common ancestor permits a younger outbreak.
+# the two tree priors.
 
 #md # ```@raw html
-#md # <details><summary>Clock-rate outbreak-age table</summary>
+#md # <details><summary>Tree-prior outbreak-age table</summary>
 #md # ```
 
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
-                            streams_table("baseline clock" => T_baseline_clock,
-    "faster clock" => T_fast_clock; digits = 0) :
-                            Markdown.md"_Clock-rate sensitivity runs on main and release builds only; skipped on this build._"
+                            streams_table("Skygrid (baseline)" => T_skygrid,
+    "Exponential growth" => T_exp_growth; digits = 0) :
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>
@@ -833,15 +825,15 @@ clock_sensitivity_T_table = RUN_SENSITIVITY ?
 clock_sensitivity_T_table #hide
 
 #md # ```@raw html
-#md # <details><summary>Clock-rate outbreak-age density plot</summary>
+#md # <details><summary>Tree-prior outbreak-age density plot</summary>
 #md # ```
 
 clock_sensitivity_T_fig = RUN_SENSITIVITY ?
-                          plot_density_overlay("baseline clock" => T_baseline_clock,
-    "faster clock" => T_fast_clock;
+                          plot_density_overlay("Skygrid (baseline)" => T_skygrid,
+    "Exponential growth" => T_exp_growth;
     xlabel = "Outbreak age (days before cut-off)",
-    title = "Posterior outbreak age by clock rate") :
-                          Markdown.md"_Clock-rate sensitivity runs on main and release builds only; skipped on this build._"
+    title = "Posterior outbreak age by tree prior") :
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
 
 #md # ```@raw html
 #md # </details>

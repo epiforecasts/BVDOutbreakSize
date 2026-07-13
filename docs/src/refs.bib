@@ -208,6 +208,14 @@
   howpublished = {\url{https://github.com/chalk-lab/Mooncake.jl}},
 }
 
+@misc{epidist,
+  title        = {epidist: Estimate Epidemiological Delay Distributions for Infectious Diseases},
+  author       = {Abbott, Sam and Park, Sang Woo and Charniga, Kelly and Howes, Adam and Funk, Sebastian and {epidist contributors}},
+  year         = {2024},
+  howpublished = {\url{https://github.com/epiforecasts/epidist}},
+  note         = {R package. Marginal delay-distribution estimation correcting for double interval censoring and right truncation},
+}
+
 @misc{integrals_jl,
   title        = {Integrals.jl — A unified Julia interface to numerical integration},
   author       = {{SciML contributors}},
@@ -305,6 +313,20 @@
   howpublished = {\url{https://github.com/seabbs/a-workflow-for-infectious-disease-modelling}},
 }
 
+@misc{mbalaplacide2026,
+  title        = {Genomic epidemiology of the ongoing 2026 Bundibugyo virus
+                  disease outbreak in the Democratic Republic of the Congo},
+  author       = {Mbala-Kingebeni, Placide and others},
+  year         = {2026},
+  howpublished = {\url{https://virological.org/t/genomic-epidemiology-of-the-ongoing-2026-bundibugyo-virus-disease-outbreak-in-the-democratic-republic-of-the-congo/1045}},
+  note         = {Virological.org post, July 2026. BEAST X v10.6.0 analysis of
+                  139 BDBV genomes; evolutionary rate ~1.1E-3 subs/site/year
+                  with Skygrid and Exponential growth tree priors; tMRCA
+                  estimates 15 Mar (Skygrid, baseline) and 08 Mar (ExpGrowth,
+                  sensitivity); Exponential growth doubling time 11.7 d
+                  (95 HPD 6.8--17.5).},
+}
+
 @misc{virological2026,
   title        = {Initial genomes from May 2026 Bundibugyo Virus Disease
                   Outbreak in the Democratic Republic of the Congo and
@@ -346,7 +368,9 @@
                   the initial BDBV genomes; the 2026-05-21 update adds a
                   BEAST v10.5.0 temporal tree of the first ten genomes
                   (HKY, strict clock fixed to literature EBOV rates,
-                  exponential coalescent) reporting the TMRCA.},
+                  exponential coalescent) reporting the TMRCA. Superseded
+                  for rate estimates by the 139-genome BEAST X analysis
+                  (mbalaplacide2026).},
 }
 
 @misc{cuomodannenburg2026,
@@ -362,7 +386,9 @@
                   epidemic doubling time of 15.2-24.5 days (wide
                   intervals that include zero), basic reproduction number
                   1.31-1.55, a 9.6-day generation time, and a TMRCA
-                  between 01 and 15 March 2026.},
+                  between 01 and 15 March 2026. The outbreak-specific rate
+                  (mbalaplacide2026, 139 genomes) now supersedes the
+                  substitution-rate assumptions used here.},
 }
 
 @article{holmes2016,
@@ -387,7 +413,9 @@
                   the genetic TMRCA with the other data streams as a
                   lower bound on the seeding time, originally via the
                   root-to-tip distance of the first BDBV genomes
-                  (virological2026) and the holmes2016 clock rate.},
+                  (virological2026) and the holmes2016 clock rate, now
+                  grounded on the outbreak-specific estimates of
+                  mbalaplacide2026.},
 }
 
 @article{semper2016,
@@ -452,6 +480,24 @@
   howpublished = {\url{https://www.fda.gov/media/91944/download}},
 }
 
+@article{akilimali2026,
+  title   = {Clinical Characteristics of Patients Infected with
+             {Bundibugyo} Virus, {DRC} 2026},
+  author  = {Akilimali, Pierre and Ebengo, Dav M. and Scarpino,
+             Samuel V. and Amuri-Aziza, Adrienne and Wawina-Bokalanga,
+             Tony and Matondo-Mbundu, Placide and Kanku, Benjamin and
+             Kinganda-Lusamaki, Eddy and Makangara, Jean-Claude and
+             Mukadi-Bamuleka, Daniel and Rojek, Amanda and Kraemer,
+             Moritz U. G. and Ngandu, Christian and Mwamba, Dieudonn{\'e}
+             and Mbala-Kingebeni, Placide},
+  journal = {New England Journal of Medicine},
+  year    = {2026},
+  note    = {Correspondence. Onset-to-sample delays (Table S3) fitted with
+             epidist correcting for double interval censoring and right
+             truncation},
+  doi     = {10.1056/NEJMc2608070},
+}
+
 @article{nishiura2009,
   title   = {Early epidemiological assessment of the virulence of
              emerging infectious diseases: a case study of an influenza
@@ -464,4 +510,15 @@
   number  = {8},
   pages   = {e6852},
   doi     = {10.1371/journal.pone.0006852},
+}
+
+@article{wilson1931,
+  author  = {Wilson, Edwin B. and Hilferty, Margaret M.},
+  title   = {The distribution of chi-square},
+  journal = {Proceedings of the National Academy of Sciences},
+  year    = {1931},
+  volume  = {17},
+  number  = {12},
+  pages   = {684--688},
+  doi     = {10.1073/pnas.17.12.684},
 }

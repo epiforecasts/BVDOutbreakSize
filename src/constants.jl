@@ -119,12 +119,13 @@ const M_PRIOR_BASE_DATE = "2026-05-18"
 """
     M_PRIOR_DOUBLING_DAYS
 
-Central doubling time (days) for the size and growth priors, from
-Cuomo-Dannenburg & Ghafari's molecular-clock reanalysis (mean 15.2-24.5 d
-across six clock assumptions). The doubling-count prior centre advances by
-one doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
+Median doubling time (days) for the size and growth priors, from the
+BEAST X analysis (mbalaplacide2026, Exponential growth model,
+11.7 d, 95% HPD 6.8-17.5). The doubling-count prior centre
+advances by one doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to
+the cut-off.
 """
-const M_PRIOR_DOUBLING_DAYS = 20.0
+const M_PRIOR_DOUBLING_DAYS = 11.7
 
 """
     M_PRIOR_BASE
@@ -134,7 +135,7 @@ Centre of the wide doubling-count prior in
 The doubling count `m` counts ONLY the cryptic-phase doublings (the origin to
 the renewal-process start): the cryptic duration is `m·τ` and the total
 outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. A centre
-of 3 places the prior cryptic phase at `m·τ ≈ 60 d` at the central 20-day
+of 3 places the prior cryptic phase at `m·τ ≈ 35 d` at the central 11.7-day
 doubling and a prior seed of `2^m = 8` infections at the renewal start. The
 genetic seeding bound pulls the lower tail of the outbreak age to sit at or
 before the most recent common ancestor.

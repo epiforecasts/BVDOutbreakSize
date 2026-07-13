@@ -6,27 +6,76 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.9.0
+
+Changes since v1.8.0.
+
+### Data
+
+- Updated data including movement flows for those in isolation.
+
+### Model
+
+- Updated the molecular-clock time estimate to use the outbreak-specific
+  BEAST X analysis (mbalaplacide2026, 139 BDBV genomes from 16 health
+  zones, ~1.1E-3 subs/site/year). The genetic TMRCA baseline moves from
+  2026-03-25 (SD 15, fixed 1.2E-3 EBOV rate) to **2026-03-15** (SD 16,
+  95 HPD 09 Feb--12 Apr) under the Skygrid coalescent prior. Added a
+  tree-prior sensitivity comparing the Exponential growth estimate
+  (2026-03-08, SD 16, 95 HPD 01 Feb--05 Apr).
+- Updated the growth-rate prior to the outbreak-specific doubling time
+  from the same analysis: centre moves from 20 d (Cuomo-Dannenburg &
+  Ghafari) to **11.7 d** (95 HPD 6.8--17.5, mbalaplacide2026), with the
+  log-SD widened from 0.15 to 0.3 to match the wider credible interval.
+
+### Documentation
+
+- Updated all prose references to the genetic bound and growth-rate prior
+  to cite the new virological.org report (v1045, mbalaplacide2026) and
+  the outbreak-specific rate and doubling time.
+- Added a tree-prior sensitivity section comparing the Skygrid and
+  Exponential growth TMRCA estimates.
+
 ## v1.8.0
 
 Changes since v1.7.0.
 
 ### Model
 
-- Split the modelled in-care occupancy into confirmed and suspected sub-
-  stocks, fit as separate prevalence series and scored against the `Tableau 6`
-  `dont confirmes` / `dont suspects` census in place of the total on the days
-  it is published (a per-day total-or-split switch). The confirmed sub-stock
-  is the confirmed subset of the occupied BVD true-case stock, carved out by
-  the in-care confirmation hazard borrowed from the lab pipeline; the suspect
-  sub-stock is the remainder. Identified only where the lab stream supplies a
-  non-zero hazard, otherwise a no-op (#344).
-- Scaled the borrowed in-care confirmation hazard by a sampled
-  confirmation-rate modifier `ρ = exp(γ_conf)`, identified by the
-  confirmed/suspected-in-care split. Admitted suspects are held for repeated
-  exclusion testing before their status settles, so in-care confirmation runs
-  slower than the community rate (`ρ < 1`); without the modifier the split was
-  forced to the borrowed community hazard and systematically over-confirmed the
-  in-care census.
+- Credited the repeat-control confirmation process in the confirmation
+  sensitivity prior. Rule-out is investigative rather than a single negative
+  PCR, so the effective sensitivity is higher than one assay draw (two controls
+  give about 0.98). The headline `test_sensitivity_model` prior moves from the
+  single-assay `Beta(10, 1.76)` (mean 0.85) to `Beta(38, 2)` (mean 0.95) on the
+  confirmed and confirmed-deaths streams. The outbreak-size estimate is robust
+  because the sensitivity enters the multiplicative ascertainment ridge
+  (`p_drc · s_test · τ_test`); the ascertainment posterior re-centres (resolves
+  the retesting/rule-out part of #374).
+- Grounded the confirmed onset-to-sample delay on the NEJM DRC 2026 cohort
+  (Akilimali et al.) as a standard part of the joint model. The onset-to-report
+  and report-to-receipt legs already convolve to onset-to-sample for confirmed
+  cases. The convolution's mean (the sum of the report and receipt leg means)
+  and median (Wilson-Hilferty of the summed leg variances) are fitted to the
+  reported 7.4 d and 4.8 d as soft Normal observations, with the reported 95%
+  credible intervals as their SDs. This grounds the otherwise-unidentified
+  laboratory-turnaround delay directly from the cohort's own uncertainty and
+  adds no latent parameter. On by default in the joint fit; the single-stream
+  and isolation fits lack the laboratory receipt leg and so do not carry it
+  (resolves #359).
+
+- Scored the confirmed-case laboratory positives as an overdispersed
+  `BetaBinomial` of the observed analysed denominator instead of a plain
+  `Binomial`. A plain `Binomial` on denominators of several hundred
+  specimens gave posterior-predictive intervals far too tight, so the
+  confirmed stream was systematically under-covered: the smooth pooled /
+  composition-linked per-window positivity does not capture the day-to-day
+  laboratory batching and within-window positivity heterogeneity the
+  confirmed counts carry. A single intra-window overdispersion `ρ`
+  (`confirmed_overdispersion_model`, weakly-informative `Beta(1, 24)`)
+  inflates each window's variance to `n·p·(1 − p)·(1 + (n − 1)·ρ)`,
+  identified across the laboratory windows, and recovers the `Binomial` as
+  `ρ → 0`. The mean structure and the composition link that identifies the
+  background `λ_bg` are unchanged.
 
 ### Documentation and infrastructure
 

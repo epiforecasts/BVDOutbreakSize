@@ -101,6 +101,56 @@ PMF is truncated back to lags `0 … nmax` and renormalised. Returns
         sd = sqrt(oa.sd^2 + ad.sd^2), oa_mean = oa.mean, ad_mean = ad.mean)
 end
 
+"""
+Wilson–Hilferty approximation to the continuous median of a `Gamma` as a
+function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`. Smooth in
+the mean and SD with no quantile inversion, so it enters a gradient-based
+likelihood cleanly, and accurate to a few percent for the shapes here. Used to
+match the confirmed onset-to-sample convolution's continuous median to the
+cohort's reported median.
+"""
+gamma_median_wh(mean::Real, sd::Real) = mean * (1 - sd^2 / (9 * mean^2))^3
+
+"""
+Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
+(Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
+onset-to-sample interval (N = 129) was estimated as a continuous Gamma through
+the `epidist` marginal model correcting for double interval censoring and right
+truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
+continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
+3.46–7.84).
+
+The confirmed onset→report→receipt convolution is grounded on its mean and
+median. The mean is the sum of the two legs' means and the variance the sum of
+their variances; the median follows by [`gamma_median_wh`](@ref). Each is fitted
+to the reported value as a Normal observation whose SD is the reported 95% CrI
+half-width over 1.96 (`mean_se`, `median_se`), so the cohort's uncertainty
+enters directly and the constraint is soft. Returns a NamedTuple
+`(; mean_obs, mean_se, median_obs, median_se)` for
+the `onset_to_sample` argument of [`bvd_joint`](@ref).
+"""
+function nejm_onset_to_sample(; mean::Real = 7.4,
+        mean_se::Real = (13.5 - 5.3) / 2 / 1.96, median::Real = 4.8,
+        median_se::Real = (7.84 - 3.46) / 2 / 1.96)
+    return (; mean_obs = mean, mean_se, median_obs = median, median_se)
+end
+
+"""
+Log-density grounding the confirmed onset-to-sample convolution on the cohort:
+soft Normal fits of the convolution's continuous mean (the sum of the report
+and receipt leg means) and continuous median (from [`gamma_median_wh`](@ref) of
+the summed leg variances) to the reported `mean_obs`/`median_obs` with SDs
+`mean_se`/`median_se`. The fixed Gaussian normalising constants are dropped.
+"""
+function onset_to_sample_logweight(report_mean::Real, report_sd::Real,
+        receipt_mean::Real, receipt_sd::Real, cfg)
+    μ = report_mean + receipt_mean
+    sd = sqrt(report_sd^2 + receipt_sd^2)
+    med = gamma_median_wh(μ, sd)
+    return -0.5 * ((cfg.mean_obs - μ) / cfg.mean_se)^2 -
+           0.5 * ((cfg.median_obs - med) / cfg.median_se)^2
+end
+
 ## --- Reproduction number ------------------------------------------------
 
 """
@@ -212,13 +262,12 @@ start, and the magnitude is independent of `r`. The composer
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.15)`, centred on Cuomo-Dannenburg & Ghafari's
-molecular-clock doubling time for this outbreak (mean 15.2–24.5 d across six
-substitution-rate assumptions, centre 20 d), equivalent to a
-`LogNormal(log(20), 0.15)` prior on the doubling time. The log-SD 0.15 reads
-the 15.2–24.5 d spread as roughly a 95% interval (log-SD ≈ 0.12) and inflates
-it a little to allow for the wide per-assumption intervals, so the prior is
-slightly inflated in SD but unbiased relative to the source. The first
+M_PRIOR_DOUBLING_DAYS), 0.28)`, with median doubling time (11.7 d)
+matching the BEAST X estimate (mbalaplacide2026, Exponential growth
+model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the asymmetric HPD as
+roughly a 95% interval (log-SD ≈ 0.24 from the HPD ratio) and slightly
+inflates it to cover the skew towards shorter doubling times, so the
+prior is modestly wider than the source but unbiased. The first
 reproduction number is then derived FORWARD from this `r` and OUR generation
 interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
@@ -229,9 +278,9 @@ under our generation interval rather than pinned by a separate `R0` prior.
 `m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)` is deliberately WIDE.
 Since `m` now counts only the CRYPTIC doublings (not the cut-off case
 total), its centre is much lower than the integral model's: with the
-≈20-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
+≈11.7-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
 days, placing the origin in the genetically-plausible window (origin roughly
-Feb–Mar). The spread keeps the cryptic duration wide.
+late Mar). The spread keeps the cryptic duration wide.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override
@@ -240,7 +289,7 @@ whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.15),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
         m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
@@ -414,7 +463,7 @@ it older; the likelihood contributes `P(read ≥ tmrca_days)`. Passing
 `tmrca_days = missing` makes the submodel a no-op.
 """
 @model function genetic_seeding_model(T::Real,
-        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 15.0)
+        tmrca_days::Union{Missing, Real}; tmrca_days_sd::Real = 16.0)
     if !ismissing(tmrca_days)
         tmrca_days ~ censored(Normal(T, tmrca_days_sd); upper = tmrca_days)
     end
@@ -860,22 +909,19 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
-PCR sensitivity prior. `Beta(10, 1.76)` is centred near a mean of about 0.85
-with a spread of roughly 0.1; being a Beta it is not symmetric and carries
-somewhat more mass toward high sensitivity. Confirmation runs on the altona
-RealStar Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA
-copies per reaction; the rapid Cepheid GeneXpert Ebola assay is
-Zaire-ebolavirus-specific and does not reliably detect Bundibugyo. The prior
-centres on a good analytical sensitivity while allowing modest downside for
-early low-viral-load specimens and field handling. Under the severe-first
-backlog model the first vintage's analysed batch is near-pure BVD (`q ≈ 1`
-when selection is strong), so the v1 positivity ≈ `s` identifies the
-sensitivity from the early data. Scales the confirmed-case stream so the
-confirmed counts reflect imperfect detection of true BVD infections.
-Returns `(; s_test)`.
+Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean of
+0.95 with a tight spread. Confirmation runs on the altona RealStar Filovirus
+Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA copies per reaction;
+the Zaire-specific GeneXpert Ebola assay does not reliably detect Bundibugyo. A
+single assay draw is sensitive to about 0.85, but a suspect is confirmed or
+ruled out through repeat control tests rather than one PCR, so the effective
+process sensitivity is higher (two controls give about 0.98) and `Beta(38, 2)`
+credits that process (issue #374). Under the severe-first backlog the first
+vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1 positivity ≈ `s`
+identifies the sensitivity from the early data. Returns `(; s_test)`.
 """
 @model function test_sensitivity_model(;
-        sensitivity_prior = Beta(10.0, 1.76))
+        sensitivity_prior = Beta(38.0, 2.0))
     s_test ~ sensitivity_prior
     return (; s_test)
 end
@@ -894,6 +940,30 @@ background `λ_bg` rather than only the BVD signal. Returns `(; spec)`.
 @model function test_specificity_model(; specificity_prior = Beta(60.0, 2.0))
     spec ~ specificity_prior
     return (; spec)
+end
+
+"""
+Confirmed-positives overdispersion prior. The confirmed positives in each
+laboratory window are scored as an overdispersed `BetaBinomial` of the
+observed analysed denominator (see [`safe_betabinomial`](@ref) and
+[`confirmed_cases_model`](@ref)) rather than a plain `Binomial`, because the
+per-window positivity `p_pos` is a smooth pooled / composition-linked curve
+that does not capture the day-to-day laboratory batching and within-window
+positivity heterogeneity the confirmed counts carry. A plain `Binomial` on
+denominators of several hundred specimens gives predictive intervals far
+too tight, so the confirmed stream is systematically under-covered. The
+intra-window correlation `ρ ∈ (0, 1)` inflates the window variance to
+`n·p·(1 − p)·(1 + (n − 1)·ρ)`, with `ρ → 0` recovering the `Binomial`. The
+default `Beta(1, 24)` (mean ≈ 0.04, 90% ≈ 0.002–0.12) is weakly informative:
+it favours a small overdispersion and shrinks toward the `Binomial` when the
+data support it, while a single scalar identified across the laboratory
+windows lets the confirmed positives themselves set the spread. Returns
+`(; ρ)`.
+"""
+@model function confirmed_overdispersion_model(;
+        overdispersion_prior = Beta(1.0, 24.0))
+    ρ ~ overdispersion_prior
+    return (; ρ)
 end
 
 """

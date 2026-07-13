@@ -107,7 +107,7 @@ function build_fit_specs(obs;
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
     end
@@ -115,7 +115,8 @@ function build_fit_specs(obs;
     ## One joint re-fit on the live data, with hooks to override the deaths
     ## submodel and the molecular-clock bound for the sensitivity analyses.
     function refit_joint_variant(; deaths = deaths_model,
-            tmrca_days = obs.tmrca_days, tmrca_days_sd = 15.0)
+            confirmed = confirmed_cases_model,
+            tmrca_days = obs.tmrca_days, tmrca_days_sd = 16.0)
         return nuts_sample(
             bvd_joint(
                 obs.n, obs.exported_cases, obs.total_deaths,
@@ -146,10 +147,11 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 deaths = deaths,
+                confirmed = confirmed,
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains,
+            samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("variant"))
     end
 
@@ -161,8 +163,9 @@ function build_fit_specs(obs;
             theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
         kwargs...)
 
-    ## Faster early-epidemic clock: common ancestor ~17 days more recent.
-    clock_alt_offset = value(Date("2026-04-11") - Date("2026-03-25"))
+    ## Exponential growth tree prior: common ancestor ~7 days earlier than
+    ## the Skygrid baseline (2026-03-08 vs 2026-03-15).
+    clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
     specs = Any[
@@ -199,7 +202,7 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains,
+                samples = samples, chains = chains, target_accept = 0.95,
                 callback = fit_callback("joint"))),
         (; id = "exports",
             kind = :chain,
@@ -280,9 +283,9 @@ function build_fit_specs(obs;
         push!(specs,
             (; id = "sens_community_delay", kind = :chain,
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
-            (; id = "sens_fast_clock", kind = :chain,
+            (; id = "sens_exp_growth_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
-                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 9.0)))
+                    tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0)))
     end
     return specs
 end

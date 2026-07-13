@@ -9,14 +9,15 @@ using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
-using Turing: @model, MCMCThreads, NUTS, sample, to_submodel
+using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
 using Turing.DynamicPPL: InitFromPrior
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
-                     NegativeBinomial, Binomial, Normal, LogNormal, Beta,
+                     NegativeBinomial, BetaBinomial, Normal,
+                     LogNormal, Beta,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
@@ -68,6 +69,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        safe_rate,
 # prior / latent submodels
        censored_delay_model, gamma_delay_model, onset_to_death_model,
+       nejm_onset_to_sample,
        generation_interval_model, rt_walk_model,
        seed_model, exponential_growth_model, infection_model,
        onset_incidence_model,
@@ -80,7 +82,8 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        background_walk_model,
        expand_vintage_rate,
        test_sensitivity_model, test_specificity_model, lab_delay_model,
-       confirmed_positivity_model, severity_enrichment_model,
+       confirmed_positivity_model, confirmed_overdispersion_model,
+       severity_enrichment_model,
        death_testing_fraction_model, death_testing_scaling_model,
        surveillance_dispersion_model, pooled_dispersion_model,
        independent_ascertainment_model, pooled_ascertainment_model,
