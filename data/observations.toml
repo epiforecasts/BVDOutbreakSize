@@ -377,9 +377,11 @@ source = "Occupancy reclassification-break days: documented, non-confounded betw
 [treatment_confirmed_incare_history]
 dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
           "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
-          "2026-06-21", "2026-06-22", "2026-06-23"]
-values = [147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192]
-source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont confirmes (NC+AC)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192 on 13-23 June. Confirmed patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history (359, 363, 376, 379, 383, 416, 361, 365, 371, 387, 408), so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+          "2026-06-21", "2026-06-22", "2026-06-23",
+          "2026-07-02", "2026-07-05", "2026-07-06", "2026-07-07", "2026-07-08"]
+values = [147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192,
+          215, 205, 218, 232, 236]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont confirmes (NC+AC)`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 147, 155, 168, 152, 161, 162, 148, 163, 196, 190, 192 on 13-23 June. Confirmed patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history (359, 363, 376, 379, 383, 416, 361, 365, 371, 387, 408), so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent. The split resumed via the `Patients en isolement (Fin J)` Tableau 7 `dont confirmes`: 215 (2 Jul, SitRep 049), 205 (5 Jul, 052), 218 (6 Jul, 053), 232 (7 Jul, 054), 236 (8 Jul, 055); 3-4 July were carried-forward tiles with no fresh split. Each closes against isolation_history (628, 646, 680, 750, 764)."
 
 # Suspect-in-care occupancy (`dont suspects`), national Ensemble. Admitted
 # patients not yet laboratory-confirmed, occupying a bed at end-of-day; the
@@ -387,9 +389,11 @@ source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. M
 [treatment_suspect_incare_history]
 dates  = ["2026-06-13", "2026-06-14", "2026-06-15", "2026-06-16",
           "2026-06-17", "2026-06-18", "2026-06-19", "2026-06-20",
-          "2026-06-21", "2026-06-22", "2026-06-23"]
-values = [212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216]
-source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont suspects`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216 on 13-23 June. Suspected (not-yet-confirmed) patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history, so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent."
+          "2026-06-21", "2026-06-22", "2026-06-23",
+          "2026-07-02", "2026-07-05", "2026-07-06", "2026-07-07", "2026-07-08"]
+values = [212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216,
+          413, 441, 462, 518, 528]
+source = "INSP situation reports 13-23 June 2026 (SitReps 030-040) `Tableau 6. Mouvement des patients dans les etablissements de soins (CTE/CT/CI)`, row `dont suspects`, national Ensemble column, read from the PDFs (data/sitrep_pdfs, fetched from the INRB-UMIE mirror): 212, 208, 208, 227, 222, 254, 213, 202, 175, 197, 216 on 13-23 June. Suspected (not-yet-confirmed) patients occupying a treatment bed at end-of-day (prevalence stock). Each day confirmes + suspects = Patients en isolement (Fin J) = isolation_history, so the split closes exactly. SitRep 029 (12 June) was not published upstream, so 12 June is absent. The split resumed via the Tableau 7 `dont suspects`: 413 (2 Jul), 441 (5 Jul), 470 (6 Jul), 518 (7 Jul), 528 (8 Jul); 6 July's `dont suspects` prints 470 but the provincial Fin J total is 680 (= 508+148+24) so the suspect stock is taken as the closing complement 680-218 = 462; 3-4 July were carried-forward tiles. Closes against isolation_history (628, 646, 680, 750, 764)."
 
 # The confirmed-case and laboratory streams are held as time series
 # only; the cut-off scalars the model uses (`confirmed_cases`,
