@@ -24,50 +24,53 @@ Changes since v1.13.0
 
 ### Model
 
-- Added a **patch (meta-population) model**, `bvd_patch_joint`, over the
-  three affected provinces (Ituri, Nord-Kivu, Sud-Kivu). Every national
-  data stream is fitted exactly as in `bvd_joint`, against the summed
-  per-patch onsets, so the national headline is unchanged in structure;
-  the spatial information enters as one extra term. Headline quantities
-  (`C_T`, `R_T`, `r`, `T`, `CFR`, `R0`, `doubling_time`) are surfaced
-  under the same names, so a patch chain drops into the existing summary
-  machinery. Uganda exports are driven by the Ituri patch alone.
-- Per-patch reproduction numbers vary in space **and** in time: a common
-  national trend (the existing `rt_walk_model`, unchanged) plus per-patch
-  deviations that sum to zero, with multivariate-normal innovations and a
-  learned cross-patch correlation (`LKJ(2)`). The deviation scale
-  (`region_drift_sd`) is sampled, so whether the provinces share one
-  temporal `Rt` shape is *estimated* rather than assumed: the limit
-  `region_drift_sd → 0` recovers a fixed `Rt` ratio between provinces.
-- The per-province confirmed cases are scored as a **composition**
-  conditional on the national total (`province_composition_model`), not as
-  a second count likelihood. They are an exact partition of the national
-  confirmed counts, so fitting them as counts alongside the national
-  stream would put the same observations into the joint density twice.
-- Between-patch importation is available (`importation_kernel`) but off by
-  default. There is no mobility data for this outbreak, and importation is
-  confounded with the secondary-patch seeds, so the intensity `ε` is
-  sampled only when a non-zero kernel is supplied.
+- The headline joint model is now a **meta-population model** over the three
+  affected provinces (Ituri, Nord-Kivu, Sud-Kivu). It is the same `bvd_joint`:
+  `n_patches` defaults to 1, which collapses it exactly onto the previous
+  single-population model (the sum-to-zero deviations vanish, there is nothing
+  to import between, and there is no per-province likelihood), so there is one
+  model rather than two. The single-patch case is fitted as the
+  `sens_no_patches` sensitivity, which is the check on the spatial structure.
+- Per-province reproduction numbers are a common national trend plus deviations
+  that sum to zero, drawn from a multivariate-normal random walk with a learned
+  cross-patch correlation. The deviation scale is sampled, so whether the
+  provinces share one temporal `Rt` shape is *estimated* rather than assumed.
+- **The per-province split is identified by the deaths.** A province's confirmed
+  case count is the product of its incidence and its case-finding, and only the
+  product is observed; the tests-analysed denominator cancels out of the
+  normalised shares, so no amount of case or laboratory data separates them.
+  Deaths are far harder to miss than cases, and the case-fatality ratio and the
+  death-confirmation probability belong to the virus and to a national
+  laboratory rather than to a province, so they cancel out of the normalised
+  death shares. The death split therefore identifies the incidence split, and
+  the case split identifies ascertainment as the residual.
+- Both splits are scored as compositions conditional on the national total, so
+  neither re-scores data the national streams already carry. The death
+  composition convolves each province's own incidence curve through the shared
+  onset-to-death and reporting delays, so the downward bias in observed CFR
+  during fast growth is predicted rather than mistaken for poor case-finding.
+- Provinces are coupled by importation (a gravity kernel weighted by destination
+  population). There is no mobility data, so the kernel is a structural
+  assumption and its intensity is weakly identified against the secondary-patch
+  seeds; that is documented rather than hidden.
 
 ### Data
 
-- Added `[province_confirmed_history]`: per-province cumulative confirmed
-  cases from the Tableau 1 spatial tables (19 vintages, 18 Jun -- 8 Jul).
-  Every vintage sums exactly to the national confirmed total.
-- Added `[province_lab_daily_history]`: per-province laboratory throughput
-  (samples analysed and positives) from section 4.3 of the situation
-  reports (18 vintages, 18 Jun -- 8 Jul), scanned by
-  `scripts/scan_province_lab.jl` (`task province-lab-data`). The scan is
-  gated on the per-province analysed counts summing exactly to the
-  national `tests_analysed_daily_history` on every date; all 18 reconcile.
-- These data show that test positivity differs sharply and persistently
-  between provinces: over the window Ituri ran 2112 tests for 671
-  positives (31.8%) against Nord-Kivu's 1340 for 74 (5.5%), a 5.8x gap
-  (~18 tests per case found in Nord-Kivu against ~3 in Ituri). The
-  provinces are testing very differently-selected pools, so per-province
-  confirmed counts are **not** proportional to per-province infections.
-  Wiring this denominator into the likelihood, which would separate
-  provincial ascertainment from provincial `Rt`, is tracked in #410.
+- Added `[province_confirmed_history]` and `[province_death_history]`:
+  per-province cumulative confirmed cases **and deaths** from Tableau 1 of the
+  situation reports (20 vintages, 15 Jun -- 8 Jul), scanned by
+  `scripts/scan_province_tableau1.jl` (`task province-tableau1`). The scan is
+  gated on the per-province figures summing exactly to the national confirmed
+  case and death totals on every date; all 20 reconcile.
+- Added `[province_lab_daily_history]`: per-province laboratory throughput from
+  section 4.3 of the situation reports (18 vintages), scanned by
+  `scripts/scan_province_lab.jl` (`task province-lab-data`), likewise gated on
+  reconciling with the national analysed series.
+- The data show that the provinces are testing very differently-selected pools
+  (Ituri 31.8% test positivity against Nord-Kivu's 5.5%), and that Nord-Kivu
+  holds a steady 8-9% of confirmed cases but 14-19% of confirmed deaths. Both
+  point the same way: Nord-Kivu is finding fewer of its cases, not transmitting
+  less.
 
 
 ## v1.13.0

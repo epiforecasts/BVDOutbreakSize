@@ -358,7 +358,7 @@ primary, carries its own deviation, and they sum to zero in every draw.
 For the log-Rt of a province relative to ITURI specifically, read the
 chain's `log_rt_contrast` instead.
 
-Expects a chain from [`bvd_patch_joint`](@ref), which stores the per-patch
+Expects a chain from [`bvd_joint`](@ref), which stores the per-patch
 quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
 `infections_T_patch`, `delta_patch`), one entry per patch.
 """
@@ -369,7 +369,7 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     absent = filter(p -> !_has_key(chn, p), required)
     isempty(absent) || error(
         "chain is missing the per-patch deterministics $(absent); it was " *
-        "not sampled from `bvd_patch_joint`.")
+        "not sampled from `bvd_joint`.")
     np = min(n_patches, length(patch_labels))
     ## `_draw_vectors` gives one vector per draw; transpose to per-patch
     ## draw vectors so each patch can be summarised independently.
@@ -381,6 +381,15 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     R_T = per_patch(:R_T_patch)
     inf_T = per_patch(:infections_T_patch)
     δ = per_patch(:delta_patch)
+    ## Case ascertainment and the Rt contrast against the primary patch are the
+    ## two quantities that must be read TOGETHER: the case composition
+    ## identifies only their product, and it is the per-province deaths that
+    ## tilt the balance between them. Reporting one without the other invites
+    ## a low provincial Rt to be read as epidemiology when it is case-finding.
+    asc = _has_key(chn, :province_ascertainment) ?
+          per_patch(:province_ascertainment) : nothing
+    contrast = _has_key(chn, :log_rt_contrast) ?
+               per_patch(:log_rt_contrast) : nothing
     df = DataFrame(
         patch = String[],
         quantity = String[],
@@ -388,11 +397,15 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
     )
     for p in 1:np
-        for (label, draws, dg) in (
-            ("Cumulative infections", C_T[p], 0),
+        rows = Any[("Cumulative infections", C_T[p], 0),
             ("Reproduction number", R_T[p], digits),
             ("Daily infections at cut-off", inf_T[p], 0),
-            ("log-Rt modifier", δ[p], digits))
+            ("log-Rt deviation from trend", δ[p], digits)]
+        contrast === nothing ||
+            push!(rows, ("log-Rt vs primary patch", contrast[p], digits))
+        asc === nothing ||
+            push!(rows, ("Relative case ascertainment", asc[p], digits))
+        for (label, draws, dg) in rows
             s = posterior_summary(draws)
             push!(df,
                 (patch_labels[p], label,

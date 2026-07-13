@@ -1,6 +1,6 @@
 ## Unit tests for the patch (meta-population) model: the multi-patch renewal
 ## primitives in src/renewal.jl, the per-patch Rt and infection models, the
-## per-province composition likelihood, and the bvd_patch_joint composer.
+## per-province composition likelihood, and the bvd_joint composer.
 
 @testitem "patch_infections: uncoupled patches match single-patch renewal" begin
     using BVDOutbreakSize: patch_infections, renewal_infections
@@ -318,7 +318,7 @@ end
     end
 end
 
-@testitem "bvd_patch_joint: fits real per-province data without double counting" begin
+@testitem "bvd_joint: fits real per-province data without double counting" begin
     using BVDOutbreakSize
     using Turing: DynamicPPL
     using Random: Xoshiro
@@ -328,7 +328,7 @@ end
 
     function build(pch)
         prov = province_increment_matrix(pch, PROVINCE_NAMES, np)
-        return bvd_patch_joint(n, np,
+        return bvd_joint(n,
             obs.exported_cases, obs.total_deaths, obs.reported_cases,
             obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
             confirmed_deaths = obs.confirmed_deaths,
@@ -352,6 +352,7 @@ end
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = obs.who_first_sitrep_days,
+            n_patches = 3,
             province_increments = prov.increments,
             province_days = prov.days,
             tmrca_days = obs.tmrca_days)
@@ -378,7 +379,7 @@ end
     @test isfinite(DynamicPPL.logjoint(build(none), vi))
 end
 
-@testitem "bvd_patch_joint: carries the bvd_joint headline quantities" tags=[:slow] begin
+@testitem "bvd_joint: carries the bvd_joint headline quantities" tags=[:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
@@ -390,12 +391,13 @@ end
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
         PROVINCE_NAMES, 3)
-    m = bvd_patch_joint(obs.n, 3,
+    m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
+        n_patches = 3,
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -447,12 +449,13 @@ end
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
         PROVINCE_NAMES, 3)
-    m = bvd_patch_joint(obs.n, 3,
+    m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
+        n_patches = 3,
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -462,8 +465,17 @@ end
 
     df = patch_summary_table(chn, 3)
     @test df isa DataFrame
-    ## Four quantities per patch, three patches.
-    @test nrow(df) == 12
+    ## Six quantities per patch, three patches: cumulative infections, Rt,
+    ## daily infections, the log-Rt deviation from the national trend, the
+    ## log-Rt contrast against the primary patch, and the relative case
+    ## ascertainment. The last two must BOTH be present: the case composition
+    ## identifies only their product, so reporting a provincial Rt without the
+    ## ascertainment beside it invites a case-finding artefact to be read as
+    ## epidemiology.
+    @test nrow(df) == 18
+    quantities = unique(df[!, "Quantity"])
+    @test "Relative case ascertainment" in quantities
+    @test "log-Rt vs primary patch" in quantities
     @test unique(df[!, "Patch"]) == ["Ituri", "Nord-Kivu", "Sud-Kivu"]
     ## The reported quantiles must be ordered, which the previous
     ## implementation's invented "median" (the midpoint of the 20-80
@@ -669,7 +681,7 @@ end
     @test nk_death_share > 1.4 * nk_case_share ## the gap that does the work
 end
 
-@testitem "bvd_patch_joint is a drop-in for bvd_joint (headline model)" tags=[:slow] begin
+@testitem "bvd_joint is a drop-in for bvd_joint (headline model)" tags=[:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
@@ -689,7 +701,7 @@ end
     provd = province_increment_matrix(obs.province_death_history,
         PROVINCE_NAMES, 3)
 
-    m = bvd_patch_joint(obs.n, 3,
+    m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         confirmed_deaths = obs.confirmed_deaths,
@@ -711,6 +723,7 @@ end
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = obs.who_first_sitrep_days,
+        n_patches = 3,
         province_increments = prov.increments, province_days = prov.days,
         province_death_increments = provd.increments,
         province_death_days = provd.days,
@@ -740,4 +753,73 @@ end
     for q in (:C_T, :R0, :r0, :doubling_time, :CFR, :p_drc, :p_uganda)
         @test all(isfinite, vec(Array(chn[q])))
     end
+end
+
+@testitem "bvd_joint: n_patches = 1 turns the spatial structure off cleanly" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## There is ONE model, not two. The patch machinery is a strict
+    ## generalisation: with a single patch the sum-to-zero deviations vanish,
+    ## the importation kernel has nothing to couple, and there are no
+    ## composition terms -- so the model collapses exactly onto the
+    ## single-population one. That is what lets the old bvd_joint be retired
+    ## rather than maintained alongside.
+    ##
+    ## The failure this guards against is a QUIET one: if the deviation
+    ## machinery still sampled with one patch, it would add prior-only
+    ## dimensions the likelihood never touches, and nothing would look wrong.
+    obs = load_observations()
+    m1 = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
+
+    ks = Set(string(k) for k in keys(DynamicPPL.VarInfo(Xoshiro(1), m1)))
+    has(s) = any(k -> occursin(s, k), ks)
+
+    ## None of the patch machinery may be sampled with a single patch.
+    @test !has("ε") && !has("epsilon")     ## nothing to import between
+    @test !has("seed_fraction")            ## no secondary patch to seed
+    @test !has("σ_δ")                      ## deviations are identically zero
+    @test !has("σ_level")
+    @test !has("Ω_L")                      ## no cross-patch correlation
+    @test !has("z_drift")
+    @test !has("z_level")
+    @test !has("composition")              ## no per-province likelihood
+end
+
+@testitem "bvd_joint: province data with n_patches = 1 is an error" begin
+    using BVDOutbreakSize
+    using Turing: DynamicPPL
+    using Random: Xoshiro
+
+    ## The silent failure mode: per-province data supplied but n_patches left
+    ## at its default of 1. The compositions would be scored against a single
+    ## patch holding the entire national total, the spatial structure would
+    ## quietly vanish, and the fit would look perfectly healthy. This exact
+    ## mistake was made once already, by a rename that dropped the argument.
+    obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+
+    ## The guard lives in the model body, so it fires on EVALUATION, not on
+    ## construction -- which is the right place: it is the fit that would be
+    ## silently wrong.
+    bad = bvd_joint(obs.n, obs.exported_cases,
+        obs.total_deaths, obs.reported_cases, obs.exports_deaths,
+        obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        province_increments = prov.increments,
+        province_days = prov.days,
+        tmrca_days = obs.tmrca_days)
+    @test_throws ErrorException DynamicPPL.VarInfo(Xoshiro(1), bad)
 end

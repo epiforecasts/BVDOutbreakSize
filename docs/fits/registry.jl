@@ -284,7 +284,54 @@ function build_fit_specs(obs;
         obs.province_death_history, PROVINCE_NAMES, 3)
 
     specs = Any[
+        ## HEADLINE FIT. The patch (meta-population) model IS the joint: with
+        ## `n_patches = 1` it collapses exactly onto the single-population
+        ## model (the sum-to-zero deviations vanish, no importation, no
+        ## composition terms), so there is one model rather than two. The
+        ## headline runs it over the three affected provinces.
         (; id = "joint",
+            kind = :chain,
+            thunk = () -> nuts_sample(
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    confirmed_deaths = obs.confirmed_deaths,
+                    recovered_cases = obs.recovered_cases,
+                    deaths_history = obs.deaths_history,
+                    reported_history = obs.reported_history,
+                    confirmed_history = obs.confirmed_history,
+                    confirmed_deaths_history = obs.confirmed_deaths_history,
+                    lab_history = obs.lab_history,
+                    lab_daily_history = obs.lab_daily_history,
+                    suspected_daily_history = obs.suspected_daily_history,
+                    suspected_daily_deaths_history =
+                    obs.suspected_daily_deaths_history,
+                    isolation_history = obs.isolation_history,
+                    bed_capacity_history = obs.bed_capacity_history,
+                    recovered_history = obs.recovered_history,
+                    treatment_admissions_history =
+                    obs.treatment_admissions_history,
+                    treatment_deaths_history = obs.treatment_deaths_history,
+                    treatment_ruleout_history = obs.treatment_ruleout_history,
+                    treatment_absconded_history =
+                    obs.treatment_absconded_history,
+                    occupancy_break_days = obs.occupancy_break_days,
+                    export_case_days = obs.export_case_days,
+                    export_death_days = obs.export_death_days,
+                    breakpoint = breakpoint,
+                    n_patches = 3,
+                    province_increments = patch_prov.increments,
+                    province_days = patch_prov.days,
+                    province_death_increments = patch_prov_deaths.increments,
+                    province_death_days = patch_prov_deaths.days,
+                    tmrca_days = obs.tmrca_days);
+                samples = samples, chains = chains, target_accept = 0.95,
+                callback = fit_callback("joint"))),
+        ## SENSITIVITY: the same model with the spatial structure turned OFF
+        ## (`n_patches` defaults to 1). This is the check on the headline --
+        ## if the patch structure were distorting the national fit, the two
+        ## C_T posteriors would part company.
+        (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(
                 bvd_joint(
@@ -329,8 +376,9 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
+<<<<<<< HEAD
                 samples = samples, chains = chains, target_accept = 0.90,
-                callback = fit_callback("joint"))),
+                callback = fit_callback("sens_no_patches"))),
         ## The patch (meta-population) fit. Registered so that it is fitted
         ## end-to-end in CI like every other stream: the two defects that the
         ## patch model shipped with (a seed prior that forced the provincial
@@ -338,44 +386,6 @@ function build_fit_specs(obs;
         ## inside the model body) were invisible to the unit tests and only
         ## surfaced on a real fit. A standing fit makes the
         ## posterior-predictive check a gate rather than a manual step.
-        (; id = "patch",
-            kind = :chain,
-            thunk = () -> nuts_sample(
-                bvd_patch_joint(
-                    obs.n, 3, obs.exported_cases, obs.total_deaths,
-                    obs.reported_cases, obs.exports_deaths,
-                    obs.confirmed_cases, obs.tests_analysed;
-                    confirmed_deaths = obs.confirmed_deaths,
-                    recovered_cases = obs.recovered_cases,
-                    deaths_history = obs.deaths_history,
-                    reported_history = obs.reported_history,
-                    confirmed_history = obs.confirmed_history,
-                    confirmed_deaths_history = obs.confirmed_deaths_history,
-                    lab_history = obs.lab_history,
-                    lab_daily_history = obs.lab_daily_history,
-                    suspected_daily_history = obs.suspected_daily_history,
-                    suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    isolation_history = obs.isolation_history,
-                    bed_capacity_history = obs.bed_capacity_history,
-                    recovered_history = obs.recovered_history,
-                    treatment_admissions_history =
-                    obs.treatment_admissions_history,
-                    treatment_deaths_history = obs.treatment_deaths_history,
-                    treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history =
-                    obs.treatment_absconded_history,
-                    occupancy_break_days = obs.occupancy_break_days,
-                    export_case_days = obs.export_case_days,
-                    export_death_days = obs.export_death_days,
-                    breakpoint = breakpoint,
-                    province_increments = patch_prov.increments,
-                    province_days = patch_prov.days,
-                    province_death_increments = patch_prov_deaths.increments,
-                    province_death_days = patch_prov_deaths.days,
-                    tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.95,
-                callback = fit_callback("patch"))),
         (; id = "exports",
             kind = :chain,
             thunk = () -> nuts_sample(

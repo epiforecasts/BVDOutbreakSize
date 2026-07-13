@@ -1317,6 +1317,27 @@ scales and the correlation matrix.
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
+    ## SINGLE PATCH: the deviations are sum-to-zero across the patches, so with
+    ## one patch delta is identically zero and the patch Rt IS the national
+    ## walk. None of the deviation machinery is then identified -- sampling it
+    ## would add prior-only dimensions the likelihood never touches. Skip it
+    ## entirely, so `n_patches = 1` collapses this model exactly onto the
+    ## single-population one. This is the switch that turns the patch structure
+    ## off.
+    if n_patches == 1
+        Tp1 = eltype(Rt_national)
+        δ_patch1 = zeros(Tp1, 1, n)
+        Rt_matrix1 = zeros(Tp1, 1, n)
+        @inbounds for t in 1:n
+            Rt_matrix1[1, t] = Rt_national[t]
+        end
+        return (; Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
+            δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
+            σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
+            Ω = ones(Tp1, 1, 1), sigma_rw = rt_state.sigma_rw,
+            log_R0 = rt_state.log_R0,
+            intervention_effect = rt_state.intervention_effect)
+    end
     ## Deviation scales (one per patch) and their cross-patch correlation.
     ## `LKJCholesky` samples the Cholesky FACTOR directly, so the
     ## decomposition never lands on the AD tape.
@@ -1509,8 +1530,14 @@ patch chain carries the same headline quantities as a single-patch one.
     τ_obs = n - renewal_start
     seed0_primary = seed_at_renewal_start(growth_state.C_T)
     seed_primary = seed_infections(seed0_primary, r_clock, renewal_start)
-    seed_fraction ~ product_distribution(
-        fill(seed_fraction_prior, max(n_patches - 1, 1)))
+    ## With one patch there are no secondary patches to seed, so the seed
+    ## fraction is not sampled: it would be a prior-only dimension.
+    if n_patches > 1
+        seed_fraction ~ product_distribution(
+            fill(seed_fraction_prior, n_patches - 1))
+    else
+        seed_fraction = Float64[]
+    end
     Tp = promote_type(eltype(Rt_matrix), eltype(g), typeof(float(r_clock)),
         eltype(seed_fraction), typeof(float(seed0_primary)))
     seeds_matrix = zeros(Tp, n_patches, renewal_start)

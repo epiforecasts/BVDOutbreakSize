@@ -3540,6 +3540,7 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 forecast_flows_fig #hide
 
 
+
 # ### Symptom-onset nowcast and forecast results
 #
 # The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
@@ -3656,33 +3657,38 @@ onset_forecast_fig #hide
 
 
 
-# ## Spatial structure: the patch model
+# ## Spatial structure
+||||||| parent of 8e88d2eb (refactor: the patch model IS the joint; one model, not two)
+# ## Spatial structure
+
 #
-# The model above treats the outbreak as one well-mixed population. It is not:
-# it began in Ituri and spread to Nord-Kivu and, marginally, Sud-Kivu. The
-# patch model (`bvd_patch_joint`) runs a renewal equation per province, coupled
-# by importation, and fits every national stream against the summed patches.
-# It carries the same deterministics as the single-patch joint, so everything
-# above could be produced from it unchanged; here we report what it adds.
+# The headline model is a meta-population: a renewal equation per province
+# (Ituri, Nord-Kivu, Sud-Kivu), coupled by importation, with every national
+# stream fitted against the summed patches. Setting `n_patches = 1` collapses
+# it exactly onto a single well-mixed population, which is the sensitivity fit
+# below; there is one model, not two.
 #
-# ### Why the per-province split is hard
+# Per-province reproduction numbers are a common national trend plus deviations
+# that sum to zero, drawn from a multivariate-normal random walk with a learned
+# cross-patch correlation. The deviation scale is sampled, so whether the
+# provinces share one temporal shape is estimated rather than assumed.
 #
-# A province's confirmed case count is the *product* of how many people it
-# infected and how well it finds them. Only the product is observed, so a
-# province with fewer infections but better case-finding is indistinguishable
-# from one with more infections and worse case-finding. No amount of case or
-# testing data separates them: the tests-analysed denominator cancels out of
-# the normalised shares.
+# ### Identifying the split
 #
-# Deaths break the deadlock. They are far harder to miss than cases, and the
-# case-fatality ratio and the death-confirmation probability belong to the
-# virus and to a national laboratory, not to a province — so they cancel out of
-# the normalised *death* shares, leaving a split driven by provincial incidence
-# alone. The deaths pin incidence; the case split then identifies ascertainment
-# as the residual.
+# A province's confirmed case count is the product of its incidence and its
+# case-finding, and only the product is observed. Case and testing data cannot
+# separate them: the tests-analysed denominator cancels out of the normalised
+# shares. Deaths can. They are far harder to miss than cases, and the
+# case-fatality ratio and death-confirmation probability belong to the virus and
+# to a national laboratory rather than to a province, so they cancel out of the
+# normalised death shares. The death split therefore identifies the incidence
+# split, and the case split identifies ascertainment as the residual.
 #
-# The signal is large and present at every vintage: Nord-Kivu holds roughly 9%
-# of the confirmed cases but 14% of the confirmed deaths.
+# Both splits are scored as compositions conditional on the national total, so
+# neither re-scores data the national streams already carry. The death
+# composition convolves each province's own incidence curve through the shared
+# onset-to-death and reporting delays, so the downward bias in observed CFR
+# during fast growth is predicted rather than mistaken for poor case-finding.
 
 province_split_table = DataFrame(
     Province = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
@@ -3699,44 +3705,46 @@ province_split_table.:"Confirmed CFR" = round.(
     digits = 1);
 province_split_table
 
-# A naive reading of those CFRs would overstate the ascertainment gap. In a
-# fast-growing epidemic the observed CFR is biased *down*, because recent cases
-# have not yet died — and Ituri grows faster than Nord-Kivu, so part of the gap
-# is right-censoring rather than case-finding. The model convolves each
-# province's own incidence curve through the shared onset-to-death and
-# reporting delays, so the censoring is predicted from the growth curves and
-# only the residual is attributed to ascertainment.
+# ### Results by location
 #
-# ### What the patch model estimates
+# Cumulative infections, the reproduction number at the cut-off, the log-Rt
+# deviation from the national trend and against Ituri, and the relative case
+# ascertainment, per province. The last two must be read together: the case
+# composition identifies only their product, and it is the deaths that tilt the
+# balance between them.
 
-patch_table = patch_summary_table(chn_patch, 3);
+patch_table = patch_summary_table(chn_joint, 3);
 patch_table
 
-# The relative case ascertainment, and the provincial reproduction numbers
-# measured against Ituri. These must be read together: the composition
-# identifies only their product, so a low `Rt` contrast with a high
-# ascertainment is observationally equivalent to the reverse. The deaths are
-# what tilt the balance between them.
+# The spatial hyperparameters. `region_drift_sd` is the scale of the deviation
+# walk: near zero the provinces share one temporal Rt shape. The prior admits
+# real divergence (a 31% prior probability that the Ituri/Nord-Kivu Rt ratio
+# moves by more than 25% over the window), so a shrunken posterior is a finding
+# rather than an artefact. The cross-patch correlation is reported for
+# completeness but is largely prior-driven: with three patches and one carrying
+# almost no signal, it is not identified.
 
-patch_ascertainment_table = summary_table(chn_patch,
-    [:province_ascertainment_sd, :region_sd, :region_corr_primary_secondary];
+spatial_hyper_table = summary_table(chn_joint,
+    [:region_sd, :region_drift_sd, :region_corr_primary_secondary,
+        :province_ascertainment_sd];
     digits = 3,
-    labels = Dict(
-        :province_ascertainment_sd => "Ascertainment spread (log SD)",
-        :region_sd => "Rt deviation spread (log SD)",
-        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation"));
-patch_ascertainment_table
+    labels = Dict(:region_sd => "Rt deviation spread",
+        :region_drift_sd => "Rt deviation drift",
+        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+        :province_ascertainment_sd => "Ascertainment spread"));
+spatial_hyper_table
 
-# ### Does the national headline move?
+# ### Sensitivity: turning the spatial structure off
 #
-# The patch model is a different generative story, so the headline outbreak
-# size is a real check on it rather than a restatement: the national streams
-# are fitted against the summed patches, and if the spatial structure were
-# distorting the national fit it would show up here.
+# The same model with `n_patches = 1`. The patch model is a different
+# generative story, so the national outbreak size is a genuine check on it: if
+# the spatial structure were distorting the national fit, the two posteriors
+# would part company.
 
-patch_vs_joint = comparison_table(posterior_C_patch;
-    reference = posterior_C_joint);
-patch_vs_joint
+spatial_sensitivity_table = streams_table(
+    "Patch model (headline)" => posterior_C_joint,
+    "No spatial structure" => posterior_C_no_patches);
+spatial_sensitivity_table
 
 
 # ## Saving results
