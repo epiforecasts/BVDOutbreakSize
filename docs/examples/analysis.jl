@@ -1355,13 +1355,11 @@ cfr_prior_fig #hide
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$. The stay lives entirely in the
 # discharge flows, each an admission stream convolved with its outcome density,
 # so one inflow and one set of outcome timings generate the bed stock, the
-# discharge flows and the demand together. This is the same accounting a ward
-# does at the start of each day — last night's patients plus today's arrivals
-# minus today's departures. Because the occupancy accumulates admissions over the
-# stay, it is a smooth integral of the infection signal, which is why a high,
-# sustained bed stock informs the reproduction number, and why anything in the
-# occupancy that is not infection, such as an overnight reclassification of who is
-# counted, has to be modelled rather than left to bend the transmission estimate.
+# discharge flows and the demand together. The occupancy accumulates admissions
+# over the stay, so it is a smooth integral of the infection signal: a high,
+# sustained bed stock informs the reproduction number, and anything in the
+# occupancy that is not infection, such as an overnight reclassification of who
+# is counted, is modelled rather than left to bend the transmission estimate.
 #
 # In-care deaths combine the two labels: a true case who dies before its test
 # returns is a suspected death and one who dies after is a confirmed death, and
@@ -1426,11 +1424,10 @@ cfr_prior_fig #hide
 #
 # Cohort tracking is needed because deaths and recoveries are observed combined
 # across the two labels, so the data do not say which departing patients had
-# already been confirmed. Draining a single confirmed running balance at the
-# pool-average discharge rate over-attributes confirmed departures whenever a
-# true case dies before its test returns; carrying the confirmation and stay
-# clocks separately excludes those fast-death cases from the confirmed pool
-# exactly. The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t -
+# already been confirmed. Carrying the confirmation and stay clocks separately
+# excludes cases that die before their test returns from the confirmed pool,
+# which a single pool-average discharge rate would over-attribute. The suspected
+# sub-stock is the remainder $O_{\text{susp},t} = D_t -
 # O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with
 # the non-case occupancy awaiting rule-out, and the abscond outflow drains this
 # suspected stock at the daily fraction $\kappa$. Recoveries among the confirmed

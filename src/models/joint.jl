@@ -187,19 +187,15 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
-    ## Confirmed-case lab pipeline: run (in predictive mode when no confirmed
-    ## data) so the treatment model can borrow the daily testing intensity and
-    ## positivity for the in-care confirmation overlay. The confirmation hazard
-    ## `τ_test · p_pos` is a no-op (zero) without it, but the standalone fit
-    ## conditions on the confirmed stream so the in-care confirmed sub-stock is
-    ## identified against real data.
+    ## Confirmed-case lab pipeline, run so the treatment model can borrow the
+    ## daily testing intensity and positivity for the in-care confirmation
+    ## overlay.
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history, tests_analysed))
-    ## Daily in-care confirmation hazard: the scalar testing intensity times the
-    ## per-day positivity expanded onto the grid.
+    ## In-care confirmation hazard `τ_test · p_pos` on the daily grid.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
@@ -554,21 +550,12 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
-    ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
-    ## length-of-stay survival into a latent bed demand, soft-capped at the bed
-    ## capacity the implied-capacity series pins (see
-    ## [`treatment_flow_model`](@ref)). The non-BVD rule-out stay is a
-    ## separate parameter from the lab-turnaround `receipt_pmf`.
-    ## Treatment-centre patient flow: occupancy plus the in-care outcome flows
-    ## (admissions, in-care deaths, rule-outs, absconded), with the in-care
-    ## fatality CFR_iso (a modifier on the infection CFR) identified by the
-    ## in-care death flow. The Tableau 6 flow histories are optional refinements
-    ## (empty → no-op).
-    ## The occupancy split borrows the daily in-care confirmation hazard
-    ## `τ_test · p_pos` from the confirmed lab pipeline (`confirmed_state`) and
-    ## carves the occupied true-case stock into a confirmed and a suspect
-    ## sub-stock, scored against the Tableau 6 `dont confirmes` / `dont suspects`
-    ## census on the days they are present (a per-day total-OR-split switch). The
+    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)): occupancy
+    ## plus the in-care outcome flows, with the in-care fatality CFR_iso
+    ## identified by the in-care death flow. The occupancy split borrows the
+    ## in-care confirmation hazard `τ_test · p_pos` from the confirmed pipeline to
+    ## carve the occupied true-case stock into confirmed and suspect sub-stocks,
+    ## scored against the Tableau 6 `dont confirmés` / `dont suspects` census. The
     ## known DHIS2 harmonisation days carry the overnight total reporting break.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
@@ -705,9 +692,9 @@ death-confirmation positivity (`death_confirmation`).
     isolation_admission := treatment_state.p_iso
     isolation_bvd_admission := treatment_state.p_iso_bvd
     isolation_severity := treatment_state.δ_iso
-    ## BVD bed stay is now the outcome mixture; `isolation_bvd_los_mean`
-    ## reports the mixture mean (overall length-of-stay), with the death and
-    ## recovery branch means surfaced separately.
+    ## BVD bed stay outcome mixture: `isolation_bvd_los_mean` is the mixture
+    ## mean (overall length-of-stay), with the death and recovery branch means
+    ## surfaced separately.
     isolation_bvd_los_mean := treatment_state.overall_los
     isolation_death_los_mean := treatment_state.death_los_mean
     isolation_recovery_los_mean := treatment_state.recovery_los_mean
