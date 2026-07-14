@@ -175,6 +175,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
         :incare_cfr => "in-care fatality (CFR_iso)",
         :incare_cfr_modifier => "in-care fatality log-odds modifier",
+        :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
         Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");

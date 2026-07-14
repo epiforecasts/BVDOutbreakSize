@@ -194,6 +194,10 @@ function build_fit_specs(obs;
                     treatment_deaths_history = obs.treatment_deaths_history,
                     treatment_ruleout_history = obs.treatment_ruleout_history,
                     treatment_absconded_history = obs.treatment_absconded_history,
+                    treatment_confirmed_incare_history =
+                    obs.treatment_confirmed_incare_history,
+                    treatment_suspect_incare_history =
+                    obs.treatment_suspect_incare_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     export_case_days = obs.export_case_days,
                     export_death_days = obs.export_death_days,
@@ -202,7 +206,7 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.95,
+                samples = samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         (; id = "exports",
             kind = :chain,

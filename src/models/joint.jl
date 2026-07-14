@@ -160,11 +160,19 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
+        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
+        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
+        confirmed_history = (; days = Int[], counts = Int[]),
+        confirmed_cases::Union{Missing, Integer} = missing,
+        lab_history = (; days = Int[], counts = Int[]),
+        lab_daily_history = (; days = Int[], counts = Int[]),
+        tests_analysed::Union{Missing, Integer} = missing,
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
+        confirmed = confirmed_cases_model,
         treatment = treatment_flow_model,
         cfr = cfr_model(),
         dispersion = surveillance_dispersion_model(),
@@ -179,6 +187,16 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
+    ## Confirmed-case lab pipeline, run so the treatment model can borrow the
+    ## daily testing intensity and positivity for the in-care confirmation
+    ## overlay.
+    confirmed_state ~ to_submodel(
+        confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
+        p_drc, cases_state.bg_daily, cases_state.τ_test,
+        cases_state.bvd_reports_daily;
+        lab_history, lab_daily_history, tests_analysed))
+    ## In-care confirmation hazard `τ_test · p_pos` on the daily grid.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, cfr_state.CFR;
@@ -187,7 +205,10 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
         absconded_history = treatment_absconded_history,
-        occupancy_break_days = occupancy_break_days))
+        confirmed_incare_history = treatment_confirmed_incare_history,
+        suspect_incare_history = treatment_suspect_incare_history,
+        occupancy_break_days = occupancy_break_days,
+        conf_hazard_daily = conf_hazard_daily))
 end
 
 """
@@ -393,6 +414,8 @@ death-confirmation positivity (`death_confirmation`).
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
+        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
+        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
@@ -527,16 +550,14 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
-    ## Isolation/treatment-bed occupancy: the suspect inflow carried through a
-    ## length-of-stay survival into a latent bed demand, soft-capped at the bed
-    ## capacity the implied-capacity series pins (see
-    ## [`treatment_flow_model`](@ref)). The non-BVD rule-out stay is a
-    ## separate parameter from the lab-turnaround `receipt_pmf`.
-    ## Treatment-centre patient flow: occupancy plus the in-care outcome flows
-    ## (admissions, in-care deaths, rule-outs, absconded), with the in-care
-    ## fatality CFR_iso (a modifier on the infection CFR) identified by the
-    ## in-care death flow. The Tableau 6 flow histories are optional refinements
-    ## (empty → no-op).
+    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)): occupancy
+    ## plus the in-care outcome flows, with the in-care fatality CFR_iso
+    ## identified by the in-care death flow. The occupancy split borrows the
+    ## in-care confirmation hazard `τ_test · p_pos` from the confirmed pipeline to
+    ## carve the occupied true-case stock into confirmed and suspect sub-stocks,
+    ## scored against the Tableau 6 `dont confirmés` / `dont suspects` census. The
+    ## known DHIS2 harmonisation days carry the overnight total reporting break.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
         cases_state.bg_daily, p_drc, deaths_state.CFR;
@@ -545,7 +566,10 @@ death-confirmation positivity (`death_confirmation`).
         deaths_history = treatment_deaths_history,
         ruleout_history = treatment_ruleout_history,
         absconded_history = treatment_absconded_history,
+        confirmed_incare_history = treatment_confirmed_incare_history,
+        suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
+        conf_hazard_daily = conf_hazard_daily,
         k_external = k_isolation))
     ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
     ## daily confirmed cases (the confirmed-and-discharged subset, not all
@@ -655,6 +679,11 @@ death-confirmation positivity (`death_confirmation`).
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
                                  treatment_state.expected_isolation)
+    ## Cut-off occupancy split: the confirmed-in-care and suspect-in-care
+    ## sub-stock prevalences carved from the occupied true-case stock by the
+    ## confirmation overlay.
+    expected_confirmed_incare_T := treatment_state.expected_confirmed_incare
+    expected_suspect_incare_T := treatment_state.expected_suspect_incare
     ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
     expected_admissions_T := treatment_state.expected_admissions
     expected_incare_deaths_T := treatment_state.expected_incare_deaths
@@ -663,9 +692,9 @@ death-confirmation positivity (`death_confirmation`).
     isolation_admission := treatment_state.p_iso
     isolation_bvd_admission := treatment_state.p_iso_bvd
     isolation_severity := treatment_state.δ_iso
-    ## BVD bed stay is now the outcome mixture; `isolation_bvd_los_mean`
-    ## reports the mixture mean (overall length-of-stay), with the death and
-    ## recovery branch means surfaced separately.
+    ## BVD bed stay outcome mixture: `isolation_bvd_los_mean` is the mixture
+    ## mean (overall length-of-stay), with the death and recovery branch means
+    ## surfaced separately.
     isolation_bvd_los_mean := treatment_state.overall_los
     isolation_death_los_mean := treatment_state.death_los_mean
     isolation_recovery_los_mean := treatment_state.recovery_los_mean
@@ -677,6 +706,9 @@ death-confirmation positivity (`death_confirmation`).
     incare_cfr := treatment_state.CFR_iso
     incare_cfr_modifier := treatment_state.β_iso
     abscond_fraction := treatment_state.abscond_frac
+    ## In-care confirmation-rate modifier ρ on the borrowed community
+    ## confirmation hazard, identified by the confirmed/suspected-in-care split.
+    incare_confirm_modifier := treatment_state.incare_confirm_modifier
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean

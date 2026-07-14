@@ -39,6 +39,9 @@ length-of-stay submodel), `bed_capacity_history` from the implied bed
 capacity (occupancy / reported occupancy rate),
 `recovered_history` from the cumulative recovered-among-confirmed series
 ("cumul guéris"),
+`treatment_confirmed_incare_history` and `treatment_suspect_incare_history`
+from the Tableau 6 occupancy split (`dont confirmes (NC+AC)` and `dont
+suspects`, two prevalence sub-stocks that sum to the total occupancy),
 `tests_received_history`),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
@@ -165,6 +168,25 @@ function load_observations(
     treatment_deaths_history = history("treatment_deaths_history")
     treatment_ruleout_history = history("treatment_ruleout_history")
     treatment_absconded_history = history("treatment_absconded_history")
+    ## Post-cutoff start-of-day in-bed count (Tableau 6 "Patients au lit
+    ## (J-1)", national): the bed stock at the start of each report day. The
+    ## treatment-flow submodel differences it against the previous day's
+    ## occupancy to identify the between-report DHIS2 reclassification days and
+    ## centre a fitted break-step prior, accumulating the sampled steps into a
+    ## cumulative offset added to the modelled occupancy mean, so the modelled
+    ## occupancy tracks the reclassification without bending Rt while still
+    ## partitioning each step into reporting-artifact vs real demand. Optional:
+    ## an empty block leaves the offset at zero, a no-op.
+    ## Tableau 6 occupancy split (13-23 June): the `dont confirmes (NC+AC)` and
+    ## `dont suspects` sub-rows of the `Patients en isolement (Fin J)` stock.
+    ## Census (prevalence) sub-stocks, not flows: each is the count of that
+    ## class of patient occupying a bed at end-of-day, and the two sum to the
+    ## total occupancy (= `isolation_history`) exactly. On the days they are
+    ## present the treatment-flow submodel scores the two sub-stocks in place of
+    ## the total occupancy (a per-day total-OR-split switch); an absent or empty
+    ## block falls back to the total-occupancy likelihood and is a no-op.
+    treatment_confirmed_incare_history = history("treatment_confirmed_incare_history")
+    treatment_suspect_incare_history = history("treatment_suspect_incare_history")
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -217,6 +239,9 @@ function load_observations(
         treatment_deaths_history = treatment_deaths_history,
         treatment_ruleout_history = treatment_ruleout_history,
         treatment_absconded_history = treatment_absconded_history,
+        treatment_confirmed_incare_history =
+        treatment_confirmed_incare_history,
+        treatment_suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
