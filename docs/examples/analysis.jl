@@ -3716,20 +3716,20 @@ province_split_table
 patch_table = patch_summary_table(chn_joint, 3);
 patch_table
 
-# The spatial hyperparameters. `region_drift_sd` is the scale of the deviation
-# walk: near zero the provinces share one temporal Rt shape. The prior admits
-# real divergence (a 31% prior probability that the Ituri/Nord-Kivu Rt ratio
-# moves by more than 25% over the window), so a shrunken posterior is a finding
-# rather than an artefact. The cross-patch correlation is reported for
-# completeness but is largely prior-driven: with three patches and one carrying
-# almost no signal, it is not identified.
+# The spatial hyperparameters. The per-province deviation drift is reported in
+# the table above, being a per-location quantity: near zero the provinces share
+# one temporal Rt shape. The prior admits real divergence (a 31% prior
+# probability that the Ituri/Nord-Kivu Rt ratio moves by more than 25% over the
+# window), so a shrunken posterior is a finding rather than an artefact. The
+# cross-patch correlation is reported for completeness but is largely
+# prior-driven: with three patches and one carrying almost no signal, it is not
+# identified.
 
 spatial_hyper_table = summary_table(chn_joint,
-    [:region_sd, :region_drift_sd, :region_corr_primary_secondary,
+    [:region_sd, :region_corr_primary_secondary,
         :province_ascertainment_sd];
     digits = 3,
     labels = Dict(:region_sd => "Rt deviation spread",
-        :region_drift_sd => "Rt deviation drift",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
         :province_ascertainment_sd => "Ascertainment spread"));
 spatial_hyper_table

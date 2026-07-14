@@ -64,7 +64,18 @@ function summary_table(chn, params::AbstractVector{Symbol};
     ) begin
         let df = _
             for p in params
-                s = posterior_summary(_draws(chn, p))
+                d = _draws(chn, p)
+                ## A VECTOR-valued deterministic (one entry per patch, or a
+                ## daily trajectory) reaches here as a vector of vectors, and
+                ## `quantile` then fails deep inside with a cryptic
+                ## `isfinite(::Vector)` MethodError at render time. Say what is
+                ## actually wrong: this table is for scalars, and a per-patch
+                ## quantity belongs in `patch_summary_table`.
+                eltype(d) <: Number || error(
+                    "summary_table: `$(p)` is vector-valued, not a scalar. " *
+                    "Per-patch quantities go in `patch_summary_table`; daily " *
+                    "trajectories are read with `_draw_vectors`.")
+                s = posterior_summary(d)
                 push!(df,
                     (get(labels, p, string(p)),
                         round(s.lo90; digits), round(s.lo60; digits),
@@ -388,6 +399,11 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     ## a low provincial Rt to be read as epidemiology when it is case-finding.
     asc = _has_key(chn, :province_ascertainment) ?
           per_patch(:province_ascertainment) : nothing
+    ## The deviation-walk scale is PER PATCH, so it belongs here rather than in
+    ## a table of scalar hyperparameters. Near zero means that province's Rt
+    ## tracks the national trend; away from zero it is pulling away from it.
+    drift = _has_key(chn, :region_drift_sd) ?
+            per_patch(:region_drift_sd) : nothing
     contrast = _has_key(chn, :log_rt_contrast) ?
                per_patch(:log_rt_contrast) : nothing
     df = DataFrame(
@@ -403,6 +419,8 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
             ("log-Rt deviation from trend", δ[p], digits)]
         contrast === nothing ||
             push!(rows, ("log-Rt vs primary patch", contrast[p], digits))
+        drift === nothing ||
+            push!(rows, ("Rt deviation drift", drift[p], 3))
         asc === nothing ||
             push!(rows, ("Relative case ascertainment", asc[p], digits))
         for (label, draws, dg) in rows

@@ -96,6 +96,15 @@ is `:chain` for the headline joint and single-stream fits or `:frozen` for the
 frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
 sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
+## Sampler settings, overridable from the environment. A full render refits
+## thirteen models at 1000x2, which is hours -- too slow to use the docs build
+## as a check that the pages still render. `BVD_FIT_SAMPLES=60 task docs-main`
+## exercises the whole render path (every chain key the pages read, every table
+## and plot call) in minutes. The draws are useless for inference and the
+## content hash changes, so a short run never pollutes the real fit cache.
+default_samples() = parse(Int, get(ENV, "BVD_FIT_SAMPLES", "1000"))
+default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
+
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
@@ -376,7 +385,6 @@ function build_fit_specs(obs;
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
                     tmrca_days = obs.tmrca_days);
-<<<<<<< HEAD
                 samples = samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("sens_no_patches"))),
         ## The patch (meta-population) fit. Registered so that it is fitted

@@ -465,17 +465,18 @@ end
 
     df = patch_summary_table(chn, 3)
     @test df isa DataFrame
-    ## Six quantities per patch, three patches: cumulative infections, Rt,
+    ## Seven quantities per patch, three patches: cumulative infections, Rt,
     ## daily infections, the log-Rt deviation from the national trend, the
     ## log-Rt contrast against the primary patch, and the relative case
     ## ascertainment. The last two must BOTH be present: the case composition
     ## identifies only their product, so reporting a provincial Rt without the
     ## ascertainment beside it invites a case-finding artefact to be read as
     ## epidemiology.
-    @test nrow(df) == 18
+    @test nrow(df) == 21
     quantities = unique(df[!, "Quantity"])
     @test "Relative case ascertainment" in quantities
     @test "log-Rt vs primary patch" in quantities
+    @test "Rt deviation drift" in quantities
     @test unique(df[!, "Patch"]) == ["Ituri", "Nord-Kivu", "Sud-Kivu"]
     ## The reported quantiles must be ordered, which the previous
     ## implementation's invented "median" (the midpoint of the 20-80
@@ -732,28 +733,46 @@ end
     chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
         progress = false)
 
-    ## EVERY chain key that src/ or docs/ reads off a joint chain. This list is
-    ## the contract: the analysis, the forecast machinery, the plots and the
-    ## CFR calculation all key off these names, and a missing one fails at
-    ## render time in CI rather than here.
+    ## THE CHAIN READ CONTRACT. Every key that src/ or docs/ pulls off a joint
+    ## chain. Two CI render failures in a row came from keys the model tests
+    ## could not see:
     ##
-    ## `cumulative_infections` is in this list for a reason. The single-
-    ## population composer surfaced it from its `_latent` submodel rather than
-    ## from its own body, so a diff of the two FUNCTION BODIES showed every
-    ## other deterministic as missing but not that one -- and it was dropped,
-    ## and CI failed rendering the analysis. Diffing bodies is not enough; the
-    ## test has to assert against the keys that are actually read.
+    ##   - `cumulative_infections` was surfaced by the OLD composer's `_latent`
+    ##     submodel, not by its body, so a diff of the two function bodies
+    ##     showed every other deterministic as missing but not that one.
+    ##   - the `rt_state.*` keys existed but under BARE names, because the
+    ##     patch model attached the Rt walk unprefixed. The same parameters are
+    ##     sampled either way, so a parameter COUNT check passes and only a
+    ##     render fails.
+    ##
+    ## Both are invisible to a test that asserts what the author remembers.
+    ## Assert against what is actually READ.
     for q in (:bed_capacity, :CFR, :C_T, :cumulative_confirmed,
-        :cumulative_infections, :cumulative_onsets, :doubling_time,
-        :expected_admissions_T, :expected_bed_demand_T,
-        :expected_confirmed_deaths_T, :expected_confirmed_T,
-        :expected_deaths_T, :expected_incare_deaths_T, :expected_infections_T,
-        :expected_recovered_T, :expected_reports_T, :expected_ruleouts_T,
-        :isolation_dispersion, :k, :onset_to_confirmation_pmf,
-        :onset_to_death_confirmation_pmf, :p_drc, :p_uganda, :r, :r0, :R0,
-        :recovered_dispersion, :R_T, :T, :cumulative_expected_deaths)
-        v = chn[q]
-        @test v !== nothing
+        :cumulative_infections, :cumulative_onsets,
+        :cumulative_expected_deaths, :doubling_time, :expected_admissions_T,
+        :expected_bed_demand_T, :expected_confirmed_deaths_T,
+        :expected_confirmed_T, :expected_deaths_T, :expected_incare_deaths_T,
+        :expected_infections_T, :expected_recovered_T, :expected_reports_T,
+        :expected_ruleouts_T, :isolation_dispersion, :k,
+        :onset_to_confirmation_pmf, :onset_to_death_confirmation_pmf,
+        :p_drc, :p_uganda, :r, :r0, :R0, :recovered_dispersion, :R_T, :T,
+        :lambda_bg, :lambda_bg_death, :tau_death, :tau_test)
+        @test chn[q] !== nothing
+    end
+
+    ## Submodel-PREFIXED keys. These are the ones that bite, because a prefix
+    ## change leaves the parameter set identical and only breaks the read.
+    for q in ("rt_state.sigma_rw", "rt_state.log_R0", "rt_state.z",
+        "rt_state.intervention_effect", "gi_state.α", "gi_state.θ",
+        "inc_state.delay_mean", "inc_state.delay_sd",
+        "cases_state.report_state.α", "cases_state.report_state.θ",
+        "confirmed_state.receipt_state.d.delay_mean",
+        "confirmed_state.receipt_state.d.delay_sd",
+        "deaths_state.od_state.oa.α", "deaths_state.od_state.oa.θ",
+        "deaths_state.od_state.ad.α", "deaths_state.od_state.ad.θ",
+        "exports_state.detect_state.α", "exports_state.detect_state.θ",
+        "exports_state.travel_state.daily_travellers")
+        @test chn[Symbol(q)] !== nothing
     end
 
     ## The scalars must be finite; the trajectories must be non-empty.

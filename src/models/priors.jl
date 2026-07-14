@@ -1309,8 +1309,16 @@ scales and the correlation matrix.
     ## Common national trend: the existing single-patch walk, unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref).
+    ##
+    ## PREFIXED (no `false`), so the walk's parameters reach the chain as
+    ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
+    ## `rt_state.intervention_effect` — the names the single-population model
+    ## used and that the analysis and sensitivity pages read. Attaching it
+    ## unprefixed surfaces them bare, which is invisible to the model tests
+    ## and to a parameter COUNT (the same parameters are still sampled) but
+    ## fails at render time on a KeyError.
     rt_state ~ to_submodel(
-        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start), false)
+        rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start))
     Rt_national = rt_state.Rt
     log_Rt_national = log.(Rt_national)
     ## The deviations live on the SAME weekly knots as the national walk, so
