@@ -2107,7 +2107,7 @@ diagnostics_table( #hide
     "frozen (1wk back)" => frozen_lastweek.chn, #hide
     (RUN_SENSITIVITY ? #hide
      ["delay sensitivity" => chn_joint_community_delay, #hide
-        "clock sensitivity" => chn_joint_fast_clock] : [])...) #hide
+        "clock sensitivity (ExpGrowth)" => chn_joint_exp_growth_clock] : [])...) #hide
 
 #md # ```@raw html
 #md # </details>
