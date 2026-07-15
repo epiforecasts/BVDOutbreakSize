@@ -32,6 +32,7 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 BVDOutbreakSize = {path = ".."}
 
 [compat]
+Aqua = "0.8.16"
 CensoredDistributions = "0.2.22"
 Coverage = "1"
 SpecialFunctions = "2"
