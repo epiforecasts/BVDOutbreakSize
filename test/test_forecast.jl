@@ -185,6 +185,37 @@ end
     end
 end
 
+@testitem "forecast_archive returns tidy long scored streams" tags=[:slow] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame, nrow
+    using Dates: Date, Day
+    using BVDOutbreakSize: forecast_reported, forecast_archive
+
+    chn=_forecast_chain(200)
+    made=Date("2026-06-07")
+    fcs=[(h,
+             forecast_reported(chn;
+                 horizon = h,
+                 obs_cases = 905, obs_deaths = 18,
+                 obs_confirmed = 210, obs_confirmed_deaths = 17))
+         for h in (7, 14)]
+    arch=forecast_archive(fcs; made_date = made, thin = 2)
+
+    @test arch isa DataFrame
+    @test names(arch) ==
+          ["made_date", "horizon", "target_date", "stream", "draw", "value"]
+    ## Only the incident confirmed streams are carried by this chain (recovered
+    ## and beds are absent, so skipped), across the two horizons.
+    @test Set(arch.stream) == Set(["confirmed cases", "confirmed deaths"])
+    @test Set(arch.horizon) == Set([7, 14])
+    @test all(arch.made_date .== made)
+    ## target_date is made_date plus the horizon.
+    @test all(arch.target_date .== arch.made_date .+ Day.(arch.horizon))
+    ## Thinning keeps every second draw: 200 / 2 = 100 per (stream, horizon).
+    sub=arch[(arch.stream .== "confirmed cases") .& (arch.horizon .== 7), :]
+    @test nrow(sub) == 100
+    @test all(arch.value .>= 0)
+end
+
 @testitem "forecast cumulative streams never fall below the cut-off" tags=[:slow] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated

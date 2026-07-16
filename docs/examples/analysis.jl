@@ -3333,7 +3333,9 @@ forecast_flows_fig #hide
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
 # The release bundles the summary tables, a thinned set of
 # posterior draws, the latent symptom-onset ("symptomatic cases")
-# trajectory over time, and a copy of the input `observations.toml` so
+# trajectory over time, the one- to four-week-ahead forecasts of the
+# observed streams (so each release records the forecast it made, for later
+# scoring), and a copy of the input `observations.toml` so
 # the exact data that produced each result is recorded alongside it.
 
 #md # ```@raw html
@@ -3384,6 +3386,21 @@ posterior_draws = DataFrame(
     confirmed_cfr_corrected = confirmed_cfr.corrected
 )[1:10:end, :]
 CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
+
+## One- to four-week-ahead forecasts of the observed streams, saved as a
+## release asset so each release records the forecast it made and it can later
+## be scored against what is observed. Only the incident and level quantities
+## are archived (see `forecast_archive`), thinned to keep the asset compact.
+forecast_horizons = (7, 14, 21, 28)
+forecast_runs = [(h, forecast_reported(chn_joint; horizon = h,
+                      obs_cases = obs.reported_cases,
+                      obs_deaths = obs.total_deaths,
+                      obs_confirmed = obs.confirmed_cases,
+                      obs_confirmed_deaths = obs.confirmed_deaths,
+                      obs_recovered = obs.recovered_cases))
+                 for h in forecast_horizons]
+CSV.write(joinpath(output_dir, "forecast.csv"),
+    forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
 ## showing outbreak growth: one row per grid day with the 30/60/90%

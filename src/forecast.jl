@@ -406,6 +406,48 @@ function forecast_reported(chn;
 end
 
 """
+    forecast_archive(fcs; made_date, thin = 1) -> DataFrame
+
+Long-format archive of one or more [`forecast_reported`](@ref) results made
+from a single cut-off, for the observed streams scored across releases. `fcs`
+is an iterable of `(horizon, fc)` pairs and `made_date` is the cut-off `Date`
+the forecasts were made from. Returns one row per `(stream, horizon, draw)`
+with columns `made_date`, `horizon`, `target_date` (`made_date` plus the
+horizon), `stream`, `draw` and `value`.
+
+Only the incident and level quantities are archived: `confirmed cases` and
+`confirmed deaths` new over the horizon, `recovered` new over the horizon and
+the supply-limited `isolation beds` occupancy. The cumulative totals are not
+archived because they are revised across data vintages, so scoring is done on
+the incident and level quantities instead. Streams a forecast does not carry
+(a single-stream fit, say) are skipped. `thin` keeps every `thin`-th draw so
+the archive stays compact when it is saved as a release asset.
+"""
+function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
+    ## Incident (new-over-horizon) and level quantities only, never cumulative.
+    streams = (
+        (:confirmed_new, "confirmed cases"),
+        (:confirmed_deaths_new, "confirmed deaths"),
+        (:recovered_new, "recovered"),
+        (:isolation_level, "isolation beds"))
+    out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
+        stream = String[], draw = Int[], value = Float64[])
+    for (horizon, fc) in fcs
+        h = Int(horizon)
+        target = made_date + Day(h)
+        for (col, label) in streams
+            col in propertynames(fc) || continue
+            vals = fc[!, col]
+            for (d, i) in enumerate(1:thin:length(vals))
+                push!(out,
+                    (made_date, h, target, label, d, Float64(vals[i])))
+            end
+        end
+    end
+    return out
+end
+
+"""
 Summarise a [`forecast_reported`](@ref) result into a `DataFrame` with
 one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or

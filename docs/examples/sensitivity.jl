@@ -860,6 +860,13 @@ CSV.write(joinpath(output_dir, "cumulative_cases_by_stream.csv"),
 CSV.write(joinpath(output_dir, "frozen_matched_cutoffs.csv"),
     frozen_streams_table)
 
+## The one-week-back validation forecast, in the same archive format as the
+## release forecast, so the frozen "last week versus now" forecast is recorded
+## as a release asset alongside the forecast it is scored against.
+CSV.write(joinpath(output_dir, "forecast_validation.csv"),
+    forecast_archive([(7, validation_forecast)];
+        made_date = frozen_lastweek.o.cutoff, thin = 5))
+
 ## The per-stream reproduction-number figure for the summary dashboard; the
 ## main analysis writes the other three dashboard figures.
 dashboard_dir = joinpath(

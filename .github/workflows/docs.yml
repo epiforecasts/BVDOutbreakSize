@@ -354,7 +354,10 @@ jobs:
 
             Bundles the posterior summary tables, thinned posterior
             draws, the latent symptom-onset ("symptomatic cases")
-            trajectory over time (`onsets_over_time.csv`), a copy of the
+            trajectory over time (`onsets_over_time.csv`), the one- to
+            four-week-ahead forecasts of the observed streams
+            (`forecast.csv`, with the one-week-back validation forecast in
+            `forecast_validation.csv`) for later scoring, a copy of the
             input `observations.toml`, a
             `site.zip` snapshot of the rendered report site, and
             `analysis.html` — a self-contained single-file copy of the
