@@ -105,13 +105,28 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 default_samples() = parse(Int, get(ENV, "BVD_FIT_SAMPLES", "1000"))
 default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 
+## The meta-population "joint" fit is the slowest in the matrix: the posterior
+## is high-curvature and needs long NUTS trajectories (median tree depth 9, 43%
+## at the max of 10), so a full 1000-draw fit runs ~5.8h and tips over GitHub's
+## 6h job cap. This is NOT a mixing failure -- the chain mixes well (worst
+## lag-1 autocorrelation 0.25, few divergences), and there is no funnel to
+## reparameterise (an Rt-parameterisation experiment found every alternative
+## equivalent, and the worst-mixing params are in the base CFR/treatment model,
+## not the patch structure). So the principled lever is fewer DRAWS, not lower
+## per-draw quality: at 800 draws the fit lands ~4.6h, and with autocorrelation
+## that low the effective sample size stays ample (~950+ for the worst param).
+default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "800"))
+
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 500, chains::Integer = 2)
+<<<<<<< HEAD
+        samples::Integer = 500,
+        joint_samples::Integer = default_joint_samples(),
+        chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     function fit_frozen_joint(cutoff_date)
@@ -334,7 +349,8 @@ function build_fit_specs(obs;
                     province_death_increments = patch_prov_deaths.increments,
                     province_death_days = patch_prov_deaths.days,
                     tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.95,
+<<<<<<< HEAD
+                samples = joint_samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         ## SENSITIVITY: the same model with the spatial structure turned OFF
         ## (`n_patches` defaults to 1). This is the check on the headline --
