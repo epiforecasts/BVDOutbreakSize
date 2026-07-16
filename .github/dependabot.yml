@@ -27,3 +27,9 @@ updates:
     labels:
       - "dependencies"
       - "julia"
+    ignore:
+      # StatsFuns 2.x needs a newer Turing than we pin: Turing 0.45/0.46 caps
+      # StatsFuns at <= 1.5.2, so bumping to 2.x makes the environment
+      # unsatisfiable. Skip StatsFuns >= 2 until Turing supports it.
+      - dependency-name: "StatsFuns"
+        versions: [">=2"]
