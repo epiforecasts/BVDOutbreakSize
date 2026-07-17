@@ -176,12 +176,12 @@ end
 
 forecast_scores_df = _release_data("forecast_scores.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, model = String, crps = Float64,
+        target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
         bias = Float64, n_samples = Int))
 forecast_overlay_df = _release_data("forecast_overlay.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
-        target_date = Date, model = String, observed = Float64,
+        target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
 forecast_score_table = forecast_score_summary(forecast_scores_df)
@@ -194,21 +194,14 @@ forecast_score_table #hide
 
 # Forecasts made at each release against the value observed since, one panel
 # per stream, the observed value in black.
-# The median and 90% interval are coloured by fit once the scores carry one,
-# and by horizon before then.
+# Each row carries a `fit`, so the median and 90% interval are coloured by
+# fit: the persistence baseline, the stream's individual fit and the joint.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-## With a `fit` column every fit is drawn and read apart by colour; before
-## then the only forecasts stored are ours and the baseline, and the overlay
-## shows ours.
-forecast_overlay_rows = "fit" in names(forecast_overlay_df) ?
-                        forecast_overlay_df :
-                        forecast_overlay_df[
-    forecast_overlay_df.model .== "ours", :]
-forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_rows);
+forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
 
 #md # ```@raw html
 #md # </details>
