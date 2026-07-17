@@ -164,10 +164,11 @@ validation_latent_fig #hide
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
 #md # ```
 
-## scripts/score_releases.jl writes these after the fits, so a file is absent
-## until that has run over a release carrying the asset. Read what is there
-## and fall back to an empty frame with the same schema, so the page renders
-## before the scores exist.
+## scripts/score_releases.jl writes these after the fits. The committed files
+## are header-only until a release carries the asset, so the common path
+## reads a real file to a zero-row frame; the typed `schema` is the fallback
+## for a file that is absent entirely, since CSV.read throws on a missing
+## path and would take the whole docs build with it.
 function _release_data(name, schema::NamedTuple)
     path = joinpath(pkgdir(BVDOutbreakSize), "data", name)
     isfile(path) && return CSV.read(path, DataFrame)
@@ -193,9 +194,11 @@ forecast_score_table = forecast_score_summary(forecast_scores_df)
 forecast_score_table #hide
 
 # Forecasts made at each release against the value observed since, one panel
-# per stream, the observed value in black.
-# Each row carries a `fit`, so the median and 90% interval are coloured by
-# fit: the persistence baseline, the stream's individual fit and the joint.
+# per stream and horizon, the observed value in black.
+# The median and 90% interval are coloured by fit role: the persistence
+# baseline, the stream's individual fit and the joint.
+# The x-axis is the date each forecast was made, so an incident stream's
+# observed window pairs unambiguously with the forecast that made it.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>

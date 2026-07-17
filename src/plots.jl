@@ -848,17 +848,34 @@ function plot_evolution_by_group(
     return fig
 end
 
-"""
-Forecasts-versus-now overlay: one panel per observed stream, each showing the
-forecasts made at every release (median with the 90% predictive interval as a
-vertical bar) against the value observed since (black points). `overlay` is
-the `data/forecast_overlay.csv` table with columns `stream`, `target_date`,
-`horizon`, `observed`, `median`, `lo90` and `hi90`.
+## Role of a forecast within a stream: the persistence baseline, the stream's
+## own individual single-stream fit or the joint. Deriving the role from the
+## fit id keeps the colour stable across streams, whichever single-stream fit
+## produced the individual row, and folds recovered's missing individual into
+## a baseline-versus-joint comparison without a per-stream label.
+_fit_role(fit) = fit == "baseline" ? "baseline" :
+                 fit == "joint" ? "joint" : "individual"
 
-Forecasts are coloured by `fit` when the table carries that column, so the
-baseline, the individual fit and the joint read apart within a stream, and by
-`horizon` otherwise. A stream that carries only some fits is drawn with only
-those, and the legend covers every level drawn in any panel.
+"""
+Forecasts-versus-now overlay: a grid of panels, one row per observed stream
+and one column per forecast horizon, each showing the forecasts made at every
+release (median with the 90% predictive interval as a vertical bar) against
+the value observed since (black points). `overlay` is the
+`data/forecast_overlay.csv` table with columns `stream`, `made_date`,
+`horizon`, `fit`, `observed`, `median`, `lo90` and `hi90`.
+
+The x-axis is the date the forecast was made, not the target date. For an
+incident stream the observed value is the new count over the forecast's own
+`(made_date, target_date]` window, so it depends on the made date: keying on
+the target date would stack several different observed windows at one x with
+no way to pair each forecast to its own truth. Within one horizon column each
+made date has a single target and a single observed value, so the pairing is
+unambiguous.
+
+Forecasts are coloured by fit role (`baseline`, `individual`, `joint`) and
+dodged so the three read apart at each made date. A stream that carries only
+some roles, e.g. recovered with no individual fit, is drawn with only those,
+and the legend covers every role drawn in any panel.
 
 Returns a figure carrying a short note in place of the panels when no
 forecasts have been scored yet.
@@ -875,52 +892,64 @@ function plot_forecast_overlay(overlay::DataFrame)
             tellwidth = false, tellheight = false, color = (:black, 0.55))
         return fig
     end
-    fig = Figure(; size = (860, 240 * length(streams) + 50))
-    ## Colour by fit once the scores carry one, so the baseline, the
-    ## individual fit and the joint read apart within a stream; before
-    ## then the only contrast available is the horizon.
-    key = "fit" in names(overlay) ? :fit : :horizon
-    levels = sort(unique(overlay[!, key]))
-    _level_label(l) = key === :fit ? string(l) : "$(l)-day forecast"
-    palette = [:steelblue, :seagreen, :goldenrod, :firebrick, :purple]
-    hcol = Dict(h => palette[mod1(i, length(palette))]
-    for (i, h) in enumerate(levels))
-    ref = minimum(Date.(string.(overlay.target_date)))
+    horizons = sort(unique(overlay.horizon))
+    role_order = ["baseline", "individual", "joint"]
+    role_colour = Dict("baseline" => :goldenrod, "individual" => :steelblue,
+        "joint" => :firebrick)
+
+    ## One made-date axis shared across every cell.
+    alldates = sort(unique(Date.(string.(overlay.made_date))))
+    ref = minimum(alldates)
     _x(d) = Float64((Date(string(d)) - ref).value)
-    ## A level a stream does not carry, e.g. the individual fit of a stream
-    ## that has none, is absent from that panel, so collect each level's
-    ## legend handle wherever it first appears rather than from the first
-    ## panel alone.
+    spacing = length(alldates) > 1 ?
+              (_x(maximum(alldates)) - _x(minimum(alldates))) /
+              (length(alldates) - 1) : 1.0
+    dodge = 0.18 * spacing
+    step = max(1, cld(length(alldates), 4))
+    tickdates = alldates[1:step:end]
+
+    ncols = length(horizons)
+    nrows = length(streams)
+    fig = Figure(; size = (240 * ncols + 80, 200 * nrows + 90))
+
+    ## A stream may lack a role, e.g. recovered has no individual fit, so
+    ## collect each role's legend handle wherever it first appears.
     obs_handle = nothing
-    level_handles = Dict{Any, Any}()
-    for (row, s) in enumerate(streams)
-        sub = overlay[overlay.stream .== s, :]
-        ax = Axis(fig[row, 1]; title = s, xlabel = "Target date",
-            ylabel = "Count")
-        ## Observed value at each target date, once per date.
-        od = sort(unique([(Date(string(t)), float(o))
-                          for (t, o) in zip(sub.target_date, sub.observed)]))
-        oh = scatter!(ax, [_x(t) for (t, _) in od], [o for (_, o) in od];
+    role_handles = Dict{String, Any}()
+    for (r, s) in enumerate(streams), (c, h) in enumerate(horizons)
+
+        cell = overlay[(overlay.stream .== s) .& (overlay.horizon .== h), :]
+        ax = Axis(fig[r, c];
+            title = r == 1 ? "$(h)-day ahead" : "",
+            xlabel = r == nrows ? "Forecast made" : "",
+            ylabel = c == 1 ? string(s) : "",
+            xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+            xticklabelrotation = pi / 4)
+        isempty(cell) && continue
+        ## Observed new count over each forecast's own window, one value per
+        ## made date within this horizon.
+        od = sort(unique([(Date(string(m)), float(o))
+                          for (m, o) in zip(cell.made_date, cell.observed)]))
+        oh = scatter!(ax, [_x(m) for (m, _) in od], [o for (_, o) in od];
             color = :black, markersize = 7)
         isnothing(obs_handle) && (obs_handle = oh)
-        for h in levels
-            hs = sub[sub[!, key] .== h, :]
-            isempty(hs) && continue
-            xs = [_x(t) for t in hs.target_date]
+        for (i, role) in enumerate(role_order)
+            rs = cell[_fit_role.(cell.fit) .== role, :]
+            isempty(rs) && continue
+            col = role_colour[role]
+            off = (i - 2) * dodge
+            xs = [_x(m) + off for m in rs.made_date]
             bx = Float64[]
             by = Float64[]
-            for (x, lo, hi) in zip(xs, hs.lo90, hs.hi90)
+            for (x, lo, hi) in zip(xs, rs.lo90, rs.hi90)
                 append!(bx, (x, x))
                 append!(by, (float(lo), float(hi)))
             end
-            linesegments!(ax, bx, by; color = (hcol[h], 0.4), linewidth = 2)
-            mh = scatter!(ax, xs, float.(hs.median);
-                color = hcol[h], markersize = 6)
-            get!(level_handles, h, mh)
+            linesegments!(ax, bx, by; color = (col, 0.45), linewidth = 2)
+            mh = scatter!(ax, xs, float.(rs.median); color = col,
+                markersize = 6)
+            get!(role_handles, role, mh)
         end
-        ts = sort(unique(Date.(string.(sub.target_date))))
-        ax.xticks = (_x.(ts), string.(ts))
-        ax.xticklabelrotation = pi / 4
     end
 
     handles = Any[]
@@ -929,15 +958,13 @@ function plot_forecast_overlay(overlay::DataFrame)
         push!(handles, obs_handle)
         push!(labels, "observed")
     end
-    for h in levels
-        haskey(level_handles, h) || continue
-        push!(handles, level_handles[h])
-        push!(labels, _level_label(h))
+    for role in role_order
+        haskey(role_handles, role) || continue
+        push!(handles, role_handles[role])
+        push!(labels, role)
     end
-    ## Legend below the panels, since inside the first axis it covers the
-    ## data and the tick labels once several horizons are scored.
     isempty(handles) ||
-        CairoMakie.Legend(fig[length(streams) + 1, 1], handles, labels;
+        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
             orientation = :horizontal, framevisible = true,
             tellheight = true, tellwidth = false)
     return fig
