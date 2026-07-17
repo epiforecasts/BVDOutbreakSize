@@ -225,6 +225,55 @@ end
           CairoMakie.Makie.Figure
 end
 
+@testitem "plot_evolution_by_group empty and filled" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+    ## Every group empty is the state before any per-dataset estimate is
+    ## saved: the guard must return the note figure, not throw.
+    empty_groups = ["joint" => NamedTuple[], "cases" => NamedTuple[]]
+    @test plot_evolution_by_group(empty_groups) isa CairoMakie.Makie.Figure
+    ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
+    joint = [
+        ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+    ]
+    cases = [
+        ("2026-06-21", 1.6, 1.4, 1.8, 1.2, 2.0, 1.0, 2.4),
+        ("2026-07-08", 1.9, 1.7, 2.1, 1.5, 2.4, 1.2, 2.9)
+    ]
+    ## A group with no estimates is dropped rather than drawn as an empty
+    ## panel, the recovered case where no individual fit exists.
+    groups = ["joint" => joint, "cases" => cases, "recovered" => NamedTuple[]]
+    @test plot_evolution_by_group(groups; refline = 1.0) isa
+          CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_overlay empty and filled" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## A zero-row overlay is the state before any release stores a forecast:
+    ## the guard must return the note figure, not throw.
+    empty = DataFrame(stream = String[], made_date = Date[], horizon = Int[],
+        target_date = Date[], fit = String[], observed = Float64[],
+        median = Float64[], lo90 = Float64[], hi90 = Float64[])
+    @test plot_forecast_overlay(empty) isa CairoMakie.Makie.Figure
+    ## Filled with the fit roles: confirmed_cases carries baseline, its
+    ## individual fit and the joint; recovered carries only baseline and the
+    ## joint, so its individual role is simply absent.
+    rows = NamedTuple[]
+    spec = ["confirmed_cases" => ["baseline", "confirmed", "joint"],
+        "recovered" => ["baseline", "joint"]]
+    for (stream, fits) in spec, md in [Date(2026, 6, 21), Date(2026, 6, 28)],
+        h in [7, 14], fit in fits
+        med = 20.0 + h
+        push!(rows,
+            (; stream = stream, made_date = md, horizon = h,
+                target_date = md + Day(h), fit = fit, observed = 18.0 + h,
+                median = med, lo90 = med * 0.7, hi90 = med * 1.4))
+    end
+    @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using Dates: Date

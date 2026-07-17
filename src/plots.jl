@@ -908,6 +908,12 @@ function plot_forecast_overlay(overlay::DataFrame)
     step = max(1, cld(length(alldates), 4))
     tickdates = alldates[1:step:end]
 
+    ## Fixed x-slot per series, so the observed truth and the three fit roles
+    ## each sit at their own offset from the made date rather than sharing an
+    ## x, and the slot is stable across cells whichever roles are present.
+    slot = Dict("observed" => -1.5, "baseline" => -0.5, "individual" => 0.5,
+        "joint" => 1.5)
+
     ncols = length(horizons)
     nrows = length(streams)
     fig = Figure(; size = (240 * ncols + 80, 200 * nrows + 90))
@@ -930,14 +936,15 @@ function plot_forecast_overlay(overlay::DataFrame)
         ## made date within this horizon.
         od = sort(unique([(Date(string(m)), float(o))
                           for (m, o) in zip(cell.made_date, cell.observed)]))
-        oh = scatter!(ax, [_x(m) for (m, _) in od], [o for (_, o) in od];
-            color = :black, markersize = 7)
+        oh = scatter!(ax,
+            [_x(m) + slot["observed"] * dodge for (m, _) in od],
+            [o for (_, o) in od]; color = :black, markersize = 7)
         isnothing(obs_handle) && (obs_handle = oh)
-        for (i, role) in enumerate(role_order)
+        for role in role_order
             rs = cell[_fit_role.(cell.fit) .== role, :]
             isempty(rs) && continue
             col = role_colour[role]
-            off = (i - 2) * dodge
+            off = slot[role] * dodge
             xs = [_x(m) + off for m in rs.made_date]
             bx = Float64[]
             by = Float64[]
