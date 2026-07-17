@@ -222,6 +222,7 @@ function score_release(tag, forecast_path, obs, grid_date)
     end
 
     out = NamedTuple[]
+    overlay = NamedTuple[]
     skipped = 0
     for (key, draws) in groups
         made_date, horizon, target_date, stream = key
@@ -240,9 +241,20 @@ function score_release(tag, forecast_path, obs, grid_date)
                     model, crps = s.crps, log_crps = s.log_crps,
                     coverage_50 = s.coverage_50, coverage_90 = s.coverage_90,
                     bias = s.bias, n_samples = s.n))
+            ## Quantile summary of the same draws for the forecasts-versus-now
+            ## overlay plot, alongside the observed truth so the docs build
+            ## reads a plain table rather than re-pulling the release assets.
+            q = posterior_summary(samples)
+            r2(x) = round(x; digits = 2)
+            push!(overlay,
+                (; release = tag, made_date, stream, horizon, target_date,
+                    model, observed = r2(truth), median = r2(median(samples)),
+                    lo30 = r2(q.lo30), hi30 = r2(q.hi30),
+                    lo60 = r2(q.lo60), hi60 = r2(q.hi60),
+                    lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
         end
     end
-    return (; rows = out, skipped)
+    return (; rows = out, overlay, skipped)
 end
 
 # ----------------------------------------------------------------------
@@ -284,6 +296,7 @@ obs = load_observations()
 grid_date(day) = obs.cutoff - Day(obs.n - day)
 
 score_rows = NamedTuple[]
+overlay_rows = NamedTuple[]
 rt_rows = NamedTuple[]
 n_scored = 0
 n_no_forecast = 0
@@ -309,6 +322,7 @@ mktempdir() do dir
             end
             if !isnothing(result)
                 append!(score_rows, result.rows)
+                append!(overlay_rows, result.overlay)
                 n_scored += 1
                 result.skipped > 0 && @info string(
                     tag, ": skipped ", result.skipped,
@@ -367,6 +381,34 @@ write_simple_csv(scores_dest,
         :n_samples => scores.n_samples])
 println("Wrote $(nrow(scores)) scored forecasts to " *
         "data/forecast_scores.csv")
+
+## `data/forecast_overlay.csv`: median and 30/60/90% bounds of each forecast
+## group with the observed truth, for the forecasts-versus-now overlay plots.
+overlay = if isempty(overlay_rows)
+    DataFrame(release = String[], made_date = Date[], stream = String[],
+        horizon = Int[], target_date = Date[], model = String[],
+        observed = Float64[], median = Float64[], lo30 = Float64[],
+        hi30 = Float64[], lo60 = Float64[], hi60 = Float64[],
+        lo90 = Float64[], hi90 = Float64[])
+else
+    sort(DataFrame(overlay_rows),
+        [:stream, :made_date, :horizon, :model])
+end
+overlay_dest = joinpath(@__DIR__, "..", "data", "forecast_overlay.csv")
+write_simple_csv(overlay_dest,
+    [:release => overlay.release,
+        :made_date => string.(overlay.made_date),
+        :stream => overlay.stream,
+        :horizon => overlay.horizon,
+        :target_date => string.(overlay.target_date),
+        :model => overlay.model,
+        :observed => overlay.observed,
+        :median => overlay.median,
+        :lo30 => overlay.lo30, :hi30 => overlay.hi30,
+        :lo60 => overlay.lo60, :hi60 => overlay.hi60,
+        :lo90 => overlay.lo90, :hi90 => overlay.hi90])
+println("Wrote $(nrow(overlay)) forecast-overlay rows to " *
+        "data/forecast_overlay.csv")
 
 ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
 rt = if isempty(rt_rows)

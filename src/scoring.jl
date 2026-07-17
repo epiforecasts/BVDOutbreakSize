@@ -57,3 +57,44 @@ function score_draws(obs::Real, samples::AbstractVector{<:Real})
         bias = bias_sample(obs, samples),
         n = n)
 end
+
+"""
+Summarise a `data/forecast_scores.csv` table (as written by
+`scripts/score_releases.jl`) into one row per `(stream, horizon)`: the number
+of scored forecasts, the mean CRPS and log-scale CRPS of our forecasts, the
+relative skill against the persistence baseline (`rel_skill`, the mean CRPS
+ratio, below one when we beat the baseline), and the empirical 50% and 90%
+coverage and mean bias. Returns an empty frame with the same columns when no
+forecasts have been scored yet, so the report renders before any release
+carries a stored forecast.
+"""
+function forecast_score_summary(scores::DataFrame)
+    rows = NamedTuple[]
+    if !isempty(scores)
+        for s in sort(unique(scores.stream))
+            hs = sort(unique(scores.horizon[scores.stream .== s]))
+            for h in hs
+                grp = scores[(scores.stream .== s) .& (scores.horizon .== h), :]
+                ours = grp[grp.model .== "ours", :]
+                base = grp[grp.model .== "baseline", :]
+                isempty(ours) && continue
+                mc = mean(ours.crps)
+                mb = isempty(base) ? NaN : mean(base.crps)
+                push!(rows,
+                    (; stream = s, horizon = h, n = size(ours, 1),
+                        crps = round(mc; digits = 2),
+                        crps_baseline = round(mb; digits = 2),
+                        rel_skill = round(mc / mb; digits = 2),
+                        log_crps = round(mean(ours.log_crps); digits = 3),
+                        coverage_50 = round(mean(ours.coverage_50); digits = 2),
+                        coverage_90 = round(mean(ours.coverage_90); digits = 2),
+                        bias = round(mean(ours.bias); digits = 2)))
+            end
+        end
+    end
+    isempty(rows) && return DataFrame(
+        stream = String[], horizon = Int[], n = Int[], crps = Float64[],
+        crps_baseline = Float64[], rel_skill = Float64[], log_crps = Float64[],
+        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[])
+    return DataFrame(rows)
+end

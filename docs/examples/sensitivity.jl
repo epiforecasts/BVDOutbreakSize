@@ -138,6 +138,101 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
+# ## Forecast scoring across releases
+#
+# How every release's saved forecasts scored against the data observed since.
+# Each results release stores its one- to four-week-ahead forecast
+# (`forecast.csv`); `scripts/score_releases.jl` scores each against the
+# now-observed incident counts and the isolation-bed occupancy level with CRPS,
+# CRPS on the log scale, 50/90% coverage and bias, against a persistence
+# baseline (`rel_skill` below one beats the baseline).
+# The scores accrue as releases with a stored forecast, and the backfill
+# release, are added, so the table and plot are empty until then.
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the cross-release forecast scores</summary>
+#md # ```
+
+forecast_scores_df = CSV.read(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "forecast_scores.csv"),
+    DataFrame)
+forecast_overlay_df = CSV.read(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "forecast_overlay.csv"),
+    DataFrame)
+forecast_score_table = forecast_score_summary(forecast_scores_df)
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_score_table #hide
+
+# Forecasts made at each release against the value observed since, one panel
+# per stream: the median and 90% interval coloured by horizon, the observed
+# value in black.
+
+#md # ```@raw html
+#md # <details><summary>Forecasts-versus-now overlay</summary>
+#md # ```
+
+forecast_overlay_fig = plot_forecast_overlay(
+    forecast_overlay_df[forecast_overlay_df.model.=="ours", :]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+forecast_overlay_fig #hide
+
+# ## Reproduction number by release
+#
+# The reproduction number estimated at each release, the Rt analogue of the
+# outbreak-size evolution below.
+# Each release's cut-off `R_T` posterior is drawn as a discrete estimate
+# (median with nested 30/60/90% bars) from `data/rt_by_release.csv`, refreshed
+# from each release's posterior draws by `scripts/score_releases.jl`.
+# The current fit's daily Rt over its established window is the continuous
+# band, and Rt = 1 is marked.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number per release with the current-fit band</summary>
+#md # ```
+
+rt_release_df = CSV.read(
+    joinpath(pkgdir(BVDOutbreakSize), "data", "rt_by_release.csv"), DataFrame)
+rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                  r.lo90, r.hi90) for r in eachrow(rt_release_df)]
+
+## The current fit's daily Rt over its established window, summarised per day
+## into a 30/60/90% band, reusing the same walk reconstruction the Rt figure
+## uses so the band lines up with the per-release points on the calendar axis.
+rt_release_trajectory = let
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+    mat = reconstruct_rt(chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start, ramp = 21.0)
+    days = _rt_start_plot:obs.n
+    dates = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
+    (dates,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+rt_evolution_fig = plot_estimate_evolution(rt_release;
+    trajectory = rt_release_trajectory,
+    ylabel = "Reproduction number",
+    title = "Reproduction number as data accrued",
+    released_label = "Released estimate (per project release)",
+    trajectory_label = "Current model, current data",
+    refline = 1.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rt_evolution_fig #hide
+
 # ## Outbreak size estimated by each data stream
 #
 # Each data stream constrains the latent outbreak size differently.

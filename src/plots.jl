@@ -616,7 +616,8 @@ function plot_estimate_evolution(
         renewal_label::AbstractString =
         "Current model re-fit frozen at each release date",
         trajectory_label::AbstractString =
-        "Current model, current data")
+        "Current model, current data",
+        refline::Union{Nothing, Real} = nothing)
     ## Calendar dates → numeric day-offsets so the x-axis is to scale,
     ## then relabel the ticks with the dates. The released marks, the
     ## frozen renewal marks and the current-model trajectory all share
@@ -728,8 +729,76 @@ function plot_estimate_evolution(
     isempty(rdates) || vlines!(ax, _x.(rdates);
         color = (:grey, 0.55), linestyle = :dot, linewidth = 1)
 
+    ## Optional horizontal reference line, e.g. Rt = 1 for a reproduction
+    ## number, drawn faint so it reads behind the estimates.
+    isnothing(refline) ||
+        hlines!(ax, [float(refline)];
+            color = (:black, 0.4), linestyle = :dash, linewidth = 1)
+
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
+    return fig
+end
+
+"""
+Forecasts-versus-now overlay: one panel per observed stream, each showing the
+forecasts made at every release (median with the 90% predictive interval as a
+vertical bar, coloured by horizon) against the value observed since (black
+points). `overlay` is the `data/forecast_overlay.csv` table restricted to the
+`"ours"` model rows, with columns `stream`, `target_date`, `horizon`,
+`observed`, `median`, `lo90` and `hi90`. Returns an empty figure when there
+are no scored forecasts yet.
+"""
+function plot_forecast_overlay(overlay::DataFrame)
+    streams = unique(overlay.stream)
+    fig = Figure(; size = (860, 240 * max(length(streams), 1)))
+    isempty(streams) && return fig
+    horizons = sort(unique(overlay.horizon))
+    palette = [:steelblue, :seagreen, :goldenrod, :firebrick]
+    hcol = Dict(h => palette[mod1(i, length(palette))]
+    for (i, h) in enumerate(horizons))
+    ref = minimum(Date.(string.(overlay.target_date)))
+    _x(d) = Float64((Date(string(d)) - ref).value)
+    handles = Any[]
+    labels = String[]
+    for (row, s) in enumerate(streams)
+        sub = overlay[overlay.stream .== s, :]
+        ax = Axis(fig[row, 1]; title = s, xlabel = "Target date",
+            ylabel = "Count")
+        ## Observed value at each target date, once per date.
+        od = sort(unique([(Date(string(t)), float(o))
+                          for (t, o) in zip(sub.target_date, sub.observed)]))
+        oh = scatter!(ax, [_x(t) for (t, _) in od], [o for (_, o) in od];
+            color = :black, markersize = 7)
+        if row == 1
+            push!(handles, oh)
+            push!(labels, "observed")
+        end
+        for h in horizons
+            hs = sub[sub.horizon .== h, :]
+            isempty(hs) && continue
+            xs = [_x(t) for t in hs.target_date]
+            bx = Float64[]
+            by = Float64[]
+            for (x, lo, hi) in zip(xs, hs.lo90, hs.hi90)
+                append!(bx, (x, x))
+                append!(by, (float(lo), float(hi)))
+            end
+            linesegments!(ax, bx, by; color = (hcol[h], 0.4), linewidth = 2)
+            mh = scatter!(ax, xs, float.(hs.median);
+                color = hcol[h], markersize = 6)
+            if row == 1
+                push!(handles, mh)
+                push!(labels, "$(h)-day forecast")
+            end
+        end
+        ts = sort(unique(Date.(string.(sub.target_date))))
+        ax.xticks = (_x.(ts), string.(ts))
+        ax.xticklabelrotation = pi / 4
+    end
+    isempty(handles) ||
+        CairoMakie.axislegend(fig.content[1], handles, labels;
+            position = :lt, framevisible = true)
     return fig
 end
 
