@@ -35,7 +35,11 @@ const FIT_CACHE_SCHEMA = "v1"
 ## cache. `released_estimates.csv` is a published-estimate overlay used only by
 ## the sensitivity page's evolution figure; the render job rewrites it before
 ## rendering, which would otherwise change every fit key and force a refit.
-const FIT_DATA_EXCLUDE = ("released_estimates.csv",)
+## `rt_by_release.csv` and `forecast_scores.csv` are the per-release R_T and
+## forecast-scoring overlays, likewise rewritten before rendering from the
+## published releases, so they are excluded for the same reason.
+const FIT_DATA_EXCLUDE = ("released_estimates.csv", "rt_by_release.csv",
+    "forecast_scores.csv")
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)

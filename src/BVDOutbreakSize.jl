@@ -21,6 +21,7 @@ using Distributions: Distribution, pdf, cdf, Poisson,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
+using ScoringRules: crps
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
@@ -36,6 +37,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
+       crps_sample, log_crps_sample, score_draws,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,
@@ -104,6 +106,7 @@ include("data.jl")
 include("sampling.jl")
 include("renewal.jl")
 include("summaries.jl")
+include("scoring.jl")
 include("counterfactual.jl")
 include("forecast.jl")
 include("confirmed_cfr.jl")

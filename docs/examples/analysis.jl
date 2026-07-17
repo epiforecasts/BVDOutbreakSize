@@ -3392,12 +3392,13 @@ CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 ## be scored against what is observed. Only the incident and level quantities
 ## are archived (see `forecast_archive`), thinned to keep the asset compact.
 forecast_horizons = (7, 14, 21, 28)
-forecast_runs = [(h, forecast_reported(chn_joint; horizon = h,
-                      obs_cases = obs.reported_cases,
-                      obs_deaths = obs.total_deaths,
-                      obs_confirmed = obs.confirmed_cases,
-                      obs_confirmed_deaths = obs.confirmed_deaths,
-                      obs_recovered = obs.recovered_cases))
+forecast_runs = [(h,
+                     forecast_reported(chn_joint; horizon = h,
+                         obs_cases = obs.reported_cases,
+                         obs_deaths = obs.total_deaths,
+                         obs_confirmed = obs.confirmed_cases,
+                         obs_confirmed_deaths = obs.confirmed_deaths,
+                         obs_recovered = obs.recovered_cases))
                  for h in forecast_horizons]
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
