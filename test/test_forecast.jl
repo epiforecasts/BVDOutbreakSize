@@ -462,3 +462,44 @@ end
         @test maximum(beds) <= 430
     end
 end
+
+@testitem "forecast_stream beds reproduce forecast_reported's occupancy" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    using Statistics: median, mean
+    import FlexiChains
+    using BVDOutbreakSize: forecast_reported, forecast_stream
+
+    ## The joint's isolation forecast must come out the same whether it is
+    ## taken from `forecast_reported` (which projects every stream at once)
+    ## or from `forecast_stream` (one stream), since both read the same
+    ## demand, capacity and isolation dispersion. The replicates draw from
+    ## different points of the RNG stream, so the distributions are compared
+    ## rather than the draws.
+    @model function _iso_parity()
+        r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
+        k ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        expected_reports_T ~ truncated(Normal(900.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
+        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
+        expected_confirmed_deaths_T ~ truncated(Normal(17.0, 3.0); lower = 0.5)
+        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        return nothing
+    end
+    chn = sample(_iso_parity(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    for h in (7, 21)
+        fr = forecast_reported(chn; horizon = h, obs_cases = 905,
+            obs_deaths = 40, obs_confirmed = 210,
+            obs_confirmed_deaths = 17).isolation_level
+        fs = forecast_stream(chn, :isolation_beds; horizon = h,
+            obs_value = 359)
+        @test isapprox(median(fr), median(fs); rtol = 0.05)
+        @test isapprox(mean(fr), mean(fs); rtol = 0.05)
+    end
+end
