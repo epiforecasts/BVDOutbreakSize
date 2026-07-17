@@ -2486,7 +2486,7 @@ rt_fig = plot_rt(chn_joint;
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = 21.0);
+    ramp = RT_INTERVENTION_RAMP);
 
 #md # ```@raw html
 #md # </details>
@@ -3460,7 +3460,7 @@ stream_fits = [
 function _fit_rt_draws(f)
     f.fit == "joint" && return vec(Array(f.chn[:R_T]))
     rt = reconstruct_rt(f.chn; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = 21.0)
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = RT_INTERVENTION_RAMP)
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end
 

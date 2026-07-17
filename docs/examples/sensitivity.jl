@@ -237,7 +237,7 @@ rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 rt_release_trajectory = let
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
     mat = reconstruct_rt(chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start, ramp = 21.0)
+        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start, ramp = RT_INTERVENTION_RAMP)
     days = _rt_start_plot:obs.n
     dates = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
@@ -469,7 +469,7 @@ stream_rt_fig = plot_rt_streams(
         rt_walk_start = _rt_walk_start_joint),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ramp = 21.0);
+    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP);
 
 #md # ```@raw html
 #md # </details>
@@ -875,7 +875,7 @@ chamla_rt_fig = plot_rt(chamla_anchor.chn;
     rt_walk_start = clamp(chamla_rt_breakpoint - RT_WALK_LEAD,
         chamla_rt_start, chamla_rt_obs.n),
     as_of_date = string(chamla_rt_obs.cutoff),
-    seeding = chamla_rt_obs.seeding, ramp = 21.0);
+    seeding = chamla_rt_obs.seeding, ramp = RT_INTERVENTION_RAMP);
 
 #md # ```@raw html
 #md # </details>

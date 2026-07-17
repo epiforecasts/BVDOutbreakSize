@@ -214,7 +214,7 @@ fortnight, the response damps `R_t` only partially by the cut-off.
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
-        ramp::Real = 21.0,
+        ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)

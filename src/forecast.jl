@@ -741,7 +741,8 @@ function _cutoff_rt(chn; n, breakpoint, rt_start, rt_walk_start)
     _has_key(chn, :R_T) && return _draws(chn, :R_T)
     (isnothing(n) || isnothing(breakpoint)) && return nothing
     rt = reconstruct_rt(chn; n = n, breakpoint = breakpoint,
-        rt_start = rt_start, rt_walk_start = rt_walk_start, ramp = 21.0)
+        rt_start = rt_start, rt_walk_start = rt_walk_start,
+        ramp = RT_INTERVENTION_RAMP)
     return Float64[rt[i, n] for i in axes(rt, 1)]
 end
 
