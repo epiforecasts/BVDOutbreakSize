@@ -746,13 +746,22 @@ forecasts made at every release (median with the 90% predictive interval as a
 vertical bar, coloured by horizon) against the value observed since (black
 points). `overlay` is the `data/forecast_overlay.csv` table restricted to the
 `"ours"` model rows, with columns `stream`, `target_date`, `horizon`,
-`observed`, `median`, `lo90` and `hi90`. Returns an empty figure when there
-are no scored forecasts yet.
+`observed`, `median`, `lo90` and `hi90`. Returns a figure carrying a short
+note in place of the panels when no forecasts have been scored yet.
 """
 function plot_forecast_overlay(overlay::DataFrame)
     streams = unique(overlay.stream)
-    fig = Figure(; size = (860, 240 * max(length(streams), 1)))
-    isempty(streams) && return fig
+    ## Scores accrue only once a release stores a forecast, so an empty
+    ## table is the expected early state and says so rather than
+    ## returning a blank panel.
+    if isempty(streams)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(fig[1, 1],
+            "No forecasts scored yet. No release carries a stored forecast.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        return fig
+    end
+    fig = Figure(; size = (860, 240 * length(streams) + 50))
     horizons = sort(unique(overlay.horizon))
     palette = [:steelblue, :seagreen, :goldenrod, :firebrick]
     hcol = Dict(h => palette[mod1(i, length(palette))]
@@ -796,9 +805,12 @@ function plot_forecast_overlay(overlay::DataFrame)
         ax.xticks = (_x.(ts), string.(ts))
         ax.xticklabelrotation = pi / 4
     end
+    ## Legend below the panels, since inside the first axis it covers the
+    ## data and the tick labels once several horizons are scored.
     isempty(handles) ||
-        CairoMakie.axislegend(fig.content[1], handles, labels;
-            position = :lt, framevisible = true)
+        CairoMakie.Legend(fig[length(streams) + 1, 1], handles, labels;
+            orientation = :horizontal, framevisible = true,
+            tellheight = true, tellwidth = false)
     return fig
 end
 

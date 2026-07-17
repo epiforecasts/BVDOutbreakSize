@@ -149,7 +149,7 @@ validation_latent_fig #hide
 # CRPS on the log scale, 50/90% coverage and bias, against a persistence
 # baseline (`rel_skill` below one beats the baseline).
 # The scores accrue as releases with a stored forecast, and the backfill
-# release, are added, so the table and plot are empty until then.
+# release, are added; until then the table has no rows and the plot says so.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
