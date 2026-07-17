@@ -1,10 +1,12 @@
 # # Sensitivity and comparison analyses
 #
 # This page continues the [main analysis](analysis.md) from the
-# one-week-ahead forecast onward: how last week's forecast held up, the
-# outbreak size each data stream implies on its own, how the estimate has
-# evolved across releases, comparisons with McCabe et al. and Chamla et al.,
-# and the delay and tree-prior sensitivity re-fits. The tree-prior
+# one-week-ahead forecast onward: how last week's forecast held up, how every
+# release's forecasts scored against what has since been observed, the
+# reproduction number by release, the outbreak size each data stream implies on
+# its own, how the estimate has evolved across releases, comparisons with
+# McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity
+# re-fits. The tree-prior
 # sensitivity compares the Skygrid and Exponential growth TMRCA estimates
 # [mbalaplacide2026](@cite) (~1.1E-3 subs/site/year, 139 BDBV genomes).
 # It renders from the same fitted chains as the main analysis, loaded through
@@ -176,7 +178,7 @@ forecast_score_table #hide
 #md # ```
 
 forecast_overlay_fig = plot_forecast_overlay(
-    forecast_overlay_df[forecast_overlay_df.model.=="ours", :]);
+    forecast_overlay_df[forecast_overlay_df.model .== "ours", :]);
 
 #md # ```@raw html
 #md # </details>

@@ -2192,6 +2192,15 @@ diagnostics_table( #hide
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
 #
+# Each release now saves its forecast as an asset so it can later be scored
+# against what is observed.
+# Earlier releases showed a forecast but did not store it, so those forecasts
+# were reconstructed by re-running each release's own code on its data and
+# published as a separate backfill release
+# (`scripts/backfill_forecasts.jl`).
+# The [forecast scoring across releases](@ref "Forecast scoring across releases")
+# section scores them.
+#
 # #### Forecast-versus-frozen evaluation
 #
 # We assess the forecast against data observed since by freezing the data to
