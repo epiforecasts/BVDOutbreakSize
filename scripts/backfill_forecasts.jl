@@ -29,11 +29,12 @@
 #
 # Coverage: only renewal-era releases (v1.4.0 on) carry the streams and the
 # reproduction-number walk the forecast needs; integral-era releases are
-# skipped. Releases whose code predates the fit registry
-# (`docs/fits/registry.jl`) do not expose a single reusable fit entry point, so
-# they are reported as needing a manual backfill rather than fit with a guessed
-# call. In this repo that is v1.4.0-v1.6.0; extend the per-tag driver below to
-# cover them if their forecasts are needed.
+# skipped before they reach the driver. Registry-era releases (v1.7.0 on) reach
+# the fit through the fit registry (`docs/fits/registry.jl`). The earlier
+# renewal releases (v1.4.0-v1.6.0) predate the registry, so a per-tag
+# pre-registry driver reproduces each tag's own headline joint call verbatim
+# instead. A renewal tag that is neither registry-era nor one of those recorded
+# pre-registry tags is reported as needing a manual backfill.
 #
 # The published reports only ever showed the 7-day horizon. The longer horizons
 # reconstruct forecasts that tag's code would have made but never displayed.
@@ -60,6 +61,9 @@ const THIN = 5
 ## v1.4.0 is the first renewal-model release (the `model` column of
 ## `data/released_estimates.csv`); everything earlier is integral-era.
 const RENEWAL_FROM = v"1.4.0"
+## Renewal releases whose code predates the fit registry. `preregistry_driver`
+## records each tag's own headline joint call, so it backfills exactly these.
+const PREREGISTRY_TAGS = ("v1.4.0", "v1.5.0", "v1.6.0")
 ## Each fit samples with this many threads, so the default concurrency stays
 ## well inside a 16-core host. `--concurrency` overrides it.
 const FIT_THREADS = 4
@@ -135,35 +139,43 @@ end
 const INSTANTIATE_LOCK = ReentrantLock()
 
 ## Reconstruct one release's forecast in a worktree checked out at its code
-## tag. Returns the path to the written forecast CSV, or `nothing` when the
-## release cannot be reconstructed automatically (pre-registry code).
+## tag. Returns the path to the written forecast CSV, or `nothing` when no
+## driver is recorded for the tag (a renewal tag that is neither registry-era
+## nor a recorded pre-registry tag).
 function backfill_one(code_tag; keep)
     dest = joinpath(OUT_DIR, "forecast_$(code_tag).csv")
     isfile(dest) && (@info "already done, skipping" code_tag; return dest)
 
-    ## Pre-registry releases have no single reusable fit entry point.
-    if !has_registry(code_tag)
-        @warn "pre-registry release needs a manual backfill" code_tag
+    ## Registry-era tags reach the fit through the registry; the earlier
+    ## renewal tags predate it and use the per-tag pre-registry driver.
+    driver_src = if has_registry(code_tag)
+        backfill_driver(dest)
+    elseif code_tag in PREREGISTRY_TAGS
+        preregistry_driver(dest, code_tag)
+    else
+        @warn "no driver recorded; needs a manual backfill" code_tag
         return nothing
     end
 
     wt = joinpath(WORKTREE_DIR, "backfill-$(code_tag)")
     lock(INSTANTIATE_LOCK) do
         isdir(wt) || run(`git -C $ROOT worktree add --detach $wt $code_tag`)
-        ## `registry.jl` includes `cache.jl`, which needs Serialization and
-        ## SHA, and the archive is written with CSV; all three are docs-project
-        ## dependencies, so the driver runs against `docs`, not the root
-        ## project. Precompiling here, under the lock, keeps tags off each
-        ## other's depot precompile locks and leaves the driver nothing to
-        ## build, so it can load modules normally. Resolving with a stale image
-        ## instead (`--compiled-modules=existing`) surfaces as an
-        ## `UndefVarError` for a binding the loaded package really does define.
+        ## Both drivers run against the `docs` project, not the root project:
+        ## the registry-era one includes `registry.jl` (which needs
+        ## Serialization and SHA through `cache.jl`), the pre-registry one saves
+        ## its chain with Serialization, and both write the archive with CSV,
+        ## all docs-project dependencies. Precompiling here, under the lock,
+        ## keeps tags off each other's depot precompile locks and leaves the
+        ## driver nothing to build, so it can load modules normally. Resolving
+        ## with a stale image instead (`--compiled-modules=existing`) surfaces
+        ## as an `UndefVarError` for a binding the loaded package really does
+        ## define.
         run(`julia --project=$(joinpath(wt, "docs"))
              -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"`)
     end
     try
         driver_path = joinpath(wt, "_backfill_driver.jl")
-        write(driver_path, backfill_driver(dest))
+        write(driver_path, driver_src)
         run(`julia --project=$(joinpath(wt, "docs"))
              --threads=$FIT_THREADS $driver_path`)
         rm(driver_path; force = true)
@@ -197,6 +209,159 @@ function backfill_driver(dest)
                           "known ids: " * join((s.id for s in specs), ", "))
     chn = fit_or_load(fit_key("joint"), specs[i].thunk;
         cache_dir = "$(CACHE_DIR)")
+
+    ## Pass only the observed-stream keywords this tag declares: the earlier
+    ## renewal releases predate `obs_recovered`, so passing it unconditionally
+    ## would fail on them.
+    accepted = Base.kwarg_decl(first(methods(forecast_reported)))
+    kw = Dict{Symbol, Any}(
+        :obs_cases => obs.reported_cases, :obs_deaths => obs.total_deaths)
+    for (kwname, field) in (
+        :obs_confirmed => :confirmed_cases,
+        :obs_confirmed_deaths => :confirmed_deaths,
+        :obs_recovered => :recovered_cases)
+        kwname in accepted && hasproperty(obs, field) &&
+            (kw[kwname] = getproperty(obs, field))
+    end
+    missed = setdiff(
+        (:obs_confirmed, :obs_confirmed_deaths, :obs_recovered), keys(kw))
+    isempty(missed) ||
+        @warn "tag does not take some observed-stream keywords" missed
+
+    runs = [(h, forecast_reported(chn; horizon = h, kw...))
+            for h in $(HORIZONS)]
+
+    ## Mirror of `forecast_archive`: incident (new-over-horizon) and level
+    ## quantities only, never cumulative.
+    streams = (
+        (:confirmed_new, "confirmed cases"),
+        (:confirmed_deaths_new, "confirmed deaths"),
+        (:recovered_new, "recovered"),
+        (:isolation_level, "isolation beds"))
+    out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
+        stream = String[], draw = Int[], value = Float64[])
+    for (horizon, fc) in runs
+        h = Int(horizon)
+        target = obs.cutoff + Day(h)
+        for (col, label) in streams
+            col in propertynames(fc) || continue
+            vals = fc[!, col]
+            for (d, i) in enumerate(1:$(THIN):length(vals))
+                push!(out,
+                    (obs.cutoff, h, target, label, d, Float64(vals[i])))
+            end
+        end
+    end
+    isempty(out) && error("no archived streams in the forecast")
+    mkpath(dirname("$(dest)"))
+    CSV.write("$(dest)", out)
+    @info "wrote archive" dest="$(dest)" rows=nrow(out) cutoff=obs.cutoff
+    """
+end
+
+## The headline joint `nuts_sample` call as `code_tag`'s own `analysis.jl`
+## writes it, ready to embed in the pre-registry driver.
+##
+## v1.4.0/v1.5.0 take neither the isolation/bed streams nor recovered: those
+## columns do not exist in `src/data.jl` at those tags, so the model cannot
+## ingest them and the forecast cannot emit them. v1.6.0 adds the
+## daily-suspected, isolation, bed-capacity and recovered histories, which is
+## what puts the bed and recovered deterministics in the chain that
+## `forecast_reported` probes before emitting `isolation_level` and
+## `recovered_new`.
+##
+## `target_accept` is not restated, so each tag's own `nuts_sample` default
+## applies (v1.4.0/v1.5.0 default to 0.9, v1.6.0 to 0.85); restating one value
+## would misfit the others. `samples`/`chains` are passed explicitly and
+## default to the production setting.
+function preregistry_joint_call(code_tag, samples, chains)
+    if code_tag in ("v1.4.0", "v1.5.0")
+        return """
+        nuts_sample(
+            bvd_joint(
+                obs.n, obs.exported_cases, obs.total_deaths,
+                obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+                obs.tests_analysed;
+                confirmed_deaths = obs.confirmed_deaths,
+                deaths_history = obs.deaths_history,
+                reported_history = obs.reported_history,
+                confirmed_history = obs.confirmed_history,
+                confirmed_deaths_history = obs.confirmed_deaths_history,
+                lab_history = obs.lab_history,
+                tests_received_history = obs.tests_received_history,
+                export_case_days = obs.export_case_days,
+                export_death_days = obs.export_death_days,
+                breakpoint = bp,
+                background_re = true,
+                confirmed_positivity_link = :composition,
+                genetic = genetic_seeding_model,
+                tmrca_days = obs.tmrca_days);
+            samples = $(samples), chains = $(chains))"""
+    elseif code_tag == "v1.6.0"
+        return """
+        nuts_sample(
+            bvd_joint(
+                obs.n, obs.exported_cases, obs.total_deaths,
+                obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+                obs.tests_analysed;
+                confirmed_deaths = obs.confirmed_deaths,
+                recovered_cases = obs.recovered_cases,
+                deaths_history = obs.deaths_history,
+                reported_history = obs.reported_history,
+                confirmed_history = obs.confirmed_history,
+                confirmed_deaths_history = obs.confirmed_deaths_history,
+                lab_history = obs.lab_history,
+                lab_daily_history = obs.lab_daily_history,
+                suspected_daily_history = obs.suspected_daily_history,
+                suspected_daily_deaths_history =
+                    obs.suspected_daily_deaths_history,
+                isolation_history = obs.isolation_history,
+                bed_capacity_history = obs.bed_capacity_history,
+                recovered_history = obs.recovered_history,
+                export_case_days = obs.export_case_days,
+                export_death_days = obs.export_death_days,
+                breakpoint = bp,
+                background_re = true,
+                confirmed_positivity_link = :composition,
+                genetic = genetic_seeding_model,
+                tmrca_days = obs.tmrca_days);
+            samples = $(samples), chains = $(chains))"""
+    end
+    error("no joint call recorded for $(code_tag)")
+end
+
+## Source of the inline driver run inside a pre-registry release's worktree
+## (v1.4.0-v1.6.0). These tags predate the fit registry, so the driver
+## reproduces each tag's own headline joint call verbatim (see
+## `preregistry_joint_call`) rather than reaching the fit through the registry.
+## The chain is serialised alongside the archive because these tags have no
+## `fit_or_load`, so a failure in the archive step would otherwise cost a whole
+## refit. Everything downstream of the fit matches `backfill_driver`, so the
+## archive is schema-identical (made_date, horizon, target_date, stream, draw,
+## value).
+function preregistry_driver(dest, code_tag; samples = 1000, chains = 2)
+    joint = preregistry_joint_call(code_tag, samples, chains)
+    return """
+    using Dates: Date, Day
+    using DataFrames: DataFrame, propertynames, nrow
+    using CSV: CSV
+    using Serialization: serialize
+    using BVDOutbreakSize
+
+    obs = load_observations()
+    @info "fitting" tag="$(code_tag)" cutoff=obs.cutoff
+    bp = obs.n - obs.who_first_sitrep_days
+    chn = $(joint)
+
+    ## Keep the chain: these tags have no `fit_or_load`, so a failure in the
+    ## archive step below would otherwise cost a whole refit.
+    chain_path = "$(dest).chain"
+    try
+        serialize(chain_path, chn)
+        @info "chain saved" chain_path
+    catch e
+        @warn "could not save chain" exception = e
+    end
 
     ## Pass only the observed-stream keywords this tag declares: the earlier
     ## renewal releases predate `obs_recovered`, so passing it unconditionally
