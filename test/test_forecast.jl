@@ -419,3 +419,46 @@ end
     @test_throws ArgumentError forecast_stream(nchn, :reported_cases;
         horizon = 7, obs_value = 905)
 end
+
+@testitem "forecast_stream recovers bed capacity on a standalone fit" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated, product_distribution
+    using Statistics: mean
+    import FlexiChains
+    using BVDOutbreakSize: forecast_stream, _bed_capacity, knot_days
+
+    ## A standalone treatment fit exposes no capacity key, so the cut-off
+    ## capacity is recovered from `expected_isolation / bed_utilisation`.
+    ## Fix a known capacity and check the recovery returns it: the occupancy
+    ## cancels, so the answer must not depend on the occupancy level.
+    nz = length(knot_days(60; week = 7, start = 1)) - 1
+    @model function _cap_test(occ, capacity)
+        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
+        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1e-3)
+        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
+        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
+        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
+        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
+        var"treatment_state.disp_state.k" ~
+        truncated(Normal(10.0, 3.0); lower = 1.0)
+        var"treatment_state.expected_bed_demand" ~
+        truncated(Normal(600.0, 80.0); lower = 1.0)
+        var"treatment_state.expected_isolation" := occ
+        var"treatment_state.bed_utilisation" := occ / capacity
+        return nothing
+    end
+
+    ## A mid-outbreak occupancy and a near-zero early one both recover the
+    ## same fixed capacity.
+    for occ in (400.0, 1e-8)
+        chn = sample(_cap_test(occ, 430.0), Prior(), 50;
+            chain_type = FlexiChains.VNChain, progress = false)
+        cap = _bed_capacity(chn)
+        @test all(c -> isapprox(c, 430.0; rtol = 1e-6), cap)
+        ## The supply limit binds: demand (~600) is capped at the capacity.
+        beds = forecast_stream(chn, :isolation_beds; horizon = 7,
+            obs_value = 359, n = 60, breakpoint = 30.0)
+        @test maximum(beds) <= 430
+    end
+end

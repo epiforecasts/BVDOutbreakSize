@@ -684,15 +684,37 @@ const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
 ## Cut-off bed capacity draws. The joint aliases it un-prefixed
 ## (`bed_capacity := treatment_state.capacity`), but `capacity` is a return
 ## field of [`treatment_flow_model`](@ref) rather than a `:=`, so a
-## standalone treatment fit carries no such key. It does expose
-## `bed_utilisation := occ_T / C_T`, so the capacity is recovered exactly by
-## dividing the cut-off occupancy through it.
+## standalone treatment fit carries no such key: the capacity walk exposes
+## only its parameters (`cap_state.C0`, `cap_state.z`, `cap_state.σ_cap`),
+## never `C` itself.
+##
+## The capacity is instead recovered from the two deterministics the
+## submodel does expose, `expected_isolation := safe_rate(occ_T)` and
+## `bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)`. Their ratio is
+## `safe_rate(C_T)` exactly — the occupancy cancels, including its
+## [`safe_rate`](@ref) flooring — so this recovers the same quantity the
+## joint aliases rather than approximating it, and needs none of the
+## walk-reconstruction machinery `reconstruct_rt` needs for `R_t`.
+##
+## The cancellation holds because `safe_rate` floors at `eps`, so the
+## denominator is positive even at the near-zero early occupancy where the
+## division would otherwise be ill-posed. A non-finite or non-positive
+## result would mean that invariant has been broken upstream, and the
+## isolation forecast is supply-limited, so a wrong capacity would silently
+## unbound the projected level: fail loudly instead.
 function _bed_capacity(chn)
     _has_key(chn, :bed_capacity) && return _draws(chn, :bed_capacity)
     occ = Symbol("treatment_state.expected_isolation")
     util = Symbol("treatment_state.bed_utilisation")
     (_has_key(chn, occ) && _has_key(chn, util)) || return nothing
-    return _draws(chn, occ) ./ _draws(chn, util)
+    cap = _draws(chn, occ) ./ _draws(chn, util)
+    all(c -> isfinite(c) && c > 0, cap) || throw(ArgumentError(
+        "forecast_stream: bed capacity recovered from " *
+        "`treatment_state.expected_isolation` / " *
+        "`treatment_state.bed_utilisation` is not finite and positive for " *
+        "every draw; the occupancy did not cancel as expected, so the " *
+        "supply limit cannot be trusted."))
+    return cap
 end
 
 ## Cut-off reproduction-number draws. The joint exposes `R_T :=
