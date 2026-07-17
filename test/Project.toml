@@ -33,6 +33,7 @@ BVDOutbreakSize = {path = ".."}
 
 [compat]
 Aqua = "0.8.16"
+CairoMakie = "0.15.13"
 CensoredDistributions = "0.2.22"
 Coverage = "1"
 LogDensityProblems = "2.2.0"
