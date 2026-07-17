@@ -3412,6 +3412,101 @@ forecast_runs = [(h,
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
 
+## Per-fit release assets: the reproduction number, outbreak size and forecasts
+## for every fit rather than the joint alone, so a release records what each
+## dataset implies on its own and can later be scored against the joint. The
+## single-stream fits walk Rt from day 1 while the joint walks from
+## `RT_WALK_LEAD` days before the first situation report, so each fit carries
+## the starts its own fit used. Each single-stream fit forecasts only the
+## dataset it observes; the joint forecasts every shared stream. Recovered has
+## no single-stream fit, so it stays a joint-only stream in `forecast.csv`.
+stream_thin = 5
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+## Observed bed occupancy at the cut-off, the level the isolation forecast
+## anchors on.
+_iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
+                 obs.isolation_history.counts[end]
+stream_fits = [
+    (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint,
+        streams = [(:reported_cases, "reported cases", obs.reported_cases),
+            (:suspected_deaths, "suspected deaths", obs.total_deaths),
+            (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
+            (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
+            (:isolation_beds, "isolation beds", _iso_at_cutoff),
+            (:exports, "exports", obs.exported_cases)]),
+    (; fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
+        streams = [(:reported_cases, "reported cases", obs.reported_cases)]),
+    (; fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
+        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)]),
+    (; fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
+        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)]),
+    (; fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1,
+        streams = [(:confirmed_deaths, "confirmed deaths",
+            obs.confirmed_deaths)]),
+    (; fit = "treatment", chn = chn_treatment, rt_start = 1,
+        rt_walk_start = 1,
+        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)]),
+    (; fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
+        streams = [(:exports, "exports", obs.exported_cases)])
+]
+
+## Cut-off reproduction number per fit. The joint exposes it as `R_T`; the
+## single-stream composers do not (the alias lives in `bvd_joint`, not the
+## shared latent submodel), so theirs is rebuilt from the walk parameters every
+## chain carries and read at the cut-off, the last day of the reconstructed
+## path. `ramp` matches the model's 21-day intervention scale-up.
+function _fit_rt_draws(f)
+    f.fit == "joint" && return vec(Array(f.chn[:R_T]))
+    rt = reconstruct_rt(f.chn; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = 21.0)
+    return Float64[rt[i, obs.n] for i in axes(rt, 1)]
+end
+
+_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])))
+                      for f in stream_fits]
+
+## One row per fit and quantity, with the median and the 30/60/90% credible
+## bounds the report's tables use.
+function _stream_estimate_row(fit, quantity, draws)
+    s = posterior_summary(draws)
+    return (fit = fit, quantity = quantity, median = quantile(draws, 0.5),
+        lo30 = s.lo30, hi30 = s.hi30, lo60 = s.lo60, hi60 = s.hi60,
+        lo90 = s.lo90, hi90 = s.hi90)
+end
+stream_estimates = DataFrame([_stream_estimate_row(fit, q, d)
+                              for (fit, rt, ct) in _stream_quantities
+                              for (q, d) in (("R_T", rt), ("C_T", ct))])
+CSV.write(joinpath(output_dir, "stream_estimates.csv"), stream_estimates);
+
+## Thinned reproduction-number and outbreak-size draws per fit, so downstream
+## scoring can recompute its own summaries rather than reuse the intervals.
+stream_draws = DataFrame([(fit = fit, quantity = q, draw = d, value = v)
+                          for (fit, rt, ct) in _stream_quantities
+                          for (q, vals) in (("R_T", rt), ("C_T", ct))
+                          for (d, v) in enumerate(vals[1:stream_thin:end])])
+CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
+
+## Per-fit forecasts of each fit's own observed stream, in the `forecast.csv`
+## long schema plus the fit that made them. Rebuilding a single-stream fit's
+## cut-off growth rate needs the grid length and the breakpoint, which are data
+## rather than chain contents, so both are passed.
+stream_forecasts = DataFrame(made_date = Date[], horizon = Int[],
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[],
+    fit = String[])
+for f in stream_fits, (stream, label, obs_value) in f.streams,
+    h in forecast_horizons
+    _vals = forecast_stream(f.chn, stream; horizon = h,
+        obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start)
+    for (d, i) in enumerate(1:stream_thin:length(_vals))
+        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
+            d, Float64(_vals[i]), f.fit))
+    end
+end
+CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
+
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
 ## showing outbreak growth: one row per grid day with the 30/60/90%
 ## credible intervals of both the daily new and cumulative onsets.
