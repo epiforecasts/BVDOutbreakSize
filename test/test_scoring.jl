@@ -1,6 +1,76 @@
 ## Tests for the forecast-scoring primitives in src/scoring.jl:
 ## crps_sample, log_crps_sample and score_draws. Scored against
-## ScoringRules directly where sensible.
+## ScoringRules directly where sensible. Also covers
+## select_daily_releases, which picks the releases scripts/score_releases.jl
+## scores.
+
+@testitem "select_daily_releases keeps tagged and main-build releases" begin
+    using Dates: DateTime
+    using BVDOutbreakSize: select_daily_releases
+
+    entries = [("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23)),
+        ("results-1223", DateTime(2026, 7, 14, 12, 16, 30)),
+        ("v1.9.0", DateTime(2026, 7, 11, 10, 0, 0)),
+        ("some-other-tag", DateTime(2026, 7, 12, 9, 0, 0))]
+
+    @test select_daily_releases(entries) ==
+          ["results-1223", "results-v1.9.0"]
+end
+
+@testitem "select_daily_releases keeps the newest main build of a day" begin
+    using Dates: DateTime
+    using BVDOutbreakSize: select_daily_releases
+
+    ## Two main builds on 2026-07-06 collapse to the later one; the build
+    ## on the next day is kept alongside it.
+    entries = [("results-1160", DateTime(2026, 7, 6, 13, 36, 42)),
+        ("results-1169", DateTime(2026, 7, 6, 22, 2, 50)),
+        ("results-1172", DateTime(2026, 7, 7, 8, 0, 46))]
+
+    @test select_daily_releases(entries) == ["results-1172", "results-1169"]
+end
+
+@testitem "select_daily_releases prefers the tagged release of a day" begin
+    using Dates: DateTime
+    using BVDOutbreakSize: select_daily_releases
+
+    ## A tag build and a main build of the same commit publish identical
+    ## forecasts under one timestamp; scoring both double-counts them.
+    entries = [("results-1204", DateTime(2026, 7, 11, 10, 24, 23)),
+        ("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23))]
+    @test select_daily_releases(entries) == ["results-v1.9.0"]
+
+    ## The tag wins even when a later main build lands the same day.
+    later = [("results-v1.9.0", DateTime(2026, 7, 11, 10, 24, 23)),
+        ("results-1210", DateTime(2026, 7, 11, 23, 0, 0))]
+    @test select_daily_releases(later) == ["results-v1.9.0"]
+end
+
+@testitem "select_daily_releases breaks timestamp ties deterministically" begin
+    using Dates: DateTime
+    using BVDOutbreakSize: select_daily_releases
+
+    ## Two version tags and a main build share one timestamp: the higher
+    ## version wins, by version order rather than string order.
+    entries = [("results-v1.3.0", DateTime(2026, 6, 9, 22, 58, 13)),
+        ("results-706", DateTime(2026, 6, 9, 22, 58, 13)),
+        ("results-v1.4.0", DateTime(2026, 6, 9, 22, 58, 13))]
+    @test select_daily_releases(entries) == ["results-v1.4.0"]
+
+    ## Main builds sharing a timestamp fall back to the higher run number.
+    mains = [("results-43", DateTime(2026, 5, 20, 9, 6, 47)),
+        ("results-4", DateTime(2026, 5, 20, 9, 6, 47))]
+    @test select_daily_releases(mains) == ["results-43"]
+end
+
+@testitem "select_daily_releases returns no tags for no releases" begin
+    using Dates: DateTime
+    using BVDOutbreakSize: select_daily_releases
+
+    @test select_daily_releases(Tuple{String, DateTime}[]) == String[]
+    @test select_daily_releases([("v1.0.0", DateTime(2026, 5, 1))]) ==
+          String[]
+end
 
 @testitem "crps_sample matches ScoringRules.crps(samples, obs)" begin
     using ScoringRules: crps

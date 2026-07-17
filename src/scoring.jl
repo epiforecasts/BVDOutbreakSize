@@ -58,6 +58,59 @@ function score_draws(obs::Real, samples::AbstractVector{<:Real})
         n = n)
 end
 
+## The two kinds of results release `.github/workflows/docs.yml` publishes:
+## `results-vX.Y.Z` from a version-tag push, and `results-<run number>`
+## from a push to `main`.
+const _VERSION_RELEASE = r"^results-v([0-9][0-9A-Za-z.+-]*)$"
+const _MAIN_RELEASE = r"^results-([0-9]+)$"
+
+## Rank one results release within its day: tagged releases above main
+## builds, then the later timestamp, then the higher version or run number
+## so releases sharing a timestamp still order deterministically. Returns
+## `nothing` for a tag that is not a results release. The version and run
+## number are only ever compared against their own kind, since the leading
+## flag separates the two.
+function _release_key(tag::AbstractString, created)
+    m = match(_VERSION_RELEASE, tag)
+    isnothing(m) || return (1, created, VersionNumber(m[1]))
+    m = match(_MAIN_RELEASE, tag)
+    isnothing(m) && return nothing
+    return (0, created, parse(Int, m[1]))
+end
+
+"""
+Select at most one results release per calendar day from `entries`, a
+collection of `(tag, created)` pairs as reported by `gh release list`
+(`created` a UTC `DateTime`). Both tagged releases (`results-vX.Y.Z`) and
+main-build releases (`results-<run number>`, published by every push to
+`main`) are eligible; any other tag is ignored. Days are the UTC calendar
+days of the release timestamps.
+
+Within a day a tagged release is preferred: a version tag and the `main`
+push of the same commit publish two releases carrying identical forecasts,
+so scoring both would count one forecast twice. Failing that the newest
+main build of the day is kept, so the day is represented by the forecast
+made from the most data. Releases sharing a timestamp are separated by
+version or run number, keeping the selection deterministic.
+
+Returns the selected tags, newest first.
+"""
+function select_daily_releases(entries)
+    rels = [(String(t), c) for (t, c) in entries
+            if !isnothing(_release_key(t, c))]
+    isempty(rels) && return String[]
+
+    days = Dict{Date, typeof(rels)}()
+    for r in rels
+        push!(get!(() -> empty(rels), days, Date(r[2])), r)
+    end
+
+    picks = [argmax(r -> _release_key(r[1], r[2]), days[d])
+             for d in sort(collect(keys(days)))]
+    sort!(picks; by = r -> r[2], rev = true)
+    return first.(picks)
+end
+
 """
 Summarise a `data/forecast_scores.csv` table (as written by
 `scripts/score_releases.jl`) into one row per `(stream, horizon)`: the number

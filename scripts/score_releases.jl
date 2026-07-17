@@ -7,7 +7,16 @@
 # same style as `data/released_estimates.csv` (see
 # `scripts/refresh_releases.jl`).
 #
-# Every `results-v*` release that carries a `forecast.csv` asset (see
+# Both kinds of results release are scored: `results-vX.Y.Z` from a
+# version tag and `results-<run number>` from a push to `main`. At most one
+# release per calendar day is kept, preferring the tagged release when a
+# tag build and a main build published the same commit's forecasts twice
+# (see `select_daily_releases` in `src/scoring.jl`). Releases predating the
+# forecast archive carry no `forecast.csv` and are skipped for scoring;
+# they are not backfilled (`scripts/backfill_forecasts.jl` covers tagged
+# releases only).
+#
+# Every release that carries a `forecast.csv` asset (see
 # `forecast_archive` in `src/forecast.jl`) has one row per (made_date,
 # horizon, target_date, stream, draw): the forecast draws for the
 # incident "confirmed cases", "confirmed deaths" and "recovered" streams
@@ -21,10 +30,9 @@
 # the last observed occupancy carried forward through the same Poisson
 # replication.
 #
-# MUST BE RE-RUN whenever a new `results-v*` release is cut: it always
-# recomputes both tables from every release currently on GitHub, so
-# re-running is idempotent and just refreshes the two output CSVs in
-# place.
+# Re-run whenever a new release is published: it always recomputes both
+# tables from every release currently on GitHub, so re-running is
+# idempotent and just refreshes the output CSVs in place.
 #
 # Requires the `gh` CLI, authenticated against the repo. Runs under the
 # package's own environment with no extra dependencies: `CSV.jl` is not a
@@ -45,6 +53,8 @@ using Random
 using Statistics: median
 using TOML
 
+using BVDOutbreakSize: select_daily_releases
+
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
@@ -56,13 +66,21 @@ repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 # gh CLI plumbing (mirrors `scripts/refresh_releases.jl`)
 # ----------------------------------------------------------------------
 
-## All tagged results releases, newest first, as reported by `gh`.
+## The results releases to score, newest first: every tagged and
+## main-build release `gh` reports, thinned to at most one per calendar
+## day by `select_daily_releases`.
 function results_release_tags(repo)
-    out = read(`gh release list -R $repo -L 200 --json tagName
-        --jq ".[].tagName"`, String)
-    tags = filter(t -> occursin(r"^results-v[0-9]", t),
-        split(strip(out), '\n'))
-    return tags
+    out = read(`gh release list -R $repo -L 200 --json tagName,createdAt
+        --jq ".[] | [.tagName, .createdAt] | @tsv"`, String)
+    entries = Tuple{String, DateTime}[]
+    for line in split(strip(out), '\n')
+        isempty(strip(line)) && continue
+        tag, created = split(line, '\t')
+        push!(entries,
+            (String(tag),
+                DateTime(created, dateformat"yyyy-mm-ddTHH:MM:SSZ")))
+    end
+    return select_daily_releases(entries)
 end
 
 ## Download a single asset from a release into `dir`, returning its path
@@ -288,7 +306,8 @@ end
 # ----------------------------------------------------------------------
 
 tags = results_release_tags(repo)
-isempty(tags) && error("no results-v* releases found for $repo")
+isempty(tags) && error("no results releases found for $repo")
+println("Scoring $(length(tags)) release(s), at most one per day.")
 
 ## The CURRENT observations manifest is the now-observed truth every
 ## release's forecast is scored against.

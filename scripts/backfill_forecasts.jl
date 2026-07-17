@@ -148,18 +148,19 @@ function backfill_one(code_tag; keep)
         ## `registry.jl` includes `cache.jl`, which needs Serialization and
         ## SHA, and the archive is written with CSV; all three are docs-project
         ## dependencies, so the driver runs against `docs`, not the root
-        ## project. `--compiled-modules=existing` avoids wedging on a shared
-        ## depot precompile lock held by another tag's worktree.
+        ## project. Precompiling here, under the lock, keeps tags off each
+        ## other's depot precompile locks and leaves the driver nothing to
+        ## build, so it can load modules normally. Resolving with a stale image
+        ## instead (`--compiled-modules=existing`) surfaces as an
+        ## `UndefVarError` for a binding the loaded package really does define.
         run(`julia --project=$(joinpath(wt, "docs"))
-             --compiled-modules=existing
-             -e "using Pkg; Pkg.instantiate()"`)
+             -e "using Pkg; Pkg.instantiate(); Pkg.precompile()"`)
     end
     try
         driver_path = joinpath(wt, "_backfill_driver.jl")
         write(driver_path, backfill_driver(dest))
         run(`julia --project=$(joinpath(wt, "docs"))
-             --compiled-modules=existing --threads=$FIT_THREADS
-             $driver_path`)
+             --threads=$FIT_THREADS $driver_path`)
         rm(driver_path; force = true)
     finally
         keep || run(`git -C $ROOT worktree remove --force $wt`)
