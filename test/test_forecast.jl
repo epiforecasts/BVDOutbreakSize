@@ -263,3 +263,159 @@ end
     @test median(f21.deaths_cum) >= median(f7.deaths_cum)
     @test median(f21.confirmed_cum) >= median(f7.confirmed_cum)
 end
+
+## Per-stream forecasts from either fit kind. Two synthetic chains stand in
+## for the two shapes `forecast_stream` must serve: a top-level chain naming
+## the joint's un-prefixed aliases, and a nested chain naming the
+## single-stream composers' submodel-bound deterministics. The nested chain
+## carries no `r`, `R_T` or `T`, so it exercises the reconstruction path.
+@testsnippet StreamFixtures begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated, product_distribution
+    import FlexiChains
+    using BVDOutbreakSize: knot_days
+
+    ## Grid length and intervention day shared by the nested chain and the
+    ## `forecast_stream` calls that reconstruct its walk.
+    const STREAM_N = 60
+    const STREAM_BREAK = 30.0
+    ## One innovation per walk step, matching `rt_walk_model` at these
+    ## settings, so `reconstruct_rt` accepts the chain.
+    const STREAM_NZ = length(knot_days(STREAM_N; week = 7, start = 1)) - 1
+
+    ## Joint-shaped: every quantity un-prefixed, as `bvd_joint`'s `:=`
+    ## aliases expose them.
+    @model function _stream_toplevel()
+        r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
+        T ~ truncated(Normal(100.0, 5.0); lower = 10.0)
+        k_cases ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        k_deaths ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        k_confirmed ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        k_confirmed_deaths ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        expected_reports_T ~ truncated(Normal(900.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
+        expected_confirmed_deaths_T ~ truncated(Normal(17.0, 3.0); lower = 0.5)
+        expected_exports_T ~ truncated(Normal(12.0, 3.0); lower = 0.5)
+        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
+        return nothing
+    end
+
+    ## Single-stream-shaped: each stream's expected count under its composer
+    ## binding, one scalar `dispersion_state.k`, and the walk and generation
+    ## interval the reconstruction reads. `growth_state.T` is the cryptic
+    ## duration only, and there is no `r`, `R_T` or `T`.
+    @model function _stream_nested()
+        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"growth_state.r" ~ truncated(Normal(0.2, 0.02); lower = 1e-3)
+        var"rt_state.log_R0" ~ Normal(log(1.8), 0.1)
+        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1e-3)
+        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
+        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), STREAM_NZ))
+        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
+        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
+        var"dispersion_state.k" ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        var"cases_state.expected_reports" ~
+        truncated(Normal(900.0, 50.0); lower = 1.0)
+        var"deaths_state.expected_deaths_T" ~
+        truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"confirmed_state.expected_confirmed" ~
+        truncated(Normal(210.0, 20.0); lower = 1.0)
+        var"confirmed_deaths_state.expected_confirmed_deaths" ~
+        truncated(Normal(17.0, 3.0); lower = 0.5)
+        var"exports_state.expected_exports_T" ~
+        truncated(Normal(12.0, 3.0); lower = 0.5)
+        var"treatment_state.expected_bed_demand" ~
+        truncated(Normal(600.0, 80.0); lower = 1.0)
+        var"treatment_state.expected_isolation" ~
+        truncated(Normal(400.0, 20.0); lower = 1.0)
+        ## `bed_utilisation := occ_T / C_T`, so a capacity near 430 given the
+        ## occupancy above.
+        var"treatment_state.bed_utilisation" ~
+        truncated(Normal(0.93, 0.02); lower = 0.1, upper = 1.0)
+        var"treatment_state.disp_state.k" ~
+        truncated(Normal(10.0, 3.0); lower = 1.0)
+        return nothing
+    end
+
+    _toplevel_chain(n) = sample(_stream_toplevel(), Prior(), n;
+        chain_type = FlexiChains.VNChain, progress = false)
+    _nested_chain(n) = sample(_stream_nested(), Prior(), n;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    const STREAM_OBS = Dict(
+        :reported_cases => 905, :suspected_deaths => 40,
+        :confirmed_cases => 210, :confirmed_deaths => 17,
+        :exports => 12, :isolation_beds => 359)
+    const STREAM_ALL = collect(keys(STREAM_OBS))
+end
+
+@testitem "forecast_stream projects every stream from a joint-shaped chain" tags=[:slow] setup=[StreamFixtures] begin
+    using BVDOutbreakSize: forecast_stream
+
+    chn=_toplevel_chain(200)
+    for s in STREAM_ALL
+        fc=forecast_stream(chn, s; horizon = 7, obs_value = STREAM_OBS[s])
+        @test fc isa Vector
+        @test length(fc) == 200
+        @test all(fc .>= 0)
+    end
+    ## Beds are a supply-limited level, so the occupancy cannot exceed the
+    ## capacity (~430) however far the demand (~600) is projected.
+    beds=forecast_stream(chn, :isolation_beds; horizon = 7,
+        obs_value = 359)
+    @test maximum(beds) <= 600
+    @test maximum(beds) > 300
+end
+
+@testitem "forecast_stream projects every stream from a nested chain" tags=[:slow] setup=[StreamFixtures] begin
+    using BVDOutbreakSize: forecast_stream
+
+    chn=_nested_chain(200)
+    for s in STREAM_ALL
+        fc=forecast_stream(chn, s; horizon = 7, obs_value = STREAM_OBS[s],
+            n = STREAM_N, breakpoint = STREAM_BREAK)
+        @test fc isa Vector
+        @test length(fc) == 200
+        @test all(fc .>= 0)
+    end
+    beds=forecast_stream(chn, :isolation_beds; horizon = 7,
+        obs_value = 359, n = STREAM_N, breakpoint = STREAM_BREAK)
+    @test maximum(beds) > 300
+end
+
+@testitem "forecast_stream incident streams grow with the horizon" tags=[:slow] setup=[StreamFixtures] begin
+    using Statistics: median
+    using BVDOutbreakSize: forecast_stream
+
+    ## More new counts accrue over a longer horizon, on both chain shapes.
+    chn=_toplevel_chain(400)
+    for s in (:reported_cases, :confirmed_cases, :exports)
+        f7=forecast_stream(chn, s; horizon = 7, obs_value = STREAM_OBS[s])
+        f21=forecast_stream(chn, s; horizon = 21, obs_value = STREAM_OBS[s])
+        @test median(f21) >= median(f7)
+    end
+    nchn=_nested_chain(400)
+    f7=forecast_stream(nchn, :confirmed_cases; horizon = 7,
+        obs_value = 210, n = STREAM_N, breakpoint = STREAM_BREAK)
+    f21=forecast_stream(nchn, :confirmed_cases; horizon = 21,
+        obs_value = 210, n = STREAM_N, breakpoint = STREAM_BREAK)
+    @test median(f21) >= median(f7)
+end
+
+@testitem "forecast_stream rejects unknown and unfitted streams" tags=[:slow] setup=[StreamFixtures] begin
+    using BVDOutbreakSize: forecast_stream
+
+    chn=_toplevel_chain(50)
+    @test_throws ArgumentError forecast_stream(chn, :not_a_stream;
+        horizon = 7, obs_value = 1)
+    ## A nested chain carries no `r` or `R_T`, so without the grid length and
+    ## breakpoint needed to rebuild them the projection is an error rather
+    ## than a silent fallback to the wrong growth rate.
+    nchn=_nested_chain(50)
+    @test_throws ArgumentError forecast_stream(nchn, :reported_cases;
+        horizon = 7, obs_value = 905)
+end
