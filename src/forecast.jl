@@ -386,6 +386,11 @@ function forecast_reported(chn;
             confirmed_share[i] = s_i
             confirmed_ward[i] = round(Int, s_i * bed_demand[i])
             suspect_ward[i] = bed_demand[i] - confirmed_ward[i]
+            ## The occupancy split assumes proportional capping: the confirmed
+            ## and suspect wards fill the capped beds in the same ratio as
+            ## demand. If confirmed cases were prioritised once demand exceeds
+            ## capacity this would understate the confirmed occupancy; the
+            ## demand split above carries no such assumption.
             confirmed_occ[i] = round(Int, s_i * isolation_level[i])
             suspect_occ[i] = isolation_level[i] - confirmed_occ[i]
         end
