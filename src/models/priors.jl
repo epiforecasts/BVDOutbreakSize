@@ -207,8 +207,8 @@ at or below zero. This is stronger than the earlier symmetric
 drifted up unchecked) and the one-sided lean `Normal(-0.3, 0.4)`: the
 response now has a definite non-increasing effect, with the half-normal
 admitting anything from no effect (mode) to a substantial decline. Because
-the breakpoint is only ≈11 days before the cut-off and the ramp is a
-fortnight, the response damps `R_t` only partially by the cut-off.
+the breakpoint is only ≈11 days before the cut-off and the ramp is three
+weeks, the response damps `R_t` only partially by the cut-off.
 """
 @model function rt_walk_model(n::Integer, log_R0_base::Real;
         week::Integer = 7,
