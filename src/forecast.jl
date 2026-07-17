@@ -625,11 +625,18 @@ end
 ##   the fallback. The names differ in whether they carry a `_T` suffix
 ##   (`deaths_state.expected_deaths_T` and `exports_state.expected_exports_T`
 ##   do, `cases_state.expected_reports` does not).
-## - `dispersion`: the joint's un-prefixed per-stream alias comes FIRST here,
-##   inverting the order above, because the joint's nested
-##   `dispersion_state.k` is the six-element partially-pooled VECTOR, not
-##   this stream's scalar. Only the single-stream fits, which sample one
-##   scalar `k`, may fall through to it.
+## - `dispersion`: each fit's OWN dispersion, read as it stands. The two
+##   candidate sets are disjoint by fit kind: the joint carries only the
+##   per-stream aliases (`k_cases`, `isolation_dispersion`, …), since
+##   `pooled_dispersion_model` returns its pooled `k` vector rather than
+##   `:=`-exposing it and `treatment_flow_model` skips its own dispersion
+##   when the joint injects `k_external`; the single-stream fits carry only
+##   the nested scalar they sample. The joint alias is listed first so a
+##   pooled vector could never be reached ahead of a stream's scalar, and
+##   `forecast_stream` guards on the resolved length as a backstop. The
+##   joint and a single-stream fit genuinely differ here, and that
+##   difference is part of what the forecast comparison measures, so it is
+##   preserved rather than harmonised.
 ## - `trajectory`: the stream's cumulative trajectory, whose last increment
 ##   is the cut-off daily rate. Only the joint exposes any (as un-prefixed
 ##   `:=` aliases); an empty list means the daily rate is always inferred
