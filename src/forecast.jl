@@ -717,12 +717,18 @@ end
 ## `growth_state.r` is NOT this quantity: that is the cryptic clock rate the
 ## joint exposes as `r0`, which is the early growth of the seeded phase
 ## rather than the growth at the cut-off.
+##
+## The generation interval is discretised at the same truncation
+## `infection_model` uses (`cdf_nmax` of the prior centre, not `_gi_pmf`'s
+## lighter default), so the rate reconstructed here for a single-stream fit
+## matches the `r` the joint reads straight off its chain.
 function _cutoff_r(chn, R_T)
     _has_key(chn, :r) && return _draws(chn, :r)
     isnothing(R_T) && return nothing
     α = _draws(chn, Symbol("gi_state.α"))
     θ = _draws(chn, Symbol("gi_state.θ"))
-    return Float64[euler_lotka_r(R_T[i], _gi_pmf(α[i], θ[i]))
+    nmax = cdf_nmax(Gamma(2.71, 5.65))
+    return Float64[euler_lotka_r(R_T[i], _gi_pmf(α[i], θ[i]; nmax = nmax))
                    for i in eachindex(R_T)]
 end
 
