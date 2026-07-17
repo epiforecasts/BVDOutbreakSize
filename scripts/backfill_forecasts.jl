@@ -246,80 +246,99 @@ end
 # Driver
 # ----------------------------------------------------------------------
 
-opts = parse_args(ARGS)
-mkpath(OUT_DIR)
-mkpath(CACHE_DIR)
-
-all_tags = renewal_release_tags()
-tags = isnothing(opts.only) ? all_tags : filter(==(opts.only), all_tags)
-isempty(tags) && error("no matching renewal release tags (have $all_tags)")
-
-@info "backfilling forecasts" tags concurrency=opts.concurrency
-done = String[]
-manual = String[]
-failed = String[]
-results = ReentrantLock()
-## Bound the number of fits in flight; each one samples on `FIT_THREADS`.
-gate = Base.Semaphore(opts.concurrency)
-
-@sync for code_tag in tags
-    @async begin
-        Base.acquire(gate)
-        try
-            while !compute_clear()
-                @info "compute budget red; waiting 60s" code_tag
-                sleep(60)
+## Backfill every tag in `tags`, honouring `concurrency` fits in flight, and
+## return the tags split into automatically reconstructed, still-manual and
+## failed. Each fit samples on `FIT_THREADS`, so the default concurrency stays
+## inside the host.
+function run_backfill(tags; keep, concurrency)
+    done = String[]
+    manual = String[]
+    failed = String[]
+    results = ReentrantLock()
+    gate = Base.Semaphore(concurrency)
+    @sync for code_tag in tags
+        @async begin
+            Base.acquire(gate)
+            try
+                while !compute_clear()
+                    @info "compute budget red; waiting 60s" code_tag
+                    sleep(60)
+                end
+                path = try
+                    backfill_one(code_tag; keep)
+                catch e
+                    @warn "backfill failed" code_tag exception=e
+                    :failed
+                end
+                lock(results) do
+                    path === :failed ? push!(failed, code_tag) :
+                    isnothing(path) ? push!(manual, code_tag) :
+                    push!(done, code_tag)
+                end
+            finally
+                Base.release(gate)
             end
-            path = try
-                backfill_one(code_tag; keep = opts.keep)
-            catch e
-                @warn "backfill failed" code_tag exception=e
-                :failed
-            end
-            lock(results) do
-                path === :failed ? push!(failed, code_tag) :
-                isnothing(path) ? push!(manual, code_tag) :
-                push!(done, code_tag)
-            end
-        finally
-            Base.release(gate)
         end
     end
+    sort!(done; rev = true)
+    sort!(manual; rev = true)
+    sort!(failed; rev = true)
+    return (; done, manual, failed)
 end
-sort!(done; rev = true)
-sort!(manual; rev = true)
-sort!(failed; rev = true)
 
-## Concatenate the per-release archives into one combined file.
-combined = joinpath(OUT_DIR, "forecasts_backfill.csv")
-open(combined, "w") do io
-    wrote_header = false
-    for code_tag in done
-        f = joinpath(OUT_DIR, "forecast_$(code_tag).csv")
-        isfile(f) || continue
-        lines = readlines(f)
-        isempty(lines) && continue
-        wrote_header || (println(io, lines[1]); wrote_header = true)
-        for l in lines[2:end]
-            isempty(strip(l)) || println(io, l)
+## Concatenate the per-release archives named in `done` into one combined file.
+function combine_archives(done)
+    combined = joinpath(OUT_DIR, "forecasts_backfill.csv")
+    open(combined, "w") do io
+        wrote_header = false
+        for code_tag in done
+            f = joinpath(OUT_DIR, "forecast_$(code_tag).csv")
+            isfile(f) || continue
+            lines = readlines(f)
+            isempty(lines) && continue
+            wrote_header || (println(io, lines[1]); wrote_header = true)
+            for l in lines[2:end]
+                isempty(strip(l)) || println(io, l)
+            end
         end
     end
+    return combined
 end
 
-println()
-println("Backfilled $(length(done)) release(s): ", join(done, ", "))
-isempty(manual) ||
-    println("Manual backfill still needed for: ", join(manual, ", "))
-isempty(failed) ||
-    println("Failed (see the log above): ", join(failed, ", "))
-println("Combined archive: $combined")
-println()
-println("Review the archives, then publish them as a dedicated release with:")
-println()
-println("  gh release create forecasts-backfill -R $REPO \\")
-println("    --title 'Backfilled historical forecasts' \\")
-println("    --notes 'Forecasts reconstructed by re-running each past " *
-        "release'\\''s own code on its data, because forecasts were shown " *
-        "in the report but never stored. Scored by " *
-        "scripts/score_releases.jl.' \\")
-println("    $OUT_DIR/forecasts_backfill.csv $OUT_DIR/forecast_v*.csv")
+function main(args = ARGS)
+    opts = parse_args(args)
+    mkpath(OUT_DIR)
+    mkpath(CACHE_DIR)
+
+    all_tags = renewal_release_tags()
+    tags = isnothing(opts.only) ? all_tags : filter(==(opts.only), all_tags)
+    isempty(tags) && error("no matching renewal release tags (have $all_tags)")
+
+    @info "backfilling forecasts" tags concurrency=opts.concurrency
+    r = run_backfill(tags; keep = opts.keep, concurrency = opts.concurrency)
+    combined = combine_archives(r.done)
+
+    println()
+    println("Backfilled $(length(r.done)) release(s): ", join(r.done, ", "))
+    isempty(r.manual) ||
+        println("Manual backfill still needed for: ", join(r.manual, ", "))
+    isempty(r.failed) ||
+        println("Failed (see the log above): ", join(r.failed, ", "))
+    println("Combined archive: $combined")
+    println()
+    println("Review the archives, then publish them as a dedicated release " *
+            "with:")
+    println()
+    println("  gh release create forecasts-backfill -R $REPO \\")
+    println("    --title 'Backfilled historical forecasts' \\")
+    println("    --notes 'Forecasts reconstructed by re-running each past " *
+            "release'\\''s own code on its data, because forecasts were " *
+            "shown in the report but never stored. Scored by " *
+            "scripts/score_releases.jl.' \\")
+    println("    $OUT_DIR/forecasts_backfill.csv $OUT_DIR/forecast_v*.csv")
+    return r
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    main()
+end
