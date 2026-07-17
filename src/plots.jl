@@ -1552,7 +1552,6 @@ function plot_forecast_beds(fc::DataFrame)
      :isolation_level in propertynames(fc)) || return Figure()
     demand = float.(fc[!, :bed_demand])
     occ = float.(fc[!, :isolation_level])
-    shortfall = max.(demand .- occ, 0.0)
     has_split = :confirmed_share in propertynames(fc)
     ## Cap the x-axis at the 98th percentile of demand: the unconstrained
     ## bed-demand projection is heavy-tailed (it grows with the reproduction
@@ -1597,6 +1596,7 @@ function plot_forecast_beds(fc::DataFrame)
             title = "Ward co-movement")
         scatter!(ax3, conf, susp; color = (:teal, 0.3), markersize = 5)
     else
+        shortfall = max.(demand .- occ, 0.0)
         _forecast_count_panel!(fig, (1, 2), shortfall, "Bed shortfall (DRC)",
             :firebrick)
     end
