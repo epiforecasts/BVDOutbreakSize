@@ -3294,6 +3294,16 @@ forecast_fig #hide
 # cannot represent local saturation, so the national shortfall understates
 # local unmet need. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
 # at 21.9%, and beds free in one province cannot serve patients in another.
+#
+# The bed forecast is partitioned into a confirmed and a suspect ward by the
+# cut-off confirmed share (`expected_confirmed_incare_T / expected_bed_demand_T`,
+# held flat over the horizon), so `confirmed_ward + suspect_ward` reproduces the
+# total demand exactly. The confirmed ward's demand and occupancy levels and its
+# share of the beds appear as extra rows in the forecast summary table above, and
+# the bed figure adds the confirmed-share density and the confirmed-versus-suspect
+# ward co-movement. The wards are strongly correlated because most of each ward's
+# variance is the shared total, so the split re-slices the total rather than
+# adding independent uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>

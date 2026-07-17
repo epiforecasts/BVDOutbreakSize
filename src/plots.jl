@@ -1537,6 +1537,15 @@ Because the model carries a SINGLE national bed capacity it cannot represent
 LOCAL saturation — on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
 at 21.9% — so the national shortfall understates the local unmet need (beds
 free in one province cannot serve patients who need them in another).
+
+When the forecast carries the confirmed/suspect ward split (`confirmed_share`
+and the ward levels), the figure becomes a three-panel SHARE-LED view: the
+unchanged total demand-vs-occupancy densities, the tight confirmed-share
+density (with its median and 90% interval in the title), and a
+confirmed-vs-suspect ward scatter making their co-movement explicit. The
+wards are ~0.9 correlated (most of a ward level's variance is the shared
+total), so the scatter is shown rather than two independent ward marginals,
+which would misstate the joint uncertainty.
 """
 function plot_forecast_beds(fc::DataFrame)
     (:bed_demand in propertynames(fc) &&
@@ -1544,13 +1553,15 @@ function plot_forecast_beds(fc::DataFrame)
     demand = float.(fc[!, :bed_demand])
     occ = float.(fc[!, :isolation_level])
     shortfall = max.(demand .- occ, 0.0)
-    fig = Figure(; size = (800, 360))
+    has_split = :confirmed_share in propertynames(fc)
     ## Cap the x-axis at the 98th percentile of demand: the unconstrained
     ## bed-demand projection is heavy-tailed (it grows with the reproduction
     ## number over the horizon), so its long upper tail otherwise squashes the
     ## readable bulk of both densities. Occupancy is capped at capacity, so it
     ## sits below this bound.
     upper = max(1.0, quantile(demand, 0.98))
+    ncols = has_split ? 3 : 2
+    fig = Figure(; size = (400 * ncols, 360))
     ax1 = Axis(fig[1, 1];
         xlabel = "Isolation beds a week ahead (DRC)",
         ylabel = "Predictive density", title = "Need vs supply-limited use",
@@ -1561,8 +1572,34 @@ function plot_forecast_beds(fc::DataFrame)
         strokecolor = :steelblue, strokewidth = 2,
         label = "Occupancy (supply-limited)")
     CairoMakie.axislegend(ax1; position = :rt, framevisible = false)
-    _forecast_count_panel!(fig, (1, 2), shortfall, "Bed shortfall (DRC)",
-        :firebrick)
+    if has_split
+        share = float.(fc[!, :confirmed_share])
+        med = quantile(share, 0.5)
+        lo = quantile(share, 0.05)
+        hi = quantile(share, 0.95)
+        ax2 = Axis(fig[1, 2];
+            xlabel = "Confirmed share of beds",
+            ylabel = "Predictive density",
+            title = string("Confirmed share: ", round(med; digits = 2),
+                " (", round(lo; digits = 2), "–", round(hi; digits = 2), ")"),
+            limits = ((0, 1), nothing))
+        density!(ax2, share; color = (:purple, 0.35),
+            strokecolor = :purple, strokewidth = 2)
+        vlines!(ax2, [med]; color = :purple, linestyle = :dash, linewidth = 2)
+        ## Confirmed-vs-suspect ward scatter: the ~0.9 correlation between the
+        ## two ward levels (both move with the shared total) is visible as the
+        ## near-linear cloud, which two independent marginals would hide.
+        conf = float.(fc[!, :confirmed_ward])
+        susp = float.(fc[!, :suspect_ward])
+        ax3 = Axis(fig[1, 3];
+            xlabel = "Confirmed ward (beds)",
+            ylabel = "Suspect ward (beds)",
+            title = "Ward co-movement")
+        scatter!(ax3, conf, susp; color = (:teal, 0.3), markersize = 5)
+    else
+        _forecast_count_panel!(fig, (1, 2), shortfall, "Bed shortfall (DRC)",
+            :firebrick)
+    end
     return fig
 end
 

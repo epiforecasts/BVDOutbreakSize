@@ -161,6 +161,15 @@ draw and columns:
   at the capacity, `min(demand, C)` (matching the fitted occupancy), so
   `bed_demand − isolation_level` is the projected bed shortfall. Replicated
   with the isolation stream's own dispersion.
+- `:confirmed_ward`, `:suspect_ward`, `:confirmed_occupancy`,
+  `:suspect_occupancy`, `:confirmed_share` — the confirmed/suspect ward split
+  of the beds, present when the chain also carries
+  `expected_confirmed_incare_T`. The projected total demand and occupancy are
+  partitioned by the per-draw cut-off confirmed share `confirmed_share`
+  (`expected_confirmed_incare_T / expected_bed_demand_T`, held flat over the
+  horizon), so `confirmed_ward + suspect_ward ≡ bed_demand` and
+  `confirmed_occupancy + suspect_occupancy ≡ isolation_level` by construction.
+  The split is purely additive: the total `bed_demand` is unchanged.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc` — the projected
   one-week-ahead daily isolation/treatment flows (new admissions, in-care
   deaths and rule-outs), present when the chain carries
@@ -247,6 +256,12 @@ function forecast_reported(chn;
         end
     has_iso = _has(:expected_bed_demand_T) && _has(:bed_capacity) &&
               _has(:isolation_dispersion)
+    ## Confirmed/suspect ward split of the isolation beds: partition the total
+    ## bed demand and occupancy by the cut-off confirmed SHARE
+    ## `expected_confirmed_incare_T / expected_bed_demand_T`. Purely additive —
+    ## the total (`bed_demand`) is untouched — so it needs only the confirmed
+    ## in-care prevalence the chain already exposes, no model change.
+    has_split = has_iso && _has(:expected_confirmed_incare_T)
     has_rec = _has(:expected_recovered_T) && _has(:recovered_dispersion)
     ## The three daily treatment flows (admissions, in-care deaths, rule-outs)
     ## share the isolation dispersion, so they need it carried too.
@@ -255,6 +270,8 @@ function forecast_reported(chn;
     demand_T = has_iso ? _draws(chn, :expected_bed_demand_T) : nothing
     cap = has_iso ? _draws(chn, :bed_capacity) : nothing
     k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
+    conf_incare_T = has_split ? _draws(chn, :expected_confirmed_incare_T) :
+                    nothing
     rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
     k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
     admit_T = has_flows ? _draws(chn, :expected_admissions_T) : nothing
@@ -294,6 +311,11 @@ function forecast_reported(chn;
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
     bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
     isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
+    confirmed_ward = has_split ? Vector{Int}(undef, n) : nothing
+    suspect_ward = has_split ? Vector{Int}(undef, n) : nothing
+    confirmed_occ = has_split ? Vector{Int}(undef, n) : nothing
+    suspect_occ = has_split ? Vector{Int}(undef, n) : nothing
+    confirmed_share = has_split ? Vector{Float64}(undef, n) : nothing
     recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
     admissions_fc = has_flows ? Vector{Int}(undef, n) : nothing
     incare_deaths_fc = has_flows ? Vector{Int}(undef, n) : nothing
@@ -351,6 +373,22 @@ function forecast_reported(chn;
             bed_demand[i] = d
             isolation_level[i] = min(d, round(Int, cap[i]))
         end
+        ## Confirmed/suspect ward split. Hold the confirmed SHARE flat at its
+        ## cut-off value over the horizon: the confirmed and suspect wards move
+        ## together with the total, so partitioning by a single per-draw share
+        ## preserves the identity `confirmed_ward + suspect_ward ≡ bed_demand`.
+        ## (A drift-continued share is a possible future refinement, but flat
+        ## vs drift agree to within ~5 beds at T+7, swamped by the total's own
+        ## uncertainty, and flat needs no model change since the share is
+        ## already exposed on the chain.)
+        if has_split
+            s_i = clamp(conf_incare_T[i] / max(demand_T[i], eps()), 0.0, 1.0)
+            confirmed_share[i] = s_i
+            confirmed_ward[i] = round(Int, s_i * bed_demand[i])
+            suspect_ward[i] = bed_demand[i] - confirmed_ward[i]
+            confirmed_occ[i] = round(Int, s_i * isolation_level[i])
+            suspect_occ[i] = isolation_level[i] - confirmed_occ[i]
+        end
         if has_rec
             base_rec = obs_recovered === missing ? round(Int, rec_T[i]) :
                        round(Int, obs_recovered)
@@ -392,6 +430,13 @@ function forecast_reported(chn;
         df.bed_demand = bed_demand
         df.isolation_level = isolation_level
     end
+    if has_split
+        df.confirmed_ward = confirmed_ward
+        df.suspect_ward = suspect_ward
+        df.confirmed_occupancy = confirmed_occ
+        df.suspect_occupancy = suspect_occ
+        df.confirmed_share = confirmed_share
+    end
     if has_flows
         df.admissions_fc = admissions_fc
         df.incare_deaths_fc = incare_deaths_fc
@@ -412,17 +457,24 @@ deaths) and quantity (cumulative total by the cut-off plus the horizon, or
 new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
 suspected reported-case and suspected-death streams are no longer reported,
-so they are not shown as forecast targets.
+so they are not shown as forecast targets. When the forecast carries the
+confirmed/suspect ward split, the confirmed ward's demand and occupancy
+levels and its share of the beds are appended as further rows.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
+    ## The confirmed share is a fraction on [0, 1], so it needs its own
+    ## decimal precision rather than the count columns' `digits`.
     _row(label,
         quantity,
-        draws) = begin
+        draws; dp::Integer = digits) = begin
         s = posterior_summary(draws)
         (stream = label, quantity = quantity,
-            lower_90 = round(s.lo90; digits), lower_60 = round(s.lo60; digits),
-            lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
-            upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
+            lower_90 = round(s.lo90; digits = dp),
+            lower_60 = round(s.lo60; digits = dp),
+            lower_30 = round(s.lo30; digits = dp),
+            upper_30 = round(s.hi30; digits = dp),
+            upper_60 = round(s.hi60; digits = dp),
+            upper_90 = round(s.hi90; digits = dp))
     end
     streams = Tuple{String, Symbol, Symbol}[]
     :confirmed_cum in propertynames(fc) && push!(streams,
@@ -442,6 +494,18 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
         _row("DRC isolation beds", "demand at T+7", fc[!, :bed_demand]))
     :isolation_level in propertynames(fc) && push!(rows,
         _row("DRC isolation beds", "occupancy at T+7", fc[!, :isolation_level]))
+    ## Confirmed/suspect ward split of the beds: the confirmed ward level and
+    ## the confirmed share, present when the chain carries the in-care split.
+    ## The suspect ward is the total minus the confirmed ward, so it is not
+    ## reported separately.
+    :confirmed_ward in propertynames(fc) && push!(rows,
+        _row("DRC confirmed ward", "demand at T+7", fc[!, :confirmed_ward]))
+    :confirmed_occupancy in propertynames(fc) && push!(rows,
+        _row("DRC confirmed ward", "occupancy at T+7",
+            fc[!, :confirmed_occupancy]))
+    :confirmed_share in propertynames(fc) && push!(rows,
+        _row("DRC confirmed ward", "share of beds",
+            fc[!, :confirmed_share]; dp = 3))
     ## One-week-ahead daily isolation/treatment flows (a single-day rate at
     ## the horizon, not a cumulative total).
     :admissions_fc in propertynames(fc) && push!(rows,

@@ -445,6 +445,16 @@ end
     fc = DataFrame(bed_demand = demand, isolation_level = occ)
     fig = plot_forecast_beds(fc)
     @test fig isa CairoMakie.Makie.Figure
+    ## With the confirmed/suspect ward split present the figure switches to the
+    ## share-led three-panel view.
+    share = clamp.(rand(rng, n) .* 0.5 .+ 0.2, 0, 1)
+    confw = round.(Int, share .* demand)
+    fc_split = DataFrame(bed_demand = demand, isolation_level = occ,
+        confirmed_ward = confw, suspect_ward = demand .- confw,
+        confirmed_occupancy = round.(Int, share .* occ),
+        suspect_occupancy = occ .- round.(Int, share .* occ),
+        confirmed_share = share)
+    @test plot_forecast_beds(fc_split) isa CairoMakie.Makie.Figure
 end
 
 @testitem "plot_forecast_beds_vs_truth scores beds against observed" setup=[HeadlessMakie] begin

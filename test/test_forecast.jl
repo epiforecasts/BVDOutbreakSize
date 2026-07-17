@@ -131,6 +131,74 @@ end
     @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
+@testitem "forecast_reported splits beds into confirmed and suspect wards" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    import FlexiChains
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_reported, forecast_table
+
+    ## Two twin chains with an IDENTICAL tilde structure. The split chain adds
+    ## the confirmed in-care sub-stock as a `:=` deterministic (a fraction of the
+    ## demand), which consumes no sampler RNG, so a fresh `MersenneTwister(1)`
+    ## draws byte-identical bed-relevant parameters in both. The projected total
+    ## `bed_demand` must therefore match exactly: the split is purely additive.
+    @model function _forecast_split_test()
+        r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
+        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        expected_confirmed_incare_T := 0.4 * expected_bed_demand_T
+        return nothing
+    end
+    @model function _forecast_nosplit_test()
+        r ~ truncated(Normal(0.05, 0.01); lower = 1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.5, 0.3); lower = 1e-3)
+        expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
+        return nothing
+    end
+    chn_split = sample(MersenneTwister(1), _forecast_split_test(), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    chn_nosplit = sample(MersenneTwister(1), _forecast_nosplit_test(), Prior(),
+        300; chain_type = FlexiChains.VNChain, progress = false)
+    args = (; horizon = 7, obs_cases = 905, obs_deaths = 18)
+    fc = forecast_reported(chn_split; args...)
+    fc0 = forecast_reported(chn_nosplit; args...)
+
+    split_cols = [:confirmed_ward, :suspect_ward, :confirmed_occupancy,
+        :suspect_occupancy, :confirmed_share]
+    @test all(c -> c in propertynames(fc), split_cols)
+    @test all(c -> c ∉ propertynames(fc0), split_cols)
+    ## (a) The wards partition the total exactly, both for demand and occupancy.
+    @test fc.confirmed_ward .+ fc.suspect_ward == fc.bed_demand
+    @test fc.confirmed_occupancy .+ fc.suspect_occupancy == fc.isolation_level
+    ## (b) The confirmed share is a valid fraction.
+    @test all(0 .<= fc.confirmed_share .<= 1)
+    @test all(fc.confirmed_ward .>= 0)
+    @test all(fc.suspect_ward .>= 0)
+    ## (c) The total is byte-identical to a run that does not read the split.
+    @test fc.bed_demand == fc0.bed_demand
+    @test fc.isolation_level == fc0.isolation_level
+    ## The split surfaces in the summary table as confirmed-ward rows.
+    tbl = forecast_table(fc)
+    @test "DRC confirmed ward" in tbl[!, "Stream"]
+    @test "share of beds" in tbl[!, "Quantity"]
+end
+
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported, forecast_table
