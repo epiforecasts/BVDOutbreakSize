@@ -16,7 +16,6 @@ Mooncake = "da2b9cff-9c12-43a0-ae48-6db2b0edb7d6"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
-ScoringRules = "1fcf7366-10ae-49d1-a4dc-286b3bf402d3"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
@@ -24,9 +23,6 @@ StatsFuns = "4c63d2b9-4356-54db-8cca-17b64c39e42c"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 TensorBoardLogger = "899adc3e-224a-11e9-021f-63837185c80f"
 Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
-
-[sources]
-ScoringRules = {url = "https://github.com/EpiAware/ScoringRules.jl"}
 
 [compat]
 ADTypes = "1.22"
@@ -43,7 +39,6 @@ Integrals = "4, 5.4"
 Literate = "2"
 Mooncake = "0.4, 0.5"
 Revise = "3"
-ScoringRules = "0.1"
 SpecialFunctions = "2"
 StatsFuns = "1"
 TOML = "1"

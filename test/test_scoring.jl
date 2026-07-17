@@ -1,8 +1,7 @@
 ## Tests for the forecast-scoring primitives in src/scoring.jl:
-## crps_sample, log_crps_sample and score_draws. Scored against
-## ScoringRules directly where sensible. Also covers
-## select_daily_releases, which picks the releases scripts/score_releases.jl
-## scores.
+## crps_sample, log_crps_sample and score_draws, checked against the
+## closed-form ensemble CRPS. Also covers select_daily_releases, which
+## picks the releases scripts/score_releases.jl scores.
 
 @testitem "select_daily_releases keeps tagged and main-build releases" begin
     using Dates: Date, DateTime
@@ -283,12 +282,19 @@ end
     @test only(ex[ex.fit .== "exports", :].n_samples) == 5
 end
 
-@testitem "crps_sample matches ScoringRules.crps(samples, obs)" begin
-    using ScoringRules: crps
+@testitem "crps_sample matches the closed-form ensemble CRPS" begin
     using BVDOutbreakSize: crps_sample
 
-    samples = [1.0, 2.0, 3.0, 4.0, 5.0]
-    @test crps_sample(2.5, samples) == crps(samples, 2.5)
+    ## CRPS = mean|xᵢ - obs| - ½ mean|xᵢ - xⱼ|. For [1,2,3,4,5] at 2.5:
+    ## mean|xᵢ - 2.5| = 6.5/5 = 1.3, and the pairwise term is 0.8, so 0.5.
+    @test crps_sample(2.5, [1.0, 2.0, 3.0, 4.0, 5.0]) ≈ 0.5
+    ## For [2,4] at 3: mean abs error 1, pairwise ½·1 = 0.5, so 0.5.
+    @test crps_sample(3.0, [2.0, 4.0]) ≈ 0.5
+    ## Symmetric ensemble about the observation.
+    @test crps_sample(0.0, [-1.0, 1.0]) ≈ 0.5
+    ## Order independence.
+    @test crps_sample(2.5, [5.0, 1.0, 3.0, 2.0, 4.0]) ≈
+          crps_sample(2.5, [1.0, 2.0, 3.0, 4.0, 5.0])
 end
 
 @testitem "crps_sample of a point-mass ensemble is the absolute error" begin

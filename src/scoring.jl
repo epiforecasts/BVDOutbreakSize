@@ -1,17 +1,35 @@
 # Forecast-scoring primitives, following scoringutils conventions
 # (https://epiforecasts.io/scoringutils/): score a single observation
-# against a predictive sample using proper scoring rules, backed by
-# ScoringRules.jl. Reuses the `bias_sample` and `_covered` helpers
-# defined in summaries.jl.
+# against a predictive sample using proper scoring rules. Reuses the
+# `bias_sample` and `_covered` helpers defined in summaries.jl.
+
+## Continuous ranked probability score of an ensemble `samples` at a point
+## observation `obs`, from the energy form `CRPS = E|X - obs| - ½ E|X - X'|`
+## evaluated on the empirical ensemble. The pairwise term uses the sorted
+## closed form `Σ_ij |x_i - x_j| = 2 Σ_i (2i - n - 1) x_(i)`, so the cost is
+## the sort rather than the O(n²) double loop.
+function _crps_ensemble(samples::AbstractVector{<:Real}, obs::Real)
+    n = length(samples)
+    x = sort!(Float64.(collect(samples)))
+    mae = zero(Float64)
+    for xi in x
+        mae += abs(xi - obs)
+    end
+    spread = zero(Float64)
+    for (i, xi) in enumerate(x)
+        spread += (2i - n - 1) * xi
+    end
+    return mae / n - spread / n^2
+end
 
 """
 Continuous ranked probability score of a predictive `samples` ensemble
-at a single observation `obs`, via `ScoringRules.crps`. Lower is
-better; zero for a perfect point forecast. For a point-mass (constant)
-ensemble the CRPS reduces to the absolute error `abs(obs - samples[1])`.
+at a single observation `obs`. Lower is better; zero for a perfect point
+forecast. For a point-mass (constant) ensemble the CRPS reduces to the
+absolute error `abs(obs - samples[1])`.
 """
 function crps_sample(obs::Real, samples::AbstractVector{<:Real})
-    return Float64(crps(samples, obs))
+    return _crps_ensemble(samples, obs)
 end
 
 """

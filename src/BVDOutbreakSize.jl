@@ -21,7 +21,6 @@ using Distributions: Distribution, pdf, cdf, Poisson,
                      Gamma, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
-using ScoringRules: crps
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
