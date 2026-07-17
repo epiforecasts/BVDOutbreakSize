@@ -1350,7 +1350,7 @@ Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(chn; n::Integer, breakpoint::Real,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = 14.0)
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
@@ -1428,7 +1428,7 @@ are marked. `seeding` is the calendar date of grid day 1 (so day `d` is
 function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = 14.0,
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         n_traj::Integer = 100)
     rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
     ndraws = size(rt, 1)
@@ -1558,7 +1558,8 @@ breakpoint lead). `display_start` is the shared grid day the panels draw from
 function plot_rt_streams(streams::AbstractVector;
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
-        display_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
+        display_start::Integer = 1, week::Integer = 7,
+        ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 2, joint_colour = :grey25)
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]

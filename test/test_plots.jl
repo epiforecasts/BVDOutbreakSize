@@ -317,7 +317,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt, knot_days
+    using BVDOutbreakSize: plot_rt, knot_days, RT_INTERVENTION_RAMP
     rng = MersenneTwister(17)
     ndraws = 120
     n = 95
@@ -337,7 +337,8 @@ end
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
     fig = plot_rt(chn; n = n, breakpoint = n - 11,
-        as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
+        ramp = RT_INTERVENTION_RAMP)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -345,7 +346,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt_streams, knot_days
+    using BVDOutbreakSize: plot_rt_streams, knot_days, RT_INTERVENTION_RAMP
     rng = MersenneTwister(31)
     ndraws = 80
     n = 95
@@ -378,7 +379,8 @@ end
         rt_start = joint_walk, rt_walk_start = joint_walk)
     fig = plot_rt_streams(streams; joint = joint, n = n,
         breakpoint = breakpoint, as_of_date = "2026-05-28",
-        seeding = Date("2026-02-23"), display_start = joint_walk)
+        seeding = Date("2026-02-23"), display_start = joint_walk,
+        ramp = RT_INTERVENTION_RAMP)
     @test fig isa CairoMakie.Makie.Figure
 end
 
