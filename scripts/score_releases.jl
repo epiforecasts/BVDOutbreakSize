@@ -224,16 +224,54 @@ end
 # Truth lookup against the CURRENT observations
 # ----------------------------------------------------------------------
 
-## The four forecast streams `forecast_archive` writes, mapped to the
-## observed history each is scored against and whether it is an INCIDENT
-## quantity (the new count over the horizon window ending at
-## `target_date`) or a LEVEL quantity (isolation beds occupancy AT
-## `target_date`).
+## The forecast streams the archive writes, mapped to the observed history
+## each is scored against (a `(; days, counts)` field on `obs`) and whether
+## it is an INCIDENT quantity (the new count over the horizon window ending
+## at `target_date`) or a LEVEL quantity (isolation beds occupancy AT
+## `target_date`). The single-stream fits forecast six labels: the four
+## here plus "reported cases" (the cases fit) and "suspected deaths" (the
+## deaths fit), scored on the same incident basis as "confirmed cases".
+## "exports" is scored too, but its truth is built by `stream_history` from
+## the dated detection series rather than named here.
 const STREAM_HISTORY = Dict(
+    "reported cases" => (:reported_history, :incident),
+    "suspected deaths" => (:deaths_history, :incident),
     "confirmed cases" => (:confirmed_history, :incident),
     "confirmed deaths" => (:confirmed_deaths_history, :incident),
     "recovered" => (:recovered_history, :incident),
     "isolation beds" => (:isolation_history, :level))
+
+## Streams the archive can carry that have no `(; days, counts)` field, so
+## `stream_history` assembles their truth. "exports" is the dated Uganda
+## import series (`export_case_days`, sorted grid day-indices of detected
+## imports): the same detections `exports_model` fits `expected_exports_T`
+## to, so scoring the export forecast against their cumulative count uses
+## the model's own truth. Each detection is one cumulative step, matching
+## `dated_event_bins` in `src/models/observations.jl`.
+const STREAM_ASSEMBLED = Dict("exports" => :incident)
+
+## Whether this script has a truth source for `stream`, i.e. it is either a
+## named history or an assembled one. An archived label that is neither
+## (schema drift, a future stream) has no truth and is skipped, never
+## scored against a wrong one.
+function has_stream_truth(stream)
+    haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream)
+end
+
+## The `(; days, counts)` cumulative history a stream is scored against and
+## its incident/level kind, assembling the truth for streams stored in
+## another shape. Errors on a stream with no truth source; callers guard
+## with `has_stream_truth` first.
+function stream_history(obs, stream)
+    if haskey(STREAM_ASSEMBLED, stream)
+        stream == "exports" || error("no assembler for stream '$stream'")
+        d = obs.export_case_days
+        return ((; days = d, counts = collect(1:length(d))),
+            STREAM_ASSEMBLED[stream])
+    end
+    field, kind = STREAM_HISTORY[stream]
+    return (getproperty(obs, field), kind)
+end
 
 ## Observed cumulative count at or before `date` from a `(days, counts)`
 ## history, held at the last report (cumulative counts are step-valued
@@ -255,8 +293,7 @@ end
 ## same convention `forecast.jl` uses for `*_new` columns.
 function truth_at(obs, grid_date, stream, made_date, target_date)
     target_date > obs.cutoff && return missing
-    hist, kind = STREAM_HISTORY[stream]
-    h = getproperty(obs, hist)
+    h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
     new = cum_at(h, target_date, grid_date) - cum_at(h, made_date, grid_date)
     return Float64(max(new, 0))
@@ -276,8 +313,7 @@ end
 ## last observed occupancy at or before `made_date`, carried forward
 ## unchanged.
 function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
-    hist, kind = STREAM_HISTORY[stream]
-    h = getproperty(obs, hist)
+    h, kind = stream_history(obs, stream)
     centre = if kind == :level
         Float64(cum_at(h, made_date, grid_date))
     else
@@ -340,16 +376,18 @@ function score_release(tag, forecast_path, obs, grid_date)
 
     ## Group rows by (made_date, horizon, target_date, stream) and fit; a
     ## plain `Dict` keeps this independent of DataFrame group-by quirks. A
-    ## row whose stream label is not one this script scores costs itself,
-    ## not the release: it is dropped here so the scoring loop only sees
-    ## known streams, and an unknown label is logged once per release.
+    ## row whose stream label has no truth source costs itself, not the
+    ## release: it is dropped here so the scoring loop only sees scorable
+    ## streams, and the dropped labels are logged once per release rather
+    ## than aborting on the first (an unmapped label used to KeyError
+    ## through the whole release).
     Key = Tuple{Date, Int, Date, String}
     groups = Dict{Key, Dict{String, Vector{Float64}}}()
     unknown = 0
     seen_unknown = Set{String}()
     for r in rows
         stream = r[str_i]
-        if !haskey(STREAM_HISTORY, stream)
+        if !has_stream_truth(stream)
             unknown += 1
             push!(seen_unknown, stream)
             continue
@@ -360,8 +398,8 @@ function score_release(tag, forecast_path, obs, grid_date)
         push!(get!(byfit, fit, Float64[]), parse(Float64, r[val_i]))
     end
     unknown > 0 && @warn string(
-        tag, ": dropped ", unknown, " row(s) with unrecognised stream ",
-        "label(s): ", join(sort(collect(seen_unknown)), ", "))
+        tag, ": dropped ", unknown, " row(s) with no truth source for ",
+        "stream label(s): ", join(sort(collect(seen_unknown)), ", "))
 
     out = NamedTuple[]
     overlay = NamedTuple[]
@@ -457,243 +495,250 @@ end
 # Driver
 # ----------------------------------------------------------------------
 
-entries = results_release_entries(repo)
-isempty(entries) && error("no releases found for $repo")
+## Run only when invoked as a script, so a test can `include` this file for
+## its functions (`score_release`, `truth_at`, …) without the driver's
+## `gh` calls or file writes firing.
+if abspath(PROGRAM_FILE) == @__FILE__
+    entries = results_release_entries(repo)
+    isempty(entries) && error("no releases found for $repo")
 
-## The CURRENT observations manifest is the now-observed truth every
-## release's forecast is scored against.
-obs = load_observations()
-grid_date(day) = obs.cutoff - Day(obs.n - day)
+    ## The CURRENT observations manifest is the now-observed truth every
+    ## release's forecast is scored against.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
 
-score_rows = NamedTuple[]
-overlay_rows = NamedTuple[]
-rt_rows = NamedTuple[]
-## One accumulator per per-stream estimate table, keyed by its filename.
-stream_est_rows = Dict(f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST))
-n_scored = 0
-n_no_forecast = 0
-n_backfilled = 0
-n_no_rt = 0
+    score_rows = NamedTuple[]
+    overlay_rows = NamedTuple[]
+    rt_rows = NamedTuple[]
+    ## One accumulator per per-stream estimate table, keyed by its filename.
+    stream_est_rows = Dict(
+        f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST))
+    n_scored = 0
+    n_no_forecast = 0
+    n_backfilled = 0
+    n_no_rt = 0
 
-## Assets live under one temp tree for the whole run, so a release's
-## `observations.toml` fetched for the selection is still there when its
-## forecast is scored. `mktempdir` removes the tree when the process exits.
-dir = mktempdir()
-tagdir(tag) = mkpath(joinpath(dir, tag))
+    ## Assets live under one temp tree for the whole run, so a release's
+    ## `observations.toml` fetched for the selection is still there when its
+    ## forecast is scored. `mktempdir` removes the tree when the process exits.
+    dir = mktempdir()
+    tagdir(tag) = mkpath(joinpath(dir, tag))
 
-## Which forecasts a reconstruction is available for, when the optional
-## backfill release exists at all.
-backfill_names = backfill_asset_names(repo)
-isempty(backfill_names) ||
-    @info "$BACKFILL_TAG carries $(length(backfill_names)) asset(s)"
+    ## Which forecasts a reconstruction is available for, when the optional
+    ## backfill release exists at all.
+    backfill_names = backfill_asset_names(repo)
+    isempty(backfill_names) ||
+        @info "$BACKFILL_TAG carries $(length(backfill_names)) asset(s)"
 
-## Selection pass: a release is placed on a data day by its own cut-off, so
-## every candidate's `observations.toml` is read before any is scored. A
-## release whose cut-off cannot be read is dropped rather than scored on an
-## assumed day, since its forecast could silently duplicate a kept one.
-##
-## The two reasons a cut-off is unreadable are logged apart, because they
-## are not the same event. A release that carries no `as_of_date` is
-## expected and permanent. One whose `observations.toml` could not be
-## fetched (after `fetch_asset`'s retries) may be a transient `gh` failure,
-## so a real distinct forecast could be dropped for this run; a re-run
-## recovers it, but the log must let the two be told apart.
-dated = Tuple{String, DateTime, Date}[]
-no_cutoff = String[]
-unfetched = String[]
-for (tag, created) in entries
-    obs_path = fetch_asset(repo, tag, OBS_ASSET, tagdir(tag))
-    if isnothing(obs_path)
-        push!(unfetched, tag)
-        continue
-    end
-    cutoff = release_cutoff(obs_path)
-    isnothing(cutoff) ? push!(no_cutoff, tag) :
-    push!(dated, (tag, created, cutoff))
-end
-isempty(no_cutoff) || @info string(
-    "ignoring ", length(no_cutoff), " release(s) that carry no data ",
-    "cut-off: ", join(no_cutoff, ", "))
-isempty(unfetched) || @warn string(
-    "could not fetch observations.toml for ", length(unfetched),
-    " release(s); a distinct forecast may be dropped this run, a re-run ",
-    "recovers it: ", join(unfetched, ", "))
-
-tags = select_daily_releases(dated)
-isempty(tags) && error("no results releases with a data cut-off for $repo")
-cutoffs = Dict(t => c for (t, _, c) in dated)
-println("Scoring $(length(tags)) release(s) of $(length(entries)), " *
-        "one per data day.")
-
-for tag in tags
-    ## A top-level `for` is a soft scope, so the running counters must be
-    ## declared global to update the bindings above rather than shadow them.
-    global n_scored, n_no_forecast, n_backfilled, n_no_rt
-
-    ## A saved forecast wins; a reconstruction stands in only where the
-    ## release never stored one. The per-stream archive carries every fit's
-    ## forecast, so it is preferred over the joint-only `forecast.csv`.
-    label = tag
-    forecast_path = fetch_asset(repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
-    isnothing(forecast_path) &&
-        (forecast_path = fetch_asset(repo, tag, FORECAST_ASSET, tagdir(tag)))
-    if isnothing(forecast_path)
-        asset = backfill_asset(tag)
-        if !isnothing(asset) && asset in backfill_names
-            forecast_path = fetch_asset(
-                repo, BACKFILL_TAG, asset, tagdir(tag))
-            isnothing(forecast_path) || (label = "$tag (backfill)")
+    ## Selection pass: a release is placed on a data day by its own cut-off, so
+    ## every candidate's `observations.toml` is read before any is scored. A
+    ## release whose cut-off cannot be read is dropped rather than scored on an
+    ## assumed day, since its forecast could silently duplicate a kept one.
+    ##
+    ## The two reasons a cut-off is unreadable are logged apart, because they
+    ## are not the same event. A release that carries no `as_of_date` is
+    ## expected and permanent. One whose `observations.toml` could not be
+    ## fetched (after `fetch_asset`'s retries) may be a transient `gh` failure,
+    ## so a real distinct forecast could be dropped for this run; a re-run
+    ## recovers it, but the log must let the two be told apart.
+    dated = Tuple{String, DateTime, Date}[]
+    no_cutoff = String[]
+    unfetched = String[]
+    for (tag, created) in entries
+        obs_path = fetch_asset(repo, tag, OBS_ASSET, tagdir(tag))
+        if isnothing(obs_path)
+            push!(unfetched, tag)
+            continue
         end
+        cutoff = release_cutoff(obs_path)
+        isnothing(cutoff) ? push!(no_cutoff, tag) :
+        push!(dated, (tag, created, cutoff))
     end
+    isempty(no_cutoff) || @info string(
+        "ignoring ", length(no_cutoff), " release(s) that carry no data ",
+        "cut-off: ", join(no_cutoff, ", "))
+    isempty(unfetched) || @warn string(
+        "could not fetch observations.toml for ", length(unfetched),
+        " release(s); a distinct forecast may be dropped this run, a re-run ",
+        "recovers it: ", join(unfetched, ", "))
 
-    if isnothing(forecast_path)
-        n_no_forecast += 1
-        @info "skipping $tag (no stored or reconstructed forecast)"
-    else
-        result = try
-            score_release(label, forecast_path, obs, grid_date)
+    tags = select_daily_releases(dated)
+    isempty(tags) && error("no results releases with a data cut-off for $repo")
+    cutoffs = Dict(t => c for (t, _, c) in dated)
+    println("Scoring $(length(tags)) release(s) of $(length(entries)), " *
+            "one per data day.")
+
+    for tag in tags
+        ## A top-level `for` is a soft scope, so the running counters must be
+        ## declared global to update the bindings above rather than shadow them.
+        global n_scored, n_no_forecast, n_backfilled, n_no_rt
+
+        ## A saved forecast wins; a reconstruction stands in only where the
+        ## release never stored one. The per-stream archive carries every fit's
+        ## forecast, so it is preferred over the joint-only `forecast.csv`.
+        label = tag
+        forecast_path = fetch_asset(
+            repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
+        isnothing(forecast_path) && (forecast_path = fetch_asset(
+            repo, tag, FORECAST_ASSET, tagdir(tag)))
+        if isnothing(forecast_path)
+            asset = backfill_asset(tag)
+            if !isnothing(asset) && asset in backfill_names
+                forecast_path = fetch_asset(
+                    repo, BACKFILL_TAG, asset, tagdir(tag))
+                isnothing(forecast_path) || (label = "$tag (backfill)")
+            end
+        end
+
+        if isnothing(forecast_path)
+            n_no_forecast += 1
+            @info "skipping $tag (no stored or reconstructed forecast)"
+        else
+            result = try
+                score_release(label, forecast_path, obs, grid_date)
+            catch e
+                @warn "skipping $label forecast scoring" exception=e
+                nothing
+            end
+            if !isnothing(result)
+                append!(score_rows, result.rows)
+                append!(overlay_rows, result.overlay)
+                n_scored += 1
+                label == tag || (n_backfilled += 1)
+                result.skipped > 0 && @info string(
+                    label, ": skipped ", result.skipped,
+                    " not-yet-observed group(s)")
+            end
+        end
+
+        draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
+        r = try
+            rt_row(tag, draws_path, cutoffs[tag])
         catch e
-            @warn "skipping $label forecast scoring" exception=e
+            @warn "skipping $tag R_T summary" exception=e
             nothing
         end
-        if !isnothing(result)
-            append!(score_rows, result.rows)
-            append!(overlay_rows, result.overlay)
-            n_scored += 1
-            label == tag || (n_backfilled += 1)
-            result.skipped > 0 && @info string(
-                label, ": skipped ", result.skipped,
-                " not-yet-observed group(s)")
+        if isnothing(r)
+            n_no_rt += 1
+        else
+            push!(rt_rows,
+                (; release = r[1], date = r[2], median = r[3],
+                    lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
+                    lo90 = r[8], hi90 = r[9]))
+        end
+
+        ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
+        ## every release until P2.2 lands, so a missing asset is a clean skip.
+        est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
+        byqty = try
+            stream_estimate_rows(tag, est_path, cutoffs[tag])
+        catch e
+            @warn "skipping $tag stream estimates" exception=e
+            nothing
+        end
+        isnothing(byqty) || for (qty, rows) in byqty
+            append!(stream_est_rows[STREAM_QUANTITY_DEST[qty]], rows)
         end
     end
 
-    draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
-    r = try
-        rt_row(tag, draws_path, cutoffs[tag])
-    catch e
-        @warn "skipping $tag R_T summary" exception=e
-        nothing
-    end
-    if isnothing(r)
-        n_no_rt += 1
+    println("Scored $n_scored/$(length(tags)) releases " *
+            "($n_no_forecast without a stored or reconstructed forecast, " *
+            "$n_backfilled from $BACKFILL_TAG).")
+    println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
+            "($n_no_rt without an R_T posterior).")
+
+    ## `data/forecast_scores.csv`: one row per scored (release, made_date,
+    ## stream, horizon, fit) group, `fit` the model or `baseline`.
+    scores = if isempty(score_rows)
+        DataFrame(release = String[], made_date = Date[], stream = String[],
+            horizon = Int[], target_date = Date[], fit = String[],
+            crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
+            coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
     else
-        push!(rt_rows,
-            (; release = r[1], date = r[2], median = r[3],
-                lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
-                lo90 = r[8], hi90 = r[9]))
+        sort(DataFrame(score_rows),
+            [:release, :made_date, :stream, :horizon, :fit])
     end
+    scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
+    write_simple_csv(scores_dest,
+        [:release => scores.release,
+            :made_date => string.(scores.made_date),
+            :stream => scores.stream,
+            :horizon => scores.horizon,
+            :target_date => string.(scores.target_date),
+            :fit => scores.fit,
+            :crps => scores.crps,
+            :log_crps => scores.log_crps,
+            :coverage_50 => scores.coverage_50,
+            :coverage_90 => scores.coverage_90,
+            :bias => scores.bias,
+            :n_samples => scores.n_samples])
+    println("Wrote $(nrow(scores)) scored forecasts to " *
+            "data/forecast_scores.csv")
 
-    ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
-    ## every release until P2.2 lands, so a missing asset is a clean skip.
-    est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
-    byqty = try
-        stream_estimate_rows(tag, est_path, cutoffs[tag])
-    catch e
-        @warn "skipping $tag stream estimates" exception=e
-        nothing
-    end
-    isnothing(byqty) || for (qty, rows) in byqty
-        append!(stream_est_rows[STREAM_QUANTITY_DEST[qty]], rows)
-    end
-end
-
-println("Scored $n_scored/$(length(tags)) releases " *
-        "($n_no_forecast without a stored or reconstructed forecast, " *
-        "$n_backfilled from $BACKFILL_TAG).")
-println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
-        "($n_no_rt without an R_T posterior).")
-
-## `data/forecast_scores.csv`: one row per scored (release, made_date,
-## stream, horizon, fit) group, `fit` the model or `baseline`.
-scores = if isempty(score_rows)
-    DataFrame(release = String[], made_date = Date[], stream = String[],
-        horizon = Int[], target_date = Date[], fit = String[],
-        crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
-        coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
-else
-    sort(DataFrame(score_rows),
-        [:release, :made_date, :stream, :horizon, :fit])
-end
-scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
-write_simple_csv(scores_dest,
-    [:release => scores.release,
-        :made_date => string.(scores.made_date),
-        :stream => scores.stream,
-        :horizon => scores.horizon,
-        :target_date => string.(scores.target_date),
-        :fit => scores.fit,
-        :crps => scores.crps,
-        :log_crps => scores.log_crps,
-        :coverage_50 => scores.coverage_50,
-        :coverage_90 => scores.coverage_90,
-        :bias => scores.bias,
-        :n_samples => scores.n_samples])
-println("Wrote $(nrow(scores)) scored forecasts to " *
-        "data/forecast_scores.csv")
-
-## `data/forecast_overlay.csv`: median and 30/60/90% bounds of each forecast
-## group with the observed truth, for the forecasts-versus-now overlay plots.
-overlay = if isempty(overlay_rows)
-    DataFrame(release = String[], made_date = Date[], stream = String[],
-        horizon = Int[], target_date = Date[], fit = String[],
-        observed = Float64[], median = Float64[], lo30 = Float64[],
-        hi30 = Float64[], lo60 = Float64[], hi60 = Float64[],
-        lo90 = Float64[], hi90 = Float64[])
-else
-    sort(DataFrame(overlay_rows),
-        [:stream, :made_date, :horizon, :fit])
-end
-overlay_dest = joinpath(@__DIR__, "..", "data", "forecast_overlay.csv")
-write_simple_csv(overlay_dest,
-    [:release => overlay.release,
-        :made_date => string.(overlay.made_date),
-        :stream => overlay.stream,
-        :horizon => overlay.horizon,
-        :target_date => string.(overlay.target_date),
-        :fit => overlay.fit,
-        :observed => overlay.observed,
-        :median => overlay.median,
-        :lo30 => overlay.lo30, :hi30 => overlay.hi30,
-        :lo60 => overlay.lo60, :hi60 => overlay.hi60,
-        :lo90 => overlay.lo90, :hi90 => overlay.hi90])
-println("Wrote $(nrow(overlay)) forecast-overlay rows to " *
-        "data/forecast_overlay.csv")
-
-## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
-rt = if isempty(rt_rows)
-    DataFrame(release = String[], date = String[], median = Float64[],
-        lo30 = Float64[], hi30 = Float64[], lo60 = Float64[],
-        hi60 = Float64[], lo90 = Float64[], hi90 = Float64[])
-else
-    sort(DataFrame(rt_rows), [:date])
-end
-rt_dest = joinpath(@__DIR__, "..", "data", "rt_by_release.csv")
-write_simple_csv(rt_dest,
-    [:release => rt.release, :date => rt.date, :median => rt.median,
-        :lo30 => rt.lo30, :hi30 => rt.hi30, :lo60 => rt.lo60,
-        :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90])
-println("Wrote $(nrow(rt)) release R_T summaries to " *
-        "data/rt_by_release.csv")
-
-## `data/rt_by_release_by_stream.csv` and
-## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of every
-## fit, per release. Written even when empty, since the docs build reads them
-## and a missing file throws rather than reading back as an empty frame.
-for file in sort(collect(values(STREAM_QUANTITY_DEST)))
-    rows = stream_est_rows[file]
-    df = if isempty(rows)
-        DataFrame(release = String[], date = String[], fit = String[],
-            median = Float64[], lo30 = Float64[], hi30 = Float64[],
-            lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
-            hi90 = Float64[])
+    ## `data/forecast_overlay.csv`: median and 30/60/90% bounds of each
+    ## forecast group with the observed truth, for the overlay plots.
+    overlay = if isempty(overlay_rows)
+        DataFrame(release = String[], made_date = Date[], stream = String[],
+            horizon = Int[], target_date = Date[], fit = String[],
+            observed = Float64[], median = Float64[], lo30 = Float64[],
+            hi30 = Float64[], lo60 = Float64[], hi60 = Float64[],
+            lo90 = Float64[], hi90 = Float64[])
     else
-        sort(DataFrame(rows), [:date, :fit])
+        sort(DataFrame(overlay_rows),
+            [:stream, :made_date, :horizon, :fit])
     end
-    dest = joinpath(@__DIR__, "..", "data", file)
-    write_simple_csv(dest,
-        [:release => df.release, :date => df.date, :fit => df.fit,
-            :median => df.median, :lo30 => df.lo30, :hi30 => df.hi30,
-            :lo60 => df.lo60, :hi60 => df.hi60, :lo90 => df.lo90,
-            :hi90 => df.hi90])
-    println("Wrote $(nrow(df)) per-stream rows to data/$file")
+    overlay_dest = joinpath(@__DIR__, "..", "data", "forecast_overlay.csv")
+    write_simple_csv(overlay_dest,
+        [:release => overlay.release,
+            :made_date => string.(overlay.made_date),
+            :stream => overlay.stream,
+            :horizon => overlay.horizon,
+            :target_date => string.(overlay.target_date),
+            :fit => overlay.fit,
+            :observed => overlay.observed,
+            :median => overlay.median,
+            :lo30 => overlay.lo30, :hi30 => overlay.hi30,
+            :lo60 => overlay.lo60, :hi60 => overlay.hi60,
+            :lo90 => overlay.lo90, :hi90 => overlay.hi90])
+    println("Wrote $(nrow(overlay)) forecast-overlay rows to " *
+            "data/forecast_overlay.csv")
+
+    ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
+    rt = if isempty(rt_rows)
+        DataFrame(release = String[], date = String[], median = Float64[],
+            lo30 = Float64[], hi30 = Float64[], lo60 = Float64[],
+            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[])
+    else
+        sort(DataFrame(rt_rows), [:date])
+    end
+    rt_dest = joinpath(@__DIR__, "..", "data", "rt_by_release.csv")
+    write_simple_csv(rt_dest,
+        [:release => rt.release, :date => rt.date, :median => rt.median,
+            :lo30 => rt.lo30, :hi30 => rt.hi30, :lo60 => rt.lo60,
+            :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90])
+    println("Wrote $(nrow(rt)) release R_T summaries to " *
+            "data/rt_by_release.csv")
+
+    ## `data/rt_by_release_by_stream.csv` and
+    ## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of
+    ## every fit, per release. Written even when empty, since the docs build
+    ## reads them and a missing file throws rather than reading back empty.
+    for file in sort(collect(values(STREAM_QUANTITY_DEST)))
+        rows = stream_est_rows[file]
+        df = if isempty(rows)
+            DataFrame(release = String[], date = String[], fit = String[],
+                median = Float64[], lo30 = Float64[], hi30 = Float64[],
+                lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
+                hi90 = Float64[])
+        else
+            sort(DataFrame(rows), [:date, :fit])
+        end
+        dest = joinpath(@__DIR__, "..", "data", file)
+        write_simple_csv(dest,
+            [:release => df.release, :date => df.date, :fit => df.fit,
+                :median => df.median, :lo30 => df.lo30, :hi30 => df.hi30,
+                :lo60 => df.lo60, :hi60 => df.hi60, :lo90 => df.lo90,
+                :hi90 => df.hi90])
+        println("Wrote $(nrow(df)) per-stream rows to data/$file")
+    end
 end

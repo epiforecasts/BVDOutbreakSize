@@ -218,6 +218,71 @@ end
     @test !("fit" in names(with_model))
 end
 
+@testitem "score_release scores every mapped stream, skips the rest" begin
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+
+    ## Load the scorer's functions without its driver (guarded on
+    ## PROGRAM_FILE), so score_release can be exercised directly.
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## A synthetic now-observed manifest: a 40-day grid, each incident
+    ## history stepping from 100 to 150 over the last week, isolation beds
+    ## at 20, and three dated export detections in the final week.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    inc = (; days = [33, 40], counts = [100, 150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = inc, deaths_history = inc,
+        confirmed_history = inc, confirmed_deaths_history = inc,
+        recovered_history = inc,
+        isolation_history = (; days = [33, 40], counts = [18, 20]),
+        export_case_days = [35, 38, 40])
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+
+    ## A stream_forecasts.csv carrying all six real labels (with two fits of
+    ## confirmed cases) plus one unmapped label that must not abort scoring.
+    made = string(grid_date(33))
+    target = string(grid_date(40))
+    labels = [("reported cases", "cases"), ("suspected deaths", "deaths"),
+        ("confirmed cases", "joint"), ("confirmed cases", "confirmed"),
+        ("exports", "exports"), ("isolation beds", "treatment"),
+        ("nonsense stream", "joint")]
+    path = joinpath(mktempdir(), "stream_forecasts.csv")
+    open(path, "w") do io
+        println(io, "made_date,horizon,target_date,stream,draw,value,fit")
+        for (stream, fit) in labels, d in 1:5
+
+            println(io,
+                join((made, 7, target, stream, d, 40 + d, fit), ','))
+        end
+    end
+
+    result = score_release("results-vT.E.S", path, obs, grid_date)
+    scored = DataFrame(result.rows)
+    scored_streams = Set(scored.stream)
+
+    ## Every mapped stream is scored, including exports (its truth built
+    ## from export_case_days) and the two clean additions.
+    for s in ["reported cases", "suspected deaths", "confirmed cases",
+        "exports", "isolation beds"]
+        @test s in scored_streams
+    end
+    ## The unmapped label is dropped, not scored, and did not abort: the
+    ## mapped streams still produced rows.
+    @test !("nonsense stream" in scored_streams)
+
+    ## Each scored stream carries its fit rows plus one baseline; confirmed
+    ## cases carries both its fits against the single baseline.
+    cc = scored[scored.stream .== "confirmed cases", :]
+    @test Set(cc.fit) == Set(["joint", "confirmed", "baseline"])
+    ex = scored[scored.stream .== "exports", :]
+    @test Set(ex.fit) == Set(["exports", "baseline"])
+    ## The exports fit's five draws are all scored (n_samples), confirming
+    ## its truth was assembled rather than the stream skipped.
+    @test only(ex[ex.fit .== "exports", :].n_samples) == 5
+end
+
 @testitem "crps_sample matches ScoringRules.crps(samples, obs)" begin
     using ScoringRules: crps
     using BVDOutbreakSize: crps_sample
