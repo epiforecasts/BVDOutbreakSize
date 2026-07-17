@@ -9,12 +9,19 @@
 #
 # Both kinds of results release are scored: `results-vX.Y.Z` from a
 # version tag and `results-<run number>` from a push to `main`. At most one
-# release per calendar day is kept, preferring the tagged release when a
-# tag build and a main build published the same commit's forecasts twice
-# (see `select_daily_releases` in `src/scoring.jl`). Releases predating the
-# forecast archive carry no `forecast.csv` and are skipped for scoring;
-# they are not backfilled (`scripts/backfill_forecasts.jl` covers tagged
-# releases only).
+# release per data day is kept, keyed on the cut-off each release was built
+# from rather than when it was published, since releases sharing a cut-off
+# carry the same forecast (see `select_daily_releases` in
+# `src/scoring.jl`). Reading the cut-off means fetching every candidate's
+# `observations.toml` before the selection, so the driver fetches those
+# first and the rest of each winner's assets after.
+#
+# A release with no `forecast.csv` of its own falls back to the
+# reconstruction `scripts/backfill_forecasts.jl` publishes for its code tag
+# on the optional `forecasts-backfill` release (`forecast_v1.9.0.csv` for
+# `results-v1.9.0`), scored under `<tag> (backfill)`. A saved forecast is
+# always preferred over a reconstructed one. That release is absent by
+# default, in which case releases without a stored forecast are skipped.
 #
 # Every release that carries a `forecast.csv` asset (see
 # `forecast_archive` in `src/forecast.jl`) has one row per (made_date,
@@ -53,12 +60,13 @@ using Random
 using Statistics: median
 using TOML
 
-using BVDOutbreakSize: select_daily_releases
+using BVDOutbreakSize: is_results_release, select_daily_releases
 
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
+const BACKFILL_TAG = "forecasts-backfill"
 
 repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 
@@ -66,21 +74,52 @@ repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 # gh CLI plumbing (mirrors `scripts/refresh_releases.jl`)
 # ----------------------------------------------------------------------
 
-## The results releases to score, newest first: every tagged and
-## main-build release `gh` reports, thinned to at most one per calendar
-## day by `select_daily_releases`.
-function results_release_tags(repo)
+## Every results release `gh` reports, as `(tag, created)` pairs. The repo
+## publishes a release per code tag too, which carries no results assets,
+## so only results releases are kept. Which of them are scored is decided
+## by `select_daily_releases` once each one's data cut-off is known.
+function results_release_entries(repo)
     out = read(`gh release list -R $repo -L 200 --json tagName,createdAt
         --jq ".[] | [.tagName, .createdAt] | @tsv"`, String)
     entries = Tuple{String, DateTime}[]
     for line in split(strip(out), '\n')
         isempty(strip(line)) && continue
         tag, created = split(line, '\t')
+        is_results_release(tag) || continue
         push!(entries,
             (String(tag),
                 DateTime(created, dateformat"yyyy-mm-ddTHH:MM:SSZ")))
     end
-    return select_daily_releases(entries)
+    return entries
+end
+
+## Reconstructed-forecast asset for a tagged release on the optional
+## `forecasts-backfill` release: `results-v1.9.0` was built from code tag
+## `v1.9.0`, whose archive `scripts/backfill_forecasts.jl` writes as
+## `forecast_v1.9.0.csv`. Main-build releases have no code tag, so no
+## reconstruction exists for them.
+function backfill_asset(tag)
+    m = match(r"^results-(v[0-9][0-9A-Za-z.+-]*)$", tag)
+    return isnothing(m) ? nothing : "forecast_$(m[1]).csv"
+end
+
+## Asset names carried by the `forecasts-backfill` release, empty when it
+## has not been published. The release is optional: the backfill is a
+## manual, compute-heavy job, so its absence is the normal case and is not
+## an error.
+function backfill_asset_names(repo)
+    out = try
+        ## `gh` reports the absent release on stderr, which is the expected
+        ## case here, so it is silenced rather than shown as a failure.
+        read(
+            pipeline(
+                `gh release view $BACKFILL_TAG -R $repo --json assets
+          --jq ".assets[].name"`; stderr = devnull), String)
+    catch
+        return String[]
+    end
+    return [String(strip(l)) for l in split(strip(out), '\n')
+            if !isempty(strip(l))]
 end
 
 ## Download a single asset from a release into `dir`, returning its path
@@ -143,6 +182,24 @@ function write_simple_csv(path::AbstractString, cols)
         end
     end
     mv(tmp, path; force = true)
+end
+
+# ----------------------------------------------------------------------
+# Release metadata
+# ----------------------------------------------------------------------
+
+## The data cut-off a release was built from, read from its
+## `observations.toml` (`as_of_date`), or `nothing` when the asset is
+## absent, unparseable or carries no cut-off.
+function release_cutoff(obs_path)
+    isnothing(obs_path) && return nothing
+    parsed = try
+        TOML.parsefile(obs_path)
+    catch
+        return nothing
+    end
+    haskey(parsed, "as_of_date") || return nothing
+    return tryparse(Date, string(parsed["as_of_date"]))
 end
 
 # ----------------------------------------------------------------------
@@ -280,14 +337,12 @@ end
 # ----------------------------------------------------------------------
 
 ## One `(tag, date, median, lo30, hi30, lo60, hi60, lo90, hi90)` row from
-## a release's `posterior_draws.csv` R_T column and its own
-## `observations.toml` cut-off, or `nothing` when either asset is
-## missing or unparseable.
-function rt_row(tag, draws_path, obs_path)
-    (isnothing(draws_path) || isnothing(obs_path)) && return nothing
-    parsed = TOML.parsefile(obs_path)
-    haskey(parsed, "as_of_date") || return nothing
-    date = string(parsed["as_of_date"])
+## a release's `posterior_draws.csv` R_T column, dated by the `cutoff` the
+## release was built from. `nothing` when the draws are missing or carry no
+## R_T column, as pre-renewal releases do.
+function rt_row(tag, draws_path, cutoff)
+    isnothing(draws_path) && return nothing
+    date = string(cutoff)
 
     header, rows = read_simple_csv(draws_path)
     "R_T" in header || return nothing
@@ -305,9 +360,8 @@ end
 # Driver
 # ----------------------------------------------------------------------
 
-tags = results_release_tags(repo)
-isempty(tags) && error("no results releases found for $repo")
-println("Scoring $(length(tags)) release(s), at most one per day.")
+entries = results_release_entries(repo)
+isempty(entries) && error("no releases found for $repo")
 
 ## The CURRENT observations manifest is the now-observed truth every
 ## release's forecast is scored against.
@@ -319,59 +373,104 @@ overlay_rows = NamedTuple[]
 rt_rows = NamedTuple[]
 n_scored = 0
 n_no_forecast = 0
+n_backfilled = 0
 n_no_rt = 0
 
-mktempdir() do dir
-    ## The `do` block is a function body (hard scope), so the running
-    ## counters must be declared global to update the top-level bindings.
-    global n_scored, n_no_forecast, n_no_rt
-    for tag in tags
-        tagdir = mkpath(joinpath(dir, tag))
+## Assets live under one temp tree for the whole run, so a release's
+## `observations.toml` fetched for the selection is still there when its
+## forecast is scored. `mktempdir` removes the tree when the process exits.
+dir = mktempdir()
+tagdir(tag) = mkpath(joinpath(dir, tag))
 
-        forecast_path = fetch_asset(repo, tag, FORECAST_ASSET, tagdir)
-        if isnothing(forecast_path)
-            n_no_forecast += 1
-            @info "skipping $tag (no forecast.csv asset)"
-        else
-            result = try
-                score_release(tag, forecast_path, obs, grid_date)
-            catch e
-                @warn "skipping $tag forecast scoring" exception=e
-                nothing
-            end
-            if !isnothing(result)
-                append!(score_rows, result.rows)
-                append!(overlay_rows, result.overlay)
-                n_scored += 1
-                result.skipped > 0 && @info string(
-                    tag, ": skipped ", result.skipped,
-                    " not-yet-observed group(s)")
-            end
+## Which forecasts a reconstruction is available for, when the optional
+## backfill release exists at all.
+backfill_names = backfill_asset_names(repo)
+isempty(backfill_names) ||
+    @info "$BACKFILL_TAG carries $(length(backfill_names)) asset(s)"
+
+## Selection pass: a release is placed on a data day by its own cut-off, so
+## every candidate's `observations.toml` is read before any is scored. A
+## release whose cut-off cannot be read is dropped rather than scored on an
+## assumed day, since its forecast could silently duplicate a kept one; it
+## is listed rather than dropped quietly.
+dated = Tuple{String, DateTime, Date}[]
+undated = String[]
+for (tag, created) in entries
+    cutoff = release_cutoff(fetch_asset(repo, tag, OBS_ASSET, tagdir(tag)))
+    isnothing(cutoff) ? push!(undated, tag) :
+    push!(dated, (tag, created, cutoff))
+end
+isempty(undated) || @info string(
+    "ignoring ", length(undated), " release(s) with no readable data ",
+    "cut-off: ", join(undated, ", "))
+
+tags = select_daily_releases(dated)
+isempty(tags) && error("no results releases with a data cut-off for $repo")
+cutoffs = Dict(t => c for (t, _, c) in dated)
+println("Scoring $(length(tags)) release(s) of $(length(entries)), " *
+        "one per data day.")
+
+for tag in tags
+    ## A top-level `for` is a soft scope, so the running counters must be
+    ## declared global to update the bindings above rather than shadow them.
+    global n_scored, n_no_forecast, n_backfilled, n_no_rt
+
+    ## A saved forecast wins; a reconstruction stands in only where the
+    ## release never stored one.
+    label = tag
+    forecast_path = fetch_asset(repo, tag, FORECAST_ASSET, tagdir(tag))
+    if isnothing(forecast_path)
+        asset = backfill_asset(tag)
+        if !isnothing(asset) && asset in backfill_names
+            forecast_path = fetch_asset(
+                repo, BACKFILL_TAG, asset, tagdir(tag))
+            isnothing(forecast_path) || (label = "$tag (backfill)")
         end
+    end
 
-        draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir)
-        obs_path = fetch_asset(repo, tag, OBS_ASSET, tagdir)
-        r = try
-            rt_row(tag, draws_path, obs_path)
+    if isnothing(forecast_path)
+        n_no_forecast += 1
+        @info "skipping $tag (no stored or reconstructed forecast)"
+    else
+        result = try
+            score_release(label, forecast_path, obs, grid_date)
         catch e
-            @warn "skipping $tag R_T summary" exception=e
+            @warn "skipping $label forecast scoring" exception=e
             nothing
         end
-        if isnothing(r)
-            n_no_rt += 1
-        else
-            push!(rt_rows,
-                (; release = r[1], date = r[2], median = r[3],
-                    lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
-                    lo90 = r[8], hi90 = r[9]))
+        if !isnothing(result)
+            append!(score_rows, result.rows)
+            append!(overlay_rows, result.overlay)
+            n_scored += 1
+            label == tag || (n_backfilled += 1)
+            result.skipped > 0 && @info string(
+                label, ": skipped ", result.skipped,
+                " not-yet-observed group(s)")
         end
+    end
+
+    draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
+    r = try
+        rt_row(tag, draws_path, cutoffs[tag])
+    catch e
+        @warn "skipping $tag R_T summary" exception=e
+        nothing
+    end
+    if isnothing(r)
+        n_no_rt += 1
+    else
+        push!(rt_rows,
+            (; release = r[1], date = r[2], median = r[3],
+                lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
+                lo90 = r[8], hi90 = r[9]))
     end
 end
 
 println("Scored $n_scored/$(length(tags)) releases " *
-        "($n_no_forecast without a forecast.csv asset).")
+        "($n_no_forecast without a stored or reconstructed forecast, " *
+        "$n_backfilled from $BACKFILL_TAG).")
 println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
-        "($n_no_rt without posterior draws/observations).")
+        "($n_no_rt without an R_T posterior).")
 
 ## `data/forecast_scores.csv`: one row per scored (release, made_date,
 ## stream, horizon, model) group.

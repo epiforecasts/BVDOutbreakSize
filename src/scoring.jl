@@ -64,6 +64,14 @@ end
 const _VERSION_RELEASE = r"^results-v([0-9][0-9A-Za-z.+-]*)$"
 const _MAIN_RELEASE = r"^results-([0-9]+)$"
 
+## Whether `tag` names a results release of either kind. The repo also
+## publishes a release per code tag (`v1.9.0`), and the reconstructed
+## forecasts live under `forecasts-backfill`; neither is a results release.
+function is_results_release(tag::AbstractString)
+    return !isnothing(match(_VERSION_RELEASE, tag)) ||
+           !isnothing(match(_MAIN_RELEASE, tag))
+end
+
 ## Rank one results release within its day: tagged releases above main
 ## builds, then the later timestamp, then the higher version or run number
 ## so releases sharing a timestamp still order deterministically. Returns
@@ -79,35 +87,43 @@ function _release_key(tag::AbstractString, created)
 end
 
 """
-Select at most one results release per calendar day from `entries`, a
-collection of `(tag, created)` pairs as reported by `gh release list`
-(`created` a UTC `DateTime`). Both tagged releases (`results-vX.Y.Z`) and
+Select at most one results release per data day from `entries`, a
+collection of `(tag, created, cutoff)` triples: the release tag, its
+creation timestamp (a UTC `DateTime`, as reported by `gh release list`)
+and the data cut-off it was built from (`as_of_date` in the release's
+`observations.toml`). Both tagged releases (`results-vX.Y.Z`) and
 main-build releases (`results-<run number>`, published by every push to
-`main`) are eligible; any other tag is ignored. Days are the UTC calendar
-days of the release timestamps.
+`main`) are eligible; any other tag is ignored.
 
-Within a day a tagged release is preferred: a version tag and the `main`
-push of the same commit publish two releases carrying identical forecasts,
-so scoring both would count one forecast twice. Failing that the newest
-main build of the day is kept, so the day is represented by the forecast
-made from the most data. Releases sharing a timestamp are separated by
-version or run number, keeping the selection deterministic.
+Days are cut-off days, not creation days, because a release's forecast is
+a function of the data it saw. Two releases sharing a cut-off carry the
+same forecast however far apart they were published: the report re-renders
+whenever `main` moves, so the same data is republished under a new tag.
+Grouping on the creation timestamp would keep both and score that forecast
+twice.
 
-Returns the selected tags, newest first.
+Within a day a tagged release is preferred, which also settles the case of
+a version tag and the `main` push of one commit publishing at the same
+instant. Failing that the newest build of the day is kept. Releases
+sharing a timestamp are separated by version or run number, keeping the
+selection deterministic.
+
+Returns the selected tags, newest cut-off first.
 """
 function select_daily_releases(entries)
-    rels = [(String(t), c) for (t, c) in entries
+    rels = [(String(t), c, Date(d))
+            for (t, c, d) in entries
             if !isnothing(_release_key(t, c))]
     isempty(rels) && return String[]
 
     days = Dict{Date, typeof(rels)}()
     for r in rels
-        push!(get!(() -> empty(rels), days, Date(r[2])), r)
+        push!(get!(() -> empty(rels), days, r[3]), r)
     end
 
     picks = [argmax(r -> _release_key(r[1], r[2]), days[d])
              for d in sort(collect(keys(days)))]
-    sort!(picks; by = r -> r[2], rev = true)
+    sort!(picks; by = r -> r[3], rev = true)
     return first.(picks)
 end
 
