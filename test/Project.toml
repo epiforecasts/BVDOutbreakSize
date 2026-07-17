@@ -35,6 +35,7 @@ BVDOutbreakSize = {path = ".."}
 Aqua = "0.8.16"
 CensoredDistributions = "0.2.22"
 Coverage = "1"
+LogDensityProblems = "2.2.0"
 SpecialFunctions = "2"
 TensorBoardLogger = "0.1"
 TestItemRunner = "1.1.5"
