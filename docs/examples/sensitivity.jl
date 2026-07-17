@@ -148,19 +148,42 @@ validation_latent_fig #hide
 # now-observed incident counts and the isolation-bed occupancy level with CRPS,
 # CRPS on the log scale, 50/90% coverage and bias, against a persistence
 # baseline (`rel_skill` below one beats the baseline).
+# Once the scores carry a `fit` column each (stream, horizon) compares three
+# forecasts: the persistence baseline, the stream's own individual fit and the
+# joint.
 # The scores accrue as releases with a stored forecast, and the backfill
 # release, are added; until then the table has no rows and the plot says so.
+#
+# Recovered is the exception.
+# The fitted models are the joint, exports, deaths, cases, confirmed, confirmed
+# deaths and isolation, so recovered has no individual fit of its own and its
+# comparison is the baseline against the joint only.
+# No individual row or panel is drawn for it.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
 #md # ```
 
-forecast_scores_df = CSV.read(
-    joinpath(pkgdir(BVDOutbreakSize), "data", "forecast_scores.csv"),
-    DataFrame)
-forecast_overlay_df = CSV.read(
-    joinpath(pkgdir(BVDOutbreakSize), "data", "forecast_overlay.csv"),
-    DataFrame)
+## scripts/score_releases.jl writes these after the fits, so a file is absent
+## until that has run over a release carrying the asset. Read what is there
+## and fall back to an empty frame with the same schema, so the page renders
+## before the scores exist.
+function _release_data(name, schema::NamedTuple)
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", name)
+    isfile(path) && return CSV.read(path, DataFrame)
+    return DataFrame([k => T[] for (k, T) in pairs(schema)])
+end
+
+forecast_scores_df = _release_data("forecast_scores.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, model = String, crps = Float64,
+        log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
+        bias = Float64, n_samples = Int))
+forecast_overlay_df = _release_data("forecast_overlay.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, model = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64))
 forecast_score_table = forecast_score_summary(forecast_scores_df)
 
 #md # ```@raw html
@@ -170,15 +193,22 @@ forecast_score_table = forecast_score_summary(forecast_scores_df)
 forecast_score_table #hide
 
 # Forecasts made at each release against the value observed since, one panel
-# per stream: the median and 90% interval coloured by horizon, the observed
-# value in black.
+# per stream, the observed value in black.
+# The median and 90% interval are coloured by fit once the scores carry one,
+# and by horizon before then.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-forecast_overlay_fig = plot_forecast_overlay(
-    forecast_overlay_df[forecast_overlay_df.model .== "ours", :]);
+## With a `fit` column every fit is drawn and read apart by colour; before
+## then the only forecasts stored are ours and the baseline, and the overlay
+## shows ours.
+forecast_overlay_rows = "fit" in names(forecast_overlay_df) ?
+                        forecast_overlay_df :
+                        forecast_overlay_df[
+    forecast_overlay_df.model .== "ours", :]
+forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_rows);
 
 #md # ```@raw html
 #md # </details>
@@ -234,6 +264,86 @@ rt_evolution_fig = plot_estimate_evolution(rt_release;
 #md # ```
 
 rt_evolution_fig #hide
+
+# ## Reproduction number by release and dataset
+#
+# The same per-release reproduction number, one panel per fit, so each
+# dataset's Rt history reads against the others and against the joint.
+# Panels share a calendar axis and a y range, Rt = 1 is marked, and each
+# release's cut-off `R_T` posterior is a median with nested 30/60/90% bars
+# from `data/rt_by_release_by_stream.csv`.
+# A fit with no saved estimates is dropped rather than drawn empty.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number per release by fit</summary>
+#md # ```
+
+## Schema of the per-release, per-fit estimate tables written by
+## scripts/score_releases.jl from each release's stream_estimates.csv.
+_by_stream_schema = (; release = String, date = Date, fit = String,
+    median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+    hi60 = Float64, lo90 = Float64, hi90 = Float64)
+
+## Fits in a fixed order, the joint first, so the panels do not reshuffle
+## between builds. Labels match the per-stream table below. Recovered is
+## absent because it has no individual fit.
+_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
+    "treatment", "exports"]
+_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
+    "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
+    "confirmed_deaths" => "confirmed deaths (DRC)",
+    "treatment" => "isolation (DRC)", "exports" => "exports")
+
+## Group a per-fit estimate table into the label => tuples pairs the faceted
+## plot takes, keyed on the date so the mixed release tag shapes
+## (`results-v1.9.0` and `results-1243`) never reach the axis.
+function _fit_groups(df)
+    return [get(_fit_labels, f, f) =>
+                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
+            for f in _fit_order]
+end
+
+rt_stream_df = _release_data("rt_by_release_by_stream.csv",
+    _by_stream_schema)
+rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
+    ylabel = "Reproduction number",
+    title = "Reproduction number as data accrued, by dataset",
+    released_label = "Released estimate (per release)",
+    refline = 1.0,
+    empty_note = "No per-dataset reproduction numbers saved yet.");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rt_stream_fig #hide
+
+# ## Outbreak size by release and dataset
+#
+# The outbreak size `C_T` estimated at each release, one panel per fit, the
+# per-dataset analogue of the release evolution below.
+# Each dataset constrains the latent size differently, so the panels show how
+# far each fit's history sits from the joint's as data accrued, from
+# `data/size_by_release_by_stream.csv`.
+
+#md # ```@raw html
+#md # <details><summary>Outbreak size per release, faceted by fit</summary>
+#md # ```
+
+size_stream_df = _release_data("size_by_release_by_stream.csv",
+    _by_stream_schema)
+size_stream_fig = plot_evolution_by_group(_fit_groups(size_stream_df);
+    ylabel = "Cumulative infections",
+    title = "Outbreak-size estimate as data accrued, by dataset",
+    released_label = "Released estimate (per release)",
+    empty_note = "No per-dataset outbreak sizes saved yet.");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+size_stream_fig #hide
 
 # ## Outbreak size estimated by each data stream
 #

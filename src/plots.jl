@@ -604,46 +604,33 @@ Release dates are marked with dotted vertical rules.
 `xlabel`/`ylabel`/`title` set the axis text; `released_label`,
 `renewal_label` and `trajectory_label` name the three series.
 """
-function plot_estimate_evolution(
-        released::AbstractVector;
-        renewal::AbstractVector = NamedTuple[],
-        trajectory::Union{Nothing, Tuple} = nothing,
-        xlabel::AbstractString = "Date",
-        ylabel::AbstractString = "Cumulative infections",
-        title::AbstractString = "Outbreak-size estimate as data accrued",
-        released_label::AbstractString =
-        "Released estimates (per project release)",
-        renewal_label::AbstractString =
-        "Current model re-fit frozen at each release date",
-        trajectory_label::AbstractString =
-        "Current model, current data",
-        refline::Union{Nothing, Real} = nothing)
-    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
-    ## then relabel the ticks with the dates. The released marks, the
-    ## frozen renewal marks and the current-model trajectory all share
-    ## this single calendar mapping, so they line up on the same axis.
+## Calendar dates carried by one panel's three series.
+function _evolution_dates(released, renewal, trajectory)
     rdates = [Date(String(r[1])) for r in released]
     ndates = [Date(String(p[1])) for p in renewal]
     tdates = isnothing(trajectory) ? Date[] :
              [d isa Date ? d : Date(String(d)) for d in trajectory[1]]
-    tickdates = sort(unique(vcat(rdates, ndates)))
-    alldates = sort(unique(vcat(rdates, ndates, tdates)))
-    ref = minimum(alldates)
-    _x(d) = Float64((d - ref).value)
+    return rdates, ndates, tdates
+end
 
-    _hi(tuples) = isempty(tuples) ? 0.0 : maximum(float(t[8]) for t in tuples)
+## Top of one panel's series, the 90% upper over every discrete mark and
+## over the trajectory's upper band.
+function _evolution_upper(released, renewal, trajectory)
+    _hi(ts) = isempty(ts) ? 0.0 : maximum(float(t[8]) for t in ts)
     upper = max(_hi(released), _hi(renewal))
     isnothing(trajectory) ||
         (upper = max(upper, maximum(float.(trajectory[7]))))
+    return upper
+end
 
-    xlo = _x(ref) - 1
-    xhi = _x(maximum(alldates)) + 1
-    fig = Figure(; size = (860, 480))
-    ax = Axis(fig[1, 1];
-        xlabel = xlabel, ylabel = ylabel, title = title,
-        xticks = (_x.(tickdates), [string(d) for d in tickdates]),
-        xticklabelrotation = pi / 4,
-        limits = ((xlo, xhi), (0, upper * 1.08)))
+## Draw one estimate-evolution panel into `ax`, shared by the single-axis
+## and faceted plots. `_x` maps a calendar date to the axis' numeric
+## day-offset and is passed in so faceted panels share one mapping.
+## `labels` names the released, renewal and trajectory series. Returns the
+## legend handles and labels for the series actually drawn.
+function _evolution_panel!(ax, _x, released, renewal, trajectory,
+        refline, labels::NamedTuple)
+    rdates, ndates, tdates = _evolution_dates(released, renewal, trajectory)
 
     ## Each release and each frozen re-fit is its own fit, so collect them
     ## as discrete marks and dodge any that share a date so they read
@@ -696,7 +683,7 @@ function plot_estimate_evolution(
     end
 
     handles = Any[]
-    labels = String[]
+    llabels = String[]
     ## Current-data estimate as the cumulative-infection trajectory over the
     ## grid: a single fit, so one continuous ribbon on the same calendar
     ## axis. `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
@@ -712,17 +699,17 @@ function plot_estimate_evolution(
         th = band!(ax, xs, float.(trajectory[2])[ord],
             float.(trajectory[3])[ord]; color = (cc, 0.24))
         push!(handles, th)
-        push!(labels, trajectory_label * " (30/60/90% band)")
+        push!(llabels, labels.trajectory * " (30/60/90% band)")
     end
     renewal_mark = _series!(:firebrick)
     if !isnothing(renewal_mark)
         push!(handles, renewal_mark)
-        push!(labels, renewal_label * " (median, 30/60/90% bars)")
+        push!(llabels, labels.renewal * " (median, 30/60/90% bars)")
     end
     released_mark = _series!(:steelblue)
     if !isnothing(released_mark)
         push!(handles, released_mark)
-        push!(labels, released_label * " (median, 30/60/90% bars)")
+        push!(llabels, labels.released * " (median, 30/60/90% bars)")
     end
 
     ## Dotted vertical rule at each release date.
@@ -734,6 +721,47 @@ function plot_estimate_evolution(
     isnothing(refline) ||
         hlines!(ax, [float(refline)];
             color = (:black, 0.4), linestyle = :dash, linewidth = 1)
+    return handles, llabels
+end
+
+function plot_estimate_evolution(
+        released::AbstractVector;
+        renewal::AbstractVector = NamedTuple[],
+        trajectory::Union{Nothing, Tuple} = nothing,
+        xlabel::AbstractString = "Date",
+        ylabel::AbstractString = "Cumulative infections",
+        title::AbstractString = "Outbreak-size estimate as data accrued",
+        released_label::AbstractString =
+        "Released estimates (per project release)",
+        renewal_label::AbstractString =
+        "Current model re-fit frozen at each release date",
+        trajectory_label::AbstractString =
+        "Current model, current data",
+        refline::Union{Nothing, Real} = nothing)
+    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
+    ## then relabel the ticks with the dates. The released marks, the
+    ## frozen renewal marks and the current-model trajectory all share
+    ## this single calendar mapping, so they line up on the same axis.
+    rdates, ndates, tdates = _evolution_dates(released, renewal, trajectory)
+    tickdates = sort(unique(vcat(rdates, ndates)))
+    alldates = sort(unique(vcat(rdates, ndates, tdates)))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+
+    upper = _evolution_upper(released, renewal, trajectory)
+    xlo = _x(ref) - 1
+    xhi = _x(maximum(alldates)) + 1
+    fig = Figure(; size = (860, 480))
+    ax = Axis(fig[1, 1];
+        xlabel = xlabel, ylabel = ylabel, title = title,
+        xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+        xticklabelrotation = pi / 4,
+        limits = ((xlo, xhi), (0, upper * 1.08)))
+
+    handles, labels = _evolution_panel!(ax, _x, released, renewal,
+        trajectory, refline,
+        (; released = released_label, renewal = renewal_label,
+            trajectory = trajectory_label))
 
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
@@ -741,13 +769,99 @@ function plot_estimate_evolution(
 end
 
 """
+Faceted estimate evolution, one panel per group, for comparing how the same
+quantity moved across releases under each of several fits.
+
+`groups` is a vector of `label => released` pairs, where `released` is the
+`(cutoff_date, median, lo30, hi30, lo60, hi60, lo90, hi90)` tuple vector
+`plot_estimate_evolution` takes. Panels share one calendar mapping and one y
+range so they read against each other, and are laid out over `ncols` columns.
+Groups with no estimates are dropped rather than drawn as an empty panel, so
+a dataset with no fit of its own does not imply a comparison that cannot
+exist. `refline` draws a faint horizontal rule in every panel, e.g. Rt = 1.
+
+Returns a figure carrying `empty_note` in place of the panels when no group
+has any estimate.
+"""
+function plot_evolution_by_group(
+        groups::AbstractVector;
+        xlabel::AbstractString = "Date",
+        ylabel::AbstractString = "Estimate",
+        title::AbstractString = "",
+        released_label::AbstractString = "Released estimate (per release)",
+        refline::Union{Nothing, Real} = nothing,
+        ncols::Int = 2,
+        empty_note::AbstractString = "No per-dataset estimates yet.")
+    ## A group with no estimates is dropped, so the panels show only fits
+    ## that exist.
+    shown = [g for g in groups if !isempty(last(g))]
+    if isempty(shown)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(fig[1, 1], empty_note;
+            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        return fig
+    end
+
+    ## One calendar mapping and one y range across every panel, so a
+    ## dataset's estimates read against the others rather than against its
+    ## own private axis.
+    alldates = sort(unique(reduce(vcat,
+        [_evolution_dates(last(g), NamedTuple[], nothing)[1] for g in shown])))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+    upper = maximum(_evolution_upper(last(g), NamedTuple[], nothing)
+    for g in shown)
+    xlo = _x(ref) - 1
+    xhi = _x(maximum(alldates)) + 1
+
+    ## Facet panels are narrow, so label a subset of the release dates.
+    step = max(1, cld(length(alldates), 5))
+    tickdates = alldates[1:step:end]
+
+    nrows = cld(length(shown), ncols)
+    fig = Figure(; size = (460 * ncols, 250 * nrows + 90))
+    handles = Any[]
+    labels = String[]
+    for (i, g) in enumerate(shown)
+        r, c = fldmod1(i, ncols)
+        ax = Axis(fig[r, c]; title = string(first(g)),
+            xlabel = r == nrows ? xlabel : "",
+            ylabel = c == 1 ? ylabel : "",
+            xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+            xticklabelrotation = pi / 4,
+            limits = ((xlo, xhi), (0, upper * 1.08)))
+        h, l = _evolution_panel!(ax, _x, last(g), NamedTuple[], nothing,
+            refline, (; released = released_label, renewal = "",
+                trajectory = ""))
+        if isempty(handles)
+            handles = h
+            labels = l
+        end
+    end
+
+    isempty(title) || CairoMakie.Label(fig[0, 1:ncols], title;
+        font = :bold, tellwidth = false)
+    isempty(handles) ||
+        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
+            orientation = :horizontal, framevisible = true,
+            tellheight = true, tellwidth = false)
+    return fig
+end
+
+"""
 Forecasts-versus-now overlay: one panel per observed stream, each showing the
 forecasts made at every release (median with the 90% predictive interval as a
-vertical bar, coloured by horizon) against the value observed since (black
-points). `overlay` is the `data/forecast_overlay.csv` table restricted to the
-`"ours"` model rows, with columns `stream`, `target_date`, `horizon`,
-`observed`, `median`, `lo90` and `hi90`. Returns a figure carrying a short
-note in place of the panels when no forecasts have been scored yet.
+vertical bar) against the value observed since (black points). `overlay` is
+the `data/forecast_overlay.csv` table with columns `stream`, `target_date`,
+`horizon`, `observed`, `median`, `lo90` and `hi90`.
+
+Forecasts are coloured by `fit` when the table carries that column, so the
+baseline, the individual fit and the joint read apart within a stream, and by
+`horizon` otherwise. A stream that carries only some fits is drawn with only
+those, and the legend covers every level drawn in any panel.
+
+Returns a figure carrying a short note in place of the panels when no
+forecasts have been scored yet.
 """
 function plot_forecast_overlay(overlay::DataFrame)
     streams = unique(overlay.stream)
@@ -762,14 +876,23 @@ function plot_forecast_overlay(overlay::DataFrame)
         return fig
     end
     fig = Figure(; size = (860, 240 * length(streams) + 50))
-    horizons = sort(unique(overlay.horizon))
-    palette = [:steelblue, :seagreen, :goldenrod, :firebrick]
+    ## Colour by fit once the scores carry one, so the baseline, the
+    ## individual fit and the joint read apart within a stream; before
+    ## then the only contrast available is the horizon.
+    key = "fit" in names(overlay) ? :fit : :horizon
+    levels = sort(unique(overlay[!, key]))
+    _level_label(l) = key === :fit ? string(l) : "$(l)-day forecast"
+    palette = [:steelblue, :seagreen, :goldenrod, :firebrick, :purple]
     hcol = Dict(h => palette[mod1(i, length(palette))]
-    for (i, h) in enumerate(horizons))
+    for (i, h) in enumerate(levels))
     ref = minimum(Date.(string.(overlay.target_date)))
     _x(d) = Float64((Date(string(d)) - ref).value)
-    handles = Any[]
-    labels = String[]
+    ## A level a stream does not carry, e.g. the individual fit of a stream
+    ## that has none, is absent from that panel, so collect each level's
+    ## legend handle wherever it first appears rather than from the first
+    ## panel alone.
+    obs_handle = nothing
+    level_handles = Dict{Any, Any}()
     for (row, s) in enumerate(streams)
         sub = overlay[overlay.stream .== s, :]
         ax = Axis(fig[row, 1]; title = s, xlabel = "Target date",
@@ -779,12 +902,9 @@ function plot_forecast_overlay(overlay::DataFrame)
                           for (t, o) in zip(sub.target_date, sub.observed)]))
         oh = scatter!(ax, [_x(t) for (t, _) in od], [o for (_, o) in od];
             color = :black, markersize = 7)
-        if row == 1
-            push!(handles, oh)
-            push!(labels, "observed")
-        end
-        for h in horizons
-            hs = sub[sub.horizon .== h, :]
+        isnothing(obs_handle) && (obs_handle = oh)
+        for h in levels
+            hs = sub[sub[!, key] .== h, :]
             isempty(hs) && continue
             xs = [_x(t) for t in hs.target_date]
             bx = Float64[]
@@ -796,14 +916,23 @@ function plot_forecast_overlay(overlay::DataFrame)
             linesegments!(ax, bx, by; color = (hcol[h], 0.4), linewidth = 2)
             mh = scatter!(ax, xs, float.(hs.median);
                 color = hcol[h], markersize = 6)
-            if row == 1
-                push!(handles, mh)
-                push!(labels, "$(h)-day forecast")
-            end
+            get!(level_handles, h, mh)
         end
         ts = sort(unique(Date.(string.(sub.target_date))))
         ax.xticks = (_x.(ts), string.(ts))
         ax.xticklabelrotation = pi / 4
+    end
+
+    handles = Any[]
+    labels = String[]
+    if !isnothing(obs_handle)
+        push!(handles, obs_handle)
+        push!(labels, "observed")
+    end
+    for h in levels
+        haskey(level_handles, h) || continue
+        push!(handles, level_handles[h])
+        push!(labels, _level_label(h))
     end
     ## Legend below the panels, since inside the first axis it covers the
     ## data and the tick labels once several horizons are scored.
