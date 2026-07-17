@@ -205,8 +205,10 @@ end
 # ----------------------------------------------------------------------
 
 ## The data cut-off a release was built from, read from its
-## `observations.toml` (`as_of_date`), or `nothing` when the asset is
-## absent, unparseable or carries no cut-off.
+## `observations.toml` (`as_of_date`), or `nothing` when the file is
+## unparseable or carries no cut-off. The caller handles a missing file
+## separately, since a failed fetch and a cut-off-less file are not the
+## same event; passing `nothing` here still returns `nothing`.
 function release_cutoff(obs_path)
     isnothing(obs_path) && return nothing
     parsed = try
@@ -337,16 +339,29 @@ function score_release(tag, forecast_path, obs, grid_date)
     fit_i = findfirst(==("fit"), header)
 
     ## Group rows by (made_date, horizon, target_date, stream) and fit; a
-    ## plain `Dict` keeps this independent of DataFrame group-by quirks.
+    ## plain `Dict` keeps this independent of DataFrame group-by quirks. A
+    ## row whose stream label is not one this script scores costs itself,
+    ## not the release: it is dropped here so the scoring loop only sees
+    ## known streams, and an unknown label is logged once per release.
     Key = Tuple{Date, Int, Date, String}
     groups = Dict{Key, Dict{String, Vector{Float64}}}()
+    unknown = 0
+    seen_unknown = Set{String}()
     for r in rows
-        key = (Date(r[made_i]), parse(Int, r[hor_i]),
-            Date(r[tgt_i]), r[str_i])
+        stream = r[str_i]
+        if !haskey(STREAM_HISTORY, stream)
+            unknown += 1
+            push!(seen_unknown, stream)
+            continue
+        end
+        key = (Date(r[made_i]), parse(Int, r[hor_i]), Date(r[tgt_i]), stream)
         fit = isnothing(fit_i) ? JOINT_FIT : r[fit_i]
         byfit = get!(() -> Dict{String, Vector{Float64}}(), groups, key)
         push!(get!(byfit, fit, Float64[]), parse(Float64, r[val_i]))
     end
+    unknown > 0 && @warn string(
+        tag, ": dropped ", unknown, " row(s) with unrecognised stream ",
+        "label(s): ", join(sort(collect(seen_unknown)), ", "))
 
     out = NamedTuple[]
     overlay = NamedTuple[]
@@ -475,18 +490,34 @@ isempty(backfill_names) ||
 ## Selection pass: a release is placed on a data day by its own cut-off, so
 ## every candidate's `observations.toml` is read before any is scored. A
 ## release whose cut-off cannot be read is dropped rather than scored on an
-## assumed day, since its forecast could silently duplicate a kept one; it
-## is listed rather than dropped quietly.
+## assumed day, since its forecast could silently duplicate a kept one.
+##
+## The two reasons a cut-off is unreadable are logged apart, because they
+## are not the same event. A release that carries no `as_of_date` is
+## expected and permanent. One whose `observations.toml` could not be
+## fetched (after `fetch_asset`'s retries) may be a transient `gh` failure,
+## so a real distinct forecast could be dropped for this run; a re-run
+## recovers it, but the log must let the two be told apart.
 dated = Tuple{String, DateTime, Date}[]
-undated = String[]
+no_cutoff = String[]
+unfetched = String[]
 for (tag, created) in entries
-    cutoff = release_cutoff(fetch_asset(repo, tag, OBS_ASSET, tagdir(tag)))
-    isnothing(cutoff) ? push!(undated, tag) :
+    obs_path = fetch_asset(repo, tag, OBS_ASSET, tagdir(tag))
+    if isnothing(obs_path)
+        push!(unfetched, tag)
+        continue
+    end
+    cutoff = release_cutoff(obs_path)
+    isnothing(cutoff) ? push!(no_cutoff, tag) :
     push!(dated, (tag, created, cutoff))
 end
-isempty(undated) || @info string(
-    "ignoring ", length(undated), " release(s) with no readable data ",
-    "cut-off: ", join(undated, ", "))
+isempty(no_cutoff) || @info string(
+    "ignoring ", length(no_cutoff), " release(s) that carry no data ",
+    "cut-off: ", join(no_cutoff, ", "))
+isempty(unfetched) || @warn string(
+    "could not fetch observations.toml for ", length(unfetched),
+    " release(s); a distinct forecast may be dropped this run, a re-run ",
+    "recovers it: ", join(unfetched, ", "))
 
 tags = select_daily_releases(dated)
 isempty(tags) && error("no results releases with a data cut-off for $repo")
