@@ -503,3 +503,30 @@ end
         @test isapprox(mean(fr), mean(fs); rtol = 0.05)
     end
 end
+
+@testitem "forecast_stream reconstructs cut-off R_T at the model's ramp" tags=[:slow] setup=[StreamFixtures] begin
+    using BVDOutbreakSize: _cutoff_rt, reconstruct_rt
+
+    ## A single-stream chain carries no top-level `R_T`, so `_cutoff_rt`
+    ## rebuilds it from the walk. The reconstruction is ramp-sensitive, and
+    ## the model's ramp is 21 (`sigmoid_ramp` / `rt_walk_model`), NOT
+    ## `reconstruct_rt`'s lighter 14 default. Pin that `_cutoff_rt` uses 21:
+    ## it must equal the ramp = 21 cut-off column and differ from ramp = 14,
+    ## so a regression back to the default would fail here.
+    chn=_nested_chain(200)
+    got=_cutoff_rt(chn; n = STREAM_N, breakpoint = STREAM_BREAK,
+        rt_start = 1, rt_walk_start = 1)
+    rt21=reconstruct_rt(chn; n = STREAM_N, breakpoint = STREAM_BREAK,
+        ramp = 21.0)
+    rt14=reconstruct_rt(chn; n = STREAM_N, breakpoint = STREAM_BREAK,
+        ramp = 14.0)
+    cut21=[rt21[i, STREAM_N] for i in axes(rt21, 1)]
+    cut14=[rt14[i, STREAM_N] for i in axes(rt14, 1)]
+
+    ## Uses the model ramp exactly.
+    @test got == cut21
+    ## The ramp genuinely moves the cut-off R_T, so the wrong default is a
+    ## real, detectable error rather than a harmless relabelling.
+    @test maximum(abs.(cut21 .- cut14)) > 1e-6
+    @test got != cut14
+end

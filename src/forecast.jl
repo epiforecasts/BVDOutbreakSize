@@ -730,11 +730,18 @@ end
 ## rebuilt from the walk parameters every chain carries. That needs the grid
 ## length `n` and the intervention `breakpoint`, which are data rather than
 ## chain contents, so it is only possible when the caller supplies them.
+##
+## The intervention ramp is passed explicitly as `21.0` to match the model's
+## own default (`sigmoid_ramp` / `rt_walk_model`, renewal.jl and
+## priors.jl) rather than taking `reconstruct_rt`'s lighter `14.0` default.
+## The cut-off `Rt[n]` is ramp-sensitive: at `21.0` the reconstruction
+## reproduces the joint's own `R_T` exactly, so the single-stream `R_T` fed
+## into the horizon rate evolution is on the same footing as the joint's.
 function _cutoff_rt(chn; n, breakpoint, rt_start, rt_walk_start)
     _has_key(chn, :R_T) && return _draws(chn, :R_T)
     (isnothing(n) || isnothing(breakpoint)) && return nothing
     rt = reconstruct_rt(chn; n = n, breakpoint = breakpoint,
-        rt_start = rt_start, rt_walk_start = rt_walk_start)
+        rt_start = rt_start, rt_walk_start = rt_walk_start, ramp = 21.0)
     return Float64[rt[i, n] for i in axes(rt, 1)]
 end
 
