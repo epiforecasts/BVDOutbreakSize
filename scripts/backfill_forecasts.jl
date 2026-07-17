@@ -72,11 +72,16 @@ function parse_args(args)
     concurrency = DEFAULT_CONCURRENCY
     i = 1
     while i <= length(args)
-        if args[i] == "--only" && i < length(args)
+        if args[i] == "--only"
+            i < length(args) || error("--only needs a release tag")
             only = args[i + 1]
             i += 2
-        elseif args[i] == "--concurrency" && i < length(args)
-            concurrency = parse(Int, args[i + 1])
+        elseif args[i] == "--concurrency"
+            i < length(args) || error("--concurrency needs an integer")
+            c = tryparse(Int, args[i + 1])
+            isnothing(c) &&
+                error("--concurrency must be an integer, got $(args[i + 1])")
+            concurrency = c
             i += 2
         else
             i += 1

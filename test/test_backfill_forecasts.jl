@@ -8,10 +8,14 @@
         "backfill_forecasts.jl"))
 
     ## Defaults: all releases, worktrees removed, conservative concurrency.
+    ## The concurrency default is asserted against its intended literal so a
+    ## wrong DEFAULT_CONCURRENCY constant is caught rather than passing
+    ## vacuously.
     d = parse_args(String[])
     @test d.only === nothing
     @test d.keep == false
-    @test d.concurrency == DEFAULT_CONCURRENCY
+    @test d.concurrency == 2
+    @test DEFAULT_CONCURRENCY == 2
 
     ## Flags are read in any order.
     a = parse_args(["--only", "v1.8.0", "--keep", "--concurrency", "3"])
@@ -31,4 +35,22 @@ end
         "backfill_forecasts.jl"))
 
     @test_throws ErrorException parse_args(["--concurrency", "0"])
+end
+
+@testitem "backfill parse_args rejects a non-integer concurrency" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
+        "backfill_forecasts.jl"))
+
+    @test_throws ErrorException parse_args(["--concurrency", "abc"])
+end
+
+@testitem "backfill parse_args rejects a dangling flag value" begin
+    using BVDOutbreakSize: BVDOutbreakSize
+    include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
+        "backfill_forecasts.jl"))
+
+    ## A trailing flag with no value is a user error, not a silent no-op.
+    @test_throws ErrorException parse_args(["--only"])
+    @test_throws ErrorException parse_args(["--concurrency"])
 end
