@@ -38,8 +38,11 @@ const FIT_CACHE_SCHEMA = "v1"
 ## `rt_by_release.csv` and `forecast_scores.csv` are the per-release R_T and
 ## forecast-scoring overlays, likewise rewritten before rendering from the
 ## published releases, so they are excluded for the same reason.
+## `rt_by_release_by_stream.csv` and `size_by_release_by_stream.csv` are the
+## per-fit versions of the same overlay, rewritten the same way.
 const FIT_DATA_EXCLUDE = ("released_estimates.csv", "rt_by_release.csv",
-    "forecast_scores.csv", "forecast_overlay.csv")
+    "forecast_scores.csv", "forecast_overlay.csv",
+    "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv")
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)

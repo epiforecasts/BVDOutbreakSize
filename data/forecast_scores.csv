@@ -1,1 +1,1 @@
-release,made_date,stream,horizon,target_date,model,crps,log_crps,coverage_50,coverage_90,bias,n_samples
+release,made_date,stream,horizon,target_date,fit,crps,log_crps,coverage_50,coverage_90,bias,n_samples

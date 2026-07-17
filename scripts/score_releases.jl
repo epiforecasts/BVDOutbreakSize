@@ -16,28 +16,35 @@
 # `observations.toml` before the selection, so the driver fetches those
 # first and the rest of each winner's assets after.
 #
-# A release with no `forecast.csv` of its own falls back to the
-# reconstruction `scripts/backfill_forecasts.jl` publishes for its code tag
-# on the optional `forecasts-backfill` release (`forecast_v1.9.0.csv` for
+# The forecast a release is scored from comes from the first of these it
+# carries: `stream_forecasts.csv`, which holds every model's forecast in
+# the archive schema plus a `fit` column; `forecast.csv`, the joint model's
+# forecast alone, read as `fit = "joint"`; or the reconstruction
+# `scripts/backfill_forecasts.jl` publishes for the release's code tag on
+# the optional `forecasts-backfill` release (`forecast_v1.9.0.csv` for
 # `results-v1.9.0`), scored under `<tag> (backfill)`. A saved forecast is
-# always preferred over a reconstructed one. That release is absent by
-# default, in which case releases without a stored forecast are skipped.
+# always preferred over a reconstructed one; the backfill release is absent
+# by default, in which case releases without a stored forecast are skipped.
 #
-# Every release that carries a `forecast.csv` asset (see
-# `forecast_archive` in `src/forecast.jl`) has one row per (made_date,
-# horizon, target_date, stream, draw): the forecast draws for the
-# incident "confirmed cases", "confirmed deaths" and "recovered" streams
-# and the LEVEL "isolation beds" stream. This script re-scores every one
-# of those forecasts against the data that has since arrived, using
-# `score_draws` (CRPS, log-CRPS, 50/90% coverage and bias), and compares
-# it against a simple persistence baseline: for the incident streams, the
-# observed count over the same-length window ending at the forecast's
-# cut-off, replicated through a Poisson (a parameter-free, defensible
-# spread; autoregression is explicitly out of scope); for isolation beds,
-# the last observed occupancy carried forward through the same Poisson
-# replication.
+# A forecast archive (see `forecast_archive` in `src/forecast.jl`) has one
+# row per (made_date, horizon, target_date, stream, draw, fit): the
+# forecast draws for the incident "confirmed cases", "confirmed deaths" and
+# "recovered" streams and the LEVEL "isolation beds" stream. This script
+# scores each fit of each stream against the data that has since arrived,
+# using `score_draws` (CRPS, log-CRPS, 50/90% coverage and bias), against
+# one persistence baseline per stream (`fit = "baseline"`): for the
+# incident streams, the observed count over the same-length window ending
+# at the forecast's cut-off, replicated through a Poisson (a
+# parameter-free, defensible spread; autoregression is explicitly out of
+# scope); for isolation beds, the last observed occupancy carried forward
+# through the same Poisson replication. A stream no individual model fits,
+# "recovered", is scored for the joint and the baseline only.
 #
-# Re-run whenever a new release is published: it always recomputes both
+# Each release's `stream_estimates.csv`, when present, also feeds the
+# per-fit `data/rt_by_release_by_stream.csv` and
+# `data/size_by_release_by_stream.csv` R_T and C_T overlays.
+#
+# Re-run whenever a new release is published: it always recomputes the
 # tables from every release currently on GitHub, so re-running is
 # idempotent and just refreshes the output CSVs in place.
 #
@@ -64,9 +71,18 @@ using BVDOutbreakSize: is_results_release, select_daily_releases
 
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
+const STREAM_FORECAST_ASSET = "stream_forecasts.csv"
+const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
+
+## Values of the `fit` column, which names the model a row's forecast or
+## estimate came from: a spec id, or `baseline` for the persistence
+## baseline, which is no model's output. `joint` is also the fit a plain
+## `forecast.csv` carries, that asset predating the per-stream fits.
+const JOINT_FIT = "joint"
+const BASELINE_FIT = "baseline"
 
 repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 
@@ -274,11 +290,43 @@ end
 # Score one release's forecast archive
 # ----------------------------------------------------------------------
 
-## Score every (made_date, horizon, target_date, stream) group in a
-## release's `forecast.csv` against `obs` (the CURRENT observations),
-## returning one row per (group, model) with `model` "ours" or
-## "baseline". Groups whose `target_date` is not yet observed are
-## skipped (counted in `.skipped` for the caller to log).
+## One score row and one overlay row for a set of predictive `samples`
+## against the observed `truth`, pushed onto `out` and `overlay`.
+function push_scored!(out, overlay, tag, key, fit, samples, truth)
+    made_date, horizon, target_date, stream = key
+    s = score_draws(truth, samples)
+    push!(out,
+        (; release = tag, made_date, stream, horizon, target_date,
+            fit, crps = s.crps, log_crps = s.log_crps,
+            coverage_50 = s.coverage_50, coverage_90 = s.coverage_90,
+            bias = s.bias, n_samples = s.n))
+    ## Quantile summary of the same draws for the forecasts-versus-now
+    ## overlay plot, alongside the observed truth so the docs build reads a
+    ## plain table rather than re-pulling the release assets.
+    q = posterior_summary(samples)
+    r2(x) = round(x; digits = 2)
+    push!(overlay,
+        (; release = tag, made_date, stream, horizon, target_date,
+            fit, observed = r2(truth), median = r2(median(samples)),
+            lo30 = r2(q.lo30), hi30 = r2(q.hi30),
+            lo60 = r2(q.lo60), hi60 = r2(q.hi60),
+            lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
+end
+
+## Score every (made_date, horizon, target_date, stream, fit) group in a
+## release's forecast archive against `obs` (the CURRENT observations),
+## returning one row per group plus one persistence-baseline row per
+## (made_date, horizon, target_date, stream), tagged `fit = "baseline"`.
+##
+## `fit` names the model a forecast came from. A `stream_forecasts.csv`
+## carries it per row; a plain `forecast.csv` predates the per-stream fits
+## and holds the joint model's forecast alone, so its rows are read as
+## `joint`. A stream no individual model fits, "recovered", therefore
+## yields `joint` and `baseline` rows and no others: the absent fit is
+## simply a fit that contributed no rows.
+##
+## Groups whose `target_date` is not yet observed are skipped (counted in
+## `.skipped` for the caller to log).
 function score_release(tag, forecast_path, obs, grid_date)
     header, rows = read_simple_csv(forecast_path)
     made_i = col(header, "made_date")
@@ -286,48 +334,43 @@ function score_release(tag, forecast_path, obs, grid_date)
     tgt_i = col(header, "target_date")
     str_i = col(header, "stream")
     val_i = col(header, "value")
+    fit_i = findfirst(==("fit"), header)
 
-    ## Group rows by (made_date, horizon, target_date, stream); a plain
-    ## `Dict` keeps this independent of DataFrame group-by quirks.
-    groups = Dict{Tuple{Date, Int, Date, String}, Vector{Float64}}()
+    ## Group rows by (made_date, horizon, target_date, stream) and fit; a
+    ## plain `Dict` keeps this independent of DataFrame group-by quirks.
+    Key = Tuple{Date, Int, Date, String}
+    groups = Dict{Key, Dict{String, Vector{Float64}}}()
     for r in rows
         key = (Date(r[made_i]), parse(Int, r[hor_i]),
             Date(r[tgt_i]), r[str_i])
-        push!(get!(groups, key, Float64[]), parse(Float64, r[val_i]))
+        fit = isnothing(fit_i) ? JOINT_FIT : r[fit_i]
+        byfit = get!(() -> Dict{String, Vector{Float64}}(), groups, key)
+        push!(get!(byfit, fit, Float64[]), parse(Float64, r[val_i]))
     end
 
     out = NamedTuple[]
     overlay = NamedTuple[]
     skipped = 0
-    for (key, draws) in groups
+    for (key, byfit) in groups
         made_date, horizon, target_date, stream = key
         truth = truth_at(obs, grid_date, stream, made_date, target_date)
         if truth === missing
-            skipped += 1
+            skipped += length(byfit)
             continue
         end
+        for fit in sort(collect(keys(byfit)))
+            push_scored!(out, overlay, tag, key, fit, byfit[fit], truth)
+        end
+
+        ## The baseline follows from the stream's own history, not from any
+        ## fit, so every fit of one stream is scored against the same one
+        ## rather than against a copy per fit. It is drawn at the width of
+        ## the widest fit so its resolution never limits the comparison.
+        n = maximum(length, values(byfit))
         rng = MersenneTwister(hash((tag, stream, horizon, made_date)))
         base = baseline_draws(
-            obs, grid_date, stream, made_date, horizon, length(draws), rng)
-        for (model, samples) in (("ours", draws), ("baseline", base))
-            s = score_draws(truth, samples)
-            push!(out,
-                (; release = tag, made_date, stream, horizon, target_date,
-                    model, crps = s.crps, log_crps = s.log_crps,
-                    coverage_50 = s.coverage_50, coverage_90 = s.coverage_90,
-                    bias = s.bias, n_samples = s.n))
-            ## Quantile summary of the same draws for the forecasts-versus-now
-            ## overlay plot, alongside the observed truth so the docs build
-            ## reads a plain table rather than re-pulling the release assets.
-            q = posterior_summary(samples)
-            r2(x) = round(x; digits = 2)
-            push!(overlay,
-                (; release = tag, made_date, stream, horizon, target_date,
-                    model, observed = r2(truth), median = r2(median(samples)),
-                    lo30 = r2(q.lo30), hi30 = r2(q.hi30),
-                    lo60 = r2(q.lo60), hi60 = r2(q.hi60),
-                    lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
-        end
+            obs, grid_date, stream, made_date, horizon, n, rng)
+        push_scored!(out, overlay, tag, key, BASELINE_FIT, base, truth)
     end
     return (; rows = out, overlay, skipped)
 end
@@ -357,6 +400,45 @@ function rt_row(tag, draws_path, cutoff)
 end
 
 # ----------------------------------------------------------------------
+# Per-stream estimate summary
+# ----------------------------------------------------------------------
+
+## The two quantities a release's `stream_estimates.csv` carries, mapped to
+## the per-release-by-stream table each is collected into.
+const STREAM_QUANTITY_DEST = Dict(
+    "R_T" => "rt_by_release_by_stream.csv",
+    "C_T" => "size_by_release_by_stream.csv")
+
+## The `(release, date, fit, median, lo30, ...)` rows from a release's
+## `stream_estimates.csv`, one per `(fit, quantity)`, keyed by quantity so
+## the caller writes each quantity to its own table. `date` is the release
+## `cutoff`. Rows whose quantity is not one this script tabulates are
+## ignored. `nothing` when the asset is absent or unreadable.
+function stream_estimate_rows(tag, estimates_path, cutoff)
+    isnothing(estimates_path) && return nothing
+    header, rows = read_simple_csv(estimates_path)
+    ("fit" in header && "quantity" in header) || return nothing
+    fit_i = col(header, "fit")
+    qty_i = col(header, "quantity")
+    cols = Dict(c => col(header, c)
+    for c in ("median", "lo30", "hi30", "lo60", "hi60", "lo90", "hi90"))
+
+    byqty = Dict{String, Vector{NamedTuple}}()
+    for r in rows
+        qty = r[qty_i]
+        haskey(STREAM_QUANTITY_DEST, qty) || continue
+        vals = Dict(c => parse(Float64, r[i]) for (c, i) in cols)
+        push!(get!(() -> NamedTuple[], byqty, qty),
+            (; release = tag, date = string(cutoff), fit = r[fit_i],
+                median = vals["median"], lo30 = vals["lo30"],
+                hi30 = vals["hi30"], lo60 = vals["lo60"],
+                hi60 = vals["hi60"], lo90 = vals["lo90"],
+                hi90 = vals["hi90"]))
+    end
+    return byqty
+end
+
+# ----------------------------------------------------------------------
 # Driver
 # ----------------------------------------------------------------------
 
@@ -371,6 +453,8 @@ grid_date(day) = obs.cutoff - Day(obs.n - day)
 score_rows = NamedTuple[]
 overlay_rows = NamedTuple[]
 rt_rows = NamedTuple[]
+## One accumulator per per-stream estimate table, keyed by its filename.
+stream_est_rows = Dict(f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST))
 n_scored = 0
 n_no_forecast = 0
 n_backfilled = 0
@@ -416,9 +500,12 @@ for tag in tags
     global n_scored, n_no_forecast, n_backfilled, n_no_rt
 
     ## A saved forecast wins; a reconstruction stands in only where the
-    ## release never stored one.
+    ## release never stored one. The per-stream archive carries every fit's
+    ## forecast, so it is preferred over the joint-only `forecast.csv`.
     label = tag
-    forecast_path = fetch_asset(repo, tag, FORECAST_ASSET, tagdir(tag))
+    forecast_path = fetch_asset(repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
+    isnothing(forecast_path) &&
+        (forecast_path = fetch_asset(repo, tag, FORECAST_ASSET, tagdir(tag)))
     if isnothing(forecast_path)
         asset = backfill_asset(tag)
         if !isnothing(asset) && asset in backfill_names
@@ -464,6 +551,19 @@ for tag in tags
                 lo30 = r[4], hi30 = r[5], lo60 = r[6], hi60 = r[7],
                 lo90 = r[8], hi90 = r[9]))
     end
+
+    ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
+    ## every release until P2.2 lands, so a missing asset is a clean skip.
+    est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
+    byqty = try
+        stream_estimate_rows(tag, est_path, cutoffs[tag])
+    catch e
+        @warn "skipping $tag stream estimates" exception=e
+        nothing
+    end
+    isnothing(byqty) || for (qty, rows) in byqty
+        append!(stream_est_rows[STREAM_QUANTITY_DEST[qty]], rows)
+    end
 end
 
 println("Scored $n_scored/$(length(tags)) releases " *
@@ -473,15 +573,15 @@ println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
         "($n_no_rt without an R_T posterior).")
 
 ## `data/forecast_scores.csv`: one row per scored (release, made_date,
-## stream, horizon, model) group.
+## stream, horizon, fit) group, `fit` the model or `baseline`.
 scores = if isempty(score_rows)
     DataFrame(release = String[], made_date = Date[], stream = String[],
-        horizon = Int[], target_date = Date[], model = String[],
+        horizon = Int[], target_date = Date[], fit = String[],
         crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
         coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
 else
     sort(DataFrame(score_rows),
-        [:release, :made_date, :stream, :horizon, :model])
+        [:release, :made_date, :stream, :horizon, :fit])
 end
 scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
 write_simple_csv(scores_dest,
@@ -490,7 +590,7 @@ write_simple_csv(scores_dest,
         :stream => scores.stream,
         :horizon => scores.horizon,
         :target_date => string.(scores.target_date),
-        :model => scores.model,
+        :fit => scores.fit,
         :crps => scores.crps,
         :log_crps => scores.log_crps,
         :coverage_50 => scores.coverage_50,
@@ -504,13 +604,13 @@ println("Wrote $(nrow(scores)) scored forecasts to " *
 ## group with the observed truth, for the forecasts-versus-now overlay plots.
 overlay = if isempty(overlay_rows)
     DataFrame(release = String[], made_date = Date[], stream = String[],
-        horizon = Int[], target_date = Date[], model = String[],
+        horizon = Int[], target_date = Date[], fit = String[],
         observed = Float64[], median = Float64[], lo30 = Float64[],
         hi30 = Float64[], lo60 = Float64[], hi60 = Float64[],
         lo90 = Float64[], hi90 = Float64[])
 else
     sort(DataFrame(overlay_rows),
-        [:stream, :made_date, :horizon, :model])
+        [:stream, :made_date, :horizon, :fit])
 end
 overlay_dest = joinpath(@__DIR__, "..", "data", "forecast_overlay.csv")
 write_simple_csv(overlay_dest,
@@ -519,7 +619,7 @@ write_simple_csv(overlay_dest,
         :stream => overlay.stream,
         :horizon => overlay.horizon,
         :target_date => string.(overlay.target_date),
-        :model => overlay.model,
+        :fit => overlay.fit,
         :observed => overlay.observed,
         :median => overlay.median,
         :lo30 => overlay.lo30, :hi30 => overlay.hi30,
@@ -543,3 +643,26 @@ write_simple_csv(rt_dest,
         :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90])
 println("Wrote $(nrow(rt)) release R_T summaries to " *
         "data/rt_by_release.csv")
+
+## `data/rt_by_release_by_stream.csv` and
+## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of every
+## fit, per release. Written even when empty, since the docs build reads them
+## and a missing file throws rather than reading back as an empty frame.
+for file in sort(collect(values(STREAM_QUANTITY_DEST)))
+    rows = stream_est_rows[file]
+    df = if isempty(rows)
+        DataFrame(release = String[], date = String[], fit = String[],
+            median = Float64[], lo30 = Float64[], hi30 = Float64[],
+            lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
+            hi90 = Float64[])
+    else
+        sort(DataFrame(rows), [:date, :fit])
+    end
+    dest = joinpath(@__DIR__, "..", "data", file)
+    write_simple_csv(dest,
+        [:release => df.release, :date => df.date, :fit => df.fit,
+            :median => df.median, :lo30 => df.lo30, :hi30 => df.hi30,
+            :lo60 => df.lo60, :hi60 => df.hi60, :lo90 => df.lo90,
+            :hi90 => df.hi90])
+    println("Wrote $(nrow(df)) per-stream rows to data/$file")
+end

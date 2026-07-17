@@ -142,6 +142,82 @@ end
         Date(2026, 4, 28))]) == String[]
 end
 
+@testitem "forecast_score_summary groups by fit against its baseline" begin
+    using DataFrames: DataFrame, nrow, names
+    using BVDOutbreakSize: forecast_score_summary
+
+    ## Two fits of "confirmed cases" and the baseline it is scored against,
+    ## plus the joint's "recovered" forecast, which has no individual fit.
+    scores = DataFrame(
+        stream = ["confirmed cases", "confirmed cases", "confirmed cases",
+            "recovered", "recovered"],
+        horizon = [7, 7, 7, 7, 7],
+        fit = ["joint", "confirmed", "baseline", "joint", "baseline"],
+        crps = [2.0, 4.0, 8.0, 3.0, 6.0],
+        log_crps = [0.2, 0.4, 0.8, 0.3, 0.6],
+        coverage_50 = [1.0, 0.0, 1.0, 1.0, 1.0],
+        coverage_90 = [1.0, 1.0, 1.0, 1.0, 1.0],
+        bias = [0.1, -0.1, 0.0, 0.2, 0.0])
+
+    out = forecast_score_summary(scores)
+    @test "fit" in names(out)
+    ## One row per non-baseline fit; no baseline row, no empty individual
+    ## row for recovered.
+    @test sort(out.fit) == ["confirmed", "joint", "joint"]
+    @test !("baseline" in out.fit)
+
+    skill(stream, fit) = only(
+        out[(out.stream .== stream) .& (out.fit .== fit), :].rel_skill)
+    ## rel_skill is each fit's CRPS over the stream's baseline CRPS.
+    @test skill("confirmed cases", "joint") == 0.25    # 2.0 / 8.0
+    @test skill("confirmed cases", "confirmed") == 0.5  # 4.0 / 8.0
+    ## recovered scores the joint against its own baseline, 3.0 / 6.0.
+    @test skill("recovered", "joint") == 0.5
+end
+
+@testitem "forecast_score_summary keeps the legacy model schema" begin
+    using DataFrames: DataFrame, nrow, names
+    using BVDOutbreakSize: forecast_score_summary
+
+    ## A table with the old `model` ∈ {ours, baseline} column and no `fit`
+    ## summarises one row per (stream, horizon) with no `fit` column.
+    scores = DataFrame(
+        stream = ["confirmed cases", "confirmed cases"],
+        horizon = [7, 7],
+        model = ["ours", "baseline"],
+        crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8],
+        coverage_50 = [1.0, 1.0],
+        coverage_90 = [1.0, 1.0],
+        bias = [0.1, 0.0])
+
+    out = forecast_score_summary(scores)
+    @test !("fit" in names(out))
+    @test nrow(out) == 1
+    @test only(out.rel_skill) == 0.25
+end
+
+@testitem "forecast_score_summary returns typed empty frames" begin
+    using DataFrames: DataFrame, nrow, names
+    using BVDOutbreakSize: forecast_score_summary
+
+    ## Empty in, empty out, with the columns that match the input schema so
+    ## the docs build renders before anything is scored.
+    with_fit = forecast_score_summary(DataFrame(
+        stream = String[], horizon = Int[], fit = String[], crps = Float64[],
+        log_crps = Float64[], coverage_50 = Float64[],
+        coverage_90 = Float64[], bias = Float64[]))
+    @test nrow(with_fit) == 0
+    @test "fit" in names(with_fit)
+
+    with_model = forecast_score_summary(DataFrame(
+        stream = String[], horizon = Int[], model = String[],
+        crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
+        coverage_90 = Float64[], bias = Float64[]))
+    @test nrow(with_model) == 0
+    @test !("fit" in names(with_model))
+end
+
 @testitem "crps_sample matches ScoringRules.crps(samples, obs)" begin
     using ScoringRules: crps
     using BVDOutbreakSize: crps_sample
