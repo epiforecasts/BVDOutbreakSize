@@ -117,7 +117,7 @@ end
     @test all(fc.recovered_cum .>= 0)
     @test all(fc.recovered_new .<= fc.recovered_cum)
     tbl = forecast_table(fc)
-    @test "DRC isolation beds" in tbl[!, "Stream"]
+    @test "DRC beds (total)" in tbl[!, "Stream"]
     @test "DRC recovered" in tbl[!, "Stream"]
     @test "demand at T+7" in tbl[!, "Quantity"]
     @test "occupancy at T+7" in tbl[!, "Quantity"]
@@ -193,10 +193,16 @@ end
     ## (c) The total is byte-identical to a run that does not read the split.
     @test fc.bed_demand == fc0.bed_demand
     @test fc.isolation_level == fc0.isolation_level
-    ## The split surfaces in the summary table as confirmed-ward rows.
+    ## The split surfaces in the summary table as total/isolation/treatment
+    ## rows, each with a demand and an occupancy quantity; the old share row is
+    ## gone.
     tbl = forecast_table(fc)
-    @test "DRC confirmed ward" in tbl[!, "Stream"]
-    @test "share of beds" in tbl[!, "Quantity"]
+    @test "DRC beds (total)" in tbl[!, "Stream"]
+    @test "DRC isolation beds (suspected)" in tbl[!, "Stream"]
+    @test "DRC treatment beds (confirmed)" in tbl[!, "Stream"]
+    @test "demand at T+7" in tbl[!, "Quantity"]
+    @test "occupancy at T+7" in tbl[!, "Quantity"]
+    @test "share of beds" ∉ tbl[!, "Quantity"]
 end
 
 @testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin

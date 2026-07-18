@@ -445,8 +445,9 @@ end
     fc = DataFrame(bed_demand = demand, isolation_level = occ)
     fig = plot_forecast_beds(fc)
     @test fig isa CairoMakie.Makie.Figure
-    ## With the confirmed/suspect ward split present the figure switches to the
-    ## share-led three-panel view.
+    ## With the confirmed/suspect bed split present the figure switches to the
+    ## three-panel bed-type view (total need-vs-capped, occupancy by type,
+    ## demand by type).
     share = clamp.(rand(rng, n) .* 0.5 .+ 0.2, 0, 1)
     confw = round.(Int, share .* demand)
     fc_split = DataFrame(bed_demand = demand, isolation_level = occ,

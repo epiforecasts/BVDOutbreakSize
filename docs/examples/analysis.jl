@@ -3295,18 +3295,71 @@ forecast_fig #hide
 # local unmet need. On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
 # at 21.9%, and beds free in one province cannot serve patients in another.
 #
-# The bed forecast is partitioned into a confirmed and a suspect ward by the
-# cut-off confirmed share (`expected_confirmed_incare_T / expected_bed_demand_T`,
-# held flat over the horizon), so `confirmed_ward + suspect_ward` reproduces the
-# total demand exactly. The confirmed ward's demand and occupancy levels and its
-# share of the beds appear as extra rows in the forecast summary table above, and
-# the bed figure adds the confirmed-share density and the confirmed-versus-suspect
-# ward co-movement. The wards are strongly correlated because most of each ward's
-# variance is the shared total, so the split re-slices the total rather than
-# adding independent uncertainty.
+# The "Patients en isolement" census is one occupancy pool split by
+# confirmation status (`dont confirmes` + `dont suspects` = total). Read as two
+# bed types the report label map is suspected → isolation beds and confirmed →
+# treatment beds, with the total being isolation + treatment. The forecast
+# partitions the total by the cut-off confirmed share
+# (`expected_confirmed_incare_T / expected_bed_demand_T`, held flat over the
+# horizon), so the isolation and treatment beds sum back to the total exactly.
+# The table below reports each type's demand (the need, under unconstrained
+# supply) and occupancy (the supply-limited beds filled) now (at the cut-off,
+# from the fitted chain) and a week ahead (from the forecast), as the posterior
+# median with its 90% credible interval. The bed figure shows the same three
+# quantities as per-draw predictive densities.
 
 #md # ```@raw html
-#md # <details><summary>One-week-ahead isolation-bed forecast plot</summary>
+#md # <details><summary>Build the current and one-week-ahead bed table</summary>
+#md # ```
+
+bed_current_vs_future = let
+    ## Median with the 90% credible interval as a single cell.
+    cell(x) = (s = posterior_summary(x);
+        string(round(Int, quantile(x, 0.5)), " [", round(Int, s.lo90), "–",
+            round(Int, s.hi90), "]"))
+    ## CURRENT (cut-off) scalars from the fitted chain. The census gives one
+    ## occupancy total; the confirmed in-care share (confirmed demand over total
+    ## demand) splits that occupancy into the two types.
+    dem_tot_now = vec(Array(chn_joint[:expected_bed_demand_T]))
+    occ_tot_now = vec(Array(chn_joint[:expected_isolation_T]))
+    dem_treat_now = vec(Array(chn_joint[:expected_confirmed_incare_T]))
+    dem_iso_now = vec(Array(chn_joint[:expected_suspect_incare_T]))
+    share_now = clamp.(dem_treat_now ./ max.(dem_tot_now, eps()), 0.0, 1.0)
+    occ_treat_now = share_now .* occ_tot_now
+    occ_iso_now = occ_tot_now .- occ_treat_now
+    ## +1 WEEK from the forecast draws (total, isolation = suspected,
+    ## treatment = confirmed, for occupancy and demand).
+    rows = [
+        ("Occupancy", "Total", occ_tot_now, float.(forecast[!, :isolation_level])),
+        ("Occupancy", "Isolation (suspected)", occ_iso_now,
+            float.(forecast[!, :suspect_occupancy])),
+        ("Occupancy", "Treatment (confirmed)", occ_treat_now,
+            float.(forecast[!, :confirmed_occupancy])),
+        ("Demand", "Total", dem_tot_now, float.(forecast[!, :bed_demand])),
+        ("Demand", "Isolation (suspected)", dem_iso_now,
+            float.(forecast[!, :suspect_ward])),
+        ("Demand", "Treatment (confirmed)", dem_treat_now,
+            float.(forecast[!, :confirmed_ward]))]
+    DataFrame([(Measure = m, var"Bed type" = t, Current = cell(now),
+                   var"+1 week" = cell(fut)) for (m, t, now, fut) in rows])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Current and one-week-ahead bed table</summary>
+#md # ```
+
+bed_current_vs_future #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>One-week-ahead bed forecast plot</summary>
 #md # ```
 
 forecast_beds_fig = plot_forecast_beds(forecast);

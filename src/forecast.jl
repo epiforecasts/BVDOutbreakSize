@@ -463,23 +463,25 @@ new this week), reporting the equal-tailed 30/60/90% credible interval
 endpoints (`lower_90 … upper_90`) used by the other summary tables. The
 suspected reported-case and suspected-death streams are no longer reported,
 so they are not shown as forecast targets. When the forecast carries the
-confirmed/suspect ward split, the confirmed ward's demand and occupancy
-levels and its share of the beds are appended as further rows.
+confirmed/suspect bed split, the beds are reported as three types — the total,
+the isolation (suspected) beds and the treatment (confirmed) beds — each with
+its demand and occupancy at the horizon. The "Patients en isolement" census is
+one occupancy pool split by confirmation status; the report label map is
+suspected → isolation beds and confirmed → treatment beds, the total being
+their sum.
 """
 function forecast_table(fc::DataFrame; digits::Integer = 0)
-    ## The confirmed share is a fraction on [0, 1], so it needs its own
-    ## decimal precision rather than the count columns' `digits`.
     _row(label,
         quantity,
-        draws; dp::Integer = digits) = begin
+        draws) = begin
         s = posterior_summary(draws)
         (stream = label, quantity = quantity,
-            lower_90 = round(s.lo90; digits = dp),
-            lower_60 = round(s.lo60; digits = dp),
-            lower_30 = round(s.lo30; digits = dp),
-            upper_30 = round(s.hi30; digits = dp),
-            upper_60 = round(s.hi60; digits = dp),
-            upper_90 = round(s.hi90; digits = dp))
+            lower_90 = round(s.lo90; digits),
+            lower_60 = round(s.lo60; digits),
+            lower_30 = round(s.lo30; digits),
+            upper_30 = round(s.hi30; digits),
+            upper_60 = round(s.hi60; digits),
+            upper_90 = round(s.hi90; digits))
     end
     streams = Tuple{String, Symbol, Symbol}[]
     :confirmed_cum in propertynames(fc) && push!(streams,
@@ -492,25 +494,29 @@ function forecast_table(fc::DataFrame; digits::Integer = 0)
         push!(rows, _row(label, "cumulative by T+7", fc[!, cum]))
         push!(rows, _row(label, "new this week", fc[!, new]))
     end
-    ## Isolation beds: the projected bed DEMAND (need under unconstrained
-    ## supply) and the supply-limited occupancy that demand produces, both
-    ## levels at the horizon. The gap between them is the bed shortfall.
-    :bed_demand in propertynames(fc) && push!(rows,
-        _row("DRC isolation beds", "demand at T+7", fc[!, :bed_demand]))
-    :isolation_level in propertynames(fc) && push!(rows,
-        _row("DRC isolation beds", "occupancy at T+7", fc[!, :isolation_level]))
-    ## Confirmed/suspect ward split of the beds: the confirmed ward level and
-    ## the confirmed share, present when the chain carries the in-care split.
-    ## The suspect ward is the total minus the confirmed ward, so it is not
-    ## reported separately.
-    :confirmed_ward in propertynames(fc) && push!(rows,
-        _row("DRC confirmed ward", "demand at T+7", fc[!, :confirmed_ward]))
-    :confirmed_occupancy in propertynames(fc) && push!(rows,
-        _row("DRC confirmed ward", "occupancy at T+7",
-            fc[!, :confirmed_occupancy]))
-    :confirmed_share in propertynames(fc) && push!(rows,
-        _row("DRC confirmed ward", "share of beds",
-            fc[!, :confirmed_share]; dp = 3))
+    ## Beds: the projected DEMAND (the need under unconstrained supply) and the
+    ## supply-limited OCCUPANCY it produces, both as levels at the horizon. The
+    ## gap between demand and occupancy is the bed shortfall. The census is one
+    ## occupancy pool split by confirmation status; when the split is present
+    ## the total is reported alongside the isolation (suspected) and treatment
+    ## (confirmed) beds. Column names stay by confirmation status (unambiguous
+    ## facts); only the display labels map suspected → isolation, confirmed →
+    ## treatment.
+    bed_streams = Tuple{String, Symbol, Symbol}[]
+    (:bed_demand in propertynames(fc) &&
+     :isolation_level in propertynames(fc)) && push!(bed_streams,
+        ("DRC beds (total)", :bed_demand, :isolation_level))
+    (:suspect_ward in propertynames(fc) &&
+     :suspect_occupancy in propertynames(fc)) && push!(bed_streams,
+        ("DRC isolation beds (suspected)", :suspect_ward, :suspect_occupancy))
+    (:confirmed_ward in propertynames(fc) &&
+     :confirmed_occupancy in propertynames(fc)) && push!(bed_streams,
+        ("DRC treatment beds (confirmed)", :confirmed_ward,
+            :confirmed_occupancy))
+    for (label, dem, occ) in bed_streams
+        push!(rows, _row(label, "demand at T+7", fc[!, dem]))
+        push!(rows, _row(label, "occupancy at T+7", fc[!, occ]))
+    end
     ## One-week-ahead daily isolation/treatment flows (a single-day rate at
     ## the horizon, not a cumulative total).
     :admissions_fc in propertynames(fc) && push!(rows,
@@ -567,8 +573,9 @@ function forecast_vs_truth(fc::DataFrame;
         push!(rows, _row("DRC confirmed cases", fc[!, :confirmed_cum],
             confirmed))
     :confirmed_deaths_cum in propertynames(fc) &&
-        push!(rows, _row("DRC confirmed deaths", fc[!, :confirmed_deaths_cum],
-            confirmed_deaths))
+        push!(rows,
+            _row("DRC confirmed deaths", fc[!, :confirmed_deaths_cum],
+                confirmed_deaths))
     isolation !== missing && :isolation_level in propertynames(fc) &&
         push!(rows, _row("DRC isolation beds", fc[!, :isolation_level],
             isolation))
