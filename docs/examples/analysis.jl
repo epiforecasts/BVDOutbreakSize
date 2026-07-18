@@ -2195,11 +2195,26 @@ diagnostics_table( #hide
 # Each release now saves its forecast as an asset so it can later be scored
 # against what is observed.
 # Earlier releases showed a forecast but did not store it, so those forecasts
-# were reconstructed by re-running each release's own code on its data and
-# published as a separate backfill release
-# (`scripts/backfill_forecasts.jl`).
-# The [forecast scoring across releases](@ref "Forecast scoring across releases")
-# section scores them.
+# are reconstructed.
+# `scripts/backfill_forecasts.jl` checks out each past release at its own tag,
+# re-runs that release's own model code on that release's data through its own
+# fit, and writes the forecast in the same archive schema, so a reconstructed
+# forecast is the release's own output rather than a current-code
+# approximation.
+# The reconstruction re-resolves dependencies at current versions, since the
+# release manifests were not pinned, so it reproduces the release's model and
+# data but not its exact solver build.
+# Reconstruction reaches back as far as a release carried the forecast
+# machinery: the renewal releases from v1.4.0 reconstruct the incident case
+# and death streams, all four streams from v1.6.0 once the recovered and
+# isolation series entered the data, and the integral-era v1.3.0 reconstructs
+# the confirmed case and death streams.
+# The earliest releases, v1.0.0 to v1.2.0, predate the forecast machinery, so
+# no reconstruction is needed for them.
+# Reconstructed forecasts are published as a separate backfill release and
+# scored alongside the stored ones by the
+# [forecast scoring across releases](@ref "Forecast scoring across releases")
+# section.
 #
 # #### Forecast-versus-frozen evaluation
 #
