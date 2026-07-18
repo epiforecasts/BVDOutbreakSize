@@ -212,6 +212,60 @@ forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
 
 forecast_overlay_fig #hide
 
+# ## Frozen-fit forecast evaluation
+#
+# The same one- to four-week-ahead forecast made from the current model frozen
+# at earlier data cut-offs (`forecast_frozen.csv`), scored against the counts
+# observed since by `scripts/score_releases.jl` into
+# `data/forecast_scores_frozen.csv`.
+# Each frozen fit is stamped with its own cut-off as the made date, so this is
+# a historical forecast evaluation of the current model at past cut-offs
+# without reconstructing old release tags.
+# The May cut-offs predate the isolation and recovered streams, so only the
+# streams a fit carries are scored.
+# Kept apart from the cross-release scores above so the frozen made-dates do
+# not pool into the release baseline, the frozen forecast is set against the
+# same persistence baseline (`rel_skill` below one beats the baseline).
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
+#md # ```
+
+frozen_scores_df = _release_data("forecast_scores_frozen.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, crps = Float64,
+        log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
+        bias = Float64, n_samples = Int))
+frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, observed = Float64,
+        median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+        hi60 = Float64, lo90 = Float64, hi90 = Float64))
+frozen_score_table = forecast_score_summary(frozen_scores_df)
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_score_table #hide
+
+# The frozen forecasts made at each cut-off against the value observed since,
+# one panel per stream and horizon, the observed value in black.
+# The frozen forecast draws in the individual-fit colour against the
+# persistence baseline; the x-axis is the frozen cut-off each was made from.
+
+#md # ```@raw html
+#md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
+#md # ```
+
+frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+frozen_overlay_fig #hide
+
 # ## Reproduction number by release
 #
 # The reproduction number estimated at each release, the Rt analogue of the

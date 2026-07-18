@@ -282,6 +282,47 @@ end
     @test only(ex[ex.fit .== "exports", :].n_samples) == 5
 end
 
+@testitem "score_release tags a fit-less archive with default_fit" begin
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The frozen-fit archive (forecast_frozen.csv) carries the same schema as
+    ## forecast.csv but no `fit` column, and is stamped with a PAST made date.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    inc = (; days = [26, 33], counts = [100, 150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = inc, deaths_history = inc,
+        confirmed_history = inc, confirmed_deaths_history = inc,
+        recovered_history = inc,
+        isolation_history = (; days = [26, 33], counts = [18, 20]),
+        export_case_days = [30, 32])
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+
+    ## A made date one week before the cut-off, so its 7-day target is already
+    ## observed and the group is scored rather than skipped.
+    made = string(grid_date(26))
+    target = string(grid_date(33))
+    path = joinpath(mktempdir(), "forecast_frozen.csv")
+    open(path, "w") do io
+        println(io, "made_date,horizon,target_date,stream,draw,value")
+        for d in 1:5
+            println(io,
+                join((made, 7, target, "confirmed cases", d, 40 + d), ','))
+        end
+    end
+
+    result = score_release("results-vT.E.S", path, obs, grid_date;
+        default_fit = "frozen")
+    scored = DataFrame(result.rows)
+    ## The fit-less rows are tagged with default_fit, and the persistence
+    ## baseline is still produced alongside.
+    @test Set(scored.fit) == Set(["frozen", "baseline"])
+    @test result.skipped == 0
+end
+
 @testitem "crps_sample matches the closed-form ensemble CRPS" begin
     using BVDOutbreakSize: crps_sample
 

@@ -3412,6 +3412,34 @@ forecast_runs = [(h,
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
 
+## The same one- to four-week-ahead forecast made from each FROZEN joint
+## re-fit (the McCabe-matched cut-offs, the Chamla anchor and the one-week-back
+## validation fit), each stamped with its OWN cut-off as the made date. This
+## gives historical forecast evaluation using the current model at past data
+## cut-offs, scored against what has since been observed, without
+## reconstructing old release tags. Each frozen fit uses its own frozen
+## observations for the cut-off counts. The May cut-offs predate the isolation
+## and recovered streams, so those are simply absent for them; the per-stream
+## guard in `forecast_archive` skips a stream a fit does not carry.
+frozen_forecast_fits = unique(f -> f.o.cutoff,
+    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek])
+frozen_forecast_archive = DataFrame(made_date = Date[], horizon = Int[],
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[])
+for f in frozen_forecast_fits
+    runs = [(h,
+                forecast_reported(f.chn; horizon = h,
+                    obs_cases = f.o.reported_cases,
+                    obs_deaths = f.o.total_deaths,
+                    obs_confirmed = f.o.confirmed_cases,
+                    obs_confirmed_deaths = f.o.confirmed_deaths,
+                    obs_recovered = f.o.recovered_cases))
+            for h in forecast_horizons]
+    append!(frozen_forecast_archive,
+        forecast_archive(runs; made_date = f.o.cutoff, thin = 5))
+end
+CSV.write(joinpath(output_dir, "forecast_frozen.csv"),
+    frozen_forecast_archive);
+
 ## Per-fit release assets: the reproduction number, outbreak size and forecasts
 ## for every fit rather than the joint alone, so a release records what each
 ## dataset implies on its own and can later be scored against the joint. The

@@ -71,6 +71,7 @@ using BVDOutbreakSize: is_results_release, select_daily_releases
 
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
+const FROZEN_FORECAST_ASSET = "forecast_frozen.csv"
 const STREAM_FORECAST_ASSET = "stream_forecasts.csv"
 const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
@@ -83,6 +84,10 @@ const BACKFILL_TAG = "forecasts-backfill"
 ## `forecast.csv` carries, that asset predating the per-stream fits.
 const JOINT_FIT = "joint"
 const BASELINE_FIT = "baseline"
+## The fit label the frozen-fit forecasts (`forecast_frozen.csv`) are scored
+## under. That asset carries no `fit` column (it is the joint model at each
+## frozen cut-off), so the label is applied at scoring time.
+const FROZEN_FIT = "frozen"
 
 repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 
@@ -359,13 +364,16 @@ end
 ## `fit` names the model a forecast came from. A `stream_forecasts.csv`
 ## carries it per row; a plain `forecast.csv` predates the per-stream fits
 ## and holds the joint model's forecast alone, so its rows are read as
-## `joint`. A stream no individual model fits, "recovered", therefore
-## yields `joint` and `baseline` rows and no others: the absent fit is
-## simply a fit that contributed no rows.
+## `default_fit` (`joint`). A stream no individual model fits, "recovered",
+## therefore yields `joint` and `baseline` rows and no others: the absent fit
+## is simply a fit that contributed no rows. The frozen-fit archive
+## (`forecast_frozen.csv`) carries no `fit` column either, so it is scored
+## with `default_fit = "frozen"`.
 ##
 ## Groups whose `target_date` is not yet observed are skipped (counted in
 ## `.skipped` for the caller to log).
-function score_release(tag, forecast_path, obs, grid_date)
+function score_release(tag, forecast_path, obs, grid_date;
+        default_fit = JOINT_FIT)
     header, rows = read_simple_csv(forecast_path)
     made_i = col(header, "made_date")
     hor_i = col(header, "horizon")
@@ -393,7 +401,7 @@ function score_release(tag, forecast_path, obs, grid_date)
             continue
         end
         key = (Date(r[made_i]), parse(Int, r[hor_i]), Date(r[tgt_i]), stream)
-        fit = isnothing(fit_i) ? JOINT_FIT : r[fit_i]
+        fit = isnothing(fit_i) ? default_fit : r[fit_i]
         byfit = get!(() -> Dict{String, Vector{Float64}}(), groups, key)
         push!(get!(byfit, fit, Float64[]), parse(Float64, r[val_i]))
     end
@@ -509,6 +517,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     score_rows = NamedTuple[]
     overlay_rows = NamedTuple[]
+    ## Frozen-fit scores are kept in their own tables so the frozen made-dates
+    ## never enter the cross-release baseline pool the main tables summarise.
+    frozen_score_rows = NamedTuple[]
+    frozen_overlay_rows = NamedTuple[]
     rt_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
     stream_est_rows = Dict(
@@ -517,6 +529,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_no_forecast = 0
     n_backfilled = 0
     n_no_rt = 0
+    n_frozen_scored = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
     ## `observations.toml` fetched for the selection is still there when its
@@ -571,7 +584,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     for tag in tags
         ## A top-level `for` is a soft scope, so the running counters must be
         ## declared global to update the bindings above rather than shadow them.
-        global n_scored, n_no_forecast, n_backfilled, n_no_rt
+        global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored
 
         ## A saved forecast wins; a reconstruction stands in only where the
         ## release never stored one. The per-stream archive carries every fit's
@@ -607,6 +620,31 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 label == tag || (n_backfilled += 1)
                 result.skipped > 0 && @info string(
                     label, ": skipped ", result.skipped,
+                    " not-yet-observed group(s)")
+            end
+        end
+
+        ## Frozen-fit forecasts: the current model re-fit at past cut-offs and
+        ## forecast forward, each row stamped with its own frozen cut-off as
+        ## the made date (see `forecast_frozen.csv` in the analysis page). It
+        ## is scored the same way, tagged `frozen`, but into its own tables so
+        ## the frozen made-dates never enter the cross-release baseline pool.
+        ## Absent on releases built before the asset existed, a clean skip.
+        frozen_path = fetch_asset(repo, tag, FROZEN_FORECAST_ASSET, tagdir(tag))
+        if !isnothing(frozen_path)
+            fresult = try
+                score_release(tag, frozen_path, obs, grid_date;
+                    default_fit = FROZEN_FIT)
+            catch e
+                @warn "skipping $tag frozen forecast scoring" exception=e
+                nothing
+            end
+            if !isnothing(fresult)
+                append!(frozen_score_rows, fresult.rows)
+                append!(frozen_overlay_rows, fresult.overlay)
+                n_frozen_scored += 1
+                fresult.skipped > 0 && @info string(
+                    tag, " (frozen): skipped ", fresult.skipped,
                     " not-yet-observed group(s)")
             end
         end
@@ -702,6 +740,63 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :lo90 => overlay.lo90, :hi90 => overlay.hi90])
     println("Wrote $(nrow(overlay)) forecast-overlay rows to " *
             "data/forecast_overlay.csv")
+
+    ## `data/forecast_scores_frozen.csv` and `data/forecast_overlay_frozen.csv`:
+    ## the frozen-fit forecasts scored against the now-observed data, kept apart
+    ## from the cross-release tables so their past made-dates never pool into
+    ## the release baseline. Same schema as the release tables, with the model
+    ## rows tagged `frozen`. Written even when empty (header only), since the
+    ## docs build reads them and a missing file would throw.
+    function _score_frame(rows)
+        isempty(rows) && return DataFrame(release = String[],
+            made_date = Date[], stream = String[], horizon = Int[],
+            target_date = Date[], fit = String[], crps = Float64[],
+            log_crps = Float64[], coverage_50 = Float64[],
+            coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
+        return sort(DataFrame(rows),
+            [:release, :made_date, :stream, :horizon, :fit])
+    end
+    function _overlay_frame(rows)
+        isempty(rows) && return DataFrame(release = String[],
+            made_date = Date[], stream = String[], horizon = Int[],
+            target_date = Date[], fit = String[], observed = Float64[],
+            median = Float64[], lo30 = Float64[], hi30 = Float64[],
+            lo60 = Float64[], hi60 = Float64[], lo90 = Float64[],
+            hi90 = Float64[])
+        return sort(DataFrame(rows), [:stream, :made_date, :horizon, :fit])
+    end
+
+    frozen_scores = _score_frame(frozen_score_rows)
+    write_simple_csv(
+        joinpath(@__DIR__, "..", "data", "forecast_scores_frozen.csv"),
+        [:release => frozen_scores.release,
+            :made_date => string.(frozen_scores.made_date),
+            :stream => frozen_scores.stream,
+            :horizon => frozen_scores.horizon,
+            :target_date => string.(frozen_scores.target_date),
+            :fit => frozen_scores.fit,
+            :crps => frozen_scores.crps,
+            :log_crps => frozen_scores.log_crps,
+            :coverage_50 => frozen_scores.coverage_50,
+            :coverage_90 => frozen_scores.coverage_90,
+            :bias => frozen_scores.bias,
+            :n_samples => frozen_scores.n_samples])
+    frozen_overlay = _overlay_frame(frozen_overlay_rows)
+    write_simple_csv(
+        joinpath(@__DIR__, "..", "data", "forecast_overlay_frozen.csv"),
+        [:release => frozen_overlay.release,
+            :made_date => string.(frozen_overlay.made_date),
+            :stream => frozen_overlay.stream,
+            :horizon => frozen_overlay.horizon,
+            :target_date => string.(frozen_overlay.target_date),
+            :fit => frozen_overlay.fit,
+            :observed => frozen_overlay.observed,
+            :median => frozen_overlay.median,
+            :lo30 => frozen_overlay.lo30, :hi30 => frozen_overlay.hi30,
+            :lo60 => frozen_overlay.lo60, :hi60 => frozen_overlay.hi60,
+            :lo90 => frozen_overlay.lo90, :hi90 => frozen_overlay.hi90])
+    println("Wrote $(nrow(frozen_scores)) frozen-fit scores over " *
+            "$n_frozen_scored release(s) to data/forecast_scores_frozen.csv")
 
     ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
     rt = if isempty(rt_rows)
