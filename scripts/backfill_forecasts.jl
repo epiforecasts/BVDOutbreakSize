@@ -275,7 +275,7 @@ end
 ## would misfit the others. `samples`/`chains` are passed explicitly and
 ## default to the production setting.
 function preregistry_joint_call(code_tag, samples, chains)
-    if code_tag in ("v1.4.0", "v1.5.0")
+    if code_tag == "v1.4.0"
         return """
         nuts_sample(
             bvd_joint(
@@ -289,6 +289,31 @@ function preregistry_joint_call(code_tag, samples, chains)
                 confirmed_deaths_history = obs.confirmed_deaths_history,
                 lab_history = obs.lab_history,
                 tests_received_history = obs.tests_received_history,
+                export_case_days = obs.export_case_days,
+                export_death_days = obs.export_death_days,
+                breakpoint = bp,
+                background_re = true,
+                confirmed_positivity_link = :composition,
+                genetic = genetic_seeding_model,
+                tmrca_days = obs.tmrca_days);
+            samples = $(samples), chains = $(chains))"""
+    elseif code_tag == "v1.5.0"
+        ## v1.5.0 dropped `tests_received_history` for the daily lab and
+        ## suspected-case histories; its `bvd_joint` rejects the v1.4.0 kwargs.
+        return """
+        nuts_sample(
+            bvd_joint(
+                obs.n, obs.exported_cases, obs.total_deaths,
+                obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+                obs.tests_analysed;
+                confirmed_deaths = obs.confirmed_deaths,
+                deaths_history = obs.deaths_history,
+                reported_history = obs.reported_history,
+                confirmed_history = obs.confirmed_history,
+                confirmed_deaths_history = obs.confirmed_deaths_history,
+                lab_history = obs.lab_history,
+                lab_daily_history = obs.lab_daily_history,
+                suspected_daily_history = obs.suspected_daily_history,
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
                 breakpoint = bp,
