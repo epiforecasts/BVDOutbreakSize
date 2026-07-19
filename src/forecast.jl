@@ -8,6 +8,13 @@
 # Each is replicated as an integer count per draw so the intervals carry
 # both parameter and observation uncertainty.
 
+## Floor on the reproduction number passed to `euler_lotka_r`. Its Newton
+## solve overflows to a non-finite growth rate below R ≈ 1e-3 (a draw
+## forecasting a steep decline projects R toward zero over the horizon), so
+## clamp at 1e-2 — R below that is an already-collapsed regime the forecast
+## does not need to resolve, and `euler_lotka_r` is finite there.
+const _RT_EULER_FLOOR = 1e-2
+
 function _nb_rand(rng, k, μ)
     μs = max(μ, eps(typeof(μ)))
     p = clamp(k / (k + μs), eps(typeof(k)), one(k) - eps(typeof(k)))
@@ -104,7 +111,7 @@ function _evolving_rates(chn, horizon::Integer;
         for d in 1:horizon
             log_rt += daily_slope
             rt_d = exp(log_rt)
-            rs[d] = euler_lotka_r(rt_d, g)
+            rs[d] = euler_lotka_r(max(rt_d, _RT_EULER_FLOOR), g)
         end
         paths[i] = rs
         rt_term[i] = exp(log_rt)
@@ -765,7 +772,9 @@ function _cutoff_r(chn, R_T)
     α = _draws(chn, Symbol("gi_state.α"))
     θ = _draws(chn, Symbol("gi_state.θ"))
     nmax = cdf_nmax(Gamma(2.71, 5.65))
-    return Float64[euler_lotka_r(R_T[i], _gi_pmf(α[i], θ[i]; nmax = nmax))
+    return Float64[euler_lotka_r(
+                       max(R_T[i], _RT_EULER_FLOOR),
+                       _gi_pmf(α[i], θ[i]; nmax = nmax))
                    for i in eachindex(R_T)]
 end
 
