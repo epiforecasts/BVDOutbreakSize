@@ -27,6 +27,13 @@ updates:
     labels:
       - "dependencies"
       - "julia"
+    groups:
+      julia-deps:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       # StatsFuns 2.x needs a newer Turing than we pin: Turing 0.45/0.46 caps
       # StatsFuns at <= 1.5.2, so bumping to 2.x makes the environment
