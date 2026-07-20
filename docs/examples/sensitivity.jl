@@ -296,11 +296,20 @@ rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 ## The current fit's daily Rt over its established window, summarised per day
 ## into a 30/60/90% band, reusing the same walk reconstruction the Rt figure
 ## uses so the band lines up with the per-release points on the calendar axis.
+## The band is drawn only from the first release date onward, so it spans the
+## same window as the per-release estimates rather than extending back to the
+## renewal start. The first release day is the earliest date in
+## `rt_by_release.csv` as a grid day; the walk is still reconstructed from the
+## renewal start `_rt_start_plot` (the model knot grid) and the window is
+## clamped into the reconstructed range so the quantiles never hit masked days.
 rt_release_trajectory = let
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
     mat = reconstruct_rt(chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
         rt_start = _rt_start_plot, rt_walk_start = rt_walk_start, ramp = RT_INTERVENTION_RAMP)
-    days = _rt_start_plot:obs.n
+    first_release_day = clamp(
+        value(minimum(rt_release_df.date) - obs.seeding) + 1,
+        _rt_start_plot, obs.n)
+    days = first_release_day:obs.n
     dates = [obs.seeding + Day(d - 1) for d in days]
     q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
     (dates,
