@@ -228,9 +228,10 @@ leapfrog steps (and so gradient evaluations) per iteration, so 0.85 trims
 the per-iteration gradient cost while staying above the conventional 0.8
 floor; raise it back toward 0.9–0.99 if a model variant reintroduces
 divergences. The default
-is two longer chains (1000 post-warmup draws each) rather than four shorter
-ones, mirroring the integral model (#211), which roughly halves the docs
-build at a similar total draw count.
+is two chains (500 post-warmup draws each, 1000 total) rather than four
+shorter ones, mirroring the integral model (#211). The total was halved
+from 2000 draws to trade some effective sample size for a roughly halved
+sampling wall-clock.
 
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
@@ -252,9 +253,10 @@ when non-`nothing`. Any additional `kwargs` are passed through to
 
 `n_adapts` sets the NUTS warmup length (step-size and mass-matrix
 adaptation), run in addition to `samples` and discarded by default. It
-defaults to `min(250, samples ÷ 2)`, trimming the per-fit warmup from
-Turing's default of `min(1000, samples ÷ 2)` (500 at the standard 1000
-draws) to speed the report build.
+defaults to `min(200, samples ÷ 2)`, capping the per-fit warmup below
+Turing's default of `min(1000, samples ÷ 2)` to speed the report build.
+At the default `samples = 500` the cap gives 200 (below `samples ÷ 2 =
+250`); it tightens further only when a caller drops `samples` below 400.
 
 A callback fires only on the samples that are kept, and NUTS discards
 its adaptation phase by default, so warmup is silent. Set
@@ -266,11 +268,11 @@ steps rather than posterior samples; raise `samples` accordingly or drop
 them before summarising.
 """
 function nuts_sample(model;
-        samples::Integer = 1_000,
+        samples::Integer = 500,
         chains::Integer = 2,
         target_accept::Real = 0.85,
         max_depth::Integer = 10,
-        n_adapts::Integer = min(250, samples ÷ 2),
+        n_adapts::Integer = min(200, samples ÷ 2),
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),

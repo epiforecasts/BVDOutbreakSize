@@ -32,10 +32,14 @@ Turing = "fce5fe82-541a-59a6-adf8-730c64b5f9a0"
 BVDOutbreakSize = {path = ".."}
 
 [compat]
+ADTypes = "1.22.2"
 Aqua = "0.8.16"
+CairoMakie = "0.15.13"
 CensoredDistributions = "0.2.22"
 Coverage = "1"
+Distributions = "0.25.129"
 LogDensityProblems = "2.2.0"
+SHA = "0.7.0"
 SpecialFunctions = "2"
 TensorBoardLogger = "0.1"
 TestItemRunner = "1.1.5"
