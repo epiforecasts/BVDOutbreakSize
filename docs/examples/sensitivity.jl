@@ -43,12 +43,17 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 #md # ```
 
 ## frozen_lastweek is computed in the setup block above.
+## `obs_recovered` is passed so the frozen fit's forecast carries a
+## `recovered_new` column (materialised only when the recovered origin is
+## given), letting the recovered stream be scored against the observed count
+## below like the other streams.
 validation_forecast = forecast_reported(frozen_lastweek.chn;
     horizon = 7,
     obs_cases = frozen_lastweek.o.reported_cases,
     obs_deaths = frozen_lastweek.o.total_deaths,
     obs_confirmed = frozen_lastweek.o.confirmed_cases,
-    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
+    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
+    obs_recovered = frozen_lastweek.o.recovered_cases);
 
 ## The observed beds at the current cut-off (the forecast target), so the
 ## frozen-fit bed forecast is scored against what the beds actually held.
@@ -73,20 +78,32 @@ validation_table #hide
 #md # </details>
 #md # ```
 
-# The observation panels histogram the one-week-ahead cumulative forecast
-# made from the frozen fit, with the 90% predictive interval shaded and the
-# count actually observed by the current cut-off drawn as a dashed black
-# rule.
+# The observation panels histogram the one-week-ahead forecast made from the
+# frozen fit, a cumulative and a new-count panel for each fitted count stream
+# the forecast carries (reported cases, suspected deaths, confirmed cases,
+# confirmed deaths and recovered), with the 90% predictive interval shaded and
+# the count actually observed by the current cut-off drawn as a dashed black
+# rule. Each stream draws only when the forecast carries its column, so a fit
+# observing fewer streams shows fewer panels.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
 #md # ```
 
+## Observed cumulative at the target date per stream, keyed by the forecast's
+## cumulative column; `baseline` is each stream's origin cumulative (the frozen
+## cut-off), so the new-count panel is scored against observed minus origin.
 validation_fig = plot_forecast_vs_truth(validation_forecast;
-    confirmed = obs.confirmed_cases,
-    confirmed_deaths = obs.confirmed_deaths,
-    baseline_confirmed = frozen_lastweek.o.confirmed_cases,
-    baseline_confirmed_deaths = frozen_lastweek.o.confirmed_deaths);
+    observed = (cases_cum = obs.reported_cases,
+        deaths_cum = obs.total_deaths,
+        confirmed_cum = obs.confirmed_cases,
+        confirmed_deaths_cum = obs.confirmed_deaths,
+        recovered_cum = obs.recovered_cases),
+    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
+        deaths_cum = frozen_lastweek.o.total_deaths,
+        confirmed_cum = frozen_lastweek.o.confirmed_cases,
+        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
+        recovered_cum = frozen_lastweek.o.recovered_cases));
 
 #md # ```@raw html
 #md # </details>
