@@ -199,6 +199,7 @@ function backfill_driver(dest)
     using Dates: Date, Day
     using DataFrames: DataFrame, propertynames, nrow
     using CSV: CSV
+    using Serialization: serialize
     using BVDOutbreakSize
     include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
 
@@ -209,6 +210,18 @@ function backfill_driver(dest)
                           "known ids: " * join((s.id for s in specs), ", "))
     chn = fit_or_load(fit_key("joint"), specs[i].thunk;
         cache_dir = "$(CACHE_DIR)")
+
+    ## Keep the chain alongside the archive: `fit_or_load` already caches the
+    ## fit under the content-addressed cache, but serialising it next to the
+    ## archive lets a later re-archive (e.g. to add a stream) reuse the exact
+    ## chain without re-resolving the cache or refitting.
+    chain_path = "$(dest).chain"
+    try
+        serialize(chain_path, chn)
+        @info "chain saved" chain_path
+    catch e
+        @warn "could not save chain" exception = e
+    end
 
     ## Pass only the observed-stream keywords this tag declares: the earlier
     ## renewal releases predate `obs_recovered`, so passing it unconditionally
@@ -231,13 +244,19 @@ function backfill_driver(dest)
     runs = [(h, forecast_reported(chn; horizon = h, kw...))
             for h in $(HORIZONS)]
 
-    ## Mirror of `forecast_archive`: incident (new-over-horizon) and level
-    ## quantities only, never cumulative.
+    ## Mirror of `forecast_archive`: the confirmed/recovered/isolation streams
+    ## plus the reported-case and suspected-death incident streams the scorer
+    ## maps (`STREAM_HISTORY` in `scripts/score_releases.jl`). Incident
+    ## (new-over-horizon) and level quantities only, never the vintage-revised
+    ## cumulative totals. Absent columns are skipped by the `propertynames`
+    ## guard below, so a tag that lacks a stream carries fewer rows.
     streams = (
         (:confirmed_new, "confirmed cases"),
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
-        (:isolation_level, "isolation beds"))
+        (:isolation_level, "isolation beds"),
+        (:cases_new, "reported cases"),
+        (:deaths_new, "suspected deaths"))
     out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
         stream = String[], draw = Int[], value = Float64[])
     for (horizon, fc) in runs
@@ -409,13 +428,19 @@ function preregistry_driver(dest, code_tag; samples = 1000, chains = 2)
     runs = [(h, forecast_reported(chn; horizon = h, kw...))
             for h in $(HORIZONS)]
 
-    ## Mirror of `forecast_archive`: incident (new-over-horizon) and level
-    ## quantities only, never cumulative.
+    ## Mirror of `forecast_archive`: the confirmed/recovered/isolation streams
+    ## plus the reported-case and suspected-death incident streams the scorer
+    ## maps (`STREAM_HISTORY` in `scripts/score_releases.jl`). Incident
+    ## (new-over-horizon) and level quantities only, never the vintage-revised
+    ## cumulative totals. Absent columns are skipped by the `propertynames`
+    ## guard below, so a tag that lacks a stream carries fewer rows.
     streams = (
         (:confirmed_new, "confirmed cases"),
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
-        (:isolation_level, "isolation beds"))
+        (:isolation_level, "isolation beds"),
+        (:cases_new, "reported cases"),
+        (:deaths_new, "suspected deaths"))
     out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
         stream = String[], draw = Int[], value = Float64[])
     for (horizon, fc) in runs
