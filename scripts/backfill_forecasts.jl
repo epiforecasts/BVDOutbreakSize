@@ -37,11 +37,14 @@
 #
 # The integral-era releases (before v1.4.0) predate the renewal model and the
 # reproduction-number walk, so each needs a driver reproducing its own joint
-# call and forecast signature. The tags listed in `INTEGRAL_TAGS` are added to
-# the run and dispatched to `integral_driver`; only v1.3.0 is listed so far (its
-# `forecast_reported` is the only integral one that emits confirmed streams).
-# The earlier integral releases (v1.0.0-v1.2.0) forecast the reported/suspected
-# streams only and extend `INTEGRAL_TAGS` as their drivers land.
+# call and forecast signature. v1.2.0 and v1.3.0 keep their joint model in the
+# package, so `integral_driver` reproduces each one's calls inline; they are
+# listed in `INTEGRAL_TAGS` and added to the run. v1.3.0 forecasts the confirmed
+# streams, v1.2.0 the reported/suspected/export streams. The earlier v1.0.0 and
+# v1.1.0 define their model inline in that tag's analysis.jl, so once
+# smoke-validated they get standalone driver files under
+# `scripts/backfill_drivers/` that `backfill_one` runs directly, rather than
+# inlining hundreds of lines of old model code here.
 #
 # The published reports only ever showed the 7-day horizon. The longer horizons
 # reconstruct forecasts that tag's code would have made but never displayed.
@@ -73,11 +76,15 @@ const RENEWAL_FROM = v"1.4.0"
 const PREREGISTRY_TAGS = ("v1.4.0", "v1.5.0", "v1.6.0")
 ## Integral-era releases backfilled by `integral_driver`. These predate the
 ## renewal model, so `renewal_release_tags` never reaches them; they are added
-## to the run explicitly. v1.3.0 is the only integral release whose
-## `forecast_reported` emits confirmed streams (v1.0.0-v1.2.0 forecast the
-## reported/suspected streams only and are added here as their drivers land).
+## to the run explicitly. v1.2.0 and v1.3.0 keep their joint model in the
+## package (like the current code), so `integral_driver` reproduces each one's
+## own joint and forecast calls inline. v1.3.0 forecasts the confirmed streams;
+## v1.2.0 forecasts the reported/suspected/export streams. The earlier
+## v1.0.0/v1.1.0 define their model inline in that tag's own analysis.jl, so
+## they are not inlined here: once smoke-validated they get standalone driver
+## files under `scripts/backfill_drivers/` that `backfill_one` runs directly.
 ## Extending this tuple is the single place to grow integral coverage.
-const INTEGRAL_TAGS = ("v1.3.0",)
+const INTEGRAL_TAGS = ("v1.2.0", "v1.3.0")
 ## Each fit samples with this many threads, so the default concurrency stays
 ## well inside a 16-core host. `--concurrency` overrides it.
 const FIT_THREADS = 4
@@ -480,25 +487,20 @@ function preregistry_driver(dest, code_tag; samples = 1000, chains = 2)
 end
 
 ## Source of the inline driver run inside an integral-era release's worktree.
-## Currently only v1.3.0, the one integral release whose `forecast_reported`
-## emits confirmed streams, so it archives the two confirmed streams
-## ("confirmed cases", "confirmed deaths"); recovered and isolation did not
-## exist yet. `joint_obs`, `_increments` and `growth_for` live in v1.3.0's
-## analysis.jl (not the package), so they are reproduced here verbatim;
-## everything else is package-exported. The joint call (analysis.jl:2018) and
-## forecast call (analysis.jl:2741) are reproduced exactly, including the
-## integral `forecast_reported` signature (daily_travellers/source_population/
-## obs_confirmed/obs_confirmed_deaths/obs_analysed). The chain is serialised
-## alongside the archive because this tag has no `fit_or_load`. Downstream of
-## the forecast the archive matches `backfill_driver` and `preregistry_driver`
-## (made_date, horizon, target_date, stream, draw, value), so
-## `score_releases.jl` scores it unchanged. v1.3.0 obs has no `cutoff` field,
-## so the cut-off date is `Date(obs.as_of_date)`. The earlier integral tags
-## (v1.0.0-v1.2.0) reproduce a different joint call and forecast signature and
-## are added as their drivers land; the guarded stream superset below already
-## covers the reported/suspected/export columns they emit.
+## Covers the integral tags whose joint model lives in the package (v1.2.0,
+## v1.3.0); v1.0.0/v1.1.0 define their model inline in that tag's analysis.jl
+## and get standalone driver files instead (see `INTEGRAL_TAGS`). The shared
+## header loads the observations and the shared tail writes the archive; the
+## per-tag fit and forecast come from `integral_fit_forecast`. The archive
+## matches `backfill_driver` and `preregistry_driver` (made_date, horizon,
+## target_date, stream, draw, value), so `score_releases.jl` scores it
+## unchanged. Integral obs has no `cutoff` field, so the cut-off date is
+## `Date(obs.as_of_date)`. The stream tuple is a guarded superset: v1.3.0 emits
+## the confirmed streams, v1.2.0 the reported/suspected/export streams, and the
+## `propertynames` guard keeps each tag to the columns its `forecast_reported`
+## produces.
 function integral_driver(dest, code_tag; samples = 1000, chains = 2)
-    return """
+    header = """
     using Dates: Date, Day
     using DataFrames: DataFrame, propertynames, nrow
     using CSV: CSV
@@ -507,157 +509,18 @@ function integral_driver(dest, code_tag; samples = 1000, chains = 2)
     using Distributions
     using BVDOutbreakSize
 
-    ## Between-vintage increments of a cumulative sitrep history (the first
-    ## increment is the cumulative at the first vintage).
-    function _increments(v)
-        d = similar(v, Int)
-        prev = 0
-        for i in eachindex(v)
-            d[i] = v[i] - prev
-            prev = v[i]
-        end
-        return d
-    end
-
-    ## Per-vintage observation arguments for the joint model, reproduced
-    ## from v1.3.0 analysis.jl. Each DRC stream is fitted as between-vintage
-    ## increments of its cumulative sitrep history.
-    function joint_obs(o; observe = true)
-        _stream(h,
-            s) = h === missing ?
-                 (Union{Missing, Int}[observe ? s : missing], [0]) :
-                 (observe ? _increments(h.values) :
-                  fill(missing, length(h.values)), h.offsets)
-        rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
-        dth, dth_off = _stream(o.death_history, o.total_deaths)
-        have_conf = o.confirmed_case_history !== missing ||
-                    o.confirmed_cases !== missing
-        have_pervintage = have_conf &&
-                          o.confirmed_case_history !== missing &&
-                          o.tests_analysed_history !== missing
-        if have_pervintage
-            sa = o.tests_analysed_history
-            sr = o.tests_received_history
-            ch = o.confirmed_case_history
-            conf_off = collect(ch.offsets)
-            conf = observe ? Union{Missing, Int}[_increments(ch.values)...] :
-                   fill(missing, length(conf_off))
-            keep = [i == 1 || sa.values[i] > sa.values[i - 1]
-                    for i in eachindex(sa.values)]
-            aoff = collect(sa.offsets)[keep]
-            a_inc = _increments(sa.values[keep])
-            ridx = [findfirst(==(off), sr.offsets) for off in aoff]
-            r_inc = _increments([sr.values[i] for i in ridx])
-            aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
-            robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
-            analysed = Union{Missing, Int}[get(aobs, off, missing)
-                                           for off in conf_off]
-            received = Union{Missing, Int}[get(robs, off, missing)
-                                           for off in conf_off]
-        else
-            conf_total = o.confirmed_cases !== missing ? o.confirmed_cases :
-                         o.confirmed_case_history === missing ? missing :
-                         o.confirmed_case_history.values[end]
-            conf,
-            conf_off = have_conf ?
-                       (Union{Missing, Int}[observe ? conf_total : missing],
-                [0]) : (Union{Missing, Int}[], Int[])
-            analysed = Union{Missing, Int}[]
-            received = Union{Missing, Int}[]
-        end
-        ec_full = o.exported_cases_daily
-        last_import = isempty(ec_full) ? nothing : findlast(!=(0), ec_full)
-        export_last_offset = last_import === nothing ? 0 :
-                             length(ec_full) - last_import
-        _truncate(v) = v[1:max(length(v) - export_last_offset, 0)]
-        ecases = isempty(ec_full) ? ec_full :
-                 (observe ? _truncate(ec_full) :
-                  fill(missing, length(_truncate(ec_full))))
-        ed_trunc = _truncate(o.export_deaths_daily)
-        edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
-        if o.confirmed_death_history !== missing
-            cdh = o.confirmed_death_history
-            cdeath = observe ?
-                     Union{Missing, Int}[_increments(cdh.values)...] :
-                     fill(missing, length(cdh.values))
-            cdeath_off = collect(cdh.offsets)
-        else
-            cdeath = Union{Missing, Int}[]
-            cdeath_off = Int[]
-        end
-        return (deaths = dth, reported = rep, export_deaths = edaily,
-            kw = (; reported_offsets = rep_off, death_offsets = dth_off,
-                confirmed_cases = conf, confirmed_offsets = conf_off,
-                samples_analysed = analysed,
-                samples_received = received,
-                confirmed_deaths = cdeath,
-                confirmed_death_offsets = cdeath_off,
-                exported_cases_daily = ecases,
-                export_last_offset = export_last_offset,
-                confirmed_epi_exclusion = nothing,
-                tests_analysed = observe ? o.cumulative_tests_analysed :
-                                 missing, tests_offset = 0))
-    end
-
-    ## Growth submodel whose doubling-count prior centre advances with the
-    ## cut-off date (analysis.jl:2004).
-    function growth_for(o)
-        exponential_growth_model(
-            m_prior = truncated(Normal(m_prior_centre(o.as_of_date), 3.0);
-                lower = 0))
-    end
-
     obs = load_observations()
     cutoff = Date(obs.as_of_date)
     @info "fitting" tag="$(code_tag)" cutoff
+    """
 
-    fit_args = joint_obs(obs)
-    growth_now = growth_for(obs)
-    genetic_seeding = T -> genetic_seeding_model(T, obs.genetic_tmrca_days;
-        tmrca_days_sd = obs.genetic_tmrca_days_sd)
-
-    ## Headline joint call, verbatim from v1.3.0 analysis.jl:2018.
-    chn = nuts_sample(
-        bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
-            fit_args.export_deaths; fit_args.kw...,
-            growth = growth_now,
-            first_export_detection_delta = obs.first_export_detection_delta,
-            report_onset_offset = report_onset_offset(obs.as_of_date),
-            confirmed_q_random_effect = confirmed_q_re_model,
-            genetic = genetic_seeding);
-        samples = $(samples), chains = $(chains), target_accept = 0.9)
-
-    ## Keep the chain: this tag has no `fit_or_load`, so a failure in the
-    ## forecast/archive step below would otherwise cost a whole refit.
-    chain_path = "$(dest).chain"
-    mkpath(dirname("$(dest)"))
-    try
-        serialize(chain_path, chn)
-        @info "chain saved" chain_path
-    catch e
-        @warn "could not save chain" exception = e
-    end
-
-    ## Forecast call, verbatim from v1.3.0 analysis.jl:2741. The integral
-    ## `forecast_reported` needs the traveller/population constants and the
-    ## confirmed-queue anchors even though exports are dropped.
-    runs = [(h, forecast_reported(chn;
-                 horizon = h,
-                 daily_travellers = obs.daily_outbound_travellers,
-                 source_population = obs.source_population,
-                 obs_confirmed = obs.confirmed_cases,
-                 obs_confirmed_deaths = obs.confirmed_deaths,
-                 obs_analysed = obs.cumulative_tests_analysed,
-                 forecast_exports = false,
-                 report_onset_offset = report_onset_offset(obs.as_of_date)))
-            for h in $(HORIZONS)]
-
-    ## Scoreable integral streams as a guarded superset: v1.3.0 emits the two
-    ## confirmed streams (recovered and isolation did not exist yet); the
-    ## earlier integral tags emit the reported/suspected/export streams. The
-    ## `propertynames` guard below keeps each tag to the columns its
-    ## `forecast_reported` actually produces. Labels match the scorer's
-    ## `STREAM_HISTORY`/`STREAM_ASSEMBLED` in `scripts/score_releases.jl`.
+    ## Guarded stream superset. v1.3.0 emits the two confirmed streams
+    ## (recovered and isolation did not exist yet); v1.2.0 emits the
+    ## reported/suspected/export streams. The `propertynames` guard keeps each
+    ## tag to the columns its `forecast_reported` actually produces. Labels
+    ## match the scorer's `STREAM_HISTORY`/`STREAM_ASSEMBLED` in
+    ## `scripts/score_releases.jl`.
+    tail = """
     streams = (
         (:confirmed_new, "confirmed cases"),
         (:confirmed_deaths_new, "confirmed deaths"),
@@ -683,6 +546,205 @@ function integral_driver(dest, code_tag; samples = 1000, chains = 2)
     CSV.write("$(dest)", out)
     @info "wrote archive" dest="$(dest)" rows=nrow(out) cutoff
     """
+
+    fit = integral_fit_forecast(dest, code_tag, samples, chains)
+    return header * fit * tail
+end
+
+## Per-tag fit and forecast reproduced verbatim from each integral tag's own
+## analysis.jl, ready to sit between `integral_driver`'s shared header and
+## tail. Each branch defines `chn` (the fit), serialises it before forecasting
+## so a failed forecast/archive step needs no refit, and defines `runs` (the
+## per-horizon forecasts) that the shared tail archives. Both tags' joint
+## models are package-exported; only v1.3.0's per-vintage observation helpers
+## are analysis.jl-local, so they are reproduced in its branch.
+function integral_fit_forecast(dest, code_tag, samples, chains)
+    if code_tag == "v1.2.0"
+        return """
+        ## Genetic-seeding closure, analysis.jl-local (analysis.jl:1193).
+        genetic_seeding = T -> genetic_seeding_model(T, obs.genetic_tmrca_days;
+            tmrca_days_sd = obs.genetic_tmrca_days_sd)
+
+        ## Headline joint call, verbatim from v1.2.0 analysis.jl:1196.
+        chn = nuts_sample(
+            bvd_joint(obs.exported_cases, obs.total_deaths,
+                obs.reported_cases, obs.export_deaths_daily;
+                first_export_detection_delta =
+                    obs.first_export_detection_delta,
+                genetic = genetic_seeding);
+            samples = $(samples), chains = $(chains))
+
+        ## Keep the chain: this tag has no `fit_or_load`, so a failure in the
+        ## forecast/archive step below would otherwise cost a whole refit.
+        chain_path = "$(dest).chain"
+        mkpath(dirname("$(dest)"))
+        try
+            serialize(chain_path, chn)
+            @info "chain saved" chain_path
+        catch e
+            @warn "could not save chain" exception = e
+        end
+
+        ## Forecast call, verbatim from v1.2.0 analysis.jl:1653.
+        runs = [(h, forecast_reported(chn;
+                     horizon = h,
+                     daily_travellers = obs.daily_outbound_travellers,
+                     source_population = obs.source_population,
+                     obs_cases = obs.reported_cases,
+                     obs_deaths = obs.total_deaths,
+                     obs_exports = obs.exported_cases))
+                for h in $(HORIZONS)]
+        """
+    elseif code_tag == "v1.3.0"
+        return """
+        ## Between-vintage increments of a cumulative sitrep history (the first
+        ## increment is the cumulative at the first vintage).
+        function _increments(v)
+            d = similar(v, Int)
+            prev = 0
+            for i in eachindex(v)
+                d[i] = v[i] - prev
+                prev = v[i]
+            end
+            return d
+        end
+
+        ## Per-vintage observation arguments for the joint model, reproduced
+        ## from v1.3.0 analysis.jl. Each DRC stream is fitted as between-vintage
+        ## increments of its cumulative sitrep history.
+        function joint_obs(o; observe = true)
+            _stream(h,
+                s) = h === missing ?
+                     (Union{Missing, Int}[observe ? s : missing], [0]) :
+                     (observe ? _increments(h.values) :
+                      fill(missing, length(h.values)), h.offsets)
+            rep, rep_off = _stream(o.reported_case_history, o.reported_cases)
+            dth, dth_off = _stream(o.death_history, o.total_deaths)
+            have_conf = o.confirmed_case_history !== missing ||
+                        o.confirmed_cases !== missing
+            have_pervintage = have_conf &&
+                              o.confirmed_case_history !== missing &&
+                              o.tests_analysed_history !== missing
+            if have_pervintage
+                sa = o.tests_analysed_history
+                sr = o.tests_received_history
+                ch = o.confirmed_case_history
+                conf_off = collect(ch.offsets)
+                conf = observe ?
+                       Union{Missing, Int}[_increments(ch.values)...] :
+                       fill(missing, length(conf_off))
+                keep = [i == 1 || sa.values[i] > sa.values[i - 1]
+                        for i in eachindex(sa.values)]
+                aoff = collect(sa.offsets)[keep]
+                a_inc = _increments(sa.values[keep])
+                ridx = [findfirst(==(off), sr.offsets) for off in aoff]
+                r_inc = _increments([sr.values[i] for i in ridx])
+                aobs = Dict(off => a_inc[k] for (k, off) in enumerate(aoff))
+                robs = Dict(off => r_inc[k] for (k, off) in enumerate(aoff))
+                analysed = Union{Missing, Int}[get(aobs, off, missing)
+                                               for off in conf_off]
+                received = Union{Missing, Int}[get(robs, off, missing)
+                                               for off in conf_off]
+            else
+                conf_total = o.confirmed_cases !== missing ?
+                             o.confirmed_cases :
+                             o.confirmed_case_history === missing ? missing :
+                             o.confirmed_case_history.values[end]
+                conf,
+                conf_off = have_conf ?
+                           (Union{Missing, Int}[observe ? conf_total :
+                                                missing],
+                    [0]) : (Union{Missing, Int}[], Int[])
+                analysed = Union{Missing, Int}[]
+                received = Union{Missing, Int}[]
+            end
+            ec_full = o.exported_cases_daily
+            last_import = isempty(ec_full) ? nothing :
+                          findlast(!=(0), ec_full)
+            export_last_offset = last_import === nothing ? 0 :
+                                 length(ec_full) - last_import
+            _truncate(v) = v[1:max(length(v) - export_last_offset, 0)]
+            ecases = isempty(ec_full) ? ec_full :
+                     (observe ? _truncate(ec_full) :
+                      fill(missing, length(_truncate(ec_full))))
+            ed_trunc = _truncate(o.export_deaths_daily)
+            edaily = observe ? ed_trunc : fill(missing, length(ed_trunc))
+            if o.confirmed_death_history !== missing
+                cdh = o.confirmed_death_history
+                cdeath = observe ?
+                         Union{Missing, Int}[_increments(cdh.values)...] :
+                         fill(missing, length(cdh.values))
+                cdeath_off = collect(cdh.offsets)
+            else
+                cdeath = Union{Missing, Int}[]
+                cdeath_off = Int[]
+            end
+            return (deaths = dth, reported = rep, export_deaths = edaily,
+                kw = (; reported_offsets = rep_off, death_offsets = dth_off,
+                    confirmed_cases = conf, confirmed_offsets = conf_off,
+                    samples_analysed = analysed,
+                    samples_received = received,
+                    confirmed_deaths = cdeath,
+                    confirmed_death_offsets = cdeath_off,
+                    exported_cases_daily = ecases,
+                    export_last_offset = export_last_offset,
+                    confirmed_epi_exclusion = nothing,
+                    tests_analysed = observe ? o.cumulative_tests_analysed :
+                                     missing, tests_offset = 0))
+        end
+
+        ## Growth submodel whose doubling-count prior centre advances with the
+        ## cut-off date (analysis.jl:2004).
+        function growth_for(o)
+            exponential_growth_model(
+                m_prior = truncated(Normal(m_prior_centre(o.as_of_date), 3.0);
+                    lower = 0))
+        end
+
+        fit_args = joint_obs(obs)
+        growth_now = growth_for(obs)
+        genetic_seeding = T -> genetic_seeding_model(T, obs.genetic_tmrca_days;
+            tmrca_days_sd = obs.genetic_tmrca_days_sd)
+
+        ## Headline joint call, verbatim from v1.3.0 analysis.jl:2018.
+        chn = nuts_sample(
+            bvd_joint(obs.exported_cases, fit_args.deaths, fit_args.reported,
+                fit_args.export_deaths; fit_args.kw...,
+                growth = growth_now,
+                first_export_detection_delta =
+                    obs.first_export_detection_delta,
+                report_onset_offset = report_onset_offset(obs.as_of_date),
+                confirmed_q_random_effect = confirmed_q_re_model,
+                genetic = genetic_seeding);
+            samples = $(samples), chains = $(chains), target_accept = 0.9)
+
+        ## Keep the chain: this tag has no `fit_or_load`, so a failure in the
+        ## forecast/archive step below would otherwise cost a whole refit.
+        chain_path = "$(dest).chain"
+        mkpath(dirname("$(dest)"))
+        try
+            serialize(chain_path, chn)
+            @info "chain saved" chain_path
+        catch e
+            @warn "could not save chain" exception = e
+        end
+
+        ## Forecast call, verbatim from v1.3.0 analysis.jl:2741. The integral
+        ## `forecast_reported` needs the traveller/population constants and the
+        ## confirmed-queue anchors even though exports are dropped.
+        runs = [(h, forecast_reported(chn;
+                     horizon = h,
+                     daily_travellers = obs.daily_outbound_travellers,
+                     source_population = obs.source_population,
+                     obs_confirmed = obs.confirmed_cases,
+                     obs_confirmed_deaths = obs.confirmed_deaths,
+                     obs_analysed = obs.cumulative_tests_analysed,
+                     forecast_exports = false,
+                     report_onset_offset = report_onset_offset(obs.as_of_date)))
+                for h in $(HORIZONS)]
+        """
+    end
+    error("no integral driver recorded for $(code_tag)")
 end
 
 # ----------------------------------------------------------------------

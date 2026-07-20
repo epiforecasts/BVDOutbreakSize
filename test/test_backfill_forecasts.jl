@@ -118,14 +118,19 @@ end
     include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
         "backfill_forecasts.jl"))
 
-    ## v1.3.0 is the integral-era tag `integral_driver` reconstructs; it is not
-    ## a pre-registry renewal tag and carries no fit registry, so `backfill_one`
-    ## reaches it only through the `INTEGRAL_TAGS` branch. `main` appends these
-    ## tags to the run so `--only v1.3.0` resolves at all.
-    @test INTEGRAL_TAGS == ("v1.3.0",)
-    @test "v1.3.0" in INTEGRAL_TAGS
-    @test !("v1.3.0" in PREREGISTRY_TAGS)
-    @test !has_registry("v1.3.0")
+    ## v1.2.0 and v1.3.0 are the integral-era tags `integral_driver`
+    ## reconstructs inline; neither is a pre-registry renewal tag and neither
+    ## carries a fit registry, so `backfill_one` reaches them only through the
+    ## `INTEGRAL_TAGS` branch. `main` appends these tags to the run so
+    ## `--only v1.2.0`/`--only v1.3.0` resolve at all. v1.0.0/v1.1.0 are not
+    ## inlined, so they are absent here.
+    @test INTEGRAL_TAGS == ("v1.2.0", "v1.3.0")
+    for tag in INTEGRAL_TAGS
+        @test !(tag in PREREGISTRY_TAGS)
+        @test !has_registry(tag)
+    end
+    @test !("v1.0.0" in INTEGRAL_TAGS)
+    @test !("v1.1.0" in INTEGRAL_TAGS)
 end
 
 @testitem "backfill integral driver source valid and schema-matched" begin
@@ -134,36 +139,48 @@ end
         "backfill_forecasts.jl"))
 
     ## Source generation needs no fit: the driver is emitted as text and only
-    ## run inside a worktree. It emits parseable Julia.
-    src = integral_driver("/tmp/forecast_v1.3.0.csv", "v1.3.0")
-    @test Meta.parseall(src) isa Expr
-    ## Schema-identical to the renewal drivers: same archive columns and the
-    ## live build's every-fifth-draw thinning.
-    @test occursin("made_date = Date[], horizon = Int[]", src)
-    @test occursin("stream = String[], draw = Int[]", src)
-    @test occursin("value = Float64[]", src)
-    @test occursin("1:$(THIN):length(vals)", src)
-    ## v1.3.0's own integral joint and forecast calls, reproduced verbatim, not
-    ## a registry lookup or a renewal-signature call.
-    @test occursin("bvd_joint(obs.exported_cases", src)
-    @test occursin("obs_confirmed = obs.confirmed_cases", src)
-    @test !occursin("build_fit_specs", src)
-    ## The chain is serialised before the forecast, so a re-archive needs no
-    ## refit.
-    @test occursin("serialize(chain_path, chn)", src)
-    ## Guarded stream superset: the two confirmed streams v1.3.0 emits plus the
-    ## reported/suspected/export columns the earlier integral tags emit. Each is
-    ## skipped when its column is absent, so v1.3.0 archives only the confirmed
-    ## pair. Labels match the scorer's `STREAM_HISTORY`/`STREAM_ASSEMBLED`.
-    for label in ("confirmed cases", "confirmed deaths", "reported cases",
-        "suspected deaths", "exports")
-        @test occursin("\"$(label)\"", src)
+    ## run inside a worktree. Both inlined integral tags emit parseable Julia
+    ## with the shared archive schema, the every-fifth-draw thinning, a chain
+    ## serialised before the forecast, and the guarded stream superset (labels
+    ## match the scorer's `STREAM_HISTORY`/`STREAM_ASSEMBLED`).
+    for tag in INTEGRAL_TAGS
+        src = integral_driver("/tmp/forecast_$(tag).csv", tag)
+        @test Meta.parseall(src) isa Expr
+        @test occursin("made_date = Date[], horizon = Int[]", src)
+        @test occursin("stream = String[], draw = Int[]", src)
+        @test occursin("value = Float64[]", src)
+        @test occursin("1:$(THIN):length(vals)", src)
+        ## The tag's own headline joint call, not a registry lookup.
+        @test occursin("bvd_joint(obs.exported_cases", src)
+        @test !occursin("build_fit_specs", src)
+        @test occursin("serialize(chain_path, chn)", src)
+        for label in ("confirmed cases", "confirmed deaths", "reported cases",
+            "suspected deaths", "exports")
+            @test occursin("\"$(label)\"", src)
+        end
+        @test occursin("col in propertynames(fc) || continue", src)
+        ## `samples`/`chains` default to the production setting and can be
+        ## lowered for a cheap smoke run.
+        @test occursin("samples = 1000, chains = 2", src)
+        smoke = integral_driver("/tmp/f.csv", tag; samples = 30, chains = 1)
+        @test occursin("samples = 30, chains = 1", smoke)
     end
-    @test occursin("col in propertynames(fc) || continue", src)
-    ## `samples`/`chains` default to the production setting and can be lowered
-    ## for a cheap smoke run; v1.3.0 restates its own `target_accept`.
-    @test occursin("samples = 1000, chains = 2", src)
-    @test occursin("target_accept = 0.9", src)
-    smoke = integral_driver("/tmp/f.csv", "v1.3.0"; samples = 30, chains = 1)
-    @test occursin("samples = 30, chains = 1", smoke)
+
+    ## v1.3.0 reproduces the analysis.jl-local `joint_obs` helper, forecasts
+    ## the confirmed streams and restates its own `target_accept`. v1.2.0 has
+    ## no local model block, forecasts the reported/suspected/export streams
+    ## and takes its `nuts_sample` default (no `target_accept`).
+    v13 = integral_driver("/tmp/f.csv", "v1.3.0")
+    @test occursin("function joint_obs", v13)
+    @test occursin("obs_confirmed = obs.confirmed_cases", v13)
+    @test occursin("target_accept = 0.9", v13)
+    v12 = integral_driver("/tmp/f.csv", "v1.2.0")
+    @test !occursin("function joint_obs", v12)
+    @test occursin("obs_cases = obs.reported_cases", v12)
+    @test occursin("obs_exports = obs.exported_cases", v12)
+    @test !occursin("target_accept", v12)
+
+    ## An unrecorded integral tag is a hard error, not a silently empty driver.
+    @test_throws ErrorException integral_fit_forecast("/tmp/f.csv",
+        "v1.99.0", 10, 1)
 end
