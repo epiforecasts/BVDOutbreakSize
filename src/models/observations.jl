@@ -864,6 +864,47 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         late_analysed, late_start = last_lab_day)
 end
 
+## Per-window tested-positive probability `p_pos` under the `:composition`
+## link, extracted from `confirmed_cases_model` as a plain function so its
+## working variables are function arguments rather than closure captures.
+## Inside the `@model` this lived in a `map(...) do i` closure nested in an
+## `if positivity_link === :composition` branch; the conditionally-scoped
+## captures were boxed in a `Base.RefValue`, which Enzyme's reverse mode
+## cannot differentiate through (Mooncake tolerates the box). As a
+## top-level function the captures become parameters, and the explicit
+## indexed loop (not `map(do i)`) creates no anonymous-closure shadow for
+## Enzyme to construct. The result is bit-identical to the in-model `map`
+## under Mooncake.
+function composition_positivity(window_days, bvd_window, bg_window,
+        c_window, δ0, dscale, s_test, spec, lo, hi)
+    Tt = eltype(bvd_window)
+    s_t = convert(Tt, s_test)
+    sp_t = convert(Tt, spec)
+    nw = length(window_days)
+    p_pos = Vector{Tt}(undef, nw)
+    @inbounds for i in 1:nw
+        ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
+        ## window, guarded against a zero/negative denominator.
+        num = bvd_window[i]
+        den = bvd_window[i] + bg_window[i]
+        ratio = num / (den + lo)
+        φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
+        δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
+        ## Severity-enriched tested BVD share, then the assay
+        ## sensitivity/specificity transform to the tested-positive
+        ## probability so the false-positive term identifies `λ_bg`.
+        q = logistic(logit(φ) + δ_i)
+        qf = isfinite(q) ? q : φ
+        qe = clamp(qf, lo, hi)
+        p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
+        ## Final guard: clamp into (0,1) and replace any non-finite value
+        ## with the composition so the confirmed BetaBinomial always sees
+        ## a valid probability even under an AD perturbation.
+        p_pos[i] = clamp(isfinite(p) ? p : φ, lo, hi)
+    end
+    return p_pos
+end
+
 """
 Laboratory pipeline likelihood. Two streams driven by the shared renewal
 onsets and the suspected-case pipeline from [`reported_cases_model`](@ref):
@@ -1080,29 +1121,14 @@ quantities.
         hi = one(Tt) - lo
         ## Floor the decay scale so a near-zero `decay_scale` draw cannot make
         ## the clock ratio `0/0` (NaN) and break the downstream Binomial.
+        ## The per-window pool composition φ, severity upshift, assay
+        ## sensitivity/specificity transform and (0,1) guards live in
+        ## `composition_positivity` (a plain function with an explicit loop,
+        ## so its working variables are not boxed closure captures under
+        ## Enzyme).
         dscale = max(convert(Tt, decay_scale), one(Tt))
-        s_t = convert(Tt, s_test)
-        sp_t = convert(Tt, spec)
-        p_pos = map(eachindex(window_days)) do i
-            ## Pool composition φ = (p_drc·BVD) / ((p_drc·BVD) + λ_bg) over the
-            ## window, guarded against a zero/negative denominator.
-            num = bvd_window[i]
-            den = bvd_window[i] + bg_window[i]
-            ratio = num / (den + lo)
-            φ = clamp(isfinite(ratio) ? ratio : convert(Tt, 0.5), lo, hi)
-            δ_i = convert(Tt, δ0) * exp(-c_window[i] / dscale)
-            ## Severity-enriched tested BVD share, then the assay
-            ## sensitivity/specificity transform to the tested-positive
-            ## probability so the false-positive term identifies `λ_bg`.
-            q = logistic(logit(φ) + δ_i)
-            qf = isfinite(q) ? q : φ
-            qe = clamp(qf, lo, hi)
-            p = s_t * qe + (one(Tt) - sp_t) * (one(Tt) - qe)
-            ## Final guard: clamp into (0,1) and replace any non-finite value
-            ## with the composition so the confirmed BetaBinomial always sees
-            ## a valid probability even under an AD perturbation.
-            clamp(isfinite(p) ? p : φ, lo, hi)
-        end
+        p_pos = composition_positivity(window_days, bvd_window, bg_window,
+            c_window, δ0, dscale, s_test, spec, lo, hi)
     else
         pos_state ~ to_submodel(positivity(nv))
         p_pos = pos_state.p_pos
@@ -2066,17 +2092,15 @@ series for forecasting and replication.
     ## (the diagnostic) stays the un-offset latent stock.
     occ_offset = eltype(occ_break_offset) === Any ?
                  convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
-    occ_obs_total = map(1:n) do t
-        demand[t] + occ_offset[t]
-    end
+    ## Broadcasts, not `map(1:n) do t`: the `do`-block builds an anonymous
+    ## closure over `demand`/`occ_offset`/`O_conf` whose reverse-mode shadow
+    ## Enzyme cannot construct; an elementwise broadcast creates no closure
+    ## and is bit-identical under Mooncake.
+    occ_obs_total = demand .+ occ_offset
 
     ## Confirmed and suspect census means, summing to the offset total.
-    conf_split = map(1:n) do t
-        O_conf[t]
-    end
-    susp_split = map(1:n) do t
-        max(occ_obs_total[t] - conf_split[t], zero(eltype(demand)))
-    end
+    conf_split = copy(O_conf)
+    susp_split = max.(occ_obs_total .- conf_split, zero(eltype(demand)))
 
     ## Occupancy likelihood: NegativeBinomial around the latent demand,
     ## right-censored at the implied-capacity bound. Days with a published split
