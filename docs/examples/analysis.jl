@@ -2177,16 +2177,17 @@ diagnostics_table( #hide
 # recent trend of its trajectory rather than holding it fixed, with no
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
-# We forecast the two confirmed DRC streams (laboratory-confirmed cases and
-# confirmed deaths) as the forecast targets, and also the isolation/treatment
-# beds and the cumulative recovered total. For the beds we project both the
-# bed demand (the need a week ahead, under unconstrained supply, the cut-off
-# demand grown by the horizon factor like the case inflow) and the
-# supply-limited occupancy that demand produces against the bed capacity. The
-# gap between them is the projected bed shortfall, the quantity of interest
-# if bed occupancy is supply-constrained. The suspected case and death
-# streams are no longer published, so they are not shown as
-# targets. Exports are not forecast either, since cross-border travel is
+# We forecast the DRC observation streams as forecast targets: the reported
+# cases and suspected deaths, the laboratory-confirmed cases and confirmed
+# deaths, the isolation/treatment beds and the recovered total. For the beds
+# we project both the bed demand (the need a week ahead, under unconstrained
+# supply, the cut-off demand grown by the horizon factor like the case
+# inflow) and the supply-limited occupancy that demand produces against the
+# bed capacity. The gap between them is the projected bed shortfall, the
+# quantity of interest if bed occupancy is supply-constrained. The reported
+# case and suspected death streams are no longer published, so their
+# forecasts extend the last published cumulative total rather than a
+# still-growing series. Exports are not forecast, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the
 # export model relies on no longer holds. The figure is shown in the
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
@@ -3249,10 +3250,13 @@ confirmed_cfr_fig #hide
 
 # ### One-week-ahead forecast results
 #
-# The cumulative and new expected counts by $T + 7$ for the two confirmed DRC
-# streams (laboratory-confirmed cases and confirmed deaths), from the
-# no-change projection defined in the methods
-# [one-week-ahead forecast](@ref "One-week-ahead forecast").
+# The cumulative and new expected counts by $T + 7$ from the no-change
+# projection defined in the methods
+# [one-week-ahead forecast](@ref "One-week-ahead forecast"). The summary
+# table reports the confirmed case and death streams, the recovered total and
+# the isolation-bed levels and daily flows; the observed-forecast plot below
+# additionally shows the reported cases and suspected deaths, so every
+# projected stream appears.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3297,6 +3301,10 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 #md # ```
 
 forecast_latent_fig #hide
+
+# The observed figure shows the new count each reported stream adds over the
+# horizon: reported cases, suspected deaths, laboratory-confirmed cases,
+# confirmed deaths and recovered, one panel per stream the forecast carries.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
@@ -3399,6 +3407,11 @@ cp(joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
 ## read off the last day of each draw's `cumulative_onsets` trajectory.
 _cum_onset_draws = vec(collect(chn_joint[:cumulative_onsets]))
 cumulative_onsets_T = Float64[v[end] for v in _cum_onset_draws]
+## Raw walk base `log_R0`, the renewal reproduction-number walk's starting
+## point on the log scale, kept unexponentiated so downstream scoring takes
+## its own exp. This is a distinct quantity from `r0`, the growth-clock
+## initial rate, so both columns are published side by side.
+log_R0_draws = vec(Array(chn_joint[Symbol("rt_state.log_R0")]))
 posterior_draws = DataFrame(
     r = vec(Array(chn_joint[:r])),
     r0 = vec(Array(chn_joint[:r0])),
@@ -3411,7 +3424,9 @@ posterior_draws = DataFrame(
     C_T = vec(Array(chn_joint[:C_T])),
     cumulative_onsets_T = cumulative_onsets_T,
     confirmed_cfr_corrected = confirmed_cfr.corrected
-)[1:10:end, :]
+)
+posterior_draws[!, Symbol("rt_state.log_R0")] = log_R0_draws
+posterior_draws = posterior_draws[1:10:end, :]
 CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
 
 ## One- to four-week-ahead forecasts of the observed streams, saved as a
