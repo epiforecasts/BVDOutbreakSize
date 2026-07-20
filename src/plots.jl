@@ -1714,21 +1714,29 @@ function plot_forecast_latent(fc::DataFrame)
 end
 
 """
-One-week-ahead forecast of the observed confirmed quantities from
-[`forecast_reported`](@ref): new laboratory-confirmed cases and new
-confirmed deaths over the horizon. Each panel histograms the projected new
-count with its 90% predictive interval shaded. The panels are drawn only
-when the forecast carries the laboratory streams. The suspected reported
-streams are no longer reported, so they are not forecast here. The latent
-counterparts are shown by [`plot_forecast_latent`](@ref).
+One-week-ahead forecast of the observed count streams from
+[`forecast_reported`](@ref): the new count each stream adds over the horizon.
+Panels cover reported cases, suspected deaths, laboratory-confirmed cases,
+confirmed deaths and recovered, each drawn only when the forecast carries that
+stream's `*_new` column, so a fit that observes fewer streams shows fewer
+panels. Each panel histograms the projected new count with its 90% predictive
+interval shaded. The latent counterparts are shown by
+[`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
-    :confirmed_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
-    :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
+    for (col, title, colour) in (
+        (:cases_new, "New reported cases (DRC)", :steelblue),
+        (:deaths_new, "New suspected deaths (DRC)", :firebrick),
+        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
+        (:recovered_new, "New recovered (DRC)", :seagreen)
+    )
+        col in propertynames(fc) || continue
+        push!(count_cols, (col, title, colour))
+    end
     npanels = length(count_cols)
+    npanels == 0 && return Figure()
     ncols = min(npanels, 2)
     nrows = cld(npanels, ncols)
     fig = Figure(; size = (400 * ncols, 360 * nrows))
@@ -1846,37 +1854,43 @@ function plot_forecast_beds_vs_truth(fc::DataFrame;
 end
 
 """
-Confirmed-stream validation figure for a [`forecast_reported`](@ref)
-projection, laid out as a two-row grid. The top row shows the cumulative
-forecast distribution per confirmed stream (DRC confirmed cases and
-confirmed deaths); the bottom row shows the new counts forecast over the
-horizon. Each panel is a histogram with the 90% predictive interval shaded
+Validation figure for a [`forecast_reported`](@ref) projection, laid out as a
+two-row grid with one column per scored stream: the top row shows the
+cumulative forecast distribution, the bottom row the new count forecast over
+the horizon. Each panel is a histogram with the 90% predictive interval shaded
 and the later-observed count drawn as a dashed black rule, so the forecast
 distribution is scored against the count that was actually observed.
-`confirmed` and `confirmed_deaths` are the observed cumulative counts;
-`baseline_*` are the counts at the forecast origin, so the observed new
-count is the cumulative truth minus the baseline. The suspected reported
-streams are no longer reported, so they are not scored here. The latent
-counterparts are scored distribution-versus-distribution by
-[`plot_forecast_vs_truth_latent`](@ref).
+
+Streams are drawn in the order reported cases, suspected deaths,
+laboratory-confirmed cases, confirmed deaths and recovered, each shown only
+when the forecast carries that stream's `*_cum`/`*_new` columns and an observed
+cumulative count is supplied for it. `observed` is a `NamedTuple` mapping a
+stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
+cumulative count at the target date; a stream absent from `observed` is
+skipped. `baseline` maps the same columns to the cumulative count at the
+forecast origin (default `0`), so the observed new count is
+`max(observed − baseline, 0)`. The latent counterparts are scored
+distribution-versus-distribution by [`plot_forecast_vs_truth_latent`](@ref).
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        confirmed::Real, confirmed_deaths::Real,
-        baseline_confirmed::Real = 0,
-        baseline_confirmed_deaths::Real = 0)
+        observed::NamedTuple, baseline::NamedTuple = NamedTuple())
+    specs = (
+        (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
+        (:deaths_cum, :deaths_new, "suspected deaths (DRC)", :firebrick),
+        (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)", :goldenrod),
+        (:confirmed_deaths_cum, :confirmed_deaths_new,
+            "confirmed deaths (DRC)", :darkorange3),
+        (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
+    )
     streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}()
-    :confirmed_cum in propertynames(fc) &&
-        push!(streams,
-            (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)",
-                :goldenrod, float(confirmed),
-                float(confirmed) - float(baseline_confirmed)))
-    :confirmed_deaths_cum in propertynames(fc) &&
-        push!(streams,
-            (:confirmed_deaths_cum, :confirmed_deaths_new,
-                "confirmed deaths (DRC)", :darkorange3,
-                float(confirmed_deaths),
-                float(confirmed_deaths) - float(baseline_confirmed_deaths)))
+    for (cumcol, newcol, name, colour) in specs
+        (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
+        obs = float(observed[cumcol])
+        base = float(get(baseline, cumcol, 0))
+        push!(streams, (cumcol, newcol, name, colour, obs, obs - base))
+    end
     ncols = length(streams)
+    ncols == 0 && return Figure()
     fig = Figure(; size = (370 * ncols, 680))
     function panel!(row, col, v, obs, title, colour)
         lo = quantile(v, 0.05)
