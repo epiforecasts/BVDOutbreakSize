@@ -187,7 +187,9 @@ forecast_scores_df = _release_data("forecast_scores.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
-        bias = Float64, n_samples = Int))
+        bias = Float64, n_samples = Int,
+        log_rel_skill_to_baseline = Float64,
+        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
 forecast_overlay_df = _release_data("forecast_overlay.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
@@ -195,11 +197,90 @@ forecast_overlay_df = _release_data("forecast_overlay.csv",
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
 forecast_score_table = forecast_score_summary(forecast_scores_df)
 
+## Geometric mean of a per-release CRPS skill ratio, skipping releases where it
+## is missing (the individual-fit ratio is absent on baseline rows,
+## individual-fit rows, streams with no individual model and every frozen row).
+## Missing when no release scored the comparison; below one beats the
+## comparator.
+function _geo_skill(xs)
+    v = [x for x in skipmissing(xs) if x > 0]
+    return isempty(v) ? missing :
+           round(exp(sum(log, v) / length(v)); digits = 2)
+end
+
+## Headline skill across releases: for each (stream, horizon, fit) the
+## geometric mean of the log-scale CRPS skill ratio against the persistence
+## baseline (`log_rel_skill_to_baseline`) and, on the joint row of a stream that
+## also has an individual model, against that individual fit
+## (`log_rel_skill_to_individual_fit`). Empty until a release carries scores.
+function _skill_overall(df)
+    empty = DataFrame(; stream = String[], horizon = Int[], fit = String[],
+        n = Int[], skill_vs_baseline = Union{Missing, Float64}[],
+        skill_vs_individual_fit = Union{Missing, Float64}[])
+    isempty(df) && return empty
+    rows = NamedTuple[]
+    for s in sort(unique(df.stream))
+        smask = df.stream .== s
+        for h in sort(unique(df.horizon[smask]))
+            hmask = smask .& (df.horizon .== h)
+            for f in sort(unique(df.fit[hmask]))
+                grp = df[hmask .& (df.fit .== f), :]
+                push!(rows,
+                    (; stream = s, horizon = h, fit = f,
+                        n = size(grp, 1),
+                        skill_vs_baseline =
+                        _geo_skill(grp.log_rel_skill_to_baseline),
+                        skill_vs_individual_fit =
+                        _geo_skill(grp.log_rel_skill_to_individual_fit)))
+            end
+        end
+    end
+    return DataFrame(rows)
+end
+
+## The same skill ratios broken out by release made-date, so a fit that beats
+## the baseline overall but not at every cut-off is visible. One row per
+## (stream, horizon, fit, made-date); the individual-fit ratio is blank where
+## it does not apply.
+function _skill_by_release(df)
+    empty = DataFrame(; made_date = Date[], stream = String[],
+        horizon = Int[], fit = String[],
+        skill_vs_baseline = Union{Missing, Float64}[],
+        skill_vs_individual_fit = Union{Missing, Float64}[])
+    isempty(df) && return empty
+    rd(x) = x === missing ? missing : round(x; digits = 2)
+    sub = DataFrame(; made_date = df.made_date, stream = df.stream,
+        horizon = df.horizon, fit = df.fit,
+        skill_vs_baseline = rd.(df.log_rel_skill_to_baseline),
+        skill_vs_individual_fit = rd.(df.log_rel_skill_to_individual_fit))
+    ord = sortperm(collect(zip(sub.stream, sub.horizon, sub.fit,
+        sub.made_date)))
+    return sub[ord, :]
+end
+
+forecast_skill_overall = _skill_overall(forecast_scores_df)
+forecast_skill_by_release = _skill_by_release(forecast_scores_df)
+
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+# The headline is the geometric mean across releases of each fit's log-scale
+# CRPS skill ratio: against the persistence baseline for every fit, and against
+# the stream's own individual fit on the joint row where the stream has one. A
+# ratio below one beats the comparator.
+
+forecast_skill_overall #hide
+
+# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
+# headline, one row per stream, horizon and fit.
+
 forecast_score_table #hide
+
+# The same skill ratios broken out by release, so a fit that wins overall but
+# not at every cut-off is visible.
+
+forecast_skill_by_release #hide
 
 # Forecasts made at each release against the value observed since, one panel
 # per stream and horizon, the observed value in black.
@@ -243,19 +324,37 @@ frozen_scores_df = _release_data("forecast_scores_frozen.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
         log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
-        bias = Float64, n_samples = Int))
+        bias = Float64, n_samples = Int,
+        log_rel_skill_to_baseline = Float64,
+        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
 frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
 frozen_score_table = forecast_score_summary(frozen_scores_df)
+frozen_skill_overall = _skill_overall(frozen_scores_df)
+frozen_skill_by_release = _skill_by_release(frozen_scores_df)
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+# The headline frozen skill, the geometric mean across cut-offs of each frozen
+# fit's log-scale CRPS skill ratio against the persistence baseline. The
+# individual-fit ratio is blank throughout: the frozen evaluation scores the
+# current joint model at past cut-offs, not the single-stream fits.
+
+frozen_skill_overall #hide
+
+# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
+# headline, one row per stream, horizon and fit.
+
 frozen_score_table #hide
+
+# The same baseline skill broken out by frozen cut-off.
+
+frozen_skill_by_release #hide
 
 # The frozen forecasts made at each cut-off against the value observed since,
 # one panel per stream and horizon, the observed value in black.
