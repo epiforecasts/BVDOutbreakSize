@@ -33,3 +33,8 @@ updates:
       # unsatisfiable. Skip StatsFuns >= 2 until Turing supports it.
       - dependency-name: "StatsFuns"
         versions: [">=2"]
+      # Statistics is a Julia stdlib versioned with Julia itself. On Julia LTS
+      # (1.10) it ships as 1.10.0, while newer Julia versions ship newer
+      # versions. Dependabot would try to pin it to a specific version in
+      # test/ and docs/ Project.toml that breaks LTS resolution. Skip it.
+      - dependency-name: "Statistics"

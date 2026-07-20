@@ -11,6 +11,7 @@ model hardcodes counts.
 |---|---|
 | `observations.toml` | The manifest the model loads. Every stream is a value or a dated `dates`/`values` history plus a prose `source =` citation. Edit this to advance the analysis. |
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
+| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Not fitted; see the section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
 
@@ -35,6 +36,50 @@ INSP is the primary source: it publishes first, and since SitRep 059
 content the mirror does not transcribe (epidemic curve by symptom-onset
 date, age/sex pyramids, five provinces).
 The mirror usually lags INSP by a report or two.
+
+## Symptom-onset epidemic curve (`onset_curve_scanned.csv`)
+
+From SitRep 059 the analytique PDFs carry a figure of confirmed cases by
+symptom-onset date (`courbe épidémique par date de début des symptômes`,
+DHIS2 line list), split by outcome (Vivant / Décédé).
+It is the only published source for the onset-date distribution, and it is a
+raster bar chart with no accompanying data table.
+`scripts/digitize_onset_curve.jl` (the dependency-free Julia reference)
+recovers the daily counts from the figure pixels and writes one block per
+vintage to `onset_curve_scanned.csv` (columns `sitrep`, `report_date`,
+`onset_date`, `confirmed_alive`, `confirmed_dead`, `confirmed_total`).
+A Python port (`scripts/digitize_onset_curve.py`) for the automated
+data-updater produces a byte-identical file; see `scripts/README.md`.
+Both self-calibrate each figure from its axis ticks; the only manual input is
+each vintage's rightmost x-axis tick date (in the script `CONFIG`).
+
+These counts are approximate.
+The digitised per-vintage totals run about 2% below the printed figure `n`
+(SitRep 064: 2018 vs printed n = 2 064), and individual daily bars carry
+roughly ±1–2 cases of pixel noise.
+SitReps 059 and 060 reuse one figure, as do 061 and 062, so the five scanned
+vintages hold three distinct onset snapshots (report dates 12, 14 and
+17 July).
+
+This stream is **not fitted**: the model does not yet read
+`onset_curve_scanned.csv`.
+It is captured so an onset-based likelihood and a reporting-delay component
+can be added later.
+
+### Rough onset-to-report delay
+
+Because each vintage redraws the same onset cohort at a later report date, the
+scanned curves form a reporting triangle: old onset dates are stable across
+vintages while recent ones fill in as more confirmations arrive (e.g. onset
+10 July reads 4 → 9 → 27 across the 12, 14 and 17 July snapshots).
+Taking the latest snapshot as the near-complete reference for onset dates at
+least ~12 days old, the empirical proportion of eventually-reported confirmed
+cases reported within `d` days of onset is roughly 65% by 7 days, 85% by
+~11 days and 95%+ by ~2 weeks, near-complete by ~3 weeks (median ~5–6 days).
+This is a coarse estimate: it rests on three digitised snapshots only, the
+reference snapshot is itself right-truncated for its most recent onsets, and
+the delay it measures is onset → confirmed-and-reported (it folds together
+care-seeking, lab confirmation and reporting).
 
 ### Fetching a SitRep from INSP directly
 
