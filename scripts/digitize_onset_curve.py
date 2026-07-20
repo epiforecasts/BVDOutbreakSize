@@ -237,7 +237,7 @@ def main():
         for onset, alive, dead in rows:
             out_rows.append((sr, report_date, onset, alive, dead, alive + dead))
     with open(out_csv, "w", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")  # LF, matching the Julia ref
         w.writerow(["sitrep", "report_date", "onset_date",
                     "confirmed_alive", "confirmed_dead", "confirmed_total"])
         w.writerows(out_rows)

@@ -10,15 +10,30 @@ julia --project=scripts scripts/<name>.jl
 `scripts/download_sitreps.jl` fetches the INSP SitRep PDFs into
 `data/sitrep_pdfs/` (see `data/README.md`).
 
-## `digitize_onset_curve.py` (Python)
+## `digitize_onset_curve` — onset epidemic-curve digitiser
 
-This one step is Python, not Julia: it digitises the symptom-onset
-epidemic-curve figure out of the analytique SitRep PDFs into
-`data/onset_curve_scanned.csv` (image analysis, so Pillow + numpy).
-It is kept separate because the automated data-updater that runs it has
-Python, not Julia, access.
-The digitised CSV is validated on the Julia side by
-`test/test_onset_curve.jl`, so the model repo still gets a Julia check.
+Digitises the symptom-onset epidemic-curve figure out of the analytique
+SitRep PDFs into `data/onset_curve_scanned.csv` (the figure is a raster bar
+chart with no data table; see `data/README.md`).
+
+There are two implementations that produce a byte-identical CSV:
+
+- `digitize_onset_curve.jl` — the **Julia reference**, dependency-free (it
+  parses the PPM that poppler's `pdfimages` emits by default, so it needs no
+  image library). This is the in-repo version:
+
+  ```sh
+  julia scripts/digitize_onset_curve.jl
+  # optional: julia scripts/digitize_onset_curve.jl <pdf_dir> <out_csv>
+  ```
+
+- `digitize_onset_curve.py` — a Python port kept for the automated
+  data-updater, which has Python (not Julia) access. Same algorithm, same
+  output.
+
+Poppler (`pdfimages` / `pdftotext` / `pdfinfo`) must be on `PATH` for both
+(`apt install poppler-utils`, or `brew install poppler`). Download the SitRep
+PDFs first with `scripts/download_sitreps.jl`.
 
 ### Getting the Python dependencies with uv
 

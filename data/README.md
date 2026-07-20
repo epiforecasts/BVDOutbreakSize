@@ -44,12 +44,14 @@ symptom-onset date (`courbe épidémique par date de début des symptômes`,
 DHIS2 line list), split by outcome (Vivant / Décédé).
 It is the only published source for the onset-date distribution, and it is a
 raster bar chart with no accompanying data table.
-`scripts/digitize_onset_curve.py` recovers the daily counts from the figure
-pixels and writes one block per vintage to `onset_curve_scanned.csv`
-(columns `sitrep`, `report_date`, `onset_date`, `confirmed_alive`,
-`confirmed_dead`, `confirmed_total`).
-The script self-calibrates each figure from its axis ticks; the only manual
-input is each vintage's rightmost x-axis tick date (in the script's `CONFIG`).
+`scripts/digitize_onset_curve.jl` (the dependency-free Julia reference)
+recovers the daily counts from the figure pixels and writes one block per
+vintage to `onset_curve_scanned.csv` (columns `sitrep`, `report_date`,
+`onset_date`, `confirmed_alive`, `confirmed_dead`, `confirmed_total`).
+A Python port (`scripts/digitize_onset_curve.py`) for the automated
+data-updater produces a byte-identical file; see `scripts/README.md`.
+Both self-calibrate each figure from its axis ticks; the only manual input is
+each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate.
 The digitised per-vintage totals run about 2% below the printed figure `n`
