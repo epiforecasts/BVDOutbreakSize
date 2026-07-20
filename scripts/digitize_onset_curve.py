@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["pillow", "numpy"]
+# ///
 #
 # Digitise the "courbe epidemique par date de debut des symptomes (liste
 # lineaire DHIS2)" figure that the INSP analytique-format SitReps carry from
@@ -29,11 +33,16 @@
 # roughly +/-1-2 cases of pixel noise. The values are approximate and are
 # NOT fitted by the model; they are captured for later use.
 #
-# Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages
-# (figure extraction). Create an isolated env if the system Python lacks
-# them, e.g.:
+# Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
+# pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
+# metadata, so with uv installed the Python deps are fetched automatically
+# into a throwaway env:
+#   uv run scripts/digitize_onset_curve.py
+# Without uv, install into an isolated venv first:
 #   python3 -m venv .venv && .venv/bin/pip install Pillow numpy
 #   .venv/bin/python scripts/digitize_onset_curve.py
+# poppler must be on PATH either way (apt install poppler-utils /
+# brew install poppler). See scripts/README.md.
 #
 # Usage:
 #   python3 scripts/digitize_onset_curve.py [pdf_dir] [out_csv]
