@@ -38,7 +38,7 @@ const FIT_CACHE_SCHEMA = "v1"
 const FIT_DATA_EXCLUDE = ("released_estimates.csv",)
 
 "Content hash of the fit-relevant source, data and sampler settings."
-function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)
+function fit_content_hash(; samples::Integer = 500, chains::Integer = 2)
     return content_hash(FIT_SOURCE_FILES;
         data_dir = joinpath(_PKG, "data"),
         data_exclude = FIT_DATA_EXCLUDE,
@@ -46,7 +46,7 @@ function fit_content_hash(; samples::Integer = 1000, chains::Integer = 2)
 end
 
 "Content-addressed cache key for fit `id` at the given sampler settings."
-function fit_key(id; samples::Integer = 1000, chains::Integer = 2)
+function fit_key(id; samples::Integer = 500, chains::Integer = 2)
     string(id, "__", fit_content_hash(; samples, chains))
 end
 
@@ -66,7 +66,7 @@ end
 
 """
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 1000, chains = 2)
+                    run_sensitivity, samples = 500, chains = 2)
 
 Ordered list of the report's fits as `(; id, kind, thunk)` named tuples. `kind`
 is `:chain` for the headline joint and single-stream fits or `:frozen` for the
@@ -79,7 +79,7 @@ function build_fit_specs(obs;
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 1000, chains::Integer = 2)
+        samples::Integer = 500, chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     function fit_frozen_joint(cutoff_date)
