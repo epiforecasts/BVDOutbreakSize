@@ -36,6 +36,18 @@ Changes since v1.8.0.
 - Added a tree-prior sensitivity section comparing the Skygrid and
   Exponential growth TMRCA estimates.
 
+### Performance
+
+- Halved the default post-warmup draws in `nuts_sample` from 2000
+  (2 chains x 1000) to 1000 total (2 chains x 500), and moved the docs
+  fit registry (`build_fit_specs`, `fit_key`, `fit_content_hash`) to the
+  same 500 x 2 setting. This roughly halves the sampling wall-clock at the
+  cost of some effective sample size.
+- Trimmed the default NUTS warmup cap in `nuts_sample` from
+  `min(250, samples ÷ 2)` to `min(200, samples ÷ 2)`, so at the new
+  `samples = 500` default each fit runs 200 adaptation steps rather than
+  250. Shortens warmup by a further ~20% per fit.
+
 ## v1.8.0
 
 Changes since v1.7.0.
