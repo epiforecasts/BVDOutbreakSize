@@ -2,10 +2,13 @@
 #
 # Score every past release's saved one-week-ahead forecasts against the
 # now-observed data, plus a persistence baseline, and write tidy score
-# tables to `data/forecast_scores.csv`. Also refreshes
-# `data/rt_by_release.csv`, the per-release posterior R_T summary, in the
-# same style as `data/released_estimates.csv` (see
-# `scripts/refresh_releases.jl`).
+# tables to `data/forecast_scores.csv`. Each score row also carries two
+# log-CRPS relative skills: `log_rel_skill_to_baseline` (a fit over its
+# stream's persistence baseline) and `log_rel_skill_to_individual_fit` (the
+# joint over the stream's individual fit). Also refreshes
+# `data/rt_by_release.csv` and `data/r0_by_release.csv`, the per-release
+# posterior R_T and initial-R0 summaries, in the same style as
+# `data/released_estimates.csv` (see `scripts/refresh_releases.jl`).
 #
 # Both kinds of results release are scored: `results-vX.Y.Z` from a
 # version tag and `results-<run number>` from a push to `main`. At most one
@@ -447,6 +450,65 @@ function score_release(tag, forecast_path, obs, grid_date;
 end
 
 # ----------------------------------------------------------------------
+# Relative forecast skill on the log-CRPS scale
+# ----------------------------------------------------------------------
+
+## The two relative-skill values for every row of a scored table, on the
+## log-CRPS scale (`log_crps`, CRPS of `log1p`-transformed draws), both
+## relative to other fits of the SAME (release, made_date, stream, horizon)
+## group:
+##
+##  * `log_rel_skill_to_baseline`: a fit's `log_crps` over its stream's
+##    persistence-baseline `log_crps` in the group. Below 1 beats the
+##    baseline. The baseline row itself is `1.0`. Every scorable stream
+##    carries a baseline, so this is defined for every row of a group whose
+##    baseline was scored.
+##
+##  * `log_rel_skill_to_individual_fit`: the JOINT fit's `log_crps` over the
+##    stream's INDIVIDUAL-fit `log_crps` in the group, defined only on the
+##    joint row of a group that also carries an individual fit. It is
+##    `missing` on every non-joint row, and on the joint row of a stream no
+##    individual model fits (e.g. "recovered"). The individual fit is the
+##    group's one row whose fit is neither the baseline nor the joint; a
+##    stream is fit by at most one individual model.
+##
+## Returned as two `Vector{Union{Missing, Float64}}` aligned to `df`'s rows.
+function rel_skill_columns(df; joint_fit = JOINT_FIT,
+        baseline_fit = BASELINE_FIT)
+    n = nrow(df)
+    to_base = Vector{Union{Missing, Float64}}(missing, n)
+    to_indiv = Vector{Union{Missing, Float64}}(missing, n)
+    key(i) = (df.release[i], df.made_date[i], df.stream[i], df.horizon[i])
+    groups = Dict{Any, Vector{Int}}()
+    for i in 1:n
+        push!(get!(() -> Int[], groups, key(i)), i)
+    end
+    for idx in values(groups)
+        base_i = findfirst(i -> df.fit[i] == baseline_fit, idx)
+        joint_i = findfirst(i -> df.fit[i] == joint_fit, idx)
+        indiv_i = findfirst(
+            i -> df.fit[i] != baseline_fit && df.fit[i] != joint_fit, idx)
+        if !isnothing(base_i)
+            base_lc = df.log_crps[idx[base_i]]
+            for i in idx
+                to_base[i] = df.fit[i] == baseline_fit ? 1.0 :
+                             df.log_crps[i] / base_lc
+            end
+        end
+        if !isnothing(joint_i) && !isnothing(indiv_i)
+            j = idx[joint_i]
+            to_indiv[j] = df.log_crps[j] / df.log_crps[idx[indiv_i]]
+        end
+    end
+    return (to_base, to_indiv)
+end
+
+## Format one relative-skill value for the plain CSV: an empty cell for
+## `missing` (an undefined ratio, e.g. a stream with no individual fit),
+## else the ratio rounded to four places.
+rel_skill_cell(x) = ismissing(x) ? "" : string(round(x; digits = 4))
+
+# ----------------------------------------------------------------------
 # Per-release posterior R_T summary (mirrors `refresh_releases.jl`)
 # ----------------------------------------------------------------------
 
@@ -467,6 +529,35 @@ function rt_row(tag, draws_path, cutoff)
     s = posterior_summary(rt)
     r3(x) = round(x; digits = 3)
     return (tag, date, r3(median(rt)), r3(s.lo30), r3(s.hi30),
+        r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90))
+end
+
+## The chain key for the renewal walk's base, `exp` of which is the
+## established initial reproduction number R0 (see `reconstruct_rt` in
+## `src/plots.jl`). Its draws ride along in `posterior_draws.csv` under this
+## column name.
+const LOG_R0_COL = "rt_state.log_R0"
+
+## One `(tag, date, median, lo30, hi30, lo60, hi60, lo90, hi90)` row of the
+## established initial reproduction number R0 = `exp(rt_state.log_R0)` from a
+## release's `posterior_draws.csv`, the renewal walk's base: the first knot
+## value, before the time-varying walk. Summarised the same way `rt_row`
+## summarises the cut-off R_T, dated by the `cutoff` the release was built
+## from. `nothing` when the draws are missing or carry no `log_R0` column, as
+## pre-renewal releases and releases whose draws omit the walk base do.
+function r0_row(tag, draws_path, cutoff)
+    isnothing(draws_path) && return nothing
+    date = string(cutoff)
+
+    header, rows = read_simple_csv(draws_path)
+    LOG_R0_COL in header || return nothing
+    i = col(header, LOG_R0_COL)
+    r0 = [exp(parse(Float64, r[i])) for r in rows]
+    isempty(r0) && return nothing
+
+    s = posterior_summary(r0)
+    r3(x) = round(x; digits = 3)
+    return (tag, date, r3(median(r0)), r3(s.lo30), r3(s.hi30),
         r3(s.lo60), r3(s.hi60), r3(s.lo90), r3(s.hi90))
 end
 
@@ -532,6 +623,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     frozen_score_rows = NamedTuple[]
     frozen_overlay_rows = NamedTuple[]
     rt_rows = NamedTuple[]
+    r0_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
     stream_est_rows = Dict(
         f => NamedTuple[] for f in values(STREAM_QUANTITY_DEST))
@@ -675,6 +767,20 @@ if abspath(PROGRAM_FILE) == @__FILE__
                     lo90 = r[8], hi90 = r[9]))
         end
 
+        ## R0 = exp(rt_state.log_R0) from the same draws asset, the renewal
+        ## walk's base. Absent on pre-renewal releases and any whose draws
+        ## omit the walk base, so a missing row is a clean skip.
+        r0r = try
+            r0_row(tag, draws_path, cutoffs[tag])
+        catch e
+            @warn "skipping $tag R0 summary" exception=e
+            nothing
+        end
+        isnothing(r0r) || push!(r0_rows,
+            (; release = r0r[1], date = r0r[2], median = r0r[3],
+                lo30 = r0r[4], hi30 = r0r[5], lo60 = r0r[6], hi60 = r0r[7],
+                lo90 = r0r[8], hi90 = r0r[9]))
+
         ## Per-fit R_T and C_T estimates, split into their own tables. Absent on
         ## every release until P2.2 lands, so a missing asset is a clean skip.
         est_path = fetch_asset(repo, tag, STREAM_ESTIMATES_ASSET, tagdir(tag))
@@ -696,7 +802,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
             "($n_no_rt without an R_T posterior).")
 
     ## `data/forecast_scores.csv`: one row per scored (release, made_date,
-    ## stream, horizon, fit) group, `fit` the model or `baseline`.
+    ## stream, horizon, fit) group, `fit` the model or `baseline`. The two
+    ## trailing columns are the log-CRPS relative skills: to the persistence
+    ## baseline (baseline row `1.0`), and the joint over the stream's
+    ## individual fit (`missing`/empty off the joint row or with no
+    ## individual model).
     scores = if isempty(score_rows)
         DataFrame(release = String[], made_date = Date[], stream = String[],
             horizon = Int[], target_date = Date[], fit = String[],
@@ -706,6 +816,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         sort(DataFrame(score_rows),
             [:release, :made_date, :stream, :horizon, :fit])
     end
+    scores_base, scores_indiv = rel_skill_columns(scores)
     scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
     write_simple_csv(scores_dest,
         [:release => scores.release,
@@ -719,7 +830,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :coverage_50 => scores.coverage_50,
             :coverage_90 => scores.coverage_90,
             :bias => scores.bias,
-            :n_samples => scores.n_samples])
+            :n_samples => scores.n_samples,
+            :log_rel_skill_to_baseline => rel_skill_cell.(scores_base),
+            :log_rel_skill_to_individual_fit =>
+                rel_skill_cell.(scores_indiv)])
     println("Wrote $(nrow(scores)) scored forecasts to " *
             "data/forecast_scores.csv")
 
@@ -776,7 +890,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
         return sort(DataFrame(rows), [:stream, :made_date, :horizon, :fit])
     end
 
+    ## The frozen scores get the same two relative-skill columns, computed
+    ## against their OWN baseline within the frozen made-dates. The frozen
+    ## archive carries no individual fits, so `log_rel_skill_to_individual_fit`
+    ## is always empty here; `log_rel_skill_to_baseline` is the frozen fit over
+    ## its persistence baseline.
     frozen_scores = _score_frame(frozen_score_rows)
+    frozen_base, frozen_indiv = rel_skill_columns(frozen_scores)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_scores_frozen.csv"),
         [:release => frozen_scores.release,
@@ -790,7 +910,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :coverage_50 => frozen_scores.coverage_50,
             :coverage_90 => frozen_scores.coverage_90,
             :bias => frozen_scores.bias,
-            :n_samples => frozen_scores.n_samples])
+            :n_samples => frozen_scores.n_samples,
+            :log_rel_skill_to_baseline => rel_skill_cell.(frozen_base),
+            :log_rel_skill_to_individual_fit =>
+                rel_skill_cell.(frozen_indiv)])
     frozen_overlay = _overlay_frame(frozen_overlay_rows)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_overlay_frozen.csv"),
@@ -823,6 +946,25 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :hi60 => rt.hi60, :lo90 => rt.lo90, :hi90 => rt.hi90])
     println("Wrote $(nrow(rt)) release R_T summaries to " *
             "data/rt_by_release.csv")
+
+    ## `data/r0_by_release.csv`: the established initial reproduction number
+    ## R0 = exp(rt_state.log_R0) per release, identical schema to
+    ## `data/rt_by_release.csv`. Written even when empty, since the docs build
+    ## reads it and a missing file throws.
+    r0 = if isempty(r0_rows)
+        DataFrame(release = String[], date = String[], median = Float64[],
+            lo30 = Float64[], hi30 = Float64[], lo60 = Float64[],
+            hi60 = Float64[], lo90 = Float64[], hi90 = Float64[])
+    else
+        sort(DataFrame(r0_rows), [:date])
+    end
+    r0_dest = joinpath(@__DIR__, "..", "data", "r0_by_release.csv")
+    write_simple_csv(r0_dest,
+        [:release => r0.release, :date => r0.date, :median => r0.median,
+            :lo30 => r0.lo30, :hi30 => r0.hi30, :lo60 => r0.lo60,
+            :hi60 => r0.hi60, :lo90 => r0.lo90, :hi90 => r0.hi90])
+    println("Wrote $(nrow(r0)) release R0 summaries to " *
+            "data/r0_by_release.csv")
 
     ## `data/rt_by_release_by_stream.csv` and
     ## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of
