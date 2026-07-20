@@ -2204,13 +2204,16 @@ diagnostics_table( #hide
 # The reconstruction re-resolves dependencies at current versions, since the
 # release manifests were not pinned, so it reproduces the release's model and
 # data but not its exact solver build.
-# Reconstruction reaches back as far as a release carried the forecast
-# machinery: the renewal releases from v1.4.0 reconstruct the incident case
-# and death streams, all four streams from v1.6.0 once the recovered and
-# isolation series entered the data, and the integral-era v1.3.0 reconstructs
-# the confirmed case and death streams.
-# The earliest releases, v1.0.0 to v1.2.0, predate the forecast machinery, so
-# no reconstruction is needed for them.
+# Reconstruction reaches back to the first release that carried any forecast,
+# so it covers the whole release history, but the streams available grow over
+# time as the model and data did.
+# The renewal releases from v1.4.0 reconstruct the incident case and death
+# streams, extending to all four streams from v1.6.0 once the recovered and
+# isolation series entered the data.
+# The integral-era v1.3.0 reconstructs the confirmed case and death streams.
+# The earliest releases, v1.0.0 to v1.2.0, forecast the reported case,
+# suspected death, and export streams, and are reconstructed from each tag's
+# own inline model code.
 # Reconstructed forecasts are published as a separate backfill release and
 # scored alongside the stored ones by the
 # [forecast scoring across releases](@ref "Forecast scoring across releases")
