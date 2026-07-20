@@ -332,6 +332,62 @@ rt_evolution_fig = plot_estimate_evolution(rt_release;
 
 rt_evolution_fig #hide
 
+# ## Basic reproduction number by release
+#
+# The basic reproduction number `R0`, the renewal walk's starting value before
+# the time-varying decline, estimated at each release, the initial-transmission
+# analogue of the cut-off `R_T` above.
+# Each release's `R0` posterior is drawn as a discrete estimate (median with
+# nested 30/60/90% bars) from `data/r0_by_release.csv`, refreshed from each
+# release's posterior draws by `scripts/score_releases.jl`.
+# The current fit's `R0` posterior is the flat reference band across the release
+# window, and R0 = 1 is marked.
+
+#md # ```@raw html
+#md # <details><summary>Basic reproduction number per release with the current-fit band</summary>
+#md # ```
+
+## Per-release R0 points from r0_by_release.csv, read through the typed
+## fallback so a missing or header-only file (until a release carries
+## `rt_state.log_R0` in its posterior draws) does not break the build. The
+## schema mirrors rt_by_release.csv.
+_r0_schema = (; release = String, date = Date, median = Float64,
+    lo30 = Float64, hi30 = Float64, lo60 = Float64, hi60 = Float64,
+    lo90 = Float64, hi90 = Float64)
+r0_release_df = _release_data("r0_by_release.csv", _r0_schema)
+r0_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                  r.lo90, r.hi90) for r in eachrow(r0_release_df)]
+
+## The current fit's R0 posterior is the exponential of the renewal walk's log
+## base `rt_state.log_R0`, a single distribution rather than a daily series.
+## Summarise it into a flat 30/60/90% reference band spanning the release
+## window (first release date to the cut-off), so it reads across the
+## per-release points like the time-varying band in the Rt figure. When no
+## release has been scored yet the window falls back to the seeding date.
+r0_reference = let
+    draws = exp.(vec(Array(chn_joint[Symbol("rt_state.log_R0")])))
+    q(p) = quantile(draws, p)
+    first_date = isempty(r0_release_df.date) ? obs.seeding :
+                 minimum(r0_release_df.date)
+    dates = [first_date, obs.cutoff]
+    (dates, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.20), 2),
+        fill(q(0.80), 2), fill(q(0.05), 2), fill(q(0.95), 2))
+end
+
+r0_evolution_fig = plot_estimate_evolution(r0_release;
+    trajectory = r0_reference,
+    ylabel = "Basic reproduction number",
+    title = "Basic reproduction number as data accrued",
+    released_label = "Released estimate (per project release)",
+    trajectory_label = "Current model, current data",
+    refline = 1.0);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+r0_evolution_fig #hide
+
 # ## Reproduction number by release and dataset
 #
 # The same per-release reproduction number, one panel per fit, so each
