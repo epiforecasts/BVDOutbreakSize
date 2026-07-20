@@ -144,15 +144,23 @@ validation_latent_fig #hide
 #
 # How every release's saved forecasts scored against the data observed since.
 # Each results release stores its one- to four-week-ahead forecast
-# (`forecast.csv`); `scripts/score_releases.jl` scores each against the
-# now-observed incident counts and the isolation-bed occupancy level with CRPS,
-# CRPS on the log scale, 50/90% coverage and bias, against a persistence
-# baseline (`rel_skill` below one beats the baseline).
+# (`forecast.csv`); `scripts/score_releases.jl` scores each against what has
+# since been observed with CRPS, CRPS on the log scale, 50/90% coverage and
+# bias, against a persistence baseline (`rel_skill` below one beats the
+# baseline).
+# The scored streams are the reported cases, suspected deaths, confirmed cases
+# and confirmed deaths as counts, and the isolation-bed occupancy as a level.
+# The count streams are reported by the sitreps as running cumulative totals,
+# so each is scored on its incidence, the between-vintage increment, rather
+# than the cumulative level: a stream that only reports a growing total is
+# judged on what it added each week, not on the total it has reached.
+# The bed occupancy is a level and is scored as one.
 # Once the scores carry a `fit` column each (stream, horizon) compares three
 # forecasts: the persistence baseline, the stream's own individual fit and the
 # joint.
-# The scores accrue as releases with a stored forecast, and the backfill
-# release, are added; until then the table has no rows and the plot says so.
+# The scores accrue as releases with a stored forecast, and the reconstructed
+# backfill release reaching back across the earlier releases, are added; until
+# then the table has no rows and the plot says so.
 #
 # Recovered is the exception.
 # The fitted models are the joint, exports, deaths, cases, confirmed, confirmed
