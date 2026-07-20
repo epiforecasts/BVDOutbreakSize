@@ -3548,6 +3548,28 @@ for f in stream_fits, (stream, label, obs_value) in f.streams,
             d, Float64(_vals[i]), f.fit))
     end
 end
+
+## Confirmed/suspect ward-bed occupancy for the joint, taken from the joint's
+## own `forecast_reported` runs (partitioned by the cut-off confirmed share in
+## `forecast_reported`, not re-derived here) so the ward beds are scored on the
+## same footing as the total occupancy in the preferred `stream_forecasts.csv`
+## asset. `forecast_stream` cannot project these — the split is not a growable
+## stream but a partition of the total — so they are read from the archive
+## runs. Dormant until the chain carries the confirmed in-care split:
+## `forecast_reported` emits these columns only when the confirmed in-care
+## prevalence `expected_confirmed_incare_T` is present, so the guard skips
+## them otherwise.
+for (h, fc) in forecast_runs,
+    (col, label) in ((:suspect_occupancy, "isolation beds (suspected)"),
+        (:confirmed_occupancy, "treatment beds"))
+
+    col in propertynames(fc) || continue
+    _wvals = fc[!, col]
+    for (d, i) in enumerate(1:stream_thin:length(_wvals))
+        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
+            d, Float64(_wvals[i]), "joint"))
+    end
+end
 CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,

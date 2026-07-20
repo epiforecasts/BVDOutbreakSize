@@ -216,6 +216,38 @@ end
     @test all(arch.value .>= 0)
 end
 
+@testitem "forecast_archive carries the ward-bed occupancy split" begin
+    using DataFrames: DataFrame
+    using Dates: Date
+    using BVDOutbreakSize: forecast_archive
+
+    ## A forecast frame carrying the confirmed/suspect ward split (as
+    ## `forecast_reported` emits once the chain carries the confirmed in-care
+    ## sub-stock) archives the two ward occupancy levels alongside the total,
+    ## each under its own scored label. A frame without the split carries the
+    ## total alone, so the hook is dormant until the columns appear.
+    n = 40
+    occ = collect(1:n)
+    conf_occ = fld.(occ, 2)
+    fc = DataFrame(isolation_level = occ, confirmed_occupancy = conf_occ,
+        suspect_occupancy = occ .- conf_occ)
+    arch = forecast_archive([(7, fc)]; made_date = Date("2026-06-13"))
+    @test "isolation beds" in arch.stream
+    @test "treatment beds" in arch.stream
+    @test "isolation beds (suspected)" in arch.stream
+    ## The ward occupancy values round-trip and partition the total.
+    _vals(s) = sort(arch[arch.stream .== s, :], :draw).value
+    tot = _vals("isolation beds")
+    tre = _vals("treatment beds")
+    iso = _vals("isolation beds (suspected)")
+    @test tre .+ iso == tot
+
+    ## A frame without the split archives only the total.
+    arch0 = forecast_archive([(7, DataFrame(isolation_level = occ))];
+        made_date = Date("2026-06-13"))
+    @test Set(arch0.stream) == Set(["isolation beds"])
+end
+
 @testitem "forecast cumulative streams never fall below the cut-off" tags=[:slow] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated

@@ -238,13 +238,23 @@ end
 ## deaths fit), scored on the same incident basis as "confirmed cases".
 ## "exports" is scored too, but its truth is built by `stream_history` from
 ## the dated detection series rather than named here.
+##
+## The confirmed/suspect ward split ("treatment beds" and "isolation beds
+## (suspected)") is a level quantity like the total: each ward occupancy is
+## scored against its Tableau 6 occupancy sub-stock (`dont confirmes` /
+## `dont suspects`, which sum to the total `isolation_history`). These are
+## present only once a forecast carries the split, so before then no archive
+## row bears the label and it is simply never scored.
 const STREAM_HISTORY = Dict(
     "reported cases" => (:reported_history, :incident),
     "suspected deaths" => (:deaths_history, :incident),
     "confirmed cases" => (:confirmed_history, :incident),
     "confirmed deaths" => (:confirmed_deaths_history, :incident),
     "recovered" => (:recovered_history, :incident),
-    "isolation beds" => (:isolation_history, :level))
+    "isolation beds" => (:isolation_history, :level),
+    "treatment beds" => (:treatment_confirmed_incare_history, :level),
+    "isolation beds (suspected)" =>
+        (:treatment_suspect_incare_history, :level))
 
 ## Streams the archive can carry that have no `(; days, counts)` field, so
 ## `stream_history` assembles their truth. "exports" is the dated Uganda

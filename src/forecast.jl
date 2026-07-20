@@ -429,19 +429,31 @@ horizon), `stream`, `draw` and `value`.
 
 Only the incident and level quantities are archived: `confirmed cases` and
 `confirmed deaths` new over the horizon, `recovered` new over the horizon and
-the supply-limited `isolation beds` occupancy. The cumulative totals are not
-archived because they are revised across data vintages, so scoring is done on
-the incident and level quantities instead. Streams a forecast does not carry
-(a single-stream fit, say) are skipped. `thin` keeps every `thin`-th draw so
-the archive stays compact when it is saved as a release asset.
+the supply-limited `isolation beds` occupancy. When the forecast carries the
+confirmed/suspect ward split (`confirmed_occupancy` / `suspect_occupancy`, the
+occupancy partitioned by the cut-off confirmed share), the two ward occupancy
+levels are archived too as `treatment beds` (confirmed) and
+`isolation beds (suspected)`, each scored against its own Tableau 6 occupancy
+sub-stock. The total `isolation beds` occupancy stays as its own stream. The
+cumulative totals are not archived because they are revised across data
+vintages, so scoring is done on the incident and level quantities instead.
+Streams a forecast does not carry (a single-stream fit, or a fit predating the
+ward split, say) are skipped. `thin` keeps every `thin`-th draw so the archive
+stays compact when it is saved as a release asset.
 """
 function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
     ## Incident (new-over-horizon) and level quantities only, never cumulative.
+    ## The two ward occupancy levels are level quantities like the total: each
+    ## is scored against its Tableau 6 occupancy sub-stock. They are emitted
+    ## only when the forecast carries the split (the guard below skips an
+    ## absent column), so a fit predating it archives the total alone.
     streams = (
         (:confirmed_new, "confirmed cases"),
         (:confirmed_deaths_new, "confirmed deaths"),
         (:recovered_new, "recovered"),
-        (:isolation_level, "isolation beds"))
+        (:isolation_level, "isolation beds"),
+        (:confirmed_occupancy, "treatment beds"),
+        (:suspect_occupancy, "isolation beds (suspected)"))
     out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
         stream = String[], draw = Int[], value = Float64[])
     for (horizon, fc) in fcs
