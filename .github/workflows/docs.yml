@@ -217,6 +217,10 @@ jobs:
       contents: write
       statuses: write
       pull-requests: write
+    # Dependabot-triggered workflows run with a read-only GITHUB_TOKEN, so
+    # the deploy-and-comment steps below would all fail. Skip the job
+    # entirely; dependabot PRs only need the test results, not a docs preview.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
