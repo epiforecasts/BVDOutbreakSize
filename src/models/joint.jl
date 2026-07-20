@@ -499,26 +499,39 @@ death-confirmation positivity (`death_confirmation`).
     ## gated, ramped level and time-variation rather than competing as a second
     ## free, outbreak-size-degenerate rate. With `background_re = false` (the
     ## renewal default) the case stream keeps its scalar `λ_bg`.
+    ## The pooling SD is sampled only when the random effect is active (the
+    ## tilde must stay gated), but `σ_rw_shared` and `bg_onset` are bound
+    ## unconditionally to plain values so the closure below captures
+    ## non-conditional, write-once variables. Conditionally-scoped captures
+    ## get boxed in a `Base.RefValue`, which Enzyme's reverse mode cannot
+    ## differentiate through (Mooncake tolerates it); binding them in both
+    ## paths keeps the capture type-stable and the closure un-boxed.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
-        ## Onset of the suspected pool's non-BVD background: a report-to-receipt
-        ## lead BEFORE the first suspected-case report, not exactly at it. The
-        ## suspects in the first report were already in the pipeline, and the
-        ## background feeds the laboratory analysed volume through the report-to-
-        ## receipt convolution, so it must begin early enough for that
-        ## convolution to be fully formed by the first report. The lead is the
-        ## MAX lag of the report-to-receipt kernel (its truncation `nmax`, the
-        ## default `lab_delay_model` support), not its mean, so no tail
-        ## contribution is cut off at the onset.
-        bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
-        bg_onset = isempty(reported_history.days) ? 1 :
-                   clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
-        case_bg_re = nn -> background_walk_model(nn, σ_rw_shared;
-            onset = bg_onset)
     else
-        case_bg_re = nothing
+        σ_rw_shared = 0.0
     end
+    ## Onset of the suspected pool's non-BVD background: a report-to-receipt
+    ## lead BEFORE the first suspected-case report, not exactly at it. The
+    ## suspects in the first report were already in the pipeline, and the
+    ## background feeds the laboratory analysed volume through the report-to-
+    ## receipt convolution, so it must begin early enough for that convolution
+    ## to be fully formed by the first report. The lead is the MAX lag of the
+    ## report-to-receipt kernel (its truncation `nmax`, the default
+    ## `lab_delay_model` support), not its mean, so no tail contribution is cut
+    ## off at the onset. Bound unconditionally (unused when the effect is off).
+    bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
+    bg_onset = isempty(reported_history.days) ? 1 :
+               clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
+    ## The closure is built unconditionally (one concrete closure type, not
+    ## closure-or-`Nothing`); `background_re` then selects the closure or the
+    ## `nothing` sentinel. Identical behaviour to the gated form: with
+    ## `background_re = false` the closure is never passed, so the unused
+    ## `σ_rw_shared = 0` never enters the log-density.
+    make_case_bg = nn -> background_walk_model(nn, σ_rw_shared;
+        onset = bg_onset)
+    case_bg_re = background_re ? make_case_bg : nothing
 
     ## Cases first so the suspected-case background `bg_daily` is available to
     ## the deaths stream (which scales it by `cfr_bg` for the death background)

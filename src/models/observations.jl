@@ -1141,10 +1141,18 @@ quantities.
     ## start rather than rolling the (now-gated) pre-testing volume. Mirrors the
     ## late-window pinning at `late_start`.
     early_p = p_pos[1:n_early]
-    early_volume = n_early > 0 ?
-                   bin_increments(analysed_daily,
-        vcat(windows.early_start, windows.early_days))[2:end] :
-                   similar(analysed_daily, 0)
+    ## `early_volume` is bound unconditionally to one array allocation site
+    ## (a `bin_increments(...)[2:end]`) rather than a two-branch ternary.
+    ## ternary. The two-allocation ternary compiles to a pointer that is one
+    ## of two array allocations depending on a branch, which Enzyme's
+    ## `nodecayed_phis!` LLVM pass cannot trace (an `EnzymeInternalError`; see
+    ## #445). With no late/early window days the edge is the singleton
+    ## `[start]`, so `bin_increments(...)[2:end]` is empty — same value as the
+    ## former `similar(analysed_daily, 0)` branch. Mooncake is unaffected.
+    early_edges = n_early > 0 ?
+                  vcat(windows.early_start, windows.early_days) :
+                  [windows.early_start]
+    early_volume = bin_increments(analysed_daily, early_edges)[2:end]
     early_mean = early_p .* early_volume
     early_obs = (have_data && n_early > 0 && fit_unanchored) ?
                 windows.early_increments : missing
@@ -1173,12 +1181,12 @@ quantities.
     ## accumulation at `late_start`, avoiding double-counting the
     ## observed-window volume.
     late_p = p_pos[(n_early + n_obs + 1):nv]
-    if n_late > 0
-        late_edges = vcat(windows.late_start, windows.late_days)
-        late_volume = bin_increments(analysed_daily, late_edges)[2:end]
-    else
-        late_volume = similar(analysed_daily, 0)
-    end
+    ## Unconditional single-allocation binding (see `early_volume` above):
+    ## avoid the two-allocation `? bin_increments : similar` pointer-PHI that
+    ## Enzyme's `nodecayed_phis!` pass cannot trace. Empty when `n_late = 0`.
+    late_edges = n_late > 0 ? vcat(windows.late_start, windows.late_days) :
+                 [windows.late_start]
+    late_volume = bin_increments(analysed_daily, late_edges)[2:end]
     late_mean = late_p .* late_volume
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support and are always
@@ -1204,7 +1212,15 @@ quantities.
         late_confirmed_model(late_obs, late_mean, windows.late_analysed,
         late_p, k, ρ_conf))
 
-    expected_analysed := safe_rate(sum(analysed_daily))
+    ## Plain `=`, not `:=`: these derived quantities are surfaced through the
+    ## returned NamedTuple and re-tracked at the joint level (`joint.jl`
+    ## `expected_confirmed_T`/`expected_analysed_T`/`test_positivity`), so the
+    ## submodel-level `:=` tracking is redundant. `:=` also builds a
+    ## DynamicPPL tracking closure that captures `p_pos` (assigned in both the
+    ## `:composition` and `else` positivity branches, so boxed in a
+    ## `Core.Box`), and Enzyme's `nodecayed_phis!` LLVM pass cannot
+    ## differentiate through the resulting boxed pointer-PHI (see #445).
+    expected_analysed = safe_rate(sum(analysed_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
     ## modelled early volume, the observed cumulative analysed windows and the
     ## late windows (anchored days contribute `p · analysed`, unanchored days the
@@ -1216,17 +1232,21 @@ quantities.
     z = zero(τ_test)
     amask = windows.late_analysed .> 0
     late_den_a = float.(windows.late_analysed)
-    late_den = n_late > 0 ? ifelse.(amask, late_den_a, late_volume) :
-               similar(late_volume, 0)
-    late_expected = n_late > 0 ? ifelse.(amask, late_p .* late_den_a, late_mean) :
-                    similar(late_mean, 0)
+    ## Unconditional broadcasts (single allocation site each): with
+    ## `n_late = 0` every operand (`amask`, `late_den_a`, `late_volume`,
+    ## `late_mean`) is empty, so the `ifelse.` result is empty too — the same
+    ## value the former `? … : similar(…, 0)` ternary produced, without the
+    ## two-allocation pointer-PHI that Enzyme's `nodecayed_phis!` pass cannot
+    ## trace (see #445). Mooncake is unaffected.
+    late_den = ifelse.(amask, late_den_a, late_volume)
+    late_expected = ifelse.(amask, late_p .* late_den_a, late_mean)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
             sum(late_den; init = z)
     expected_positives = sum(early_mean; init = z) +
                          sum(late_expected; init = z) +
                          (n_obs > 0 ? sum(obs_p .* windows.obs_analysed) : z)
-    expected_confirmed := safe_rate(expected_positives)
-    p_positive := safe_rate(expected_positives) / safe_rate(denom)
+    expected_confirmed = safe_rate(expected_positives)
+    p_positive = safe_rate(expected_positives) / safe_rate(denom)
 
     ## Modelled daily confirmed-case incidence: per-window tested-positive
     ## probability expanded onto the daily grid times the modelled analysed
