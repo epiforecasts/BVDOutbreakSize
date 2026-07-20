@@ -253,10 +253,10 @@ when non-`nothing`. Any additional `kwargs` are passed through to
 
 `n_adapts` sets the NUTS warmup length (step-size and mass-matrix
 adaptation), run in addition to `samples` and discarded by default. It
-defaults to `min(250, samples ÷ 2)`, capping the per-fit warmup below
+defaults to `min(200, samples ÷ 2)`, capping the per-fit warmup below
 Turing's default of `min(1000, samples ÷ 2)` to speed the report build.
-At the default `samples = 500` both give 250; the cap bites only when a
-caller raises `samples` above 500.
+At the default `samples = 500` the cap gives 200 (below `samples ÷ 2 =
+250`); it tightens further only when a caller drops `samples` below 400.
 
 A callback fires only on the samples that are kept, and NUTS discards
 its adaptation phase by default, so warmup is silent. Set
@@ -272,7 +272,7 @@ function nuts_sample(model;
         chains::Integer = 2,
         target_accept::Real = 0.85,
         max_depth::Integer = 10,
-        n_adapts::Integer = min(250, samples ÷ 2),
+        n_adapts::Integer = min(200, samples ÷ 2),
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),

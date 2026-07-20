@@ -43,6 +43,10 @@ Changes since v1.8.0.
   fit registry (`build_fit_specs`, `fit_key`, `fit_content_hash`) to the
   same 500 x 2 setting. This roughly halves the sampling wall-clock at the
   cost of some effective sample size.
+- Trimmed the default NUTS warmup cap in `nuts_sample` from
+  `min(250, samples ÷ 2)` to `min(200, samples ÷ 2)`, so at the new
+  `samples = 500` default each fit runs 200 adaptation steps rather than
+  250. Shortens warmup by a further ~20% per fit.
 
 ## v1.8.0
 
