@@ -388,6 +388,124 @@ death testing fraction `tau_death`, the implied per-suspected
 (`suspected_positivity`) and per-test (`test_positivity`) positivities,
 and the death-pool BVD composition (`death_composition`) and
 death-confirmation positivity (`death_confirmation`).
+
+## ──────────────────────────────────────────────────────────────────────────────
+## Sub-composer building blocks for [`bvd_joint`](@ref). Each runs a group of
+## related observation submodels and returns their combined state, keeping the
+## LLVM IR per function small enough that Enzyme can compile without hitting
+## the upstream `nodecayed_phis!` bug. Sub-composers are also independently
+## testable via the `test/enzyme/` suite.
+
+## Sub-composer definitions — defined via include_string so the @model macro
+## is expanded in the correct module context at load time.
+
+include_string(@__MODULE__, """
+@model function _bvd_joint_base(onsets, reported_history, reported_cases,
+        deaths_history, total_deaths, suspected_daily_history,
+        suspected_daily_deaths_history, background_re, case_bg_re;
+        dispersion, ascertainment,
+        cases = reported_cases_model, deaths = deaths_model)
+    dispersion_state ~ to_submodel(dispersion(6))
+    asc_state ~ to_submodel(ascertainment)
+    kv = dispersion_state.k
+    k_cases = kv[1]; k_deaths = kv[2]; k_confirmed = kv[3]
+    k_confirmed_deaths = kv[4]; k_isolation = kv[5]; k_recovered = kv[6]
+    p_drc = asc_state.p_drc; p_uganda = asc_state.p_uganda
+    cases_state ~ to_submodel(
+        cases(reported_history, reported_cases, onsets, k_cases, p_drc;
+        suspected_daily_history, background_re = case_bg_re))
+    deaths_state ~ to_submodel(
+        deaths(deaths_history, total_deaths, onsets, k_deaths;
+        suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
+    return (; dispersion_state, asc_state, kv,
+        k_cases, k_deaths, k_confirmed, k_confirmed_deaths,
+        k_isolation, k_recovered, p_drc, p_uganda,
+        cases_state, deaths_state)
+end
+""")
+
+include_string(@__MODULE__, """
+@model function _bvd_joint_lab(onsets, k_confirmed, k_confirmed_deaths,
+        p_drc, bg_daily, tau_test, bvd_reports_daily,
+        deaths_state, total_deaths, confirmed_deaths,
+        cases_state_reports_daily;
+        confirmed_history, confirmed_cases, lab_history, lab_daily_history,
+        tests_analysed, confirmed_deaths_history,
+        confirmed_positivity_link,
+        confirmed = confirmed_cases_model,
+        confirmed_deaths_stream = confirmed_deaths_model)
+    confirmed_state ~ to_submodel(
+        confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
+        p_drc, bg_daily, tau_test, bvd_reports_daily;
+        lab_history, lab_daily_history,
+        tests_analysed,
+        positivity_link = confirmed_positivity_link))
+    confirmed_deaths_state ~ to_submodel(
+        confirmed_deaths_stream(confirmed_deaths, total_deaths,
+        deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
+        deaths_state.bg_death_daily, k_confirmed_deaths;
+        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        case_analysed_daily = confirmed_state.analysed_daily,
+        case_suspected_daily = cases_state_reports_daily))
+    return (; confirmed_state, confirmed_deaths_state)
+end
+""")
+
+include_string(@__MODULE__, """
+@model function _bvd_joint_treatment_recovered(
+        bvd_reports_daily, bg_daily, p_drc, CFR,
+        conf_hazard_daily, confirmed_daily, k_isolation, k_recovered;
+        isolation_history, bed_capacity_history,
+        treatment_admissions_history, treatment_deaths_history,
+        treatment_ruleout_history, treatment_absconded_history,
+        treatment_confirmed_incare_history, treatment_suspect_incare_history,
+        occupancy_break_days,
+        recovered_history, recovered_cases,
+        treatment = treatment_flow_model,
+        recovered = recovered_model)
+    treatment_state ~ to_submodel(
+        treatment(isolation_history, bvd_reports_daily,
+        bg_daily, p_drc, CFR;
+        capacity_history = bed_capacity_history,
+        admissions_history = treatment_admissions_history,
+        deaths_history = treatment_deaths_history,
+        ruleout_history = treatment_ruleout_history,
+        absconded_history = treatment_absconded_history,
+        confirmed_incare_history = treatment_confirmed_incare_history,
+        suspect_incare_history = treatment_suspect_incare_history,
+        occupancy_break_days = occupancy_break_days,
+        conf_hazard_daily = conf_hazard_daily,
+        k_external = k_isolation))
+    recovered_state ~ to_submodel(
+        recovered(recovered_history, recovered_cases,
+        confirmed_daily, CFR;
+        k_external = k_recovered))
+    return (; treatment_state, recovered_state)
+end
+""")
+
+include_string(@__MODULE__, """
+@model function _bvd_joint_exports(exported_cases, exports_deaths,
+        infections, p_uganda, incubation_pmf, CFR, od_pmf;
+        export_case_days, export_death_days, source_population,
+        genetic, T, tmrca_days, tmrca_days_sd,
+        exports = exports_model,
+        exports_deaths_model_func = exports_deaths_model)
+    exports_state ~ to_submodel(
+        exports(exported_cases, infections, p_uganda;
+        export_case_days, incubation_pmf, source_population))
+    exports_deaths_state ~ to_submodel(
+        exports_deaths_model_func(exports_deaths,
+        exports_state.travelled_prevalence, CFR,
+        od_pmf, incubation_pmf; export_death_days))
+    if genetic !== nothing
+        genetic_state ~ to_submodel(
+            genetic(T, tmrca_days; tmrca_days_sd), false)
+    end
+    return (; exports_state, exports_deaths_state)
+end
+""")
+
 """
 @model function bvd_joint(
         n::Integer,
@@ -464,147 +582,68 @@ death-confirmation positivity (`death_confirmation`).
     infection_state = latent.infection_state
     onsets = latent.onsets
 
-    ## Partially-pooled per-stream dispersions: every count stream draws its
-    ## own negative-binomial dispersion from a shared population rather than
-    ## sharing one global `k`, so a stream's noise is not pulled around by
-    ## whichever stream dominates the likelihood while the sparse streams
-    ## still borrow strength. Order: 1 suspected cases, 2 suspected deaths,
-    ## 3 confirmed cases, 4 confirmed deaths, 5 isolation occupancy,
-    ## 6 recovered. The isolation and recovered dispersions are injected into
-    ## their submodels (which sample their own only when run standalone).
-    dispersion_state ~ to_submodel(dispersion(6))
-    asc_state ~ to_submodel(ascertainment)
-    kv = dispersion_state.k
-    k_cases = kv[1]
-    k_deaths = kv[2]
-    k_confirmed = kv[3]
-    k_confirmed_deaths = kv[4]
-    k_isolation = kv[5]
-    k_recovered = kv[6]
-    p_drc = asc_state.p_drc
-    p_uganda = asc_state.p_uganda
-
-    ## Non-BVD background as a SMOOTH daily lognormal random walk over the
-    ## surveillance window ([`background_walk_model`](@ref)), with the tight
-    ## innovation SD `σ_rw` driving the suspected-CASE stream. The background is
-    ## gated to zero before the surveillance onset (a report-to-receipt lead
-    ## before the first suspected-case report) — it does not exist before
-    ## surveillance began. The tight innovation SD keeps it fairly constant,
-    ## which regularises the background/outbreak-size degeneracy (the prior used
-    ## a per-vintage STEP random effect whose multiplicative blow-up opened a
-    ## second posterior mode that broke convergence). The suspected-DEATH
-    ## background is NOT a separate random effect: it is tied to the case
-    ## background by a background CFR (`cfr_bg · case_bg_daily`, see
-    ## [`deaths_model`](@ref)), so it inherits the case background's smooth,
-    ## gated, ramped level and time-variation rather than competing as a second
-    ## free, outbreak-size-degenerate rate. With `background_re = false` (the
-    ## renewal default) the case stream keeps its scalar `λ_bg`.
-    ## The pooling SD is sampled only when the random effect is active (the
-    ## tilde must stay gated), but `σ_rw_shared` and `bg_onset` are bound
-    ## unconditionally to plain values so the closure below captures
-    ## non-conditional, write-once variables. Conditionally-scoped captures
-    ## get boxed in a `Base.RefValue`, which Enzyme's reverse mode cannot
-    ## differentiate through (Mooncake tolerates it); binding them in both
-    ## paths keeps the capture type-stable and the closure un-boxed.
+    ## Sub-composer for the base streams: dispersion, ascertainment,
+    ## reported cases and suspected deaths. The background-re closure is
+    ## prepared here and passed in.
     if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
     else
         σ_rw_shared = 0.0
     end
-    ## Onset of the suspected pool's non-BVD background: a report-to-receipt
-    ## lead BEFORE the first suspected-case report, not exactly at it. The
-    ## suspects in the first report were already in the pipeline, and the
-    ## background feeds the laboratory analysed volume through the report-to-
-    ## receipt convolution, so it must begin early enough for that convolution
-    ## to be fully formed by the first report. The lead is the MAX lag of the
-    ## report-to-receipt kernel (its truncation `nmax`, the default
-    ## `lab_delay_model` support), not its mean, so no tail contribution is cut
-    ## off at the onset. Bound unconditionally (unused when the effect is off).
     bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
     bg_onset = isempty(reported_history.days) ? 1 :
                clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
-    ## The closure is built unconditionally (one concrete closure type, not
-    ## closure-or-`Nothing`); `background_re` then selects the closure or the
-    ## `nothing` sentinel. Identical behaviour to the gated form: with
-    ## `background_re = false` the closure is never passed, so the unused
-    ## `σ_rw_shared = 0` never enters the log-density.
     make_case_bg = nn -> background_walk_model(nn, σ_rw_shared;
         onset = bg_onset)
     case_bg_re = background_re ? make_case_bg : nothing
 
-    ## Cases first so the suspected-case background `bg_daily` is available to
-    ## the deaths stream (which scales it by `cfr_bg` for the death background)
-    ## and to the laboratory pipeline.
-    cases_state ~ to_submodel(
-        cases(reported_history, reported_cases, onsets, k_cases, p_drc;
-        suspected_daily_history, background_re = case_bg_re))
-    deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, onsets, k_deaths;
-        suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
-    confirmed_state ~ to_submodel(
-        confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
-        p_drc, cases_state.bg_daily, cases_state.τ_test,
-        cases_state.bvd_reports_daily;
-        lab_history, lab_daily_history,
-        tests_analysed,
-        positivity_link = confirmed_positivity_link))
-    ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
-    ## analysed volume scales the modelled case analysed volume
-    ## (`confirmed_state.analysed_daily`) at the per-day suspected
-    ## death-to-case ratio, scored through a death-pool composition positivity
-    ## from the death series' own BVD and background components. The case
-    ## volume carries the laboratory capacity onset, so the death volume
-    ## inherits it and no deaths are confirmed before testing began.
-    confirmed_deaths_state ~ to_submodel(
-        confirmed_deaths_stream(confirmed_deaths, total_deaths,
-        deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
-        deaths_state.bg_death_daily, k_confirmed_deaths;
-        confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
-        case_analysed_daily = confirmed_state.analysed_daily,
-        case_suspected_daily = cases_state.reports_daily))
-    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)): occupancy
-    ## plus the in-care outcome flows, with the in-care fatality CFR_iso
-    ## identified by the in-care death flow. The occupancy split borrows the
-    ## in-care confirmation hazard `τ_test · p_pos` from the confirmed pipeline to
-    ## carve the occupied true-case stock into confirmed and suspect sub-stocks,
-    ## scored against the Tableau 6 `dont confirmés` / `dont suspects` census. The
-    ## known DHIS2 harmonisation days carry the overnight total reporting break.
-    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
-    treatment_state ~ to_submodel(
-        treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, deaths_state.CFR;
-        capacity_history = bed_capacity_history,
-        admissions_history = treatment_admissions_history,
-        deaths_history = treatment_deaths_history,
-        ruleout_history = treatment_ruleout_history,
-        absconded_history = treatment_absconded_history,
-        confirmed_incare_history = treatment_confirmed_incare_history,
-        suspect_incare_history = treatment_suspect_incare_history,
-        occupancy_break_days = occupancy_break_days,
-        conf_hazard_daily = conf_hazard_daily,
-        k_external = k_isolation))
-    ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
-    ## daily confirmed cases (the confirmed-and-discharged subset, not all
-    ## in-care recoveries), with a recovery fraction grounded on the CFR and
-    ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
-    recovered_state ~ to_submodel(
-        recovered(recovered_history, recovered_cases,
-        confirmed_state.confirmed_daily, deaths_state.CFR;
-        k_external = k_recovered))
-    exports_state ~ to_submodel(
-        exports(exported_cases, infection_state.infections, p_uganda;
-        export_case_days, incubation_pmf = latent.incubation_pmf,
-        source_population))
-    exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths,
-        exports_state.travelled_prevalence, deaths_state.CFR,
-        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
+    base ~ to_submodel(_bvd_joint_base(onsets, reported_history,
+        reported_cases, deaths_history, total_deaths,
+        suspected_daily_history, suspected_daily_deaths_history,
+        background_re, case_bg_re; dispersion, ascertainment))
+    kv = base.kv; k_cases = base.k_cases; k_deaths = base.k_deaths
+    k_confirmed = base.k_confirmed; k_confirmed_deaths = base.k_confirmed_deaths
+    k_isolation = base.k_isolation; k_recovered = base.k_recovered
+    p_drc = base.p_drc; p_uganda = base.p_uganda
+    cases_state = base.cases_state; deaths_state = base.deaths_state
+    dispersion_state = base.dispersion_state; asc_state = base.asc_state
 
-    if genetic !== nothing
-        genetic_state ~ to_submodel(
-            genetic(infection_state.T, tmrca_days; tmrca_days_sd), false)
-    end
+    ## Sub-composer for the laboratory pipeline.
+    lab ~ to_submodel(_bvd_joint_lab(onsets, k_confirmed,
+        k_confirmed_deaths, p_drc, cases_state.bg_daily,
+        cases_state.τ_test, cases_state.bvd_reports_daily,
+        deaths_state, total_deaths, confirmed_deaths,
+        cases_state.reports_daily;
+        confirmed_history, confirmed_cases, lab_history, lab_daily_history,
+        tests_analysed, confirmed_deaths_history,
+        confirmed_positivity_link))
+    confirmed_state = lab.confirmed_state
+    confirmed_deaths_state = lab.confirmed_deaths_state
+
+    ## Sub-composer for treatment and recovered.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
+    treat_rec ~ to_submodel(_bvd_joint_treatment_recovered(
+        cases_state.bvd_reports_daily, cases_state.bg_daily, p_drc,
+        deaths_state.CFR, conf_hazard_daily,
+        confirmed_state.confirmed_daily, k_isolation, k_recovered;
+        isolation_history, bed_capacity_history,
+        treatment_admissions_history, treatment_deaths_history,
+        treatment_ruleout_history, treatment_absconded_history,
+        treatment_confirmed_incare_history, treatment_suspect_incare_history,
+        occupancy_break_days,
+        recovered_history, recovered_cases))
+    treatment_state = treat_rec.treatment_state
+    recovered_state = treat_rec.recovered_state
+
+    ## Sub-composer for exports and genetic bound.
+    exports_comp ~ to_submodel(_bvd_joint_exports(exported_cases,
+        exports_deaths, infection_state.infections, p_uganda,
+        latent.incubation_pmf, deaths_state.CFR, deaths_state.od_pmf;
+        export_case_days, export_death_days, source_population,
+        genetic, infection_state.T, tmrca_days, tmrca_days_sd))
+    exports_state = exports_comp.exports_state
+    exports_deaths_state = exports_comp.exports_deaths_state
 
     ## Daily cumulative trajectories for the headline 3x2 figure: the
     ## modelled expected cumulative infections, symptom onsets and deaths
