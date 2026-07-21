@@ -864,6 +864,39 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         late_analysed, late_start = last_lab_day)
 end
 
+## Per-day death-pool BVD composition, extracted from `confirmed_deaths_model`
+## as a plain function so its working variables are function arguments rather
+## than boxed closure captures. Inside the `@model` this lived in a
+## `map(eachindex(susp_death)) do t` closure; the explicit indexed loop creates
+## no anonymous-closure shadow for Enzyme to construct. Bit-identical under
+## Mooncake.
+function death_pool_composition(susp_death, bvd_death, lo, hi)
+    T = eltype(susp_death)
+    n = length(susp_death)
+    out = Vector{T}(undef, n)
+    @inbounds for t in 1:n
+        den = susp_death[t]
+        r = den > lo ? bvd_death[t] / den : one(T)
+        out[t] = clamp(isfinite(r) ? r : one(T), lo, hi)
+    end
+    return out
+end
+
+## Per-day death analysed volume, extracted from `confirmed_deaths_model` as
+## a plain function. Replaces a `map(eachindex(susp_death)) do t` closure that
+## Enzyme's reverse mode could not shadow. Bit-identical under Mooncake.
+function death_test_volume(susp_death, susp_case, case_analysed_daily, sc, lo)
+    T = eltype(susp_death)
+    n = length(susp_death)
+    out = Vector{T}(undef, n)
+    @inbounds for t in 1:n
+        den = susp_case[t]
+        v = den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den : zero(T)
+        out[t] = min(v, susp_death[t])
+    end
+    return out
+end
+
 ## Per-window tested-positive probability `p_pos` under the `:composition`
 ## link, extracted from `confirmed_cases_model` as a plain function so its
 ## working variables are function arguments rather than closure captures.
@@ -875,7 +908,7 @@ end
 ## indexed loop (not `map(do i)`) creates no anonymous-closure shadow for
 ## Enzyme to construct. The result is bit-identical to the in-model `map`
 ## under Mooncake.
-function composition_positivity(window_days, bvd_window, bg_window,
+@noinline function composition_positivity(window_days, bvd_window, bg_window,
         c_window, δ0, dscale, s_test, spec, lo, hi)
     Tt = eltype(bvd_window)
     s_t = convert(Tt, s_test)
@@ -1541,11 +1574,9 @@ positivity and the expected confirmed-death count.
     ## the same link the confirmed cases use.
     lo = eps(typeof(s))
     hi = one(s) - lo
-    q_death_daily = map(eachindex(susp_death)) do t
-        den = susp_death[t]
-        ratio = den > lo ? bvd_death[t] / den : one(s)
-        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
-    end
+    ## `death_pool_composition` is a plain function with an explicit loop,
+    ## so its working variables are not boxed closure captures under Enzyme.
+    q_death_daily = death_pool_composition(susp_death, bvd_death, lo, hi)
     p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
                                         (one(s) .- q_death_daily)
 
@@ -1560,14 +1591,10 @@ positivity and the expected confirmed-death count.
         scale_state ~ to_submodel(scaling)
         sc = scale_state.scaling
         susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
-        death_volume = map(eachindex(susp_death)) do t
-            den = susp_case[t]
-            v = den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
-                zero(sc)
-            ## Cap the volume at the suspected-death pool so confirmed deaths
-            ## stay a subset of suspected and the realised τ_death ≤ 1.
-            min(v, susp_death[t])
-        end
+        ## `death_test_volume` is a plain function with an explicit loop,
+        ## so its working variables are not boxed closure captures under Enzyme.
+        death_volume = death_test_volume(susp_death, susp_case,
+            case_analysed_daily, sc, lo)
         τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
     else
         test_state ~ to_submodel(testing)
@@ -1647,7 +1674,7 @@ not-yet-confirmed BVD occupancy plus the non-case rule-out occupancy, so
 is floored with `eps` so a zero suspect pool gives a zero split. Returns
 `(; demand, O_bvd, O_conf, O_susp, abscond)`, each a length-`n` vector.
 """
-function accumulate_occupancy(A_bvd::AbstractVector, A_bg::AbstractVector,
+@noinline function accumulate_occupancy(A_bvd::AbstractVector, A_bg::AbstractVector,
         deaths::AbstractVector, recover::AbstractVector,
         ruleout::AbstractVector, κ::Real, conf_hazard::AbstractVector)
     n = length(A_bvd)
@@ -1716,7 +1743,7 @@ discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)` of
 by construction. The two PMFs need not share a length; each contributes zero
 beyond its support, so the result takes the longer length.
 """
-function clinical_stay_survival(death_pmf::AbstractVector,
+@noinline function clinical_stay_survival(death_pmf::AbstractVector,
         recover_pmf::AbstractVector, cfr::Real)
     L = max(length(death_pmf), length(recover_pmf))
     T = promote_type(eltype(death_pmf), eltype(recover_pmf), typeof(cfr))
@@ -1763,7 +1790,7 @@ mean-field approximation: a true case that dies before its test returns is never
 counted as confirmed. Returns the length-`n` confirmed-in-care sub-stock; the
 caller forms the suspect sub-stock as the demand remainder `D − O_conf`.
 """
-function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
+@noinline function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
         S_clin::AbstractVector)
     n = length(A_bvd)
     T = promote_type(eltype(A_bvd), eltype(conf_hazard), eltype(S_clin))
@@ -1802,7 +1829,7 @@ no-op bound. The bound is kept strictly above each day's observed admissions
 scored as a plain count rather than on the censoring boundary. Returns a
 length-`length(adm_days)` `Float64` vector.
 """
-function admission_headroom(adm_days, adm_obs, capacity_history,
+@noinline function admission_headroom(adm_days, adm_obs, capacity_history,
         isolation_history)
     cdays = Int.(capacity_history.days)
     ccounts = Float64.(capacity_history.counts)
@@ -2095,8 +2122,11 @@ series for forecasting and replication.
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
     ## `O_conf ≤ O_bvd` holds by construction; clamp into `[0, O_bvd]` as a guard
     ## under any prior draw. The suspect sub-stock is the demand remainder.
-    O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
-    O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
+    ## Broadcasts, not `map((c, b) -> ...)`: the anonymous function closure
+    ## Enzyme's reverse mode cannot shadow; elementwise broadcasts create no
+    ## closure and are bit-identical under Mooncake.
+    O_conf = clamp.(O_conf_raw, zero(eltype(demand)), O_bvd)
+    O_susp = max.(demand .- O_conf, zero(eltype(demand)))
     ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`; day 1
     ## has no prior stock.
     abscond_daily = [t == 1 ? zero(eltype(demand)) : κ * O_susp[t - 1]
