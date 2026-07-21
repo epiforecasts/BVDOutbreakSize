@@ -6,6 +6,73 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.10.0
+
+Changes since v1.9.0.
+
+### Data
+
+- Advanced the model cut-off from SitRep 055 (8 July) to **SitRep 064
+  (17 July 2026)** across four batches: SitReps 056–057 (9–10 July),
+  SitRep 058 (11 July), SitReps 059–061 (12–14 July, from the INSP source),
+  and SitReps 062–064 (15–17 July, stepping over the unpublished 063).
+  `as_of_date` → `2026-07-17`. Every fitted stream (confirmed cases/deaths,
+  daily new-suspects, occupancy, bed capacity, recovered, 24h analysed,
+  Tableau 6 treatment flows) is extended through each batch.
+- Captured symptom-onset epidemic curves from the DHIS2 line list published
+  in the analytique SitRep figures (059–062, 064). Digitised via
+  `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port,
+  and recorded as `data/onset_curve_scanned.csv`. The curves are **not
+  fitted** — the model does not read them, but they provide an empirical
+  onset-to-report delay benchmark (~65 % by 7 days, median ~5–6 days).
+- Re-ran the confirmed/suspect in-care occupancy split on the resumed
+  Tableau 7 data (SitReps 052–055), extending
+  `treatment_confirmed_incare_history` and
+  `treatment_suspect_incare_history` through 8 July (#413, revisits #373).
+- Added `scripts/check_new_sitreps.jl` to detect stale manifests by
+  comparing published INSP SitReps against the latest recorded vintage.
+
+### Model
+
+- De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
+  log-density path (`confirmed_positivity_link = :composition`): extracted
+  the composition-positivity loop to a plain `composition_positivity()`
+  function and replaced three occupancy/split `map(1:n) do t …` blocks with
+  elementwise broadcasts. Pure type-stability tidy-up; Mooncake gradient
+  is bit-identical (same `hash(g)`). Clears the **layer-1 prerequisite**
+  for the opt-in Enzyme reverse-mode backend — Enzyme cannot construct a
+  shadow for anonymous closures that capture conditionally-scoped variables
+  (they get boxed in `Base.RefValue`), and after this fix reaches LLVM's
+  `nodecayed_phis!` pass (next blocker tracked in #445; #446).
+
+### Fixes
+
+- Restored the renamed clock-sensitivity chain reference (`chn_joint_fast_clock`
+  → `chn_joint_exp_growth_clock`) in analysis diagnostics after a merge
+  inadvertently reverted it to the old, undefined variable. This had broken the
+  `Documenter → Render analysis` step on `main` when `BVD_RUN_SENSITIVITY=true`
+  (#418).
+
+### Documentation and infrastructure
+
+- Added `data/README.md` documenting the two data sources, the direct-INSP
+  fetch workflow via the WordPress REST API, the per-SitRep field checklist,
+  and the drift-check protocol.
+- Added Julia (`scripts/digitize_onset_curve.jl`) and Python
+  (`scripts/digitize_onset_curve.py`) digitisation scripts for the symptom-onset
+  epidemic curves, producing byte-identical CSVs. Python deps managed via `uv`
+  (PEP 723).
+
+### Dependencies
+
+- Widened the Turing compat from `0.45` to `0.45, 0.46`, allowing the
+  upstream package evolution while keeping 0.45 pinned as the working default
+  (#415, #416).
+- Updated compat bounds for ADTypes (1.22.2), CairoMakie (0.15.13),
+  Distributions (0.25.129), LogDensityProblems (2.2.0), Integrals (4, 5.4),
+  StatsFuns (2.2.0), SHA (0.7.0), Aqua (0.8.16), TestItemRunner (1.1.5),
+  CensoredDistributions (0.2.22), and TestItems (1.0.0).
+
 ## v1.9.0
 
 Changes since v1.8.0.
@@ -48,6 +115,18 @@ Changes since v1.8.0.
   the outbreak-specific rate and doubling time.
 - Added a tree-prior sensitivity section comparing the Skygrid and
   Exponential growth TMRCA estimates.
+
+### Performance
+
+- Halved the default post-warmup draws in `nuts_sample` from 2000
+  (2 chains x 1000) to 1000 total (2 chains x 500), and moved the docs
+  fit registry (`build_fit_specs`, `fit_key`, `fit_content_hash`) to the
+  same 500 x 2 setting. This roughly halves the sampling wall-clock at the
+  cost of some effective sample size.
+- Trimmed the default NUTS warmup cap in `nuts_sample` from
+  `min(250, samples ÷ 2)` to `min(200, samples ÷ 2)`, so at the new
+  `samples = 500` default each fit runs 200 adaptation steps rather than
+  250. Shortens warmup by a further ~20% per fit.
 
 ## v1.8.0
 
