@@ -124,10 +124,12 @@ end
     ## The bed forecast is validated against an observed occupancy when one is
     ## supplied; without it the beds are not scored.
     using BVDOutbreakSize: forecast_vs_truth
-    vt = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17,
+    vt = forecast_vs_truth(fc;
+        observed = (confirmed_cum = 210, confirmed_deaths_cum = 17),
         isolation = 359)
     @test "DRC isolation beds" in vt[!, "Stream"]
-    vt0 = forecast_vs_truth(fc; confirmed = 210, confirmed_deaths = 17)
+    vt0 = forecast_vs_truth(fc;
+        observed = (confirmed_cum = 210, confirmed_deaths_cum = 17))
     @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
@@ -169,20 +171,71 @@ end
         obs_confirmed_deaths = 17)
 
     tbl=forecast_vs_truth(fc;
-        confirmed = 260, confirmed_deaths = 20)
+        observed = (confirmed_cum = 260, confirmed_deaths_cum = 20))
 
     @test tbl isa DataFrame
-    @test nrow(tbl) == 2
+    ## Two confirmed streams x two quantities (cumulative, new this week).
+    @test nrow(tbl) == 4
     @test names(tbl) ==
-          ["Stream", "Observed", "Lower 90%", "Lower 60%", "Lower 30%",
-        "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
+          ["Stream", "Quantity", "Observed", "Lower 90%", "Lower 60%",
+        "Lower 30%", "Upper 30%", "Upper 60%", "Upper 90%", "Within 90% PI"]
     @test Set(tbl[!, "Stream"]) ==
           Set(["DRC confirmed cases", "DRC confirmed deaths"])
+    @test Set(tbl[!, "Quantity"]) ==
+          Set(["cumulative by T+7", "new this week"])
 
     for row in eachrow(tbl)
         covered=row["Lower 90%"]<=row.Observed<=row["Upper 90%"]
         @test row["Within 90% PI"] == (covered ? "yes" : "no")
     end
+end
+
+@testitem "forecast_vs_truth covers all streams and guards on observed" begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_vs_truth
+    rng = MersenneTwister(51)
+    n = 300
+    fc = DataFrame(
+        cases_cum = rand(rng, 50:150, n), cases_new = rand(rng, 0:30, n),
+        deaths_cum = rand(rng, 40:100, n), deaths_new = rand(rng, 0:20, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        confirmed_deaths_new = rand(rng, 0:5, n),
+        recovered_cum = rand(rng, 10:60, n),
+        recovered_new = rand(rng, 0:10, n),
+        isolation_level = rand(rng, 250:400, n)
+    )
+    ## Every count stream supplied an observed cumulative gives two rows each
+    ## (cumulative + new); the beds add one level row when an occupancy is
+    ## supplied. Ten count rows + one beds row.
+    tbl = forecast_vs_truth(fc;
+        observed = (cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
+            confirmed_deaths_cum = 18, recovered_cum = 55),
+        baseline = (confirmed_cum = 40,),
+        isolation = 359)
+    @test nrow(tbl) == 11
+    @test "Quantity" in names(tbl)
+    @test Set(tbl[!, "Stream"]) == Set([
+        "DRC reported cases", "DRC suspected deaths", "DRC confirmed cases",
+        "DRC confirmed deaths", "DRC recovered", "DRC isolation beds"])
+    ## A stream present in the frame but absent from `observed` is skipped, and
+    ## without an observed occupancy the beds row is dropped.
+    tbl2 = forecast_vs_truth(fc;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
+    @test nrow(tbl2) == 4
+    @test "DRC reported cases" ∉ tbl2[!, "Stream"]
+    @test "DRC isolation beds" ∉ tbl2[!, "Stream"]
+    ## baseline shifts the new-count observed: the confirmed "new this week"
+    ## row is scored against observed - baseline = 70 - 40 = 30.
+    conf_new = tbl[(tbl.Stream .== "DRC confirmed cases") .& (tbl.Quantity .== "new this week"), :]
+    @test only(conf_new.Observed) == 30
+    ## Absent baseline defaults to zero, so the new-count observed is the full
+    ## observed cumulative.
+    tbl3 = forecast_vs_truth(fc; observed = (confirmed_cum = 70,))
+    c3 = tbl3[(tbl3.Stream .== "DRC confirmed cases") .& (tbl3.Quantity .== "new this week"), :]
+    @test only(c3.Observed) == 70
 end
 
 @testitem "forecast_archive returns tidy long scored streams" tags=[:slow] setup=[ForecastFixtures] begin

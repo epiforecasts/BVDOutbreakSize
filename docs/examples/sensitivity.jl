@@ -59,9 +59,19 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
 ## frozen-fit bed forecast is scored against what the beds actually held.
 _obs_beds = isempty(obs.isolation_history.counts) ? missing :
             obs.isolation_history.counts[end]
+## Same observed/baseline keying as the plot below, so the table covers every
+## fitted count stream (cumulative and new-count rows) plus the bed level.
 validation_table = forecast_vs_truth(validation_forecast;
-    confirmed = obs.confirmed_cases,
-    confirmed_deaths = obs.confirmed_deaths,
+    observed = (cases_cum = obs.reported_cases,
+        deaths_cum = obs.total_deaths,
+        confirmed_cum = obs.confirmed_cases,
+        confirmed_deaths_cum = obs.confirmed_deaths,
+        recovered_cum = obs.recovered_cases),
+    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
+        deaths_cum = frozen_lastweek.o.total_deaths,
+        confirmed_cum = frozen_lastweek.o.confirmed_cases,
+        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
+        recovered_cum = frozen_lastweek.o.recovered_cases),
     isolation = _obs_beds);
 
 #md # ```@raw html

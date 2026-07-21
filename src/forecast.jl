@@ -527,16 +527,26 @@ end
 
 """
 Validate a [`forecast_reported`](@ref) projection against the counts that
-were later observed. `confirmed` and `confirmed_deaths` are the observed
-cumulative DRC laboratory-confirmed cases and confirmed deaths at the
-forecast target date. When `isolation` (the observed bed occupancy at the
-target date) is supplied and the forecast carries the beds, the projected
-supply-limited occupancy is scored against it too — a last-week's-forecast
-versus what the beds actually held. Returns a `DataFrame` with one row per
-scored stream giving the observed count, the equal-tailed 30/60/90%
-predictive intervals (the same endpoints as the other summary tables), and
-whether the observed count falls inside the 90% interval. The suspected
-reported streams are no longer reported, so they are not scored.
+were later observed. `observed` is a `NamedTuple` mapping each stream's
+cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
+cumulative count at the forecast target date; `baseline` maps the same
+columns to the cumulative count at the forecast origin (default `0`). A
+stream is scored only when its cumulative column is in the forecast and a key
+for it is in `observed`. The scored streams are the reported cases, suspected
+deaths, laboratory-confirmed cases, confirmed deaths and recovered — the same
+set [`plot_forecast_vs_truth`](@ref) draws — so the call site can pass the
+same `observed`/`baseline` NamedTuples it builds for the plot.
+
+Each scored stream gets two rows, mirroring the plot's two panels and the
+`Quantity` split of [`forecast_table`](@ref): a `cumulative by T+7` row
+scoring the projected cumulative against `observed`, and a `new this week`
+row scoring the projected new count against `max(observed − baseline, 0)`.
+When `isolation` (the observed bed occupancy at the target date) is supplied
+and the forecast carries the beds, the projected supply-limited occupancy is
+scored against it too as a single level row. Returns a `DataFrame` with the
+observed count, the equal-tailed 30/60/90% predictive intervals (the same
+endpoints as the other summary tables), and whether the observed count falls
+inside the 90% interval.
 
 Note that at a one-week-back freeze the bed capacity is weakly informed (the
 reported occupancy rate starts only on 9 June), so the projected bed
@@ -544,31 +554,38 @@ occupancy rides the capacity random walk back to the freeze date and its
 interval is wide.
 """
 function forecast_vs_truth(fc::DataFrame;
-        confirmed::Real, confirmed_deaths::Real,
+        observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
         isolation::Union{Real, Missing} = missing,
         digits::Integer = 0)
-    _row(label,
-        draws,
-        obs) = begin
+    _row(label, quantity, draws, obs) = begin
         s = posterior_summary(draws)
         lo = round(s.lo90; digits)
         hi = round(s.hi90; digits)
-        (stream = label, observed = round(obs; digits),
+        (stream = label, quantity = quantity, observed = round(obs; digits),
             lower_90 = lo, lower_60 = round(s.lo60; digits),
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
             upper_60 = round(s.hi60; digits), upper_90 = hi,
             within_90 = lo <= obs <= hi ? "yes" : "no")
     end
+    specs = (
+        (:cases_cum, :cases_new, "DRC reported cases"),
+        (:deaths_cum, :deaths_new, "DRC suspected deaths"),
+        (:confirmed_cum, :confirmed_new, "DRC confirmed cases"),
+        (:confirmed_deaths_cum, :confirmed_deaths_new, "DRC confirmed deaths"),
+        (:recovered_cum, :recovered_new, "DRC recovered")
+    )
     rows = NamedTuple[]
-    :confirmed_cum in propertynames(fc) &&
-        push!(rows, _row("DRC confirmed cases", fc[!, :confirmed_cum],
-            confirmed))
-    :confirmed_deaths_cum in propertynames(fc) &&
-        push!(rows, _row("DRC confirmed deaths", fc[!, :confirmed_deaths_cum],
-            confirmed_deaths))
+    for (cumcol, newcol, label) in specs
+        (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
+        obs_cum = float(observed[cumcol])
+        push!(rows, _row(label, "cumulative by T+7", fc[!, cumcol], obs_cum))
+        newcol in propertynames(fc) || continue
+        obs_new = max(obs_cum - float(get(baseline, cumcol, 0)), 0.0)
+        push!(rows, _row(label, "new this week", fc[!, newcol], obs_new))
+    end
     isolation !== missing && :isolation_level in propertynames(fc) &&
-        push!(rows, _row("DRC isolation beds", fc[!, :isolation_level],
-            isolation))
+        push!(rows, _row("DRC isolation beds", "occupancy at T+7",
+            fc[!, :isolation_level], isolation))
     return _prettify(DataFrame(rows))
 end
 
