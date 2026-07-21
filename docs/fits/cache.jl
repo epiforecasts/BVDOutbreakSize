@@ -90,7 +90,7 @@ function content_hash(source_files;
 end
 
 """
-    fit_or_load(key, thunk; cache_dir, refit = false) -> Any
+    fit_or_load(key, thunk; cache_dir, refit = false, strict = false) -> Any
 
 Return the cached result at `<cache_dir>/<key>.jls` when it exists and `refit`
 is false; otherwise run `thunk()`, serialise its result to that path and return
@@ -98,16 +98,32 @@ it. `key` should already encode a content hash (see [`content_hash`](@ref)) so
 a stale cache is never silently reused. The result is written to a temporary
 file and moved into place, so an interrupted fit does not leave a half-written
 cache entry.
+
+Hits and misses are written straight to `stderr` (bypassing any output capture
+by `Literate`/`Documenter`), so during a render the cache behaviour is visible
+in the job log rather than silent.
+
+`strict = true` turns a miss into an error instead of refitting. The render
+loads every fit that the per-fit CI matrix already produced, so a miss there
+means the render is looking in the wrong cache directory (or asking for a fit
+the matrix never made) — a bug that should fail in seconds naming the key and
+the directory, not silently refit the whole report for hours.
 """
 function fit_or_load(key::AbstractString, thunk;
-        cache_dir::AbstractString, refit::Bool = false)
+        cache_dir::AbstractString, refit::Bool = false, strict::Bool = false)
     mkpath(cache_dir)
     path = joinpath(cache_dir, key * ".jls")
     if !refit && isfile(path)
-        @info "fit cache hit" key
+        println(stderr, "[fit cache] HIT  $key")
         return repair_chain_keys(deserialize(path))
     end
-    @info "fit cache miss — fitting" key
+    if strict && !refit
+        error("fit cache MISS for key $key in $cache_dir — expected this fit " *
+              "to have been produced by the CI fit matrix and downloaded here. " *
+              "Refusing to refit inline (strict mode). Check that the render's " *
+              "BVD_FIT_CACHE points at the collected fits.")
+    end
+    println(stderr, "[fit cache] MISS — fitting $key")
     result = thunk()
     tmp = path * ".tmp"
     serialize(tmp, result)

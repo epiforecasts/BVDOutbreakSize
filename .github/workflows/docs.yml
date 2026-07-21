@@ -198,6 +198,11 @@ jobs:
         env:
           BVD_DOC_PAGE: ${{ matrix.page }}
           BVD_FIT_CACHE: logs/fit_cache
+          # The fit matrix has already produced every fit and they are collected
+          # above, so the render must only ever load from cache. Fail fast and
+          # loud on any miss (naming the key and dir) instead of silently
+          # refitting the whole report into the render-job timeout.
+          BVD_FIT_STRICT: true
           BVD_FIT_LOG: none
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/execute.jl

@@ -19,6 +19,27 @@
     @test isfile(joinpath(dir, key * ".jls"))
 end
 
+@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+
+    dir = mktempdir()
+    calls = Ref(0)
+    thunk = () -> (calls[] += 1; (payload = "chain", n = 42))
+    key = "demo__" * content_hash([@__FILE__]; extra = "strict")
+
+    ## A strict miss must throw (naming the key and dir) and never run the thunk,
+    ## so a render can fail fast rather than silently refit the whole report.
+    @test_throws Exception fit_or_load(key, thunk; cache_dir = dir, strict = true)
+    @test calls[] == 0
+    @test !isfile(joinpath(dir, key * ".jls"))
+
+    ## Once the fit exists, strict mode loads it like a normal hit.
+    fit_or_load(key, thunk; cache_dir = dir)          # populate (non-strict miss)
+    r = fit_or_load(key, thunk; cache_dir = dir, strict = true)
+    @test r == (payload = "chain", n = 42)
+    @test calls[] == 1                                # only the populating fit ran
+end
+
 @testitem "content hash reflects inputs" tags=[:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 
