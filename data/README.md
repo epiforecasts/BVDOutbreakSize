@@ -120,7 +120,14 @@ This is the guard against the manifest silently drifting weeks behind again.
 
 Read these from the PDF (the `date de rapportage`, not the filename or the
 publication date, is the key each row is stored under) and record them in the
-matching `observations.toml` history:
+matching `observations.toml` history.
+**Advance every stream in the table below on each update, whenever the SitRep
+prints the value** — not just the confirmed/suspected headlines. The
+isolation, bed-capacity, recovered, laboratory and CTE patient-movement
+streams move together with the headlines: the treatment/occupancy streams
+share one Tableau, and the loader invariants tie the latest treatment-flow day
+to the isolation window, so advancing the headlines while leaving these behind
+both drops data and can break the loader test.
 
 | From the SitRep | `observations.toml` stream |
 |---|---|
@@ -147,7 +154,19 @@ the `source =` string and prefer the auditable value.
   increment does not exceed that day's national `analysed` count (you cannot
   confirm more specimens than you analysed). A province that reports
   "reçus / en cours d'analyse" but no completed count contributes 0, like a
-  non-reporting province. Sum only completed per-province analysed counts.
+  non-reporting province. Sum only completed per-province analysed counts. A
+  province worded "documentés dans le réseau de collecte" rather than
+  "analysés" is a shade looser but usable (precedent: SitRep 065, 18 July,
+  Ituri 167 + Nord-Kivu 127 = 294); note the wording in the `source =` string.
+- **Occupation table (Tableau 6/7)**: use it only when it balance-closes
+  (`Patients au lit (J-1) + Total admissions (24h) − Total sorties (24h) =
+  Patients en isolement (Fin J)`) and the `dont confirmés + dont suspects`
+  split sums to the Fin J total. Bed capacity = Fin J ÷ `taux d'occupation`,
+  which should equal the printed `Nombre de lits`. A **carried-forward tile**
+  (page-1 isolement count *and* occupancy rate byte-identical to the prior day
+  with no fresh Tableau to corroborate) is a reporting gap: record the raw
+  value in the CSV note but exclude it from the fitted series (precedent:
+  30 June, 3–4 July).
 - **Unpublished reports**: some SitRep numbers were never issued (029/12 Jun,
   043/26 Jun, 045/28 Jun). The series simply step over the missing date; note
   it in the `source =` string.
@@ -160,6 +179,27 @@ the `source =` string and prefer the auditable value.
   The DHIS2 suspect-death-of-day measure is not continuous in this format, so
   `suspected_daily_deaths_history` is frozen at 11 July; see its `source =`
   string.
+
+## Other signals to scan for and flag (not yet fitted)
+
+Each SitRep also prints indicators the model does not (yet) read. On **every**
+update, scan the PDF for any such signal, and if it is present and plausibly
+useful, surface it in the PR under a **"Data available but not fitted (for
+@seabbs to consider tracking)"** heading with its current value, so the
+maintainer can decide whether to add a stream. This keeps new signals from
+being silently dropped as the report format evolves. Known candidates:
+
+| Signal (SitRep location) | Note |
+|---|---|
+| `Taux de suivi des contacts` national % (+ Tableau 4 contacts sous suivi / vus) | Contact-tracing coverage; a surveillance-intensity signal. |
+| `Alertes validées — décédées (comm.)` (Tableau 3) | Community suspect-death proxy — the candidate replacement basis for the frozen `suspected_daily_deaths_history` (needs a methodology decision, issue #431). |
+| PoE/PoC screening (Tableau 5): travellers screened, alerts, corpses swabbed | Cross-border importation pressure. |
+| SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
+| CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
+| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+
+If a genuinely new indicator appears that is not in this list or the fitted
+table, add a row here in the same PR so the procedure stays current.
 
 After editing, validate with the loader and its invariants:
 
