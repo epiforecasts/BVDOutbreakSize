@@ -216,7 +216,9 @@ forecast_scores_df = _release_data("forecast_scores.csv",
         log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
         bias = Float64, n_samples = Int,
         log_rel_skill_to_baseline = Float64,
-        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
+        log_rel_skill_to_individual_fit = Union{Missing, Float64},
+        skill_vs_baseline = Union{Missing, Float64},
+        skill_vs_individual_fit = Union{Missing, Float64}))
 forecast_overlay_df = _release_data("forecast_overlay.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
@@ -353,7 +355,9 @@ frozen_scores_df = _release_data("forecast_scores_frozen.csv",
         log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
         bias = Float64, n_samples = Int,
         log_rel_skill_to_baseline = Float64,
-        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
+        log_rel_skill_to_individual_fit = Union{Missing, Float64},
+        skill_vs_baseline = Union{Missing, Float64},
+        skill_vs_individual_fit = Union{Missing, Float64}))
 frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
