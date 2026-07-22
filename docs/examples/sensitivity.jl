@@ -28,15 +28,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 
 # ## Forecast validation (last week versus now)
 #
-# How last week's forecast held up against the data since observed, using the
-# frozen re-fit and one-week projection defined in the methods
-# [forecast-versus-frozen evaluation](@ref
-# "Forecast-versus-frozen evaluation"). The frozen fit also conditions on
-# the isolation beds, so the projected bed occupancy is scored against the
-# beds held a week later. The bed validation is weak at a one-week-back freeze:
-# the reported occupancy rate starts only on 9 June, so the capacity has no
-# implied-capacity anchor and rides its random walk back to the freeze date,
-# widening the projected bed interval.
+# The frozen re-fit one-week-ahead forecast validated against data observed since.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -88,13 +80,7 @@ validation_table #hide
 #md # </details>
 #md # ```
 
-# The observation panels histogram the one-week-ahead forecast made from the
-# frozen fit, a cumulative and a new-count panel for each fitted count stream
-# the forecast carries (reported cases, suspected deaths, confirmed cases,
-# confirmed deaths and recovered), with the 90% predictive interval shaded and
-# the count actually observed by the current cut-off drawn as a dashed black
-# rule. Each stream draws only when the forecast carries its column, so a fit
-# observing fewer streams shows fewer panels.
+# One-week-ahead forecast panels: predictive intervals vs observed counts per stream.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -121,8 +107,7 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 
 validation_fig #hide
 
-# The bed panel scores last week's projected occupancy against the beds
-# occupied now (the dashed rule).
+# Bed occupancy forecast vs observed.
 
 #md # ```@raw html
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
@@ -137,10 +122,7 @@ validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
 
 validation_beds_fig #hide
 
-# The latent quantities are not observed, so they are scored distribution
-# against distribution: what the frozen fit forecast for the past week's new
-# infections, onsets and deaths against what the current fit now estimates
-# for the same window.
+# Latent quantities: frozen-fit forecast vs current-fit estimate for the same window.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-now latent plot</summary>
@@ -169,31 +151,7 @@ validation_latent_fig #hide
 
 # ## Forecast scoring across releases
 #
-# How every release's saved forecasts scored against the data observed since.
-# Each results release stores its one- to four-week-ahead forecast
-# (`forecast.csv`); `scripts/score_releases.jl` scores each against what has
-# since been observed with CRPS, CRPS on the log scale, 50/90% coverage and
-# bias, against a persistence baseline (`rel_skill` below one beats the
-# baseline).
-# The scored streams are the reported cases, suspected deaths, confirmed cases
-# and confirmed deaths as counts, and the isolation-bed occupancy as a level.
-# The count streams are reported by the sitreps as running cumulative totals,
-# so each is scored on its incidence, the between-vintage increment, rather
-# than the cumulative level: a stream that only reports a growing total is
-# judged on what it added each week, not on the total it has reached.
-# The bed occupancy is a level and is scored as one.
-# Once the scores carry a `fit` column each (stream, horizon) compares three
-# forecasts: the persistence baseline, the stream's own individual fit and the
-# joint.
-# The scores accrue as releases with a stored forecast, and the reconstructed
-# backfill release reaching back across the earlier releases, are added; until
-# then the table has no rows and the plot says so.
-#
-# Recovered is the exception.
-# The fitted models are the joint, exports, deaths, cases, confirmed, confirmed
-# deaths and isolation, so recovered has no individual fit of its own and its
-# comparison is the baseline against the joint only.
-# No individual row or panel is drawn for it.
+# Forecast scores by stream, horizon and fit, against a persistence baseline.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -292,10 +250,7 @@ forecast_skill_by_release = _skill_by_release(forecast_scores_df)
 #md # </details>
 #md # ```
 
-# The headline is the geometric mean across releases of each fit's log-scale
-# CRPS skill ratio: against the persistence baseline for every fit, and against
-# the stream's own individual fit on the joint row where the stream has one. A
-# ratio below one beats the comparator.
+# Forecast skill summary: geometric mean of log-scale CRPS ratios across releases.
 
 forecast_skill_overall #hide
 
@@ -309,12 +264,7 @@ forecast_score_table #hide
 
 forecast_skill_by_release #hide
 
-# Forecasts made at each release against the value observed since, one panel
-# per stream and horizon, the observed value in black.
-# The median and 90% interval are coloured by fit role: the persistence
-# baseline, the stream's individual fit and the joint.
-# The x-axis is the date each forecast was made, so an incident stream's
-# observed window pairs unambiguously with the forecast that made it.
+# Forecasts vs observed by release, stream and horizon.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
@@ -330,18 +280,7 @@ forecast_overlay_fig #hide
 
 # ## Frozen-fit forecast evaluation
 #
-# The same one- to four-week-ahead forecast made from the current model frozen
-# at earlier data cut-offs (`forecast_frozen.csv`), scored against the counts
-# observed since by `scripts/score_releases.jl` into
-# `data/forecast_scores_frozen.csv`.
-# Each frozen fit is stamped with its own cut-off as the made date, so this is
-# a historical forecast evaluation of the current model at past cut-offs
-# without reconstructing old release tags.
-# The May cut-offs predate the isolation and recovered streams, so only the
-# streams a fit carries are scored.
-# Kept apart from the cross-release scores above so the frozen made-dates do
-# not pool into the release baseline, the frozen forecast is set against the
-# same persistence baseline (`rel_skill` below one beats the baseline).
+# Current model frozen at past cut-offs, scored against data observed since.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
@@ -367,10 +306,7 @@ frozen_skill_by_release = _skill_by_release(frozen_scores_df)
 #md # </details>
 #md # ```
 
-# The headline frozen skill, the geometric mean across cut-offs of each frozen
-# fit's log-scale CRPS skill ratio against the persistence baseline. The
-# individual-fit ratio is blank throughout: the frozen evaluation scores the
-# current joint model at past cut-offs, not the single-stream fits.
+# Frozen forecast skill summary: geometric mean of log-scale CRPS ratios across cut-offs.
 
 frozen_skill_overall #hide
 
@@ -383,10 +319,7 @@ frozen_score_table #hide
 
 frozen_skill_by_release #hide
 
-# The frozen forecasts made at each cut-off against the value observed since,
-# one panel per stream and horizon, the observed value in black.
-# The frozen forecast draws in the individual-fit colour against the
-# persistence baseline; the x-axis is the frozen cut-off each was made from.
+# Frozen forecasts vs observed by stream and horizon.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
