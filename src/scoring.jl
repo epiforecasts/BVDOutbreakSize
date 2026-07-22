@@ -146,13 +146,21 @@ function select_daily_releases(entries)
 end
 
 ## Score columns summarised for one group of forecasts, against the mean
-## baseline CRPS `mb` of the same (stream, horizon).
-function _score_stats(grp::DataFrame, mb::Real)
+## baseline CRPS `mb` and mean baseline log-CRPS `mlb` of the same
+## (stream, horizon).
+function _score_stats(grp::DataFrame, mb::Real, mlb::Real)
     mc = mean(grp.crps)
+    mlc = mean(grp.log_crps)
+    rs = mc / mb
+    lrs = mlc / mlb
     return (; n = size(grp, 1), crps = round(mc; digits = 2),
         crps_baseline = round(mb; digits = 2),
-        rel_skill = round(mc / mb; digits = 2),
-        log_crps = round(mean(grp.log_crps); digits = 3),
+        rel_skill = round(rs; digits = 2),
+        skill = round(1.0 - rs; digits = 3),
+        log_crps = round(mlc; digits = 3),
+        log_crps_baseline = round(mlb; digits = 3),
+        log_rel_skill = round(lrs; digits = 3),
+        log_skill = round(1.0 - lrs; digits = 3),
         coverage_50 = round(mean(grp.coverage_50); digits = 2),
         coverage_90 = round(mean(grp.coverage_90); digits = 2),
         bias = round(mean(grp.bias); digits = 2))
@@ -197,7 +205,8 @@ function forecast_score_summary(scores::DataFrame)
                     ours = has_fit ? grp[grp.fit .== f, :] :
                            grp[grp.model .== "ours", :]
                     isempty(ours) && continue
-                    st = _score_stats(ours, mb)
+                    mlb = isempty(base) ? NaN : mean(base.log_crps)
+                    st = _score_stats(ours, mb, mlb)
                     push!(rows,
                         has_fit ? (; stream = s, horizon = h, fit = f, st...) :
                         (; stream = s, horizon = h, st...))
@@ -207,7 +216,9 @@ function forecast_score_summary(scores::DataFrame)
     end
     if isempty(rows)
         empty = (; n = Int[], crps = Float64[], crps_baseline = Float64[],
-            rel_skill = Float64[], log_crps = Float64[],
+            rel_skill = Float64[], skill = Float64[],
+            log_crps = Float64[], log_crps_baseline = Float64[],
+            log_rel_skill = Float64[], log_skill = Float64[],
             coverage_50 = Float64[], coverage_90 = Float64[],
             bias = Float64[])
         return has_fit ?

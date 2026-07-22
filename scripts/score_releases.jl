@@ -453,55 +453,83 @@ end
 # Relative forecast skill on the log-CRPS scale
 # ----------------------------------------------------------------------
 
-## The two relative-skill values for every row of a scored table, on the
-## log-CRPS scale (`log_crps`, CRPS of `log1p`-transformed draws), both
-## relative to other fits of the SAME (release, made_date, stream, horizon)
-## group:
+## The relative-skill values for every row of a scored table, computed from
+## the MEAN log-CRPS across all releases for each (stream, horizon) group,
+## rather than per-group ratios within a single release. This gives a
+## stable baseline reference across the full history.
 ##
-##  * `log_rel_skill_to_baseline`: a fit's `log_crps` over its stream's
-##    persistence-baseline `log_crps` in the group. Below 1 beats the
-##    baseline. The baseline row itself is `1.0`. Every scorable stream
-##    carries a baseline, so this is defined for every row of a group whose
-##    baseline was scored.
+##  * `log_rel_skill_to_baseline`: a fit's `log_crps` over the mean
+##    persistence-baseline `log_crps` for the same (stream, horizon).
+##    Below 1 beats the baseline. The baseline row itself is `1.0`.
 ##
 ##  * `log_rel_skill_to_individual_fit`: the JOINT fit's `log_crps` over the
-##    stream's INDIVIDUAL-fit `log_crps` in the group, defined only on the
-##    joint row of a group that also carries an individual fit. It is
-##    `missing` on every non-joint row, and on the joint row of a stream no
-##    individual model fits (e.g. "recovered"). The individual fit is the
-##    group's one row whose fit is neither the baseline nor the joint; a
-##    stream is fit by at most one individual model.
+##    stream's INDIVIDUAL-fit `log_crps` for the same (stream, horizon),
+##    defined only on the joint row of a stream that also has an individual
+##    model. It is `missing` on every non-joint row.
 ##
-## Returned as two `Vector{Union{Missing, Float64}}` aligned to `df`'s rows.
+##  * `skill_vs_baseline`: the normalised skill `1 - log_rel_skill_to_baseline`,
+##    so positive values mean the fit beats the baseline.
+##
+##  * `skill_vs_individual_fit`: `1 - log_rel_skill_to_individual_fit`,
+##    positive means the joint beats the individual fit.
+##
+## Returned as four `Vector{Union{Missing, Float64}}` aligned to `df`'s rows.
 function rel_skill_columns(df; joint_fit = JOINT_FIT,
         baseline_fit = BASELINE_FIT)
     n = nrow(df)
     to_base = Vector{Union{Missing, Float64}}(missing, n)
     to_indiv = Vector{Union{Missing, Float64}}(missing, n)
-    key(i) = (df.release[i], df.made_date[i], df.stream[i], df.horizon[i])
-    groups = Dict{Any, Vector{Int}}()
+    skill_base = Vector{Union{Missing, Float64}}(missing, n)
+    skill_indiv = Vector{Union{Missing, Float64}}(missing, n)
+
+    ## Pre-compute the mean baseline log_crps per (stream, horizon) across
+    ## all releases, so every row of the same stream and horizon is compared
+    ## against the same reference.
+    base_mask = df.fit .== baseline_fit
+    sh_key(i) = (df.stream[i], df.horizon[i])
+    baseline_means = Dict{Tuple{String, Int}, Float64}()
     for i in 1:n
-        push!(get!(() -> Int[], groups, key(i)), i)
-    end
-    for idx in values(groups)
-        base_i = findfirst(i -> df.fit[i] == baseline_fit, idx)
-        joint_i = findfirst(i -> df.fit[i] == joint_fit, idx)
-        indiv_i = findfirst(
-            i -> df.fit[i] != baseline_fit && df.fit[i] != joint_fit, idx)
-        if !isnothing(base_i)
-            base_lc = df.log_crps[idx[base_i]]
-            for i in idx
-                to_base[i] = df.fit[i] == baseline_fit ? 1.0 :
-                             df.log_crps[i] / base_lc
-            end
-        end
-        if !isnothing(joint_i) && !isnothing(indiv_i)
-            j = idx[joint_i]
-            to_indiv[j] = df.log_crps[j] / df.log_crps[idx[indiv_i]]
+        base_mask[i] || continue
+        k = sh_key(i)
+        baseline_means[k] = get!(baseline_means, k) do
+            mean(df.log_crps[base_mask .& (df.stream .== k[1]) .& (df.horizon .== k[2])])
         end
     end
-    return (to_base, to_indiv)
+
+    ## Pre-compute the mean individual-fit log_crps per (stream, horizon)
+    ## for the joint-vs-individual comparison.
+    indiv_mask = (df.fit .!= baseline_fit) .& (df.fit .!= joint_fit)
+    indiv_means = Dict{Tuple{String, Int}, Float64}()
+    for i in 1:n
+        indiv_mask[i] || continue
+        k = sh_key(i)
+        indiv_means[k] = get!(indiv_means, k) do
+            mean(df.log_crps[indiv_mask .& (df.stream .== k[1]) .& (df.horizon .== k[2])])
+        end
+    end
+
+    for i in 1:n
+        k = sh_key(i)
+        ## Skill vs baseline
+        if haskey(baseline_means, k) && baseline_means[k] > 0
+            ratio = df.log_crps[i] / baseline_means[k]
+            to_base[i] = df.fit[i] == baseline_fit ? 1.0 : ratio
+            skill_base[i] = 1.0 - ratio
+        end
+        ## Skill vs individual fit (joint row only)
+        if df.fit[i] == joint_fit && haskey(indiv_means, k) && indiv_means[k] > 0
+            ratio = df.log_crps[i] / indiv_means[k]
+            to_indiv[i] = ratio
+            skill_indiv[i] = 1.0 - ratio
+        end
+    end
+    return (to_base, to_indiv, skill_base, skill_indiv)
 end
+
+## Format one relative-skill value for the plain CSV: an empty cell for
+## `missing` (an undefined ratio, e.g. a stream with no individual fit),
+## else the ratio rounded to four places.
+rel_skill_cell(x) = ismissing(x) ? "" : string(round(x; digits = 4))
 
 ## Format one relative-skill value for the plain CSV: an empty cell for
 ## `missing` (an undefined ratio, e.g. a stream with no individual fit),
@@ -816,7 +844,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
         sort(DataFrame(score_rows),
             [:release, :made_date, :stream, :horizon, :fit])
     end
-    scores_base, scores_indiv = rel_skill_columns(scores)
+    scores_base, scores_indiv, scores_skill_base,
+    scores_skill_indiv = rel_skill_columns(scores)
     scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
     write_simple_csv(scores_dest,
         [:release => scores.release,
@@ -833,7 +862,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :n_samples => scores.n_samples,
             :log_rel_skill_to_baseline => rel_skill_cell.(scores_base),
             :log_rel_skill_to_individual_fit =>
-                rel_skill_cell.(scores_indiv)])
+                rel_skill_cell.(scores_indiv),
+            :skill_vs_baseline => rel_skill_cell.(scores_skill_base),
+            :skill_vs_individual_fit =>
+                rel_skill_cell.(scores_skill_indiv)])
     println("Wrote $(nrow(scores)) scored forecasts to " *
             "data/forecast_scores.csv")
 
@@ -896,7 +928,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## is always empty here; `log_rel_skill_to_baseline` is the frozen fit over
     ## its persistence baseline.
     frozen_scores = _score_frame(frozen_score_rows)
-    frozen_base, frozen_indiv = rel_skill_columns(frozen_scores)
+    frozen_base, frozen_indiv, frozen_skill_base,
+    frozen_skill_indiv = rel_skill_columns(frozen_scores)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_scores_frozen.csv"),
         [:release => frozen_scores.release,
@@ -913,7 +946,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :n_samples => frozen_scores.n_samples,
             :log_rel_skill_to_baseline => rel_skill_cell.(frozen_base),
             :log_rel_skill_to_individual_fit =>
-                rel_skill_cell.(frozen_indiv)])
+                rel_skill_cell.(frozen_indiv),
+            :skill_vs_baseline => rel_skill_cell.(frozen_skill_base),
+            :skill_vs_individual_fit =>
+                rel_skill_cell.(frozen_skill_indiv)])
     frozen_overlay = _overlay_frame(frozen_overlay_rows)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_overlay_frozen.csv"),

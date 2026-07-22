@@ -23,18 +23,21 @@
         fit = ["baseline", "joint", "confirmed", "joint", "baseline"],
         log_crps = [0.8, 0.2, 0.4, 0.3, 0.6])
 
-    to_base, to_indiv = rel_skill_columns(df)
+    to_base, to_indiv, skill_base, skill_indiv = rel_skill_columns(df)
 
     ## Every row of a group whose baseline was scored gets a baseline skill;
     ## the baseline row itself is 1.0.
     @test to_base == [1.0, 0.25, 0.5, 0.5, 1.0]  # 0.2/0.8, 0.4/0.8, 0.3/0.6
+    @test skill_base ≈ [0.0, 0.75, 0.5, 0.5, 0.0]
 
     ## The individual skill is defined only on the joint row of the group
     ## that carries an individual fit: confirmed cases' joint, 0.2/0.4.
     @test to_indiv[2] == 0.5
+    @test skill_indiv[2] ≈ 0.5
     ## Missing on the individual row, the baseline rows, and the recovered
     ## joint (no individual model fits it).
     @test all(ismissing, to_indiv[[1, 3, 4, 5]])
+    @test all(ismissing, skill_indiv[[1, 3, 4, 5]])
 end
 
 @testitem "rel_skill_columns leaves a frozen individual skill empty" begin
@@ -53,9 +56,11 @@ end
         fit = ["frozen", "baseline"],
         log_crps = [0.3, 0.6])
 
-    to_base, to_indiv = rel_skill_columns(df)
+    to_base, to_indiv, skill_base, skill_indiv = rel_skill_columns(df)
     @test to_base == [0.5, 1.0]  # 0.3/0.6, then the baseline itself
+    @test skill_base ≈ [0.5, 0.0]
     @test all(ismissing, to_indiv)
+    @test all(ismissing, skill_indiv)
 end
 
 @testitem "rel_skill_cell empties missing, rounds a ratio" begin
