@@ -39,3 +39,6 @@ logs/
 # Transient docs build logs captured at the repo root
 /docs_build*.log
 .pi-subagents/
+
+# Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
+/worktrees/

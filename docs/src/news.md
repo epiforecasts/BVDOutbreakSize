@@ -95,6 +95,19 @@ Changes since v1.8.0.
   Ghafari) to **11.7 d** (95 HPD 6.8--17.5, mbalaplacide2026), with the
   log-SD widened from 0.15 to 0.3 to match the wider credible interval.
 
+### Report and forecasts
+
+- Saved the one- to four-week-ahead forecasts as a release asset
+  (`forecast.csv`), plus the one-week-back validation forecast
+  (`forecast_validation.csv`), at each results release. Past forecasts were
+  shown in the report but never stored, so they had to be reconstructed by
+  re-running each past release's own code on that release's data; these are
+  published separately as a backfill release. Each release now records the
+  forecast it made, so it can later be scored against what is observed. This
+  underpins the new cross-release forecast scoring (CRPS, log-scale CRPS,
+  coverage, bias, and relative skill against a persistence baseline) shown
+  on the sensitivity page.
+
 ### Documentation
 
 - Updated all prose references to the genetic bound and growth-rate prior

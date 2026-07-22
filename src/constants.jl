@@ -172,6 +172,20 @@ precedes the seeded trajectory.
 const RT_WALK_LEAD = 28
 
 """
+    RT_INTERVENTION_RAMP
+
+Time scale in days of the logistic ramp over which the outbreak-response
+intervention takes effect on `R_t`, centred on the `breakpoint`
+([`sigmoid_ramp`](@ref)). A ramped rather than instantaneous step: the
+response damps transmission over weeks, not on a single day. The single
+source of truth for this ramp, referenced by both the model (the
+`rt_walk_model` prior and `sigmoid_ramp`) and every `reconstruct_rt` caller
+that rebuilds the daily `R_t` off the chain, so the reconstruction cannot
+drift from the value the model fitted.
+"""
+const RT_INTERVENTION_RAMP = 21.0
+
+"""
     ITURI_POPULATION
 
 Source population for the Ituri Province (McCabe et al., Table 1).

@@ -604,45 +604,33 @@ Release dates are marked with dotted vertical rules.
 `xlabel`/`ylabel`/`title` set the axis text; `released_label`,
 `renewal_label` and `trajectory_label` name the three series.
 """
-function plot_estimate_evolution(
-        released::AbstractVector;
-        renewal::AbstractVector = NamedTuple[],
-        trajectory::Union{Nothing, Tuple} = nothing,
-        xlabel::AbstractString = "Date",
-        ylabel::AbstractString = "Cumulative infections",
-        title::AbstractString = "Outbreak-size estimate as data accrued",
-        released_label::AbstractString =
-        "Released estimates (per project release)",
-        renewal_label::AbstractString =
-        "Current model re-fit frozen at each release date",
-        trajectory_label::AbstractString =
-        "Current model, current data")
-    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
-    ## then relabel the ticks with the dates. The released marks, the
-    ## frozen renewal marks and the current-model trajectory all share
-    ## this single calendar mapping, so they line up on the same axis.
+## Calendar dates carried by one panel's three series.
+function _evolution_dates(released, renewal, trajectory)
     rdates = [Date(String(r[1])) for r in released]
     ndates = [Date(String(p[1])) for p in renewal]
     tdates = isnothing(trajectory) ? Date[] :
              [d isa Date ? d : Date(String(d)) for d in trajectory[1]]
-    tickdates = sort(unique(vcat(rdates, ndates)))
-    alldates = sort(unique(vcat(rdates, ndates, tdates)))
-    ref = minimum(alldates)
-    _x(d) = Float64((d - ref).value)
+    return rdates, ndates, tdates
+end
 
-    _hi(tuples) = isempty(tuples) ? 0.0 : maximum(float(t[8]) for t in tuples)
+## Top of one panel's series, the 90% upper over every discrete mark and
+## over the trajectory's upper band.
+function _evolution_upper(released, renewal, trajectory)
+    _hi(ts) = isempty(ts) ? 0.0 : maximum(float(t[8]) for t in ts)
     upper = max(_hi(released), _hi(renewal))
     isnothing(trajectory) ||
         (upper = max(upper, maximum(float.(trajectory[7]))))
+    return upper
+end
 
-    xlo = _x(ref) - 1
-    xhi = _x(maximum(alldates)) + 1
-    fig = Figure(; size = (860, 480))
-    ax = Axis(fig[1, 1];
-        xlabel = xlabel, ylabel = ylabel, title = title,
-        xticks = (_x.(tickdates), [string(d) for d in tickdates]),
-        xticklabelrotation = pi / 4,
-        limits = ((xlo, xhi), (0, upper * 1.08)))
+## Draw one estimate-evolution panel into `ax`, shared by the single-axis
+## and faceted plots. `_x` maps a calendar date to the axis' numeric
+## day-offset and is passed in so faceted panels share one mapping.
+## `labels` names the released, renewal and trajectory series. Returns the
+## legend handles and labels for the series actually drawn.
+function _evolution_panel!(ax, _x, released, renewal, trajectory,
+        refline, labels::NamedTuple)
+    rdates, ndates, tdates = _evolution_dates(released, renewal, trajectory)
 
     ## Each release and each frozen re-fit is its own fit, so collect them
     ## as discrete marks and dodge any that share a date so they read
@@ -695,7 +683,7 @@ function plot_estimate_evolution(
     end
 
     handles = Any[]
-    labels = String[]
+    llabels = String[]
     ## Current-data estimate as the cumulative-infection trajectory over the
     ## grid: a single fit, so one continuous ribbon on the same calendar
     ## axis. `trajectory` is `(dates, lo30, hi30, lo60, hi60, lo90, hi90)`.
@@ -711,25 +699,281 @@ function plot_estimate_evolution(
         th = band!(ax, xs, float.(trajectory[2])[ord],
             float.(trajectory[3])[ord]; color = (cc, 0.24))
         push!(handles, th)
-        push!(labels, trajectory_label * " (30/60/90% band)")
+        push!(llabels, labels.trajectory * " (30/60/90% band)")
     end
     renewal_mark = _series!(:firebrick)
     if !isnothing(renewal_mark)
         push!(handles, renewal_mark)
-        push!(labels, renewal_label * " (median, 30/60/90% bars)")
+        push!(llabels, labels.renewal * " (median, 30/60/90% bars)")
     end
     released_mark = _series!(:steelblue)
     if !isnothing(released_mark)
         push!(handles, released_mark)
-        push!(labels, released_label * " (median, 30/60/90% bars)")
+        push!(llabels, labels.released * " (median, 30/60/90% bars)")
     end
 
     ## Dotted vertical rule at each release date.
     isempty(rdates) || vlines!(ax, _x.(rdates);
         color = (:grey, 0.55), linestyle = :dot, linewidth = 1)
 
+    ## Optional horizontal reference line, e.g. Rt = 1 for a reproduction
+    ## number, drawn faint so it reads behind the estimates.
+    isnothing(refline) ||
+        hlines!(ax, [float(refline)];
+            color = (:black, 0.4), linestyle = :dash, linewidth = 1)
+    return handles, llabels
+end
+
+function plot_estimate_evolution(
+        released::AbstractVector;
+        renewal::AbstractVector = NamedTuple[],
+        trajectory::Union{Nothing, Tuple} = nothing,
+        xlabel::AbstractString = "Date",
+        ylabel::AbstractString = "Cumulative infections",
+        title::AbstractString = "Outbreak-size estimate as data accrued",
+        released_label::AbstractString =
+        "Released estimates (per project release)",
+        renewal_label::AbstractString =
+        "Current model re-fit frozen at each release date",
+        trajectory_label::AbstractString =
+        "Current model, current data",
+        refline::Union{Nothing, Real} = nothing)
+    ## Calendar dates → numeric day-offsets so the x-axis is to scale,
+    ## then relabel the ticks with the dates. The released marks, the
+    ## frozen renewal marks and the current-model trajectory all share
+    ## this single calendar mapping, so they line up on the same axis.
+    rdates, ndates, tdates = _evolution_dates(released, renewal, trajectory)
+    tickdates = sort(unique(vcat(rdates, ndates)))
+    alldates = sort(unique(vcat(rdates, ndates, tdates)))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+
+    upper = _evolution_upper(released, renewal, trajectory)
+    xlo = _x(ref) - 1
+    xhi = _x(maximum(alldates)) + 1
+    fig = Figure(; size = (860, 480))
+    ax = Axis(fig[1, 1];
+        xlabel = xlabel, ylabel = ylabel, title = title,
+        xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+        xticklabelrotation = pi / 4,
+        limits = ((xlo, xhi), (0, upper * 1.08)))
+
+    handles, labels = _evolution_panel!(ax, _x, released, renewal,
+        trajectory, refline,
+        (; released = released_label, renewal = renewal_label,
+            trajectory = trajectory_label))
+
     CairoMakie.axislegend(ax, handles, labels; position = :lt,
         framevisible = true)
+    return fig
+end
+
+"""
+Faceted estimate evolution, one panel per group, for comparing how the same
+quantity moved across releases under each of several fits.
+
+`groups` is a vector of `label => released` pairs, where `released` is the
+`(cutoff_date, median, lo30, hi30, lo60, hi60, lo90, hi90)` tuple vector
+`plot_estimate_evolution` takes. Panels share one calendar mapping and one y
+range so they read against each other, and are laid out over `ncols` columns.
+Groups with no estimates are dropped rather than drawn as an empty panel, so
+a dataset with no fit of its own does not imply a comparison that cannot
+exist. `refline` draws a faint horizontal rule in every panel, e.g. Rt = 1.
+
+Returns a figure carrying `empty_note` in place of the panels when no group
+has any estimate.
+"""
+function plot_evolution_by_group(
+        groups::AbstractVector;
+        xlabel::AbstractString = "Date",
+        ylabel::AbstractString = "Estimate",
+        title::AbstractString = "",
+        released_label::AbstractString = "Released estimate (per release)",
+        refline::Union{Nothing, Real} = nothing,
+        ncols::Int = 2,
+        empty_note::AbstractString = "No per-dataset estimates yet.")
+    ## A group with no estimates is dropped, so the panels show only fits
+    ## that exist.
+    shown = [g for g in groups if !isempty(last(g))]
+    if isempty(shown)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(fig[1, 1], empty_note;
+            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        return fig
+    end
+
+    ## One calendar mapping and one y range across every panel, so a
+    ## dataset's estimates read against the others rather than against its
+    ## own private axis.
+    alldates = sort(unique(reduce(vcat,
+        [_evolution_dates(last(g), NamedTuple[], nothing)[1] for g in shown])))
+    ref = minimum(alldates)
+    _x(d) = Float64((d - ref).value)
+    upper = maximum(_evolution_upper(last(g), NamedTuple[], nothing)
+    for g in shown)
+    xlo = _x(ref) - 1
+    xhi = _x(maximum(alldates)) + 1
+
+    ## Facet panels are narrow, so label a subset of the release dates.
+    step = max(1, cld(length(alldates), 5))
+    tickdates = alldates[1:step:end]
+
+    nrows = cld(length(shown), ncols)
+    fig = Figure(; size = (460 * ncols, 250 * nrows + 90))
+    handles = Any[]
+    labels = String[]
+    for (i, g) in enumerate(shown)
+        r, c = fldmod1(i, ncols)
+        ax = Axis(fig[r, c]; title = string(first(g)),
+            xlabel = r == nrows ? xlabel : "",
+            ylabel = c == 1 ? ylabel : "",
+            xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+            xticklabelrotation = pi / 4,
+            limits = ((xlo, xhi), (0, upper * 1.08)))
+        h, l = _evolution_panel!(ax, _x, last(g), NamedTuple[], nothing,
+            refline, (; released = released_label, renewal = "",
+                trajectory = ""))
+        if isempty(handles)
+            handles = h
+            labels = l
+        end
+    end
+
+    isempty(title) || CairoMakie.Label(fig[0, 1:ncols], title;
+        font = :bold, tellwidth = false)
+    isempty(handles) ||
+        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
+            orientation = :horizontal, framevisible = true,
+            tellheight = true, tellwidth = false)
+    return fig
+end
+
+## Role of a forecast within a stream: the persistence baseline, the stream's
+## own individual single-stream fit or the joint. Deriving the role from the
+## fit id keeps the colour stable across streams, whichever single-stream fit
+## produced the individual row, and folds recovered's missing individual into
+## a baseline-versus-joint comparison without a per-stream label.
+_fit_role(fit) = fit == "baseline" ? "baseline" :
+                 fit == "joint" ? "joint" : "individual"
+
+"""
+Forecasts-versus-now overlay: a grid of panels, one row per observed stream
+and one column per forecast horizon, each showing the forecasts made at every
+release (median with the 90% predictive interval as a vertical bar) against
+the value observed since (black points). `overlay` is the
+`data/forecast_overlay.csv` table with columns `stream`, `made_date`,
+`horizon`, `fit`, `observed`, `median`, `lo90` and `hi90`.
+
+The x-axis is the date the forecast was made, not the target date. For an
+incident stream the observed value is the new count over the forecast's own
+`(made_date, target_date]` window, so it depends on the made date: keying on
+the target date would stack several different observed windows at one x with
+no way to pair each forecast to its own truth. Within one horizon column each
+made date has a single target and a single observed value, so the pairing is
+unambiguous.
+
+Forecasts are coloured by fit role (`baseline`, `individual`, `joint`) and
+dodged so the three read apart at each made date. A stream that carries only
+some roles, e.g. recovered with no individual fit, is drawn with only those,
+and the legend covers every role drawn in any panel.
+
+Returns a figure carrying a short note in place of the panels when no
+forecasts have been scored yet.
+"""
+function plot_forecast_overlay(overlay::DataFrame)
+    streams = unique(overlay.stream)
+    ## Scores accrue only once a release stores a forecast, so an empty
+    ## table is the expected early state and says so rather than
+    ## returning a blank panel.
+    if isempty(streams)
+        fig = Figure(; size = (860, 160))
+        CairoMakie.Label(fig[1, 1],
+            "No forecasts scored yet. No release carries a stored forecast.";
+            tellwidth = false, tellheight = false, color = (:black, 0.55))
+        return fig
+    end
+    horizons = sort(unique(overlay.horizon))
+    role_order = ["baseline", "individual", "joint"]
+    role_colour = Dict("baseline" => :goldenrod, "individual" => :steelblue,
+        "joint" => :firebrick)
+
+    ## One made-date axis shared across every cell.
+    alldates = sort(unique(Date.(string.(overlay.made_date))))
+    ref = minimum(alldates)
+    _x(d) = Float64((Date(string(d)) - ref).value)
+    spacing = length(alldates) > 1 ?
+              (_x(maximum(alldates)) - _x(minimum(alldates))) /
+              (length(alldates) - 1) : 1.0
+    dodge = 0.18 * spacing
+    step = max(1, cld(length(alldates), 4))
+    tickdates = alldates[1:step:end]
+
+    ## Fixed x-slot per series, so the observed truth and the three fit roles
+    ## each sit at their own offset from the made date rather than sharing an
+    ## x, and the slot is stable across cells whichever roles are present.
+    slot = Dict("observed" => -1.5, "baseline" => -0.5, "individual" => 0.5,
+        "joint" => 1.5)
+
+    ncols = length(horizons)
+    nrows = length(streams)
+    fig = Figure(; size = (240 * ncols + 80, 200 * nrows + 90))
+
+    ## A stream may lack a role, e.g. recovered has no individual fit, so
+    ## collect each role's legend handle wherever it first appears.
+    obs_handle = nothing
+    role_handles = Dict{String, Any}()
+    for (r, s) in enumerate(streams), (c, h) in enumerate(horizons)
+
+        cell = overlay[(overlay.stream .== s) .& (overlay.horizon .== h), :]
+        ax = Axis(fig[r, c];
+            title = r == 1 ? "$(h)-day ahead" : "",
+            xlabel = r == nrows ? "Forecast made" : "",
+            ylabel = c == 1 ? string(s) : "",
+            xticks = (_x.(tickdates), [string(d) for d in tickdates]),
+            xticklabelrotation = pi / 4)
+        isempty(cell) && continue
+        ## Observed new count over each forecast's own window, one value per
+        ## made date within this horizon.
+        od = sort(unique([(Date(string(m)), float(o))
+                          for (m, o) in zip(cell.made_date, cell.observed)]))
+        oh = scatter!(ax,
+            [_x(m) + slot["observed"] * dodge for (m, _) in od],
+            [o for (_, o) in od]; color = :black, markersize = 7)
+        isnothing(obs_handle) && (obs_handle = oh)
+        for role in role_order
+            rs = cell[_fit_role.(cell.fit) .== role, :]
+            isempty(rs) && continue
+            col = role_colour[role]
+            off = slot[role] * dodge
+            xs = [_x(m) + off for m in rs.made_date]
+            bx = Float64[]
+            by = Float64[]
+            for (x, lo, hi) in zip(xs, rs.lo90, rs.hi90)
+                append!(bx, (x, x))
+                append!(by, (float(lo), float(hi)))
+            end
+            linesegments!(ax, bx, by; color = (col, 0.45), linewidth = 2)
+            mh = scatter!(ax, xs, float.(rs.median); color = col,
+                markersize = 6)
+            get!(role_handles, role, mh)
+        end
+    end
+
+    handles = Any[]
+    labels = String[]
+    if !isnothing(obs_handle)
+        push!(handles, obs_handle)
+        push!(labels, "observed")
+    end
+    for role in role_order
+        haskey(role_handles, role) || continue
+        push!(handles, role_handles[role])
+        push!(labels, role)
+    end
+    isempty(handles) ||
+        CairoMakie.Legend(fig[nrows + 1, 1:ncols], handles, labels;
+            orientation = :horizontal, framevisible = true,
+            tellheight = true, tellwidth = false)
     return fig
 end
 
@@ -1106,7 +1350,7 @@ Shared by [`plot_rt`](@ref) and [`plot_rt_streams`](@ref).
 """
 function reconstruct_rt(chn; n::Integer, breakpoint::Real,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = 14.0)
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP)
     log_R0 = _draws(chn, Symbol("rt_state.log_R0"))
     sigma = _draws(chn, Symbol("rt_state.sigma_rw"))
     effect = _draws(chn, Symbol("rt_state.intervention_effect"))
@@ -1184,7 +1428,7 @@ are marked. `seeding` is the calendar date of grid day 1 (so day `d` is
 function plot_rt(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
-        week::Integer = 7, ramp::Real = 14.0,
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
         n_traj::Integer = 100)
     rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
     ndraws = size(rt, 1)
@@ -1314,7 +1558,8 @@ breakpoint lead). `display_start` is the shared grid day the panels draw from
 function plot_rt_streams(streams::AbstractVector;
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
-        display_start::Integer = 1, week::Integer = 7, ramp::Real = 14.0,
+        display_start::Integer = 1, week::Integer = 7,
+        ramp::Real = RT_INTERVENTION_RAMP,
         ncols::Integer = 2, joint_colour = :grey25)
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
@@ -1469,21 +1714,29 @@ function plot_forecast_latent(fc::DataFrame)
 end
 
 """
-One-week-ahead forecast of the observed confirmed quantities from
-[`forecast_reported`](@ref): new laboratory-confirmed cases and new
-confirmed deaths over the horizon. Each panel histograms the projected new
-count with its 90% predictive interval shaded. The panels are drawn only
-when the forecast carries the laboratory streams. The suspected reported
-streams are no longer reported, so they are not forecast here. The latent
-counterparts are shown by [`plot_forecast_latent`](@ref).
+One-week-ahead forecast of the observed count streams from
+[`forecast_reported`](@ref): the new count each stream adds over the horizon.
+Panels cover reported cases, suspected deaths, laboratory-confirmed cases,
+confirmed deaths and recovered, each drawn only when the forecast carries that
+stream's `*_new` column, so a fit that observes fewer streams shows fewer
+panels. Each panel histograms the projected new count with its 90% predictive
+interval shaded. The latent counterparts are shown by
+[`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
-    :confirmed_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod))
-    :confirmed_deaths_new in propertynames(fc) && push!(count_cols,
-        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3))
+    for (col, title, colour) in (
+        (:cases_new, "New reported cases (DRC)", :steelblue),
+        (:deaths_new, "New suspected deaths (DRC)", :firebrick),
+        (:confirmed_new, "New confirmed cases (DRC)", :goldenrod),
+        (:confirmed_deaths_new, "New confirmed deaths (DRC)", :darkorange3),
+        (:recovered_new, "New recovered (DRC)", :seagreen)
+    )
+        col in propertynames(fc) || continue
+        push!(count_cols, (col, title, colour))
+    end
     npanels = length(count_cols)
+    npanels == 0 && return Figure()
     ncols = min(npanels, 2)
     nrows = cld(npanels, ncols)
     fig = Figure(; size = (400 * ncols, 360 * nrows))
@@ -1601,37 +1854,43 @@ function plot_forecast_beds_vs_truth(fc::DataFrame;
 end
 
 """
-Confirmed-stream validation figure for a [`forecast_reported`](@ref)
-projection, laid out as a two-row grid. The top row shows the cumulative
-forecast distribution per confirmed stream (DRC confirmed cases and
-confirmed deaths); the bottom row shows the new counts forecast over the
-horizon. Each panel is a histogram with the 90% predictive interval shaded
+Validation figure for a [`forecast_reported`](@ref) projection, laid out as a
+two-row grid with one column per scored stream: the top row shows the
+cumulative forecast distribution, the bottom row the new count forecast over
+the horizon. Each panel is a histogram with the 90% predictive interval shaded
 and the later-observed count drawn as a dashed black rule, so the forecast
 distribution is scored against the count that was actually observed.
-`confirmed` and `confirmed_deaths` are the observed cumulative counts;
-`baseline_*` are the counts at the forecast origin, so the observed new
-count is the cumulative truth minus the baseline. The suspected reported
-streams are no longer reported, so they are not scored here. The latent
-counterparts are scored distribution-versus-distribution by
-[`plot_forecast_vs_truth_latent`](@ref).
+
+Streams are drawn in the order reported cases, suspected deaths,
+laboratory-confirmed cases, confirmed deaths and recovered, each shown only
+when the forecast carries that stream's `*_cum`/`*_new` columns and an observed
+cumulative count is supplied for it. `observed` is a `NamedTuple` mapping a
+stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
+cumulative count at the target date; a stream absent from `observed` is
+skipped. `baseline` maps the same columns to the cumulative count at the
+forecast origin (default `0`), so the observed new count is
+`max(observed − baseline, 0)`. The latent counterparts are scored
+distribution-versus-distribution by [`plot_forecast_vs_truth_latent`](@ref).
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        confirmed::Real, confirmed_deaths::Real,
-        baseline_confirmed::Real = 0,
-        baseline_confirmed_deaths::Real = 0)
+        observed::NamedTuple, baseline::NamedTuple = NamedTuple())
+    specs = (
+        (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
+        (:deaths_cum, :deaths_new, "suspected deaths (DRC)", :firebrick),
+        (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)", :goldenrod),
+        (:confirmed_deaths_cum, :confirmed_deaths_new,
+            "confirmed deaths (DRC)", :darkorange3),
+        (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
+    )
     streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}()
-    :confirmed_cum in propertynames(fc) &&
-        push!(streams,
-            (:confirmed_cum, :confirmed_new, "confirmed cases (DRC)",
-                :goldenrod, float(confirmed),
-                float(confirmed) - float(baseline_confirmed)))
-    :confirmed_deaths_cum in propertynames(fc) &&
-        push!(streams,
-            (:confirmed_deaths_cum, :confirmed_deaths_new,
-                "confirmed deaths (DRC)", :darkorange3,
-                float(confirmed_deaths),
-                float(confirmed_deaths) - float(baseline_confirmed_deaths)))
+    for (cumcol, newcol, name, colour) in specs
+        (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
+        obs = float(observed[cumcol])
+        base = float(get(baseline, cumcol, 0))
+        push!(streams, (cumcol, newcol, name, colour, obs, obs - base))
+    end
     ncols = length(streams)
+    ncols == 0 && return Figure()
     fig = Figure(; size = (370 * ncols, 680))
     function panel!(row, col, v, obs, title, colour)
         lo = quantile(v, 0.05)

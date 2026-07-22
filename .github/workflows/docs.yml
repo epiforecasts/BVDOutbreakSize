@@ -180,17 +180,29 @@ jobs:
       # "Estimate evolution across releases" figure picks up the newest
       # results-v* release. Best-effort: on any failure it uses the committed
       # data/released_estimates.csv.
-      - name: Refresh released-estimate overlay
+      - name: Refresh released-estimate and forecast-scoring overlays
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           (julia --project=scripts -e 'using Pkg; Pkg.instantiate()' &&
            julia --project=scripts scripts/refresh_releases.jl) ||
             echo "release refresh failed; using committed released_estimates.csv"
+          # Rescore every release's saved forecasts against the now-observed
+          # data and refresh the per-release R_T overlay. Best-effort: on any
+          # failure the committed forecast_scores.csv / rt_by_release.csv are
+          # used instead.
+          (julia --project=docs -e 'using Pkg; Pkg.instantiate()' &&
+           julia --project=docs scripts/score_releases.jl) ||
+            echo "score refresh failed; using committed scoring overlays"
       - name: Render ${{ matrix.page }}
         env:
           BVD_DOC_PAGE: ${{ matrix.page }}
           BVD_FIT_CACHE: logs/fit_cache
+          # The fit matrix has already produced every fit and they are collected
+          # above, so the render must only ever load from cache. Fail fast and
+          # loud on any miss (naming the key and dir) instead of silently
+          # refitting the whole report into the render-job timeout.
+          BVD_FIT_STRICT: true
           BVD_FIT_LOG: none
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
         run: julia --project=docs docs/execute.jl
@@ -358,7 +370,10 @@ jobs:
 
             Bundles the posterior summary tables, thinned posterior
             draws, the latent symptom-onset ("symptomatic cases")
-            trajectory over time (`onsets_over_time.csv`), a copy of the
+            trajectory over time (`onsets_over_time.csv`), the one- to
+            four-week-ahead forecasts of the observed streams
+            (`forecast.csv`, with the one-week-back validation forecast in
+            `forecast_validation.csv`) for later scoring, a copy of the
             input `observations.toml`, a
             `site.zip` snapshot of the rendered report site, and
             `analysis.html` — a self-contained single-file copy of the
