@@ -245,6 +245,33 @@ function _skill_by_release(df)
     return sub[ord, :]
 end
 
+## Headline forecast skill: mean CRPS, log-CRPS, coverage, bias and skill vs
+## the persistence baseline, one row per fit across all streams and horizons.
+## Empty until a release carries a stored forecast.
+function _headline_summary(df)
+    empty = DataFrame(; fit = String[], n = Int[], crps = Float64[],
+        log_crps = Float64[], coverage_50 = Float64[],
+        coverage_90 = Float64[], bias = Float64[],
+        skill_vs_baseline = Union{Missing, Float64}[])
+    isempty(df) && return empty
+    rows = NamedTuple[]
+    for f in sort(unique(df.fit))
+        f == "baseline" && continue
+        grp = df[df.fit .== f, :]
+        sb = _geo_skill(grp.log_rel_skill_to_baseline)
+        push!(rows,
+            (; fit = f, n = size(grp, 1),
+                crps = round(mean(grp.crps); digits = 2),
+                log_crps = round(mean(grp.log_crps); digits = 3),
+                coverage_50 = round(mean(grp.coverage_50); digits = 2),
+                coverage_90 = round(mean(grp.coverage_90); digits = 2),
+                bias = round(mean(grp.bias); digits = 2),
+                skill_vs_baseline = sb))
+    end
+    DataFrame(rows)
+end
+
+forecast_headline = _headline_summary(forecast_scores_df)
 forecast_skill_overall = _skill_overall(forecast_scores_df)
 forecast_skill_by_release = _skill_by_release(forecast_scores_df)
 
@@ -252,19 +279,29 @@ forecast_skill_by_release = _skill_by_release(forecast_scores_df)
 #md # </details>
 #md # ```
 
-# Forecast skill summary: geometric mean of log-scale CRPS ratios across releases.
+# Forecast skill by fit, across all streams and horizons.
 
-forecast_skill_overall #hide
+forecast_headline
 
-# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
-# headline, one row per stream, horizon and fit.
+#md # ```@raw html
+#md # <details><summary>Full forecast scores by stream, horizon and fit</summary>
+#md # ```
 
-forecast_score_table #hide
+forecast_score_table
 
-# The same skill ratios broken out by release, so a fit that wins overall but
-# not at every cut-off is visible.
+#md # ```@raw html
+#md # </details>
+#md # ```
 
-forecast_skill_by_release #hide
+#md # ```@raw html
+#md # <details><summary>Forecast skill ratios by release made-date</summary>
+#md # ```
+
+forecast_skill_by_release
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # Forecasts vs observed by release, stream and horizon.
 
@@ -303,6 +340,7 @@ frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
 frozen_score_table = forecast_score_summary(frozen_scores_df)
+frozen_headline = _headline_summary(frozen_scores_df)
 frozen_skill_overall = _skill_overall(frozen_scores_df)
 frozen_skill_by_release = _skill_by_release(frozen_scores_df)
 
@@ -310,18 +348,29 @@ frozen_skill_by_release = _skill_by_release(frozen_scores_df)
 #md # </details>
 #md # ```
 
-# Frozen forecast skill summary: geometric mean of log-scale CRPS ratios across cut-offs.
+# Frozen forecast skill by fit, across all cut-offs and streams.
 
-frozen_skill_overall #hide
+frozen_headline
 
-# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
-# headline, one row per stream, horizon and fit.
+#md # ```@raw html
+#md # <details><summary>Full frozen forecast scores by stream, horizon and fit</summary>
+#md # ```
 
-frozen_score_table #hide
+frozen_score_table
 
-# The same baseline skill broken out by frozen cut-off.
+#md # ```@raw html
+#md # </details>
+#md # ```
 
-frozen_skill_by_release #hide
+#md # ```@raw html
+#md # <details><summary>Frozen forecast skill ratios by cut-off</summary>
+#md # ```
+
+frozen_skill_by_release
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # Frozen forecasts vs observed by stream and horizon.
 
