@@ -880,7 +880,8 @@ and the legend covers every role drawn in any panel.
 Returns a figure carrying a short note in place of the panels when no
 forecasts have been scored yet.
 """
-function plot_forecast_overlay(overlay::DataFrame)
+function plot_forecast_overlay(overlay::DataFrame;
+        release_dates::Union{Nothing, AbstractVector{Date}} = nothing)
     streams = unique(overlay.stream)
     ## Scores accrue only once a release stores a forecast, so an empty
     ## table is the expected early state and says so rather than
@@ -932,6 +933,13 @@ function plot_forecast_overlay(overlay::DataFrame)
             yscale = log10,
             xticks = (_x.(tickdates), [string(d) for d in tickdates]),
             xticklabelrotation = pi / 4)
+        ## Faint vertical lines at every release date, so the reader can see
+        ## which releases have no scored forecast yet (no data point at that
+        ## x position).
+        if !isnothing(release_dates)
+            rx = [_x(d) for d in release_dates]
+            vlines!(ax, rx; color = (:grey, 0.15), linewidth = 0.5)
+        end
         isempty(cell) && continue
         ## Observed new count over each forecast's own window, one value per
         ## made date within this horizon.

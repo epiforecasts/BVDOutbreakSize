@@ -272,7 +272,16 @@ forecast_skill_by_release #hide
 #md # <details><summary>Forecasts-versus-now overlay</summary>
 #md # ```
 
-forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
+## Read the full release history to mark unscored releases on the overlay.
+_release_dates = _release_data("rt_by_release.csv",
+    (; release = String, date = Date, median = Float64,
+        lo30 = Float64, hi30 = Float64, lo60 = Float64, hi60 = Float64,
+        lo90 = Float64, hi90 = Float64))
+_release_date_vec = isempty(_release_dates) ? Date[] :
+                    sort(unique(_release_dates.date))
+
+forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df;
+    release_dates = _release_date_vec);
 
 #md # ```@raw html
 #md # </details>
@@ -329,7 +338,8 @@ frozen_skill_by_release #hide
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
 #md # ```
 
-frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
+frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df;
+    release_dates = _release_date_vec);
 
 #md # ```@raw html
 #md # </details>
