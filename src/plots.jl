@@ -929,6 +929,7 @@ function plot_forecast_overlay(overlay::DataFrame)
             title = r == 1 ? "$(h)-day ahead" : "",
             xlabel = r == nrows ? "Forecast made" : "",
             ylabel = c == 1 ? string(s) : "",
+            yscale = log10,
             xticks = (_x.(tickdates), [string(d) for d in tickdates]),
             xticklabelrotation = pi / 4)
         isempty(cell) && continue
