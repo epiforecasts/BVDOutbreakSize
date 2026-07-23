@@ -632,7 +632,7 @@ end
 ## `nothing` for an absent key, so the lookup is probed.
 function _has_key(chn, key)
     try
-        chn[key]
+        _draws(chn, key)
         return true
     catch
         return false
