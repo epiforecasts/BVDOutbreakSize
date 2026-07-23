@@ -19,6 +19,45 @@
     @test isfile(joinpath(dir, key * ".jls"))
 end
 
+@testitem "fit_or_load strict mode errors on a miss instead of fitting" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
+
+    dir = mktempdir()
+    calls = Ref(0)
+    thunk = () -> (calls[] += 1; (payload = "chain", n = 42))
+    key = "demo__" * content_hash([@__FILE__]; extra = "strict")
+
+    ## A strict miss must throw (naming the key and dir) and never run the thunk,
+    ## so a render can fail fast rather than silently refit the whole report.
+    @test_throws Exception fit_or_load(key, thunk; cache_dir = dir, strict = true)
+    @test calls[] == 0
+    @test !isfile(joinpath(dir, key * ".jls"))
+
+    ## Once the fit exists, strict mode loads it like a normal hit.
+    fit_or_load(key, thunk; cache_dir = dir)          # populate (non-strict miss)
+    r = fit_or_load(key, thunk; cache_dir = dir, strict = true)
+    @test r == (payload = "chain", n = 42)
+    @test calls[] == 1                                # only the populating fit ran
+end
+
+@testitem "every score_releases overlay is excluded from the fit hash" tags=[:quality] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## score_releases.jl runs in the render job (before rendering) and writes
+    ## overlay CSVs into data/. Every such file MUST be in FIT_DATA_EXCLUDE, or
+    ## the render's data-dir hash diverges from the fit matrix's, every fit key
+    ## changes, and the render misses the whole cache (a 2h refit / strict-mode
+    ## failure). Auto-derive the written files from the script so a new overlay
+    ## that forgets the exclusion fails here instead of in CI.
+    src = read(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String)
+    written = Set(m.captures[1]
+    for m in eachmatch(r"\"data\",\s*\"([\w.]+\.csv)\"", src))
+    @test length(written) >= 4          # guards against the regex silently missing all
+    for f in written
+        @test f in FIT_DATA_EXCLUDE
+    end
+end
+
 @testitem "content hash reflects inputs" tags=[:quality] begin
     include(joinpath(@__DIR__, "..", "docs", "fits", "cache.jl"))
 

@@ -225,6 +225,55 @@ end
           CairoMakie.Makie.Figure
 end
 
+@testitem "plot_evolution_by_group empty and filled" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+    ## Every group empty is the state before any per-dataset estimate is
+    ## saved: the guard must return the note figure, not throw.
+    empty_groups = ["joint" => NamedTuple[], "cases" => NamedTuple[]]
+    @test plot_evolution_by_group(empty_groups) isa CairoMakie.Makie.Figure
+    ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
+    joint = [
+        ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+    ]
+    cases = [
+        ("2026-06-21", 1.6, 1.4, 1.8, 1.2, 2.0, 1.0, 2.4),
+        ("2026-07-08", 1.9, 1.7, 2.1, 1.5, 2.4, 1.2, 2.9)
+    ]
+    ## A group with no estimates is dropped rather than drawn as an empty
+    ## panel, the recovered case where no individual fit exists.
+    groups = ["joint" => joint, "cases" => cases, "recovered" => NamedTuple[]]
+    @test plot_evolution_by_group(groups; refline = 1.0) isa
+          CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_overlay empty and filled" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## A zero-row overlay is the state before any release stores a forecast:
+    ## the guard must return the note figure, not throw.
+    empty = DataFrame(stream = String[], made_date = Date[], horizon = Int[],
+        target_date = Date[], fit = String[], observed = Float64[],
+        median = Float64[], lo90 = Float64[], hi90 = Float64[])
+    @test plot_forecast_overlay(empty) isa CairoMakie.Makie.Figure
+    ## Filled with the fit roles: confirmed_cases carries baseline, its
+    ## individual fit and the joint; recovered carries only baseline and the
+    ## joint, so its individual role is simply absent.
+    rows = NamedTuple[]
+    spec = ["confirmed_cases" => ["baseline", "confirmed", "joint"],
+        "recovered" => ["baseline", "joint"]]
+    for (stream, fits) in spec, md in [Date(2026, 6, 21), Date(2026, 6, 28)],
+        h in [7, 14], fit in fits
+        med = 20.0 + h
+        push!(rows,
+            (; stream = stream, made_date = md, horizon = h,
+                target_date = md + Day(h), fit = fit, observed = 18.0 + h,
+                median = med, lo90 = med * 0.7, hi90 = med * 1.4))
+    end
+    @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using Dates: Date
@@ -268,7 +317,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt, knot_days
+    using BVDOutbreakSize: plot_rt, knot_days, RT_INTERVENTION_RAMP
     rng = MersenneTwister(17)
     ndraws = 120
     n = 95
@@ -288,7 +337,8 @@ end
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
     fig = plot_rt(chn; n = n, breakpoint = n - 11,
-        as_of_date = "2026-05-28", seeding = Date("2026-02-23"))
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
+        ramp = RT_INTERVENTION_RAMP)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -296,7 +346,7 @@ end
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
-    using BVDOutbreakSize: plot_rt_streams, knot_days
+    using BVDOutbreakSize: plot_rt_streams, knot_days, RT_INTERVENTION_RAMP
     rng = MersenneTwister(31)
     ndraws = 80
     n = 95
@@ -329,7 +379,8 @@ end
         rt_start = joint_walk, rt_walk_start = joint_walk)
     fig = plot_rt_streams(streams; joint = joint, n = n,
         breakpoint = breakpoint, as_of_date = "2026-05-28",
-        seeding = Date("2026-02-23"), display_start = joint_walk)
+        seeding = Date("2026-02-23"), display_start = joint_walk,
+        ramp = RT_INTERVENTION_RAMP)
     @test fig isa CairoMakie.Makie.Figure
 end
 
@@ -416,6 +467,10 @@ end
     using BVDOutbreakSize: plot_forecast
     rng = MersenneTwister(32)
     n = 300
+    naxes(fig) = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
+    ## A frame carrying every observed count stream draws one panel per stream:
+    ## reported cases, suspected deaths, confirmed cases, confirmed deaths and
+    ## recovered.
     fc = DataFrame(
         cases_cum = rand(rng, 50:150, n),
         deaths_cum = rand(rng, 40:100, n),
@@ -425,11 +480,27 @@ end
         deaths_new = rand(rng, 0:20, n),
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_new = rand(rng, 0:5, n),
+        recovered_new = rand(rng, 0:10, n),
         infections_new = abs.(randn(rng, n)) .* 500,
         rt_forecast = 1.0 .+ abs.(randn(rng, n)) .* 0.5
     )
     fig = plot_forecast(fc)
     @test fig isa CairoMakie.Makie.Figure
+    @test naxes(fig) == 5
+    ## A single-stream fit that carries only the confirmed columns still draws
+    ## just those two panels (backward-compatible with the confirmed-only frame).
+    fc_conf = DataFrame(
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_new = rand(rng, 0:5, n)
+    )
+    fig_conf = plot_forecast(fc_conf)
+    @test fig_conf isa CairoMakie.Makie.Figure
+    @test naxes(fig_conf) == 2
+    ## A frame carrying no observed count stream returns an empty figure rather
+    ## than erroring on the panel-grid layout.
+    fig_empty = plot_forecast(DataFrame(rt_forecast = rand(rng, n)))
+    @test fig_empty isa CairoMakie.Makie.Figure
+    @test naxes(fig_empty) == 0
 end
 
 @testitem "plot_forecast_beds returns a Makie figure" setup=[HeadlessMakie] begin
@@ -501,23 +572,59 @@ end
     using BVDOutbreakSize: plot_forecast_vs_truth
     rng = MersenneTwister(33)
     n = 300
+    naxes(fig) = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
     fc = DataFrame(
         confirmed_cum = rand(rng, 20:80, n),
         confirmed_deaths_cum = rand(rng, 1:20, n),
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_new = rand(rng, 0:5, n)
     )
+    ## Two confirmed streams supplied observed cumulatives: two columns of a
+    ## cumulative-and-new panel each, four axes.
     fig = plot_forecast_vs_truth(fc;
-        confirmed = 70, confirmed_deaths = 18)
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
     @test fig isa CairoMakie.Makie.Figure
-    ## Confirmed-deaths column absent: the confirmed-deaths panel is dropped
-    ## without error, leaving the confirmed-cases panel alone.
+    @test naxes(fig) == 4
+    ## A stream whose cumulative column is absent is dropped without error even
+    ## when an observed value is supplied, leaving the confirmed-cases panel
+    ## alone (two axes).
     fc_cases = DataFrame(
         confirmed_cum = rand(rng, 20:80, n),
         confirmed_new = rand(rng, 0:15, n))
     fig2 = plot_forecast_vs_truth(fc_cases;
-        confirmed = 70, confirmed_deaths = 18)
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
     @test fig2 isa CairoMakie.Makie.Figure
+    @test naxes(fig2) == 2
+    ## All five scored streams present with observed cumulatives, one with a
+    ## baseline: five columns of two panels give ten axes.
+    fc_all = DataFrame(
+        cases_cum = rand(rng, 50:150, n),
+        cases_new = rand(rng, 0:30, n),
+        deaths_cum = rand(rng, 40:100, n),
+        deaths_new = rand(rng, 0:20, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        confirmed_deaths_new = rand(rng, 0:5, n),
+        recovered_cum = rand(rng, 10:60, n),
+        recovered_new = rand(rng, 0:10, n)
+    )
+    fig3 = plot_forecast_vs_truth(fc_all;
+        observed = (cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
+            confirmed_deaths_cum = 18, recovered_cum = 55),
+        baseline = (confirmed_cum = 40,))
+    @test fig3 isa CairoMakie.Makie.Figure
+    @test naxes(fig3) == 10
+    ## A stream present in the frame but absent from `observed` stays absent, so
+    ## here recovered adds no panel and only the confirmed streams are drawn.
+    fig4 = plot_forecast_vs_truth(fc_all;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18))
+    @test fig4 isa CairoMakie.Makie.Figure
+    @test naxes(fig4) == 4
+    ## No observed values at all yields an empty figure rather than erroring.
+    fig5 = plot_forecast_vs_truth(fc_all; observed = NamedTuple())
+    @test fig5 isa CairoMakie.Makie.Figure
+    @test naxes(fig5) == 0
 end
 
 @testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin

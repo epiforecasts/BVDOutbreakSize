@@ -358,7 +358,7 @@ intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
 """
 function sigmoid_ramp(n::Integer, day::Union{Missing, Real};
-        ramp::Real = 21.0)
+        ramp::Real = RT_INTERVENTION_RAMP)
     ismissing(day) && return zeros(Float64, n)
     return Float64[logistic((t - day) / ramp) for t in 1:n]
 end

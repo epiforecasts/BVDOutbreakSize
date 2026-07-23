@@ -2177,20 +2177,48 @@ diagnostics_table( #hide
 # recent trend of its trajectory rather than holding it fixed, with no
 # further interventions and no saturation imposed.
 # The projection carries both parameter and observation uncertainty.
-# We forecast the two confirmed DRC streams (laboratory-confirmed cases and
-# confirmed deaths) as the forecast targets, and also the isolation/treatment
-# beds and the cumulative recovered total. For the beds we project both the
-# bed demand (the need a week ahead, under unconstrained supply, the cut-off
-# demand grown by the horizon factor like the case inflow) and the
-# supply-limited occupancy that demand produces against the bed capacity. The
-# gap between them is the projected bed shortfall, the quantity of interest
-# if bed occupancy is supply-constrained. The suspected case and death
-# streams are no longer published, so they are not shown as
-# targets. Exports are not forecast either, since cross-border travel is
+# We forecast the DRC observation streams as forecast targets: the reported
+# cases and suspected deaths, the laboratory-confirmed cases and confirmed
+# deaths, the isolation/treatment beds and the recovered total. For the beds
+# we project both the bed demand (the need a week ahead, under unconstrained
+# supply, the cut-off demand grown by the horizon factor like the case
+# inflow) and the supply-limited occupancy that demand produces against the
+# bed capacity. The gap between them is the projected bed shortfall, the
+# quantity of interest if bed occupancy is supply-constrained. The reported
+# case and suspected death streams are no longer published, so their
+# forecasts extend the last published cumulative total rather than a
+# still-growing series. Exports are not forecast, since cross-border travel is
 # unlikely to continue at its baseline rate, so the forward travel rate the
 # export model relies on no longer holds. The figure is shown in the
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
+#
+# Each release now saves its forecast as an asset so it can later be scored
+# against what is observed.
+# Earlier releases showed a forecast but did not store it, so those forecasts
+# are reconstructed.
+# `scripts/backfill_forecasts.jl` checks out each past release at its own tag,
+# re-runs that release's own model code on that release's data through its own
+# fit, and writes the forecast in the same archive schema, so a reconstructed
+# forecast is the release's own output rather than a current-code
+# approximation.
+# The reconstruction re-resolves dependencies at current versions, since the
+# release manifests were not pinned, so it reproduces the release's model and
+# data but not its exact solver build.
+# Reconstruction reaches back to the first release that carried any forecast,
+# so it covers the whole release history, but the streams available grow over
+# time as the model and data did.
+# The renewal releases from v1.4.0 reconstruct the incident case and death
+# streams, extending to all four streams from v1.6.0 once the recovered and
+# isolation series entered the data.
+# The integral-era v1.3.0 reconstructs the confirmed case and death streams.
+# The earliest releases, v1.0.0 to v1.2.0, forecast the reported case,
+# suspected death, and export streams, and are reconstructed from each tag's
+# own inline model code.
+# Reconstructed forecasts are published as a separate backfill release and
+# scored alongside the stored ones by the
+# [forecast scoring across releases](@ref "Forecast scoring across releases")
+# section.
 #
 # #### Forecast-versus-frozen evaluation
 #
@@ -2477,7 +2505,7 @@ rt_fig = plot_rt(chn_joint;
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    ramp = 21.0);
+    ramp = RT_INTERVENTION_RAMP);
 
 #md # ```@raw html
 #md # </details>
@@ -3222,10 +3250,13 @@ confirmed_cfr_fig #hide
 
 # ### One-week-ahead forecast results
 #
-# The cumulative and new expected counts by $T + 7$ for the two confirmed DRC
-# streams (laboratory-confirmed cases and confirmed deaths), from the
-# no-change projection defined in the methods
-# [one-week-ahead forecast](@ref "One-week-ahead forecast").
+# The cumulative and new expected counts by $T + 7$ from the no-change
+# projection defined in the methods
+# [one-week-ahead forecast](@ref "One-week-ahead forecast"). The summary
+# table reports the confirmed case and death streams, the recovered total and
+# the isolation-bed levels and daily flows; the observed-forecast plot below
+# additionally shows the reported cases and suspected deaths, so every
+# projected stream appears.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3270,6 +3301,10 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 #md # ```
 
 forecast_latent_fig #hide
+
+# The observed figure shows the new count each reported stream adds over the
+# horizon: reported cases, suspected deaths, laboratory-confirmed cases,
+# confirmed deaths and recovered, one panel per stream the forecast carries.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>
@@ -3333,7 +3368,9 @@ forecast_flows_fig #hide
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
 # The release bundles the summary tables, a thinned set of
 # posterior draws, the latent symptom-onset ("symptomatic cases")
-# trajectory over time, and a copy of the input `observations.toml` so
+# trajectory over time, the one- to four-week-ahead forecasts of the
+# observed streams (so each release records the forecast it made, for later
+# scoring), and a copy of the input `observations.toml` so
 # the exact data that produced each result is recorded alongside it.
 
 #md # ```@raw html
@@ -3370,6 +3407,11 @@ cp(joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
 ## read off the last day of each draw's `cumulative_onsets` trajectory.
 _cum_onset_draws = vec(collect(chn_joint[:cumulative_onsets]))
 cumulative_onsets_T = Float64[v[end] for v in _cum_onset_draws]
+## Raw walk base `log_R0`, the renewal reproduction-number walk's starting
+## point on the log scale, kept unexponentiated so downstream scoring takes
+## its own exp. This is a distinct quantity from `r0`, the growth-clock
+## initial rate, so both columns are published side by side.
+log_R0_draws = vec(Array(chn_joint[Symbol("rt_state.log_R0")]))
 posterior_draws = DataFrame(
     r = vec(Array(chn_joint[:r])),
     r0 = vec(Array(chn_joint[:r0])),
@@ -3382,8 +3424,171 @@ posterior_draws = DataFrame(
     C_T = vec(Array(chn_joint[:C_T])),
     cumulative_onsets_T = cumulative_onsets_T,
     confirmed_cfr_corrected = confirmed_cfr.corrected
-)[1:10:end, :]
+)
+posterior_draws[!, Symbol("rt_state.log_R0")] = log_R0_draws
+posterior_draws = posterior_draws[1:10:end, :]
 CSV.write(joinpath(output_dir, "posterior_draws.csv"), posterior_draws);
+
+## One- to four-week-ahead forecasts of the observed streams, saved as a
+## release asset so each release records the forecast it made and it can later
+## be scored against what is observed. Only the incident and level quantities
+## are archived (see `forecast_archive`), thinned to keep the asset compact.
+forecast_horizons = (7, 14, 21, 28)
+forecast_runs = [(h,
+                     forecast_reported(chn_joint; horizon = h,
+                         obs_cases = obs.reported_cases,
+                         obs_deaths = obs.total_deaths,
+                         obs_confirmed = obs.confirmed_cases,
+                         obs_confirmed_deaths = obs.confirmed_deaths,
+                         obs_recovered = obs.recovered_cases))
+                 for h in forecast_horizons]
+CSV.write(joinpath(output_dir, "forecast.csv"),
+    forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
+
+## The same one- to four-week-ahead forecast made from each FROZEN joint
+## re-fit (the McCabe-matched cut-offs, the Chamla anchor and the one-week-back
+## validation fit), each stamped with its OWN cut-off as the made date. This
+## gives historical forecast evaluation using the current model at past data
+## cut-offs, scored against what has since been observed, without
+## reconstructing old release tags. Each frozen fit uses its own frozen
+## observations for the cut-off counts. The May cut-offs predate the isolation
+## and recovered streams, so those are simply absent for them; the per-stream
+## guard in `forecast_archive` skips a stream a fit does not carry.
+frozen_forecast_fits = unique(f -> f.o.cutoff,
+    [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek])
+frozen_forecast_archive = DataFrame(made_date = Date[], horizon = Int[],
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[])
+for f in frozen_forecast_fits
+    runs = [(h,
+                forecast_reported(f.chn; horizon = h,
+                    obs_cases = f.o.reported_cases,
+                    obs_deaths = f.o.total_deaths,
+                    obs_confirmed = f.o.confirmed_cases,
+                    obs_confirmed_deaths = f.o.confirmed_deaths,
+                    obs_recovered = f.o.recovered_cases))
+            for h in forecast_horizons]
+    append!(frozen_forecast_archive,
+        forecast_archive(runs; made_date = f.o.cutoff, thin = 5))
+end
+CSV.write(joinpath(output_dir, "forecast_frozen.csv"),
+    frozen_forecast_archive);
+
+## Per-fit release assets: the reproduction number, outbreak size and forecasts
+## for every fit rather than the joint alone, so a release records what each
+## dataset implies on its own and can later be scored against the joint. The
+## single-stream fits walk Rt from day 1 while the joint walks from
+## `RT_WALK_LEAD` days before the first situation report, so each fit carries
+## the starts its own fit used. Each single-stream fit forecasts only the
+## dataset it observes; the joint forecasts every shared stream. Recovered has
+## no single-stream fit, so it stays a joint-only stream in `forecast.csv`.
+stream_thin = 5
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+## Observed bed occupancy at the cut-off, the level the isolation forecast
+## anchors on.
+_iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
+                 obs.isolation_history.counts[end]
+stream_fits = [
+    (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint,
+        streams = [(:reported_cases, "reported cases", obs.reported_cases),
+            (:suspected_deaths, "suspected deaths", obs.total_deaths),
+            (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
+            (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
+            (:isolation_beds, "isolation beds", _iso_at_cutoff),
+            (:exports, "exports", obs.exported_cases)]),
+    (; fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
+        streams = [(:reported_cases, "reported cases", obs.reported_cases)]),
+    (; fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
+        streams = [(:suspected_deaths, "suspected deaths", obs.total_deaths)]),
+    (; fit = "confirmed", chn = chn_confirmed, rt_start = 1, rt_walk_start = 1,
+        streams = [(:confirmed_cases, "confirmed cases", obs.confirmed_cases)]),
+    (; fit = "confirmed_deaths", chn = chn_confirmed_deaths, rt_start = 1,
+        rt_walk_start = 1,
+        streams = [(:confirmed_deaths, "confirmed deaths",
+            obs.confirmed_deaths)]),
+    (; fit = "treatment", chn = chn_treatment, rt_start = 1,
+        rt_walk_start = 1,
+        streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)]),
+    (; fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
+        streams = [(:exports, "exports", obs.exported_cases)])
+]
+
+## Cut-off reproduction number per fit. The joint exposes it as `R_T`; the
+## single-stream composers do not (the alias lives in `bvd_joint`, not the
+## shared latent submodel), so theirs is rebuilt from the walk parameters every
+## chain carries and read at the cut-off, the last day of the reconstructed
+## path. `ramp` matches the model's 21-day intervention scale-up.
+function _fit_rt_draws(f)
+    f.fit == "joint" && return vec(Array(f.chn[:R_T]))
+    rt = reconstruct_rt(f.chn; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start, ramp = RT_INTERVENTION_RAMP)
+    return Float64[rt[i, obs.n] for i in axes(rt, 1)]
+end
+
+_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])))
+                      for f in stream_fits]
+
+## One row per fit and quantity, with the median and the 30/60/90% credible
+## bounds the report's tables use.
+function _stream_estimate_row(fit, quantity, draws)
+    s = posterior_summary(draws)
+    return (fit = fit, quantity = quantity, median = quantile(draws, 0.5),
+        lo30 = s.lo30, hi30 = s.hi30, lo60 = s.lo60, hi60 = s.hi60,
+        lo90 = s.lo90, hi90 = s.hi90)
+end
+stream_estimates = DataFrame([_stream_estimate_row(fit, q, d)
+                              for (fit, rt, ct) in _stream_quantities
+                              for (q, d) in (("R_T", rt), ("C_T", ct))])
+CSV.write(joinpath(output_dir, "stream_estimates.csv"), stream_estimates);
+
+## Thinned reproduction-number and outbreak-size draws per fit, so downstream
+## scoring can recompute its own summaries rather than reuse the intervals.
+stream_draws = DataFrame([(fit = fit, quantity = q, draw = d, value = v)
+                          for (fit, rt, ct) in _stream_quantities
+                          for (q, vals) in (("R_T", rt), ("C_T", ct))
+                          for (d, v) in enumerate(vals[1:stream_thin:end])])
+CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
+
+## Per-fit forecasts of each fit's own observed stream, in the `forecast.csv`
+## long schema plus the fit that made them. Rebuilding a single-stream fit's
+## cut-off growth rate needs the grid length and the breakpoint, which are data
+## rather than chain contents, so both are passed.
+stream_forecasts = DataFrame(made_date = Date[], horizon = Int[],
+    target_date = Date[], stream = String[], draw = Int[], value = Float64[],
+    fit = String[])
+for f in stream_fits, (stream, label, obs_value) in f.streams,
+    h in forecast_horizons
+    _vals = forecast_stream(f.chn, stream; horizon = h,
+        obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start)
+    for (d, i) in enumerate(1:stream_thin:length(_vals))
+        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
+            d, Float64(_vals[i]), f.fit))
+    end
+end
+
+## Confirmed/suspect ward-bed occupancy for the joint, taken from the joint's
+## own `forecast_reported` runs (partitioned by the cut-off confirmed share in
+## `forecast_reported`, not re-derived here) so the ward beds are scored on the
+## same footing as the total occupancy in the preferred `stream_forecasts.csv`
+## asset. `forecast_stream` cannot project these — the split is not a growable
+## stream but a partition of the total — so they are read from the archive
+## runs. Dormant until the chain carries the confirmed in-care split:
+## `forecast_reported` emits these columns only when the confirmed in-care
+## prevalence `expected_confirmed_incare_T` is present, so the guard skips
+## them otherwise.
+for (h, fc) in forecast_runs,
+    (col, label) in ((:suspect_occupancy, "isolation beds (suspected)"),
+        (:confirmed_occupancy, "treatment beds"))
+
+    col in propertynames(fc) || continue
+    _wvals = fc[!, col]
+    for (d, i) in enumerate(1:stream_thin:length(_wvals))
+        push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
+            d, Float64(_wvals[i]), "joint"))
+    end
+end
+CSV.write(joinpath(output_dir, "stream_forecasts.csv"), stream_forecasts);
 
 ## Latent symptom-onset trajectory over time, the "symptomatic cases" curve,
 ## showing outbreak growth: one row per grid day with the 30/60/90%

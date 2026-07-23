@@ -207,14 +207,14 @@ at or below zero. This is stronger than the earlier symmetric
 drifted up unchecked) and the one-sided lean `Normal(-0.3, 0.4)`: the
 response now has a definite non-increasing effect, with the half-normal
 admitting anything from no effect (mode) to a substantial decline. Because
-the breakpoint is only ≈11 days before the cut-off and the ramp is a
-fortnight, the response damps `R_t` only partially by the cut-off.
+the breakpoint is only ≈11 days before the cut-off and the ramp is three
+weeks, the response damps `R_t` only partially by the cut-off.
 """
 @model function rt_walk_model(n::Integer, log_R0_base::Real;
         week::Integer = 7,
         breakpoint::Union{Missing, Real} = missing,
         rt_start::Integer = 1,
-        ramp::Real = 21.0,
+        ramp::Real = RT_INTERVENTION_RAMP,
         sigma_prior = truncated(Normal(0, 0.1); lower = 0),
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)

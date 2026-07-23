@@ -31,11 +31,13 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
+       RT_INTERVENTION_RAMP,
        load_observations, freeze_observations, m_prior_centre,
        summary_table, posterior_summary, markdown_table,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
+       crps_sample, log_crps_sample, score_draws, forecast_score_summary,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,
@@ -45,14 +47,17 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_posterior_predictive, plot_posterior_predictive_grid,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
        plot_correlation_heatmap, plot_stream_pairs,
-       plot_estimate_evolution, plot_projection_comparison,
+       plot_estimate_evolution, plot_evolution_by_group,
+       plot_forecast_overlay,
+       plot_projection_comparison,
        plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        plot_vintage_incidence_ppc, plot_stream_calibration,
        plot_rt, plot_rt_streams,
        reconstruct_rt,
        predict_no_onward_deaths, plot_no_onward_deaths,
-       forecast_reported, forecast_table, plot_forecast,
+       forecast_reported, forecast_stream, forecast_table, forecast_archive,
+       plot_forecast,
        plot_forecast_latent, plot_forecast_beds, plot_forecast_flows,
        forecast_vs_truth, forecast_vs_truth_trajectory,
        plot_forecast_vs_truth, plot_forecast_vs_truth_latent,
@@ -104,6 +109,7 @@ include("data.jl")
 include("sampling.jl")
 include("renewal.jl")
 include("summaries.jl")
+include("scoring.jl")
 include("counterfactual.jl")
 include("forecast.jl")
 include("confirmed_cfr.jl")
