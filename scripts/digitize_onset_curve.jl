@@ -26,10 +26,12 @@
 #     segments but stopping at the wide white gap up to the floating label /
 #     dashed line above the bar.
 #
-# Accuracy: digitised per-vintage totals run ~2% below the printed figure `n`
-# (SitRep 064: 2018 vs printed n=2 064); individual bars carry roughly +/-1-2
-# cases of pixel noise. The values are approximate and are NOT fitted by the
-# model; they are captured for later use (see data/README.md).
+# Accuracy: digitised per-vintage totals run 2-5% below the printed figure `n`
+# (SitRep 064: 2018 vs printed n=2 064; SitRep 070: 2260 vs n=2 329); individual
+# bars carry roughly +/-1-2 cases of pixel noise. The shortfall sits in the
+# faded bars of the `donnees potentiellement incompletes` band, whose lightened
+# fill falls outside the colour masks. The values are approximate and are NOT
+# fitted by the model; they are captured for later use (see data/README.md).
 #
 # Dependencies: poppler (`pdfimages`, `pdftotext`, `pdfinfo`) on PATH. No
 # Julia packages beyond stdlib.
@@ -52,7 +54,12 @@ const CONFIG = [
     ("060", Date(2026, 7, 13), Date(2026, 7, 12)),
     ("061", Date(2026, 7, 14), Date(2026, 7, 12)),
     ("062", Date(2026, 7, 15), Date(2026, 7, 12)),
-    ("064", Date(2026, 7, 17), Date(2026, 7, 15))
+    ("064", Date(2026, 7, 17), Date(2026, 7, 15)),
+    ("065", Date(2026, 7, 18), Date(2026, 7, 15)),
+    ("066", Date(2026, 7, 19), Date(2026, 7, 15)),
+    ("067", Date(2026, 7, 20), Date(2026, 7, 15)),
+    ("069", Date(2026, 7, 22), Date(2026, 7, 22)),
+    ("070", Date(2026, 7, 23), Date(2026, 7, 22))
 ]
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -105,11 +112,14 @@ end
 
 # The onset figure is a blue-dominant daily bar chart with no orange (the
 # age/sex pyramids use orange; the notification-week chart uses a darker
-# steel blue and prints value labels).
+# steel blue and prints value labels). The blue floor is well below the
+# smallest onset figure seen (SitReps 069/070 embed it at 1009x583, blue
+# ~50k, against ~66-95k for the larger 059-067 renderings) and well above
+# the largest non-onset image sharing its page (~5k).
 function is_onset_curve(R, G, B)
     m = masks(R, G, B)
     orange = (R .> 200) .& (G .> 110) .& (G .< 195) .& (B .< 90)
-    return sum(m.blue) > 60000 && sum(orange) < 500 && sum(m.red) > 20000
+    return sum(m.blue) > 20000 && sum(orange) < 500 && sum(m.red) > 20000
 end
 
 function longest_run(col)
@@ -137,6 +147,33 @@ function cluster(idx; gap = 3)
     return out
 end
 
+# The 0/20/40/60 y-axis tick rows, read from the label strip just left of
+# the vertical axis line (searched from column 30 to skip the left image
+# border). Candidate strips are scored by the longest dark vertical run (the
+# axis line itself), but only among strips whose rows form a plausible axis:
+# at least three clusters, evenly spaced, with the last one (the 0 tick) on
+# the baseline. Taking the longest run alone is not enough - in SitRep 067 a
+# glyph stroke outruns the real axis line and yields a scale that halves
+# every count.
+function y_axis_ticks(dark, base, H, W)
+    best = nothing
+    for x in 30:floor(Int, W * 0.13)
+        seg = vec(sum(dark[1:min(base + 3, H), max(1, x - 10):(x - 1)];
+            dims = 2))
+        yt = cluster([y for y in 1:length(seg) if seg[y] >= 3])
+        length(yt) < 3 && continue
+        abs(yt[end] - base) > 3 && continue
+        d = diff(yt)
+        (minimum(d) <= 5 || maximum(d) > 1.15 * minimum(d)) && continue
+        rank = (longest_run(@view dark[1:base, x]), -x)  # tie-break leftmost
+        if best === nothing || rank > best[1]
+            best = (rank, yt)
+        end
+    end
+    best === nothing && error("no y-axis tick strip found")
+    return best[2]
+end
+
 function digitize(R, G, B, last_tick::Date)
     H, W = size(R)
     m = masks(R, G, B)
@@ -144,19 +181,22 @@ function digitize(R, G, B, last_tick::Date)
     drow = vec(sum(dark; dims = 2))
     drow[1:floor(Int, H * 0.4)] .= 0
     base = argmax(drow)                   # count-0 baseline row
-    # y scale from the 0/20/40/60 ticks left of the vertical axis line
-    # (search from column 30 to skip the left image border)
-    xsearch = 30:floor(Int, W * 0.13)
-    axc = xsearch[argmax([longest_run(@view dark[1:base, x])
-                          for x in xsearch])]
-    seg = vec(sum(dark[1:min(base + 3, H), max(1, axc - 10):(axc - 1)];
-        dims = 2))
-    yt = cluster([y for y in 1:length(seg) if seg[y] >= 3])
+    # count scale from the 0/20/40/60 y-axis ticks
+    yt = y_axis_ticks(dark, base, H, W)
     ppc = median(diff(yt)) / 20.0         # pixels per count
     ytop, y0 = yt[1], yt[end]
-    # x scale from the weekly tick marks below the baseline
+    # x scale from the weekly tick marks below the baseline. The tick marks
+    # are only a few pixels tall and shrink with the embedded figure
+    # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
+    # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
+    # cut down until a full weekly row of ticks resolves instead of fixing
+    # it at 4 and losing the axis entirely on the smaller figures.
     band = vec(sum(dark[(base + 2):min(base + 8, H), :]; dims = 1))
-    xt = cluster([x for x in 1:W if band[x] >= 4])
+    xt = Int[]
+    for cut in (4, 3, 2)
+        xt = cluster([x for x in 1:W if band[x] >= cut])
+        length(xt) >= 8 && break
+    end
     ppd = median(diff(xt)) / 7.0          # pixels per day
     lastx = xt[end]                       # rightmost tick is always real
     # per-column stacked bar height, flooded up from the baseline
