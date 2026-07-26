@@ -17,5 +17,8 @@ Pkg.Registry.update()
 Pkg.instantiate()
 using JuliaFormatter
 dirs = ["src", "test", "docs", "scripts"]
-all_ok = all(d -> JuliaFormatter.format(d; overwrite = true), dirs)
-exit(all_ok ? 0 : 1)'
+# `map`, not `all`: `all` short-circuits, so an unformatted file in an early
+# directory left every later one unformatted AND unreported, one round trip per
+# directory. Every directory is rewritten in a single pass.
+results = map(d -> JuliaFormatter.format(d; overwrite = true), dirs)
+exit(all(results) ? 0 : 1)'
