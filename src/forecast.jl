@@ -660,7 +660,15 @@ end
 ##   first because both fit kinds carry it; the un-prefixed joint alias is
 ##   the fallback. The names differ in whether they carry a `_T` suffix
 ##   (`deaths_state.expected_deaths_T` and `exports_state.expected_exports_T`
-##   do, `cases_state.expected_reports` does not).
+##   do, `cases_state.expected_reports` does not). `:confirmed_cases` is the
+##   exception with no nested name at all:
+##   [`confirmed_cases_model`](@ref) keeps its derived quantities on plain
+##   `=` rather than `:=` (a `:=` there builds a tracking closure over the
+##   boxed `p_pos` that Enzyme cannot differentiate through, see #445 and
+##   #453), so NEITHER fit kind carries
+##   `confirmed_state.expected_confirmed`. Both [`bvd_joint`](@ref) and
+##   [`confirmed_only_model`](@ref) alias the cut-off count un-prefixed as
+##   `expected_confirmed_T` instead, so that single name serves both.
 ## - `dispersion`: each fit's OWN dispersion, read as it stands. The two
 ##   candidate sets are disjoint by fit kind: the joint carries only the
 ##   per-stream aliases (`k_cases`, `isolation_dispersion`, …), since
@@ -697,8 +705,7 @@ const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
         trajectory = [:cumulative_deaths_total],
         kind = :cumulative, noise = :nb),
     :confirmed_cases => (
-        expected = [Symbol("confirmed_state.expected_confirmed"),
-            :expected_confirmed_T],
+        expected = [:expected_confirmed_T],
         dispersion = [:k_confirmed, Symbol("dispersion_state.k")],
         trajectory = [:cumulative_confirmed],
         kind = :cumulative, noise = :nb),
