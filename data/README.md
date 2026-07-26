@@ -54,12 +54,21 @@ Both self-calibrate each figure from its axis ticks; the only manual input is
 each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate.
-The digitised per-vintage totals run about 2% below the printed figure `n`
-(SitRep 064: 2018 vs printed n = 2 064), and individual daily bars carry
-roughly ±1–2 cases of pixel noise.
-SitReps 059 and 060 reuse one figure, as do 061 and 062, so the five scanned
-vintages hold three distinct onset snapshots (report dates 12, 14 and
-17 July).
+The digitised per-vintage totals run 2–5% below the printed figure `n`
+(SitRep 064: 2018 vs printed n = 2 064; SitRep 070: 2260 vs n = 2 329), and
+individual daily bars carry roughly ±1–2 cases of pixel noise.
+The shortfall is concentrated in the faded bars inside the
+`données potentiellement incomplètes` band at the right of each figure, whose
+lightened fill falls outside the colour masks.
+SitReps 059 and 060 reuse one figure, as do 061 and 062 and 069 and 070, so
+the ten scanned vintages hold seven distinct onset snapshots (report dates
+12, 14, 17, 18, 19, 20 and 22 July).
+SitRep 068 (21 July) is absent: the INRB-UMIE mirror never carried its PDF,
+so there is no figure to digitise for that vintage; the manifest streams for
+21 July come from the SitRep 068 scan recorded in `insp_sitrep_scanned.csv`.
+The embedded figures shrink from SitRep 069 (1009×583 against 1257×698 for
+SitRep 064), which is why the figure-detection and axis-tick thresholds in
+both scripts are resolution-tolerant rather than fixed.
 
 This stream is **not fitted**: the model does not yet read
 `onset_curve_scanned.csv`.
@@ -71,15 +80,20 @@ can be added later.
 Because each vintage redraws the same onset cohort at a later report date, the
 scanned curves form a reporting triangle: old onset dates are stable across
 vintages while recent ones fill in as more confirmations arrive (e.g. onset
-10 July reads 4 → 9 → 27 across the 12, 14 and 17 July snapshots).
+10 July reads 4 → 9 → 27 → 33 → 37 → 39 → 40 across the 12, 14, 17, 18, 19,
+20 and 22 July snapshots).
 Taking the latest snapshot as the near-complete reference for onset dates at
 least ~12 days old, the empirical proportion of eventually-reported confirmed
-cases reported within `d` days of onset is roughly 65% by 7 days, 85% by
-~11 days and 95%+ by ~2 weeks, near-complete by ~3 weeks (median ~5–6 days).
-This is a coarse estimate: it rests on three digitised snapshots only, the
-reference snapshot is itself right-truncated for its most recent onsets, and
-the delay it measures is onset → confirmed-and-reported (it folds together
-care-seeking, lab confirmation and reporting).
+cases reported within `d` days of onset is roughly 60% by 7 days, 85% by
+~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by
+~3 weeks (median ~5–6 days).
+This supersedes the earlier three-snapshot estimate and shifts it slightly
+later; the seven-snapshot curve is flatter through the second week than the
+three-snapshot one suggested.
+This is still a coarse estimate: it rests on seven digitised snapshots over a
+ten-day window, the reference snapshot is itself right-truncated for its most
+recent onsets, and the delay it measures is onset → confirmed-and-reported
+(it folds together care-seeking, lab confirmation and reporting).
 
 ### Fetching a SitRep from INSP directly
 
@@ -173,6 +187,16 @@ the `source =` string and prefer the auditable value.
 - **Headline vs table disagreement**: prefer the auditable table sum and
   record the headline as the discrepancy (precedent: SitRep 009's 220 over
   the erroneous 119; SitRep 061's Fin J 736 over the page-1 typo 737).
+- **Retrospective harmonisation steps**: when a vintage's asterisked headline
+  jumps far beyond its own 24h new-case count because a provincial base was
+  integrated, record the harmonised headline (it is what the INRB-UMIE
+  `national_*` CSV carries) and state the gross-vs-net split in the
+  `source =` string, so the artefact is visible to whoever reads the
+  increment the daily likelihood actually fits. Precedents: SitRep 065
+  (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross vs +77 net) and
+  SitRep 069 (22 July, Ituri/Nord-Kivu base integration, +97 gross vs +369
+  net cases and +62 gross vs +236 net deaths — much the largest so far, and
+  called out in the report's own footnote).
 - **Format change from SitRep 059**: the analytique format moved the 24h
   analysed counts to §3.2 Laboratoire bullets, dropped the page-1 suspect-
   death-of-day subtitle, and reports the daily suspect total in Tableau 3.
@@ -197,6 +221,8 @@ being silently dropped as the report format evolves. Known candidates:
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+| Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
+| Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.

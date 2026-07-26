@@ -28,10 +28,13 @@
 #     stacked segments but stopping at the wide white gap up to the floating
 #     "premier resultat positif" label / dashed line above the bar.
 #
-# Accuracy: the digitised per-vintage totals run ~2% below the printed n
-# (SitRep 064: 2019 vs printed n=2 064), and individual daily bars carry
-# roughly +/-1-2 cases of pixel noise. The values are approximate and are
-# NOT fitted by the model; they are captured for later use.
+# Accuracy: the digitised per-vintage totals run 2-5% below the printed n
+# (SitRep 064: 2018 vs printed n=2 064; SitRep 070: 2260 vs n=2 329), and
+# individual daily bars carry roughly +/-1-2 cases of pixel noise. The
+# shortfall sits in the faded bars of the `donnees potentiellement
+# incompletes` band, whose lightened fill falls outside the colour masks.
+# The values are approximate and are NOT fitted by the model; they are
+# captured for later use.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -69,6 +72,11 @@ CONFIG = {
     "061": ("2026-07-14", "2026-07-12"),
     "062": ("2026-07-15", "2026-07-12"),
     "064": ("2026-07-17", "2026-07-15"),
+    "065": ("2026-07-18", "2026-07-15"),
+    "066": ("2026-07-19", "2026-07-15"),
+    "067": ("2026-07-20", "2026-07-15"),
+    "069": ("2026-07-22", "2026-07-22"),
+    "070": ("2026-07-23", "2026-07-22"),
 }
 
 
@@ -84,9 +92,13 @@ def _masks(im):
 def _is_onset_curve(im):
     # The onset figure is a blue-dominant daily bar chart with no orange
     # (the age/sex pyramids use orange; the notification-week chart uses a
-    # darker steel blue and prints value labels).
+    # darker steel blue and prints value labels). The blue floor is well
+    # below the smallest onset figure seen (SitReps 069/070 embed it at
+    # 1009x583, blue ~50k, against ~66-95k for the larger 059-067
+    # renderings) and well above the largest non-onset image on its page
+    # (~5k).
     blue, red, orange, _ = _masks(im)
-    return blue.sum() > 60000 and orange.sum() < 500 and red.sum() > 20000
+    return blue.sum() > 20000 and orange.sum() < 500 and red.sum() > 20000
 
 
 def _onset_page(pdf):
@@ -147,22 +159,52 @@ def _cluster(idx, gap=3):
     return out
 
 
+def _y_axis_ticks(dark, base, W):
+    # The 0/20/40/60 y-axis tick rows, read from the label strip just left
+    # of the vertical axis line. Candidate strips are scored by the longest
+    # dark vertical run (the axis line itself), but only among strips whose
+    # rows form a plausible axis: at least three clusters, evenly spaced,
+    # with the last one (the 0 tick) on the baseline. Taking the longest run
+    # alone is not enough - in SitRep 067 a glyph stroke outruns the real
+    # axis line and yields a scale that halves every count.
+    best = None
+    for x in range(30, int(W * 0.13)):
+        seg = dark[: base + 3, max(0, x - 10):x - 1].sum(axis=1)
+        yt = _cluster([y for y in range(len(seg)) if seg[y] >= 3])
+        if len(yt) < 3 or abs(yt[-1] - base) > 3:
+            continue
+        d = np.diff(yt)
+        if d.min() <= 5 or d.max() > 1.15 * d.min():
+            continue
+        rank = (_longest_run(dark[:base, x]), -x)  # tie-break leftmost
+        if best is None or rank > best[0]:
+            best = (rank, yt)
+    if best is None:
+        raise ValueError("no y-axis tick strip found")
+    return best[1]
+
+
 def digitize(im, last_tick_date):
     H, W, _ = im.shape
     blue, red, _, dark = _masks(im)
     drow = dark.sum(axis=1)
     drow[: int(H * 0.4)] = 0
     base = int(np.argmax(drow))  # count-0 baseline row
-    # y scale from the 0/20/40/60 axis ticks left of the vertical axis line
-    axc = max(range(30, int(W * 0.13)),
-              key=lambda x: _longest_run(dark[:base, x]))
-    seg = dark[: base + 3, max(0, axc - 10):axc - 1].sum(axis=1)
-    yt = _cluster([y for y in range(len(seg)) if seg[y] >= 3])
+    # count scale from the 0/20/40/60 y-axis ticks
+    yt = _y_axis_ticks(dark, base, W)
     ppc = np.median(np.diff(yt)) / 20.0
     ytop, y0 = yt[0], yt[-1]
-    # x scale from the weekly tick marks below the baseline
+    # x scale from the weekly tick marks below the baseline. The tick marks
+    # are only a few pixels tall and shrink with the embedded figure
+    # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
+    # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
+    # cut down until a full weekly row of ticks resolves instead of fixing
+    # it at 4 and losing the axis entirely on the smaller figures.
     band = dark[base + 2:base + 9, :].sum(axis=0)
-    xt = np.array(_cluster([x for x in range(W) if band[x] >= 4]))
+    for cut in (4, 3, 2):
+        xt = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
+        if len(xt) >= 8:
+            break
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
     lastx = xt[-1]                       # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)
