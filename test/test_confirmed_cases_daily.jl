@@ -125,6 +125,32 @@ end
     @test length(confirmed_break_offset(Int[], [22], [1.0])) == 0
 end
 
+@testitem "break_step_centres derives the step from the printed gross count" begin
+    using BVDOutbreakSize: break_step_centres
+
+    ## The centre is `observed increment - printed 24h count`: the part of the
+    ## vintage step the report attributes to base integration. 22 July 2026:
+    ## 369 - 97 = 272 cases, 236 - 62 = 174 deaths.
+    days, centres = break_step_centres([21, 22, 23], [10, 369, 15], [22], [97])
+    @test days == [22]
+    @test centres == [272.0]
+
+    ## Deaths use the same helper with their own gross count.
+    _, dcentres = break_step_centres([21, 22, 23], [10, 236, 15], [22], [62])
+    @test dcentres == [174.0]
+
+    ## A break day matching no window is dropped, so no inert step is sampled.
+    @test break_step_centres([21, 23], [10, 15], [22], [97]) == (Int[], Float64[])
+
+    ## A missing/short gross falls back to a zero centre, recovering the
+    ## uninformative behaviour rather than erroring.
+    @test break_step_centres([21, 22], [10, 369], [22], Int[])[2] == [369.0]
+
+    ## No break days at all is empty.
+    @test break_step_centres([21, 22], [10, 369], Int[], Int[]) ==
+          (Int[], Float64[])
+end
+
 @testitem "confirmed break day is sampled and keeps the likelihood finite" begin
     using BVDOutbreakSize: confirmed_only_model
     using Turing: logjoint
@@ -138,7 +164,8 @@ end
     daily = (; days = [30, 35, 40], counts = [50, 414, 60])
     m = confirmed_only_model(40, 444;
         confirmed_history = hist, lab_history = lab,
-        lab_daily_history = daily, confirmed_break_days = [35])
+        lab_daily_history = daily, confirmed_break_days = [35],
+        confirmed_break_gross = [97])
     θ = rand(MersenneTwister(1), m)
     @test any(k -> occursin("confirmed_step", string(k)), keys(θ))
     @test isfinite(logjoint(m, θ))

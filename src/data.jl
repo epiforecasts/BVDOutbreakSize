@@ -118,13 +118,34 @@ function load_observations(
     ## Manually specified retrospective harmonisation-break days (opt-in) for
     ## the confirmed streams: grid days on which INSP integrated a harmonised
     ## provincial base, so the cumulative confirmed headline steps by far more
-    ## than that day's own notifications. On such a day the confirmed submodel
-    ## de-anchors the laboratory positivity denominator (the reattached cases
-    ## are not same-day positives) and fits a level step into the modelled
+    ## than that day's own notifications. On such a day the confirmed submodels
+    ## de-anchor the laboratory positivity denominator (the reattached cases
+    ## are not same-day positives) and fit a level step into the modelled
     ## confirmed mean, so the increment likelihood does not read the backlog as
     ## one day of incidence. A dated list filtered to the cut-off like the
     ## histories; absent or empty → no break days, a no-op. See issue #484.
     confirmed_break_days = event_days("confirmed_break_dates")
+
+    ## The PRINTED 24h new-confirmed counts on each break day, which make the
+    ## step data-derived rather than a guessed prior width: the submodels
+    ## centre each step on `observed increment − gross`, the part of the
+    ## vintage step the report itself attributes to base integration rather
+    ## than to the day's notifications. Filtered with the dates so the three
+    ## stay aligned, and defaulted to zeros when absent (recovering an
+    ## uninformative zero-centred step).
+    function break_gross(key)
+        haskey(raw, "confirmed_break_dates") || return Int[]
+        blk = raw["confirmed_break_dates"]
+        haskey(blk, key) || return zeros(Int, length(confirmed_break_days))
+        ds = String.(blk["value"])
+        vals = Int.(blk[key])
+        length(vals) == length(ds) || error(
+            "confirmed_break_dates: $key has $(length(vals)) entries for " *
+            "$(length(ds)) dates")
+        return Int[v for (d, v) in zip(ds, vals) if Date(d) <= cutoff]
+    end
+    confirmed_break_gross_cases = break_gross("gross_cases")
+    confirmed_break_gross_deaths = break_gross("gross_deaths")
 
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
@@ -255,6 +276,8 @@ function load_observations(
         treatment_suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
         confirmed_break_days = confirmed_break_days,
+        confirmed_break_gross_cases = confirmed_break_gross_cases,
+        confirmed_break_gross_deaths = confirmed_break_gross_deaths,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

@@ -257,6 +257,25 @@
     ## inert step against no observation.
     @test all(in(obs.confirmed_history.days), obs.confirmed_break_days)
 
+    ## The printed 24h gross counts that make each step data-derived: aligned
+    ## with the dates and filtered with them, positive, and strictly below the
+    ## vintage increment they are subtracted from (otherwise the "discrepancy"
+    ## the step centres on would be negative and the day is not a
+    ## harmonisation at all).
+    @test length(obs.confirmed_break_gross_cases) ==
+          length(obs.confirmed_break_days)
+    @test length(obs.confirmed_break_gross_deaths) ==
+          length(obs.confirmed_break_days)
+    @test all(>(0), obs.confirmed_break_gross_cases)
+    @test all(>(0), obs.confirmed_break_gross_deaths)
+    let cmap = Dict(zip(obs.confirmed_history.days,
+            diff(vcat(0, collect(obs.confirmed_history.counts)))))
+        for (d, g) in zip(obs.confirmed_break_days,
+            obs.confirmed_break_gross_cases)
+            @test g < cmap[d]
+        end
+    end
+
     ## Genetic TMRCA bound
     @test !ismissing(obs.tmrca_days)
     @test obs.tmrca_days isa Real

@@ -124,6 +124,7 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         tests_analysed::Union{Missing, Integer} = missing,
         breakpoint::Union{Missing, Real} = missing,
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         infection = infection_model,
         onset_incidence = onset_incidence_model,
         cases = reported_cases_model,
@@ -146,6 +147,7 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history,
         tests_analysed, confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_cases,
         positivity_link = confirmed_positivity_link))
     ## Cut-off expected confirmed count, aliased under the same un-prefixed
     ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
@@ -187,6 +189,7 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         tests_analysed::Union{Missing, Integer} = missing,
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -214,7 +217,8 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
         p_drc, cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history, tests_analysed,
-        confirmed_break_days))
+        confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_cases))
     ## In-care confirmation hazard `τ_test · p_pos` on the daily grid.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
@@ -244,6 +248,8 @@ on the confirmed-death likelihood alone. See
         total_deaths::Union{Missing, Integer} = missing;
         deaths_history = (; days = Int[], counts = Int[]),
         confirmed_deaths_history = (; days = Int[], counts = Int[]),
+        confirmed_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
         infection = infection_model,
         onset_incidence = onset_incidence_model,
@@ -268,7 +274,8 @@ on the confirmed-death likelihood alone. See
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k;
-        confirmed_deaths_history))
+        confirmed_deaths_history, confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_deaths))
 end
 
 """
@@ -438,6 +445,8 @@ death-confirmation positivity (`death_confirmation`).
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
+        confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
         breakpoint::Union{Missing, Real} = missing,
@@ -569,6 +578,7 @@ death-confirmation positivity (`death_confirmation`).
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history,
         tests_analysed, confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_cases,
         positivity_link = confirmed_positivity_link))
     ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
     ## analysed volume scales the modelled case analysed volume
@@ -582,6 +592,8 @@ death-confirmation positivity (`death_confirmation`).
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k_confirmed_deaths;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_deaths,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
     ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)): occupancy

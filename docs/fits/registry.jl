@@ -114,6 +114,8 @@ function build_fit_specs(obs;
                 bed_capacity_history = o.bed_capacity_history,
                 occupancy_break_days = o.occupancy_break_days,
                 confirmed_break_days = o.confirmed_break_days,
+                confirmed_break_gross_cases = o.confirmed_break_gross_cases,
+                confirmed_break_gross_deaths = o.confirmed_break_gross_deaths,
                 export_case_days = o.export_case_days,
                 export_death_days = o.export_death_days,
                 breakpoint = bp,
@@ -156,6 +158,8 @@ function build_fit_specs(obs;
                 treatment_absconded_history = obs.treatment_absconded_history,
                 occupancy_break_days = obs.occupancy_break_days,
                 confirmed_break_days = obs.confirmed_break_days,
+                confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+                confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
                 breakpoint = breakpoint,
@@ -215,6 +219,8 @@ function build_fit_specs(obs;
                     obs.treatment_suspect_incare_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     confirmed_break_days = obs.confirmed_break_days,
+                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+                    confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
                     export_case_days = obs.export_case_days,
                     export_death_days = obs.export_death_days,
                     breakpoint = breakpoint,
@@ -261,6 +267,7 @@ function build_fit_specs(obs;
                     lab_history = obs.lab_history,
                     lab_daily_history = obs.lab_daily_history,
                     confirmed_break_days = obs.confirmed_break_days,
+                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed"))),
@@ -271,6 +278,9 @@ function build_fit_specs(obs;
                     obs.total_deaths;
                     deaths_history = obs.deaths_history,
                     confirmed_deaths_history = obs.confirmed_deaths_history,
+                    confirmed_break_days = obs.confirmed_break_days,
+                    confirmed_break_gross_deaths =
+                    obs.confirmed_break_gross_deaths,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed_deaths"))),
@@ -286,6 +296,7 @@ function build_fit_specs(obs;
                     treatment_absconded_history = obs.treatment_absconded_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     confirmed_break_days = obs.confirmed_break_days,
+                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("treatment"))),

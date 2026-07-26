@@ -221,8 +221,6 @@ being silently dropped as the report format evolves. Known candidates:
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
-| Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
-| Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
