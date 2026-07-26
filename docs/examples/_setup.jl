@@ -148,13 +148,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
     end
 
-    posterior_C_joint = vec(Array(chn_joint[:C_T]));
-    posterior_C_exports = vec(Array(chn_exports[:C_T]));
-    posterior_C_deaths = vec(Array(chn_deaths[:C_T]));
-    posterior_C_cases = vec(Array(chn_cases[:C_T]));
-    posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]));
-    posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]));
-    posterior_C_treatment = vec(Array(chn_treatment[:C_T]));
+    posterior_C_joint = vec(Array(chn_joint[:C_T]))
+    posterior_C_exports = vec(Array(chn_exports[:C_T]))
+    posterior_C_deaths = vec(Array(chn_deaths[:C_T]))
+    posterior_C_cases = vec(Array(chn_cases[:C_T]))
+    posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
+    posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]))
+    posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
 
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the
@@ -186,10 +186,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
-        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers");
+        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers")
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
     ## with the model, shared by the main and sensitivity R(t) plots.
     _rt_start_plot = clamp(
-        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n);
+        obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD, 1, obs.n)
 end # _BVD_SETUP_LOADED guard

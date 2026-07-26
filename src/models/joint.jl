@@ -111,6 +111,10 @@ kernel) and conditions on the laboratory pipeline alone: the confirmed
 positives (a Binomial of the observed analysed denominator in
 `lab_history`) and the modelled analysed-specimen volume. See
 [`confirmed_cases_model`](@ref) and [`reported_cases_model`](@ref).
+
+Exposes the cut-off expected confirmed count as `expected_confirmed_T`,
+the same un-prefixed name [`bvd_joint`](@ref) uses, so the confirmed
+stream can be forecast from this fit ([`forecast_stream`](@ref)).
 """
 @model function confirmed_only_model(
         n::Integer, confirmed_cases::Union{Missing, Integer};
@@ -142,6 +146,19 @@ positives (a Binomial of the observed analysed denominator in
         lab_history, lab_daily_history,
         tests_analysed,
         positivity_link = confirmed_positivity_link))
+    ## Cut-off expected confirmed count, aliased under the same un-prefixed
+    ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
+    ## confirmed stream can be forecast from this fit
+    ## ([`forecast_stream`](@ref)). It is aliased HERE, at the composer
+    ## level, rather than `:=`-tracked inside
+    ## [`confirmed_cases_model`](@ref): that submodel deliberately keeps its
+    ## derived quantities on plain `=` because a `:=` there builds a
+    ## DynamicPPL tracking closure over the boxed `p_pos` that Enzyme's
+    ## `nodecayed_phis!` pass cannot differentiate through (see #445, #453).
+    ## The alias below closes over the submodel's returned NamedTuple, which
+    ## is assigned once and not boxed — the same pattern the joint already
+    ## uses for this quantity.
+    expected_confirmed_T := confirmed_state.expected_confirmed
 end
 
 """

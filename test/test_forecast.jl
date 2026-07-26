@@ -393,6 +393,11 @@ end
     ## binding, one scalar `dispersion_state.k`, and the walk and generation
     ## interval the reconstruction reads. `growth_state.T` is the cryptic
     ## duration only, and there is no `r`, `R_T` or `T`.
+    ##
+    ## Confirmed cases are the exception to the nested naming: their
+    ## submodel keeps `expected_confirmed` on a plain `=` for Enzyme (#445,
+    ## #453), so `confirmed_only_model` aliases the cut-off count
+    ## un-prefixed as `expected_confirmed_T`, exactly as the joint does.
     @model function _stream_nested()
         var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
         var"growth_state.r" ~ truncated(Normal(0.2, 0.02); lower = 1e-3)
@@ -407,8 +412,7 @@ end
         truncated(Normal(900.0, 50.0); lower = 1.0)
         var"deaths_state.expected_deaths_T" ~
         truncated(Normal(40.0, 5.0); lower = 1.0)
-        var"confirmed_state.expected_confirmed" ~
-        truncated(Normal(210.0, 20.0); lower = 1.0)
+        expected_confirmed_T ~ truncated(Normal(210.0, 20.0); lower = 1.0)
         var"confirmed_deaths_state.expected_confirmed_deaths" ~
         truncated(Normal(17.0, 3.0); lower = 0.5)
         var"exports_state.expected_exports_T" ~
@@ -503,6 +507,49 @@ end
     nchn=_nested_chain(50)
     @test_throws ArgumentError forecast_stream(nchn, :reported_cases;
         horizon = 7, obs_value = 905)
+end
+
+@testitem "every composer carries its own stream's forecast keys" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: cases_only_model, deaths_only_model,
+                           confirmed_only_model, confirmed_deaths_only_model,
+                           treatment_only_model, exports_only_model,
+                           _STREAM_SPEC, _resolve_draws, _bed_capacity
+
+    ## The fixtures above pin `forecast_stream`'s key resolution against
+    ## hand-written chains, which cannot catch `_STREAM_SPEC` naming a key
+    ## the real model never exposes — how the confirmed-case binding went
+    ## stale when its submodel dropped the `:=` (#445, #453). Sample each
+    ## single-stream composer from the prior and check its OWN stream
+    ## resolves off a real chain.
+    m_cases = cases_only_model(40, missing)
+    m_deaths = deaths_only_model(33, missing;
+        deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246]))
+    m_confirmed = confirmed_only_model(40, 8;
+        confirmed_history = (; days = [20, 40], counts = [3, 8]),
+        lab_history = (; days = [20, 40], counts = [5, 9]))
+    m_confirmed_deaths = confirmed_deaths_only_model(40, 17, 246;
+        deaths_history = (; days = [20, 40], counts = [120, 246]))
+    fits = [(:reported_cases, m_cases), (:suspected_deaths, m_deaths),
+        (:confirmed_cases, m_confirmed),
+        (:confirmed_deaths, m_confirmed_deaths),
+        (:isolation_beds, treatment_only_model(33)),
+        (:exports, exports_only_model(40, 2))]
+    for (stream, fit) in fits
+        chn = sample(fit, Prior(), 10; chain_type = FlexiChains.VNChain,
+            progress = false)
+        spec = _STREAM_SPEC[stream]
+        @test !isnothing(_resolve_draws(chn, spec.expected))
+        if spec.noise === :nb
+            @test !isnothing(_resolve_draws(chn, spec.dispersion))
+        end
+        ## The treatment composer exposes no `bed_capacity` key, so the
+        ## supply limit must still be recoverable from the ratio.
+        if stream === :isolation_beds
+            @test !isnothing(_bed_capacity(chn))
+        end
+    end
 end
 
 @testitem "forecast_stream recovers bed capacity on a standalone fit" tags=[:slow] begin
