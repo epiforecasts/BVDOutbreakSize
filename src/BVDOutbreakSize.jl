@@ -94,7 +94,8 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        independent_ascertainment_model, pooled_ascertainment_model,
 # observation models
        deaths_model, reported_cases_model, confirmed_cases_model,
-       confirmed_positivity_windows, confirmed_deaths_model,
+       confirmed_positivity_windows, confirmed_break_offset,
+       confirmed_deaths_model,
        treatment_flow_model, recovered_model,
        exports_model, exports_deaths_model,
 # joint composers

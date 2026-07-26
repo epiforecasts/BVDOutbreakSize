@@ -115,6 +115,17 @@ function load_observations(
     ## the cut-off like the histories; absent or empty → no break days, a no-op.
     occupancy_break_days = event_days("occupancy_break_dates")
 
+    ## Manually specified retrospective harmonisation-break days (opt-in) for
+    ## the confirmed streams: grid days on which INSP integrated a harmonised
+    ## provincial base, so the cumulative confirmed headline steps by far more
+    ## than that day's own notifications. On such a day the confirmed submodel
+    ## de-anchors the laboratory positivity denominator (the reattached cases
+    ## are not same-day positives) and fits a level step into the modelled
+    ## confirmed mean, so the increment likelihood does not read the backlog as
+    ## one day of incidence. A dated list filtered to the cut-off like the
+    ## histories; absent or empty → no break days, a no-op. See issue #484.
+    confirmed_break_days = event_days("confirmed_break_dates")
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -243,6 +254,7 @@ function load_observations(
         treatment_confirmed_incare_history,
         treatment_suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
+        confirmed_break_days = confirmed_break_days,
         tests_received_history = tests_received_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)

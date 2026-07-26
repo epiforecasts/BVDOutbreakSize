@@ -241,6 +241,22 @@
     @test all(minimum(obs.isolation_history.days) .<=
               obs.occupancy_break_days .<= maximum(obs.isolation_history.days))
 
+    ## Manual confirmed harmonisation-break days: the same opt-in dated-list
+    ## shape, resolved onto the grid. 22 July 2026 (SitRep 069) is listed —
+    ## the report itself states the cumulative step is mostly a provincial
+    ## base integration rather than 24h notifications. An invariant plus the
+    ## one pinned date, so a re-scan regression is caught without echoing a
+    ## list that grows on every harmonisation.
+    @test obs.confirmed_break_days isa AbstractVector{<:Integer}
+    @test issorted(obs.confirmed_break_days)
+    @test all(1 .<= obs.confirmed_break_days .<= obs.n)
+    @test obs.confirmed_break_days ==
+          [obs.n - (Date(obs.cutoff) - Date(d)).value
+           for d in (Date("2026-07-22"),)]
+    ## Every break day must land on a confirmed vintage, otherwise it fits an
+    ## inert step against no observation.
+    @test all(in(obs.confirmed_history.days), obs.confirmed_break_days)
+
     ## Genetic TMRCA bound
     @test !ismissing(obs.tmrca_days)
     @test obs.tmrca_days isa Real

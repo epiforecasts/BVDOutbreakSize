@@ -373,6 +373,40 @@ function cumulative_occupancy_offset(iso_days, break_days, b)
 end
 
 """
+    confirmed_break_offset(late_days, break_days, b)
+
+Per-late-window confirmed harmonisation offset from the fitted break steps `b`
+on the manually specified `break_days` (grid day-indices). Unlike
+[`cumulative_occupancy_offset`](@ref) this is NOT cumulative: the confirmed
+likelihood fits between-vintage INCREMENTS, so a one-off retrospective base
+integration inflates exactly one increment — every later vintage differences
+against the new, higher base and is unaffected. Each entry is therefore the
+step for that window alone, zero on every non-break window.
+
+Added to the modelled confirmed mean of the break window in
+[`confirmed_cases_model`](@ref), so the fit can explain an increment that is
+mostly reattached backlog without inflating the latent incidence that drives
+`Rt`. Each `b_j` is sampled there, centred on zero and symmetric because a
+harmonisation can revise down as well as up. Returns a
+length-`length(late_days)` vector of `eltype(b)` (zeros when there are no break
+days, a no-op).
+"""
+function confirmed_break_offset(late_days, break_days, b)
+    m = length(late_days)
+    T = isempty(b) ? Float64 : eltype(b)
+    Δ = zeros(T, m)
+    isempty(break_days) && return Δ
+    ldays = Int.(late_days)
+    bdays = Int.(break_days)
+    @inbounds for (j, bd) in enumerate(bdays)
+        for t in 1:m
+            ldays[t] == bd && (Δ[t] += b[j])
+        end
+    end
+    return Δ
+end
+
+"""
 DRC suspected-deaths likelihood, per-vintage time series. Convolves the
 daily onsets with the sampled onset-to-death delay, scales by the CFR and
 the death ascertainment `p_death`, and reads the modelled cumulative deaths
@@ -730,6 +764,15 @@ them into three non-overlapping groups so all the confirmed data is used:
   the post-cutoff daily denominators the unanchored windows otherwise lack) is
   flagged in `late_analysed` so the model can score it as a Binomial of
   that observed denominator instead, anchoring its positivity to data.
+  A day listed in `confirmed_break_days` is the exception: its denominator is
+  dropped (`late_analysed` set to 0) so it stays a modelled-volume window.
+  On such a day INSP has retrospectively integrated a harmonised provincial
+  base, so most of the confirmed increment is reattached backlog rather than
+  positives out of that day's specimens, and pairing the two would score a
+  wildly inflated positivity (22 July 2026: 369 of 414 analysed, 89% implied
+  against the 23% actually reported). The increment is still scored; the
+  backlog is absorbed by a fitted level step in
+  [`confirmed_cases_model`](@ref) (see [`confirmed_break_offset`](@ref)).
 
 The three groups partition the confirmed counts at the first and last
 laboratory dates, so no confirmed case is counted twice. Returns
@@ -742,7 +785,8 @@ and every confirmed vintage becomes an early window. Pure integer
 bookkeeping on the observed data, so it carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history,
-        lab_daily_history = (; days = Int[], counts = Int[]))
+        lab_daily_history = (; days = Int[], counts = Int[]),
+        confirmed_break_days = Int[])
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
@@ -857,6 +901,24 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         di > last_lab_day || continue
         pos = findfirst(==(di), late_days)
         pos === nothing || (late_analysed[pos] = Int(c))
+    end
+
+    ## Retrospective harmonisation days are DE-ANCHORED: their published 24h
+    ## analysed count is dropped, so the window falls to the modelled-volume
+    ## NegativeBinomial branch instead of entering the BetaBinomial as
+    ## same-day positives. On such a day most of the confirmed increment is a
+    ## provincial base integration, not specimens that tested positive out of
+    ## that day's denominator, so pairing the two would score a wildly
+    ## inflated positivity (22 July 2026: 369 of 414 = 89%, against the 23%
+    ## actually reported) and drag `λ_bg`, the composition link and the
+    ## ascertainment with it. The increment itself is still scored, with a
+    ## fitted level step absorbing the backlog (see `confirmed_cases_model`).
+    ## Plain integer bookkeeping in a loop, like the block above, so the AD
+    ## backends can compile a rule for it on every Julia version.
+    for d in confirmed_break_days
+        di = Int(d)
+        pos = findfirst(==(di), late_days)
+        pos === nothing || (late_analysed[pos] = 0)
     end
 
     return (; obs_days, obs_positives, obs_analysed, early_days,
@@ -986,7 +1048,14 @@ quantities.
         ## observed-denominator Binomial windows contribute, so confirmed
         ## informs positivity without extrapolating a denominator from
         ## incidence. Used to probe the no-test-data extrapolation.
-        fit_unanchored::Bool = true)
+        fit_unanchored::Bool = true,
+        ## Opt-in retrospective harmonisation-break days (grid day-indices):
+        ## days whose cumulative confirmed step is mostly a provincial base
+        ## integration rather than 24h notifications. De-anchored from the
+        ## positivity denominator and given a fitted level step in the
+        ## modelled mean. Empty (the default) → no-op. See issue #484.
+        confirmed_break_days::AbstractVector{<:Integer} = Int[],
+        confirmed_break_sd::Real = 100.0)
     n = length(onsets)
     ## `missing` cut-off scalar means generator mode: observed increments are
     ## left missing so `predict` resamples them.
@@ -1061,7 +1130,7 @@ quantities.
     ## confirmed-only format) scored as counts against the modelled volume
     ## like the early windows.
     windows = confirmed_positivity_windows(confirmed_history, lab_history,
-        lab_daily_history)
+        lab_daily_history, confirmed_break_days)
     n_early = length(windows.early_days)
     n_obs = length(windows.obs_analysed)
     n_late = length(windows.late_days)
@@ -1187,7 +1256,29 @@ quantities.
     late_edges = n_late > 0 ? vcat(windows.late_start, windows.late_days) :
                  [windows.late_start]
     late_volume = bin_increments(analysed_daily, late_edges)[2:end]
-    late_mean = late_p .* late_volume
+    ## Opt-in retrospective harmonisation step. On a declared break day the
+    ## observed increment is mostly a provincial base integration, so a single
+    ## level step is fitted into that window's modelled mean and the fit
+    ## partitions the increment into reporting artefact vs real incidence with
+    ## uncertainty. Sampled non-centred and centred on zero (symmetric: a
+    ## harmonisation can revise down as well as up). Only break days that land
+    ## on a late window can move the likelihood; others are dropped so no inert
+    ## step is sampled. Same conditional-`b`-then-pure-function shape as the
+    ## occupancy break (`cumulative_occupancy_offset`), which keeps the
+    ## allocation single-site for the AD backends. Empty → Δ = 0, a no-op.
+    late_day_ints = Int.(windows.late_days)
+    conf_brk_days = [Int(d) for d in confirmed_break_days
+                     if Int(d) in late_day_ints]
+    if isempty(conf_brk_days)
+        cb = Float64[]
+    else
+        confirmed_step ~ product_distribution(
+            fill(Normal(0, 1), length(conf_brk_days)))
+        cb = confirmed_break_sd .* confirmed_step
+    end
+    late_break_offset = confirmed_break_offset(windows.late_days,
+        conf_brk_days, cb)
+    late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support and are always
     ## scored; unanchored days are scored only when `fit_unanchored` (the
