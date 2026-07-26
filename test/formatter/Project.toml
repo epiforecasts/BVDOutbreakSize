@@ -1,5 +1,13 @@
 [deps]
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 
+# Pinned to ONE exact version, not a range. Formatting is a fixed point of a
+# specific formatter: a new JuliaFormatter release can reformat unchanged files
+# and turn `test/package/CodeFormatting.jl` red with no commit to blame. A range
+# also let the pre-commit hook and the test resolve DIFFERENT versions of the
+# same environment (this directory has no committed Manifest, so each entry
+# point resolves afresh, and `Pkg.add` refreshes the registry while
+# `Pkg.instantiate` does not) — so the hook could pass a tree the test then
+# rejected. Bump this deliberately, reformatting the tree in the same commit.
 [compat]
-JuliaFormatter = "1, 2"
+JuliaFormatter = "=2.12.0"

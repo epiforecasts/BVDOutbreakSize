@@ -5,8 +5,15 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# The registry is refreshed before instantiating so this hook and
+# test/package/CodeFormatting.jl always resolve the SAME JuliaFormatter: the
+# sub-environment has no committed Manifest, and `Pkg.instantiate` resolves
+# against whatever registry snapshot the depot already holds. It also keeps the
+# exact pin in test/formatter/Project.toml resolvable on a depot last updated
+# before that version was registered.
 julia --project=test/formatter -e '
 using Pkg
+Pkg.Registry.update()
 Pkg.instantiate()
 using JuliaFormatter
 dirs = ["src", "test", "docs", "scripts"]
