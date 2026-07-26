@@ -19,7 +19,6 @@ if !isempty(unformatted_dirs)
     println(stderr, "Unformatted Julia code under: ",
         join(relpath.(unformatted_dirs, project_root), ", "))
     for dir in unformatted_dirs, (root, _, files) in walkdir(dir), file in files
-
         endswith(file, ".jl") || continue
         path = joinpath(root, file)
         if !JuliaFormatter.format(path; overwrite = false)
