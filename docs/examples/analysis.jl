@@ -2084,16 +2084,17 @@ cfr_prior_fig #hide
 # series: the reproduction-number walk on the infection and hence onset
 # axis, the calendar walk on the report axis, and ascertainment, which is
 # not a free object at all here but the asymptote of the hazard the
-# calendar walk modifies. Each leaves a different footprint on the
-# triangle. A change in the onset series scales a column, one onset date
-# across every snapshot. A change in the calendar walk scales a diagonal,
-# one report day across every onset date that reaches it at its own delay.
-# A change in the baseline hazard scales a delay band. Column, diagonal and
-# band are distinguishable once there is more than one snapshot, which is
-# the structural reason this stream is worth fitting, and also the reason
-# the calendar walk is indexed on the report date: on the onset axis its
-# footprint would coincide with the reproduction-number walk's exactly and
-# neither would be identified.
+# calendar walk modifies. Each leaves a different footprint on the grid of
+# scored cells, which runs over onset date and snapshot pair. A change in
+# the onset series moves a column, one onset date across every snapshot. A
+# change in the calendar walk moves a row, the hazard on the report days one
+# snapshot pair spans, across every onset date at once. A change in the
+# baseline hazard moves a delay band, running diagonally across both.
+# Column, row and band are distinguishable once there is more than one
+# snapshot, which is the structural reason this stream is worth fitting, and
+# also the reason the calendar walk is indexed on the report date: on the
+# onset axis its footprint would be a column too, the same one the
+# reproduction-number walk already moves, and neither would be identified.
 #
 # Three things stay weak. The asymptote is pinned by the first snapshot's
 # level cells and by the onset series coming from the other streams, not by
