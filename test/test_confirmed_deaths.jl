@@ -164,6 +164,76 @@ end
     @test isfinite(logjoint(m, draw))
 end
 
+@testitem "confirmed deaths break day is sampled at composer level" begin
+    using BVDOutbreakSize: confirmed_deaths_only_model, bvd_joint
+    using Turing: logjoint
+    using Random: MersenneTwister
+
+    ## The composers rename the submodel's `confirmed_break_gross` to a
+    ## per-stream `confirmed_break_gross_deaths`, so exercising the deaths break
+    ## only through the submodel leaves the composer keyword unverified. A
+    ## late vintage whose increment is dominated by a harmonisation: with the
+    ## day declared, a `cdeath_step` is sampled and the log-density is finite.
+    hist = (; days = [20, 30, 35, 40], counts = [200, 240, 476, 490])
+    m = confirmed_deaths_only_model(40, 490, 800;
+        deaths_history = (; days = [20, 40], counts = [400, 800]),
+        confirmed_deaths_history = hist,
+        confirmed_break_days = [35],
+        confirmed_break_gross_deaths = [62])
+    θ = rand(MersenneTwister(1), m)
+    @test any(k -> occursin("cdeath_step", string(k)), keys(θ))
+    @test isfinite(logjoint(m, θ))
+
+    ## Undeclared, no step is sampled: the block is opt-in.
+    m0 = confirmed_deaths_only_model(40, 490, 800;
+        deaths_history = (; days = [20, 40], counts = [400, 800]),
+        confirmed_deaths_history = hist)
+    θ0 = rand(MersenneTwister(1), m0)
+    @test !any(k -> occursin("cdeath_step", string(k)), keys(θ0))
+    @test isfinite(logjoint(m0, θ0))
+
+    ## `bvd_joint` forwards each confirmed stream its OWN gross vector, so the
+    ## cases and deaths steps are both sampled and neither keyword is crossed.
+    conf = (; days = [20, 30, 35, 40], counts = [500, 600, 969, 990])
+    j = bvd_joint(40, missing, 800, missing, missing, 990, missing;
+        confirmed_deaths = 490,
+        deaths_history = (; days = [20, 40], counts = [400, 800]),
+        confirmed_history = conf,
+        confirmed_deaths_history = hist,
+        lab_history = (; days = [10, 20], counts = [100, 300]),
+        lab_daily_history = (; days = [30, 35, 40], counts = [50, 414, 60]),
+        confirmed_break_days = [35],
+        confirmed_break_gross_cases = [97],
+        confirmed_break_gross_deaths = [62])
+    θj = rand(MersenneTwister(1), j)
+    ks = string.(keys(θj))
+    @test any(k -> occursin("confirmed_step", k), ks)
+    @test any(k -> occursin("cdeath_step", k), ks)
+    @test isfinite(logjoint(j, θj))
+end
+
+@testitem "a deaths predictive replicates the break day" begin
+    using BVDOutbreakSize: confirmed_deaths_only_model
+    using Random: MersenneTwister
+
+    ## Nulling the cut-off scalar is the generator gate, so `predict` resamples
+    ## the increments while the dated history still supplies the vintage grid
+    ## AND the published discrepancy the step is centred on. Emptying the
+    ## history instead loses the discrepancy, which is why the scalar is the
+    ## gate on this stream as it already is on the cases stream.
+    hist = (; days = [20, 30, 35, 40], counts = [200, 240, 476, 490])
+    gen = confirmed_deaths_only_model(40, missing, 800;
+        deaths_history = (; days = [20, 40], counts = [400, 800]),
+        confirmed_deaths_history = hist,
+        confirmed_break_days = [35],
+        confirmed_break_gross_deaths = [62])
+    θ = rand(MersenneTwister(1), gen)
+
+    ## The step survives into the generator, so a predictive carries the same
+    ## dimensions as the fitted chain rather than dropping the break.
+    @test any(k -> occursin("cdeath_step", string(k)), keys(θ))
+end
+
 @testitem "deaths_model background is the lagged scaled case background" begin
     using BVDOutbreakSize: deaths_model, background_walk_model, convolve_delay
     using Turing: returned

@@ -3283,9 +3283,27 @@ pp_joint = predict(
         treatment_suspect_incare_history =
         _days_only(obs.treatment_suspect_incare_history),
         confirmed_history = obs.confirmed_history,
-        confirmed_deaths_history = _days_only(obs.confirmed_deaths_history),
+        ## Counts kept, like the confirmed cases above: the cut-off scalar
+        ## (`confirmed_deaths = missing`) is this stream's generator gate, so
+        ## `predict` still resamples the increments while the dated history
+        ## supplies both the vintage grid and the published break discrepancy
+        ## the step is centred on. Differencing an emptied history cannot
+        ## recover that discrepancy, which would leave the harmonised vintage
+        ## replicated as a day of real deaths.
+        confirmed_deaths_history = obs.confirmed_deaths_history,
         lab_history = obs.lab_history,
         lab_daily_history = obs.lab_daily_history,
+        ## Kept, like the occupancy break above, so the generator's confirmed
+        ## break dimension matches the fitted chain (the level step and the
+        ## de-anchored positivity denominator on the
+        ## `[confirmed_break_dates]` days). Without them the harmonised
+        ## vintage is replicated as though its whole increment were one day of
+        ## incidence, so 22 July plots as a gross outlier against a chain that
+        ## fitted it as mostly backlog, and the `confirmed_step` columns go
+        ## unused.
+        confirmed_break_days = obs.confirmed_break_days,
+        confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+        confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         ## Kept with its real cell grid (`onset_days`/`report_days`/

@@ -1,0 +1,63 @@
+signal,sitrep,report_date,value,unit,source_note
+eds_death_alerts,059,2026-07-12,36,alerts,section 7 prose; N-Kivu only 36 - Ituri narrative with no counts; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,059,2026-07-12,29,investigations,section 7 prose; N-Kivu only 29; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,059,2026-07-12,35,corpses,section 7 prose; N-Kivu only 35 - printed as corps swabes et securises; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,060,2026-07-13,28,alerts,section 7 prose; N-Kivu only 28 - Ituri narrative with no counts; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,060,2026-07-13,29,investigations,section 7 prose; N-Kivu only 29 - exceeds the 28 alerts; 3 corps non swabes also printed; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,060,2026-07-13,25,corpses,section 7 prose; N-Kivu only 25 - printed as corps swabes et securises; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,061,2026-07-14,108,alerts,section 7 prose; Ituri 81 + N-Kivu 27; N-Kivu prints 'Report : 11 alertes de deces sur 27' and its 27 is confirmed as the total by corps swabes 25 + corps non swabes 2 = 27; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,061,2026-07-14,84,investigations,section 7 prose; Ituri 57 + N-Kivu 27; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,061,2026-07-14,62,corpses,section 7 prose; Ituri 37 + N-Kivu 25; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,062,2026-07-15,55,alerts,section 7 prose; Ituri only 55 (dated 15/07) - N-Kivu prints no alert count; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,062,2026-07-15,63,investigations,section 7 prose; Ituri 46 + N-Kivu 17; the N-Kivu 17 is worded 'corps securises et inhumes dignement' not 'EDS realises' so the field is not identical; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,062,2026-07-15,33,corpses,section 7 prose; Ituri only 33 - N-Kivu prints no swab count; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,064,2026-07-17,47,alerts,section 7 prose; N-Kivu only 47 - Ituri narrative with no counts; Haut-Uele's '4 alertes validees dont un deces' is the Tableau 3 validation field not a death-alert count so it is excluded; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,064,2026-07-17,46,investigations,section 7 prose; N-Kivu only 46; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,064,2026-07-17,47,corpses,section 7 prose; N-Kivu only 47 - printed as corps swabes/securises; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,065,2026-07-18,67,alerts,section 7 prose; Ituri only 67 - the denominator of '52 EDS realises sur 67'; N-Kivu prints no alert count; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,065,2026-07-18,76,investigations,section 7 prose; Ituri 52 + N-Kivu 24; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,065,2026-07-18,36,corpses,section 7 prose; Ituri only 36; the N-Kivu 'corps swabes et securises en attente 12' is a pending backlog and its sentence is internally inconsistent ('dont 24 EDS' of 12) so it is excluded; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,066,2026-07-19,20,alerts,section 7 prose; N-Kivu only 20 - Ituri narrative with no counts; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,066,2026-07-19,24,investigations,section 7 prose; N-Kivu only 24 - exceeds the 20 alerts; 10 reports du jour also printed; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,066,2026-07-19,20,corpses,section 7 prose; N-Kivu only 20 - printed as corps swabes et securises; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,067,2026-07-20,39,alerts,section 7 prose; N-Kivu only 39 - Ituri Sud-Kivu and Tshopo narrative with no counts; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,067,2026-07-20,40,investigations,section 7 prose; N-Kivu only 40 - exceeds the 39 alerts; 9 reports also printed; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,067,2026-07-20,39,corpses,section 7 prose; N-Kivu only 39 - printed as corps swabes et securises; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,068,2026-07-21,38,alerts,section 7 prose; N-Kivu only 38 - Ituri and Tshopo narrative with no counts; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,068,2026-07-21,34,investigations,section 7 prose; N-Kivu only 34; 12 reports also printed; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,068,2026-07-21,37,corpses,section 7 prose; N-Kivu only 37 - printed as corps swabes/securises with 1 echec de swab at Butembo; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,069,2026-07-22,115,alerts,section 7 prose; Ituri 75 + N-Kivu 40; N-Kivu printed as '39 Swabs realises sur 40 alertes deces remontees'; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,069,2026-07-22,68,investigations,section 7 prose; Ituri only 68 - N-Kivu prints NO EDS count this vintage so this is not a national total; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,069,2026-07-22,82,corpses,section 7 prose; Ituri 43 + N-Kivu 39; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_death_alerts,070,2026-07-23,129,alerts,section 7 prose; Ituri 89 + N-Kivu 40; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_investigations_performed,070,2026-07-23,111,investigations,section 7 prose; Ituri 71 + N-Kivu 40; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+eds_corpses_swabbed,070,2026-07-23,87,corpses,section 7 prose; Ituri 49 + N-Kivu 38; province coverage varies by vintage so the series is NOT comparable across vintages - read the province list before differencing
+contacts_under_follow_up,071,2026-07-24,14525,persons,Tableau 4 national `sous suivi`; per province Ituri 10123 N-Kivu 4111 Tshopo 33 Haut-Uele 258 Sud-Kivu 0 (fin de suivi)
+contacts_seen,071,2026-07-24,11100,persons,Tableau 4 national `vus`; page-1 tile gives the ratio 76.4 percent
+contact_tracing_coverage,071,2026-07-24,76.4,percent,page-1 `SUIVI DES CONTACTS NATIONAL`; 11100/14525; Ituri and N-Kivu computed only over reporting health zones (8 zones had no data at consolidation)
+alerts_total_day,071,2026-07-24,1937,alerts,Tableau 3 `Total alertes du jour`; report J-1 79 + nouvelles 1858
+alerts_investigated,071,2026-07-24,1617,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,071,2026-07-24,83.5,percent,Tableau 3 `Taux d'investigation (24 h)`; 1617/1937; Haut-Uele only 8.9 percent
+alerts_validated_alive,071,2026-07-24,189,alerts,Tableau 3 `Alertes validees vivantes`; sums with the dead row to the 274 suspects of the day
+alerts_validated_dead_community,071,2026-07-24,85,alerts,Tableau 3 `Alertes validees decedees (comm.)`; candidate replacement basis for the frozen suspected_daily_deaths_history (issue #431)
+poe_travellers_screened,071,2026-07-24,167939,persons,Tableau 5 global; Ituri 104642 (printed `10 4642`) + N-Kivu 61060 + Tshopo 2237
+poe_corpses_swabbed,071,2026-07-24,2,corpses,Tableau 5; 100.0 percent of 2 intercepted
+health_worker_infections_cumulative,071,2026-07-24,123,persons,Tableau 8 PPL total confirmed; 67 recovered 20 hospitalised 36 deaths
+health_worker_deaths_cumulative,071,2026-07-24,36,persons,Tableau 8 PPL deaths; letalite 29.3 percent
+treatment_admissions_cumulative,071,2026-07-24,869,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 649 + N-Kivu 220; distinct from the fitted 24h figure
+contacts_under_follow_up,072,2026-07-25,15440,persons,Tableau 4 national `sous suivi`; Ituri 10901 N-Kivu 4307 Tshopo 33 Haut-Uele 199 Sud-Kivu 0
+contacts_seen,072,2026-07-25,12010,persons,Tableau 4 national `vus`
+contact_tracing_coverage,072,2026-07-25,77.8,percent,page-1 `SUIVI DES CONTACTS NATIONAL`; 12010/15440; reporting-zone caveat as 071 but a different zone list
+alerts_total_day,072,2026-07-25,1417,alerts,Tableau 3 `Total alertes du jour`; report J-1 82 + nouvelles 1335
+alerts_investigated,072,2026-07-25,1206,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,072,2026-07-25,85.1,percent,Tableau 3 `Taux d'investigation (24 h)`; 1206/1417
+alerts_validated_alive,072,2026-07-25,233,alerts,Tableau 3; sums with the dead row to the 340 suspects of the day
+alerts_validated_dead_community,072,2026-07-25,107,alerts,Tableau 3 `Alertes validees decedees (comm.)`; see issue #431
+poe_travellers_screened,072,2026-07-25,155936,persons,Tableau 5 global; Ituri 98423 + N-Kivu 53748 + Tshopo 3765
+poe_corpses_swabbed,072,2026-07-25,4,corpses,Tableau 5; 100.0 percent of 4 intercepted
+health_worker_infections_cumulative,072,2026-07-25,123,persons,Tableau 8 PPL total confirmed; flat against 071 though the PCI narrative reports a new Nizi case not yet in the table
+health_worker_deaths_cumulative,072,2026-07-25,37,persons,Tableau 8 PPL deaths; letalite 30.1 percent; only change from 071 is Bunia 14 to 15
+treatment_admissions_cumulative,072,2026-07-25,894,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 678 + N-Kivu 216; N-Kivu FELL from 220 despite 49 admissions in 24h
+eds_death_alerts,072,2026-07-25,98,alerts,section 7 prose (never a table); Ituri 65 + N-Kivu 33; present from at least SitRep 060 but intermittently - 071 gives no EDS numbers and some vintages give one province only - so a missing province is not a zero; not reconciled against the Tableau 3 dead-alert count of 107
+eds_investigations_performed,072,2026-07-25,80,investigations,section 7 prose; Ituri 50 + N-Kivu 30; intermittent from at least SitRep 060 - see the eds_death_alerts note
+eds_corpses_swabbed,072,2026-07-25,73,corpses,section 7 prose; Ituri 40 + N-Kivu 33; intermittent from at least SitRep 060 - see the eds_death_alerts note; N-Kivu swabs 33 of 33 alerts on 30 EDS performed - looks degenerate
