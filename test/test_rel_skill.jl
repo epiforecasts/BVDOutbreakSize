@@ -1,9 +1,11 @@
 ## Tests for the relative-skill and per-release R0 additions in
-## scripts/score_releases.jl: rel_skill_columns (log-CRPS skill to the
-## persistence baseline and to a stream's individual fit) and r0_row
-## (the established initial reproduction number, exp(rt_state.log_R0)).
+## scripts/score_releases.jl: rel_skill_columns (per-row log-CRPS skill to
+## the persistence baseline) and r0_row (the established initial
+## reproduction number, exp(rt_state.log_R0)). The comparison against a
+## stream's individual fit is computed at aggregation time in
+## src/scoring.jl and is tested there, not here.
 
-@testitem "rel_skill_columns scores to baseline and individual fit" begin
+@testitem "rel_skill_columns scores to the persistence baseline" begin
     using Dates: Date
     using DataFrames: DataFrame
 
@@ -23,28 +25,20 @@
         fit = ["baseline", "joint", "confirmed", "joint", "baseline"],
         log_crps = [0.8, 0.2, 0.4, 0.3, 0.6])
 
-    to_base, to_indiv = rel_skill_columns(df)
+    to_base = rel_skill_columns(df)
 
     ## Every row of a group whose baseline was scored gets a baseline skill;
     ## the baseline row itself is 1.0.
     @test to_base == [1.0, 0.25, 0.5, 0.5, 1.0]  # 0.2/0.8, 0.4/0.8, 0.3/0.6
-
-    ## The individual skill is defined only on the joint row of the group
-    ## that carries an individual fit: confirmed cases' joint, 0.2/0.4.
-    @test to_indiv[2] == 0.5
-    ## Missing on the individual row, the baseline rows, and the recovered
-    ## joint (no individual model fits it).
-    @test all(ismissing, to_indiv[[1, 3, 4, 5]])
 end
 
-@testitem "rel_skill_columns leaves a frozen individual skill empty" begin
+@testitem "rel_skill_columns scores a frozen fit to its own baseline" begin
     using Dates: Date
     using DataFrames: DataFrame
 
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
-    ## The frozen archive carries only the frozen fit and its baseline, no
-    ## individual fits: baseline skill is defined, individual skill is not.
+    ## The frozen archive carries only the frozen fit and its baseline.
     df = DataFrame(
         release = fill("results-vT", 2),
         made_date = fill(Date(2026, 6, 20), 2),
@@ -53,9 +47,8 @@ end
         fit = ["frozen", "baseline"],
         log_crps = [0.3, 0.6])
 
-    to_base, to_indiv = rel_skill_columns(df)
+    to_base = rel_skill_columns(df)
     @test to_base == [0.5, 1.0]  # 0.3/0.6, then the baseline itself
-    @test all(ismissing, to_indiv)
 end
 
 @testitem "rel_skill_cell empties missing, rounds a ratio" begin

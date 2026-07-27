@@ -169,31 +169,25 @@ validation_latent_fig #hide
 
 # ## Forecast scoring across releases
 #
-# How every release's saved forecasts scored against the data observed since.
-# Each results release stores its one- to four-week-ahead forecast
-# (`forecast.csv`); `scripts/score_releases.jl` scores each against what has
-# since been observed with CRPS, CRPS on the log scale, 50/90% coverage and
-# bias, against a persistence baseline (`rel_skill` below one beats the
-# baseline).
-# The scored streams are the reported cases, suspected deaths, confirmed cases
-# and confirmed deaths as counts, and the isolation-bed occupancy as a level.
-# The count streams are reported by the sitreps as running cumulative totals,
-# so each is scored on its incidence, the between-vintage increment, rather
-# than the cumulative level: a stream that only reports a growing total is
-# judged on what it added each week, not on the total it has reached.
-# The bed occupancy is a level and is scored as one.
-# Once the scores carry a `fit` column each (stream, horizon) compares three
-# forecasts: the persistence baseline, the stream's own individual fit and the
-# joint.
-# The scores accrue as releases with a stored forecast, and the reconstructed
-# backfill release reaching back across the earlier releases, are added; until
-# then the table has no rows and the plot says so.
+# How every release's saved one- to four-week-ahead forecast scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
+# The count streams are reported as running cumulative totals, so each is scored on its incidence, the increment between one vintage and the next, rather than the cumulative level a stream that only ever grows would otherwise be judged on.
+# The isolation-bed occupancy is a level and is scored as one.
+# Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
 #
-# Recovered is the exception.
-# The fitted models are the joint, exports, deaths, cases, confirmed, confirmed
-# deaths and isolation, so recovered has no individual fit of its own and its
-# comparison is the baseline against the joint only.
-# No individual row or panel is drawn for it.
+# The persistence baseline simply carries the last observed count, or occupancy level, forward unchanged.
+# Its uncertainty comes from how much that same quantity has moved, week to week, earlier in the outbreak, widened to match how far ahead the forecast reaches.
+# A skill ratio below one means a fit scored better than the baseline over the forecasts they were both judged on.
+# A ratio above one means simple persistence would have done better.
+#
+# A stream is only scored over the period its own reporting source covers, from the day it was first reported to the day it was last updated.
+# Outside that period a cumulative total that has not moved is the absence of a series rather than a count of zero, and scoring against it would reward simple persistence for predicting a number nobody measured.
+# Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off, so exports contributes no scored forecast at all and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
+# None of this changes how those streams are fitted or how they appear elsewhere in this report.
+#
+# Only a minority of the daily releases examined across the outbreak contribute a row to the table below, and every one of them is a reconstruction of an earlier version of the model rather than the model as it stands today, so the table below is not a verdict on the current fit.
+# The releases that do carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet, which is why the comparison against each stream's individual fit is still empty.
+# It will populate once those targets resolve.
+# Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -213,108 +207,70 @@ end
 forecast_scores_df = _release_data("forecast_scores.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
-        log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
         bias = Float64, n_samples = Int,
-        log_rel_skill_to_baseline = Float64,
-        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
+        log_rel_skill_to_baseline = Float64))
 forecast_overlay_df = _release_data("forecast_overlay.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
-forecast_score_table = forecast_score_summary(forecast_scores_df)
-
-## Geometric mean of a per-release CRPS skill ratio, skipping releases where it
-## is missing (the individual-fit ratio is absent on baseline rows,
-## individual-fit rows, streams with no individual model and every frozen row).
-## Missing when no release scored the comparison; below one beats the
-## comparator.
-function _geo_skill(xs)
-    v = [x for x in skipmissing(xs) if x > 0]
-    return isempty(v) ? missing :
-           round(exp(sum(log, v) / length(v)); digits = 2)
-end
-
-## Headline skill across releases: for each (stream, horizon, fit) the
-## geometric mean of the log-scale CRPS skill ratio against the persistence
-## baseline (`log_rel_skill_to_baseline`) and, on the joint row of a stream that
-## also has an individual model, against that individual fit
-## (`log_rel_skill_to_individual_fit`). Empty until a release carries scores.
-function _skill_overall(df)
-    empty = DataFrame(; stream = String[], horizon = Int[], fit = String[],
-        n = Int[], skill_vs_baseline = Union{Missing, Float64}[],
-        skill_vs_individual_fit = Union{Missing, Float64}[])
-    isempty(df) && return empty
-    rows = NamedTuple[]
-    for s in sort(unique(df.stream))
-        smask = df.stream .== s
-        for h in sort(unique(df.horizon[smask]))
-            hmask = smask .& (df.horizon .== h)
-            for f in sort(unique(df.fit[hmask]))
-                grp = df[hmask .& (df.fit .== f), :]
-                push!(rows,
-                    (; stream = s, horizon = h, fit = f,
-                        n = size(grp, 1),
-                        skill_vs_baseline =
-                        _geo_skill(grp.log_rel_skill_to_baseline),
-                        skill_vs_individual_fit =
-                        _geo_skill(grp.log_rel_skill_to_individual_fit)))
-            end
-        end
-    end
-    return DataFrame(rows)
-end
-
-## The same skill ratios broken out by release made-date, so a fit that beats
-## the baseline overall but not at every cut-off is visible. One row per
-## (stream, horizon, fit, made-date); the individual-fit ratio is blank where
-## it does not apply.
-function _skill_by_release(df)
-    empty = DataFrame(; made_date = Date[], stream = String[],
-        horizon = Int[], fit = String[],
-        skill_vs_baseline = Union{Missing, Float64}[],
-        skill_vs_individual_fit = Union{Missing, Float64}[])
-    isempty(df) && return empty
-    rd(x) = x === missing ? missing : round(x; digits = 2)
-    sub = DataFrame(; made_date = df.made_date, stream = df.stream,
-        horizon = df.horizon, fit = df.fit,
-        skill_vs_baseline = rd.(df.log_rel_skill_to_baseline),
-        skill_vs_individual_fit = rd.(df.log_rel_skill_to_individual_fit))
-    ord = sortperm(collect(zip(sub.stream, sub.horizon, sub.fit,
-        sub.made_date)))
-    return sub[ord, :]
-end
-
-forecast_skill_overall = _skill_overall(forecast_scores_df)
-forecast_skill_by_release = _skill_by_release(forecast_scores_df)
+## The headline table, one row per (stream, fit) pooled over every horizon
+## and release; the by-horizon and by-release detail tables carry the same
+## columns at a finer grain (see src/scoring.jl).
+forecast_score_overview_table = forecast_score_overview(forecast_scores_df)
+forecast_score_by_horizon_table = forecast_score_by_horizon(forecast_scores_df)
+forecast_score_by_release_table = forecast_score_by_release(forecast_scores_df)
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The headline is the geometric mean across releases of each fit's log-scale
-# CRPS skill ratio: against the persistence baseline for every fit, and against
-# the stream's own individual fit on the joint row where the stream has one. A
-# ratio below one beats the comparator.
+# The headline pools every horizon and release into one row per stream and fit: the mean CRPS and its decomposition, coverage and bias, and the relative skill against the persistence baseline for every fit and, on the joint row where the stream has one, against its own individual fit, on both the natural and the log scale.
+# The log scale scores the log-transformed counts rather than the raw counts, so it is not the logarithm of the CRPS itself, and it plays down the very largest counts rather than treating an error of a hundred cases the same at every scale.
+# Every relative skill is the ratio of the two fits' mean CRPS over the matched forecasts both scored, not a mean of per-forecast ratios, so a comparator that happened to score zero on one forecast cannot make the ratio infinite.
+# A ratio below one beats the comparator.
+# The decomposition splits the mean CRPS into the ensemble's own spread and the extra cost of over- or under-predicting the observed count; a fit reading consistently high carries more overprediction than underprediction, and the reverse for a fit reading low.
+# Coverage is the share of matched forecasts whose 50% or 90% interval contained the observation, which should sit near 0.5 and 0.9 for a well-calibrated fit; bias is signed and runs from -1 (every forecast too low) to 1 (every forecast too high).
 
-forecast_skill_overall #hide
+forecast_score_overview_table #hide
 
-# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
-# headline, one row per stream, horizon and fit.
+# The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
+# A fit that beats the baseline on average but not at every cut-off is visible as a series that crosses the line rather than sitting under it throughout.
 
-forecast_score_table #hide
+forecast_relative_skill_fig = plot_forecast_relative_skill(
+    forecast_score_by_horizon_table);
 
-# The same skill ratios broken out by release, so a fit that wins overall but
-# not at every cut-off is visible.
+forecast_relative_skill_fig #hide
 
-forecast_skill_by_release #hide
+# The same columns as a table, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
 
-# Forecasts made at each release against the value observed since, one panel
-# per stream and horizon, the observed value in black.
-# The median and 90% interval are coloured by fit role: the persistence
-# baseline, the stream's individual fit and the joint.
-# The x-axis is the date each forecast was made, so an incident stream's
-# observed window pairs unambiguously with the forecast that made it.
+#md # ```@raw html
+#md # <details><summary>Scores by horizon</summary>
+#md # ```
+
+forecast_score_by_horizon_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Scores by release</summary>
+#md # ```
+
+forecast_score_by_release_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# Forecasts made at each release against the value observed since, one panel per stream and horizon, the observed value in black.
+# The median and 90% interval are coloured by fit role: the persistence baseline, the stream's individual fit and the joint.
+# The x-axis is the date each forecast was made, so an incident stream's observed window pairs unambiguously with the forecast that made it.
+# Each panel's axis is cropped to a small multiple of what that stream actually reached, so one very wide interval cannot squash every other series flat; an interval or median too wide for the panel is clamped at the top and marked with an open triangle rather than silently cut off.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
@@ -330,18 +286,12 @@ forecast_overlay_fig #hide
 
 # ## Frozen-fit forecast evaluation
 #
-# The same one- to four-week-ahead forecast made from the current model frozen
-# at earlier data cut-offs (`forecast_frozen.csv`), scored against the counts
-# observed since by `scripts/score_releases.jl` into
-# `data/forecast_scores_frozen.csv`.
-# Each frozen fit is stamped with its own cut-off as the made date, so this is
-# a historical forecast evaluation of the current model at past cut-offs
-# without reconstructing old release tags.
-# The May cut-offs predate the isolation and recovered streams, so only the
-# streams a fit carries are scored.
-# Kept apart from the cross-release scores above so the frozen made-dates do
-# not pool into the release baseline, the frozen forecast is set against the
-# same persistence baseline (`rel_skill` below one beats the baseline).
+# The same one- to four-week-ahead forecast, made from the current model frozen at earlier data cut-offs and scored against the counts observed since, against the same persistence baseline described above.
+# Each frozen fit is stamped with its own cut-off as the made date, so this is a historical evaluation of the current model at past cut-offs, without reconstructing old release tags.
+# The same reporting-coverage rule applies, and only the streams a fit carries are scored.
+# It matters more here than above, because the May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are dropped rather than scored against a series that had not started.
+# Kept apart from the cross-release scores above so the frozen made-dates do not pool into the release baseline.
+# The frozen evaluation scores the current joint model alone, so there is no individual-fit comparison to show here.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
@@ -350,43 +300,68 @@ forecast_overlay_fig #hide
 frozen_scores_df = _release_data("forecast_scores_frozen.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, crps = Float64,
-        log_crps = Float64, coverage_50 = Float64, coverage_90 = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
         bias = Float64, n_samples = Int,
-        log_rel_skill_to_baseline = Float64,
-        log_rel_skill_to_individual_fit = Union{Missing, Float64}))
+        log_rel_skill_to_baseline = Float64))
 frozen_overlay_df = _release_data("forecast_overlay_frozen.csv",
     (; release = String, made_date = Date, stream = String, horizon = Int,
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
-frozen_score_table = forecast_score_summary(frozen_scores_df)
-frozen_skill_overall = _skill_overall(frozen_scores_df)
-frozen_skill_by_release = _skill_by_release(frozen_scores_df)
+## The frozen evaluation never carries an individual single-stream fit
+## (it scores only the joint model at past cut-offs), so the individual-fit
+## comparison columns are dropped rather than shown as a column of missing.
+frozen_score_overview_table = drop_individual_fit_columns(
+    forecast_score_overview(frozen_scores_df))
+frozen_score_by_horizon_table = drop_individual_fit_columns(
+    forecast_score_by_horizon(frozen_scores_df))
+frozen_score_by_release_table = drop_individual_fit_columns(
+    forecast_score_by_release(frozen_scores_df))
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The headline frozen skill, the geometric mean across cut-offs of each frozen
-# fit's log-scale CRPS skill ratio against the persistence baseline. The
-# individual-fit ratio is blank throughout: the frozen evaluation scores the
-# current joint model at past cut-offs, not the single-stream fits.
+# The headline frozen table, one row per stream and fit pooled across cut-offs and horizons, against the persistence baseline on both scales, with the same CRPS decomposition, coverage and bias columns described above.
+# The individual-fit comparison is omitted here: the frozen evaluation scores the current joint model at past cut-offs, not the single-stream fits.
 
-frozen_skill_overall #hide
+frozen_score_overview_table #hide
 
-# The mean CRPS, log-scale CRPS, relative skill, coverage and bias behind that
-# headline, one row per stream, horizon and fit.
+# The same relative skill against the baseline, by horizon, for the frozen cut-offs.
+# The frozen evaluation scores one fit at each cut-off, so a single series appears in every panel, drawn in the same colour and under the same label as the individual fit above.
 
-frozen_score_table #hide
+frozen_relative_skill_fig = plot_forecast_relative_skill(
+    frozen_score_by_horizon_table);
 
-# The same baseline skill broken out by frozen cut-off.
+frozen_relative_skill_fig #hide
 
-frozen_skill_by_release #hide
+# The same columns as a table, broken out by horizon, and again broken out by frozen cut-off, are behind the two dropdowns below.
 
-# The frozen forecasts made at each cut-off against the value observed since,
-# one panel per stream and horizon, the observed value in black.
-# The frozen forecast draws in the individual-fit colour against the
-# persistence baseline; the x-axis is the frozen cut-off each was made from.
+#md # ```@raw html
+#md # <details><summary>Scores by horizon</summary>
+#md # ```
+
+frozen_score_by_horizon_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Scores by frozen cut-off</summary>
+#md # ```
+
+frozen_score_by_release_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
+# The frozen forecast draws in the individual-fit colour against the persistence baseline; the x-axis is the frozen cut-off each was made from.
+# The same per-panel axis crop and overflow marker described above applies here too.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
@@ -400,15 +375,250 @@ frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
 
 frozen_overlay_fig #hide
 
+# The frozen re-fits below freeze the renewal data to an earlier cut-off
+# and re-fit, so that a change driven by newer data can be distinguished from
+# one driven by a change of method.
+# Each uses the full headline settings (1000 draws across two chains),
+# reusing the frozen-fit helper defined above.
+
+#md # ```@raw html
+#md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
+#md # ```
+
+## Frozen re-fits and released_df are prepared in the setup block above.
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# ## Estimate evolution across releases
+#
+# How the outbreak-size estimate moved as the situation reports accrued.
+#
+# The project publishes a tagged results release at each data cut-off
+# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
+# the posterior draws and input data.
+# The released series, in blue, is the project's published estimate at each
+# release: the closed-form integral model up to v1.3.0, then the renewal
+# model from v1.4.0 on.
+# Each release is its own fit, so it is drawn as a discrete estimate, a
+# median with nested 30/60/90% interval bars, rather than a ribbon.
+# The current model frozen at earlier cut-offs is drawn in red as discrete
+# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
+# and 27 May), Chamla et al.'s 8 June confirmed-case calibration date, and
+# one week before the current cut-off. These are the frozen joint fits
+# already computed for the matched-in-time comparison, the Chamla comparison
+# and the forecast validation, reused here, so no extra fits are run.
+# The current-data, current-model estimate is drawn in green as the
+# cumulative-infection trajectory over time, a single fit shown across the
+# period so the latest estimate reads against the earlier ones.
+# Each release date is marked with a dotted vertical rule.
+
+#md # ```@raw html
+#md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
+#md # ```
+
+## Released median and 30/60/90% intervals per release, from
+## `data/released_estimates.csv`. Each tuple is
+## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
+release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                         r.lo90, r.hi90) for r in eachrow(released_df)]
+
+## The current model frozen at earlier cut-offs, each its own discrete
+## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
+## for the matched-in-time comparison below, the 8 June Chamla
+## confirmed-case anchor computed for the Chamla comparison, and the
+## one-week-back validation fit (`frozen_lastweek`, at `validation_cutoff`)
+## already computed for the forecast validation above. All are reused here so
+## the current-model estimate at those earlier cut-offs reads against the
+## released overlay, including a recent point one week before the cut-off.
+## No extra fits are run. Each tuple carries the median and 30/60/90%
+## credible bounds from the frozen `C_T` draws.
+function _ci369(xs)
+    q(p) = round(Int, quantile(xs, p))
+    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
+end
+frozen_by_cutoff[validation_cutoff] = frozen_lastweek
+frozen_matched = [(c, _ci369(frozen_C(c))...)
+                  for c in sort(union(frozen_cutoffs,
+    [validation_cutoff, default_chamla_cutoff()]))]
+
+## The current-data, current-model estimate as the cumulative-infection
+## trajectory over the day grid (one calendar date per grid day, day 1 is
+## the seeding date), summarised by per-day 30/60/90% credible bounds. This
+## is the same latent quantity the cumulative-trajectory figure shows, so
+## the current estimate rises over time on the release-date axis instead of
+## sitting flat. Drawn against calendar dates, it lines up with the
+## release and frozen points.
+infection_trajectory = let
+    mat = chn_joint[:cumulative_infections]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    ## Only over the comparison window — from the earliest release date to the
+    ## cut-off — not back to the seeding date.
+    start_day = obs.n - value(obs.cutoff - Date(release_evolution[1][1]))
+    days = max(start_day, 1):obs.n
+    dates = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
+    (dates,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+evolution_fig = plot_estimate_evolution(release_evolution;
+    renewal = frozen_matched,
+    renewal_label = "Current model frozen at earlier cut-offs",
+    trajectory = infection_trajectory,
+    title = "Outbreak-size estimate as data accrued");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+evolution_fig #hide
+
+# ## Outbreak size by release and dataset
+#
+# The outbreak size $C_T$ estimated at each release, one panel per fit, the per-dataset analogue of the overall release evolution above.
+# Each dataset constrains the latent size differently, so the panels show how far each fit's history sits from the joint's as data accrued.
+# A dataset the report fits on its own also carries that fit's current-model outbreak-size band, the per-dataset analogue of the current-data trajectory above, so a panel spanning only one saved release still reads against its own current estimate.
+# Confirmed deaths has no band of its own here, so its panel carries its release points alone.
+# The per-dataset release history begins at the release that first published these per-fit estimates, so some panels open later than the overall outbreak-size picture above.
+# Each panel keeps its own y range rather than a shared one, since the datasets span very different scales.
+
+#md # ```@raw html
+#md # <details><summary>Outbreak size per release, faceted by fit</summary>
+#md # ```
+
+## Schema of the per-release, per-fit estimate tables written by
+## scripts/score_releases.jl from each release's stream_estimates.csv. Shared
+## by this section and the reproduction-number-by-dataset section below.
+_by_stream_schema = (; release = String, date = Date, fit = String,
+    median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+    hi60 = Float64, lo90 = Float64, hi90 = Float64)
+
+## Fits in a fixed order, the joint first, so the panels do not reshuffle
+## between builds. Labels match the per-stream table below. Recovered is
+## absent because it has no individual fit.
+_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
+    "treatment", "exports"]
+_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
+    "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
+    "confirmed_deaths" => "confirmed deaths (DRC)",
+    "treatment" => "isolation (DRC)", "exports" => "exports")
+
+## Group a per-fit estimate table into the label => tuples pairs the faceted
+## plot takes, keyed on the date so the mixed release tag shapes
+## (`results-v1.9.0` and `results-1243`) never reach the axis.
+function _fit_groups(df)
+    return [get(_fit_labels, f, f) =>
+                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
+            for f in _fit_order]
+end
+
+## Current-data, current-model cumulative-infection trajectory for one
+## single-stream fit, the per-dataset analogue of the joint trajectory built
+## for the release-evolution section above. `dates` is that fit's own saved
+## release dates, so the band starts at the same release its per-fit panel's
+## points begin at.
+function _stream_size_trajectory(chn, dates)
+    mat = chn[:cumulative_infections]
+    trajs = [collect(v) for v in vec(collect(mat))]
+    first_date = isempty(dates) ? obs.seeding : minimum(dates)
+    start_day = obs.n - value(obs.cutoff - first_date)
+    days = max(start_day, 1):obs.n
+    ds = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
+    (ds,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+## Same, for the reproduction number, reconstructing the walk exactly as
+## `plot_rt_streams` does per stream.
+function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
+    mat = reconstruct_rt(chn; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = rt_start, rt_walk_start = rt_walk_start,
+        ramp = RT_INTERVENTION_RAMP)
+    first_date = isempty(dates) ? obs.seeding : minimum(dates)
+    first_day = clamp(value(first_date - obs.seeding) + 1, rt_start, obs.n)
+    days = first_day:obs.n
+    ds = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
+    (ds,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+## The single-stream chains and their renewal-walk starts, keyed on the fit
+## id the per-release tables use. The joint walks from `RT_WALK_LEAD` days
+## before the first situation report; the per-stream fits walk from day 1,
+## matching the per-stream implied-Rt figure further below. Confirmed deaths
+## has no trajectory here: its panel still draws its release points alone.
+_stream_rt_walk_start = clamp(
+    _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+_stream_chains = (
+    "joint" => (; chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _stream_rt_walk_start),
+    "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
+    "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
+    "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
+    "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
+
+## Build a fit label => trajectory dictionary from a per-release table,
+## restricted to the fits `_stream_chains` names. A fit with no row in `df`
+## gets no trajectory, so its panel still draws its release points alone.
+function _rt_trajectories(df)
+    trajs = Dict{String, Any}()
+    for (fid, cfg) in _stream_chains
+        fdates = df.date[df.fit .== fid]
+        isempty(fdates) && continue
+        trajs[get(_fit_labels, fid, fid)] = _stream_rt_trajectory(
+            cfg.chn, fdates; rt_start = cfg.rt_start,
+            rt_walk_start = cfg.rt_walk_start)
+    end
+    return trajs
+end
+function _size_trajectories(df)
+    trajs = Dict{String, Any}()
+    for (fid, cfg) in _stream_chains
+        fdates = df.date[df.fit .== fid]
+        isempty(fdates) && continue
+        trajs[get(_fit_labels, fid, fid)] = _stream_size_trajectory(
+            cfg.chn, fdates)
+    end
+    return trajs
+end
+
+size_stream_df = _release_data("size_by_release_by_stream.csv",
+    _by_stream_schema)
+## Outbreak size spans very different scales across datasets (exports, a
+## handful of detections, against the joint's tens of thousands of
+## infections), so each panel keeps its own y range rather than sharing one
+## that a single wide-scale dataset would set for every other panel.
+size_stream_fig = plot_evolution_by_group(_fit_groups(size_stream_df);
+    trajectories = _size_trajectories(size_stream_df),
+    ylabel = "Cumulative infections",
+    title = "Outbreak-size estimate as data accrued, by dataset",
+    released_label = "Released estimate (per release)",
+    shared_yrange = false,
+    empty_note = "No per-dataset outbreak sizes saved yet.");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+size_stream_fig #hide
+
 # ## Reproduction number by release
 #
-# The reproduction number estimated at each release, the Rt analogue of the
-# outbreak-size evolution below.
-# Each release's cut-off `R_T` posterior is drawn as a discrete estimate
-# (median with nested 30/60/90% bars) from `data/rt_by_release.csv`, refreshed
-# from each release's posterior draws by `scripts/score_releases.jl`.
-# The current fit's daily Rt over its established window is the continuous
-# band, and Rt = 1 is marked.
+# The reproduction number estimated at each release, the same kind of release-by-release picture as the outbreak-size evolution above.
+# Each release's cut-off reproduction number $R_T$ is drawn as a discrete estimate, a median with nested 30/60/90% interval bars.
+# The current fit's daily $R_t$ over its established window is drawn as the continuous band, and $R_t = 1$ is marked.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release with the current-fit band</summary>
@@ -431,7 +641,8 @@ rt_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 rt_release_trajectory = let
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
     mat = reconstruct_rt(chn_joint; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start, ramp = RT_INTERVENTION_RAMP)
+        rt_start = _rt_start_plot, rt_walk_start = rt_walk_start,
+        ramp = RT_INTERVENTION_RAMP)
     first_release_day = clamp(
         value(minimum(rt_release_df.date) - obs.seeding) + 1,
         _rt_start_plot, obs.n)
@@ -460,14 +671,10 @@ rt_evolution_fig #hide
 
 # ## Basic reproduction number by release
 #
-# The basic reproduction number `R0`, the renewal walk's starting value before
-# the time-varying decline, estimated at each release, the initial-transmission
-# analogue of the cut-off `R_T` above.
-# Each release's `R0` posterior is drawn as a discrete estimate (median with
-# nested 30/60/90% bars) from `data/r0_by_release.csv`, refreshed from each
-# release's posterior draws by `scripts/score_releases.jl`.
-# The current fit's `R0` posterior is the flat reference band across the release
-# window, and R0 = 1 is marked.
+# The basic reproduction number $R_0$, the renewal walk's starting value before the time-varying decline, estimated at each release, the initial-transmission analogue of the cut-off reproduction number above.
+# Each release's $R_0$ posterior is drawn as a discrete estimate, a median with nested 30/60/90% interval bars.
+# The current fit's $R_0$ posterior is the flat reference band across the release window, and $R_0 = 1$ is marked.
+# This quantity is only saved by a release once the release started publishing it, so the discrete points begin at the release that introduced it rather than at the start of the release history.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release with the current-fit band</summary>
@@ -516,46 +723,23 @@ r0_evolution_fig #hide
 
 # ## Reproduction number by release and dataset
 #
-# The same per-release reproduction number, one panel per fit, so each
-# dataset's Rt history reads against the others and against the joint.
-# Panels share a calendar axis and a y range, Rt = 1 is marked, and each
-# release's cut-off `R_T` posterior is a median with nested 30/60/90% bars
-# from `data/rt_by_release_by_stream.csv`.
+# The same per-release reproduction number, one panel per fit, so each dataset's history reads against the others and against the joint.
+# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off reproduction number is a median with nested 30/60/90% interval bars.
 # A fit with no saved estimates is dropped rather than drawn empty.
+# A dataset the report fits on its own also carries that fit's current-model reproduction number as a band, reconstructed the same way as the single overall fit above, so a panel spanning only one release still reads against its own current estimate rather than sitting alone.
+# Confirmed deaths has no band of its own here, so its panel carries its release points alone.
+# The per-dataset release history begins at the release that first published these per-fit estimates, so some panels open later than the overall reproduction-number picture above.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release by fit</summary>
 #md # ```
 
-## Schema of the per-release, per-fit estimate tables written by
-## scripts/score_releases.jl from each release's stream_estimates.csv.
-_by_stream_schema = (; release = String, date = Date, fit = String,
-    median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-    hi60 = Float64, lo90 = Float64, hi90 = Float64)
-
-## Fits in a fixed order, the joint first, so the panels do not reshuffle
-## between builds. Labels match the per-stream table below. Recovered is
-## absent because it has no individual fit.
-_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
-    "treatment", "exports"]
-_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
-    "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
-    "confirmed_deaths" => "confirmed deaths (DRC)",
-    "treatment" => "isolation (DRC)", "exports" => "exports")
-
-## Group a per-fit estimate table into the label => tuples pairs the faceted
-## plot takes, keyed on the date so the mixed release tag shapes
-## (`results-v1.9.0` and `results-1243`) never reach the axis.
-function _fit_groups(df)
-    return [get(_fit_labels, f, f) =>
-                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
-            for f in _fit_order]
-end
-
+## Schema, fit order/labels and grouping and trajectory helpers are shared
+## with, and already defined by, the outbreak-size-by-dataset section above.
 rt_stream_df = _release_data("rt_by_release_by_stream.csv",
     _by_stream_schema)
 rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
+    trajectories = _rt_trajectories(rt_stream_df),
     ylabel = "Reproduction number",
     title = "Reproduction number as data accrued, by dataset",
     released_label = "Released estimate (per release)",
@@ -567,32 +751,6 @@ rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
 #md # ```
 
 rt_stream_fig #hide
-
-# ## Outbreak size by release and dataset
-#
-# The outbreak size `C_T` estimated at each release, one panel per fit, the
-# per-dataset analogue of the release evolution below.
-# Each dataset constrains the latent size differently, so the panels show how
-# far each fit's history sits from the joint's as data accrued, from
-# `data/size_by_release_by_stream.csv`.
-
-#md # ```@raw html
-#md # <details><summary>Outbreak size per release, faceted by fit</summary>
-#md # ```
-
-size_stream_df = _release_data("size_by_release_by_stream.csv",
-    _by_stream_schema)
-size_stream_fig = plot_evolution_by_group(_fit_groups(size_stream_df);
-    ylabel = "Cumulative infections",
-    title = "Outbreak-size estimate as data accrued, by dataset",
-    released_label = "Released estimate (per release)",
-    empty_note = "No per-dataset outbreak sizes saved yet.");
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-size_stream_fig #hide
 
 # ## Outbreak size estimated by each data stream
 #
@@ -729,108 +887,6 @@ stream_rt_fig = plot_rt_streams(
 #md # ```
 
 stream_rt_fig #hide
-
-# The frozen re-fits below freeze the renewal data to an earlier cut-off
-# and re-fit, so that a change driven by newer data can be distinguished from
-# one driven by a change of method.
-# Each uses the full headline settings (1000 draws across two chains),
-# reusing the frozen-fit helper defined above.
-
-#md # ```@raw html
-#md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
-#md # ```
-
-## Frozen re-fits and released_df are prepared in the setup block above.
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-# ## Estimate evolution across releases
-#
-# How the outbreak-size estimate moved as the situation reports accrued.
-#
-# The project publishes a tagged results release at each data cut-off
-# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
-# the posterior draws and input data.
-# The released series, in blue, is the project's published estimate at each
-# release: the closed-form integral model up to v1.3.0, then the renewal
-# model from v1.4.0 on.
-# Each release is its own fit, so it is drawn as a discrete estimate, a
-# median with nested 30/60/90% interval bars, rather than a ribbon.
-# The current model frozen at earlier cut-offs is drawn in red as discrete
-# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
-# and 27 May), Chamla et al.'s 8 June confirmed-case calibration date, and
-# one week before the current cut-off. These are the frozen joint fits
-# already computed for the matched-in-time comparison, the Chamla comparison
-# and the forecast validation, reused here, so no extra fits are run.
-# The current-data, current-model estimate is drawn in green as the
-# cumulative-infection trajectory over time, a single fit shown across the
-# period so the latest estimate reads against the earlier ones.
-# Each release date is marked with a dotted vertical rule.
-
-#md # ```@raw html
-#md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
-#md # ```
-
-## Released median and 30/60/90% intervals per release, from
-## `data/released_estimates.csv`. Each tuple is
-## `(date, median, lo30, hi30, lo60, hi60, lo90, hi90)`.
-release_evolution = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                         r.lo90, r.hi90) for r in eachrow(released_df)]
-
-## The current model frozen at earlier cut-offs, each its own discrete
-## estimate: the matched-McCabe cut-offs (20, 23, 27 May) already computed
-## for the matched-in-time comparison below, the 8 June Chamla
-## confirmed-case anchor computed for the Chamla comparison, and the
-## one-week-back validation fit (`frozen_lastweek`, at `validation_cutoff`)
-## already computed for the forecast validation above. All are reused here so
-## the current-model estimate at those earlier cut-offs reads against the
-## released overlay, including a recent point one week before the cut-off.
-## No extra fits are run. Each tuple carries the median and 30/60/90%
-## credible bounds from the frozen `C_T` draws.
-function _ci369(xs)
-    q(p) = round(Int, quantile(xs, p))
-    (q(0.5), q(0.35), q(0.65), q(0.20), q(0.80), q(0.05), q(0.95))
-end
-frozen_by_cutoff[validation_cutoff] = frozen_lastweek
-frozen_matched = [(c, _ci369(frozen_C(c))...)
-                  for c in sort(union(frozen_cutoffs,
-    [validation_cutoff, default_chamla_cutoff()]))]
-
-## The current-data, current-model estimate as the cumulative-infection
-## trajectory over the day grid (one calendar date per grid day, day 1 is
-## the seeding date), summarised by per-day 30/60/90% credible bounds. This
-## is the same latent quantity the cumulative-trajectory figure shows, so
-## the current estimate rises over time on the release-date axis instead of
-## sitting flat. Drawn against calendar dates, it lines up with the
-## release and frozen points.
-infection_trajectory = let
-    mat = chn_joint[:cumulative_infections]
-    trajs = [collect(v) for v in vec(collect(mat))]
-    ## Only over the comparison window — from the earliest release date to the
-    ## cut-off — not back to the seeding date.
-    start_day = obs.n - value(obs.cutoff - Date(release_evolution[1][1]))
-    days = max(start_day, 1):obs.n
-    dates = [obs.seeding + Day(d - 1) for d in days]
-    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
-    (dates,
-        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
-end
-
-evolution_fig = plot_estimate_evolution(release_evolution;
-    renewal = frozen_matched,
-    renewal_label = "Current model frozen at earlier cut-offs",
-    trajectory = infection_trajectory,
-    title = "Outbreak-size estimate as data accrued");
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-evolution_fig #hide
 
 # ## Comparison with McCabe et al.
 #

@@ -2,10 +2,10 @@
 #
 # Score every past release's saved one-week-ahead forecasts against the
 # now-observed data, plus a persistence baseline, and write tidy score
-# tables to `data/forecast_scores.csv`. Each score row also carries two
-# log-CRPS relative skills: `log_rel_skill_to_baseline` (a fit over its
-# stream's persistence baseline) and `log_rel_skill_to_individual_fit` (the
-# joint over the stream's individual fit). Also refreshes
+# tables to `data/forecast_scores.csv`. Each score row also carries a
+# log-CRPS relative skill to the persistence baseline,
+# `log_rel_skill_to_baseline`; the comparison against a stream's individual
+# fit is computed at aggregation time, not stored per row. Also refreshes
 # `data/rt_by_release.csv` and `data/r0_by_release.csv`, the per-release
 # posterior R_T and initial-R0 summaries, in the same style as
 # `data/released_estimates.csv` (see `scripts/refresh_releases.jl`).
@@ -34,14 +34,19 @@
 # forecast draws for the incident "confirmed cases", "confirmed deaths" and
 # "recovered" streams and the LEVEL "isolation beds" stream. This script
 # scores each fit of each stream against the data that has since arrived,
-# using `score_draws` (CRPS, log-CRPS, 50/90% coverage and bias), against
-# one persistence baseline per stream (`fit = "baseline"`): for the
-# incident streams, the observed count over the same-length window ending
-# at the forecast's cut-off, replicated through a Poisson (a
-# parameter-free, defensible spread; autoregression is explicitly out of
-# scope); for isolation beds, the last observed occupancy carried forward
-# through the same Poisson replication. A stream no individual model fits,
-# "recovered", is scored for the joint and the baseline only.
+# using `score_draws` (CRPS, log-CRPS, its dispersion/overprediction/
+# underprediction decomposition, 50/90% coverage and bias), against one
+# persistence baseline per stream (`fit = "baseline"`, `baseline_draws`):
+# the centre carried forward as before (the observed count over the
+# same-length window ending at the forecast's cut-off for the incident
+# streams, the last observed occupancy for isolation beds), with the
+# spread taken from the stream's own past first differences, in the style
+# of the COVID-19 Forecast Hub baseline, falling back to a Poisson spread
+# when a stream has too little history yet. A stream no individual model
+# fits, "recovered", is scored for the joint and the baseline only. A
+# forecast group whose target runs past the stream's own reporting
+# coverage (`truth_at`, `stream_coverage_end`) is not scored at all, the
+# same way a not-yet-observed target is not.
 #
 # Each release's `stream_estimates.csv`, when present, also feeds the
 # per-fit `data/rt_by_release_by_stream.csv` and
@@ -304,13 +309,57 @@ function cum_at(hist, date::Date, grid_date)
     return hist.counts[idx]
 end
 
+## The last date a stream's own truth source was still being updated: the
+## date of its last vintage, since beyond it the cumulative total is only
+## ever repeated at its last reported value rather than genuinely observed.
+## For the exports stream, assembled by `stream_history` from the dated
+## detection series, this is the date of the last detection, since the
+## manifest documents a later known import deliberately excluded as later
+## than the cut-off that series is anchored to; the same generic rule
+## reads that correctly with no special case for the stream. A history
+## with no vintages at all has no coverage.
+function stream_coverage_end(obs, grid_date, stream)
+    h, _ = stream_history(obs, stream)
+    isempty(h.days) && return typemin(Date)
+    return grid_date(maximum(h.days))
+end
+
+## The first date a stream's own truth source carries an observation: the
+## date of its first vintage. Before it `cum_at` reads zero because no
+## vintage predates the date, which is the absence of a series rather than a
+## count of zero. A window opening before this date therefore measures its
+## increment from a non-observation, and a persistence baseline centred
+## there carries zero forward against a real value, so such a window is not
+## scorable. A history with no vintages at all has no coverage.
+##
+## An assembled stream is exempt. "exports" is a dated list of detections
+## rather than a series of reporting vintages, so a date before its first
+## detection carries the true statement that no export had been detected
+## yet, not the absence of a source. Only its end anchor constrains it.
+function stream_coverage_start(obs, grid_date, stream)
+    haskey(STREAM_ASSEMBLED, stream) && return typemin(Date)
+    h, _ = stream_history(obs, stream)
+    isempty(h.days) && return typemax(Date)
+    return grid_date(minimum(h.days))
+end
+
 ## Observed truth for one (stream, made_date, target_date) forecast group
-## against the CURRENT `obs`, or `missing` when `target_date` is beyond
-## the current data cut-off (not yet observed, so the group cannot be
-## scored). Incident streams floor the new-count difference at zero, the
-## same convention `forecast.jl` uses for `*_new` columns.
+## against the CURRENT `obs`, or a `Symbol` naming why the group is not
+## scorable: `:not_yet_observed` when `target_date` is beyond the current
+## data cut-off, `:stopped_reporting` when it is beyond the stream's own
+## coverage (see `stream_coverage_end`), so an unmoved cumulative total is
+## not read as an observed zero, or `:not_yet_reporting` when the window
+## opens before the stream began being reported (see
+## `stream_coverage_start`), so a series that had not started is not read as
+## a zero either. The window is scored only where the stream's own reporting
+## covers it at both ends. Incident streams floor the new-count difference at
+## zero, the same convention `forecast.jl` uses for `*_new` columns.
 function truth_at(obs, grid_date, stream, made_date, target_date)
-    target_date > obs.cutoff && return missing
+    target_date > obs.cutoff && return :not_yet_observed
+    target_date > stream_coverage_end(obs, grid_date, stream) &&
+        return :stopped_reporting
+    made_date < stream_coverage_start(obs, grid_date, stream) &&
+        return :not_yet_reporting
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
     new = cum_at(h, target_date, grid_date) - cum_at(h, made_date, grid_date)
@@ -321,15 +370,47 @@ end
 # Persistence baseline
 # ----------------------------------------------------------------------
 
-## Persistence baseline draws for one forecast group: `n` replicates from
-## a Poisson centred on the last-observed value, chosen as the simplest
-## defensible spread (no free dispersion parameter to justify, and no
-## autoregression, which is explicitly out of scope). For an INCIDENT
-## stream the centre is the observed count over the horizon-length window
-## ENDING at `made_date` (the same window length as the forecast, one
-## horizon earlier); for the LEVEL stream ("isolation beds") it is the
-## last observed occupancy at or before `made_date`, carried forward
-## unchanged.
+## The `(value, window)` first differences between consecutive vintages of
+## a `(; days, counts)` history at or before `made_date`: `value` the
+## signed change in the count between the two vintages and `window` the
+## number of days between them, kept apart because vintages do not arrive
+## on a fixed cadence. Fewer than two vintages by `made_date` yields no
+## differences.
+function _history_diffs(hist, grid_date, made_date)
+    out = Tuple{Float64, Int}[]
+    n = length(hist.days)
+    n < 2 && return out
+    for i in 2:n
+        d_prev = grid_date(hist.days[i - 1])
+        d_this = grid_date(hist.days[i])
+        d_this > made_date && break
+        window = Dates.value(d_this - d_prev)
+        window <= 0 && continue
+        push!(out, (Float64(hist.counts[i] - hist.counts[i - 1]), window))
+    end
+    return out
+end
+
+## Persistence baseline draws for one forecast group, in the style of the
+## COVID-19 Forecast Hub baseline: the centre carried forward with
+## uncertainty taken from the stream's own reporting history, rather than
+## a Poisson's few-percent spread at a count of several hundred (which
+## makes the baseline a near-point forecast and any skill ratio against it
+## explode).
+##
+## The centre is unchanged: for an INCIDENT stream, the observed count over
+## the horizon-length window ENDING at `made_date`; for the LEVEL stream
+## ("isolation beds"), the last observed occupancy at or before
+## `made_date`.
+##
+## The spread draws from the stream's own past first differences (see
+## `_history_diffs`), symmetrised about zero so a run of only-rising or
+## only-falling history does not bias the spread one way, each difference
+## scaled by the square root of the current horizon over the window it
+## itself spanned (a random walk's spread grows with the square root of
+## elapsed time), added to the centre and truncated at zero. Falls back to
+## the plain Poisson draw when fewer than three past differences are
+## available, so an early made-date still scores.
 function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
     h, kind = stream_history(obs, stream)
     centre = if kind == :level
@@ -339,7 +420,14 @@ function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
         Float64(max(
             cum_at(h, made_date, grid_date) - cum_at(h, prior, grid_date), 0))
     end
-    return Float64.(rand(rng, Poisson(centre), n))
+
+    diffs = _history_diffs(h, grid_date, made_date)
+    length(diffs) < 3 && return Float64.(rand(rng, Poisson(centre), n))
+
+    scaled = [d * sqrt(horizon / window) for (d, window) in diffs]
+    pool = vcat(scaled, -scaled)
+    draws = centre .+ rand(rng, pool, n)
+    return max.(draws, 0.0)
 end
 
 # ----------------------------------------------------------------------
@@ -354,6 +442,8 @@ function push_scored!(out, overlay, tag, key, fit, samples, truth)
     push!(out,
         (; release = tag, made_date, stream, horizon, target_date,
             fit, crps = s.crps, log_crps = s.log_crps,
+            dispersion = s.dispersion, overprediction = s.overprediction,
+            underprediction = s.underprediction,
             coverage_50 = s.coverage_50, coverage_90 = s.coverage_90,
             bias = s.bias, n_samples = s.n))
     ## Quantile summary of the same draws for the forecasts-versus-now
@@ -384,7 +474,12 @@ end
 ## with `default_fit = "frozen"`.
 ##
 ## Groups whose `target_date` is not yet observed are skipped (counted in
-## `.skipped` for the caller to log).
+## `.skipped` for the caller to log), and so are groups whose `target_date`
+## runs past the stream's own reporting coverage (counted in `.stopped`),
+## kept apart because the two are not the same finding: one is a target the
+## world has not reached yet, the other is a stream that stopped being
+## updated before the target, whose unmoved cumulative total is not an
+## observed zero (see `truth_at`, `stream_coverage_end`).
 function score_release(tag, forecast_path, obs, grid_date;
         default_fit = JOINT_FIT)
     header, rows = read_simple_csv(forecast_path)
@@ -425,11 +520,19 @@ function score_release(tag, forecast_path, obs, grid_date;
     out = NamedTuple[]
     overlay = NamedTuple[]
     skipped = 0
+    stopped = 0
+    unstarted = 0
     for (key, byfit) in groups
         made_date, horizon, target_date, stream = key
         truth = truth_at(obs, grid_date, stream, made_date, target_date)
-        if truth === missing
+        if truth === :not_yet_observed
             skipped += length(byfit)
+            continue
+        elseif truth === :stopped_reporting
+            stopped += length(byfit)
+            continue
+        elseif truth === :not_yet_reporting
+            unstarted += length(byfit)
             continue
         end
         for fit in sort(collect(keys(byfit)))
@@ -446,38 +549,30 @@ function score_release(tag, forecast_path, obs, grid_date;
             obs, grid_date, stream, made_date, horizon, n, rng)
         push_scored!(out, overlay, tag, key, BASELINE_FIT, base, truth)
     end
-    return (; rows = out, overlay, skipped)
+    return (; rows = out, overlay, skipped, stopped, unstarted)
 end
 
 # ----------------------------------------------------------------------
 # Relative forecast skill on the log-CRPS scale
 # ----------------------------------------------------------------------
 
-## The two relative-skill values for every row of a scored table, on the
-## log-CRPS scale (`log_crps`, CRPS of `log1p`-transformed draws), both
-## relative to other fits of the SAME (release, made_date, stream, horizon)
-## group:
+## The per-row relative skill against the persistence baseline, on the
+## log-CRPS scale (`log_crps`, CRPS of `log1p`-transformed draws), for every
+## row of a scored table, relative to other fits of the SAME (release,
+## made_date, stream, horizon) group: a fit's `log_crps` over its stream's
+## persistence-baseline `log_crps` in the group. Below 1 beats the baseline.
+## The baseline row itself is `1.0`. Every scorable stream carries a
+## baseline, so this is defined for every row of a group whose baseline was
+## scored, and `missing` otherwise.
 ##
-##  * `log_rel_skill_to_baseline`: a fit's `log_crps` over its stream's
-##    persistence-baseline `log_crps` in the group. Below 1 beats the
-##    baseline. The baseline row itself is `1.0`. Every scorable stream
-##    carries a baseline, so this is defined for every row of a group whose
-##    baseline was scored.
+## The comparison against a stream's individual fit is not a per-row ratio:
+## it is computed at aggregation time from matched group means, alongside
+## the baseline comparison, by the table builders in `src/scoring.jl`.
 ##
-##  * `log_rel_skill_to_individual_fit`: the JOINT fit's `log_crps` over the
-##    stream's INDIVIDUAL-fit `log_crps` in the group, defined only on the
-##    joint row of a group that also carries an individual fit. It is
-##    `missing` on every non-joint row, and on the joint row of a stream no
-##    individual model fits (e.g. "recovered"). The individual fit is the
-##    group's one row whose fit is neither the baseline nor the joint; a
-##    stream is fit by at most one individual model.
-##
-## Returned as two `Vector{Union{Missing, Float64}}` aligned to `df`'s rows.
-function rel_skill_columns(df; joint_fit = JOINT_FIT,
-        baseline_fit = BASELINE_FIT)
+## Returned as a `Vector{Union{Missing, Float64}}` aligned to `df`'s rows.
+function rel_skill_columns(df; baseline_fit = BASELINE_FIT)
     n = nrow(df)
     to_base = Vector{Union{Missing, Float64}}(missing, n)
-    to_indiv = Vector{Union{Missing, Float64}}(missing, n)
     key(i) = (df.release[i], df.made_date[i], df.stream[i], df.horizon[i])
     groups = Dict{Any, Vector{Int}}()
     for i in 1:n
@@ -485,9 +580,6 @@ function rel_skill_columns(df; joint_fit = JOINT_FIT,
     end
     for idx in values(groups)
         base_i = findfirst(i -> df.fit[i] == baseline_fit, idx)
-        joint_i = findfirst(i -> df.fit[i] == joint_fit, idx)
-        indiv_i = findfirst(
-            i -> df.fit[i] != baseline_fit && df.fit[i] != joint_fit, idx)
         if !isnothing(base_i)
             base_lc = df.log_crps[idx[base_i]]
             for i in idx
@@ -495,12 +587,8 @@ function rel_skill_columns(df; joint_fit = JOINT_FIT,
                              df.log_crps[i] / base_lc
             end
         end
-        if !isnothing(joint_i) && !isnothing(indiv_i)
-            j = idx[joint_i]
-            to_indiv[j] = df.log_crps[j] / df.log_crps[idx[indiv_i]]
-        end
     end
-    return (to_base, to_indiv)
+    return to_base
 end
 
 ## Format one relative-skill value for the plain CSV: an empty cell for
@@ -632,6 +720,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_backfilled = 0
     n_no_rt = 0
     n_frozen_scored = 0
+    n_stopped = 0
+    n_frozen_stopped = 0
+    n_unstarted = 0
+    n_frozen_unstarted = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
     ## `observations.toml` fetched for the selection is still there when its
@@ -686,7 +778,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     for tag in tags
         ## A top-level `for` is a soft scope, so the running counters must be
         ## declared global to update the bindings above rather than shadow them.
-        global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored
+        global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored,
+        n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted
 
         ## A saved forecast wins; a reconstruction stands in only where the
         ## release never stored one. The per-stream archive carries every fit's
@@ -720,9 +813,17 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 append!(overlay_rows, result.overlay)
                 n_scored += 1
                 label == tag || (n_backfilled += 1)
+                n_stopped += result.stopped
+                n_unstarted += result.unstarted
                 result.skipped > 0 && @info string(
                     label, ": skipped ", result.skipped,
                     " not-yet-observed group(s)")
+                result.stopped > 0 && @info string(
+                    label, ": skipped ", result.stopped,
+                    " group(s) past their stream's reporting coverage")
+                result.unstarted > 0 && @info string(
+                    label, ": skipped ", result.unstarted,
+                    " group(s) before their stream began being reported")
             end
         end
 
@@ -745,9 +846,17 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 append!(frozen_score_rows, fresult.rows)
                 append!(frozen_overlay_rows, fresult.overlay)
                 n_frozen_scored += 1
+                n_frozen_stopped += fresult.stopped
+                n_frozen_unstarted += fresult.unstarted
                 fresult.skipped > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.skipped,
                     " not-yet-observed group(s)")
+                fresult.stopped > 0 && @info string(
+                    tag, " (frozen): skipped ", fresult.stopped,
+                    " group(s) past their stream's reporting coverage")
+                fresult.unstarted > 0 && @info string(
+                    tag, " (frozen): skipped ", fresult.unstarted,
+                    " group(s) before their stream began being reported")
             end
         end
 
@@ -798,25 +907,33 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println("Scored $n_scored/$(length(tags)) releases " *
             "($n_no_forecast without a stored or reconstructed forecast, " *
             "$n_backfilled from $BACKFILL_TAG).")
+    println("Dropped $n_stopped group(s) whose target ran past their " *
+            "stream's own reporting coverage ($n_frozen_stopped in the " *
+            "frozen tables).")
+    println("Dropped $n_unstarted group(s) whose window opened before their " *
+            "stream began being reported ($n_frozen_unstarted in the " *
+            "frozen tables).")
     println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
             "($n_no_rt without an R_T posterior).")
 
     ## `data/forecast_scores.csv`: one row per scored (release, made_date,
     ## stream, horizon, fit) group, `fit` the model or `baseline`. The two
-    ## trailing columns are the log-CRPS relative skills: to the persistence
-    ## baseline (baseline row `1.0`), and the joint over the stream's
-    ## individual fit (`missing`/empty off the joint row or with no
-    ## individual model).
+    ## trailing column is the log-CRPS relative skill to the persistence
+    ## baseline (baseline row `1.0`). The comparison against a stream's
+    ## individual fit is computed at aggregation time by the table builders
+    ## in `src/scoring.jl`, not stored per row here.
     scores = if isempty(score_rows)
         DataFrame(release = String[], made_date = Date[], stream = String[],
             horizon = Int[], target_date = Date[], fit = String[],
-            crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
+            crps = Float64[], log_crps = Float64[], dispersion = Float64[],
+            overprediction = Float64[], underprediction = Float64[],
+            coverage_50 = Float64[],
             coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
     else
         sort(DataFrame(score_rows),
             [:release, :made_date, :stream, :horizon, :fit])
     end
-    scores_base, scores_indiv = rel_skill_columns(scores)
+    scores_base = rel_skill_columns(scores)
     scores_dest = joinpath(@__DIR__, "..", "data", "forecast_scores.csv")
     write_simple_csv(scores_dest,
         [:release => scores.release,
@@ -827,13 +944,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :fit => scores.fit,
             :crps => scores.crps,
             :log_crps => scores.log_crps,
+            :dispersion => scores.dispersion,
+            :overprediction => scores.overprediction,
+            :underprediction => scores.underprediction,
             :coverage_50 => scores.coverage_50,
             :coverage_90 => scores.coverage_90,
             :bias => scores.bias,
             :n_samples => scores.n_samples,
-            :log_rel_skill_to_baseline => rel_skill_cell.(scores_base),
-            :log_rel_skill_to_individual_fit =>
-                rel_skill_cell.(scores_indiv)])
+            :log_rel_skill_to_baseline => rel_skill_cell.(scores_base)])
     println("Wrote $(nrow(scores)) scored forecasts to " *
             "data/forecast_scores.csv")
 
@@ -875,7 +993,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
         isempty(rows) && return DataFrame(release = String[],
             made_date = Date[], stream = String[], horizon = Int[],
             target_date = Date[], fit = String[], crps = Float64[],
-            log_crps = Float64[], coverage_50 = Float64[],
+            log_crps = Float64[], dispersion = Float64[],
+            overprediction = Float64[], underprediction = Float64[],
+            coverage_50 = Float64[],
             coverage_90 = Float64[], bias = Float64[], n_samples = Int[])
         return sort(DataFrame(rows),
             [:release, :made_date, :stream, :horizon, :fit])
@@ -890,13 +1010,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
         return sort(DataFrame(rows), [:stream, :made_date, :horizon, :fit])
     end
 
-    ## The frozen scores get the same two relative-skill columns, computed
-    ## against their OWN baseline within the frozen made-dates. The frozen
-    ## archive carries no individual fits, so `log_rel_skill_to_individual_fit`
-    ## is always empty here; `log_rel_skill_to_baseline` is the frozen fit over
-    ## its persistence baseline.
+    ## The frozen scores get the same relative-skill column, computed
+    ## against their OWN baseline within the frozen made-dates: the frozen
+    ## fit's `log_crps` over its persistence baseline's.
     frozen_scores = _score_frame(frozen_score_rows)
-    frozen_base, frozen_indiv = rel_skill_columns(frozen_scores)
+    frozen_base = rel_skill_columns(frozen_scores)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_scores_frozen.csv"),
         [:release => frozen_scores.release,
@@ -907,13 +1025,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :fit => frozen_scores.fit,
             :crps => frozen_scores.crps,
             :log_crps => frozen_scores.log_crps,
+            :dispersion => frozen_scores.dispersion,
+            :overprediction => frozen_scores.overprediction,
+            :underprediction => frozen_scores.underprediction,
             :coverage_50 => frozen_scores.coverage_50,
             :coverage_90 => frozen_scores.coverage_90,
             :bias => frozen_scores.bias,
             :n_samples => frozen_scores.n_samples,
-            :log_rel_skill_to_baseline => rel_skill_cell.(frozen_base),
-            :log_rel_skill_to_individual_fit =>
-                rel_skill_cell.(frozen_indiv)])
+            :log_rel_skill_to_baseline => rel_skill_cell.(frozen_base)])
     frozen_overlay = _overlay_frame(frozen_overlay_rows)
     write_simple_csv(
         joinpath(@__DIR__, "..", "data", "forecast_overlay_frozen.csv"),

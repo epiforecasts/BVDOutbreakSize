@@ -225,6 +225,26 @@ end
           CairoMakie.Makie.Figure
 end
 
+@testitem "plot_estimate_evolution widens a degenerate trajectory" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_estimate_evolution
+    rows = [
+        ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+    ]
+    ## Both trajectory dates collapse to the same day, the basic
+    ## reproduction number's case where its release history begins at the
+    ## current release: a naive band would have zero width and vanish.
+    traj = (["2026-07-08", "2026-07-08"], [1.4, 1.4], [1.6, 1.6],
+        [1.3, 1.3], [1.7, 1.7], [1.1, 1.1], [1.9, 1.9])
+    fig = plot_estimate_evolution(rows; trajectory = traj)
+    @test fig isa CairoMakie.Makie.Figure
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    bands = [p for p in ax.scene.plots if p isa CairoMakie.Makie.Band]
+    @test length(bands) == 3
+    xs = first.(bands[1][1][])
+    @test maximum(xs) > minimum(xs)
+end
+
 @testitem "plot_evolution_by_group empty and filled" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_evolution_by_group
     ## Every group empty is the state before any per-dataset estimate is
@@ -245,6 +265,70 @@ end
     groups = ["joint" => joint, "cases" => cases, "recovered" => NamedTuple[]]
     @test plot_evolution_by_group(groups; refline = 1.0) isa
           CairoMakie.Makie.Figure
+end
+
+@testitem "plot_evolution_by_group draws a per-group trajectory" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+    joint = [
+        ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
+        ("2026-07-08", 1.5, 1.4, 1.6, 1.3, 1.8, 1.1, 2.1)
+    ]
+    ## A single release, the case a per-dataset history usually starts from
+    ## (R22): the group's own trajectory is what makes a one-point panel
+    ## readable.
+    cases = [("2026-07-08", 1.9, 1.7, 2.1, 1.5, 2.4, 1.2, 2.9)]
+    groups = ["joint" => joint, "cases" => cases]
+
+    ## Both trajectory dates collapse to the single release date, the
+    ## degenerate case a single-release history produces.
+    traj = (["2026-07-08", "2026-07-08"], [1.8, 1.8], [2.0, 2.0],
+        [1.6, 1.6], [2.2, 2.2], [1.3, 1.3], [2.6, 2.6])
+    fig = plot_evolution_by_group(groups; trajectories = Dict("cases" => traj))
+    @test fig isa CairoMakie.Makie.Figure
+
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    cases_ax = only(a for a in axes if a.title[] == "cases")
+    joint_ax = only(a for a in axes if a.title[] == "joint")
+    cases_bands = [p for p in cases_ax.scene.plots
+                   if p isa CairoMakie.Makie.Band]
+    ## The trajectory is drawn in the "cases" panel as a real, non-zero-width
+    ## band even though both its dates are the same calendar day.
+    @test length(cases_bands) == 3
+    xs = first.(cases_bands[1][1][])
+    @test maximum(xs) > minimum(xs)
+    ## The "joint" panel has no trajectory of its own, so it draws no band.
+    @test !any(p -> p isa CairoMakie.Makie.Band, joint_ax.scene.plots)
+end
+
+@testitem "plot_evolution_by_group with shared_yrange=false uses per-panel limits" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_evolution_by_group
+
+    ## "joint" reaches far higher than "exports", the outbreak-size case where
+    ## a shared axis would squash the small-scale panel to a hairline.
+    joint = [("2026-07-08", 50000.0, 48000.0, 52000.0,
+        46000.0, 54000.0, 44000.0, 56000.0)]
+    exports = [("2026-07-08", 4.0, 3.0, 5.0, 2.0, 6.0, 1.0, 7.0)]
+    groups = ["joint" => joint, "exports" => exports]
+
+    fig = plot_evolution_by_group(groups; shared_yrange = false)
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    joint_ax = only(a for a in axes if a.title[] == "joint")
+    exports_ax = only(a for a in axes if a.title[] == "exports")
+    joint_ylim = joint_ax.limits[][2]
+    exports_ylim = exports_ax.limits[][2]
+    ## Each panel's own upper limit tracks its own data, so the small-scale
+    ## panel is not squashed by the large-scale one.
+    @test joint_ylim[2] > 10000
+    @test exports_ylim[2] < 100
+
+    ## The default (shared_yrange = true) instead gives every panel the
+    ## same, joint-dominated limit.
+    shared_fig = plot_evolution_by_group(groups)
+    shared_axes = [x for x in shared_fig.content
+                   if x isa CairoMakie.Makie.Axis]
+    shared_joint = only(a for a in shared_axes if a.title[] == "joint")
+    shared_exports = only(a for a in shared_axes if a.title[] == "exports")
+    @test shared_joint.limits[][2] == shared_exports.limits[][2]
 end
 
 @testitem "plot_forecast_overlay empty and filled" setup=[HeadlessMakie] begin
@@ -272,6 +356,133 @@ end
                 median = med, lo90 = med * 0.7, hi90 = med * 1.4))
     end
     @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_overlay crops each panel's y-axis" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## One stream and horizon, with a joint interval far wider than the
+    ## observed value or either fit's median, the case that used to squash
+    ## every series in the panel to a line near the bottom.
+    md = Date(2026, 6, 21)
+    rows = [
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "baseline", observed = 21.0,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0),
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "joint", observed = 21.0,
+            median = 22.0, lo90 = 5.0, hi90 = 6000.0)
+    ]
+    fig = plot_forecast_overlay(DataFrame(rows))
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    _, ylims = ax.limits[]
+    ## Cropped to three times the larger of the observed value (21) and the
+    ## largest median (22), not to the joint's much wider 90% interval.
+    @test ylims[2] ≈ 3.0 * 22.0
+    @test ylims[2] < 100.0
+end
+
+@testitem "plot_forecast_overlay overflow marker stays clear of the axis
+    limit" setup = [HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## Same overflowing joint interval as the crop test: the marker must
+    ## sit strictly below the axis's own upper limit, not coincident with
+    ## it, or CairoMakie's plot-area clipping cuts the triangle in half.
+    md = Date(2026, 6, 21)
+    rows = [
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "baseline", observed = 21.0,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0),
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = "joint", observed = 21.0,
+            median = 22.0, lo90 = 5.0, hi90 = 6000.0)
+    ]
+    fig = plot_forecast_overlay(DataFrame(rows))
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    _, ylims = ax.limits[]
+    cap = ylims[2]
+    ## Makie converts a marker symbol into a path before it reaches the
+    ## plot, so the triangle is matched against the same converted path
+    ## rather than against the `:utriangle` symbol.
+    tri = CairoMakie.Makie.convert_attribute(:utriangle,
+        CairoMakie.Makie.key"marker"(), CairoMakie.Makie.key"scatter"())
+    scatters = [x for x in ax.scene.plots if x isa CairoMakie.Makie.Scatter]
+    marker = only(s for s in scatters if s.marker[] == tri)
+    marker_y = only(unique(last.(marker[1][])))
+    @test marker_y < cap
+    @test marker_y > 0.9 * cap
+end
+
+@testitem "plot_forecast_overlay tick density scales with made dates" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    dates = [Date(2026, 5, 1) + Day(3 * i) for i in 0:14]
+
+    row(md) = (; stream = "confirmed cases", made_date = md, horizon = 7,
+        target_date = md + Day(7), fit = "joint", observed = 20.0,
+        median = 20.0, lo90 = 15.0, hi90 = 25.0)
+
+    ## Few made dates: every one gets its own tick.
+    few = DataFrame(row.(dates[1:5]))
+    fig_few = plot_forecast_overlay(few)
+    ax_few = only(x for x in fig_few.content if x isa CairoMakie.Makie.Axis)
+    @test length(ax_few.xticks[][1]) == 5
+
+    ## A moderate release history still gets a tick per made date: the made
+    ## dates are evenly spaced rather than placed to calendar scale, so
+    ## fifteen labels sit apart from each other rather than overprinting.
+    many = DataFrame(row.(dates))
+    fig_many = plot_forecast_overlay(many)
+    ax_many = only(x for x in fig_many.content if x isa CairoMakie.Makie.Axis)
+    @test length(ax_many.xticks[][1]) == length(dates)
+
+    ## A long enough history is thinned, well above the four ticks a fixed
+    ## quarter-split would leave but below one per date.
+    longer = [Date(2026, 5, 1) + Day(3 * i) for i in 0:39]
+    fig_long = plot_forecast_overlay(DataFrame(row.(longer)))
+    ax_long = only(x for x in fig_long.content if x isa CairoMakie.Makie.Axis)
+    nticks = length(ax_long.xticks[][1])
+    @test nticks > 4
+    @test nticks < length(longer)
+end
+
+@testitem "plot_forecast_relative_skill empty and filled" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_relative_skill
+    using DataFrames: DataFrame
+
+    empty = DataFrame(stream = String[], horizon = Int[], fit = String[],
+        rel_skill = Union{Missing, Float64}[])
+    @test plot_forecast_relative_skill(empty) isa CairoMakie.Makie.Figure
+
+    rows = NamedTuple[]
+    for h in [7, 14, 21], (fit, val) in [("confirmed", 0.8), ("joint", 1.3)]
+
+        push!(rows,
+            (; stream = "confirmed cases", horizon = h, fit = fit,
+                rel_skill = val + 0.05 * h))
+    end
+    ## Recovered has no individual fit, and one guarded cell is missing
+    ## (R20), neither of which should break the render.
+    push!(rows,
+        (; stream = "recovered", horizon = 7, fit = "joint", rel_skill = 1.1))
+    push!(rows,
+        (; stream = "recovered", horizon = 14, fit = "joint",
+            rel_skill = missing))
+    df = DataFrame(rows)
+    fig = plot_forecast_relative_skill(df)
+    @test fig isa CairoMakie.Makie.Figure
+    naxes = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
+    @test naxes == 2
+
+    ## The log-scale column plots the same way through `value_col`.
+    df2 = copy(df)
+    df2.rel_skill_log = df2.rel_skill
+    @test plot_forecast_relative_skill(df2; value_col = :rel_skill_log) isa
+          CairoMakie.Makie.Figure
 end
 
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
