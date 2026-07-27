@@ -315,6 +315,7 @@ observations_table = DataFrame(
         "suspected_cases",
         "confirmed_cases",
         "confirmed_deaths",
+        "onset_curve_reported",
         "specimens_analysed",
         "treatment_admissions",
         "treatment_deaths",
@@ -334,6 +335,8 @@ observations_table = DataFrame(
         hist_last_date(obs.reported_history),
         hist_last_date(obs.confirmed_history),
         hist_last_date(obs.confirmed_deaths_history),
+        isempty(obs.onset_curve_history.report_days) ? missing :
+        grid_date(maximum(obs.onset_curve_history.report_days)),
         hist_last_date(obs.lab_history),
         hist_last_date(obs.treatment_admissions_history),
         hist_last_date(obs.treatment_deaths_history),
@@ -351,6 +354,7 @@ observations_table = DataFrame(
         obs.reported_cases,
         obs.confirmed_cases,
         obs.confirmed_deaths,
+        obs.onset_curve_history.last_total,
         obs.tests_analysed,
         isempty(obs.treatment_admissions_history.counts) ? missing :
         obs.treatment_admissions_history.counts[end],
@@ -3047,10 +3051,14 @@ surveillance_pair_fig #hide
 # own non-centred components.
 # The table below reports the hazard's hyperparameters together with two
 # representative derived quantities, rather than the 28 per-delay hazards or
-# the full calendar-walk trajectory: the 7-day cumulative reporting fraction
-# at a representative (median) onset date, and the median modelled
-# ascertainment across every onset date whose asymptote is observable
-# within the fitted grid.
+# the full calendar-walk trajectory: the share of a representative (median)
+# onset date's eventual reports that arrive within 7 days, and the median
+# modelled ascertainment across every onset date whose asymptote is
+# observable within the fitted grid. The first is the cumulative $F$
+# normalised by its own asymptote, since $F$ carries ascertainment as well
+# as delay; the second is that asymptote. Both come from the one fitted
+# calendar effect, so read them together rather than as independent
+# estimates.
 # The pair plot summarises the hyperparameters alone, with the prior
 # overlaid; the fitted curves themselves are shown against the digitised
 # data in the snapshot figure further below.
@@ -3101,10 +3109,23 @@ _onset_hazard = _onset_hazard_draws(chn_joint)
 _onset_u_ref = isempty(obs.onset_curve_history.onset_days) ?
                _onset_grid_start :
                round(Int, quantile(obs.onset_curve_history.onset_days, 0.5))
-_onset_7d_fraction = [onset_report_cdf(
-                          6, _onset_hazard.logit_h0[i], _onset_hazard.gamma[i],
-                          _onset_u_ref, _onset_grid_start)
+## The delay profile is the cumulative F normalised by its own asymptote,
+## since F itself is deliberately not made to reach 1 and so carries
+## ascertainment as well as delay. The two are reported separately below.
+_onset_7d_fraction = [begin
+                          D = length(_onset_hazard.logit_h0[i])
+                          f7 = onset_report_cdf(6,
+                              _onset_hazard.logit_h0[i],
+                              _onset_hazard.gamma[i], _onset_u_ref,
+                              _onset_grid_start)
+                          fa = onset_report_cdf(D - 1,
+                              _onset_hazard.logit_h0[i],
+                              _onset_hazard.gamma[i], _onset_u_ref,
+                              _onset_grid_start)
+                          fa > 0 ? f7 / fa : NaN
+                      end
                       for i in eachindex(_onset_hazard.logit_h0)]
+filter!(isfinite, _onset_7d_fraction)
 
 ## Per-draw median ascertainment over every onset date whose asymptote is
 ## observable within the fitted grid (`onset_report_ascertainment`), then
@@ -3141,7 +3162,7 @@ onset_derived_raw = DataFrame(
     lower_30 = Float64[], upper_30 = Float64[],
     upper_60 = Float64[], upper_90 = Float64[])
 for (label, draws) in [
-    ("7-day cumulative reporting fraction (median onset date)",
+    ("share of eventual reports arriving within 7 days (median onset date)",
         _onset_7d_fraction),
     ("median modelled ascertainment", _onset_ascertainment_draws)]
     s = posterior_summary(draws)
@@ -4165,7 +4186,13 @@ stream_fits = [
         rt_walk_start = 1,
         streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)]),
     (; fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
-        streams = [(:exports, "exports", obs.exported_cases)])
+        streams = [(:exports, "exports", obs.exported_cases)]),
+    ## The onsets fit contributes its reproduction number and outbreak size
+    ## to the release assets but forecasts nothing: `forecast_stream` grows
+    ## an observed cut-off total forward, and the onset triangle's own total
+    ## is a digitised reading of a figure rather than a reported count.
+    (; fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
+        streams = Tuple{Symbol, String, Int}[])
 ]
 
 ## Cut-off reproduction number per fit. The joint exposes it as `R_T`; the
