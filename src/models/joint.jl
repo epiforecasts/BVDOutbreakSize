@@ -243,8 +243,11 @@ asymptote plays that role directly (see [`onset_report_cdf`](@ref)), so
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the same un-prefixed name [`bvd_joint`](@ref)
-uses, so the stream can be forecast from this fit (see `expected_confirmed_T`
-on [`confirmed_only_model`](@ref) for the identical precedent).
+uses, so the two carry one key and can be compared directly (see
+`expected_confirmed_T` on [`confirmed_only_model`](@ref) for the
+precedent). It is not a forecast target: [`forecast_stream`](@ref) grows an
+observed cut-off total forward, and this stream's total is a digitised
+reading of a figure rather than a reported count.
 """
 @model function onsets_only_model(n::Integer;
         onset_curve_history = (; onset_days = Int[], report_days = Int[],
