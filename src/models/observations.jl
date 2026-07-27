@@ -3104,7 +3104,7 @@ counting variation of the cases each cell reports plus the measured
 digitisation error (`pixel_sd` ≈2.1 cases/bar, `scan_frac` ≈4.0% per scan),
 and is corrected by a sampled multiplicative slack `σ_mult ~ slack_prior`
 that can only inflate it (`slack_prior` is bounded below at 1). The bound
-is deliberate. Both terms in the scale are lower bounds on the truth: a bar
+is deliberate. Each term in the scale is a lower bound on the truth: a bar
 cannot be read off a raster more precisely than its pixels allow, and a
 count of newly reported cases carries at least its own counting variation.
 A fitted scale below them would have a couple of hundred cells claiming a
