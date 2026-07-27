@@ -1,0 +1,30 @@
+signal,sitrep,report_date,value,unit,source_note
+contacts_under_follow_up,071,2026-07-24,14525,persons,Tableau 4 national `sous suivi`; per province Ituri 10123 N-Kivu 4111 Tshopo 33 Haut-Uele 258 Sud-Kivu 0 (fin de suivi)
+contacts_seen,071,2026-07-24,11100,persons,Tableau 4 national `vus`; page-1 tile gives the ratio 76.4 percent
+contact_tracing_coverage,071,2026-07-24,76.4,percent,page-1 `SUIVI DES CONTACTS NATIONAL`; 11100/14525; Ituri and N-Kivu computed only over reporting health zones (8 zones had no data at consolidation)
+alerts_total_day,071,2026-07-24,1937,alerts,Tableau 3 `Total alertes du jour`; report J-1 79 + nouvelles 1858
+alerts_investigated,071,2026-07-24,1617,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,071,2026-07-24,83.5,percent,Tableau 3 `Taux d'investigation (24 h)`; 1617/1937; Haut-Uele only 8.9 percent
+alerts_validated_alive,071,2026-07-24,189,alerts,Tableau 3 `Alertes validees vivantes`; sums with the dead row to the 274 suspects of the day
+alerts_validated_dead_community,071,2026-07-24,85,alerts,Tableau 3 `Alertes validees decedees (comm.)`; candidate replacement basis for the frozen suspected_daily_deaths_history (issue #431)
+poe_travellers_screened,071,2026-07-24,167939,persons,Tableau 5 global; Ituri 104642 (printed `10 4642`) + N-Kivu 61060 + Tshopo 2237
+poe_corpses_swabbed,071,2026-07-24,2,corpses,Tableau 5; 100.0 percent of 2 intercepted
+health_worker_infections_cumulative,071,2026-07-24,123,persons,Tableau 8 PPL total confirmed; 67 recovered 20 hospitalised 36 deaths
+health_worker_deaths_cumulative,071,2026-07-24,36,persons,Tableau 8 PPL deaths; letalite 29.3 percent
+treatment_admissions_cumulative,071,2026-07-24,869,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 649 + N-Kivu 220; distinct from the fitted 24h figure
+contacts_under_follow_up,072,2026-07-25,15440,persons,Tableau 4 national `sous suivi`; Ituri 10901 N-Kivu 4307 Tshopo 33 Haut-Uele 199 Sud-Kivu 0
+contacts_seen,072,2026-07-25,12010,persons,Tableau 4 national `vus`
+contact_tracing_coverage,072,2026-07-25,77.8,percent,page-1 `SUIVI DES CONTACTS NATIONAL`; 12010/15440; reporting-zone caveat as 071 but a different zone list
+alerts_total_day,072,2026-07-25,1417,alerts,Tableau 3 `Total alertes du jour`; report J-1 82 + nouvelles 1335
+alerts_investigated,072,2026-07-25,1206,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,072,2026-07-25,85.1,percent,Tableau 3 `Taux d'investigation (24 h)`; 1206/1417
+alerts_validated_alive,072,2026-07-25,233,alerts,Tableau 3; sums with the dead row to the 340 suspects of the day
+alerts_validated_dead_community,072,2026-07-25,107,alerts,Tableau 3 `Alertes validees decedees (comm.)`; see issue #431
+poe_travellers_screened,072,2026-07-25,155936,persons,Tableau 5 global; Ituri 98423 + N-Kivu 53748 + Tshopo 3765
+poe_corpses_swabbed,072,2026-07-25,4,corpses,Tableau 5; 100.0 percent of 4 intercepted
+health_worker_infections_cumulative,072,2026-07-25,123,persons,Tableau 8 PPL total confirmed; flat against 071 though the PCI narrative reports a new Nizi case not yet in the table
+health_worker_deaths_cumulative,072,2026-07-25,37,persons,Tableau 8 PPL deaths; letalite 30.1 percent; only change from 071 is Bunia 14 to 15
+treatment_admissions_cumulative,072,2026-07-25,894,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 678 + N-Kivu 216; N-Kivu FELL from 220 despite 49 admissions in 24h
+eds_death_alerts,072,2026-07-25,98,alerts,section 7 first per-province EDS table; Ituri 65 + N-Kivu 33; not reconciled against the Tableau 3 dead-alert count of 107
+eds_investigations_performed,072,2026-07-25,80,investigations,section 7; Ituri 50 + N-Kivu 30
+eds_corpses_swabbed,072,2026-07-25,73,corpses,section 7; Ituri 40 + N-Kivu 33; N-Kivu 33 of 33 alerts looks degenerate and needs a second vintage to confirm

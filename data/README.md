@@ -239,9 +239,18 @@ being silently dropped as the report format evolves. Known candidates:
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
+| EDS throughput (§7, per province from SitRep 072): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. First tabulated in 072; earlier vintages give it in prose only. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
+
+Values for these signals accumulate in `candidate_signals.csv`
+(`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row
+per signal per vintage, so a series builds from the day a signal first appears
+rather than from the day someone decides to fit it.
+Extend it on every update alongside the fitted streams, and open one issue per
+signal proposing it for fitting — one per signal, not one per vintage.
+Nothing in the model reads this file.
 
 After editing, validate with the loader and its invariants:
 
