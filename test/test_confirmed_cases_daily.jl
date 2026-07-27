@@ -142,8 +142,10 @@ end
     ## A break day matching no window is dropped, so no inert step is sampled.
     @test break_step_centres([21, 23], [10, 15], [22], [97]) == (Int[], Float64[])
 
-    ## A missing/short gross falls back to a zero centre, recovering the
-    ## uninformative behaviour rather than erroring.
+    ## A missing/short gross is read as a gross of zero, so the centre is the
+    ## WHOLE increment: all of it attributed to the artefact rather than
+    ## erroring. Conservative, not neutral — a centre near zero over a
+    ## de-anchored day is the configuration that wrecks the geometry.
     @test break_step_centres([21, 22], [10, 369], [22], Int[])[2] == [369.0]
 
     ## No break days at all is empty.

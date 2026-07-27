@@ -388,9 +388,18 @@ harmonisation magnitude from a single observation, whereas the report states
 it. The sampled deviation around the centre then carries only the residual
 uncertainty about how much of the discrepancy is truly retrospective.
 
-Break days not matching a window are dropped so no inert step is sampled, and
-a missing/short `gross` contributes a zero centre (recovering the
-uninformative behaviour). `increments` may itself be `missing`, the generator
+Break days not matching a window are dropped so no inert step is sampled. A
+missing/short `gross` is treated as a gross of zero, so the centre becomes the
+WHOLE increment: the entire vintage step is attributed to the artefact. That is
+the conservative fallback rather than a neutral one, and it is deliberate — the
+de-anchor drops the day's positivity denominator, and a step centred near zero
+over a de-anchored day is the pathological configuration (measured on
+`confirmed_only_model`: 94 divergences and a min bulk ESS of 15, against 20 and
+522 with no break day, because nothing absorbs the backlog and the fit books it
+as incidence). Supply the printed count so the split is data-derived; omitting
+it errs towards artefact, never towards incidence.
+
+`increments` may itself be `missing`, the generator
 path where no cumulative counts are supplied to difference: the day still gets
 a step, so a predictive keeps the fitted chain's dimensions, but there is no
 published discrepancy to centre it on and the centre falls back to zero.
@@ -1103,7 +1112,8 @@ quantities.
         ## centred on `observed increment − gross`, the part of the vintage
         ## step the report attributes to base integration, so the magnitude
         ## comes from published data rather than a prior guess. Empty or
-        ## all-zero recovers an uninformative zero-centred step.
+        ## all-zero centres on the WHOLE increment, attributing all of it to
+        ## the artefact — conservative, not neutral.
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
         ## Residual uncertainty about how much of that discrepancy is truly
         ## retrospective rather than coincident same-day incidence — NOT the

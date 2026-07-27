@@ -147,8 +147,11 @@ function load_observations(
     ## centre each step on `observed increment − gross`, the part of the
     ## vintage step the report itself attributes to base integration rather
     ## than to the day's notifications. Filtered and permuted with the dates so
-    ## the three stay aligned, and defaulted to zeros when absent (recovering
-    ## an uninformative zero-centred step).
+    ## the three stay aligned. Absent counts default to zeros, which makes each
+    ## centre the WHOLE increment rather than anything neutral: the entire step
+    ## is then attributed to the artefact. That errs towards artefact rather
+    ## than towards incidence, which is the safe direction for a de-anchored
+    ## day (see `break_step_centres`).
     function break_gross(key)
         _brk.blk === nothing && return Int[]
         haskey(_brk.blk, key) || return zeros(Int, length(_brk.ord))
