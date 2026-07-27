@@ -18,10 +18,12 @@
 #
 # Notes:
 #  - INSP blocks some default user agents (HTTP 403); this script sends a
-#    browser User-Agent, which returns HTTP 200. INSP is the primary
-#    source for currency checks: the upstream INRB-UMIE mirror (used by
-#    download_sitreps.jl) usually lags INSP by a report or two and does not
-#    carry the richer `analytique` PDFs.
+#    browser User-Agent, which returns HTTP 200. INSP is the primary source
+#    both for currency checks and for the PDFs themselves
+#    (download_sitreps.jl): the INRB-UMIE mirror usually lags INSP by a
+#    report or two, has dropped individual vintages, and does not carry the
+#    richer `analytique` PDFs, so it is a cross-check only
+#    (confirm_insp_data.jl).
 #  - Each printed post page embeds the real PDF in a `pdfemb-data` base64
 #    blob (a base64 of {"url": ...}); data/README.md documents the one-line
 #    decode to get a direct, fetchable PDF link.
