@@ -515,6 +515,7 @@ streams_C_table = streams_table(
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
     "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
     "joint" => posterior_C_joint);
 
 #md # ```@raw html
@@ -560,7 +561,10 @@ stream_traj_fig = plot_stream_trajectories(
             colour = :goldenrod),
         (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
             last_day = _last_day(obs.isolation_history.days),
-            colour = :darkorange)];
+            colour = :darkorange),
+        (; label = "onsets (DRC)", trajs = _cuminf(chn_onsets),
+            last_day = _last_day(obs.onset_curve_history.report_days),
+            colour = :mediumpurple)];
     n = obs.n, seeding = obs.seeding);
 
 #md # ```@raw html
@@ -589,6 +593,7 @@ cumulative_density_fig = plot_cumulative_cases(
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
     "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
     "joint" => posterior_C_joint;
     scenarios = [], xmax = density_xmax);
 
@@ -697,7 +702,9 @@ stream_rt_fig = plot_rt_streams(
         (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
             rt_walk_start = 1, colour = :goldenrod),
         (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
-            rt_walk_start = 1, colour = :darkorange)];
+            rt_walk_start = 1, colour = :darkorange),
+        (; label = "onsets (DRC)", chn = chn_onsets, rt_start = 1,
+            rt_walk_start = 1, colour = :mediumpurple)];
     joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint),
     n = obs.n, breakpoint = _BREAKPOINT,
