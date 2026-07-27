@@ -254,7 +254,7 @@ being silently dropped as the report format evolves. Known candidates:
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
-| EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from at least SitRep 060 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
+| EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. **The 059 boundary is deliberate, not the edge of the data.** 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
@@ -273,11 +273,8 @@ signal proposing it for fitting — one per signal, not one per vintage.
 Nothing in the model reads this file.
 
 Every value is read twice by independent readers, as for the fitted streams.
-The `eds_*` rows are backfilled to SitRep 059, which is where the §7 dashboard
-layout begins; the same figures appear in earlier vintages in a different
-narrative style with spelled-out numbers (SitRep 058 gives Ituri "Trente-six
-(36) EDS ont été réalisés"), and whether those are the same fields is an open
-question, so they are not included.
+The `eds_*` rows are backfilled to SitRep 059; see the EDS row above for why
+the series stops there and what would have to be settled to extend it.
 **These three series are not comparable across vintages**, because which
 provinces print a count changes from report to report: Nord-Kivu appears
 numerically almost throughout, Ituri only in 061, 062, 065, 069, 070 and 072,
