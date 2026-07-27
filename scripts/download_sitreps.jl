@@ -116,17 +116,18 @@ function collect_sitrep_urls()
 end
 
 function fetch_pdf(url, dest)
+    last_err = nothing
     for attempt in 1:ATTEMPTS
         try
             Downloads.download(url, dest; headers = ["User-Agent" => UA],
                 timeout = REQUEST_TIMEOUT)
-            return true
+            return (; ok = true, err = nothing)
         catch err
-            attempt == ATTEMPTS && return false
-            sleep(2^attempt)
+            last_err = err
+            attempt < ATTEMPTS && sleep(2^attempt)
         end
     end
-    return false
+    return (; ok = false, err = last_err)
 end
 
 urls = collect_sitrep_urls()
@@ -142,12 +143,13 @@ for num in sort(collect(keys(urls)))
         continue
     end
     print("fetch SitRep $num ... ")
-    if fetch_pdf(urls[num], dest)
+    res = fetch_pdf(urls[num], dest)
+    if res.ok
         println("$(round(filesize(dest) / 1024; digits = 1)) KiB")
         global downloaded += 1
     else
         isfile(dest) && rm(dest)
-        println("FAILED after $ATTEMPTS attempts")
+        println("FAILED after $ATTEMPTS attempts ($(res.err))")
     end
 end
 
