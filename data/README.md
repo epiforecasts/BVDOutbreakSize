@@ -116,8 +116,9 @@ b=re.search(r"pdfemb-data=([A-Za-z0-9_-]+)",c).group(1); b+="="*(-len(b)%4); \
 print(json.loads(base64.urlsafe_b64decode(b))["url"])'
 ```
 
-The INRB-UMIE mirror's PDFs can also be pulled with
-`scripts/download_sitreps.jl` (lags INSP, no `analytique` reports).
+`scripts/download_sitreps.jl` bulk-fetches the whole MVE SitRep series from
+the `wp/v2/media` API instead, so the per-post decode above is only needed
+for a report the bulk fetch misses (a corrected `_v2` re-issue).
 
 ## Checking for new SitReps (do this before every refresh)
 
