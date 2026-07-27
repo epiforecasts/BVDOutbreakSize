@@ -165,7 +165,7 @@ end
     m = confirmed_only_model(40, 444;
         confirmed_history = hist, lab_history = lab,
         lab_daily_history = daily, confirmed_break_days = [35],
-        confirmed_break_gross = [97])
+        confirmed_break_gross_cases = [97])
     θ = rand(MersenneTwister(1), m)
     @test any(k -> occursin("confirmed_step", string(k)), keys(θ))
     @test isfinite(logjoint(m, θ))
