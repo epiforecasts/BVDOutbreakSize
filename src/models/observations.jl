@@ -2366,9 +2366,14 @@ end
 
 NaN / Inf-safe location-scale Student-t distribution `μ + σ · Tν`, built
 from `Distributions.TDist(ν)` via the affine-combination operators. `σ` is
-floored away from zero/non-finite and `ν` away from non-positive/non-finite,
-mirroring [`safe_nbinomial`](@ref)'s domain-guard idiom so a wild NUTS
-warmup proposal cannot throw a `DomainError` and abort a Mooncake gradient.
+floored away from zero and non-finite values, mirroring
+[`safe_nbinomial`](@ref)'s domain-guard idiom so a wild NUTS warmup proposal
+cannot throw a `DomainError` and abort a Mooncake gradient. A non-positive
+or non-finite `ν` falls back to `4`, the caller's own default, rather than
+to the smallest value `TDist` accepts: `TDist(1)` is Cauchy, so a floor at
+the domain edge would quietly turn a bad degrees-of-freedom argument into a
+likelihood with no mean or variance, which is a worse failure than the
+`DomainError` it replaces.
 Used by [`onset_reporting_model`](@ref) to score the reporting-triangle
 increments, which are frequently negative (a later scan reads fewer cases
 at some onset date than an earlier one, from digitisation noise rather than
@@ -2377,7 +2382,7 @@ distribution cannot represent.
 """
 function safe_studentt(μ::Real, σ::Real, ν::Real)
     σc = (isfinite(σ) && σ > zero(σ)) ? σ : eps(typeof(float(σ)))
-    νc = (isfinite(ν) && ν > zero(ν)) ? ν : one(float(ν))
+    νc = (isfinite(ν) && ν > zero(ν)) ? ν : oftype(float(ν), 4)
     return μ + σc * TDist(νc)
 end
 
