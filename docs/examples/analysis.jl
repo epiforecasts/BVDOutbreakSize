@@ -2054,7 +2054,13 @@ cfr_prior_fig #hide
 # its own cumulative reading. Every magnitude entering $\sigma_u$ is the
 # modelled one, never the observed count, so the likelihood's own noise
 # never feeds back into its own variance, and a sampled slack multiplier
-# sits on top of the whole thing.
+# sits on top of the whole thing. That multiplier can only inflate the
+# scale, never shrink it: both terms are lower bounds on the truth, since a
+# bar cannot be read off a raster more precisely than its pixels allow and a
+# count of newly reported cases carries at least its own counting variation,
+# and a fitted scale below them would have a couple of hundred cells
+# claiming a precision the figure cannot support and outvoting every other
+# stream.
 #
 # The very first scored snapshot is differenced against an implicit empty
 # predecessor, so its cells score levels rather than corrections. That is
@@ -2106,6 +2112,20 @@ cfr_prior_fig #hide
 # ascertainment into the asymptote rather than giving it its own parameter
 # block is deliberate: a separate block would trade against the hazard
 # total with nothing in the data to arbitrate between them.
+#
+# One consequence of folding ascertainment into the asymptote is easy to
+# miss. The triangle counts confirmed cases by onset date, so its asymptote
+# estimates the proportion of onsets eventually confirmed, the same quantity
+# the confirmed pipeline above builds from $p_{\text{DRC}}$, the tested
+# fraction and test positivity. We do not tie the two together. That keeps a
+# digitised figure from pulling on the pooled ascertainment every other
+# stream shares, and it means a disagreement between them is absorbed by the
+# asymptote rather than surfacing as a conflict; the cost is that this
+# stream informs the ascertainment level only through the onset series it
+# shares, and what it contributes of its own is timing. Comparing the fitted
+# asymptote against $p_{\text{DRC}}$ times the tested fraction times
+# positivity from the same fit is a free consistency check, and a large gap
+# is worth investigating rather than ignoring.
 #
 # What we have not been able to check is whether the calendar walk and the
 # reproduction-number walk pull on each other in practice. Their footprints
@@ -3132,6 +3152,11 @@ _onset_path = joinpath(pkgdir(BVDOutbreakSize), "data",
 _onset_snaps = filter(b -> b.report_date <= obs.cutoff,
     BVDOutbreakSize._dedup_onset_blocks(
         BVDOutbreakSize._read_onset_curve_blocks(_onset_path)))
+## Keyed by report day rather than kept in order: a snapshot whose printed
+## extent misses the scored window contributes no cells, so the panels and
+## the snapshot blocks are not guaranteed to line up positionally.
+_onset_snap_by_day = Dict(
+    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps)
 
 ## Cell indices grouped by their snapshot's report day, and the daily
 ## onsets series per posterior draw (the diff of the chain's stored
@@ -3161,7 +3186,7 @@ onset_fit_fig = let
     fig = CairoMakie.Figure(; size = (330 * ncol, 260 * nrow + 60))
     for (k, R) in enumerate(_onset_report_grid_days)
         r, c = fldmod1(k, ncol)
-        snap = _onset_snaps[k]
+        snap = _onset_snap_by_day[R]
         idx = sort(_onset_cells_by_report[R];
             by = i -> obs.onset_curve_history.onset_days[i])
         us = obs.onset_curve_history.onset_days[idx]

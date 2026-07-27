@@ -2852,6 +2852,21 @@ giving it its own parameter block is deliberate: a separate block would be
 free to trade against the hazard total with nothing in the data to arbitrate
 between them.
 
+One consequence of folding ascertainment into the asymptote deserves
+naming, because it is easy to miss. The triangle counts confirmed cases by
+onset date, so its asymptote estimates the proportion of onsets eventually
+confirmed — the same quantity the confirmed pipeline builds from `p_drc`,
+the tested fraction and test positivity. The two are not tied together
+here. That is deliberate: it keeps a digitised figure from pulling on the
+pooled ascertainment every other stream shares, and it means a disagreement
+between them is absorbed quietly by the asymptote rather than surfacing as
+a conflict. The cost is that this stream informs the ascertainment level
+only through the onset series it shares, not directly; what it contributes
+of its own is timing. Comparing the fitted asymptote against
+`p_drc · τ_test · positivity` from the same fit is therefore a free
+consistency check, and a large gap between them is worth investigating
+rather than ignoring.
+
 What has not been checked here is whether `γ` and `rt_walk_model` pull on
 each other in practice. Their footprints differ, but their calendar windows
 overlap and both are least constrained in the final fortnight. The first
@@ -2873,9 +2888,23 @@ instead of condition (the predictive-generator path, mirroring
 [`vintage_increments_model`](@ref)).
 
 The observation scale ([`onset_report_scales`](@ref)) is built from the
-measured digitisation error (`pixel_sd` ≈2.1 cases/bar, `scan_frac` ≈4.0%
-per scan) and lightly corrected by a sampled multiplicative slack
-`σ_mult ~ slack_prior`. The likelihood is Student-t with fixed degrees of
+counting variation of the cases each cell reports plus the measured
+digitisation error (`pixel_sd` ≈2.1 cases/bar, `scan_frac` ≈4.0% per scan),
+and is corrected by a sampled multiplicative slack `σ_mult ~ slack_prior`
+that can only inflate it (`slack_prior` is bounded below at 1). The bound
+is deliberate. Both terms in the scale are lower bounds on the truth: a bar
+cannot be read off a raster more precisely than its pixels allow, and a
+count of newly reported cases carries at least its own counting variation.
+A fitted scale below them would have 211 cells claiming a precision the
+figure cannot support and outvoting every other stream in the joint fit. A
+short onsets-only run does pull the slack onto the bound, which is expected
+there: with no other stream pinning the onset series, the latent curve is
+free to bend towards the bars and leave residuals smaller than the
+measurement floor. In the joint fit the onset series is pinned elsewhere,
+so the informative diagnostic is the other direction, a `σ_mult` posterior
+well above 1 saying the scale is missing a term.
+
+The likelihood is Student-t with fixed degrees of
 freedom `ν` (default 4, a standard robust-regression choice with
 meaningfully heavier tails than Normal): with only a few hundred cells, `ν`
 is notoriously weakly identified, and the repo's own `lab_delay_model`
@@ -2897,7 +2926,7 @@ already returns via `hazard_state`, not re-sampled).
         hazard = onset_report_hazard_model,
         D::Integer = ONSET_REPORT_MAX_DELAY,
         pixel_sd::Real = 2.1, scan_frac::Real = 0.04,
-        slack_prior = truncated(Normal(1.0, 0.2); lower = 0.1),
+        slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
         ν::Real = 4.0)
     onset_days = onset_curve_history.onset_days
     report_days = onset_curve_history.report_days
