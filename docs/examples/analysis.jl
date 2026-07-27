@@ -2055,7 +2055,7 @@ cfr_prior_fig #hide
 # modelled one, never the observed count, so the likelihood's own noise
 # never feeds back into its own variance, and a sampled slack multiplier
 # sits on top of the whole thing. That multiplier can only inflate the
-# scale, never shrink it: both terms are lower bounds on the truth, since a
+# scale, never shrink it: each term is a lower bound on the truth, since a
 # bar cannot be read off a raster more precisely than its pixels allow and a
 # count of newly reported cases carries at least its own counting variation,
 # and a fitted scale below them would have a couple of hundred cells
