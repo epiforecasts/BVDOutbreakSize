@@ -1950,7 +1950,7 @@ cfr_prior_fig #hide
 # Every observation model above sees the shared daily onset series only
 # after a further convolution: a suspected-case report, a death, a
 # laboratory confirmation. The digitised onset epidemic curve (see the
-# [Data](@ref) section) is the only DIRECT observation of that series, so
+# [Data](@ref) section) is the only direct observation of that series, so
 # it can identify things the other streams cannot on their own, plausibly
 # including the report-versus-receipt split the laboratory pipeline
 # currently pins with a soft external constraint
@@ -1972,7 +1972,7 @@ cfr_prior_fig #hide
 # ```
 #
 # The hazard at delay $d$ for an onset on day $u$ is then modified by a
-# calendar-time effect indexed on the REPORT day $u + d$: a weekly-knot
+# calendar-time effect indexed on the report day $u + d$: a weekly-knot
 # non-centred random walk on the logit scale, the same construction as the
 # reproduction-number walk above but tightly constrained
 # ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.1)$), so reporting speed
@@ -1996,12 +1996,12 @@ cfr_prior_fig #hide
 #     & \delta \ge 0. \end{cases} \tag{43}
 # ```
 #
-# $\delta < 0$ is RIGHT TRUNCATION, and it is the only place it enters this
+# $\delta < 0$ is right truncation, and it is the only place it enters this
 # model: a recent onset date's expected count in a given snapshot is only
 # ever what its own delay allows, so the same onset date's expected count
 # rises as later snapshots see more of it — the same idea EpiNow2 uses for
 # its nowcast. What differs here is the observation model below, which
-# scores per-snapshot CORRECTIONS to a reporting triangle, not a single
+# scores per-snapshot corrections to a reporting triangle, not a single
 # evolving total column the way EpiNow2, and every other stream in this
 # package, is scored.
 #
@@ -2015,7 +2015,7 @@ cfr_prior_fig #hide
 # The expected reported count is the shared onset series convolved with
 # $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$, and,
 # to avoid double-counting a case already reported at an earlier snapshot,
-# the likelihood scores the DIFFERENCE between consecutive snapshots
+# the likelihood scores the difference between consecutive snapshots
 # $s - 1, s$ at each onset date $u$ in a trailing $D$-day window of the
 # newer snapshot's report day (dropping onset dates further back, which
 # the triangle shows carry only noise by then):
@@ -2028,14 +2028,14 @@ cfr_prior_fig #hide
 #
 # $\sigma_u$ is built from the measured digitisation error (an independent
 # $\pm 2.1$-case pixel-noise SD per read and a $4.0\%$ level-error SD per
-# scan, applied to the MODELLED rather than the observed level, so the
+# scan, applied to the modelled rather than the observed level, so the
 # likelihood's own noise never feeds back into its own variance) plus a
 # small sampled slack multiplier. The very first scored snapshot is
 # differenced against an implicit empty predecessor, recovering signal
 # from it rather than discarding it. A count likelihood cannot be used
 # here: the measured increments are frequently negative, since a re-dated
 # case can move a bar down in a later scan even though the true running
-# total cannot fall, so we use a Student-$t$ with FIXED degrees of freedom
+# total cannot fall, so we use a Student-$t$ with fixed degrees of freedom
 # ($\nu = 4$, a standard robust-regression choice) rather than a sampled
 # one, for the same reason the report-to-receipt delay above keeps its own
 # scale nuisance fixed where the data cannot pin it down.
@@ -2049,7 +2049,7 @@ cfr_prior_fig #hide
 # but not for a genuine ascertainment fall, which does not recover; the
 # multi-snapshot triangle can in principle tell "filled in later" from
 # "genuinely missed" apart, which a single latest curve cannot. Second,
-# the calendar-time walk is indexed on the REPORT date, not the onset
+# the calendar-time walk is indexed on the report date, not the onset
 # date: the model already carries a smooth calendar-time effect on the
 # onset-date axis, the reproduction-number walk, so an ascertainment or
 # hazard-total effect indexed by onset date would not be identified
@@ -2317,6 +2317,7 @@ diagnostics_table( #hide
     "confirmed (DRC)" => chn_confirmed, #hide
     "confirmed deaths (DRC)" => chn_confirmed_deaths, #hide
     "isolation (DRC)" => chn_treatment, #hide
+    "onsets (DRC)" => chn_onsets, #hide
     "frozen (1wk back)" => frozen_lastweek.chn, #hide
     (RUN_SENSITIVITY ? #hide
      ["delay sensitivity" => chn_joint_community_delay, #hide
@@ -3057,7 +3058,7 @@ onset_pair_fig #hide
 ## The digitised, deduplicated, cut-off-filtered snapshot blocks
 ## `load_onset_curve` scores, kept here for their raw cumulative
 ## onset-date counts: the fitted stream only ever sees between-vintage
-## INCREMENTS, so the observed cumulative levels this figure plots are
+## increments, so the observed cumulative levels this figure plots are
 ## read back from the source blocks directly rather than reconstructed
 ## from the fitted increments.
 _onset_path = joinpath(pkgdir(BVDOutbreakSize), "data",
