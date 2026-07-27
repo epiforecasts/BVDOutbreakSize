@@ -282,6 +282,9 @@ Tshopo never, and 071 prints no EDS numbers at all.
 The value is the sum over the provinces that printed the quantity and the
 `source_note` names them, so read that before differencing consecutive rows —
 a step can be pure coverage.
+This is a workaround for the schema having no province column, which is
+issue #492; per-province splitting should come before any of these signals is
+fitted.
 Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in
 060, 066 and 067, which the same vintages' carried-over `reports` explain; and
 the swab count is usually printed as the combined `corps swabés et sécurisés`
