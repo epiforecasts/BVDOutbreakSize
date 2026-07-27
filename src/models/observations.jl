@@ -2895,8 +2895,8 @@ that can only inflate it (`slack_prior` is bounded below at 1). The bound
 is deliberate. Both terms in the scale are lower bounds on the truth: a bar
 cannot be read off a raster more precisely than its pixels allow, and a
 count of newly reported cases carries at least its own counting variation.
-A fitted scale below them would have 211 cells claiming a precision the
-figure cannot support and outvoting every other stream in the joint fit. A
+A fitted scale below them would have a couple of hundred cells claiming a
+precision the figure cannot support and outvoting every other stream. A
 short onsets-only run does pull the slack onto the bound, which is expected
 there: with no other stream pinning the onset series, the latent curve is
 free to bend towards the bars and leave residuals smaller than the
