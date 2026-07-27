@@ -3015,15 +3015,16 @@ multiplicative objects now act on or near the same latent series: the
 reproduction-number walk ([`rt_walk_model`](@ref)) on the infection and
 hence onset axis, this stream's calendar walk `γ` on the report axis, and
 ascertainment, which is no longer a free object at all but the asymptote of
-the same hazard `γ` modifies. Each has a different footprint on the
-triangle. A change in the onset series scales a whole column (one onset
-date, every snapshot). A change in `γ` scales a diagonal (one report day,
-every onset date reaching it at its own delay). A change in the baseline
-`logit_h0` scales a delay band across columns and diagonals alike. Column,
-diagonal and band are distinguishable in a triangle with more than one
-snapshot, which is the structural reason this stream is worth fitting and
-also the reason `γ` is indexed on the report day rather than the onset day:
-on the onset axis it would share a footprint with `rt_walk_model` exactly
+the same hazard `γ` modifies. Each leaves a different footprint on the
+grid of scored cells, which runs over onset date and snapshot pair. A change
+in the onset series moves a column: one onset date, every snapshot. A change
+in `γ` moves a row: the hazard on the report days one snapshot pair spans,
+across every onset date at once. A change in the baseline `logit_h0` moves a
+delay band, which runs diagonally across both. Column, row and band are
+distinguishable once there is more than one snapshot, which is the
+structural reason this stream is worth fitting, and also the reason `γ` is
+indexed on the report day rather than the onset day: on the onset axis its
+footprint would be a column too, the same one `rt_walk_model` already moves,
 and neither would be identified.
 
 Three things are genuinely weak, and are stated rather than papered over.
