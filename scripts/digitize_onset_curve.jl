@@ -58,8 +58,19 @@ const CONFIG = [
     ("065", Date(2026, 7, 18), Date(2026, 7, 15)),
     ("066", Date(2026, 7, 19), Date(2026, 7, 15)),
     ("067", Date(2026, 7, 20), Date(2026, 7, 15)),
+    # 068 is deliberately absent. Its PDF is now in the cache and does carry
+    # an onset figure (n = 2 308, embedded at 1074x619), but the scan comes
+    # out at 2344, i.e. 1.6% ABOVE the printed n where every other vintage
+    # lands 2-5% below, and above SitRep 069's 2260 even though 069's
+    # printed n is higher. Day by day it disagrees with 069 by up to 10
+    # cases on early-May onset dates that were long settled by either
+    # report. Something in the axis calibration is off for this rendering,
+    # so the vintage is left out rather than committed wrong. See the issue
+    # linked from data/README.md.
     ("069", Date(2026, 7, 22), Date(2026, 7, 22)),
-    ("070", Date(2026, 7, 23), Date(2026, 7, 22))
+    ("070", Date(2026, 7, 23), Date(2026, 7, 22)),
+    ("071", Date(2026, 7, 24), Date(2026, 7, 22)),
+    ("072", Date(2026, 7, 25), Date(2026, 7, 22))
 ]
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -112,14 +123,26 @@ end
 
 # The onset figure is a blue-dominant daily bar chart with no orange (the
 # age/sex pyramids use orange; the notification-week chart uses a darker
-# steel blue and prints value labels). The blue floor is well below the
-# smallest onset figure seen (SitReps 069/070 embed it at 1009x583, blue
-# ~50k, against ~66-95k for the larger 059-067 renderings) and well above
-# the largest non-onset image sharing its page (~5k).
+# steel blue and prints value labels). The tests are pixel FRACTIONS, not
+# counts, because INSP re-renders the figure at whatever size the layout
+# needs and an absolute threshold silently flips as the size moves: the
+# blue floor already had to be lowered once when the figure shrank to
+# 1009x583, and SitRep 072's larger 1277x799 rendering then pushed the
+# crimson/pink-band anti-aliasing to 631 orange pixels, past a 500 cut.
+#
+# Measured over SitReps 059-072, the two classes are two orders of
+# magnitude apart, so the thresholds sit clear of both edges:
+#   blue fraction    onset 0.085-0.098   other images <= 0.006
+#   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
+#   red fraction     onset >= 0.046      (a floor, not a discriminator:
+#                                        the notification-week chart is
+#                                        also crimson-heavy)
 function is_onset_curve(R, G, B)
     m = masks(R, G, B)
     orange = (R .> 200) .& (G .> 110) .& (G .< 195) .& (B .< 90)
-    return sum(m.blue) > 20000 && sum(orange) < 500 && sum(m.red) > 20000
+    npx = length(R)
+    return sum(m.blue) / npx > 0.02 && sum(orange) / npx < 0.01 &&
+           sum(m.red) / npx > 0.01
 end
 
 function longest_run(col)

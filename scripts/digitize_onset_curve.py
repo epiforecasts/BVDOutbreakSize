@@ -75,8 +75,19 @@ CONFIG = {
     "065": ("2026-07-18", "2026-07-15"),
     "066": ("2026-07-19", "2026-07-15"),
     "067": ("2026-07-20", "2026-07-15"),
+    # 068 is deliberately absent. Its PDF is now in the cache and does carry
+    # an onset figure (n = 2 308, embedded at 1074x619), but the scan comes
+    # out at 2344, i.e. 1.6% ABOVE the printed n where every other vintage
+    # lands 2-5% below, and above SitRep 069's 2260 even though 069's
+    # printed n is higher. Day by day it disagrees with 069 by up to 10
+    # cases on early-May onset dates that were long settled by either
+    # report. Something in the axis calibration is off for this rendering,
+    # so the vintage is left out rather than committed wrong. See the issue
+    # linked from data/README.md.
     "069": ("2026-07-22", "2026-07-22"),
     "070": ("2026-07-23", "2026-07-22"),
+    "071": ("2026-07-24", "2026-07-22"),
+    "072": ("2026-07-25", "2026-07-22"),
 }
 
 
@@ -92,13 +103,25 @@ def _masks(im):
 def _is_onset_curve(im):
     # The onset figure is a blue-dominant daily bar chart with no orange
     # (the age/sex pyramids use orange; the notification-week chart uses a
-    # darker steel blue and prints value labels). The blue floor is well
-    # below the smallest onset figure seen (SitReps 069/070 embed it at
-    # 1009x583, blue ~50k, against ~66-95k for the larger 059-067
-    # renderings) and well above the largest non-onset image on its page
-    # (~5k).
+    # darker steel blue and prints value labels). The tests are pixel
+    # FRACTIONS, not counts, because INSP re-renders the figure at whatever
+    # size the layout needs and an absolute threshold silently flips as the
+    # size moves: the blue floor already had to be lowered once when the
+    # figure shrank to 1009x583, and SitRep 072's larger 1277x799
+    # rendering then pushed the crimson/pink-band anti-aliasing to 631
+    # orange pixels, past a 500 cut.
+    #
+    # Measured over SitReps 059-072, the two classes are two orders of
+    # magnitude apart, so the thresholds sit clear of both edges:
+    #   blue fraction    onset 0.085-0.098   other images <= 0.006
+    #   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
+    #   red fraction     onset >= 0.046      (a floor, not a discriminator:
+    #                                        the notification-week chart is
+    #                                        also crimson-heavy)
     blue, red, orange, _ = _masks(im)
-    return blue.sum() > 20000 and orange.sum() < 500 and red.sum() > 20000
+    npx = im.shape[0] * im.shape[1]
+    return (blue.sum() / npx > 0.02 and orange.sum() / npx < 0.01
+            and red.sum() / npx > 0.01)
 
 
 def _onset_page(pdf):
