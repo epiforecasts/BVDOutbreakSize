@@ -78,7 +78,7 @@ increments can support.
 See issue #488.
 
 SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
-071, so the twelve scanned vintages hold eight distinct onset snapshots
+071, so the thirteen scanned vintages hold nine distinct onset snapshots
 (report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
 SitRep 068 (21 July) is now included: its PDF was unreachable while the
 INSP fetch was broken, and it does carry a figure (n = 2 308).
@@ -110,6 +110,16 @@ This is still a coarse estimate: it rests on seven digitised snapshots over a
 ten-day window, the reference snapshot is itself right-truncated for its most
 recent onsets, and the delay it measures is onset → confirmed-and-reported
 (it folds together care-seeking, lab confirmation and reporting).
+
+Two caveats have been added since these figures were computed, and neither has
+been folded into them.
+The 21 and 25 July snapshots now exist (nine distinct snapshots, not seven), so
+the estimate is one report behind at both ends.
+More importantly, the scan noise documented above is two-sided and of the same
+order as the between-vintage increments this estimate is built from, so the
+quoted percentages are almost certainly more precise than the data supports.
+Treat them as indicative until the triangle is re-estimated with that noise
+carried through.
 
 ### Fetching a SitRep from INSP directly
 

@@ -22,6 +22,11 @@ CLAUDE.md
 
 # SitRep PDFs fetched by scripts/download_sitreps.jl for scanning
 /data/sitrep_pdfs/
+# Without the slash too: in a git worktree the PDF cache is often a symlink
+# back to the primary checkout, and a directory-only pattern lets the symlink
+# itself be committed (carrying an absolute path, dangling everywhere else).
+/data/sitrep_pdfs
+__pycache__/
 
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
