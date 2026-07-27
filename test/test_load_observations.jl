@@ -287,6 +287,33 @@
     @test breakpoint <= obs.n
 end
 
+@testitem "confirmed break gross counts follow the sorted dates" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+
+    ## The grid days come back sorted while the TOML arrays keep the order
+    ## they are written in, so one permutation has to carry the dates and both
+    ## gross vectors together. Written out of date order, a per-vector filter
+    ## would pair the earlier day with the later day's printed counts.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    src = read(path, String)
+    block = "value  = [\"2026-07-22\"]\n" *
+            "gross_cases  = [97]\ngross_deaths = [62]"
+    swapped = "value  = [\"2026-07-22\", \"2026-07-21\"]\n" *
+              "gross_cases  = [97, 11]\ngross_deaths = [62, 22]"
+    reordered = replace(src, block => swapped)
+    @test reordered != src
+    tmp = joinpath(mktempdir(), "observations.toml")
+    write(tmp, reordered)
+    obs = load_observations(tmp)
+
+    ## 21 July sorts first and must keep its own counts, not 22 July's.
+    @test length(obs.confirmed_break_days) == 2
+    @test issorted(obs.confirmed_break_days)
+    @test obs.confirmed_break_gross_cases == [11, 97]
+    @test obs.confirmed_break_gross_deaths == [22, 62]
+end
+
 @testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()

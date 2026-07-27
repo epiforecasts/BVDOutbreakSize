@@ -124,25 +124,39 @@ function load_observations(
     ## confirmed mean, so the increment likelihood does not read the backlog as
     ## one day of incidence. A dated list filtered to the cut-off like the
     ## histories; absent or empty → no break days, a no-op. See issue #484.
-    confirmed_break_days = event_days("confirmed_break_dates")
+    ## The grid days are returned sorted while the TOML arrays keep the order
+    ## they are written in, so the cut-off filter and the sort permutation are
+    ## built once here and shared with the gross vectors below; pairing them
+    ## per-vector instead would silently mismatch an out-of-order block.
+    _brk = let key = "confirmed_break_dates"
+        if haskey(raw, key)
+            blk = raw[key]
+            ds = String.(blk["value"])
+            keep = [Date(String(d)) <= cutoff for d in ds]
+            days = Int[_index(d) for d in ds[keep]]
+            (; blk, ds, keep, ord = sortperm(days), days)
+        else
+            (; blk = nothing, ds = String[], keep = Bool[], ord = Int[],
+                days = Int[])
+        end
+    end
+    confirmed_break_days = _brk.days[_brk.ord]
 
     ## The PRINTED 24h new-confirmed counts on each break day, which make the
     ## step data-derived rather than a guessed prior width: the submodels
     ## centre each step on `observed increment − gross`, the part of the
     ## vintage step the report itself attributes to base integration rather
-    ## than to the day's notifications. Filtered with the dates so the three
-    ## stay aligned, and defaulted to zeros when absent (recovering an
-    ## uninformative zero-centred step).
+    ## than to the day's notifications. Filtered and permuted with the dates so
+    ## the three stay aligned, and defaulted to zeros when absent (recovering
+    ## an uninformative zero-centred step).
     function break_gross(key)
-        haskey(raw, "confirmed_break_dates") || return Int[]
-        blk = raw["confirmed_break_dates"]
-        haskey(blk, key) || return zeros(Int, length(confirmed_break_days))
-        ds = String.(blk["value"])
-        vals = Int.(blk[key])
-        length(vals) == length(ds) || error(
+        _brk.blk === nothing && return Int[]
+        haskey(_brk.blk, key) || return zeros(Int, length(_brk.ord))
+        vals = Int.(_brk.blk[key])
+        length(vals) == length(_brk.ds) || error(
             "confirmed_break_dates: $key has $(length(vals)) entries for " *
-            "$(length(ds)) dates")
-        return Int[v for (d, v) in zip(ds, vals) if Date(d) <= cutoff]
+            "$(length(_brk.ds)) dates")
+        return vals[_brk.keep][_brk.ord]
     end
     confirmed_break_gross_cases = break_gross("gross_cases")
     confirmed_break_gross_deaths = break_gross("gross_deaths")
