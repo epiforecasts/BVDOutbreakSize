@@ -25,6 +25,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "sampling.jl"),
     joinpath(_PKG, "src", "constants.jl"),
     joinpath(_PKG, "src", "data.jl"),
+    joinpath(_PKG, "src", "onset_curve.jl"),
     @__FILE__
 ]
 
@@ -115,6 +116,7 @@ function build_fit_specs(obs;
                 occupancy_break_days = o.occupancy_break_days,
                 export_case_days = o.export_case_days,
                 export_death_days = o.export_death_days,
+                onset_curve_history = o.onset_curve_history,
                 breakpoint = bp,
                 background_re = true,
                 confirmed_positivity_link = :composition,
@@ -156,6 +158,7 @@ function build_fit_specs(obs;
                 occupancy_break_days = obs.occupancy_break_days,
                 export_case_days = obs.export_case_days,
                 export_death_days = obs.export_death_days,
+                onset_curve_history = obs.onset_curve_history,
                 breakpoint = breakpoint,
                 background_re = true,
                 confirmed_positivity_link = :composition,
@@ -214,6 +217,7 @@ function build_fit_specs(obs;
                     occupancy_break_days = obs.occupancy_break_days,
                     export_case_days = obs.export_case_days,
                     export_death_days = obs.export_death_days,
+                    onset_curve_history = obs.onset_curve_history,
                     breakpoint = breakpoint,
                     background_re = true,
                     confirmed_positivity_link = :composition,
@@ -284,6 +288,14 @@ function build_fit_specs(obs;
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("treatment"))),
+        (; id = "onsets",
+            kind = :chain,
+            thunk = () -> nuts_sample(
+                onsets_only_model(obs.n;
+                    onset_curve_history = obs.onset_curve_history,
+                    breakpoint = breakpoint);
+                samples = samples, chains = chains,
+                callback = fit_callback("onsets"))),
         (; id = "frozen_validation", kind = :frozen,
             thunk = () -> fit_frozen_joint(validation_cutoff))
     ]
