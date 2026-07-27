@@ -276,9 +276,9 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # three of them reprints) with report dates 12, 13, 14, 17, 18, 19, 20,
 # 21, 22 and 25 July. The fit only ever sees snapshots at or before the
 # current cut-off, the same rule as every other stream (see
-# [`load_onset_curve`](@ref)), so the 25 July snapshot is not yet scored;
-# it enters automatically, with no code change, once the cut-off advances
-# past it.
+# [`load_onset_curve`](@ref)), so a vintage digitised ahead of the manifest
+# enters automatically, with no code change, once the cut-off advances past
+# its report date.
 #
 # Each figure also stops its horizontal axis short of its own report date,
 # by anything from zero to eight days depending on the vintage, and the
@@ -3239,8 +3239,8 @@ onset_pair_fig #hide
 # panel and catches up in a later snapshot's panel, the right-truncation
 # behaviour the model relies on (see the [symptom-onset reporting
 # delay](@ref "Symptom-onset reporting delay") Methods section); the
-# panels only cover snapshots at or before the current cut-off, so the
-# 25 July snapshot is not shown yet (see the [Data](@ref) section).
+# panels only cover snapshots at or before the current cut-off (see the
+# [Data](@ref) section).
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
