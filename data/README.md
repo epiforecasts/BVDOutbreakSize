@@ -158,8 +158,12 @@ the estimate is one report behind at both ends.
 More importantly, the scan noise documented above is two-sided and of the same
 order as the between-vintage increments this estimate is built from, so the
 quoted percentages are almost certainly more precise than the data supports.
-Treat them as indicative until the triangle is re-estimated with that noise
-carried through.
+Treat them as indicative.
+The model now carries the noise through: the fitted reporting-delay hazard in
+`onset_reporting_model` scores the increments under a heavy-tailed likelihood
+whose scale is built from the measured digitisation error, and the analysis
+report quotes the delay with its posterior interval.
+Prefer that estimate over the arithmetic above.
 
 ### Fetching a SitRep from INSP directly
 
