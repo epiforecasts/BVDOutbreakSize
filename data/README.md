@@ -11,7 +11,7 @@ model hardcodes counts.
 |---|---|
 | `observations.toml` | The manifest the model loads. Every stream is a value or a dated `dates`/`values` history plus a prose `source =` citation. Edit this to advance the analysis. |
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
-| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Not fitted; see the section below. |
+| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
 
@@ -60,9 +60,26 @@ individual daily bars carry roughly ±1–2 cases of pixel noise.
 The shortfall is concentrated in the faded bars inside the
 `données potentiellement incomplètes` band at the right of each figure, whose
 lightened fill falls outside the colour masks.
-SitReps 059 and 060 reuse one figure, as do 061 and 062 and 069 and 070, so
-the ten scanned vintages hold seven distinct onset snapshots (report dates
-12, 14, 17, 18, 19, 20 and 22 July).
+SitReps 061 and 062 reuse one figure, as do 069, 070 and 071, so the
+scanned vintages hold fewer distinct onset snapshots than blocks.
+SitReps 059 and 060 are **not** a repeat despite sharing a digitised total of
+1821: they differ on several days, so they count as two snapshots.
+The loader (`load_onset_curve`, `src/onset_curve.jl`) collapses reprints by
+exact value equality over the digitised block rather than by a hardcoded list
+of vintage ids, so a new reprint is caught without a code change; treating a
+reprint as a fresh snapshot would fabricate an increment of exactly zero and
+bias the fitted delay towards fast reporting.
+
+Each figure also stops its x axis short of its own report date, by anything
+from zero to eight days, and the last bar it prints is often a substantial
+count rather than a tail fading to zero.
+An onset date past that axis is a date the figure says nothing about, not a
+bar of height zero.
+The loader drops those cells rather than reading them as zeros: the axis gap
+is about five days for most vintages, close to the reporting delay itself, so
+reading it as "nothing reported yet" would force the fitted hazard to near
+zero over the first five days and pile the missing mass onto the delay at
+which the axis first covers the date.
 SitRep 068 (21 July) is absent: the INRB-UMIE mirror never carried its PDF,
 so there is no figure to digitise for that vintage; the manifest streams for
 21 July come from the SitRep 068 scan recorded in `insp_sitrep_scanned.csv`.
@@ -70,10 +87,16 @@ The embedded figures shrink from SitRep 069 (1009×583 against 1257×698 for
 SitRep 064), which is why the figure-detection and axis-tick thresholds in
 both scripts are resolution-tolerant rather than fixed.
 
-This stream is **not fitted**: the model does not yet read
-`onset_curve_scanned.csv`.
-It is captured so an onset-based likelihood and a reporting-delay component
-can be added later.
+This stream **is fitted**.
+`load_onset_curve` (`src/onset_curve.jl`) reads the file, collapses reprints,
+drops vintages reported after the manifest cut-off and builds the
+between-vintage increment cells; `onset_reporting_model`
+(`src/models/observations.jl`) fits them through a discrete reporting-delay
+hazard whose asymptote carries ascertainment.
+It is the only direct observation of the latent onset series, every other
+stream seeing it only after a further convolution.
+Advancing `as_of_date` in `observations.toml` past a newly digitised
+vintage's report date picks that vintage up with no code change.
 
 ### Rough onset-to-report delay
 
@@ -84,9 +107,14 @@ vintages while recent ones fill in as more confirmations arrive (e.g. onset
 20 and 22 July snapshots).
 Taking the latest snapshot as the near-complete reference for onset dates at
 least ~12 days old, the empirical proportion of eventually-reported confirmed
-cases reported within `d` days of onset is roughly 60% by 7 days, 85% by
+cases reported within `d` days of onset is around 55–60% by 7 days, 85% by
 ~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by
 ~3 weeks (median ~5–6 days).
+The 7-day figure is the least well determined of these: a fuller reanalysis of
+the same triangle put it at 54–62% with a 95% interval of 43–68%, wide because
+the digitisation noise is close in size to the between-vintage increments the
+estimate rests on.
+Quote the interval, not the point.
 This supersedes the earlier three-snapshot estimate and shifts it slightly
 later; the seven-snapshot curve is flatter through the second week than the
 three-snapshot one suggested.
@@ -220,7 +248,7 @@ being silently dropped as the report format evolves. Known candidates:
 | PoE/PoC screening (Tableau 5): travellers screened, alerts, corpses swabbed | Cross-border importation pressure. |
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
-| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; fitted as the reporting-triangle stream (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 

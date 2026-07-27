@@ -280,6 +280,23 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # it enters automatically, with no code change, once the cut-off advances
 # past it.
 #
+# Each figure also stops its horizontal axis short of its own report date,
+# by anything from zero to eight days depending on the vintage, and the
+# last bar it does print is often a substantial count rather than a tail
+# fading to zero. An onset date past that axis is not a bar of height zero,
+# it is a date the figure says nothing about, so we drop those cells rather
+# than scoring them as zeros: the axis gap is about five days for most
+# vintages, close to the reporting delay itself, and reading it as "nothing
+# reported yet" would force the fitted hazard to near zero over the first
+# five days and pile the missing mass onto the delay at which the axis
+# first covers the date. The publisher's choice of axis limit does not
+# depend on the counts it hides, so treating those cells as missing rather
+# than zero is the conservative reading. The price is that a correction
+# needs both vintages of a pair to print the date, which leaves the very
+# shortest delays thinly observed: no cell in the current triangle reaches
+# delay zero, and the fitted hazard there rests on pooling across delays
+# rather than on data.
+#
 # The first table lists each figure at the cut-off, or at the date
 # reporting stopped for that stream. The second table gives the per-date
 # history of each situation-report stream; the model fits the
@@ -2026,46 +2043,74 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
-# $\sigma_u$ is built from the measured digitisation error (an independent
-# $\pm 2.1$-case pixel-noise SD per read and a $4.0\%$ level-error SD per
-# scan, applied to the modelled rather than the observed level, so the
-# likelihood's own noise never feeds back into its own variance) plus a
-# small sampled slack multiplier. The very first scored snapshot is
-# differenced against an implicit empty predecessor, recovering signal
-# from it rather than discarding it. A count likelihood cannot be used
-# here: the measured increments are frequently negative, since a re-dated
-# case can move a bar down in a later scan even though the true running
-# total cannot fall, so we use a Student-$t$ with fixed degrees of freedom
-# ($\nu = 4$, a standard robust-regression choice) rather than a sampled
-# one, for the same reason the report-to-receipt delay above keeps its own
-# scale nuisance fixed where the data cannot pin it down.
+# $\sigma_u$ collects three sources. The cell counts cases, so it carries
+# counting variation of about its own modelled mean; the digitised bar is
+# read with a $\pm 2.1$-case pixel-noise SD, doubled for a correction since
+# it differences two reads; and each scan carries a $4.0\%$ level error on
+# its own cumulative reading. Every magnitude entering $\sigma_u$ is the
+# modelled one, never the observed count, so the likelihood's own noise
+# never feeds back into its own variance, and a sampled slack multiplier
+# sits on top of the whole thing.
 #
-# **What separates ascertainment from delay speed, and what does not.** A
-# falling ascertainment and a slower reporting delay both suppress a
-# snapshot's most recent onset bars in the same way, so the two are partly
-# confounded within a single snapshot. Two things pull them apart, only
-# partially. First, right truncation self-corrects for a genuine delay
-# explanation — a suppressed recent bar catches up in later snapshots —
-# but not for a genuine ascertainment fall, which does not recover; the
-# multi-snapshot triangle can in principle tell "filled in later" from
-# "genuinely missed" apart, which a single latest curve cannot. Second,
-# the calendar-time walk is indexed on the report date, not the onset
-# date: the model already carries a smooth calendar-time effect on the
-# onset-date axis, the reproduction-number walk, so an ascertainment or
-# hazard-total effect indexed by onset date would not be identified
-# against it. Report date is a different, if overlapping, calendar window
-# (it lags onset by the delay itself plus the incubation period the onset
-# series is already convolved from), which removes the direct collision
-# but not all of it: the onset triangle's own report-date range sits
-# inside the reproduction-number walk's active window, so some residual
-# absorption between "incidence slowed" and "reporting slowed" remains
-# plausible and has not been checked against a real fit. Both the
-# ascertainment and the delay profile above are read off the same one
-# fitted calendar effect, so they are reported with matching uncertainty
-# and are not separable beyond what is stated here; this is a deliberate
-# simplification, not an oversight. The alive/dead split the raw figure
-# carries is not modelled separately, since the confirmed-death stream
-# above already carries that split from other data.
+# The very first scored snapshot is differenced against an implicit empty
+# predecessor, so its cells score levels rather than corrections. That is
+# what recovers it instead of discarding it, and it also does real work:
+# corrections only ever pin differences of $F$, so scaling $F$ up while
+# scaling the onset series down leaves every correction cell unchanged, and
+# something has to score a level for the asymptote to be anchored at all.
+# Those cells are the ones whose counting variation matters most, a bar of
+# 40 cases carrying about $\sqrt{40}$ of it against $2.1$ of reading error.
+#
+# A count likelihood cannot be used here: the measured increments are
+# frequently negative, since a re-dated case can move a bar down in a later
+# scan even though the true running total cannot fall, so we use a
+# Student-$t$ with fixed degrees of freedom ($\nu = 4$, a standard
+# robust-regression choice) rather than a sampled one, for the same reason
+# the report-to-receipt delay above keeps its own scale nuisance fixed
+# where the data cannot pin it down.
+#
+# **What the triangle separates, and what it does not.** Three
+# time-varying multiplicative objects now act on or near the same latent
+# series: the reproduction-number walk on the infection and hence onset
+# axis, the calendar walk on the report axis, and ascertainment, which is
+# not a free object at all here but the asymptote of the hazard the
+# calendar walk modifies. Each leaves a different footprint on the
+# triangle. A change in the onset series scales a column, one onset date
+# across every snapshot. A change in the calendar walk scales a diagonal,
+# one report day across every onset date that reaches it at its own delay.
+# A change in the baseline hazard scales a delay band. Column, diagonal and
+# band are distinguishable once there is more than one snapshot, which is
+# the structural reason this stream is worth fitting, and also the reason
+# the calendar walk is indexed on the report date: on the onset axis its
+# footprint would coincide with the reproduction-number walk's exactly and
+# neither would be identified.
+#
+# Three things stay weak. The asymptote is pinned by the first snapshot's
+# level cells and by the onset series coming from the other streams, not by
+# the corrections, so in the onsets-only fit below the asymptote and the
+# outbreak size are confounded and that fit's $C_T$ is close to
+# prior-driven; it belongs in the comparison as a comparison, not as an
+# estimate. The hazard below about two days' delay is barely observed, for
+# the axis reason given in the Data section, and rests on pooling across
+# delays. And a falling asymptote and a slowing hazard shape both suppress
+# recent bars within one snapshot; right truncation self-corrects for the
+# delay explanation, since a suppressed bar catches up later, but not for
+# an ascertainment fall, which does not recover, so the vintage structure
+# does bear on this, only as strongly as the handful of snapshots covering
+# the affected onset dates allows. Both readouts come from the one fitted
+# calendar effect and are reported with matching uncertainty. Folding
+# ascertainment into the asymptote rather than giving it its own parameter
+# block is deliberate: a separate block would trade against the hazard
+# total with nothing in the data to arbitrate between them.
+#
+# What we have not been able to check is whether the calendar walk and the
+# reproduction-number walk pull on each other in practice. Their footprints
+# differ, but their calendar windows overlap and both are least constrained
+# in the final fortnight, so the first diagnostic to look at is the
+# calendar walk's step size against the reproduction-number walk's own, and
+# the $R_t$ posterior with and without this stream. The alive/dead split
+# the raw figure carries is not modelled separately, since the
+# confirmed-death stream above already carries that split from other data.
 #
 # An earlier line-list-independent reanalysis of this triangle put the
 # median onset-to-report delay at around 6 days and the 7-day reporting
