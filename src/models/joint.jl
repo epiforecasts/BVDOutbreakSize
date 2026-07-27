@@ -229,6 +229,40 @@ kernel) and conditions on the isolation/treatment-bed occupancy alone. See
 end
 
 """
+Onsets-only composer (the direct-observation analogue). Runs the infection
+process and onset staging, then conditions on the symptom-onset reporting-
+triangle likelihood alone. See [`onset_reporting_model`](@ref) for the
+delay hazard, calendar-time drift, right-truncation and ascertainment
+maths.
+
+Unlike every other single-stream composer, this stream needs no dispersion
+or ascertainment submodel of its own: the reporting-delay hazard's
+asymptote plays that role directly (see [`onset_report_cdf`](@ref)), so
+`onset_report` is the only injected submodel, mirroring
+[`deaths_only_model`](@ref)'s shape.
+
+Exposes the cut-off expected onset-reported count as
+`expected_onset_reported_T`, the same un-prefixed name [`bvd_joint`](@ref)
+uses, so the stream can be forecast from this fit (see `expected_confirmed_T`
+on [`confirmed_only_model`](@ref) for the identical precedent).
+"""
+@model function onsets_only_model(n::Integer;
+        onset_curve_history = (; onset_days = Int[], report_days = Int[],
+            prev_report_days = Int[], increments = Int[]),
+        breakpoint::Union{Missing, Real} = missing,
+        infection = infection_model,
+        onset_incidence = onset_incidence_model,
+        onset_report = onset_reporting_model)
+    latent ~ to_submodel(
+        _latent(n, breakpoint, infection, onset_incidence), false)
+    onset_report_state ~ to_submodel(
+        onset_report(onset_curve_history, latent.onsets))
+    expected_onset_reported_T := onset_report_expected_total(
+        latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_state.grid_start, n)
+end
+
+"""
 Confirmed-deaths-only composer. Runs the infection process and onset
 staging, samples dispersion and pooled ascertainment, runs the reported-
 cases stream (in predictive mode, to supply the non-BVD background the death
@@ -349,8 +383,11 @@ stages it to daily onset incidence, then conditions on the DRC suspected
 cases, deaths and the laboratory pipeline (the analysed-specimen volume as
 a per-vintage time series and the confirmed positives as a Binomial of the
 observed analysed denominator), the confirmed deaths, the Uganda exports
-and deaths-among-exports, and the optional genetic seeding bound on the
-outbreak age. Each stream argument may be `missing` to drop it, so the
+and deaths-among-exports, the digitised symptom-onset reporting triangle
+(the only direct observation of the shared onset series, see
+[`onset_reporting_model`](@ref); not opt-in, degrades to a no-op when
+`onset_curve_history` is empty), and the optional genetic seeding bound on
+the outbreak age. Each stream argument may be `missing` to drop it, so the
 model doubles as a prior- and posterior-predictive generator.
 
 onset-to-report kernel with the suspected-case stream. A single
@@ -436,6 +473,8 @@ death-confirmation positivity (`death_confirmation`).
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
         export_case_days::AbstractVector{<:Integer} = Int[],
         export_death_days::AbstractVector{<:Integer} = Int[],
+        onset_curve_history = (; onset_days = Int[], report_days = Int[],
+            prev_report_days = Int[], increments = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
         infection = infection_model,
@@ -447,6 +486,7 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_deaths_stream = confirmed_deaths_model,
         treatment = treatment_flow_model,
         recovered = recovered_model,
+        onset_report = onset_reporting_model,
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
@@ -559,6 +599,14 @@ death-confirmation positivity (`death_confirmation`).
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
+    ## Symptom-onset reporting-triangle stream
+    ## ([`onset_reporting_model`](@ref)): the only direct observation of the
+    ## shared latent onset series `onsets`, every other stream sees it only
+    ## after a further onset-to-event convolution. No dependency on any
+    ## other stream's state, so it runs alongside `deaths_state` rather
+    ## than being deferred to the confirmed pipeline.
+    onset_report_state ~ to_submodel(
+        onset_report(onset_curve_history, onsets))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
@@ -705,6 +753,17 @@ death-confirmation positivity (`death_confirmation`).
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
+    ## Cut-off expected onset-reported total and the modelled per-onset-date
+    ## ascertainment (the reporting-delay hazard's asymptote,
+    ## [`onset_report_ascertainment`](@ref)), both off the same fitted hazard
+    ## as the delay itself; see [`onset_reporting_model`](@ref) for what the
+    ## vintage structure does and does not separate here.
+    expected_onset_reported_T := onset_report_expected_total(
+        onsets, onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_state.grid_start, n)
+    onset_ascertainment := onset_report_ascertainment(
+        onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_state.grid_start, onset_report_state.grid_end)
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -

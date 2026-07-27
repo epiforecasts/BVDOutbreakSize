@@ -18,7 +18,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
                      LogNormal, Beta,
-                     Gamma, truncated, censored, product_distribution
+                     Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
 import CairoMakie
@@ -31,8 +31,9 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
-       RT_INTERVENTION_RAMP,
+       RT_INTERVENTION_RAMP, ONSET_REPORT_MAX_DELAY,
        load_observations, freeze_observations, m_prior_centre,
+       load_onset_curve,
        summary_table, posterior_summary, markdown_table,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
@@ -97,15 +98,22 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        confirmed_positivity_windows, confirmed_deaths_model,
        treatment_flow_model, recovered_model,
        exports_model, exports_deaths_model,
+       safe_studentt, onset_report_cdf, onset_report_cdf_extrapolated,
+       onset_report_moments, onset_report_scales,
+       onset_report_expected_total,
+       onset_report_ascertainment, onset_report_hazard_model,
+       onset_reporting_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
-       exports_deaths_only_model, exports_joint_only_model, bvd_joint
+       exports_deaths_only_model, exports_joint_only_model, bvd_joint,
+       onsets_only_model
 
 include("docstrings.jl")
 include("constants.jl")
 include("data.jl")
+include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
 include("summaries.jl")
