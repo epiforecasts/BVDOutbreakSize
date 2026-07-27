@@ -141,6 +141,9 @@ function load_observations(
         end
     end
     confirmed_break_days = _brk.days[_brk.ord]
+    ## The same days as calendar dates, in the same order, so a validation
+    ## failure below names the date the user wrote rather than a grid index.
+    confirmed_break_date_labels = String.(_brk.ds[_brk.keep])[_brk.ord]
 
     ## The PRINTED 24h new-confirmed counts on each break day, which make the
     ## step data-derived rather than a guessed prior width: the submodels
@@ -169,48 +172,79 @@ function load_observations(
     confirmed_deaths_history = history("confirmed_death_history")
     deaths_history = history("death_history")
 
-    ## Validate each listed break day against the increment it will be applied
-    ## to, once here rather than inside the models, where it would re-run on
-    ## every likelihood evaluation.
+    ## Validate each listed break day, once here rather than inside the models,
+    ## where it would re-run on every likelihood evaluation. Both confirmed
+    ## streams are checked separately against their own gross vector and their
+    ## own increments: a harmonisation can be well behaved on one and not the
+    ## other, so the failing stream is named.
     ##
-    ## The bar is `gross < increment`. A day whose printed 24h count already
-    ## covers its whole vintage step is not a harmonisation, and listing it is
-    ## actively harmful rather than merely useless: the confirmed-case model
-    ## DE-ANCHORS a listed day from the laboratory positivity denominator, so
-    ## the day loses its `BetaBinomial` term while the step that should absorb
-    ## the backlog is centred at or below zero. Measured on
-    ## `confirmed_only_model` (`scripts/diag_break_attribution.jl`, 500 draws x
-    ## 2 chains), that configuration gives 94 divergences and a min bulk ESS of
-    ## 15, against 20 and 522 with no break day declared, and inflates the
-    ## cut-off infection count by 14% as the fit books the artefact as
-    ## incidence. Pinning the step at a published discrepancy instead restores
-    ## 22 divergences and 477 ESS. So this errors rather than warns.
+    ## Two configurations are refused, both of which are silent today.
     ##
-    ## A gross of zero (the default when the key is absent) is legal but
-    ## warned: it makes the centre the whole increment, attributing all of it
-    ## to the artefact. That errs towards artefact rather than towards
-    ## incidence, the safe direction, but it is not the neutral choice it
-    ## looks like.
+    ## 1. `gross >= increment`. A day whose printed 24h count already covers its
+    ##    whole vintage step is a provincial TRANSFER, not a base integration.
+    ##    The diagnostic is the direction: an integration reattaches cases and
+    ##    deaths and so ADDS to both, while a transfer moves both DOWN (SitRep
+    ##    065, 18 July 2026, is the worked example — +83 gross against +77 net
+    ##    cases and +40 against +37 net deaths, as Haut-Uele's cumulative was
+    ##    revised down to 16 cases and 10 deaths). Listing such a day is harmful
+    ##    rather than merely useless: `confirmed_cases_model` DE-ANCHORS a listed
+    ##    day from the laboratory positivity denominator, so it loses its
+    ##    `BetaBinomial` term while the step that should absorb the backlog is
+    ##    centred at or below zero. Measured on `confirmed_only_model`
+    ##    (`scripts/diag_break_attribution.jl`, 500 draws x 2 chains): 94
+    ##    divergences and a min bulk ESS of 15, against 20 and 522 with no break
+    ##    day declared, and the cut-off infection count inflated 14% as the fit
+    ##    books the artefact as incidence. Pinning the step at a published
+    ##    discrepancy instead restores 22 divergences and 477 ESS.
+    ##
+    ## 2. A date matching NO vintage in the history. It does nothing at all: no
+    ##    step, no de-anchor, no error, and the `gross` bar above cannot fire
+    ##    because there is no increment to compare. A transposed digit or wrong
+    ##    month therefore presents as silence while the user believes a
+    ##    harmonisation is being absorbed.
+    ##
+    ## A gross of zero (the default when the key is absent) is legal but warned:
+    ## it makes the centre the whole increment, attributing all of it to the
+    ## artefact. That errs towards artefact rather than towards incidence, the
+    ## safe direction, but it is not the neutral choice it looks like.
     function check_break_gross(gross, hist, label)
         isempty(confirmed_break_days) && return nothing
         isempty(hist.counts) && return nothing
         inc = diff(vcat(0, collect(hist.counts)))
         hdays = collect(hist.days)
-        for (d, g) in zip(confirmed_break_days, gross)
+        for (i, d) in enumerate(confirmed_break_days)
+            date = confirmed_break_date_labels[i]
             pos = findfirst(==(d), hdays)
-            pos === nothing && continue
+            if pos === nothing
+                error("confirmed_break_dates: $date (grid day $d) matches no " *
+                      "vintage in the $label history, so it would be silently " *
+                      "ignored — no step and no de-anchor — while appearing to " *
+                      "absorb a harmonisation. Check the date against the " *
+                      "history's own vintages; a transposed digit or the wrong " *
+                      "month presents exactly like this.")
+            end
+            g = i <= length(gross) ? gross[i] : 0
             if g >= inc[pos]
-                error("confirmed_break_dates: $label gross $g on grid day $d " *
-                      "is not below that vintage's increment $(inc[pos]), so " *
-                      "the day is not a harmonisation. Listing it de-anchors " *
+                error("confirmed_break_dates: $date has a printed 24h $label " *
+                      "count of $g against a net vintage increment of " *
+                      "$(inc[pos]), so the gross does not sit below the net. " *
+                      "That is a provincial TRANSFER, not a base integration: " *
+                      "an integration reattaches records and so ADDS to cases " *
+                      "and deaths together, whereas a transfer moves both " *
+                      "DOWN (SitRep 065, 18 July 2026: +83 gross vs +77 net " *
+                      "cases and +40 vs +37 net deaths). Listing it de-anchors " *
                       "the positivity denominator with no backlog to absorb, " *
-                      "which wrecks the sampling geometry. Remove the date.")
+                      "which measured 94 divergences and a min bulk ESS of 15 " *
+                      "against 20 and 522 undeclared, and inflated the cut-off " *
+                      "infection count 14%. Remove $date from " *
+                      "[confirmed_break_dates].")
             end
             if g == 0
-                @warn "confirmed_break_dates: no $label gross count on grid " *
-                      "day $d, so its step is centred on the whole increment " *
+                @warn "confirmed_break_dates: no printed 24h $label count for " *
+                      "$date, so its step is centred on the whole increment " *
                       "and attributes all of it to the harmonisation rather " *
-                      "than splitting it" increment=inc[pos]
+                      "than splitting it. Supply gross_$label to make the " *
+                      "split data-derived." increment=inc[pos]
             end
         end
         return nothing

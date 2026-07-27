@@ -370,9 +370,68 @@ end
 
     ## A zero gross is legal but warns: the whole increment becomes artefact.
     blk["gross_cases"] = [0]
-    @test_logs (:warn, r"no cases gross count") match_mode=:any begin
+    @test_logs (:warn, r"no printed 24h cases count") match_mode=:any begin
         load_observations(write_toml(raw))
     end
+
+    ## The deaths stream is checked independently against its own increment, so
+    ## a day can pass on cases and fail on deaths. The message names the stream.
+    raw2 = TOML.parsefile(path)
+    dh = raw2["confirmed_death_history"]
+    didx = findfirst(==(day), String.(dh["dates"]))
+    dinc = Int(dh["values"][didx]) - Int(dh["values"][didx - 1])
+    raw2["confirmed_break_dates"]["gross_deaths"] = [dinc]
+    derr = try
+        load_observations(write_toml(raw2))
+        nothing
+    catch err
+        err
+    end
+    @test derr isa ErrorException
+    @test occursin("deaths", derr.msg)
+    @test occursin(day, derr.msg)
+end
+
+@testitem "a break date matching no vintage is rejected" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+    using Dates: Date, Day
+    using TOML
+
+    ## The quietest failure of the three: a date that matches no vintage does
+    ## nothing at all — no step, no de-anchor — and the gross bar cannot fire
+    ## because there is no increment to compare against. A transposed digit or
+    ## the wrong month therefore presents as silence while the user believes a
+    ## harmonisation is being absorbed, so the loader refuses it.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+    listed = Date(String(blk["value"][1]))
+
+    ## Find a date inside the history's own span that is not a vintage. There is
+    ## at least one: SitRep 063 (16 July 2026) was never published upstream, so
+    ## the confirmed series has no entry for it.
+    dates = Set(String.(raw["confirmed_case_history"]["dates"]))
+    first_vintage = Date(minimum(dates))
+    absent = first(d for d in first_vintage:Day(1):listed
+    if !(string(d) in dates))
+    @test !(string(absent) in dates)
+
+    blk["value"] = [string(absent)]
+    blk["gross_cases"] = [10]
+    blk["gross_deaths"] = [5]
+    tmp = joinpath(mktempdir(), "observations.toml")
+    open(io -> TOML.print(io, raw), tmp, "w")
+
+    err = try
+        load_observations(tmp)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ErrorException
+    @test occursin(string(absent), err.msg)
+    @test occursin("matches no", err.msg)
 end
 
 @testitem "load_observations histories have consistent counts" begin
