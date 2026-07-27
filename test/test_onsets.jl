@@ -489,8 +489,8 @@ end
     ## fabricated negative: the very first pair (virtual empty predecessor
     ## vs block 001) legitimately scores a genuine +4 "difference from
     ## nothing" cell at this same onset date and is not part of this guard.
-    idxs = findall(
-        i -> h.onset_days[i] == u && h.report_days[i] == R2, eachindex(h.onset_days))
+    idxs = findall(i -> h.onset_days[i] == u && h.report_days[i] == R2,
+        eachindex(h.onset_days))
     @test !isempty(idxs)
     ## 03-01 is outside block 002's own extent: carried forward from
     ## block 001's reading of 4, so the increment is 4 - 4 = 0, not
