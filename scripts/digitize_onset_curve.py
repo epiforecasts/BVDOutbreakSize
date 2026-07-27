@@ -28,13 +28,28 @@
 #     stacked segments but stopping at the wide white gap up to the floating
 #     "premier resultat positif" label / dashed line above the bar.
 #
-# Accuracy: the digitised per-vintage totals run 2-5% below the printed n
-# (SitRep 064: 2018 vs printed n=2 064; SitRep 070: 2260 vs n=2 329), and
-# individual daily bars carry roughly +/-1-2 cases of pixel noise. The
-# shortfall sits in the faded bars of the `donnees potentiellement
-# incompletes` band, whose lightened fill falls outside the colour masks.
+# Accuracy: the error is a few percent in EITHER direction, per scan, and
+# it is independent between vintages. Against the printed n it ranges from
+# -3.0% (SitRep 069/070/071: 2260 vs n=2 329) to +1.6% (SitRep 068: 2344 vs
+# n=2 308), with SitRep 064 at -2.2% (2018 vs n=2 064) and 072 at +0.4%
+# (2531 vs n=2 521). Individual daily bars carry roughly +/-1-2 cases of
+# pixel noise. Part of the shortfall sits in the faded bars of the `donnees
+# potentiellement incompletes` band, whose lightened fill falls outside the
+# colour masks, but that mechanism is one-sided and does not explain the
+# overshoots, so treat the sign as unknown.
+#
+# The consequence that matters: the scans do NOT preserve a property the
+# underlying data has. Late reporting only ever ADDS cases, so an onset
+# date's count must be non-decreasing across vintages, yet on onset dates
+# settled more than three weeks before every report date the scanned totals
+# move both ways between consecutive snapshots - 064 -> 065 falls by 40
+# cases across 37 of 58 such days, and every other consecutive pair falls
+# somewhere too. So a between-vintage increment of a few cases is at or
+# below the noise floor, and anything built on those increments (a
+# reporting-delay estimate, say) has to account for it.
+#
 # The values are approximate and are NOT fitted by the model; they are
-# captured for later use.
+# captured for later use. See #488.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -75,15 +90,7 @@ CONFIG = {
     "065": ("2026-07-18", "2026-07-15"),
     "066": ("2026-07-19", "2026-07-15"),
     "067": ("2026-07-20", "2026-07-15"),
-    # 068 is deliberately absent. Its PDF is now in the cache and does carry
-    # an onset figure (n = 2 308, embedded at 1074x619), but the scan comes
-    # out at 2344, i.e. 1.6% ABOVE the printed n where every other vintage
-    # lands 2-5% below, and above SitRep 069's 2260 even though 069's
-    # printed n is higher. Day by day it disagrees with 069 by up to 10
-    # cases on early-May onset dates that were long settled by either
-    # report. Something in the axis calibration is off for this rendering,
-    # so the vintage is left out rather than committed wrong. See the issue
-    # linked from data/README.md.
+    "068": ("2026-07-21", "2026-07-22"),
     "069": ("2026-07-22", "2026-07-22"),
     "070": ("2026-07-23", "2026-07-22"),
     "071": ("2026-07-24", "2026-07-22"),

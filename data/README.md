@@ -53,19 +53,35 @@ data-updater produces a byte-identical file; see `scripts/README.md`.
 Both self-calibrate each figure from its axis ticks; the only manual input is
 each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
-These counts are approximate.
-The digitised per-vintage totals run 2–5% below the printed figure `n`
-(SitRep 064: 2018 vs printed n = 2 064; SitRep 070: 2260 vs n = 2 329), and
-individual daily bars carry roughly ±1–2 cases of pixel noise.
-The shortfall is concentrated in the faded bars inside the
+These counts are approximate, and the error is a few percent in either
+direction per scan, independent between vintages.
+Against the printed figure `n` it ranges from −3.0% (SitReps 069/070/071:
+2260 against n = 2 329) to +1.6% (SitRep 068: 2344 against n = 2 308), with
+SitRep 064 at −2.2% (2018 against n = 2 064) and SitRep 072 at +0.4% (2531
+against n = 2 521).
+Individual daily bars carry roughly ±1–2 cases of pixel noise.
+Some of the shortfall is the faded bars inside the
 `données potentiellement incomplètes` band at the right of each figure, whose
-lightened fill falls outside the colour masks.
-SitReps 059 and 060 reuse one figure, as do 061 and 062 and 069 and 070, so
-the ten scanned vintages hold seven distinct onset snapshots (report dates
-12, 14, 17, 18, 19, 20 and 22 July).
-SitRep 068 (21 July) is absent: the INRB-UMIE mirror never carried its PDF,
-so there is no figure to digitise for that vintage; the manifest streams for
-21 July come from the SitRep 068 scan recorded in `insp_sitrep_scanned.csv`.
+lightened fill falls outside the colour masks, but that mechanism can only
+lose cases and so does not explain the overshoots; treat the sign as unknown.
+
+One consequence deserves emphasis before anyone fits this stream.
+Late reporting only ever adds cases, so an onset date's count must be
+non-decreasing across vintages, and the scans do not respect that.
+On onset dates settled more than three weeks before every report date, the
+scanned totals move both ways between consecutive distinct snapshots: 064 →
+065 falls by 40 cases across 37 of 58 such days, and every other consecutive
+pair falls somewhere too.
+A between-vintage increment of a few cases is therefore at or below the noise
+floor, which bounds what a reporting-delay estimate built from those
+increments can support.
+See issue #488.
+
+SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
+071, so the twelve scanned vintages hold eight distinct onset snapshots
+(report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
+SitRep 068 (21 July) is now included: its PDF was unreachable while the
+INSP fetch was broken, and it does carry a figure (n = 2 308).
 The embedded figures shrink from SitRep 069 (1009×583 against 1257×698 for
 SitRep 064), which is why the figure-detection and axis-tick thresholds in
 both scripts are resolution-tolerant rather than fixed.
