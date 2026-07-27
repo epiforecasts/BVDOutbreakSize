@@ -224,11 +224,14 @@ the `source =` string and prefer the auditable value.
   integrated, record the harmonised headline (it is what the INRB-UMIE
   `national_*` CSV carries) and state the gross-vs-net split in the
   `source =` string, so the artefact is visible to whoever reads the
-  increment the daily likelihood actually fits. Precedents: SitRep 065
-  (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross vs +77 net) and
-  SitRep 069 (22 July, Ituri/Nord-Kivu base integration, +97 gross vs +369
-  net cases and +62 gross vs +236 net deaths — much the largest so far, and
-  called out in the report's own footnote).
+  increment the daily likelihood actually fits. State the split for BOTH
+  confirmed streams, since a break day now applies to cases and deaths alike.
+  Precedents: SitRep 065 (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross
+  vs +77 net cases and +40 gross vs +37 net deaths — both DOWNWARD, which is
+  what a transfer between provinces looks like rather than a base
+  integration) and SitRep 069 (22 July, Ituri/Nord-Kivu base integration,
+  +97 gross vs +369 net cases and +62 gross vs +236 net deaths — much the
+  largest so far, and called out in the report's own footnote).
 - **Format change from SitRep 059**: the analytique format moved the 24h
   analysed counts to §3.2 Laboratoire bullets, dropped the page-1 suspect-
   death-of-day subtitle, and reports the daily suspect total in Tableau 3.

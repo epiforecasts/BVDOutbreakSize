@@ -241,6 +241,41 @@
     @test all(minimum(obs.isolation_history.days) .<=
               obs.occupancy_break_days .<= maximum(obs.isolation_history.days))
 
+    ## Manual confirmed harmonisation-break days: the same opt-in dated-list
+    ## shape, resolved onto the grid. 22 July 2026 (SitRep 069) is listed —
+    ## the report itself states the cumulative step is mostly a provincial
+    ## base integration rather than 24h notifications. An invariant plus the
+    ## one pinned date, so a re-scan regression is caught without echoing a
+    ## list that grows on every harmonisation.
+    @test obs.confirmed_break_days isa AbstractVector{<:Integer}
+    @test issorted(obs.confirmed_break_days)
+    @test all(1 .<= obs.confirmed_break_days .<= obs.n)
+    @test obs.confirmed_break_days ==
+          [obs.n - (Date(obs.cutoff) - Date(d)).value
+           for d in (Date("2026-07-22"),)]
+    ## Every break day must land on a confirmed vintage, otherwise it fits an
+    ## inert step against no observation.
+    @test all(in(obs.confirmed_history.days), obs.confirmed_break_days)
+
+    ## The printed 24h gross counts that make each step data-derived: aligned
+    ## with the dates and filtered with them, positive, and strictly below the
+    ## vintage increment they are subtracted from (otherwise the "discrepancy"
+    ## the step centres on would be negative and the day is not a
+    ## harmonisation at all).
+    @test length(obs.confirmed_break_gross_cases) ==
+          length(obs.confirmed_break_days)
+    @test length(obs.confirmed_break_gross_deaths) ==
+          length(obs.confirmed_break_days)
+    @test all(>(0), obs.confirmed_break_gross_cases)
+    @test all(>(0), obs.confirmed_break_gross_deaths)
+    let cmap = Dict(zip(obs.confirmed_history.days,
+            diff(vcat(0, collect(obs.confirmed_history.counts)))))
+        for (d, g) in zip(obs.confirmed_break_days,
+            obs.confirmed_break_gross_cases)
+            @test g < cmap[d]
+        end
+    end
+
     ## Genetic TMRCA bound
     @test !ismissing(obs.tmrca_days)
     @test obs.tmrca_days isa Real
@@ -250,6 +285,153 @@
     breakpoint = obs.n - obs.who_first_sitrep_days
     @test breakpoint >= 1
     @test breakpoint <= obs.n
+end
+
+@testitem "confirmed break gross counts follow the sorted dates" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+
+    using Dates: Date, Day
+    using TOML
+
+    ## The grid days come back sorted while the TOML arrays keep the order
+    ## they are written in, so one permutation has to carry the dates and both
+    ## gross vectors together. Written out of date order, a per-vector filter
+    ## would pair the earlier day with the later day's printed counts.
+    ##
+    ## The fixture is built by round-tripping the manifest through the TOML
+    ## parser and rewriting only the break block, not by editing its text: text
+    ## surgery matches neither a CRLF checkout nor a rewrapped block, and a
+    ## fixture that silently fails to apply turns this into a test of nothing.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+
+    ## Derive both dates from the manifest's own listed day so the fixture does
+    ## not pin a date that a later cut-off or data update invalidates, and write
+    ## them DESCENDING so sorting has something to do.
+    later = Date(String(blk["value"][1]))
+    earlier = later - Day(1)
+    blk["value"] = [string(later), string(earlier)]
+    blk["gross_cases"] = [97, 11]
+    blk["gross_deaths"] = [62, 22]
+    @test Date(blk["value"][1]) > Date(blk["value"][2])
+
+    tmp = joinpath(mktempdir(), "observations.toml")
+    open(io -> TOML.print(io, raw), tmp, "w")
+    obs = load_observations(tmp)
+
+    ## The earlier day sorts first and must keep its own counts, not the later
+    ## day's, which is exactly what a per-vector filter would hand it.
+    @test length(obs.confirmed_break_days) == 2
+    @test issorted(obs.confirmed_break_days)
+    @test obs.confirmed_break_gross_cases == [11, 97]
+    @test obs.confirmed_break_gross_deaths == [22, 62]
+end
+
+@testitem "a break day whose gross covers its increment is rejected" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+    using Dates: Date
+    using TOML
+
+    ## A day whose printed 24h count already covers its whole vintage step is
+    ## not a harmonisation, and listing it is harmful rather than inert: the
+    ## day is de-anchored from the positivity denominator while the step meant
+    ## to absorb the backlog is centred at or below zero. Measured at 94
+    ## divergences and a min bulk ESS of 15 against 20 and 522 with no break
+    ## day, so the loader refuses it instead of sampling it.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+    day = String(blk["value"][1])
+
+    ## That vintage's own increment, which the gross must stay below.
+    ch = raw["confirmed_case_history"]
+    idx = findfirst(==(day), String.(ch["dates"]))
+    inc = Int(ch["values"][idx]) - Int(ch["values"][idx - 1])
+    @test inc > 0
+
+    write_toml(r) = (p = joinpath(mktempdir(), "observations.toml");
+        open(io -> TOML.print(io, r), p, "w"); p)
+
+    ## Equal to the increment is already too high: the centre would be zero.
+    blk["gross_cases"] = [inc]
+    @test_throws ErrorException load_observations(write_toml(raw))
+
+    ## And above it, which would centre the step negatively.
+    blk["gross_cases"] = [inc + 10]
+    @test_throws ErrorException load_observations(write_toml(raw))
+
+    ## Just below is accepted, so the bound is exactly `gross < increment`.
+    blk["gross_cases"] = [inc - 1]
+    obs = load_observations(write_toml(raw))
+    @test obs.confirmed_break_gross_cases == [inc - 1]
+
+    ## A zero gross is legal but warns: the whole increment becomes artefact.
+    blk["gross_cases"] = [0]
+    @test_logs (:warn, r"no printed 24h cases count") match_mode=:any begin
+        load_observations(write_toml(raw))
+    end
+
+    ## The deaths stream is checked independently against its own increment, so
+    ## a day can pass on cases and fail on deaths. The message names the stream.
+    raw2 = TOML.parsefile(path)
+    dh = raw2["confirmed_death_history"]
+    didx = findfirst(==(day), String.(dh["dates"]))
+    dinc = Int(dh["values"][didx]) - Int(dh["values"][didx - 1])
+    raw2["confirmed_break_dates"]["gross_deaths"] = [dinc]
+    derr = try
+        load_observations(write_toml(raw2))
+        nothing
+    catch err
+        err
+    end
+    @test derr isa ErrorException
+    @test occursin("deaths", derr.msg)
+    @test occursin(day, derr.msg)
+end
+
+@testitem "a break date matching no vintage is rejected" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+    using Dates: Date, Day
+    using TOML
+
+    ## The quietest failure of the three: a date that matches no vintage does
+    ## nothing at all — no step, no de-anchor — and the gross bar cannot fire
+    ## because there is no increment to compare against. A transposed digit or
+    ## the wrong month therefore presents as silence while the user believes a
+    ## harmonisation is being absorbed, so the loader refuses it.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+    listed = Date(String(blk["value"][1]))
+
+    ## Find a date inside the history's own span that is not a vintage. There is
+    ## at least one: SitRep 063 (16 July 2026) was never published upstream, so
+    ## the confirmed series has no entry for it.
+    dates = Set(String.(raw["confirmed_case_history"]["dates"]))
+    first_vintage = Date(minimum(dates))
+    absent = first(d for d in first_vintage:Day(1):listed
+    if !(string(d) in dates))
+    @test !(string(absent) in dates)
+
+    blk["value"] = [string(absent)]
+    blk["gross_cases"] = [10]
+    blk["gross_deaths"] = [5]
+    tmp = joinpath(mktempdir(), "observations.toml")
+    open(io -> TOML.print(io, raw), tmp, "w")
+
+    err = try
+        load_observations(tmp)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ErrorException
+    @test occursin(string(absent), err.msg)
+    @test occursin("matches no", err.msg)
 end
 
 @testitem "load_observations histories have consistent counts" begin
