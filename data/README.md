@@ -272,6 +272,24 @@ Extend it on every update alongside the fitted streams, and open one issue per
 signal proposing it for fitting — one per signal, not one per vintage.
 Nothing in the model reads this file.
 
+Every value is read twice by independent readers, as for the fitted streams.
+The `eds_*` rows are backfilled to SitRep 059, which is where the §7 dashboard
+layout begins; the same figures appear in earlier vintages in a different
+narrative style with spelled-out numbers (SitRep 058 gives Ituri "Trente-six
+(36) EDS ont été réalisés"), and whether those are the same fields is an open
+question, so they are not included.
+**These three series are not comparable across vintages**, because which
+provinces print a count changes from report to report: Nord-Kivu appears
+numerically almost throughout, Ituri only in 061, 062, 065, 069, 070 and 072,
+Tshopo never, and 071 prints no EDS numbers at all.
+The value is the sum over the provinces that printed the quantity and the
+`source_note` names them, so read that before differencing consecutive rows —
+a step can be pure coverage.
+Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in
+060, 066 and 067, which the same vintages' carried-over `reports` explain; and
+the swab count is usually printed as the combined `corps swabés et sécurisés`
+rather than swabs alone.
+
 After editing, validate with the loader and its invariants:
 
 ```sh
