@@ -38,19 +38,54 @@ end
 
 @testitem "Aqua: persistent_tasks" tags=[:quality] begin
     using Aqua, BVDOutbreakSize
-    # Skipped on macOS: the macOS CI runner leaves a background task alive
-    # after loading the heavy graphics stack (CairoMakie/Makie), so this
-    # check fails there even at tmax = 60 s. It passes on Linux and Windows
-    # and locally, so this is a runner-environment issue, not package code.
-    # Keep the real check on the other platforms; raise tmax for the heavy
-    # AD/plotting load. The Enzyme precompile-and-load step is slow on the
-    # Julia 1.11 ubuntu runner (Enzyme alone takes ~3.5 min to build there),
-    # so the load can exceed 120 s and the check then false-positives a
-    # persistent task; it passes on Windows and Julia LTS. Give it a generous
-    # timeout so the slow load is not mistaken for a lingering task.
+    using Logging: Error
+    using Test: collect_test_logs
+    # Aqua's probe builds a throwaway package depending on this one,
+    # precompiles it in a subprocess, and has that subprocess write a sentinel
+    # file once `using BVDOutbreakSize` returns. It then allows `tmax` for the
+    # subprocess to exit; one still alive after loading is the persistent task
+    # the check looks for.
+    #
+    # The probe conflates two outcomes. When the subprocess exits WITHOUT
+    # writing the sentinel — a failed or killed precompilation, nothing to do
+    # with tasks — Aqua logs `<file> was not created, but precompilation
+    # exited` and reports a persistent task regardless. `tmax` does not cover
+    # that phase: the wait for the sentinel has no timeout at all, so raising
+    # `tmax` cannot help. The durations seen, 1m39 and 8m48 against
+    # `tmax = 600`, were the precompilation dying rather than a timeout.
+    #
+    # Rebuilding this package's dependency stack in a fresh project while this
+    # process already holds it loaded is heavy enough that the subprocess dies
+    # intermittently on the runners: two of three concluded
+    # `Julia 1 - ubuntu-latest` runs on 27 July 2026, one of them on main.
+    #
+    # So the two outcomes are separated here. A genuine detection still fails.
+    # A probe that could not run is skipped with its reason visible, rather
+    # than reported as a package defect. Issue #495 tracks the root cause,
+    # which this does not address.
+    #
+    # macOS is excluded outright: that runner leaves a background task alive
+    # after loading the graphics stack (CairoMakie/Makie), so the check cannot
+    # pass there.
     if Sys.isapple()
         @test_skip "persistent_tasks: macOS CI runner leaves a graphics task"
     else
-        Aqua.test_persistent_tasks(BVDOutbreakSize; tmax = 600)
+        logs, detected = collect_test_logs(min_level = Error) do
+            Aqua.has_persistent_tasks(Base.PkgId(BVDOutbreakSize); tmax = 600)
+        end
+        ## collect_test_logs swallows the records, so re-emit them: the probe's
+        ## own diagnostics are the only clue to why it failed.
+        for rec in logs
+            @warn "Aqua persistent_tasks probe" message = string(rec.message)
+        end
+        incomplete = any(logs) do rec
+            occursin("was not created", string(rec.message))
+        end
+        if incomplete
+            @test_skip "persistent_tasks: probe did not complete, so the " *
+                       "presence of a task is unknown (#495)"
+        else
+            @test !detected
+        end
     end
 end
