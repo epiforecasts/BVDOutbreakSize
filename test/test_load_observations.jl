@@ -291,23 +291,38 @@ end
     using BVDOutbreakSize
     using BVDOutbreakSize: load_observations
 
+    using Dates: Date, Day
+    using TOML
+
     ## The grid days come back sorted while the TOML arrays keep the order
     ## they are written in, so one permutation has to carry the dates and both
     ## gross vectors together. Written out of date order, a per-vector filter
     ## would pair the earlier day with the later day's printed counts.
+    ##
+    ## The fixture is built by round-tripping the manifest through the TOML
+    ## parser and rewriting only the break block, not by editing its text: text
+    ## surgery matches neither a CRLF checkout nor a rewrapped block, and a
+    ## fixture that silently fails to apply turns this into a test of nothing.
     path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
-    src = read(path, String)
-    block = "value  = [\"2026-07-22\"]\n" *
-            "gross_cases  = [97]\ngross_deaths = [62]"
-    swapped = "value  = [\"2026-07-22\", \"2026-07-21\"]\n" *
-              "gross_cases  = [97, 11]\ngross_deaths = [62, 22]"
-    reordered = replace(src, block => swapped)
-    @test reordered != src
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+
+    ## Derive both dates from the manifest's own listed day so the fixture does
+    ## not pin a date that a later cut-off or data update invalidates, and write
+    ## them DESCENDING so sorting has something to do.
+    later = Date(String(blk["value"][1]))
+    earlier = later - Day(1)
+    blk["value"] = [string(later), string(earlier)]
+    blk["gross_cases"] = [97, 11]
+    blk["gross_deaths"] = [62, 22]
+    @test Date(blk["value"][1]) > Date(blk["value"][2])
+
     tmp = joinpath(mktempdir(), "observations.toml")
-    write(tmp, reordered)
+    open(io -> TOML.print(io, raw), tmp, "w")
     obs = load_observations(tmp)
 
-    ## 21 July sorts first and must keep its own counts, not 22 July's.
+    ## The earlier day sorts first and must keep its own counts, not the later
+    ## day's, which is exactly what a per-vector filter would hand it.
     @test length(obs.confirmed_break_days) == 2
     @test issorted(obs.confirmed_break_days)
     @test obs.confirmed_break_gross_cases == [11, 97]
