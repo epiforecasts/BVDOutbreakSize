@@ -10,4 +10,4 @@ JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 # `Pkg.instantiate` does not) — so the hook could pass a tree the test then
 # rejected. Bump this deliberately, reformatting the tree in the same commit.
 [compat]
-JuliaFormatter = "=2.12.0"
+JuliaFormatter = "=2.12.0, 2.12"
