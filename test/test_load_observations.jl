@@ -329,6 +329,52 @@ end
     @test obs.confirmed_break_gross_deaths == [22, 62]
 end
 
+@testitem "a break day whose gross covers its increment is rejected" begin
+    using BVDOutbreakSize
+    using BVDOutbreakSize: load_observations
+    using Dates: Date
+    using TOML
+
+    ## A day whose printed 24h count already covers its whole vintage step is
+    ## not a harmonisation, and listing it is harmful rather than inert: the
+    ## day is de-anchored from the positivity denominator while the step meant
+    ## to absorb the backlog is centred at or below zero. Measured at 94
+    ## divergences and a min bulk ESS of 15 against 20 and 522 with no break
+    ## day, so the loader refuses it instead of sampling it.
+    path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
+    raw = TOML.parsefile(path)
+    blk = raw["confirmed_break_dates"]
+    day = String(blk["value"][1])
+
+    ## That vintage's own increment, which the gross must stay below.
+    ch = raw["confirmed_case_history"]
+    idx = findfirst(==(day), String.(ch["dates"]))
+    inc = Int(ch["values"][idx]) - Int(ch["values"][idx - 1])
+    @test inc > 0
+
+    write_toml(r) = (p = joinpath(mktempdir(), "observations.toml");
+        open(io -> TOML.print(io, r), p, "w"); p)
+
+    ## Equal to the increment is already too high: the centre would be zero.
+    blk["gross_cases"] = [inc]
+    @test_throws ErrorException load_observations(write_toml(raw))
+
+    ## And above it, which would centre the step negatively.
+    blk["gross_cases"] = [inc + 10]
+    @test_throws ErrorException load_observations(write_toml(raw))
+
+    ## Just below is accepted, so the bound is exactly `gross < increment`.
+    blk["gross_cases"] = [inc - 1]
+    obs = load_observations(write_toml(raw))
+    @test obs.confirmed_break_gross_cases == [inc - 1]
+
+    ## A zero gross is legal but warns: the whole increment becomes artefact.
+    blk["gross_cases"] = [0]
+    @test_logs (:warn, r"no cases gross count") match_mode=:any begin
+        load_observations(write_toml(raw))
+    end
+end
+
 @testitem "load_observations histories have consistent counts" begin
     using BVDOutbreakSize: load_observations
     obs = load_observations()

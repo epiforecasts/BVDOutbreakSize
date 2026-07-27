@@ -168,6 +168,56 @@ function load_observations(
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
     deaths_history = history("death_history")
+
+    ## Validate each listed break day against the increment it will be applied
+    ## to, once here rather than inside the models, where it would re-run on
+    ## every likelihood evaluation.
+    ##
+    ## The bar is `gross < increment`. A day whose printed 24h count already
+    ## covers its whole vintage step is not a harmonisation, and listing it is
+    ## actively harmful rather than merely useless: the confirmed-case model
+    ## DE-ANCHORS a listed day from the laboratory positivity denominator, so
+    ## the day loses its `BetaBinomial` term while the step that should absorb
+    ## the backlog is centred at or below zero. Measured on
+    ## `confirmed_only_model` (`scripts/diag_break_attribution.jl`, 500 draws x
+    ## 2 chains), that configuration gives 94 divergences and a min bulk ESS of
+    ## 15, against 20 and 522 with no break day declared, and inflates the
+    ## cut-off infection count by 14% as the fit books the artefact as
+    ## incidence. Pinning the step at a published discrepancy instead restores
+    ## 22 divergences and 477 ESS. So this errors rather than warns.
+    ##
+    ## A gross of zero (the default when the key is absent) is legal but
+    ## warned: it makes the centre the whole increment, attributing all of it
+    ## to the artefact. That errs towards artefact rather than towards
+    ## incidence, the safe direction, but it is not the neutral choice it
+    ## looks like.
+    function check_break_gross(gross, hist, label)
+        isempty(confirmed_break_days) && return nothing
+        isempty(hist.counts) && return nothing
+        inc = diff(vcat(0, collect(hist.counts)))
+        hdays = collect(hist.days)
+        for (d, g) in zip(confirmed_break_days, gross)
+            pos = findfirst(==(d), hdays)
+            pos === nothing && continue
+            if g >= inc[pos]
+                error("confirmed_break_dates: $label gross $g on grid day $d " *
+                      "is not below that vintage's increment $(inc[pos]), so " *
+                      "the day is not a harmonisation. Listing it de-anchors " *
+                      "the positivity denominator with no backlog to absorb, " *
+                      "which wrecks the sampling geometry. Remove the date.")
+            end
+            if g == 0
+                @warn "confirmed_break_dates: no $label gross count on grid " *
+                      "day $d, so its step is centred on the whole increment " *
+                      "and attributes all of it to the harmonisation rather " *
+                      "than splitting it" increment=inc[pos]
+            end
+        end
+        return nothing
+    end
+    check_break_gross(confirmed_break_gross_cases, confirmed_history, "cases")
+    check_break_gross(confirmed_break_gross_deaths, confirmed_deaths_history,
+        "deaths")
     ## The analysed-specimen series is the laboratory denominator; the
     ## received series is recorded for the pipeline view but not fitted.
     lab_history = history("tests_analysed_history")
