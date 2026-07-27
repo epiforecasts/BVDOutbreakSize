@@ -68,10 +68,11 @@ lose cases and so does not explain the overshoots; treat the sign as unknown.
 One consequence deserves emphasis before anyone fits this stream.
 Late reporting only ever adds cases, so an onset date's count must be
 non-decreasing across vintages, and the scans do not respect that.
-On onset dates settled more than three weeks before every report date, the
-scanned totals move both ways between consecutive distinct snapshots: 064 →
-065 falls by 40 cases across 37 of 58 such days, and every other consecutive
-pair falls somewhere too.
+On onset dates more than three weeks before the earliest report date in the
+file (12 July, so onsets before 21 June), the scanned totals move both ways
+between consecutive distinct snapshots: 064 → 065 falls by a net 36 cases
+across 34 of 54 such days, and every other consecutive pair falls somewhere
+too.
 A between-vintage increment of a few cases is therefore at or below the noise
 floor, which bounds what a reporting-delay estimate built from those
 increments can support.
@@ -82,9 +83,13 @@ SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
 (report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
 SitRep 068 (21 July) is now included: its PDF was unreachable while the
 INSP fetch was broken, and it does carry a figure (n = 2 308).
-The embedded figures shrink from SitRep 069 (1009×583 against 1257×698 for
-SitRep 064), which is why the figure-detection and axis-tick thresholds in
-both scripts are resolution-tolerant rather than fixed.
+The embedded figure is re-rendered at whatever size the layout needs and moves
+in both directions: it shrinks to 1009×583 at SitRep 069 (against 1257×698 for
+SitRep 064) and then grows to 1277×799 at SitRep 072.
+Both moves have broken detection once — the shrink by falling under an absolute
+blue floor, the growth by pushing anti-aliasing over an absolute orange cut —
+which is why the figure-detection and axis-tick thresholds in both scripts are
+pixel fractions rather than counts.
 
 This stream is **not fitted**: the model does not yet read
 `onset_curve_scanned.csv`.
@@ -249,10 +254,15 @@ being silently dropped as the report format evolves. Known candidates:
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
-| EDS throughput (§7, per province from SitRep 072): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. First tabulated in 072; earlier vintages give it in prose only. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
+| EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from at least SitRep 060 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
+Before calling anything new, moved or dropped, grep the adjacent vintages for
+it (`pdftotext -layout` over `sitrep_pdfs/`), because a two-reader check of one
+report cannot see what the neighbouring reports do.
+Three claims of that kind in PR #490 turned out to describe changes that had
+happened ten or more vintages earlier, or not at all.
 
 Values for these signals accumulate in `candidate_signals.csv`
 (`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row

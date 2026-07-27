@@ -25,6 +25,6 @@ poe_corpses_swabbed,072,2026-07-25,4,corpses,Tableau 5; 100.0 percent of 4 inter
 health_worker_infections_cumulative,072,2026-07-25,123,persons,Tableau 8 PPL total confirmed; flat against 071 though the PCI narrative reports a new Nizi case not yet in the table
 health_worker_deaths_cumulative,072,2026-07-25,37,persons,Tableau 8 PPL deaths; letalite 30.1 percent; only change from 071 is Bunia 14 to 15
 treatment_admissions_cumulative,072,2026-07-25,894,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 678 + N-Kivu 216; N-Kivu FELL from 220 despite 49 admissions in 24h
-eds_death_alerts,072,2026-07-25,98,alerts,section 7 first per-province EDS table; Ituri 65 + N-Kivu 33; not reconciled against the Tableau 3 dead-alert count of 107
-eds_investigations_performed,072,2026-07-25,80,investigations,section 7; Ituri 50 + N-Kivu 30
-eds_corpses_swabbed,072,2026-07-25,73,corpses,section 7; Ituri 40 + N-Kivu 33; N-Kivu 33 of 33 alerts looks degenerate and needs a second vintage to confirm
+eds_death_alerts,072,2026-07-25,98,alerts,section 7 prose (never a table); Ituri 65 + N-Kivu 33; present from at least SitRep 060 but intermittently - 071 gives no EDS numbers and some vintages give one province only - so a missing province is not a zero; not reconciled against the Tableau 3 dead-alert count of 107
+eds_investigations_performed,072,2026-07-25,80,investigations,section 7 prose; Ituri 50 + N-Kivu 30; intermittent from at least SitRep 060 - see the eds_death_alerts note
+eds_corpses_swabbed,072,2026-07-25,73,corpses,section 7 prose; Ituri 40 + N-Kivu 33; intermittent from at least SitRep 060 - see the eds_death_alerts note; N-Kivu swabs 33 of 33 alerts on 30 EDS performed - looks degenerate

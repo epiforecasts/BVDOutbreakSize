@@ -41,10 +41,11 @@
 # The consequence that matters: the scans do NOT preserve a property the
 # underlying data has. Late reporting only ever ADDS cases, so an onset
 # date's count must be non-decreasing across vintages, yet on onset dates
-# settled more than three weeks before every report date the scanned totals
-# move both ways between consecutive snapshots - 064 -> 065 falls by 40
-# cases across 37 of 58 such days, and every other consecutive pair falls
-# somewhere too. So a between-vintage increment of a few cases is at or
+# more than three weeks before the earliest report date in the file (12
+# July, so onsets before 21 June) the scanned totals move both ways between
+# consecutive snapshots - 064 -> 065 falls by a net 36 cases across 34 of 54
+# such days, and every other consecutive pair falls somewhere too. So a
+# between-vintage increment of a few cases is at or
 # below the noise floor, and anything built on those increments (a
 # reporting-delay estimate, say) has to account for it.
 #
