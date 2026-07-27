@@ -41,6 +41,10 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " *
            "AppleWebKit/605.1.15"
 const REQUEST_TIMEOUT = 120.0
 const ATTEMPTS = 3
+# The walk stops itself: WordPress marks the end of the listing, but an API
+# or cache that keeps answering page 1 would otherwise spin forever, and a
+# nightly hang is worse than an error.
+const MAX_PAGES = 50
 
 outdir = length(ARGS) >= 1 ? ARGS[1] :
          joinpath(@__DIR__, "..", "data", "sitrep_pdfs")
@@ -64,40 +68,62 @@ function sitrep_number(name)
     m === nothing ? nothing : lpad(m.captures[1], 3, '0')
 end
 
-# One media-API page. Returns the body with its HTTP status so the caller
-# can tell the end of the listing (the API 400s past the last page) from a
-# refusal or a timeout, which are retried and then reported.
+# One media-API page. Returns the body with the HTTP status and, when the
+# request never got a reply, the last exception, so the caller can tell the
+# end of the listing from a refusal or a timeout and can say which it was.
+# A 400 body is returned too: WordPress marks the real end of the listing
+# with `rest_post_invalid_page_number`, and a 400 from anything else (a rate
+# limiter, say) must not be mistaken for it.
 function api_page(url)
+    last_status = 0
+    last_err = nothing
     for attempt in 1:ATTEMPTS
         io = IOBuffer()
         res = try
             Downloads.request(url; output = io, throw = false,
                 headers = ["User-Agent" => UA], timeout = REQUEST_TIMEOUT)
-        catch
+        catch err
+            last_err = err
             nothing
         end
         if res isa Downloads.Response
-            res.status == 200 && return (; status = 200,
-                body = String(take!(io)))
-            res.status == 400 && return (; status = 400, body = "")
+            body = String(take!(io))
+            (res.status == 200 || res.status == 400) &&
+                return (; status = res.status, body, err = nothing)
+            last_status = res.status
         end
         attempt < ATTEMPTS && sleep(2^attempt)
     end
-    return (; status = 0, body = "")
+    return (; status = last_status, body = "", err = last_err)
+end
+
+# What went wrong, in the words of whatever went wrong, rather than a list
+# of guesses for the next person to work through.
+function page_failure(res)
+    res.status != 0 && return "HTTP $(res.status)"
+    res.err === nothing && return "no response"
+    return string(res.err)
 end
 
 # Walk the paginated media API and collect (number => source_url) for every
-# MVE SitRep PDF, keeping the first URL seen per number.
+# MVE SitRep PDF, keeping the first URL seen per number. Also returns the
+# SitRep-numbered files rejected for not naming MVE, so a renamed MVE report
+# is visible rather than just missing.
 function collect_sitrep_urls()
     urls = Dict{String, String}()
-    page = 1
-    while true
+    rejected = String[]
+    for page in 1:MAX_PAGES
         res = api_page("$MEDIA_API?search=sitrep&per_page=100&page=$page")
-        res.status == 400 && break  # past the last page
+        ## Past the last page WordPress 400s with this code. Any other 400
+        ## is a real failure and must not silently truncate the listing.
+        if res.status == 400
+            occursin("rest_post_invalid_page_number", res.body) && break
+            error("media API returned HTTP 400 at $MEDIA_API (page " *
+                  "$page) without the end-of-listing code: $(res.body)")
+        end
         res.status == 200 || error(
             "media API request failed after $ATTEMPTS attempts at " *
-            "$MEDIA_API (page $page): site down, refusing this user " *
-            "agent, or the API changed?")
+            "$MEDIA_API (page $page): $(page_failure(res))")
         hits = collect(eachmatch(r"\"source_url\":\"([^\"]*?\.pdf)\"",
             res.body))
         isempty(hits) && break
@@ -105,14 +131,19 @@ function collect_sitrep_urls()
             url = json_unescape(h.captures[1])
             name = basename(url)
             occursin(r"(?i)sitrep", name) || continue
-            occursin(r"(?i)mve", name) || continue
             num = sitrep_number(name)
             num === nothing && continue
+            if !occursin(r"(?i)mve", name)
+                push!(rejected, name)
+                continue
+            end
             get!(urls, num, url)
         end
-        page += 1
+        page == MAX_PAGES && error(
+            "media API still returning results after $MAX_PAGES pages at " *
+            "$MEDIA_API: pagination is not advancing?")
     end
-    return urls
+    return (; urls, rejected = sort!(unique(rejected)))
 end
 
 function fetch_pdf(url, dest)
@@ -130,10 +161,25 @@ function fetch_pdf(url, dest)
     return (; ok = false, err = last_err)
 end
 
-urls = collect_sitrep_urls()
+listing = collect_sitrep_urls()
+urls = listing.urls
 isempty(urls) &&
     error("no MVE SitRep PDFs found at $MEDIA_API (site down or API " *
           "changed?)")
+
+## Measles and SGI-GPM SitReps share this media library and their numbering
+## collides with the MVE series, so these rejections are expected. They are
+## printed anyway: if an MVE report is ever published without MVE in the
+## filename it lands here, and a gap in the series would otherwise be
+## indistinguishable from a rename.
+if !isempty(listing.rejected)
+    println("skipped $(length(listing.rejected)) sitrep-numbered non-MVE " *
+            "file(s):")
+    for name in listing.rejected
+        println("  $name")
+    end
+    println()
+end
 
 downloaded = 0
 for num in sort(collect(keys(urls)))
