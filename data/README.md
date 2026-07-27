@@ -53,22 +53,43 @@ data-updater produces a byte-identical file; see `scripts/README.md`.
 Both self-calibrate each figure from its axis ticks; the only manual input is
 each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
-These counts are approximate.
-The digitised per-vintage totals run 2–5% below the printed figure `n`
-(SitRep 064: 2018 vs printed n = 2 064; SitRep 070: 2260 vs n = 2 329), and
-individual daily bars carry roughly ±1–2 cases of pixel noise.
-The shortfall is concentrated in the faded bars inside the
+These counts are approximate, and the error is a few percent in either
+direction per scan, independent between vintages.
+Against the printed figure `n` it ranges from −3.0% (SitReps 069/070/071:
+2260 against n = 2 329) to +1.6% (SitRep 068: 2344 against n = 2 308), with
+SitRep 064 at −2.2% (2018 against n = 2 064) and SitRep 072 at +0.4% (2531
+against n = 2 521).
+Individual daily bars carry roughly ±1–2 cases of pixel noise.
+Some of the shortfall is the faded bars inside the
 `données potentiellement incomplètes` band at the right of each figure, whose
-lightened fill falls outside the colour masks.
-SitReps 059 and 060 reuse one figure, as do 061 and 062 and 069 and 070, so
-the ten scanned vintages hold seven distinct onset snapshots (report dates
-12, 14, 17, 18, 19, 20 and 22 July).
-SitRep 068 (21 July) is absent: the INRB-UMIE mirror never carried its PDF,
-so there is no figure to digitise for that vintage; the manifest streams for
-21 July come from the SitRep 068 scan recorded in `insp_sitrep_scanned.csv`.
-The embedded figures shrink from SitRep 069 (1009×583 against 1257×698 for
-SitRep 064), which is why the figure-detection and axis-tick thresholds in
-both scripts are resolution-tolerant rather than fixed.
+lightened fill falls outside the colour masks, but that mechanism can only
+lose cases and so does not explain the overshoots; treat the sign as unknown.
+
+One consequence deserves emphasis before anyone fits this stream.
+Late reporting only ever adds cases, so an onset date's count must be
+non-decreasing across vintages, and the scans do not respect that.
+On onset dates more than three weeks before the earliest report date in the
+file (12 July, so onsets before 21 June), the scanned totals move both ways
+between consecutive distinct snapshots: 064 → 065 falls by a net 36 cases
+across 34 of 54 such days, and every other consecutive pair falls somewhere
+too.
+A between-vintage increment of a few cases is therefore at or below the noise
+floor, which bounds what a reporting-delay estimate built from those
+increments can support.
+See issue #488.
+
+SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
+071, so the thirteen scanned vintages hold nine distinct onset snapshots
+(report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
+SitRep 068 (21 July) is now included: its PDF was unreachable while the
+INSP fetch was broken, and it does carry a figure (n = 2 308).
+The embedded figure is re-rendered at whatever size the layout needs and moves
+in both directions: it shrinks to 1009×583 at SitRep 069 (against 1257×698 for
+SitRep 064) and then grows to 1277×799 at SitRep 072.
+Both moves have broken detection once — the shrink by falling under an absolute
+blue floor, the growth by pushing anti-aliasing over an absolute orange cut —
+which is why the figure-detection and axis-tick thresholds in both scripts are
+pixel fractions rather than counts.
 
 This stream is **not fitted**: the model does not yet read
 `onset_curve_scanned.csv`.
@@ -95,6 +116,16 @@ ten-day window, the reference snapshot is itself right-truncated for its most
 recent onsets, and the delay it measures is onset → confirmed-and-reported
 (it folds together care-seeking, lab confirmation and reporting).
 
+Two caveats have been added since these figures were computed, and neither has
+been folded into them.
+The 21 and 25 July snapshots now exist (nine distinct snapshots, not seven), so
+the estimate is one report behind at both ends.
+More importantly, the scan noise documented above is two-sided and of the same
+order as the between-vintage increments this estimate is built from, so the
+quoted percentages are almost certainly more precise than the data supports.
+Treat them as indicative until the triangle is re-estimated with that noise
+carried through.
+
 ### Fetching a SitRep from INSP directly
 
 INSP blocks some default user agents with HTTP 403, but a browser
@@ -116,8 +147,9 @@ b=re.search(r"pdfemb-data=([A-Za-z0-9_-]+)",c).group(1); b+="="*(-len(b)%4); \
 print(json.loads(base64.urlsafe_b64decode(b))["url"])'
 ```
 
-The INRB-UMIE mirror's PDFs can also be pulled with
-`scripts/download_sitreps.jl` (lags INSP, no `analytique` reports).
+`scripts/download_sitreps.jl` bulk-fetches the whole MVE SitRep series from
+the `wp/v2/media` API instead, so the per-post decode above is only needed
+for a report the bulk fetch misses (a corrected `_v2` re-issue).
 
 ## Checking for new SitReps (do this before every refresh)
 
@@ -224,9 +256,43 @@ being silently dropped as the report format evolves. Known candidates:
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+| Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
+| Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
+| EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. **The 059 boundary is deliberate, not the edge of the data.** 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
+Before calling anything new, moved or dropped, grep the adjacent vintages for
+it (`pdftotext -layout` over `sitrep_pdfs/`), because a two-reader check of one
+report cannot see what the neighbouring reports do.
+Three claims of that kind in PR #490 turned out to describe changes that had
+happened ten or more vintages earlier, or not at all.
+
+Values for these signals accumulate in `candidate_signals.csv`
+(`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row
+per signal per vintage, so a series builds from the day a signal first appears
+rather than from the day someone decides to fit it.
+Extend it on every update alongside the fitted streams, and open one issue per
+signal proposing it for fitting — one per signal, not one per vintage.
+Nothing in the model reads this file.
+
+Every value is read twice by independent readers, as for the fitted streams.
+The `eds_*` rows are backfilled to SitRep 059; see the EDS row above for why
+the series stops there and what would have to be settled to extend it.
+**These three series are not comparable across vintages**, because which
+provinces print a count changes from report to report: Nord-Kivu appears
+numerically almost throughout, Ituri only in 061, 062, 065, 069, 070 and 072,
+Tshopo never, and 071 prints no EDS numbers at all.
+The value is the sum over the provinces that printed the quantity and the
+`source_note` names them, so read that before differencing consecutive rows —
+a step can be pure coverage.
+This is a workaround for the schema having no province column, which is
+issue #492; per-province splitting should come before any of these signals is
+fitted.
+Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in
+060, 066 and 067, which the same vintages' carried-over `reports` explain; and
+the swab count is usually printed as the combined `corps swabés et sécurisés`
+rather than swabs alone.
 
 After editing, validate with the loader and its invariants:
 

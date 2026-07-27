@@ -28,13 +28,29 @@
 #     stacked segments but stopping at the wide white gap up to the floating
 #     "premier resultat positif" label / dashed line above the bar.
 #
-# Accuracy: the digitised per-vintage totals run 2-5% below the printed n
-# (SitRep 064: 2018 vs printed n=2 064; SitRep 070: 2260 vs n=2 329), and
-# individual daily bars carry roughly +/-1-2 cases of pixel noise. The
-# shortfall sits in the faded bars of the `donnees potentiellement
-# incompletes` band, whose lightened fill falls outside the colour masks.
+# Accuracy: the error is a few percent in EITHER direction, per scan, and
+# it is independent between vintages. Against the printed n it ranges from
+# -3.0% (SitRep 069/070/071: 2260 vs n=2 329) to +1.6% (SitRep 068: 2344 vs
+# n=2 308), with SitRep 064 at -2.2% (2018 vs n=2 064) and 072 at +0.4%
+# (2531 vs n=2 521). Individual daily bars carry roughly +/-1-2 cases of
+# pixel noise. Part of the shortfall sits in the faded bars of the `donnees
+# potentiellement incompletes` band, whose lightened fill falls outside the
+# colour masks, but that mechanism is one-sided and does not explain the
+# overshoots, so treat the sign as unknown.
+#
+# The consequence that matters: the scans do NOT preserve a property the
+# underlying data has. Late reporting only ever ADDS cases, so an onset
+# date's count must be non-decreasing across vintages, yet on onset dates
+# more than three weeks before the earliest report date in the file (12
+# July, so onsets before 21 June) the scanned totals move both ways between
+# consecutive snapshots - 064 -> 065 falls by a net 36 cases across 34 of 54
+# such days, and every other consecutive pair falls somewhere too. So a
+# between-vintage increment of a few cases is at or
+# below the noise floor, and anything built on those increments (a
+# reporting-delay estimate, say) has to account for it.
+#
 # The values are approximate and are NOT fitted by the model; they are
-# captured for later use.
+# captured for later use. See #488.
 #
 # Dependencies: Pillow and numpy (image analysis) and poppler's pdfimages /
 # pdftotext / pdfinfo (figure extraction). The script carries PEP 723 inline
@@ -75,8 +91,11 @@ CONFIG = {
     "065": ("2026-07-18", "2026-07-15"),
     "066": ("2026-07-19", "2026-07-15"),
     "067": ("2026-07-20", "2026-07-15"),
+    "068": ("2026-07-21", "2026-07-22"),
     "069": ("2026-07-22", "2026-07-22"),
     "070": ("2026-07-23", "2026-07-22"),
+    "071": ("2026-07-24", "2026-07-22"),
+    "072": ("2026-07-25", "2026-07-22"),
 }
 
 
@@ -92,13 +111,25 @@ def _masks(im):
 def _is_onset_curve(im):
     # The onset figure is a blue-dominant daily bar chart with no orange
     # (the age/sex pyramids use orange; the notification-week chart uses a
-    # darker steel blue and prints value labels). The blue floor is well
-    # below the smallest onset figure seen (SitReps 069/070 embed it at
-    # 1009x583, blue ~50k, against ~66-95k for the larger 059-067
-    # renderings) and well above the largest non-onset image on its page
-    # (~5k).
+    # darker steel blue and prints value labels). The tests are pixel
+    # FRACTIONS, not counts, because INSP re-renders the figure at whatever
+    # size the layout needs and an absolute threshold silently flips as the
+    # size moves: the blue floor already had to be lowered once when the
+    # figure shrank to 1009x583, and SitRep 072's larger 1277x799
+    # rendering then pushed the crimson/pink-band anti-aliasing to 631
+    # orange pixels, past a 500 cut.
+    #
+    # Measured over SitReps 059-072, the two classes are two orders of
+    # magnitude apart, so the thresholds sit clear of both edges:
+    #   blue fraction    onset 0.085-0.098   other images <= 0.006
+    #   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
+    #   red fraction     onset >= 0.046      (a floor, not a discriminator:
+    #                                        the notification-week chart is
+    #                                        also crimson-heavy)
     blue, red, orange, _ = _masks(im)
-    return blue.sum() > 20000 and orange.sum() < 500 and red.sum() > 20000
+    npx = im.shape[0] * im.shape[1]
+    return (blue.sum() / npx > 0.02 and orange.sum() / npx < 0.01
+            and red.sum() / npx > 0.01)
 
 
 def _onset_page(pdf):

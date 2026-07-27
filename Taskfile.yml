@@ -13,9 +13,10 @@ tasks:
 
   download-sitreps:
     desc: >
-      Download the INSP situation-report PDFs from the INRB-UMIE mirror
-      into data/sitrep_pdfs/ (git-ignored) for direct scanning. Skips
-      reports already present, so it fetches only new sitreps.
+      Download the MVE situation-report PDFs from the INSP site (insp.cd,
+      the source of truth) into data/sitrep_pdfs/ (git-ignored) for direct
+      scanning. Skips reports already present, so it fetches only new
+      sitreps.
     cmds:
       - julia --project=scripts scripts/download_sitreps.jl {{.CLI_ARGS}}
 

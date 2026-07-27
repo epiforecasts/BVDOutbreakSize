@@ -20,8 +20,12 @@ CLAUDE.md
 *.swp
 *.swo
 
-# SitRep PDFs fetched by scripts/download_sitreps.jl for scanning
-/data/sitrep_pdfs/
+# SitRep PDFs fetched by scripts/download_sitreps.jl for scanning.
+# No trailing slash: in a worktree the cache is usually a symlink back to the
+# primary checkout, and a directory-only pattern would not match the symlink,
+# letting it be committed with an absolute path that dangles everywhere else.
+/data/sitrep_pdfs
+__pycache__/
 
 # Scratch diagnostic harness (throwaway, not part of the package)
 /scratch/
