@@ -42,7 +42,10 @@ capacity (occupancy / reported occupancy rate),
 `treatment_confirmed_incare_history` and `treatment_suspect_incare_history`
 from the Tableau 6 occupancy split (`dont confirmes (NC+AC)` and `dont
 suspects`, two prevalence sub-stocks that sum to the total occupancy),
-`tests_received_history`),
+`tests_received_history`), the digitised symptom-onset reporting-triangle
+increments `onset_curve_history` (from `data/onset_curve_scanned.csv`,
+alongside `path`; see [`load_onset_curve`](@ref) for the dedup, cut-off
+filtering and increment construction),
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
 earliest reported-case vintage, to the cut-off). The intervention
@@ -320,6 +323,13 @@ function load_observations(
     ## block falls back to the total-occupancy likelihood and is a no-op.
     treatment_confirmed_incare_history = history("treatment_confirmed_incare_history")
     treatment_suspect_incare_history = history("treatment_suspect_incare_history")
+    ## Digitised symptom-onset reporting-triangle increments, from a sibling
+    ## CSV rather than the TOML manifest (a 2D onset-date x report-date
+    ## triangle, not a single dated series). Filtered to the same `cutoff`
+    ## as every history above, so a freeze also freezes this stream; see
+    ## `load_onset_curve` for the dedup and increment construction.
+    onset_curve_history = load_onset_curve(
+        joinpath(dirname(path), "onset_curve_scanned.csv"); cutoff, seeding)
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -380,6 +390,7 @@ function load_observations(
         confirmed_break_gross_cases = confirmed_break_gross_cases,
         confirmed_break_gross_deaths = confirmed_break_gross_deaths,
         tests_received_history = tests_received_history,
+        onset_curve_history = onset_curve_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end
