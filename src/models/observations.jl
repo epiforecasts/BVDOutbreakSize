@@ -390,7 +390,11 @@ uncertainty about how much of the discrepancy is truly retrospective.
 
 Break days not matching a window are dropped so no inert step is sampled, and
 a missing/short `gross` contributes a zero centre (recovering the
-uninformative behaviour). Returns `(days, centres)`, both possibly empty.
+uninformative behaviour). `increments` may itself be `missing`, the generator
+path where no cumulative counts are supplied to difference: the day still gets
+a step, so a predictive keeps the fitted chain's dimensions, but there is no
+published discrepancy to centre it on and the centre falls back to zero.
+Returns `(days, centres)`, both possibly empty.
 """
 function break_step_centres(window_days, increments, break_days, gross)
     days = Int[]
@@ -400,9 +404,13 @@ function break_step_centres(window_days, increments, break_days, gross)
     for (j, bd) in enumerate(Int.(break_days))
         pos = findfirst(==(bd), wdays)
         pos === nothing && continue
-        g = j <= length(gross) ? Int(gross[j]) : 0
         push!(days, bd)
-        push!(centres, Float64(Int(increments[pos]) - g))
+        if ismissing(increments)
+            push!(centres, 0.0)
+        else
+            g = j <= length(gross) ? Int(gross[j]) : 0
+            push!(centres, Float64(Int(increments[pos]) - g))
+        end
     end
     return (days, centres)
 end
@@ -1100,6 +1108,8 @@ quantities.
         ## Residual uncertainty about how much of that discrepancy is truly
         ## retrospective rather than coincident same-day incidence — NOT the
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
+        ## Zero pins the step at the published discrepancy and samples no
+        ## parameter, taking the printed count as exact.
         confirmed_break_sd::Real = 25.0)
     n = length(onsets)
     ## `missing` cut-off scalar means generator mode: observed increments are
@@ -1305,8 +1315,11 @@ quantities.
     ## observed increment is mostly a provincial base integration, so a single
     ## level step is fitted into that window's modelled mean and the fit
     ## partitions the increment into reporting artefact vs real incidence with
-    ## uncertainty. Sampled non-centred and centred on zero (symmetric: a
-    ## harmonisation can revise down as well as up). Only break days that land
+    ## uncertainty. Sampled non-centred around the published discrepancy
+    ## (`break_step_centres`: the vintage increment minus the printed 24h
+    ## count), with `confirmed_break_sd` the residual uncertainty about how much
+    ## of that discrepancy is truly retrospective. Symmetric, because that
+    ## residual can fall either side. Only break days that land
     ## on a late window can move the likelihood; others are dropped so no inert
     ## step is sampled. Same conditional-`b`-then-pure-function shape as the
     ## occupancy break (`cumulative_occupancy_offset`), which keeps the
@@ -1316,6 +1329,13 @@ quantities.
         windows.late_increments, confirmed_break_days, confirmed_break_gross)
     if isempty(conf_brk_days)
         cb = Float64[]
+    elseif iszero(confirmed_break_sd)
+        ## `confirmed_break_sd = 0` is the DETERMINISTIC correction: the report
+        ## publishes the 24h count, so the artefact size is taken as exact and
+        ## the increment is fitted against the gross count with no sampled
+        ## parameter. Two fewer parameters, and no ridge between a step and the
+        ## ascertainment it trades off against.
+        cb = conf_brk_centre
     else
         confirmed_step ~ product_distribution(
             fill(Normal(0, 1), length(conf_brk_days)))
@@ -1653,6 +1673,8 @@ positivity and the expected confirmed-death count.
         ## Empty (the default) → no-op. See issue #484.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
+        ## As on the cases path: the residual uncertainty around the published
+        ## discrepancy, with zero pinning the step and sampling no parameter.
         confirmed_break_sd::Real = 25.0,
         receipt_pmf::AbstractVector = [1.0],
         capacity_start::Integer = 0,
@@ -1728,27 +1750,33 @@ positivity and the expected confirmed-death count.
     ## centred on the published discrepancy (vintage increment minus the
     ## printed 24h death count) and added to that window's modelled mean, so
     ## the increment likelihood does not attribute reattached deaths to the
-    ## day. Only meaningful when the increments are observed; in generator
-    ## mode (`obs_increments === missing`) there is no discrepancy to centre
-    ## on, so the step is skipped.
-    if ismissing(vobs.obs_increments)
-        cd_brk_days = Int[]
+    ## day. Sampled whenever a break day lands on a vintage, as on the cases
+    ## path, so a posterior predictive carries the same dimensions as the
+    ## fitted chain and replicates the break instead of leaving the vintage as
+    ## an outlier.
+    cd_brk_days, cd_brk_centre = break_step_centres(vobs.days,
+        vobs.obs_increments, confirmed_break_days, confirmed_break_gross)
+    if isempty(cd_brk_days)
         cdb = Float64[]
+    elseif iszero(confirmed_break_sd)
+        ## Deterministic correction, as on the cases path: the printed 24h death
+        ## count is taken as exact and no step parameter is sampled.
+        cdb = cd_brk_centre
     else
-        cd_brk_days, cd_brk_centre = break_step_centres(vobs.days,
-            vobs.obs_increments, confirmed_break_days, confirmed_break_gross)
-        if isempty(cd_brk_days)
-            cdb = Float64[]
-        else
-            cdeath_step ~ product_distribution(
-                fill(Normal(0, 1), length(cd_brk_days)))
-            cdb = cd_brk_centre .+ confirmed_break_sd .* cdeath_step
-        end
+        cdeath_step ~ product_distribution(
+            fill(Normal(0, 1), length(cd_brk_days)))
+        cdb = cd_brk_centre .+ confirmed_break_sd .* cdeath_step
     end
     modelled_inc = modelled_inc .+
                    confirmed_break_offset(vobs.days, cd_brk_days, cdb)
+    ## The cut-off scalar is the generator gate, as in `confirmed_cases_model`:
+    ## nulling it leaves `predict` to resample the increments while the dated
+    ## history still supplies the vintage grid and the break-step centres. That
+    ## keeps the published discrepancy available to a predictive, which
+    ## differencing an emptied history cannot do.
+    cdeath_obs = ismissing(confirmed_deaths) ? missing : vobs.obs_increments
     cdeath_increments ~ to_submodel(
-        vintage_increments_model(modelled_inc, vobs.obs_increments, k))
+        vintage_increments_model(modelled_inc, cdeath_obs, k))
 
     expected_confirmed_deaths := safe_rate(sum(confirmed_death_daily))
     ## Cut-off death-pool composition and confirmation positivity, surfaced as

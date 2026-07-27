@@ -149,6 +149,106 @@ end
     ## No break days at all is empty.
     @test break_step_centres([21, 22], [10, 369], Int[], Int[]) ==
           (Int[], Float64[])
+
+    ## Generator mode: no counts to difference, so there is no published
+    ## discrepancy. The day still gets a step (a predictive keeps the fitted
+    ## chain's dimensions) but the centre falls back to zero.
+    @test break_step_centres([21, 22, 23], missing, [22], [97]) ==
+          ([22], [0.0])
+    @test break_step_centres([21, 23], missing, [22], [97]) ==
+          (Int[], Float64[])
+end
+
+@testitem "break step centre and offset address the same window" begin
+    using BVDOutbreakSize: break_step_centres, confirmed_break_offset
+
+    ## The centre is read out of `increments` BY POSITION while the offset is
+    ## written back BY DAY, so handing the two helpers day vectors that do not
+    ## correspond to the same increments shifts a step onto its neighbour.
+    ## Per-day increments that all differ make the pairing observable: only the
+    ## break day's own increment can produce its centre, and the offset must be
+    ## non-zero on exactly the index that increment came from.
+    days = [30, 35, 40]
+    increments = [11, 369, 22]
+    bdays, centres = break_step_centres(days, increments, [35], [97])
+    @test bdays == [35]
+    @test centres == [272.0]
+    pos = findfirst(==(35), days)
+    Δ = confirmed_break_offset(days, bdays, centres)
+    @test Δ == [0.0, 272.0, 0.0]
+    @test Δ[pos] == increments[pos] - 97
+
+    ## Shifting the declared day by one moves BOTH the centre and the offset,
+    ## so a mismatch cannot hide behind a coincidentally equal step: the
+    ## neighbour's centre is its own increment, not 22 July's.
+    nbdays, ncentres = break_step_centres(days, increments, [40], [97])
+    @test ncentres == [Float64(increments[3] - 97)]
+    @test confirmed_break_offset(days, nbdays, ncentres) ==
+          [0.0, 0.0, Float64(increments[3] - 97)]
+end
+
+@testitem "the listed break day is a live late window, not a silent no-op" begin
+    using BVDOutbreakSize: load_observations, confirmed_positivity_windows
+
+    ## Both mechanisms (the de-anchor and the fitted step) search `late_days`
+    ## only, so if a later cumulative laboratory vintage ever moved the listed
+    ## day out of the late group they would both vanish with no error and no
+    ## warning. Assert the wiring against the real data rather than assume it.
+    obs = load_observations()
+    @test !isempty(obs.confirmed_break_days)
+    w = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history,
+        obs.lab_daily_history, obs.confirmed_break_days)
+    for d in obs.confirmed_break_days
+        pos = findfirst(==(d), w.late_days)
+        @test pos !== nothing
+
+        ## De-anchored: the day publishes a 24h analysed count, and the break
+        ## drops it so the window cannot enter the BetaBinomial as same-day
+        ## positives at an implausible positivity.
+        @test d in obs.lab_daily_history.days
+        @test w.late_analysed[pos] == 0
+
+        ## The step is centred on the vintage increment the model actually
+        ## scores, which must exceed the printed gross count for the day to be
+        ## a harmonisation at all.
+        @test w.late_increments[pos] > 0
+    end
+
+    ## Left undeclared the same day keeps its published denominator, so the
+    ## assertions above are testing the break and not a vacuous zero.
+    w0 = confirmed_positivity_windows(obs.confirmed_history, obs.lab_history,
+        obs.lab_daily_history)
+    for d in obs.confirmed_break_days
+        @test w0.late_analysed[findfirst(==(d), w0.late_days)] > 0
+    end
+end
+
+@testitem "a zero break sd is a deterministic correction" begin
+    using BVDOutbreakSize: confirmed_only_model
+    using Turing: logjoint
+    using Random: MersenneTwister
+
+    ## `confirmed_break_sd = 0` takes the printed 24h count as exact: the step
+    ## is pinned at the published discrepancy and no parameter is sampled, so
+    ## the correction cannot cost any sampling geometry.
+    hist = (; days = [20, 30, 35, 40], counts = [50, 60, 429, 444])
+    lab = (; days = [10, 20], counts = [100, 300])
+    daily = (; days = [30, 35, 40], counts = [50, 414, 60])
+    build(sd, gross) = confirmed_only_model(40, 444;
+        confirmed_history = hist, lab_history = lab,
+        lab_daily_history = daily, confirmed_break_days = [35],
+        confirmed_break_gross_cases = gross, confirmed_break_sd = sd)
+
+    m = build(0.0, [97])
+    θ = rand(MersenneTwister(1), m)
+    @test !any(k -> occursin("confirmed_step", string(k)), keys(θ))
+    @test isfinite(logjoint(m, θ))
+
+    ## The pinned step still reaches the likelihood: the same draw scores
+    ## differently once the declared gross changes the centre. Day 35's
+    ## increment is 429 - 60 = 369, so a gross of 369 pins the step at zero
+    ## while 97 pins it at 272.
+    @test logjoint(build(0.0, [369]), θ) != logjoint(m, θ)
 end
 
 @testitem "confirmed break day is sampled and keeps the likelihood finite" begin
