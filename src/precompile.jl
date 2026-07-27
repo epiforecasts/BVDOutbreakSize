@@ -42,6 +42,13 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
         sdh = (; days = [18, 40], counts = [20, 30])
         sddh = (; days = [18, 40], counts = [2, 3])
         rch = (; days = [18, 40], counts = [4, 7])
+        ## Onset-reporting-triangle stream: a couple of synthetic increment
+        ## cells so `increments[i] ~ safe_studentt(...)` in
+        ## `onset_reporting_model` actually runs (an empty history makes
+        ## that loop a no-op, and Mooncake never builds a reverse rule for a
+        ## branch it never executes; see `onset_reporting_model`).
+        och = (; onset_days = [10, 12], report_days = [18, 40],
+            prev_report_days = [0, 18], increments = [4, 6])
         @compile_workload begin
             ## Mirror the headline `bvd_joint` call for the precompilable
             ## streams, differentiated once under the default (Mooncake)
@@ -60,6 +67,7 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
                 recovered_history = rch,
                 export_case_days = [20, 30],
                 export_death_days = [35],
+                onset_curve_history = och,
                 breakpoint = 30,
                 background_re = true,
                 confirmed_positivity_link = :composition)
