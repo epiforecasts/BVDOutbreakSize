@@ -88,16 +88,18 @@ end
     """)
     seeding = Date("2026-01-01")
 
-    ## Cut-off before 004's report date: only 001, 003 survive → 1 pair.
+    ## Cut-off before 004's report date: 001 and 003 survive, so two
+    ## scored snapshots (001 against the empty predecessor, then 003
+    ## against 001).
     early = load_onset_curve(path; cutoff = Date("2026-03-04"), seeding)
     @test !isempty(early.onset_days)
-    @test length(unique(early.report_days)) == 1
+    @test length(unique(early.report_days)) == 2
 
-    ## Advancing the cut-off past 004's report date recovers it — the SAME
+    ## Advancing the cut-off past 004's report date recovers it: the same
     ## loader call, no code change, exactly the self-correcting behaviour
     ## the manifest `as_of_date` advance relies on.
     late = load_onset_curve(path; cutoff = Date("2026-03-06"), seeding)
-    @test length(unique(late.report_days)) == 2
+    @test length(unique(late.report_days)) == 3
     @test length(late.onset_days) > length(early.onset_days)
 end
 
@@ -458,20 +460,18 @@ end
     @test total ≈ restricted + (grid_start - 1) * 5.0 * F_edge
 end
 
-@testitem "load_onset_curve: a vintage narrower than an earlier one carries the previous reading forward" begin
-    ## Guard against a hypothetical future digitisation whose printed
-    ## extent is narrower than an earlier vintage's: a date outside the
-    ## later block's own extent must NOT read as a fabricated zero (which
-    ## would produce a spurious negative increment) when an earlier block
-    ## covered it with a positive count.
+@testitem "load_onset_curve: a vintage narrower than an earlier one drops the uncovered date" begin
+    ## A date one vintage of a pair does not print carries no observation
+    ## from that vintage, so the pair cannot form a correction there. The
+    ## cell is dropped rather than read as a zero, which would fabricate a
+    ## negative correction against the earlier vintage's positive count.
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date, date2epochdays
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    ## Block 001 covers 03-01..03-03. Block 002 (a hypothetical reprint
-    ## error) only covers 03-02..03-03: 03-01 sits entirely outside its own
-    ## printed extent.
+    ## Block 001 covers 03-01..03-03. Block 002 covers only 03-02..03-03,
+    ## so 03-01 sits outside its printed extent.
     write(path, """
     sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
     001,2026-03-05,2026-03-01,4,0,4
@@ -483,19 +483,22 @@ end
     seeding = Date("2026-01-01")
     h = load_onset_curve(path; cutoff = Date("2026-03-07"), seeding,
         max_delay = 10)
-    u = Int(date2epochdays(Date("2026-03-01")) - date2epochdays(seeding)) + 1
-    R2 = Int(date2epochdays(Date("2026-03-07")) - date2epochdays(seeding)) + 1
-    ## Only the block-001-vs-block-002 pair (report day R2) is at risk of a
-    ## fabricated negative: the very first pair (virtual empty predecessor
-    ## vs block 001) legitimately scores a genuine +4 "difference from
-    ## nothing" cell at this same onset date and is not part of this guard.
-    idxs = findall(i -> h.onset_days[i] == u && h.report_days[i] == R2,
+    _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
+    u = _day("2026-03-01")
+    R2 = _day("2026-03-07")
+    ## No cell for 03-01 in the 001-versus-002 pair.
+    @test isempty(findall(i -> h.onset_days[i] == u && h.report_days[i] == R2,
+        eachindex(h.onset_days)))
+    ## The first pair still scores 03-01 as a level against the empty
+    ## predecessor, since block 001 does print it.
+    R1 = _day("2026-03-05")
+    first_idx = findall(
+        i -> h.onset_days[i] == u && h.report_days[i] == R1,
         eachindex(h.onset_days))
-    @test !isempty(idxs)
-    ## 03-01 is outside block 002's own extent: carried forward from
-    ## block 001's reading of 4, so the increment is 4 - 4 = 0, not
-    ## 0 - 4 = -4.
-    @test all(i -> h.increments[i] == 0, idxs)
+    @test length(first_idx) == 1
+    @test h.increments[first_idx[1]] == 4
+    ## Nothing anywhere fabricates the -4 the dropped cell would have given.
+    @test minimum(h.increments) >= 0
 end
 
 @testitem "onset_report_scales matches the measured-error formula and grows with magnitude" begin
@@ -531,17 +534,23 @@ end
 
 @testitem "safe_studentt stays valid under extreme scale/df" begin
     using BVDOutbreakSize: safe_studentt
-    using Distributions: mean, std
+    using Distributions: mean, std, logpdf
 
     for (σ, ν) in ((0.0, 4.0), (-1.0, 4.0), (NaN, 4.0), (Inf, 4.0),
         (1.0, 0.0), (1.0, -2.0), (1.0, NaN))
         d = safe_studentt(3.0, σ, ν)
+        ## Mean and variance both exist: a degenerate degrees-of-freedom
+        ## argument falls back to 4, not to the Cauchy at the domain edge.
         @test isfinite(mean(d))
         @test isfinite(std(d))
+        @test isfinite(logpdf(d, 5.0))
     end
-    ## A well-posed call passes through as the requested location.
+    ## A well-posed call passes through as the requested location and scale.
     d = safe_studentt(3.0, 2.0, 4.0)
     @test mean(d) ≈ 3.0
+    @test std(d) ≈ 2.0 * sqrt(4 / 2)
+    ## A caller-chosen heavy tail is respected rather than overridden.
+    @test !isfinite(std(safe_studentt(0.0, 1.0, 1.5)))
 end
 
 ## --- Model level ------------------------------------------------------
