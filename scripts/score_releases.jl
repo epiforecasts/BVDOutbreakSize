@@ -31,8 +31,12 @@
 #
 # A forecast archive (see `forecast_archive` in `src/forecast.jl`) has one
 # row per (made_date, horizon, target_date, stream, draw, fit): the
-# forecast draws for the incident "confirmed cases", "confirmed deaths" and
-# "recovered" streams and the LEVEL "isolation beds" stream. This script
+# forecast draws for the incident "confirmed cases", "confirmed deaths",
+# "recovered" and "onset reports" streams and the LEVEL "isolation beds"
+# stream. "onset reports" is the new reported count the digitised
+# symptom-onset triangle adds over the horizon; only releases from the one
+# that first carried it can be scored on it, and no earlier release can be
+# backfilled for it. This script
 # scores each fit of each stream against the data that has since arrived,
 # using `score_draws` (CRPS, log-CRPS, 50/90% coverage and bias), against
 # one persistence baseline per stream (`fit = "baseline"`): for the

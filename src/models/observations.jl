@@ -2806,11 +2806,11 @@ function onset_report_scales(means::AbstractVector,
 end
 
 """
-    onset_report_scale(mean, level_cur, level_prev, reads;
+    onset_report_scale(μ, level_cur, level_prev, reads;
         pixel_sd = 2.1, scan_frac = 0.04)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
-increment mean `mean` between two modelled cumulative levels `level_cur`
+increment mean `μ` between two modelled cumulative levels `level_cur`
 and `level_prev` read off `reads` bars (`1` for a level differenced
 against an empty predecessor, `2` for a genuine correction). The vector
 method calls this, so the two cannot drift apart; the forecast
@@ -2819,11 +2819,11 @@ reporting increment the same three-term observation scale the likelihood
 gives a scored cell. See [`onset_report_scales`](@ref) for what each term
 means and which of them a fit can correct.
 """
-function onset_report_scale(mean::Real, level_cur::Real, level_prev::Real,
+function onset_report_scale(μ::Real, level_cur::Real, level_prev::Real,
         reads::Integer; pixel_sd::Real = 2.1, scan_frac::Real = 0.04)
-    T = promote_type(typeof(float(mean)), typeof(float(level_cur)),
+    T = promote_type(typeof(float(μ)), typeof(float(level_cur)),
         typeof(float(level_prev)), typeof(float(pixel_sd)))
-    return sqrt(max(mean, zero(T)) + pixel_sd^2 * reads +
+    return sqrt(max(μ, zero(T)) + pixel_sd^2 * reads +
                 scan_frac^2 * (level_cur^2 + level_prev^2))
 end
 

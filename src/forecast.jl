@@ -436,7 +436,13 @@ function forecast_reported(chn;
         onset_fc = forecast_onsets(chn; grid_start = onset_grid_start,
             grid_end = onset_grid_end, n = grid_n, horizon = horizon,
             seed = seed)
+        ## `onsets_new` is already a column here, built from the same cut-off
+        ## daily onset rate and the same evolving growth path, so the two are
+        ## the same quantity. The existing one is kept rather than
+        ## overwritten: a silent overwrite would hide it if they ever stopped
+        ## agreeing.
         for col in propertynames(onset_fc)
+            col in propertynames(df) && continue
             df[!, col] = onset_fc[!, col]
         end
     end
