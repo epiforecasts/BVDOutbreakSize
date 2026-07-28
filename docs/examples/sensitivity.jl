@@ -218,6 +218,7 @@ validation_latent_fig #hide
 # Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off, so exports contributes no scored forecast at all and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
 # Only a minority of the daily releases examined across the outbreak contribute a row to the table below, and every one of them is a reconstruction of an earlier version of the model rather than the model as it stands today, so the table below is not a verdict on the current fit.
+# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample properly rather than a genuine forecast (see `scripts/score_releases.jl`, `_FAILED_RECONSTRUCTIONS`).
 # The releases that do carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet, which is why the comparison against each stream's individual fit is still empty.
 # It will populate once those targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
@@ -468,7 +469,10 @@ individual_score_overview_table #hide
 # The same relative skill against the baseline, by horizon, one panel per stream (dataset), for each stream's own individual fit.
 
 individual_relative_skill_fig = plot_forecast_relative_skill(
-    individual_score_by_horizon_table);
+    individual_score_by_horizon_table;
+    empty_message = "Empty: the releases that carry the current model's " *
+                    "own individual-stream forecasts are too recent for their " *
+                    "targets to be observed yet. Not a missing forecast.");
 
 individual_relative_skill_fig #hide
 
@@ -494,6 +498,106 @@ individual_score_by_release_table #hide
 #md # </details>
 #md # ```
 
+# ## Outbreak size estimated by each data stream
+#
+# Each data stream constrains the latent outbreak size differently.
+# The table below puts the posteriors over the infection count side by side,
+# the single-stream fits and the joint, to show what each stream implies on
+# its own and what the joint adds.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream infection-count table</summary>
+#md # ```
+
+streams_C_table = streams_table(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "joint" => posterior_C_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+streams_C_table #hide
+
+# The first figure shows each single-stream fit's cumulative-infection
+# trajectory projected to the cut-off, with a dotted rule in each stream's
+# colour marking where its data stops and the ribbon beyond it becomes a
+# forward projection.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream projected-trajectory plot</summary>
+#md # ```
+
+## Per-draw cumulative-infection trajectory carried by each single-stream
+## fit out to the cut-off on day `n`, so streams whose data ends earlier are
+## still projected to today.
+function _cuminf(chn)
+    mat = chn[:cumulative_infections]
+    return [collect(v) for v in vec(collect(mat))]
+end
+## Grid day a stream's data last reports, used for the dotted rule. The
+## suspected case and death histories freeze at 26 May; exports and confirmed
+## run to the cut-off.
+_last_day(days) = isempty(days) ? nothing : maximum(days)
+
+stream_traj_fig = plot_stream_trajectories(
+    [
+        (; label = "exports", trajs = _cuminf(chn_exports),
+            last_day = _last_day(vcat(obs.export_case_days,
+                obs.export_death_days)), colour = :seagreen),
+        (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
+            last_day = _last_day(obs.deaths_history.days),
+            colour = :firebrick),
+        (; label = "cases (DRC)", trajs = _cuminf(chn_cases),
+            last_day = _last_day(obs.reported_history.days),
+            colour = :steelblue),
+        (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
+            last_day = _last_day(obs.confirmed_history.days),
+            colour = :goldenrod),
+        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
+            last_day = _last_day(obs.isolation_history.days),
+            colour = :darkorange)];
+    n = obs.n, seeding = obs.seeding);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_traj_fig #hide
+
+# The second figure is the posterior density of each fit's cumulative
+# infection count at the cut-off; the x-axis is scaled to a multiple of the
+# joint-fit 90% upper bound so the bulk of the streams stays visible rather
+# than being flattened by the wide, ill-defined confirmed-only tail.
+
+#md # ```@raw html
+#md # <details><summary>Cut-off infection-count density plot</summary>
+#md # ```
+
+## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
+## the streams that track it read clearly while the confirmed-only tail runs
+## off the axis rather than dominating it.
+density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
+
+cumulative_density_fig = plot_cumulative_cases(
+    "exports" => posterior_C_exports,
+    "deaths (DRC)" => posterior_C_deaths,
+    "cases (DRC)" => posterior_C_cases,
+    "confirmed (DRC)" => posterior_C_confirmed,
+    "isolation (DRC)" => posterior_C_treatment,
+    "joint" => posterior_C_joint;
+    scenarios = [], xmax = density_xmax);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+cumulative_density_fig #hide
+
 # ## Outbreak size by release and dataset
 #
 # The outbreak size $C_T$ estimated at each release, one panel per fit, the per-dataset analogue of the overall release evolution below.
@@ -515,8 +619,9 @@ _by_stream_schema = (; release = String, date = Date, fit = String,
     hi60 = Float64, lo90 = Float64, hi90 = Float64)
 
 ## Fits in a fixed order, the joint first, so the panels do not reshuffle
-## between builds. Labels match the per-stream table below. Recovered is
-## absent because it has no individual fit.
+## between builds. Labels match the per-stream table above (in "Outbreak
+## size estimated by each data stream"). Recovered is absent because it
+## has no individual fit.
 _fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
     "treatment", "exports"]
 _fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
@@ -717,6 +822,43 @@ evolution_fig = plot_estimate_evolution(release_evolution;
 
 evolution_fig #hide
 
+# ## Reproduction number estimated by each data stream
+#
+# The reproduction number each stream implies on its own, one panel per stream with the joint fit overlaid in grey as the reference.
+
+#md # ```@raw html
+#md # <details><summary>Per-stream implied-Rt plot</summary>
+#md # ```
+
+## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
+## joint walks from `RT_WALK_LEAD` days before the first situation report; the
+## shared `display_start` is the joint renewal start so every stream reads over
+## the same established window. `ramp` matches the joint Rt figure.
+_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
+stream_rt_fig = plot_rt_streams(
+    [
+        (; label = "exports", chn = chn_exports, rt_start = 1,
+            rt_walk_start = 1, colour = :seagreen),
+        (; label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
+            rt_walk_start = 1, colour = :firebrick),
+        (; label = "cases (DRC)", chn = chn_cases, rt_start = 1,
+            rt_walk_start = 1, colour = :steelblue),
+        (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
+            rt_walk_start = 1, colour = :goldenrod),
+        (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
+            rt_walk_start = 1, colour = :darkorange)];
+    joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _rt_walk_start_joint),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+stream_rt_fig #hide
+
 # ## Reproduction number by release and dataset
 #
 # The same per-release reproduction number, one panel per fit, so each dataset's history reads against the others and against the joint.
@@ -855,142 +997,6 @@ r0_evolution_fig = plot_estimate_evolution(r0_release;
 #md # ```
 
 r0_evolution_fig #hide
-
-# ## Outbreak size estimated by each data stream
-#
-# Each data stream constrains the latent outbreak size differently.
-# The table below puts the posteriors over the infection count side by side,
-# the single-stream fits and the joint, to show what each stream implies on
-# its own and what the joint adds.
-
-#md # ```@raw html
-#md # <details><summary>Per-stream infection-count table</summary>
-#md # ```
-
-streams_C_table = streams_table(
-    "exports" => posterior_C_exports,
-    "deaths (DRC)" => posterior_C_deaths,
-    "cases (DRC)" => posterior_C_cases,
-    "confirmed (DRC)" => posterior_C_confirmed,
-    "isolation (DRC)" => posterior_C_treatment,
-    "joint" => posterior_C_joint);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-streams_C_table #hide
-
-# The first figure shows each single-stream fit's cumulative-infection
-# trajectory projected to the cut-off, with a dotted rule in each stream's
-# colour marking where its data stops and the ribbon beyond it becomes a
-# forward projection.
-
-#md # ```@raw html
-#md # <details><summary>Per-stream projected-trajectory plot</summary>
-#md # ```
-
-## Per-draw cumulative-infection trajectory carried by each single-stream
-## fit out to the cut-off on day `n`, so streams whose data ends earlier are
-## still projected to today.
-function _cuminf(chn)
-    mat = chn[:cumulative_infections]
-    return [collect(v) for v in vec(collect(mat))]
-end
-## Grid day a stream's data last reports, used for the dotted rule. The
-## suspected case and death histories freeze at 26 May; exports and confirmed
-## run to the cut-off.
-_last_day(days) = isempty(days) ? nothing : maximum(days)
-
-stream_traj_fig = plot_stream_trajectories(
-    [
-        (; label = "exports", trajs = _cuminf(chn_exports),
-            last_day = _last_day(vcat(obs.export_case_days,
-                obs.export_death_days)), colour = :seagreen),
-        (; label = "deaths (DRC)", trajs = _cuminf(chn_deaths),
-            last_day = _last_day(obs.deaths_history.days),
-            colour = :firebrick),
-        (; label = "cases (DRC)", trajs = _cuminf(chn_cases),
-            last_day = _last_day(obs.reported_history.days),
-            colour = :steelblue),
-        (; label = "confirmed (DRC)", trajs = _cuminf(chn_confirmed),
-            last_day = _last_day(obs.confirmed_history.days),
-            colour = :goldenrod),
-        (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
-            last_day = _last_day(obs.isolation_history.days),
-            colour = :darkorange)];
-    n = obs.n, seeding = obs.seeding);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-stream_traj_fig #hide
-
-# The second figure is the posterior density of each fit's cumulative
-# infection count at the cut-off; the x-axis is scaled to a multiple of the
-# joint-fit 90% upper bound so the bulk of the streams stays visible rather
-# than being flattened by the wide, ill-defined confirmed-only tail.
-
-#md # ```@raw html
-#md # <details><summary>Cut-off infection-count density plot</summary>
-#md # ```
-
-## Scale the x-axis to twice the joint-fit 90% upper bound, so the joint and
-## the streams that track it read clearly while the confirmed-only tail runs
-## off the axis rather than dominating it.
-density_xmax = 2.0 * quantile(posterior_C_joint, 0.95)
-
-cumulative_density_fig = plot_cumulative_cases(
-    "exports" => posterior_C_exports,
-    "deaths (DRC)" => posterior_C_deaths,
-    "cases (DRC)" => posterior_C_cases,
-    "confirmed (DRC)" => posterior_C_confirmed,
-    "isolation (DRC)" => posterior_C_treatment,
-    "joint" => posterior_C_joint;
-    scenarios = [], xmax = density_xmax);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-cumulative_density_fig #hide
-
-# The third figure is the reproduction number each stream implies on its own,
-# one panel per stream with the joint fit overlaid in grey as the reference.
-
-#md # ```@raw html
-#md # <details><summary>Per-stream implied-Rt plot</summary>
-#md # ```
-
-## The per-stream fits walk Rt from day 1 (the default `rt_start`), while the
-## joint walks from `RT_WALK_LEAD` days before the first situation report; the
-## shared `display_start` is the joint renewal start so every stream reads over
-## the same established window. `ramp` matches the joint Rt figure.
-_rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n);
-stream_rt_fig = plot_rt_streams(
-    [
-        (; label = "exports", chn = chn_exports, rt_start = 1,
-            rt_walk_start = 1, colour = :seagreen),
-        (; label = "deaths (DRC)", chn = chn_deaths, rt_start = 1,
-            rt_walk_start = 1, colour = :firebrick),
-        (; label = "cases (DRC)", chn = chn_cases, rt_start = 1,
-            rt_walk_start = 1, colour = :steelblue),
-        (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
-            rt_walk_start = 1, colour = :goldenrod),
-        (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
-            rt_walk_start = 1, colour = :darkorange)];
-    joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = _rt_walk_start_joint),
-    n = obs.n, breakpoint = _BREAKPOINT,
-    as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ramp = RT_INTERVENTION_RAMP);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-stream_rt_fig #hide
 
 # ## Comparison with McCabe et al.
 #
