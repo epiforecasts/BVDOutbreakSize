@@ -807,7 +807,7 @@ rule in every panel, e.g. Rt = 1.
 
 `trajectories` optionally maps a group's label to that group's own
 current-data, current-model trajectory, a `(dates, lo30, hi30, lo60, hi60,
-lo90, hi90)` tuple in the shape [`plot_estimate_evolution`](@ref) takes,
+lo90, hi90)` tuple in the shape `plot_estimate_evolution` takes,
 drawn with the same band styling. A group absent from `trajectories` still
 draws its released points with no band, so a dataset with no current-data
 fit of its own is not left blank.
