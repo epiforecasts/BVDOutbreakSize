@@ -202,9 +202,27 @@ validation_latent_fig #hide
 #
 # Recovered is the exception.
 # The fitted models are the joint, exports, deaths, cases, confirmed, confirmed
-# deaths and isolation, so recovered has no individual fit of its own and its
-# comparison is the baseline against the joint only.
+# deaths, isolation and onsets, so recovered has no individual fit of its own
+# and its comparison is the baseline against the joint only.
 # No individual row or panel is drawn for it.
+#
+# The symptom-onset reporting triangle is scored as "onset reports", the new
+# reported count it adds over the horizon, against its own per-vintage
+# cumulative total.
+# Its level is deliberately not scored: every vintage rereads the whole
+# figure, so the printed total moves from genuine late reporting and from the
+# roughly 4% per-scan level error alike, and in the current data it falls
+# between consecutive vintages more than once.
+# Scoring the level would charge the forecast for a rescan of cases it had
+# already predicted, and would recount the same revision at every horizon.
+# Two things follow for the table below.
+# The stream appears only from the first release that carried it, since no
+# earlier release stored an onset forecast and the backfill reconstructs each
+# release's own output rather than adding a stream it never had.
+# And its intervals are dominated by digitisation rather than by epidemic
+# uncertainty, so its coverage says more about the scan error than about the
+# fitted delay; the CRPS comparison against the baseline is the more
+# informative column for it.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
