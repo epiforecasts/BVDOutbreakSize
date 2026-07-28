@@ -964,3 +964,25 @@ end
     ## constructions has drifted.
     @test withonsets.onsets_new ≈ direct.onsets_new
 end
+
+@testitem "the onset stream spec names keys the onsets fit really carries" begin
+    ## `_STREAM_SPEC[:onset_reports]` does not drive the projection — the
+    ## `kind = :onset` branch hands the stream to `forecast_onsets` before
+    ## those fields are read — but a spec entry naming a key the model never
+    ## exposes is exactly how the confirmed-case binding went stale (#445,
+    ## #453). Pin it against a real chain so it cannot rot unnoticed if the
+    ## fields are ever wired up.
+    using BVDOutbreakSize: onsets_only_model, _STREAM_SPEC, _resolve_draws,
+                           _daily_at_cutoff_any
+    using Turing: Prior, sample
+
+    oc = (; onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
+        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0])
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
+        Prior(), 10; progress = false)
+    spec = _STREAM_SPEC[:onset_reports]
+    @test spec.kind === :onset
+    @test !isnothing(_resolve_draws(chn, spec.expected))
+    @test !isnothing(_daily_at_cutoff_any(chn, spec.trajectory))
+end
