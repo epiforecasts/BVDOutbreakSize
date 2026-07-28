@@ -51,13 +51,24 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 ## `recovered_new` column (materialised only when the recovered origin is
 ## given), letting the recovered stream be scored against the observed count
 ## below like the other streams.
+## The onset grid is the one the FROZEN fit saw, not the live one, so the
+## validation forecast carries an `onset reports` row scored on the triangle
+## the frozen fit was actually fitted to.
+_val_onset_days = frozen_lastweek.o.onset_curve_history.onset_days
+_val_grid_start = isempty(_val_onset_days) ? nothing :
+                  minimum(_val_onset_days)
+_val_grid_end = isnothing(_val_grid_start) ? nothing :
+                max(maximum(frozen_lastweek.o.onset_curve_history.report_days),
+    _val_grid_start)
 validation_forecast = forecast_reported(frozen_lastweek.chn;
     horizon = 7,
     obs_cases = frozen_lastweek.o.reported_cases,
     obs_deaths = frozen_lastweek.o.total_deaths,
     obs_confirmed = frozen_lastweek.o.confirmed_cases,
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-    obs_recovered = frozen_lastweek.o.recovered_cases);
+    obs_recovered = frozen_lastweek.o.recovered_cases,
+    grid_n = frozen_lastweek.o.n,
+    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end);
 
 ## Each frozen individual (single-stream) fit's own one-week-ahead new-count
 ## forecast at the same cut-off as `frozen_lastweek`, from
