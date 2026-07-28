@@ -669,7 +669,10 @@ Only the incident and level quantities are archived: `confirmed cases` and
 `onset reports` new over the horizon (the reporting triangle's own
 cumulative total is revised between vintages for the same reason the
 other cumulatives are, and by more: the ≈4% per-scan level error alone
-moves it by tens of cases, so only the increment is archived) and
+moves it by tens of cases, and in the current data the printed total
+falls between consecutive vintages — 2531 to 2523, and 2018 to 1996 —
+which late reporting cannot produce, so only the increment is archived)
+and
 the supply-limited `isolation beds` occupancy. When the forecast carries the
 confirmed/suspect ward split (`confirmed_occupancy` / `suspect_occupancy`, the
 occupancy partitioned by the cut-off confirmed share), the two ward occupancy
