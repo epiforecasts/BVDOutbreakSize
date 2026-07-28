@@ -277,13 +277,15 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
 
     crps = mean(mfit.crps)
     log_crps = mean(mfit.log_crps)
+    ## The baseline's and the individual fit's own mean CRPS are only ever
+    ## intermediate: they feed the ratios below and are not published as
+    ## columns themselves (R25 keeps the table to the ratios a reader
+    ## compares against one, not the absolute scores behind them).
     crps_baseline = mean(mbase.crps)
     log_crps_baseline = mean(mbase.log_crps)
 
-    crps_individual = missing
-    log_crps_individual = missing
-    skill_vs_individual = missing
-    skill_vs_individual_log = missing
+    rel_to_individual = missing
+    log_rel_to_individual = missing
     if fit == joint_fit
         indiv = _individual_fit_id(scores, stream, joint_fit, baseline_fit)
         if !ismissing(indiv)
@@ -292,23 +294,18 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
             if size(mfit2, 1) > 0
                 fit_c, ind_c = mean(mfit2.crps), mean(mind.crps)
                 fit_lc, ind_lc = mean(mfit2.log_crps), mean(mind.log_crps)
-                crps_individual = round(ind_c; digits = 2)
-                log_crps_individual = round(ind_lc; digits = 3)
-                skill_vs_individual = _safe_ratio(fit_c, ind_c)
-                skill_vs_individual_log = _safe_ratio(fit_lc, ind_lc)
+                rel_to_individual = _safe_ratio(fit_c, ind_c)
+                log_rel_to_individual = _safe_ratio(fit_lc, ind_lc)
             end
         end
     end
 
     return (; n,
         crps = round(crps; digits = 2),
-        crps_baseline = round(crps_baseline; digits = 2),
-        rel_skill = _safe_ratio(crps, crps_baseline),
+        rel_to_baseline = _safe_ratio(crps, crps_baseline),
         log_crps = round(log_crps; digits = 3),
-        log_crps_baseline = round(log_crps_baseline; digits = 3),
-        rel_skill_log = _safe_ratio(log_crps, log_crps_baseline),
-        crps_individual, log_crps_individual,
-        skill_vs_individual, skill_vs_individual_log,
+        log_rel_to_baseline = _safe_ratio(log_crps, log_crps_baseline),
+        rel_to_individual, log_rel_to_individual,
         dispersion = round(mean(mfit.dispersion); digits = 2),
         overprediction = round(mean(mfit.overprediction); digits = 2),
         underprediction = round(mean(mfit.underprediction); digits = 2),
@@ -324,14 +321,12 @@ end
 ## release carries a forecast.
 function _score_summary_schema(key_cols::NamedTuple)
     metrics = (;
-        n = Int[], crps = Float64[], crps_baseline = Float64[],
-        rel_skill = Union{Missing, Float64}[],
-        log_crps = Float64[], log_crps_baseline = Float64[],
-        rel_skill_log = Union{Missing, Float64}[],
-        crps_individual = Union{Missing, Float64}[],
-        log_crps_individual = Union{Missing, Float64}[],
-        skill_vs_individual = Union{Missing, Float64}[],
-        skill_vs_individual_log = Union{Missing, Float64}[],
+        n = Int[], crps = Float64[],
+        rel_to_baseline = Union{Missing, Float64}[],
+        log_crps = Float64[],
+        log_rel_to_baseline = Union{Missing, Float64}[],
+        rel_to_individual = Union{Missing, Float64}[],
+        log_rel_to_individual = Union{Missing, Float64}[],
         dispersion = Float64[], overprediction = Float64[],
         underprediction = Float64[],
         coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[])
@@ -435,8 +430,7 @@ function forecast_score_by_release(scores::DataFrame;
     return DataFrame(rows)
 end
 
-const _INDIVIDUAL_FIT_COLUMNS = ("crps_individual", "log_crps_individual",
-    "skill_vs_individual", "skill_vs_individual_log")
+const _INDIVIDUAL_FIT_COLUMNS = ("rel_to_individual", "log_rel_to_individual")
 
 """
 `table` (a table from [`forecast_score_overview`](@ref),
@@ -448,5 +442,38 @@ evaluation, which scores only the joint model at past cut-offs.
 """
 function drop_individual_fit_columns(table::DataFrame)
     keep = [n for n in names(table) if !(n in _INDIVIDUAL_FIT_COLUMNS)]
+    return table[:, keep]
+end
+
+"""
+`table` (from [`forecast_score_overview`](@ref),
+[`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
+with its `fit` column dropped, for a table whose `fit` column is
+single-valued by construction rather than merely by the data currently on
+hand — the frozen-fit evaluation, which scores the current joint model
+alone at past cut-offs, is the only such table in this report.
+
+Every other column (`crps`, `dispersion`, `overprediction`,
+`underprediction`, `coverage_50`, `coverage_90`, …) is left untouched; this
+drops one column and nothing else. `table` is returned with `fit` still
+present when it is empty, since an empty table carries no evidence either
+way. State which model a de-columned table refers to in the surrounding
+prose, so the table stays self-describing once the column is gone.
+
+Errors when `table`'s `fit` column carries more than one distinct value,
+rather than silently dropping it: a column that vanishes only when it
+happens to be constant and reappears once a second model is scored is
+worse than a constant column that never varies, so this is only safe to
+call on a table whose single-fit shape is structural (as the frozen
+evaluation's is), never on a table that could legitimately grow a second
+model later.
+"""
+function drop_degenerate_fit_column(table::DataFrame)
+    isempty(table.fit) && return table
+    length(unique(table.fit)) == 1 ||
+        error("drop_degenerate_fit_column: table's fit column carries " *
+              "more than one value; only call this on a table whose " *
+              "single-fit shape is structural, not incidental")
+    keep = [n for n in names(table) if n != "fit"]
     return table[:, keep]
 end

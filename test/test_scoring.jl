@@ -172,32 +172,34 @@ end
 
     row(stream, fit) = only(
         out[(out.stream .== stream) .& (out.fit .== fit), :])
-    ## rel_skill is the ratio of the two fits' mean CRPS over the matched
-    ## forecasts, pooled across both releases and horizons: joint mean
-    ## (2+4)/2 = 3, baseline mean (8+12)/2 = 10, ratio 0.3.
+    ## rel_to_baseline is the ratio of the two fits' mean CRPS over the
+    ## matched forecasts, pooled across both releases and horizons: joint
+    ## mean (2+4)/2 = 3, baseline mean (8+12)/2 = 10, ratio 0.3. The
+    ## absolute baseline and individual CRPS are not published columns.
     cc_joint = row("confirmed cases", "joint")
     @test cc_joint.n == 2
     @test cc_joint.crps == 3.0
-    @test cc_joint.crps_baseline == 10.0
-    @test cc_joint.rel_skill == 0.3
+    @test cc_joint.rel_to_baseline == 0.3
     ## Against the individual fit: joint mean 3.0, individual mean
     ## (4+6)/2 = 5.0, ratio 0.6.
-    @test cc_joint.crps_individual == 5.0
-    @test cc_joint.skill_vs_individual == 0.6
+    @test cc_joint.rel_to_individual == 0.6
+    ## Same ratio on the log scale: joint log_crps mean (0.2+0.4)/2 = 0.3,
+    ## individual log_crps mean (0.4+0.6)/2 = 0.5, ratio 0.6.
+    @test cc_joint.log_rel_to_individual == 0.6
 
     cc_indiv = row("confirmed cases", "confirmed")
     @test cc_indiv.crps == 5.0
-    @test cc_indiv.rel_skill == 0.5  # 5.0 / 10.0
+    @test cc_indiv.rel_to_baseline == 0.5  # 5.0 / 10.0
     ## The individual fit's own row carries no individual-fit comparison.
-    @test ismissing(cc_indiv.crps_individual)
-    @test ismissing(cc_indiv.skill_vs_individual)
+    @test ismissing(cc_indiv.rel_to_individual)
+    @test ismissing(cc_indiv.log_rel_to_individual)
 
     ## "recovered" has no individual model: those columns stay missing on
     ## its joint row, and its skill is against its own baseline only.
     rec_joint = row("recovered", "joint")
-    @test rec_joint.rel_skill == 0.5  # 3.0 / 6.0
-    @test ismissing(rec_joint.crps_individual)
-    @test ismissing(rec_joint.skill_vs_individual)
+    @test rec_joint.rel_to_baseline == 0.5  # 3.0 / 6.0
+    @test ismissing(rec_joint.rel_to_individual)
+    @test ismissing(rec_joint.log_rel_to_individual)
 end
 
 @testitem "forecast_score_overview drops a group with no matched baseline" begin
@@ -228,7 +230,7 @@ end
 
     ## A baseline scored to an exact zero CRPS (a coincidental perfect
     ## persistence match) would divide by zero; the guard reports the row
-    ## with rel_skill missing instead of Inf.
+    ## with rel_to_baseline missing instead of Inf.
     scores = DataFrame(
         release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
         horizon = [7, 7], stream = fill("confirmed cases", 2),
@@ -239,8 +241,8 @@ end
         bias = [0.0, 0.0])
 
     out = forecast_score_overview(scores)
-    @test ismissing(only(out.rel_skill))
-    @test !any(isinf, skipmissing(out.rel_skill))
+    @test ismissing(only(out.rel_to_baseline))
+    @test !any(isinf, skipmissing(out.rel_to_baseline))
 end
 
 @testitem "forecast_score_overview returns a typed empty frame" begin
@@ -259,8 +261,10 @@ end
     @test nrow(out) == 0
     @test "stream" in names(out)
     @test "fit" in names(out)
-    @test "rel_skill" in names(out)
-    @test "skill_vs_individual" in names(out)
+    @test "rel_to_baseline" in names(out)
+    @test "rel_to_individual" in names(out)
+    @test !("crps_baseline" in names(out))
+    @test !("crps_individual" in names(out))
 end
 
 @testitem "drop_individual_fit_columns omits the individual comparison" begin
@@ -280,16 +284,75 @@ end
         bias = [0.0, 0.0])
 
     table = forecast_score_overview(scores)
-    @test "crps_individual" in names(table)
+    @test "rel_to_individual" in names(table)
 
     out = drop_individual_fit_columns(table)
-    @test !("crps_individual" in names(out))
-    @test !("log_crps_individual" in names(out))
-    @test !("skill_vs_individual" in names(out))
-    @test !("skill_vs_individual_log" in names(out))
+    @test !("rel_to_individual" in names(out))
+    @test !("log_rel_to_individual" in names(out))
     ## Every other column, and the row itself, survives untouched.
-    @test "rel_skill" in names(out)
+    @test "rel_to_baseline" in names(out)
     @test only(out.fit) == "frozen"
+end
+
+@testitem "drop_degenerate_fit_column drops a single-valued fit column" begin
+    using Dates: Date
+    using DataFrames: DataFrame, names, nrow
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+
+    ## The frozen-evaluation shape: only ever "frozen" and its baseline, so
+    ## `fit` carries exactly one value ("frozen") throughout the table.
+    scores = DataFrame(
+        release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["frozen", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
+        overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
+        coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
+        bias = [0.0, 0.0])
+    table = forecast_score_overview(scores)
+
+    out = drop_degenerate_fit_column(table)
+    @test !("fit" in names(out))
+    ## Every other column survives untouched, in place.
+    @test "bias" in names(out)
+    @test "dispersion" in names(out)
+    @test "overprediction" in names(out)
+    @test "underprediction" in names(out)
+    @test "coverage_50" in names(out)
+    @test "coverage_90" in names(out)
+    @test "crps" in names(out)
+    @test "rel_to_baseline" in names(out)
+    @test nrow(out) == nrow(table)
+end
+
+@testitem "drop_degenerate_fit_column errors on a multi-fit table" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+
+    ## The ordinary joint-vs-baseline shape: joint, confirmed and baseline,
+    ## so `fit` carries more than one value and must not be dropped.
+    scores = DataFrame(
+        release = fill("r1", 3), made_date = fill(Date(2026, 6, 1), 3),
+        horizon = fill(7, 3), stream = fill("confirmed cases", 3),
+        fit = ["joint", "confirmed", "baseline"], crps = [2.0, 2.5, 8.0],
+        log_crps = [0.2, 0.25, 0.8], dispersion = fill(0.1, 3),
+        overprediction = fill(0.05, 3), underprediction = fill(0.05, 3),
+        coverage_50 = fill(1.0, 3), coverage_90 = fill(1.0, 3),
+        bias = fill(0.0, 3))
+    table = forecast_score_overview(scores)
+
+    @test_throws ErrorException drop_degenerate_fit_column(table)
+end
+
+@testitem "drop_degenerate_fit_column leaves an empty table's fit column" begin
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+    using DataFrames: DataFrame, names, nrow
+
+    empty = forecast_score_overview(DataFrame())
+    out = drop_degenerate_fit_column(empty)
+    @test "fit" in names(out)
+    @test nrow(out) == 0
 end
 
 @testitem "forecast_score_by_horizon keeps a separate row per horizon" begin
@@ -311,8 +374,8 @@ end
     @test sort(out.horizon) == [7, 14]
     h7 = only(out[out.horizon .== 7, :])
     h14 = only(out[out.horizon .== 14, :])
-    @test h7.rel_skill == 0.25   # 2.0 / 8.0
-    @test h14.rel_skill == 0.5   # 6.0 / 12.0
+    @test h7.rel_to_baseline == 0.25   # 2.0 / 8.0
+    @test h14.rel_to_baseline == 0.5   # 6.0 / 12.0
 end
 
 @testitem "forecast_score_by_release averages across horizon" begin
@@ -337,8 +400,7 @@ end
     @test row.made_date == Date(2026, 6, 1)
     @test row.n == 2
     @test row.crps == 4.0          # mean(2.0, 6.0)
-    @test row.crps_baseline == 10.0  # mean(8.0, 12.0)
-    @test row.rel_skill == 0.4
+    @test row.rel_to_baseline == 0.4  # mean(2.0, 6.0) / mean(8.0, 12.0)
 end
 
 @testitem "score_release scores every mapped stream, skips the rest" begin
