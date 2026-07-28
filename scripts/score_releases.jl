@@ -105,6 +105,24 @@ const BASELINE_FIT = "baseline"
 ## frozen cut-off), so the label is applied at scoring time.
 const FROZEN_FIT = "frozen"
 
+## Release tags whose forecast is excluded from scoring because the
+## RECONSTRUCTION failed, not because the model performed badly: a chain
+## that did not sample properly rather than a genuine forecast. Keyed on
+## the release tag itself (before the "(backfill)" label is applied), each
+## value names the signature that identifies it as a failed reconstruction,
+## kept here rather than in a comment so it prints in the run log. Only the
+## FORECAST is skipped for a listed tag; its `posterior_draws.csv` (the R_T
+## and R0 summaries) is a separate, unaffected asset from the real release
+## and is still scored normally.
+const _FAILED_RECONSTRUCTIONS = Dict(
+    "results-v1.6.0" =>
+    "the reconstructed joint chain forecasts a " *
+    "nearly-zero median at every horizon and every stream, with the " *
+    "upper predictive tail occasionally exploding to five- and " *
+    "six-digit values (e.g. a confirmed-cases CRPS above 100000 at " *
+    "the 28-day horizon); that combination is the signature of a " *
+    "chain that failed to sample properly, not a real forecast.")
+
 repo = length(ARGS) >= 1 ? ARGS[1] : DEFAULT_REPO
 
 # ----------------------------------------------------------------------
@@ -830,6 +848,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_frozen_stopped = 0
     n_unstarted = 0
     n_frozen_unstarted = 0
+    n_failed_reconstruction = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
     ## `observations.toml` fetched for the selection is still there when its
@@ -885,7 +904,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## A top-level `for` is a soft scope, so the running counters must be
         ## declared global to update the bindings above rather than shadow them.
         global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored,
-        n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted
+        n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
+        n_failed_reconstruction
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -923,22 +943,32 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
         ## A saved forecast wins; a reconstruction stands in only where the
         ## release never stored one. The per-stream archive carries every fit's
-        ## forecast, so it is preferred over the joint-only `forecast.csv`.
+        ## forecast, so it is preferred over the joint-only `forecast.csv`. A
+        ## tag on `_FAILED_RECONSTRUCTIONS` is skipped before any of that: its
+        ## forecast, wherever it comes from, is a failed reconstruction rather
+        ## than a real one, so it is never worth fetching.
         label = tag
-        forecast_path = fetch_asset(
-            repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
-        isnothing(forecast_path) && (forecast_path = fetch_asset(
-            repo, tag, FORECAST_ASSET, tagdir(tag)))
-        if isnothing(forecast_path)
-            asset = backfill_asset(tag)
-            if !isnothing(asset) && asset in backfill_names
-                forecast_path = fetch_asset(
-                    repo, BACKFILL_TAG, asset, tagdir(tag))
-                isnothing(forecast_path) || (label = "$tag (backfill)")
+        forecast_path = if haskey(_FAILED_RECONSTRUCTIONS, tag)
+            nothing
+        else
+            fp = fetch_asset(repo, tag, STREAM_FORECAST_ASSET, tagdir(tag))
+            isnothing(fp) && (fp = fetch_asset(
+                repo, tag, FORECAST_ASSET, tagdir(tag)))
+            if isnothing(fp)
+                asset = backfill_asset(tag)
+                if !isnothing(asset) && asset in backfill_names
+                    fp = fetch_asset(repo, BACKFILL_TAG, asset, tagdir(tag))
+                    isnothing(fp) || (label = "$tag (backfill)")
+                end
             end
+            fp
         end
 
-        if isnothing(forecast_path)
+        if haskey(_FAILED_RECONSTRUCTIONS, tag)
+            n_failed_reconstruction += 1
+            @info string(tag, ": skipping known-failed reconstruction, not ",
+                "scored as a model finding — ", _FAILED_RECONSTRUCTIONS[tag])
+        elseif isnothing(forecast_path)
             n_no_forecast += 1
             @info "skipping $tag (no stored or reconstructed forecast)"
         else
@@ -1047,7 +1077,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     println("Scored $n_scored/$(length(tags)) releases " *
             "($n_no_forecast without a stored or reconstructed forecast, " *
-            "$n_backfilled from $BACKFILL_TAG).")
+            "$n_backfilled from $BACKFILL_TAG, $n_failed_reconstruction " *
+            "excluded as known-failed reconstructions).")
     println("Dropped $n_stopped group(s) whose target ran past their " *
             "stream's own reporting coverage ($n_frozen_stopped in the " *
             "frozen tables).")
