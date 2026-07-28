@@ -203,7 +203,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 
 # ## Methods
 #
-# ### Data
+# ### [Data](@id methods-data)
 #
 # The DRC data come from the situation reports of the Institut National
 # de Santé Publique [insp_sitrep_2026](@cite). Each report gives the
@@ -1971,9 +1971,9 @@ cfr_prior_fig #hide
 # Every observation model above sees the shared daily onset series only
 # after a further convolution: a suspected-case report, a death, a
 # laboratory confirmation. The digitised onset epidemic curve (see the
-# [Data](@ref) section) is the only direct observation of that series, so
-# it can identify things the other streams cannot on their own, plausibly
-# including the report-versus-receipt split the laboratory pipeline
+# [Data](@ref methods-data) section) is the only direct observation of that
+# series, so it can identify things the other streams cannot on their own,
+# plausibly including the report-versus-receipt split the laboratory pipeline
 # currently pins with a soft external constraint
 # (`onset_to_sample_logweight`).
 #
@@ -3136,7 +3136,7 @@ onset_pair_fig #hide
 # behaviour the model relies on (see the [symptom-onset reporting
 # delay](@ref "Symptom-onset reporting delay") Methods section); the
 # panels only cover snapshots at or before the current cut-off (see the
-# [Data](@ref) section).
+# [Data](@ref methods-data) section).
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
