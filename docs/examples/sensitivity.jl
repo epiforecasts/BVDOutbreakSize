@@ -236,6 +236,13 @@ validation_latent_fig #hide
 # The releases that do carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet, which is why the comparison against each stream's individual fit is still empty.
 # It will populate once those targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
+#
+# The symptom-onset reporting triangle is scored as "onset reports", the new reported count it adds over the horizon, against its own per-vintage cumulative total.
+# Its level is deliberately not scored: every vintage rereads the whole figure, so the printed total moves from genuine late reporting and from the roughly 4% per-scan level error alike, and in the current data it falls between consecutive vintages more than once.
+# Scoring the level would charge the forecast for a rescan of cases it had already predicted, and would recount the same revision at every horizon.
+# Two things follow for the table below.
+# The stream appears only from the first release that carried it, since no earlier release stored an onset forecast and the backfill reconstructs each release's own output rather than adding a stream it never had.
+# And its intervals are dominated by digitisation rather than by epidemic uncertainty, so its coverage says more about the scan error than about the fitted delay; the CRPS comparison against the baseline is the more informative column for it.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
