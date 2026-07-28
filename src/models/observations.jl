@@ -2800,8 +2800,13 @@ cannot change the mean-variance shape; the test is the empirical/modelled
 residual ratio across bins of `means`, against the `sqrt(ν/(ν-2))` a
 Student-t likelihood implies rather than against 1. Correlated scan error
 leaves individual cells alone and shows up only once cells from one snapshot
-are summed, where treating a shared error as independent makes the aggregate
-predictive too narrow; the test is per-snapshot coverage, not per-cell.
+are summed; the test is per-snapshot coverage, not per-cell. Do not expect
+it to show as an aggregate predictive that is simply too narrow: summing
+independent errors can reproduce the right total spread while putting it in
+the wrong place, so the symptom is central coverage collapsing with the
+90% coverage still near nominal. Both are checked in the report's
+symptom-onset reporting-delay section, and issue #507 carries what they
+returned for the current data.
 """
 function onset_report_scales(means::AbstractVector,
         level_cur::AbstractVector,
