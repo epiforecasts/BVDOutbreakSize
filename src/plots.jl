@@ -1117,20 +1117,24 @@ non-finite (the aggregation guard against a zero-mean baseline) is simply
 absent from its series rather than drawn as a break, and a stream with no
 individual fit, e.g. recovered, is drawn with the joint series alone.
 
-Returns a figure carrying a short note in place of the panels when `scores`
-has no rows.
+Returns a figure carrying `empty_message` in place of the panels when
+`scores` has no rows, since an empty table can mean different things
+(no release has a stored forecast at all, versus every stored forecast's
+target has yet to resolve) and a reader should be told which, not left
+with one generic caption for both.
 """
 function plot_forecast_relative_skill(scores::DataFrame;
         value_col::Symbol = :rel_to_baseline,
         ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
         title::AbstractString =
         "Relative skill against the baseline, by horizon",
-        ncols::Integer = 3)
+        ncols::Integer = 3,
+        empty_message::AbstractString =
+        "No scored forecasts yet. No release carries a stored forecast.")
     streams = sort(unique(scores.stream))
     if isempty(streams)
         fig = Figure(; size = (860, 160))
-        CairoMakie.Label(fig[1, 1],
-            "No scored forecasts yet. No release carries a stored forecast.";
+        CairoMakie.Label(fig[1, 1], empty_message;
             tellwidth = false, tellheight = false, color = (:black, 0.55))
         return fig
     end
