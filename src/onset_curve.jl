@@ -186,9 +186,13 @@ stream-comparison plots), or `missing` when no vintage survives.
 
 The per-vintage totals are NOT monotone across vintages: the ≈4%
 per-scan level error means a later scan can read a smaller total than an
-earlier one even though late reporting only ever adds cases. Consumers
-that need a non-decreasing series must say what they do with a fall
-rather than assume it cannot happen.
+earlier one even though late reporting only ever adds cases. It happens
+more than once in the current data (2531 on 25 July against 2523 on 26
+July; 2018 on 17 July against 1996 on 18 July), so this is the ordinary
+case and not a corner. Consumers that need a non-decreasing series must
+say what they do with a fall rather than assume it cannot happen, and
+anything scored against this series should be scored on its increments
+rather than its level (see `forecast_onsets`).
 
 A missing `path`, or a manifest with no in-cutoff vintage, returns the
 same empty, `missing`-total shape, so the stream degrades to a no-op

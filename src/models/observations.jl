@@ -2783,10 +2783,25 @@ drawing it independently; treating it per cell is a tractability choice that
 likely understates posterior uncertainty on parameters shared across many
 cells from one scan (the calendar-walk `γ` step nearest that scan's report
 day in particular). Second, the counting term is Poisson-like, with no
-separate overdispersion parameter. In both cases `σ_mult` is the only lever
-that can absorb the shortfall, so a `σ_mult` posterior pressed against its
-prior's upper edge is the fit diagnostic that says one of these terms needs
-its own parameter.
+separate overdispersion parameter.
+
+`σ_mult` is the only lever that can absorb either shortfall, so it is the
+diagnostic for both, but read it in the right direction: its prior
+(`onset_reporting_model`'s `slack_prior`) is bounded BELOW at 1 and is
+unbounded above, so there is no upper edge for a posterior to press against.
+The signature that says a term needs its own parameter is `σ_mult` mass well
+above 1. A posterior sitting on the lower bound says the opposite, that the
+fit would like a tighter likelihood than the measurement floor allows.
+
+The two approximations leave different fingerprints, and `σ_mult` alone does
+not separate them. A missing overdispersion parameter grows the shortfall
+with the cell mean, since a uniform multiplier can inflate every cell but
+cannot change the mean-variance shape; the test is the empirical/modelled
+residual ratio across bins of `means`, against the `sqrt(ν/(ν-2))` a
+Student-t likelihood implies rather than against 1. Correlated scan error
+leaves individual cells alone and shows up only once cells from one snapshot
+are summed, where treating a shared error as independent makes the aggregate
+predictive too narrow; the test is per-snapshot coverage, not per-cell.
 """
 function onset_report_scales(means::AbstractVector,
         level_cur::AbstractVector,

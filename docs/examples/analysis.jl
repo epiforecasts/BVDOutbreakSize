@@ -2522,9 +2522,11 @@ diagnostics_table( #hide
 # We score the sum of the two terms, the new reported count the triangle
 # should add over the horizon, and not the triangle's cumulative level. Every
 # vintage rereads the whole figure, so its total moves both from genuine late
-# reporting and from the roughly 4% per-scan level error: in the current data
-# the printed total falls between consecutive vintages more than once, which
-# late reporting cannot produce. Scoring the level would charge the forecast
+# reporting and from the roughly 4% per-scan level error. In the current data
+# the printed total falls between consecutive vintages more than once: 2531
+# on 25 July against 2523 on 26 July, and 2018 on 17 July against 1996 on 18
+# July. Late reporting only ever adds cases, so a fall of that size is the
+# rescan and not the epidemic. Scoring the level would charge the forecast
 # for a rescan of cases it had already predicted, and would count the same
 # revision again at every later horizon. On the incident basis each revision
 # enters exactly one scored window. This is the same argument that keeps the
@@ -3060,10 +3062,40 @@ surveillance_pair_fig #hide
 # inflate every cell but cannot change the mean-variance shape. Correlated
 # scan error leaves the individual cells alone and shows up only when cells
 # from one snapshot are summed, where treating a shared error as independent
-# makes the aggregate predictive too narrow. The per-snapshot panel in the
-# [posterior predictive checks](@ref "Posterior predictive checks") is
-# therefore the one to read for the second, and the per-cell coverage for
-# the first.
+# puts the aggregate predictive's mass in the wrong place. The per-snapshot
+# panel in the [posterior predictive checks](@ref "Posterior predictive
+# checks") is therefore the one to read for the second, and the per-cell
+# coverage for the first.
+#
+# Both have been checked, and the answer is not the one the phrase
+# "underdispersed" suggests (issue #507 carries the full numbers).
+# The onset stream is **not** underdispersed.
+# Individual cells are scored about twice as wide as they need to be: the
+# standardised residual has SD 0.71 against the 1.414 a Student-t with four
+# degrees of freedom implies, and the empirical-to-modelled residual ratio
+# does not grow with the cell mean, so there is no evidence for an
+# overdispersion parameter and adding one would widen cells that are already
+# over-covered.
+# What is wrong is the per-snapshot aggregate, where one snapshot in eleven
+# falls inside the nominal 50% interval, against ten of eleven inside the
+# nominal 90%.
+# One in eleven has probability 0.006 under a correct model, so this is a
+# real failure and not small-sample noise.
+# The aggregate variance is nonetheless right (empirical over modelled 1.07),
+# which is what rules out any variance fix: the predictive has about the
+# right spread and puts it in the wrong place, with deviations that are
+# large and two-sided and rarely near the centre.
+# That is the shared-scan fingerprint rather than the overdispersion one,
+# and the scan term is a fifth of the per-snapshot variance, so it is large
+# enough to matter.
+# The likelihood is deliberately left unchanged here: the shared error would
+# have to be smaller than the 4% measured per bar, since moving that figure
+# wholesale from per-cell to per-vintage over-corrects the aggregate variance
+# by about a factor of two.
+# There is also a weak suggestion that the model under-predicts how much is
+# added between snapshots (mean deviation +16 with a standard error of 10),
+# which would be a centring rather than a spread problem; at eleven
+# snapshots it is suggestive and no more.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
