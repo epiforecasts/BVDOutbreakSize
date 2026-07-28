@@ -455,7 +455,7 @@ end
     using DataFrames: DataFrame
 
     empty = DataFrame(stream = String[], horizon = Int[], fit = String[],
-        rel_skill = Union{Missing, Float64}[])
+        rel_to_baseline = Union{Missing, Float64}[])
     @test plot_forecast_relative_skill(empty) isa CairoMakie.Makie.Figure
 
     rows = NamedTuple[]
@@ -463,15 +463,16 @@ end
 
         push!(rows,
             (; stream = "confirmed cases", horizon = h, fit = fit,
-                rel_skill = val + 0.05 * h))
+                rel_to_baseline = val + 0.05 * h))
     end
     ## Recovered has no individual fit, and one guarded cell is missing
     ## (R20), neither of which should break the render.
     push!(rows,
-        (; stream = "recovered", horizon = 7, fit = "joint", rel_skill = 1.1))
+        (; stream = "recovered", horizon = 7, fit = "joint",
+            rel_to_baseline = 1.1))
     push!(rows,
         (; stream = "recovered", horizon = 14, fit = "joint",
-            rel_skill = missing))
+            rel_to_baseline = missing))
     df = DataFrame(rows)
     fig = plot_forecast_relative_skill(df)
     @test fig isa CairoMakie.Makie.Figure
@@ -480,9 +481,9 @@ end
 
     ## The log-scale column plots the same way through `value_col`.
     df2 = copy(df)
-    df2.rel_skill_log = df2.rel_skill
-    @test plot_forecast_relative_skill(df2; value_col = :rel_skill_log) isa
-          CairoMakie.Makie.Figure
+    df2.log_rel_to_baseline = df2.rel_to_baseline
+    @test plot_forecast_relative_skill(df2;
+        value_col = :log_rel_to_baseline) isa CairoMakie.Makie.Figure
 end
 
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
@@ -740,6 +741,18 @@ end
     ## A missing observed value returns an empty figure rather than erroring.
     @test plot_forecast_beds_vs_truth(fc; isolation = missing) isa
           CairoMakie.Makie.Figure
+    ## An individual-fit forecast overlays a second (dashed) density without
+    ## erroring, and without changing the figure type.
+    indiv = rand(rng, 200:380, 250)
+    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
+        individual = indiv) isa CairoMakie.Makie.Figure
+    ## A degenerate (single-valued) individual sample is skipped rather than
+    ## erroring inside `density!`, which needs more than one distinct value.
+    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
+        individual = fill(300.0, 10)) isa CairoMakie.Makie.Figure
+    ## An empty individual sample is likewise skipped without erroring.
+    @test plot_forecast_beds_vs_truth(fc; isolation = 359,
+        individual = Float64[]) isa CairoMakie.Makie.Figure
 end
 
 @testitem "plot_forecast_latent returns a Makie figure" setup=[HeadlessMakie] begin
@@ -836,6 +849,28 @@ end
     fig5 = plot_forecast_vs_truth(fc_all; observed = NamedTuple())
     @test fig5 isa CairoMakie.Makie.Figure
     @test naxes(fig5) == 0
+
+    ## An individual-fit forecast overlays a dashed density on both panels
+    ## of the streams it covers, without adding axes (the panel count is
+    ## driven by `observed`, not by which streams carry an individual
+    ## overlay) and without erroring on a stream `individual` has no entry
+    ## for (recovered, which has no individual fit).
+    fig6 = plot_forecast_vs_truth(fc_all;
+        observed = (cases_cum = 140, deaths_cum = 90, confirmed_cum = 70,
+            confirmed_deaths_cum = 18, recovered_cum = 55),
+        baseline = (confirmed_cum = 40,),
+        individual = (cases_new = rand(rng, 0:30, n),
+            confirmed_new = rand(rng, 0:15, n)))
+    @test fig6 isa CairoMakie.Makie.Figure
+    @test naxes(fig6) == 10
+
+    ## A degenerate (single-valued) individual sample for one stream is
+    ## skipped rather than erroring inside `density!`.
+    fig7 = plot_forecast_vs_truth(fc_cases;
+        observed = (confirmed_cum = 70, confirmed_deaths_cum = 18),
+        individual = (confirmed_new = fill(5.0, 10),))
+    @test fig7 isa CairoMakie.Makie.Figure
+    @test naxes(fig7) == 2
 end
 
 @testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin

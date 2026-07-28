@@ -1101,8 +1101,9 @@ const _skill_tick_labels = [t >= 1 ? string(round(Int, t)) : string(t)
 
 """
 By-horizon relative-skill figure: one panel per stream, plotting relative
-skill against the persistence baseline (`rel_skill`, or `rel_skill_log` on
-the log scale) against the forecast horizon, with one series per fit role
+skill against the persistence baseline (`rel_to_baseline`, or
+`log_rel_to_baseline` on the log scale) against the forecast horizon, with
+one series per fit role
 (`individual`, `joint`). `scores` is a
 [`forecast_score_by_horizon`](@ref)-shaped table, baseline rows already
 excluded, carrying `stream`, `horizon`, `fit` and the column named by
@@ -1120,7 +1121,7 @@ Returns a figure carrying a short note in place of the panels when `scores`
 has no rows.
 """
 function plot_forecast_relative_skill(scores::DataFrame;
-        value_col::Symbol = :rel_skill,
+        value_col::Symbol = :rel_to_baseline,
         ylabel::AbstractString = "Relative skill (log scale, 1 = baseline)",
         title::AbstractString =
         "Relative skill against the baseline, by horizon",
@@ -2037,29 +2038,49 @@ isolation-bed occupancy with the 90% predictive interval shaded and the
 so last week's bed forecast is scored against what the beds held. Drawn only
 when the forecast carries `isolation_level`.
 
+`individual`, when given, is a second predictive sample — the frozen
+individual (treatment-only) model's own forecast draws at the same
+cut-off, from [`forecast_stream`](@ref) — overlaid as a dotted density so
+the joint and the individual model's bed forecasts are both visible
+against the observed occupancy, rather than the joint alone.
+
 At a one-week-back freeze the bed capacity has no implied-capacity anchor
 (the reported occupancy rate starts only on 9 June), so the projected
 occupancy rides the capacity random walk back to the freeze date and the
 interval is wide — the bed forecast is the weakest of the validated streams.
 """
 function plot_forecast_beds_vs_truth(fc::DataFrame;
-        isolation::Union{Real, Missing})
+        isolation::Union{Real, Missing},
+        individual::Union{Nothing, AbstractVector} = nothing)
     (isolation !== missing && :isolation_level in propertynames(fc)) ||
         return Figure()
     v = float.(fc[!, :isolation_level])
+    indiv = isnothing(individual) ? nothing : float.(individual)
     lo = quantile(v, 0.05)
     hi = quantile(v, 0.95)
-    upper = max(1.0, quantile(v, 0.995), float(isolation) * 1.05)
+    upper = max(1.0, quantile(v, 0.995), float(isolation) * 1.05,
+        isnothing(indiv) || isempty(indiv) ? 0.0 :
+        quantile(indiv, 0.995))
     fig = Figure(; size = (440, 360))
     ax = Axis(fig[1, 1];
         xlabel = "Isolation beds occupied at the target date (DRC)",
         ylabel = "Predictive frequency", title = "Forecast vs observed",
         limits = ((0, upper), nothing))
     vspan!(ax, lo, hi; color = (:steelblue, 0.15))
-    hist!(ax, v; bins = range(0, upper; length = 30),
+    joint_h = hist!(ax, v; bins = range(0, upper; length = 30),
         color = (:steelblue, 0.7))
+    handles = Any[joint_h]
+    labels = String["joint"]
+    if !isnothing(indiv) && !isempty(indiv) && length(unique(indiv)) > 1
+        indiv_h = density!(ax, indiv; color = (:black, 0.0),
+            strokecolor = :black, strokewidth = 2, linestyle = :dot)
+        push!(handles, indiv_h)
+        push!(labels, "individual")
+    end
     vlines!(ax, [float(isolation)]; color = :black, linestyle = :dash,
         linewidth = 2)
+    length(handles) > 1 && CairoMakie.axislegend(ax, handles, labels;
+        position = :rt, framevisible = false)
     return fig
 end
 
@@ -2079,11 +2100,21 @@ stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
 cumulative count at the target date; a stream absent from `observed` is
 skipped. `baseline` maps the same columns to the cumulative count at the
 forecast origin (default `0`), so the observed new count is
-`max(observed − baseline, 0)`. The latent counterparts are scored
-distribution-versus-distribution by [`plot_forecast_vs_truth_latent`](@ref).
+`max(observed − baseline, 0)`. `individual` is an optional `NamedTuple`
+mapping a stream's NEW-count column (`:confirmed_new`, `:cases_new`, …) to
+that stream's own frozen individual (single-stream) model's forecast draws
+of the new count, from [`forecast_stream`](@ref); a stream present in
+`individual` gets a second, dotted density overlaid on both its panels (the
+cumulative panel from `baseline + individual` new-count draws), so the joint
+and the individual fit's forecasts are both visible rather than the joint
+alone. A stream absent from `individual` (e.g. recovered, which has no
+individual fit) draws the joint alone, unchanged. The latent counterparts are
+scored distribution-versus-distribution by
+[`plot_forecast_vs_truth_latent`](@ref).
 """
 function plot_forecast_vs_truth(fc::DataFrame;
-        observed::NamedTuple, baseline::NamedTuple = NamedTuple())
+        observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
+        individual::NamedTuple = NamedTuple())
     specs = (
         (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
         (:deaths_cum, :deaths_new, "suspected deaths (DRC)", :firebrick),
@@ -2092,31 +2123,59 @@ function plot_forecast_vs_truth(fc::DataFrame;
             "confirmed deaths (DRC)", :darkorange3),
         (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
     )
-    streams = Vector{Tuple{Symbol, Symbol, String, Symbol, Float64, Float64}}()
+    streams = Vector{
+        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64,
+        Union{Nothing, Vector{Float64}}}}()
     for (cumcol, newcol, name, colour) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
         obs = float(observed[cumcol])
         base = float(get(baseline, cumcol, 0))
-        push!(streams, (cumcol, newcol, name, colour, obs, obs - base))
+        indiv_new = haskey(individual, newcol) ?
+                    Float64.(individual[newcol]) : nothing
+        push!(streams,
+            (cumcol, newcol, name, colour, obs, obs - base, indiv_new))
     end
     ncols = length(streams)
     ncols == 0 && return Figure()
     fig = Figure(; size = (370 * ncols, 680))
-    function panel!(row, col, v, obs, title, colour)
+    any_indiv = false
+    function panel!(row, col, v, obs, title, colour, indiv)
         lo = quantile(v, 0.05)
         hi = quantile(v, 0.95)
-        upper = max(1.0, quantile(v, 0.995), obs * 1.05)
+        upper = max(1.0, quantile(v, 0.995), obs * 1.05,
+            isnothing(indiv) || isempty(indiv) ? 0.0 :
+            quantile(indiv, 0.995))
         ax = Axis(fig[row, col];
             xlabel = title, ylabel = "Predictive frequency",
             limits = ((0, upper), nothing))
         vspan!(ax, lo, hi; color = (colour, 0.15))
         hist!(ax, v; bins = range(0, upper; length = 30),
             color = (colour, 0.7))
+        ## Overlaid as a dotted density (not a second histogram) so the two
+        ## fits' forecasts read apart rather than obscuring one another.
+        if !isnothing(indiv) && !isempty(indiv) && length(unique(indiv)) > 1
+            density!(ax, indiv; color = (:black, 0.0),
+                strokecolor = :black, strokewidth = 2, linestyle = :dot)
+            any_indiv = true
+        end
         vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
-    for (j, (ccol, ncol, name, colour, obs_cum, obs_new)) in enumerate(streams)
-        panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour)
-        panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour)
+    for (j, stream_entry) in enumerate(streams)
+        ccol, ncol, name, colour, obs_cum, obs_new, indiv_new = stream_entry
+        indiv_cum = isnothing(indiv_new) ? nothing :
+                    indiv_new .+ (obs_cum - obs_new)
+        panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour,
+            indiv_cum)
+        panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour,
+            indiv_new)
+    end
+    if any_indiv
+        joint_marker = CairoMakie.PolyElement(; color = (:grey, 0.7))
+        indiv_marker = CairoMakie.LineElement(; color = :black,
+            linestyle = :dot, linewidth = 2)
+        CairoMakie.Legend(fig[0, 1:ncols], [joint_marker, indiv_marker],
+            ["joint", "individual"]; orientation = :horizontal,
+            framevisible = false, tellwidth = false)
     end
     return fig
 end
