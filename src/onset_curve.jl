@@ -172,21 +172,35 @@ dates' levels are given up along with their noise, so the stream informs the
 onset curve over the trailing four weeks only, not over the whole epidemic.
 
 Returns `(; onset_days, report_days, prev_report_days, increments,
-last_total)`: the first four are length-matched `Vector{Int}`s (1-based
-grid day-indices for the first three, the observed increment for the
-fourth) ready for [`onset_reporting_model`](@ref), and `last_total` is the
-cumulative confirmed total of the most recent in-cutoff vintage (a
-convenience scalar for stream-comparison plots), or `missing` when no
-vintage survives. A missing `path`, or a manifest with no in-cutoff
-vintage, returns the same empty, `missing`-total shape, so the stream
-degrades to a no-op rather than throwing.
+total_days, total_counts, last_total)`. The first four are length-matched
+`Vector{Int}`s (1-based grid day-indices for the first three, the observed
+increment for the fourth) ready for [`onset_reporting_model`](@ref).
+`total_days`/`total_counts` are the per-vintage cumulative confirmed total
+printed by each surviving vintage, keyed on its report day: the same
+`(days, counts)` shape every other stream's history carries, so the
+reported-onset total can be scored like any other observed series (see
+`forecast_onsets`). It is built from every printed bar of a vintage, not
+from the scored cells, which cover only the trailing `horizon` window.
+`last_total` is the final entry of `total_counts` (a convenience scalar for
+stream-comparison plots), or `missing` when no vintage survives.
+
+The per-vintage totals are NOT monotone across vintages: the ≈4%
+per-scan level error means a later scan can read a smaller total than an
+earlier one even though late reporting only ever adds cases. Consumers
+that need a non-decreasing series must say what they do with a fall
+rather than assume it cannot happen.
+
+A missing `path`, or a manifest with no in-cutoff vintage, returns the
+same empty, `missing`-total shape, so the stream degrades to a no-op
+rather than throwing.
 """
 function load_onset_curve(path::AbstractString;
         cutoff::Date, seeding::Date,
         max_delay::Integer = ONSET_REPORT_MAX_DELAY,
         horizon::Integer = max_delay)
     noop = (; onset_days = Int[], report_days = Int[],
-        prev_report_days = Int[], increments = Int[], last_total = missing)
+        prev_report_days = Int[], increments = Int[],
+        total_days = Int[], total_counts = Int[], last_total = missing)
     isfile(path) || return noop
 
     snaps = filter(b -> b.report_date <= cutoff,
@@ -233,7 +247,12 @@ function load_onset_curve(path::AbstractString;
             push!(increments, cur - prev)
         end
     end
-    last_total = sum(values(snaps[end].onsets))
+    ## Per-vintage cumulative confirmed total, over every printed bar rather
+    ## than the scored cells: the scored window covers only the trailing
+    ## `horizon` days, so summing the cells would give a rolling partial sum
+    ## instead of the total the figure reports.
+    total_days = [_idx(snap.report_date) for snap in snaps]
+    total_counts = [sum(values(snap.onsets)) for snap in snaps]
     return (; onset_days, report_days, prev_report_days, increments,
-        last_total)
+        total_days, total_counts, last_total = total_counts[end])
 end

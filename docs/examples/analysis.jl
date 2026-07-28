@@ -2486,6 +2486,68 @@ diagnostics_table( #hide
 # [one-week-ahead forecast results](@ref "One-week-ahead forecast results")
 # below.
 #
+# ##### Symptom-onset nowcast and forecast
+#
+# The symptom-onset stream is projected differently from every stream above,
+# because the reporting triangle lets us separate two things the other
+# streams cannot tell apart: cases whose symptoms have already begun but
+# whose report has not yet arrived, and cases whose symptoms have not begun
+# at all. The first is a nowcast, the second a forecast, and a count of
+# "cases still to come" that mixes them is not interpretable.
+#
+# The separation comes from the same cumulative reported proportion
+# $F(u, \delta)$ the likelihood is built on
+# (see [symptom-onset reporting delay](@ref "Symptom-onset reporting
+# delay")). The expected reported total as of day $a$ is
+#
+# ```math
+# S(a) = \sum_{u \le a} \text{onsets}_u\, F(u,\, a - u),
+# ```
+#
+# so at the cut-off $T$ the triangle should have printed $S(T)$ while
+# $\sum_{u \le T} \text{onsets}_u$ symptom onsets have actually happened.
+# Their difference is the nowcast: onsets already in the population but not
+# in the figure. Not all of it will ever be reported, because $F$ is
+# deliberately not made to reach one and carries ascertainment as well as
+# delay, so this difference is the reporting backlog and the never-ascertained
+# cases together, not a backlog alone.
+#
+# Splitting $S(T + h) - S(T)$ at the cut-off splits the coming week the same
+# way:
+#
+# ```math
+# \underbrace{\sum_{u \le T} \text{onsets}_u \bigl(F(u,\, T + h - u) -
+#     F(u,\, T - u)\bigr)}_{\text{already happened, reported this week}}
+# \; + \;
+# \underbrace{\sum_{T < u \le T+h} \text{onsets}_u\, F(u,\, T + h -
+#     u)}_{\text{not yet happened}} .
+# ```
+#
+# Onsets past the cut-off are projected under the same evolving growth-rate
+# path the other streams use, and the calendar-time effect $\gamma$ is held
+# flat at its last fitted value across the horizon, the assumption any
+# nowcast makes about reporting behaviour continuing.
+#
+# We score the sum of the two terms, the new reported count the triangle
+# should add over the horizon, and not the triangle's cumulative level. Every
+# vintage rereads the whole figure, so its total moves both from genuine late
+# reporting and from the roughly 4% per-scan level error: in the current data
+# the printed total falls between consecutive vintages more than once, which
+# late reporting cannot produce. Scoring the level would charge the forecast
+# for a rescan of cases it had already predicted, and would count the same
+# revision again at every later horizon. On the incident basis each revision
+# enters exactly one scored window. This is the same argument that keeps the
+# other cumulative streams out of the scored archive, applied to a stream
+# whose revisions are larger and partly artefactual.
+#
+# The interval on that increment is dominated by digitisation rather than by
+# epidemic uncertainty: at a total of a couple of thousand cases the
+# per-scan level term alone is worth tens of cases, well above the counting
+# variation of a week's new reports. The onset forecast is therefore worth
+# more as a check that the fitted delay and ascertainment reproduce the next
+# vintage than as a case-count prediction, and its scores should be read that
+# way.
+#
 # Each release now saves its forecast as an asset so it can later be scored
 # against what is observed.
 # Earlier releases showed a forecast but did not store it, so those forecasts
@@ -4061,6 +4123,115 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 
 forecast_flows_fig #hide
 
+# ### Symptom-onset nowcast and forecast results
+#
+# The onset stream's projection, built as described in the methods
+# [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and
+# forecast"). The table reads top to bottom as the nowcast first and the
+# forecast second, and the two must not be added together: the first three
+# rows describe the state of the outbreak at the cut-off, the next three the
+# coming week.
+#
+# The distinction the table exists to make is between cases that are not yet
+# reported and cases that have not yet happened. The first is knowable now
+# and is what the reporting triangle buys us; the second is a projection and
+# carries the reproduction number's uncertainty. A count of "cases still to
+# come" that mixes the two is not a quantity anyone can act on.
+#
+# One row deserves care. "Onsets not yet reported at T" is not a backlog that
+# will all arrive: the fitted hazard's asymptote is this stream's
+# ascertainment, and it does not reach one, so this row holds the reporting
+# backlog and the cases the surveillance system will never confirm, together.
+# The "reports this week of onsets before T" row is the part of it the coming
+# week should actually clear, and is the smaller number.
+
+#md # ```@raw html
+#md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
+#md # ```
+
+## The triangle's own grid, recomputed from the observations exactly as
+## `onset_reporting_model` derives it, since it is data rather than chain
+## contents. `_onset_grid_start`/`_onset_grid_end` are already built for the
+## reporting-delay section above and reused here.
+onset_forecast = forecast_onsets(chn_joint;
+    grid_start = _onset_grid_start, grid_end = _onset_grid_end,
+    n = obs.n, horizon = 7,
+    obs_value = something(obs.onset_curve_history.last_total, 0));
+onset_forecast_summary = onset_forecast_table(onset_forecast);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset nowcast and forecast summary table</summary>
+#md # ```
+
+onset_forecast_summary #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The figure splits the coming week's new onset reports into the two
+# components: reports of onsets that had already happened by the cut-off
+# (the nowcast made observable) and reports of onsets still to come. The
+# right panel puts the nowcast itself on the same axes, the onsets that have
+# happened against the share of them the triangle has printed.
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset nowcast and forecast plot</summary>
+#md # ```
+
+onset_forecast_fig = let
+    fig = CairoMakie.Figure(; size = (960, 420))
+    ax1 = CairoMakie.Axis(fig[1, 1];
+        title = "New onset reports over the coming week",
+        ylabel = "cases", xticks = (1:3,
+            ["already happened", "not yet happened", "total"]),
+        xticklabelrotation = π / 12)
+    for (i, d) in enumerate((onset_forecast.onset_reports_backfill,
+        onset_forecast.onset_reports_future,
+        Float64.(onset_forecast.onset_reports_new)))
+        s = posterior_summary(d)
+        CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo90], [s.hi90];
+            color = :mediumpurple, linewidth = 3)
+        CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo60], [s.hi60];
+            color = :mediumpurple, linewidth = 8)
+        CairoMakie.scatter!(ax1, [Float64(i)], [quantile(d, 0.5)];
+            color = :black, markersize = 9)
+    end
+    ax2 = CairoMakie.Axis(fig[1, 2];
+        title = "Symptom onsets by the cut-off",
+        ylabel = "cases", xticks = (1:3,
+            ["onsets to date", "reported by T", "not yet reported"]),
+        xticklabelrotation = π / 12)
+    for (i, d) in enumerate((onset_forecast.onsets_to_date,
+        onset_forecast.onset_reports_to_date,
+        onset_forecast.onsets_unreported))
+        s = posterior_summary(d)
+        CairoMakie.rangebars!(ax2, [Float64(i)], [s.lo90], [s.hi90];
+            color = :seagreen, linewidth = 3)
+        CairoMakie.rangebars!(ax2, [Float64(i)], [s.lo60], [s.hi60];
+            color = :seagreen, linewidth = 8)
+        CairoMakie.scatter!(ax2, [Float64(i)], [quantile(d, 0.5)];
+            color = :black, markersize = 9)
+    end
+    ## The digitised total the "reported by T" bar is a model of, so the
+    ## reader can see the fitted reported level against the figure itself.
+    ismissing(obs.onset_curve_history.last_total) ||
+        CairoMakie.hlines!(ax2,
+            [Float64(obs.onset_curve_history.last_total)];
+            color = :black, linestyle = :dash)
+    fig
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_forecast_fig #hide
+
 # ## Saving results
 #
 # The tables above are written to an `output/` directory at the repo
@@ -4142,7 +4313,10 @@ forecast_runs = [(h,
                          obs_deaths = obs.total_deaths,
                          obs_confirmed = obs.confirmed_cases,
                          obs_confirmed_deaths = obs.confirmed_deaths,
-                         obs_recovered = obs.recovered_cases))
+                         obs_recovered = obs.recovered_cases,
+                         grid_n = obs.n,
+                         onset_grid_start = _onset_grid_start,
+                         onset_grid_end = _onset_grid_end))
                  for h in forecast_horizons]
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
@@ -4160,14 +4334,25 @@ frozen_forecast_fits = unique(f -> f.o.cutoff,
     [frozen_results; frozen_by_cutoff[chamla_cutoff]; frozen_lastweek])
 frozen_forecast_archive = DataFrame(made_date = Date[], horizon = Int[],
     target_date = Date[], stream = String[], draw = Int[], value = Float64[])
+## The onset grid belongs to the triangle each frozen fit actually saw, not
+## to the live one: the May cut-offs predate the digitised figure entirely,
+## so their grid is empty and the onset block is simply absent for them.
+function _frozen_onset_grid(o)
+    isempty(o.onset_curve_history.onset_days) && return (nothing, nothing)
+    gs = minimum(o.onset_curve_history.onset_days)
+    return (gs, max(maximum(o.onset_curve_history.report_days), gs))
+end
 for f in frozen_forecast_fits
+    _fgs, _fge = _frozen_onset_grid(f.o)
     runs = [(h,
                 forecast_reported(f.chn; horizon = h,
                     obs_cases = f.o.reported_cases,
                     obs_deaths = f.o.total_deaths,
                     obs_confirmed = f.o.confirmed_cases,
                     obs_confirmed_deaths = f.o.confirmed_deaths,
-                    obs_recovered = f.o.recovered_cases))
+                    obs_recovered = f.o.recovered_cases,
+                    grid_n = f.o.n,
+                    onset_grid_start = _fgs, onset_grid_end = _fge))
             for h in forecast_horizons]
     append!(frozen_forecast_archive,
         forecast_archive(runs; made_date = f.o.cutoff, thin = 5))
@@ -4189,6 +4374,11 @@ _rt_walk_start_joint = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
 ## anchors on.
 _iso_at_cutoff = isempty(obs.isolation_history.counts) ? 0 :
                  obs.isolation_history.counts[end]
+## The reporting triangle's own cumulative total at the cut-off. It anchors
+## the reported quantity rather than changing it: the onset forecast is the
+## INCREMENT this total should add over the horizon, not the level (see the
+## methods section on the nowcast and forecast).
+_onset_at_cutoff = something(obs.onset_curve_history.last_total, 0)
 stream_fits = [
     (; fit = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint,
@@ -4197,7 +4387,8 @@ stream_fits = [
             (:confirmed_cases, "confirmed cases", obs.confirmed_cases),
             (:confirmed_deaths, "confirmed deaths", obs.confirmed_deaths),
             (:isolation_beds, "isolation beds", _iso_at_cutoff),
-            (:exports, "exports", obs.exported_cases)]),
+            (:exports, "exports", obs.exported_cases),
+            (:onset_reports, "onset reports", _onset_at_cutoff)]),
     (; fit = "cases", chn = chn_cases, rt_start = 1, rt_walk_start = 1,
         streams = [(:reported_cases, "reported cases", obs.reported_cases)]),
     (; fit = "deaths", chn = chn_deaths, rt_start = 1, rt_walk_start = 1,
@@ -4213,12 +4404,8 @@ stream_fits = [
         streams = [(:isolation_beds, "isolation beds", _iso_at_cutoff)]),
     (; fit = "exports", chn = chn_exports, rt_start = 1, rt_walk_start = 1,
         streams = [(:exports, "exports", obs.exported_cases)]),
-    ## The onsets fit contributes its reproduction number and outbreak size
-    ## to the release assets but forecasts nothing: `forecast_stream` grows
-    ## an observed cut-off total forward, and the onset triangle's own total
-    ## is a digitised reading of a figure rather than a reported count.
     (; fit = "onsets", chn = chn_onsets, rt_start = 1, rt_walk_start = 1,
-        streams = Tuple{Symbol, String, Int}[])
+        streams = [(:onset_reports, "onset reports", _onset_at_cutoff)])
 ]
 
 ## Cut-off reproduction number per fit. The joint exposes it as `R_T`; the
@@ -4276,9 +4463,13 @@ stream_forecasts = DataFrame(made_date = Date[], horizon = Int[],
     fit = String[])
 for f in stream_fits, (stream, label, obs_value) in f.streams,
     h in forecast_horizons
+    ## The onset grid is ignored by every other stream, so it is passed
+    ## unconditionally rather than branching the loop on the stream name.
     _vals = forecast_stream(f.chn, stream; horizon = h,
         obs_value = obs_value, n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start)
+        rt_start = f.rt_start, rt_walk_start = f.rt_walk_start,
+        onset_grid_start = _onset_grid_start,
+        onset_grid_end = _onset_grid_end)
     for (d, i) in enumerate(1:stream_thin:length(_vals))
         push!(stream_forecasts, (obs.cutoff, h, obs.cutoff + Day(h), label,
             d, Float64(_vals[i]), f.fit))

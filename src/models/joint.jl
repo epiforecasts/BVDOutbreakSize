@@ -25,8 +25,13 @@
     ## [`bvd_joint`](@ref), so these surface bare in each. `cumulative` is the
     ## renewal `cumsum` already computed by [`infection_model`](@ref) (no
     ## recompute), and `C_T` its cut-off value (`cumulative[n]`).
+    ## `cumulative_onsets` is here rather than in [`bvd_joint`](@ref) so a
+    ## single-stream fit carries the latent onset trajectory too: the onset
+    ## nowcast ([`forecast_onsets`](@ref)) reads its increments, and the
+    ## onsets-only fit is exactly the one that has no other route to them.
     cumulative_infections := infection_state.cumulative
     C_T := infection_state.C_T
+    cumulative_onsets := cumsum(onset_state.onsets)
     return (; infection_state, onsets = onset_state.onsets,
         incubation_pmf = onset_state.incubation_pmf)
 end
@@ -256,9 +261,11 @@ Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the same un-prefixed name [`bvd_joint`](@ref)
 uses, so the two carry one key and can be compared directly (see
 `expected_confirmed_T` on [`confirmed_only_model`](@ref) for the
-precedent). It is not a forecast target: [`forecast_stream`](@ref) grows an
-observed cut-off total forward, and this stream's total is a digitised
-reading of a figure rather than a reported count.
+precedent). With the shared `cumulative_onsets` trajectory from `_latent`
+that is everything [`forecast_onsets`](@ref) needs, so this fit nowcasts
+and forecasts the onset stream like any other, scored on the reported
+increment rather than on the digitised level (see
+[`forecast_stream`](@ref)).
 """
 @model function onsets_only_model(n::Integer;
         onset_curve_history = (; onset_days = Int[], report_days = Int[],
@@ -707,9 +714,9 @@ death-confirmation positivity (`death_confirmation`).
     ## series (onsets convolved with the onset-to-death delay), NOT the
     ## fitted total, so it stays smooth like infections and onsets. The
     ## additive non-BVD background is a daily random walk and belongs to the
-    ## observation side, not this latent trajectory. `cumulative_infections`
-    ## and `C_T` are exposed once by the shared `_latent` submodel above.
-    cumulative_onsets := cumsum(onsets)
+    ## observation side, not this latent trajectory. `cumulative_infections`,
+    ## `cumulative_onsets` and `C_T` are exposed once by the shared `_latent`
+    ## submodel above.
     cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
     ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
     ## the per-window tested-positive probability applied to the modelled,
