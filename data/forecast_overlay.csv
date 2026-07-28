@@ -15,14 +15,6 @@ results-v1.5.0 (backfill),2026-06-10,confirmed cases,21,2026-07-01,baseline,784.
 results-v1.5.0 (backfill),2026-06-10,confirmed cases,21,2026-07-01,joint,784.0,1991.5,1053.65,3147.05,307.8,5298.2,0.0,10617.8
 results-v1.5.0 (backfill),2026-06-10,confirmed cases,28,2026-07-08,baseline,1116.0,685.0,633.0,753.35,564.0,850.4,427.5,984.2
 results-v1.5.0 (backfill),2026-06-10,confirmed cases,28,2026-07-08,joint,1116.0,2994.5,1466.5,5175.1,558.2,9424.4,0.0,35573.6
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,7,2026-06-28,baseline,226.0,234.18,197.49,269.89,155.8,309.2,60.73,382.05
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,7,2026-06-28,joint,226.0,0.0,0.0,0.0,0.0,0.0,0.0,731.6
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,14,2026-07-05,baseline,576.0,485.0,430.69,535.42,376.4,600.35,271.71,715.88
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,14,2026-07-05,joint,576.0,0.0,0.0,0.0,0.0,164.2,0.0,3611.15
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,21,2026-07-12,baseline,915.0,723.56,674.84,777.35,598.85,849.9,478.23,976.58
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,21,2026-07-12,joint,915.0,0.0,0.0,0.0,0.0,412.6,0.0,27895.4
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,28,2026-07-19,baseline,1375.0,949.0,881.29,1020.28,799.27,1111.27,674.22,1229.06
-results-v1.6.0 (backfill),2026-06-21,confirmed cases,28,2026-07-19,joint,1375.0,0.0,0.0,0.0,0.0,1925.4,0.0,484742.4
 results-v1.7.0 (backfill),2026-07-01,confirmed cases,7,2026-07-08,baseline,332.0,297.0,266.3,332.96,223.96,382.3,130.28,458.87
 results-v1.7.0 (backfill),2026-07-01,confirmed cases,7,2026-07-08,joint,332.0,601.5,466.0,708.5,354.6,975.4,217.65,1430.35
 results-v1.7.0 (backfill),2026-07-01,confirmed cases,14,2026-07-15,baseline,664.0,559.22,498.77,609.81,442.51,676.37,333.23,811.59
@@ -53,14 +45,6 @@ results-v1.5.0 (backfill),2026-06-10,confirmed deaths,21,2026-07-01,baseline,316
 results-v1.5.0 (backfill),2026-06-10,confirmed deaths,21,2026-07-01,joint,316.0,352.0,158.3,659.7,52.8,1109.0,0.0,2874.5
 results-v1.5.0 (backfill),2026-06-10,confirmed deaths,28,2026-07-08,baseline,489.0,133.0,111.0,154.35,87.8,187.0,42.85,218.0
 results-v1.5.0 (backfill),2026-06-10,confirmed deaths,28,2026-07-08,joint,489.0,678.0,324.6,1107.85,126.8,1914.8,0.0,5778.4
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,7,2026-06-28,baseline,93.0,74.65,63.0,86.0,50.24,97.2,30.95,121.76
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,7,2026-06-28,joint,93.0,0.0,0.0,0.0,0.0,9.6,0.0,282.1
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,14,2026-07-05,baseline,254.0,162.65,146.0,177.35,129.3,196.0,98.27,226.05
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,14,2026-07-05,joint,254.0,0.0,0.0,0.0,0.0,53.2,0.0,1024.65
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,21,2026-07-12,baseline,452.0,216.5,201.0,234.8,178.0,257.0,134.24,295.44
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,21,2026-07-12,joint,452.0,0.0,0.0,0.0,0.0,82.6,0.0,8615.05
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,28,2026-07-19,baseline,700.0,253.0,235.89,273.11,211.8,303.28,160.29,351.03
-results-v1.6.0 (backfill),2026-06-21,confirmed deaths,28,2026-07-19,joint,700.0,0.0,0.0,0.0,0.0,522.2,0.0,157612.4
 results-v1.7.0 (backfill),2026-07-01,confirmed deaths,7,2026-07-08,baseline,173.0,151.0,140.2,164.34,122.8,177.0,94.9,207.65
 results-v1.7.0 (backfill),2026-07-01,confirmed deaths,7,2026-07-08,joint,173.0,234.0,143.65,362.0,53.8,608.0,0.0,1279.75
 results-v1.7.0 (backfill),2026-07-01,confirmed deaths,14,2026-07-15,baseline,376.0,219.56,199.38,241.11,173.0,265.0,139.77,305.42
@@ -75,14 +59,6 @@ results-v1.9.0 (backfill),2026-07-08,confirmed deaths,7,2026-07-15,baseline,203.
 results-v1.9.0 (backfill),2026-07-08,confirmed deaths,7,2026-07-15,joint,203.0,44.5,0.0,99.35,0.0,153.0,0.0,316.15
 results-v1.9.0 (backfill),2026-07-08,confirmed deaths,14,2026-07-22,baseline,644.0,316.29,297.0,342.48,276.88,376.4,226.89,421.08
 results-v1.9.0 (backfill),2026-07-08,confirmed deaths,14,2026-07-22,joint,644.0,211.0,153.65,311.0,64.4,420.6,0.0,799.0
-results-v1.6.0 (backfill),2026-06-21,isolation beds,7,2026-06-28,baseline,502.0,371.0,347.0,399.0,316.0,426.2,251.79,498.25
-results-v1.6.0 (backfill),2026-06-21,isolation beds,7,2026-06-28,joint,502.0,227.0,181.95,285.35,118.6,356.4,34.0,435.0
-results-v1.6.0 (backfill),2026-06-21,isolation beds,14,2026-07-05,baseline,646.0,365.5,331.0,407.27,297.07,446.4,195.85,534.04
-results-v1.6.0 (backfill),2026-06-21,isolation beds,14,2026-07-05,joint,646.0,135.5,75.0,224.4,25.0,420.0,0.95,440.05
-results-v1.6.0 (backfill),2026-06-21,isolation beds,21,2026-07-12,baseline,736.0,377.5,333.85,417.46,273.95,483.29,164.74,575.01
-results-v1.6.0 (backfill),2026-06-21,isolation beds,21,2026-07-12,joint,736.0,83.5,29.0,182.7,2.0,426.2,0.0,444.0
-results-v1.6.0 (backfill),2026-06-21,isolation beds,28,2026-07-19,baseline,734.0,373.11,315.96,418.27,254.8,489.6,143.98,618.3
-results-v1.6.0 (backfill),2026-06-21,isolation beds,28,2026-07-19,joint,734.0,38.5,7.0,154.05,0.0,429.0,0.0,445.05
 results-v1.7.0 (backfill),2026-07-01,isolation beds,7,2026-07-08,baseline,764.0,643.47,611.06,675.54,573.84,715.15,510.96,780.19
 results-v1.7.0 (backfill),2026-07-01,isolation beds,7,2026-07-08,joint,764.0,636.0,621.0,647.35,605.0,661.2,561.95,693.05
 results-v1.7.0 (backfill),2026-07-01,isolation beds,14,2026-07-15,baseline,725.0,639.32,602.42,679.81,537.02,742.09,457.54,824.94
@@ -97,14 +73,6 @@ results-v1.9.0 (backfill),2026-07-08,isolation beds,7,2026-07-15,baseline,725.0,
 results-v1.9.0 (backfill),2026-07-08,isolation beds,7,2026-07-15,joint,725.0,800.0,784.65,816.7,762.8,835.0,700.9,870.0
 results-v1.9.0 (backfill),2026-07-08,isolation beds,14,2026-07-22,baseline,722.0,766.31,707.08,817.34,652.31,859.29,561.05,948.27
 results-v1.9.0 (backfill),2026-07-08,isolation beds,14,2026-07-22,joint,722.0,800.0,786.0,820.0,762.8,836.2,668.8,869.05
-results-v1.6.0 (backfill),2026-06-21,recovered,7,2026-06-28,baseline,66.0,62.83,52.0,72.12,42.27,81.73,22.65,102.02
-results-v1.6.0 (backfill),2026-06-21,recovered,7,2026-06-28,joint,66.0,0.0,0.0,0.0,0.0,41.6,0.0,173.45
-results-v1.6.0 (backfill),2026-06-21,recovered,14,2026-07-05,baseline,161.0,94.0,79.88,107.45,64.34,121.09,39.64,148.76
-results-v1.6.0 (backfill),2026-06-21,recovered,14,2026-07-05,joint,161.0,0.0,0.0,0.0,0.0,35.2,0.0,541.25
-results-v1.6.0 (backfill),2026-06-21,recovered,21,2026-07-12,baseline,221.0,110.67,98.2,124.23,76.8,140.47,45.11,179.39
-results-v1.6.0 (backfill),2026-06-21,recovered,21,2026-07-12,joint,221.0,0.0,0.0,0.0,0.0,105.6,0.0,3862.6
-results-v1.6.0 (backfill),2026-06-21,recovered,28,2026-07-19,baseline,357.0,113.34,95.08,129.89,72.21,152.66,37.26,183.72
-results-v1.6.0 (backfill),2026-06-21,recovered,28,2026-07-19,joint,357.0,0.0,0.0,0.0,0.0,306.2,0.0,105978.25
 results-v1.7.0 (backfill),2026-07-01,recovered,7,2026-07-08,baseline,82.0,76.0,65.22,86.45,51.96,96.68,34.56,116.25
 results-v1.7.0 (backfill),2026-07-01,recovered,7,2026-07-08,joint,82.0,115.0,72.0,176.0,40.0,309.6,8.0,729.4
 results-v1.7.0 (backfill),2026-07-01,recovered,14,2026-07-15,baseline,177.0,135.22,120.41,149.94,102.63,167.02,73.61,196.83
