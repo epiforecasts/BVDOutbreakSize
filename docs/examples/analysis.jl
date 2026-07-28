@@ -4191,11 +4191,12 @@ onset_forecast_summary #hide
 
 onset_forecast_fig = let
     fig = CairoMakie.Figure(; size = (960, 420))
+    ## Two-line tick labels rather than rotated ones: the leftmost rotated
+    ## label overhangs the axis and is clipped at the figure edge.
     ax1 = CairoMakie.Axis(fig[1, 1];
         title = "New onset reports over the coming week",
         ylabel = "cases", xticks = (1:3,
-            ["already happened", "not yet happened", "total"]),
-        xticklabelrotation = π / 12)
+            ["already\nhappened", "not yet\nhappened", "total"]))
     for (i, d) in enumerate((onset_forecast.onset_reports_backfill,
         onset_forecast.onset_reports_future,
         Float64.(onset_forecast.onset_reports_new)))
@@ -4210,8 +4211,7 @@ onset_forecast_fig = let
     ax2 = CairoMakie.Axis(fig[1, 2];
         title = "Symptom onsets by the cut-off",
         ylabel = "cases", xticks = (1:3,
-            ["onsets to date", "reported by T", "not yet reported"]),
-        xticklabelrotation = π / 12)
+            ["onsets\nto date", "reported\nby T", "not yet\nreported"]))
     for (i, d) in enumerate((onset_forecast.onsets_to_date,
         onset_forecast.onset_reports_to_date,
         onset_forecast.onsets_unreported))
