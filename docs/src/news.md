@@ -34,6 +34,23 @@ Changes since v1.9.0.
 
 ### Model
 
+- Made the digitised symptom-onset reporting triangle a **fitted stream**
+  (`onset_reporting_model`), scored on its between-vintage increments
+  through a discrete reporting-delay hazard that is nonparametric over the
+  delay and drifts over calendar time. Ascertainment is the hazard's own
+  asymptote rather than a separate parameter block. Fitted by `bvd_joint`
+  alongside every other stream and by a new `onsets_only_model`
+  single-stream composer.
+- Added a symptom-onset **nowcast and forecast** (`forecast_onsets`),
+  splitting the coming week's new onset reports into the part arising from
+  onsets that have already happened but are not yet reported and the part
+  from onsets that have not yet happened. The latent onset trajectory
+  `cumulative_onsets` moved from `bvd_joint` to the shared `_latent`
+  submodel so every composer carries it. The reported increment is scored
+  across releases as the `onset reports` stream; the triangle's cumulative
+  level is deliberately not scored, since every vintage rereads the whole
+  figure and its ≈4% per-scan level error revises the total both ways.
+
 - De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
   log-density path (`confirmed_positivity_link = :composition`): extracted
   the composition-positivity loop to a plain `composition_positivity()`

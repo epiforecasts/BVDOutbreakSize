@@ -690,3 +690,266 @@ end
     @test length(et) == 12
     @test all(isfinite, et)
 end
+
+## --- Per-vintage totals ------------------------------------------------
+
+@testitem "load_onset_curve reports each vintage's printed total" begin
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    ## Three distinct vintages. The third reads a SMALLER total than the
+    ## second, which late reporting cannot produce and the per-scan level
+    ## error can: the totals are recorded as read rather than made
+    ## monotone.
+    write(path, """
+    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+    001,2026-03-05,2026-03-01,2,0,2
+    001,2026-03-05,2026-03-02,1,0,1
+    002,2026-03-07,2026-03-01,4,0,4
+    002,2026-03-07,2026-03-02,3,0,3
+    002,2026-03-07,2026-03-03,2,0,2
+    003,2026-03-09,2026-03-01,4,0,4
+    003,2026-03-09,2026-03-02,2,0,2
+    003,2026-03-09,2026-03-03,2,0,2
+    """)
+    oc = load_onset_curve(path; cutoff = Date("2026-03-20"),
+        seeding = Date("2026-03-01"))
+    ## Seeding day is grid day 1, so 5/7/9 March are grid days 5/7/9.
+    @test oc.total_days == [5, 7, 9]
+    @test oc.total_counts == [3, 9, 8]
+    @test oc.last_total == 8
+end
+
+@testitem "load_onset_curve totals honour the cut-off and the no-op path" begin
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    write(path, """
+    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+    001,2026-03-05,2026-03-01,2,0,2
+    002,2026-03-09,2026-03-01,5,0,5
+    """)
+    ## The 9 March vintage is past the cut-off, so neither its cells nor its
+    ## total survive.
+    oc = load_onset_curve(path; cutoff = Date("2026-03-06"),
+        seeding = Date("2026-03-01"))
+    @test oc.total_days == [5]
+    @test oc.total_counts == [2]
+    @test oc.last_total == 2
+
+    noop = load_onset_curve(joinpath(dir, "absent.csv");
+        cutoff = Date("2026-03-06"), seeding = Date("2026-03-01"))
+    @test isempty(noop.total_days)
+    @test isempty(noop.total_counts)
+    @test ismissing(noop.last_total)
+end
+
+## --- Hazard reconstruction and the onset nowcast/forecast ---------------
+
+@testitem "reconstruct_onset_hazard rebuilds the fitted cut-off total" begin
+    ## The reconstruction is exact rather than approximate: feeding it back
+    ## into `onset_report_expected_total` with the chain's own onset
+    ## trajectory must reproduce the `expected_onset_reported_T` the model
+    ## computed for that same draw. A wrong grid, a wrong knot count or a
+    ## mis-scaled walk all break this and nothing else in the report would.
+    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
+                           onset_report_expected_total
+    using Turing: Prior, sample
+
+    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+    n = 40
+    chn = sample(onsets_only_model(n; onset_curve_history = oc), Prior(),
+        20; progress = false)
+
+    grid_start = minimum(oc.onset_days)
+    grid_end = maximum(oc.report_days)
+    hz = reconstruct_onset_hazard(chn; grid_start, grid_end)
+    daily = [(v = collect(t); vcat(v[1], diff(v)))
+             for t in vec(collect(chn[:cumulative_onsets]))]
+    et = vec(Array(chn[:expected_onset_reported_T]))
+
+    @test length(hz.logit_h0) == 20
+    @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
+    rebuilt = [onset_report_expected_total(daily[i], hz.logit_h0[i],
+                   hz.γ[i], grid_start, n) for i in 1:20]
+    @test all(isapprox.(rebuilt, et; rtol = 1e-8))
+end
+
+@testitem "reconstruct_onset_hazard rejects a grid the chain was not fitted on" begin
+    using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard
+    using Turing: Prior, sample
+
+    oc = (; onset_days = [10, 11, 12, 13], report_days = [15, 15, 15, 15],
+        prev_report_days = [0, 0, 0, 0], increments = [2, 3, 1, 0])
+    chn = sample(onsets_only_model(40; onset_curve_history = oc), Prior(), 5;
+        progress = false)
+    ## A grid four times as long needs more weekly knots than the chain has
+    ## innovations for, so this is an error rather than a silently short walk.
+    @test_throws ErrorException reconstruct_onset_hazard(chn;
+        grid_start = 10, grid_end = 110)
+end
+
+@testitem "forecast_onsets separates not-yet-reported from not-yet-happened" begin
+    using BVDOutbreakSize: onsets_only_model, forecast_onsets
+    using Turing: Prior, sample
+    using DataFrames: nrow
+    using Statistics: mean
+
+    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+    n = 40
+    chn = sample(
+        onsets_only_model(n; onset_curve_history = oc, breakpoint = 30),
+        Prior(), 100; progress = false)
+    fc = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = n,
+        horizon = 7, obs_value = 18, breakpoint = 30)
+
+    @test nrow(fc) == 100
+    for col in (:onsets_to_date, :onset_reports_to_date, :onsets_unreported,
+        :onsets_new, :onset_reports_backfill, :onset_reports_future,
+        :onset_reports_new, :onset_reports_cum)
+        @test col in propertynames(fc)
+        @test all(isfinite, fc[!, col])
+    end
+    ## Reports to date are a fraction F <= 1 of the onsets to date, so the
+    ## unreported remainder is non-negative by construction.
+    @test all(fc.onsets_unreported .>= 0)
+    @test all(fc.onset_reports_to_date .<= fc.onsets_to_date)
+    ## Both horizon components are non-negative: F is non-decreasing in the
+    ## delay, so a later snapshot never reports fewer of a given onset date.
+    @test all(fc.onset_reports_backfill .>= 0)
+    @test all(fc.onset_reports_future .>= 0)
+    @test all(fc.onset_reports_new .>= 0)
+    @test all(fc.onset_reports_cum .>= 18)
+    ## The scored increment is a replicate of the two components' sum, not a
+    ## degenerate zero: the observation noise is added on top of a live mean.
+    @test any(fc.onset_reports_new .> 0)
+    @test mean(fc.onset_reports_new) > 0
+end
+
+@testitem "forecast_onsets backfill shrinks and future grows with the horizon" begin
+    using BVDOutbreakSize: onsets_only_model, forecast_onsets
+    using Turing: Prior, sample
+    using Statistics: mean
+
+    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
+        Prior(), 200; progress = false)
+    f7 = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 7, breakpoint = 30)
+    f21 = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 21, breakpoint = 30)
+    ## The nowcast is a property of the cut-off, so it does not move with
+    ## the horizon; both horizon components do.
+    @test f7.onsets_to_date == f21.onsets_to_date
+    @test f7.onsets_unreported == f21.onsets_unreported
+    @test mean(f21.onset_reports_backfill) >= mean(f7.onset_reports_backfill)
+    @test mean(f21.onset_reports_future) > mean(f7.onset_reports_future)
+    @test mean(f21.onsets_new) > mean(f7.onsets_new)
+end
+
+@testitem "forecast_stream routes the onset stream through forecast_onsets" begin
+    using BVDOutbreakSize: onsets_only_model, forecast_stream,
+                           forecast_onsets
+    using Turing: Prior, sample
+
+    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+    chn = sample(
+        onsets_only_model(40; onset_curve_history = oc, breakpoint = 30),
+        Prior(), 50; progress = false)
+    got = forecast_stream(chn, :onset_reports; horizon = 7, obs_value = 18,
+        n = 40, breakpoint = 30, onset_grid_start = 10, onset_grid_end = 20)
+    want = forecast_onsets(chn; grid_start = 10, grid_end = 20, n = 40,
+        horizon = 7, breakpoint = 30)
+    @test got == want.onset_reports_new
+    ## The grid is data rather than chain contents, so omitting it is an
+    ## error and never a guess at the triangle's extent.
+    @test_throws ArgumentError forecast_stream(chn, :onset_reports;
+        horizon = 7, obs_value = 18, n = 40, breakpoint = 30)
+end
+
+@testitem "forecast_onsets needs an onset trajectory in the chain" begin
+    using BVDOutbreakSize: forecast_onsets, deaths_only_model
+    using Turing: Prior, sample
+
+    ## A fit with no onset stream carries the shared latent onset trajectory
+    ## (every composer does, via `_latent`) but none of the reporting
+    ## hazard's parameters, so this fails rather than forecasting a
+    ## reporting process the model never fitted.
+    chn = sample(
+        deaths_only_model(33, missing;
+            deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])),
+        Prior(), 5; progress = false)
+    @test_throws Exception forecast_onsets(chn; grid_start = 10,
+        grid_end = 20, n = 33, horizon = 7, breakpoint = 25)
+end
+
+@testitem "forecast_archive carries the onset reporting increment" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_archive
+    using Dates: Date
+
+    fc = DataFrame(onset_reports_new = [10, 12, 14, 9],
+        confirmed_new = [3, 4, 5, 6])
+    arc = forecast_archive([(7, fc)]; made_date = Date("2026-07-25"))
+    @test "onset reports" in arc.stream
+    rows = arc[arc.stream .== "onset reports", :]
+    @test size(rows, 1) == 4
+    @test rows.value == [10.0, 12.0, 14.0, 9.0]
+    @test all(rows.target_date .== Date("2026-08-01"))
+end
+
+@testitem "forecast_reported attaches the onset block only when asked" begin
+    using BVDOutbreakSize: bvd_joint, forecast_reported, forecast_onsets
+    using Turing: Prior, sample
+
+    n = 40
+    oc = (; onset_days = [20, 21, 22, 23, 20, 21, 22, 23, 24],
+        report_days = [25, 25, 25, 25, 30, 30, 30, 30, 30],
+        prev_report_days = [0, 0, 0, 0, 25, 25, 25, 25, 0],
+        increments = [3, 2, 1, 0, 1, 2, 1, 3, 2])
+    model = bvd_joint(n, 2, 18, 905, 0, 27, 50;
+        confirmed_deaths = 5,
+        deaths_history = (; days = [13, 18, 40], counts = [10, 14, 18]),
+        reported_history = (; days = [13, 18, 40], counts = [340, 516, 905]),
+        confirmed_history = (; days = [13, 18, 40], counts = [9, 17, 27]),
+        lab_history = (; days = [18, 40], counts = [30, 50]),
+        onset_curve_history = oc,
+        breakpoint = 30)
+    chn = sample(model, Prior(), 40; progress = false)
+
+    ## The grid is data, so without it the onset block is simply absent and
+    ## the rest of the forecast is unchanged.
+    plain = forecast_reported(chn; horizon = 7, obs_cases = 905,
+        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5)
+    @test !(:onset_reports_new in propertynames(plain))
+
+    withonsets = forecast_reported(chn; horizon = 7, obs_cases = 905,
+        obs_deaths = 18, obs_confirmed = 27, obs_confirmed_deaths = 5,
+        grid_n = n, onset_grid_start = 20, onset_grid_end = 30)
+    @test :onset_reports_new in propertynames(withonsets)
+    @test :onsets_unreported in propertynames(withonsets)
+    @test all(withonsets.onset_reports_new .>= 0)
+    ## `grid_n` is the model cut-off, not the draw count: an onset total
+    ## summed over 40 draws instead of 40 grid days would be a different
+    ## number entirely, so check the block agrees with a direct call.
+    @test withonsets.onsets_to_date ==
+          forecast_onsets(chn; grid_start = 20, grid_end = 30, n = n,
+        horizon = 7).onsets_to_date
+end

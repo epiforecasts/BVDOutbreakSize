@@ -248,12 +248,29 @@ end
 ## `dont suspects`, which sum to the total `isolation_history`). These are
 ## present only once a forecast carries the split, so before then no archive
 ## row bears the label and it is simply never scored.
+##
+## "onset reports" is the digitised symptom-onset triangle's own per-vintage
+## cumulative confirmed total (`onset_report_history`, built by
+## `load_onset_curve`), scored on the incident basis: the new reported count
+## the triangle adds over the horizon window. The level is deliberately not
+## scored. Each vintage rereads the whole figure, so its total is revised
+## both by genuine late reporting and by the ≈4% per-scan level error, and a
+## level score would charge the forecast for a rescan of cases it had
+## already predicted. On the incident basis each week's revision enters
+## exactly one scored window, so the triangle's own vintage structure is
+## scored once rather than compounded — the same argument `forecast_archive`
+## makes for the other cumulative streams, which is why the archive carries
+## `onset_reports_new` and no onset level. A window over which the rescan
+## reads a smaller total floors at zero here, as every incident stream's
+## truth does, and `forecast_onsets` floors its replicate the same way, so
+## the two sides of the score meet the same convention.
 const STREAM_HISTORY = Dict(
     "reported cases" => (:reported_history, :incident),
     "suspected deaths" => (:deaths_history, :incident),
     "confirmed cases" => (:confirmed_history, :incident),
     "confirmed deaths" => (:confirmed_deaths_history, :incident),
     "recovered" => (:recovered_history, :incident),
+    "onset reports" => (:onset_report_history, :incident),
     "isolation beds" => (:isolation_history, :level),
     "treatment beds" => (:treatment_confirmed_incare_history, :level),
     "isolation beds (suspected)" =>
