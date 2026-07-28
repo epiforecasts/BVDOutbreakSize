@@ -45,7 +45,9 @@ suspects`, two prevalence sub-stocks that sum to the total occupancy),
 `tests_received_history`), the digitised symptom-onset reporting-triangle
 increments `onset_curve_history` (from `data/onset_curve_scanned.csv`,
 alongside `path`; see [`load_onset_curve`](@ref) for the dedup, cut-off
-filtering and increment construction),
+filtering and increment construction) together with the same triangle's
+per-vintage cumulative confirmed-by-onset total as `onset_report_history`
+in the usual `(; days, counts)` shape,
 the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
 `who_first_sitrep_days` (days from the first situation report, the
 earliest reported-case vintage, to the cut-off). The intervention
@@ -330,6 +332,13 @@ function load_observations(
     ## `load_onset_curve` for the dedup and increment construction.
     onset_curve_history = load_onset_curve(
         joinpath(dirname(path), "onset_curve_scanned.csv"); cutoff, seeding)
+    ## The same triangle's per-vintage cumulative confirmed-by-onset total,
+    ## restated in the `(; days, counts)` shape every other stream's history
+    ## uses so the reported-onset total is scored by the same machinery. The
+    ## fitted stream never sees this series (it fits the increments); it is
+    ## the observation the onset nowcast/forecast is scored against.
+    onset_report_history = (; days = onset_curve_history.total_days,
+        counts = onset_curve_history.total_counts)
     ## Cut-off scalar from an explicit TOML block, else the final
     ## (most recent) vintage of the matching history. When a `cutoff_date`
     ## freeze is active the explicit TOML scalars (which hold the final,
@@ -391,6 +400,7 @@ function load_observations(
         confirmed_break_gross_deaths = confirmed_break_gross_deaths,
         tests_received_history = tests_received_history,
         onset_curve_history = onset_curve_history,
+        onset_report_history = onset_report_history,
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end
