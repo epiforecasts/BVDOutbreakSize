@@ -824,6 +824,12 @@ end
     ## unreported remainder is non-negative by construction.
     @test all(fc.onsets_unreported .>= 0)
     @test all(fc.onset_reports_to_date .<= fc.onsets_to_date)
+    ## End-to-end check of the whole nowcast path: the reported-to-date
+    ## column is the same sum the model itself exposes as
+    ## `expected_onset_reported_T`, so a wrong hazard reconstruction, grid or
+    ## onset trajectory anywhere between the chain and here breaks this.
+    @test fc.onset_reports_to_date ≈
+          vec(Array(chn[:expected_onset_reported_T]))
     ## Both horizon components are non-negative: F is non-decreasing in the
     ## delay, so a later snapshot never reports fewer of a given onset date.
     @test all(fc.onset_reports_backfill .>= 0)
@@ -949,7 +955,12 @@ end
     ## `grid_n` is the model cut-off, not the draw count: an onset total
     ## summed over 40 draws instead of 40 grid days would be a different
     ## number entirely, so check the block agrees with a direct call.
-    @test withonsets.onsets_to_date ==
-          forecast_onsets(chn; grid_start = 20, grid_end = 30, n = n,
-        horizon = 7).onsets_to_date
+    direct = forecast_onsets(chn; grid_start = 20, grid_end = 30, n = n,
+        horizon = 7)
+    @test withonsets.onsets_to_date == direct.onsets_to_date
+    ## `onsets_new` is a column of both, built the same way from the same
+    ## cut-off rate and growth path. The block keeps `forecast_reported`'s
+    ## rather than overwriting it, so they must agree or one of the two
+    ## constructions has drifted.
+    @test withonsets.onsets_new ≈ direct.onsets_new
 end

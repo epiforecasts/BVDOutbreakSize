@@ -3145,6 +3145,29 @@ surveillance_pair_fig #hide
 # The pair plot summarises the hyperparameters alone, with the prior
 # overlaid; the fitted curves themselves are shown against the digitised
 # data in the snapshot figure further below.
+#
+# The scale slack row is a diagnostic rather than a quantity of interest.
+# Its prior is bounded below at one, because each term in the observation
+# scale is a lower bound on the truth: a bar cannot be read off a raster
+# more precisely than its pixels allow, and a count of newly reported cases
+# carries at least its own counting variation. So a posterior sitting on
+# that bound says the fit would like a tighter likelihood than the figure
+# can support, which is what the onsets-only fit does (its latent curve is
+# pinned by nothing else and bends onto the bars); a posterior well above
+# one says the scale is missing a term. Read it against the two
+# approximations named in `onset_report_scales`: the per-scan level error is
+# treated as independent across the roughly 28 cells drawn from one scan
+# when it is really one shared dilation of that scan's whole figure, and the
+# counting term is Poisson-like with no separate overdispersion parameter.
+# Those two leave different fingerprints. A missing overdispersion parameter
+# grows the shortfall with the cell mean, since a slack multiplier can
+# inflate every cell but cannot change the mean-variance shape. Correlated
+# scan error leaves the individual cells alone and shows up only when cells
+# from one snapshot are summed, where treating a shared error as independent
+# makes the aggregate predictive too narrow. The per-snapshot panel in the
+# [posterior predictive checks](@ref "Posterior predictive checks") is
+# therefore the one to read for the second, and the per-cell coverage for
+# the first.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3160,32 +3183,15 @@ _onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
                   _onset_grid_start :
                   max(maximum(obs.onset_curve_history.report_days),
     _onset_grid_start)
-_onset_nt = max(_onset_grid_end - _onset_grid_start + 1, 1)
-_onset_knots = knot_days(_onset_nt; week = 7, start = 1)
 
-## Rebuild every posterior draw's `logit_h0` (the baseline delay hazard)
-## and `γ` (the report-date calendar walk) from the sampled non-centred
-## innovations the chain actually stores (`η0`, `σ_h0`, `z_h0`, `σ_γ`,
-## `z_γ`), mirroring `onset_report_hazard_model` exactly.
-function _onset_hazard_draws(chn)
-    eta0 = vec(Array(chn[Symbol("onset_report_state.η0")]))
-    sigma_h0 = vec(Array(chn[Symbol("onset_report_state.σ_h0")]))
-    zh0 = [collect(z)
-           for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))]
-    sigma_g = vec(Array(chn[Symbol("onset_report_state.σ_γ")]))
-    zg = [collect(z)
-          for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))]
-    ndraws = length(eta0)
-    nb = length(_onset_knots)
-    logit_h0 = [eta0[i] .+ sigma_h0[i] .* zh0[i] for i in 1:ndraws]
-    gamma = [interpolate_knots(
-                 vcat(0.0, cumsum(sigma_g[i] .* zg[i][1:(nb - 1)])),
-                 _onset_knots, _onset_nt)
-             for i in 1:ndraws]
-    return (; logit_h0, gamma)
-end
-
-_onset_hazard = _onset_hazard_draws(chn_joint)
+## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
+## (the report-date calendar walk), rebuilt from the non-centred
+## innovations the chain stores. `reconstruct_onset_hazard` is the package
+## function the onset forecast also uses, so the hazard plotted here and
+## the one projected forward are the same object rather than two copies of
+## the same reconstruction that could drift apart.
+_onset_hazard = reconstruct_onset_hazard(chn_joint;
+    grid_start = _onset_grid_start, grid_end = _onset_grid_end)
 
 ## A representative onset day (the median scored onset date), so the 7-day
 ## fraction below reflects a typical, not an edge, calendar day.
@@ -3199,11 +3205,11 @@ _onset_7d_fraction = [begin
                           D = length(_onset_hazard.logit_h0[i])
                           f7 = onset_report_cdf(6,
                               _onset_hazard.logit_h0[i],
-                              _onset_hazard.gamma[i], _onset_u_ref,
+                              _onset_hazard.γ[i], _onset_u_ref,
                               _onset_grid_start)
                           fa = onset_report_cdf(D - 1,
                               _onset_hazard.logit_h0[i],
-                              _onset_hazard.gamma[i], _onset_u_ref,
+                              _onset_hazard.γ[i], _onset_u_ref,
                               _onset_grid_start)
                           fa > 0 ? f7 / fa : NaN
                       end
@@ -3218,7 +3224,7 @@ filter!(isfinite, _onset_7d_fraction)
 _onset_ascertainment_draws = Float64[]
 for i in eachindex(_onset_hazard.logit_h0)
     a = onset_report_ascertainment(_onset_hazard.logit_h0[i],
-        _onset_hazard.gamma[i], _onset_grid_start, _onset_grid_end)
+        _onset_hazard.γ[i], _onset_grid_start, _onset_grid_end)
     isempty(a) || push!(_onset_ascertainment_draws, quantile(a, 0.5))
 end
 
@@ -3343,7 +3349,7 @@ _onset_daily_draws = [vcat(v[1], diff(v))
 function _onset_modelled_cumulative(u::Integer, R::Integer)
     return [_onset_daily_draws[i][u] *
             onset_report_cdf(R - u, _onset_hazard.logit_h0[i],
-                _onset_hazard.gamma[i], u, _onset_grid_start)
+                _onset_hazard.γ[i], u, _onset_grid_start)
             for i in eachindex(_onset_daily_draws)]
 end
 
