@@ -1,16 +1,16 @@
 ## Tests for the relative-skill and per-release R0 additions in
-## scripts/score_releases.jl: rel_skill_columns (per-row log-CRPS skill to
-## the persistence baseline) and r0_row (the established initial
+## scripts/score_releases.jl: rel_to_baseline_columns (per-row log-CRPS
+## skill to the persistence baseline) and r0_row (the established initial
 ## reproduction number, exp(rt_state.log_R0)). The comparison against a
 ## stream's individual fit is computed at aggregation time in
 ## src/scoring.jl and is tested there, not here.
 
-@testitem "rel_skill_columns scores to the persistence baseline" begin
+@testitem "rel_to_baseline_columns scores to the persistence baseline" begin
     using Dates: Date
     using DataFrames: DataFrame
 
     ## Load the scorer's functions without its driver (guarded on
-    ## PROGRAM_FILE), so rel_skill_columns can be exercised directly.
+    ## PROGRAM_FILE), so rel_to_baseline_columns can be exercised directly.
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     ## One "confirmed cases" group with baseline, joint and an individual
@@ -25,14 +25,14 @@
         fit = ["baseline", "joint", "confirmed", "joint", "baseline"],
         log_crps = [0.8, 0.2, 0.4, 0.3, 0.6])
 
-    to_base = rel_skill_columns(df)
+    to_base = rel_to_baseline_columns(df)
 
     ## Every row of a group whose baseline was scored gets a baseline skill;
     ## the baseline row itself is 1.0.
     @test to_base == [1.0, 0.25, 0.5, 0.5, 1.0]  # 0.2/0.8, 0.4/0.8, 0.3/0.6
 end
 
-@testitem "rel_skill_columns scores a frozen fit to its own baseline" begin
+@testitem "rel_to_baseline_columns scores a frozen fit to its baseline" begin
     using Dates: Date
     using DataFrames: DataFrame
 
@@ -47,15 +47,36 @@ end
         fit = ["frozen", "baseline"],
         log_crps = [0.3, 0.6])
 
-    to_base = rel_skill_columns(df)
+    to_base = rel_to_baseline_columns(df)
     @test to_base == [0.5, 1.0]  # 0.3/0.6, then the baseline itself
 end
 
-@testitem "rel_skill_cell empties missing, rounds a ratio" begin
+@testitem "rel_to_baseline_columns guards a zero-CRPS baseline" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
-    @test rel_skill_cell(missing) == ""
-    @test rel_skill_cell(0.25) == "0.25"
-    @test rel_skill_cell(1 / 3) == "0.3333"  # rounded to four places
+
+    ## A degenerate baseline row (a perfect point-mass match) must not
+    ## divide a fit's log_crps by zero and write Inf/NaN into the column.
+    df = DataFrame(
+        release = fill("results-vT", 2),
+        made_date = fill(Date(2026, 7, 1), 2),
+        stream = ["confirmed cases", "confirmed cases"],
+        horizon = fill(7, 2),
+        fit = ["baseline", "joint"],
+        log_crps = [0.0, 0.4])
+
+    to_base = rel_to_baseline_columns(df)
+    @test to_base[1] == 1.0  # the baseline row itself is always 1.0
+    @test ismissing(to_base[2])
+end
+
+@testitem "rel_to_baseline_cell empties missing, rounds a ratio" begin
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+    @test rel_to_baseline_cell(missing) == ""
+    @test rel_to_baseline_cell(0.25) == "0.25"
+    @test rel_to_baseline_cell(1 / 3) == "0.3333"  # rounded to four places
 end
 
 @testitem "r0_row summarises exp(log_R0), skips when the column is absent" begin
