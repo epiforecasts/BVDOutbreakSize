@@ -27,7 +27,8 @@ import PairPlots
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
                   lines!, scatter!, band!, linesegments!, scatterlines!
 
-export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
+export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
+       REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,

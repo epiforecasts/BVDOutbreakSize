@@ -86,6 +86,14 @@ using TOML
 
 using BVDOutbreakSize: is_results_release, select_daily_releases
 
+## Values of the `fit` column, which names the model a row's forecast or
+## estimate came from: a per-stream spec id, or one of these three, which
+## the package owns so the plotting fit roles key off the same names.
+## `JOINT_FIT` is also the fit a plain `forecast.csv` carries, that asset
+## predating the per-stream fits. `FROZEN_FIT` is applied at scoring time
+## to `forecast_frozen.csv`, which carries no `fit` column of its own.
+using BVDOutbreakSize: JOINT_FIT, BASELINE_FIT, FROZEN_FIT
+
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
 const FROZEN_FORECAST_ASSET = "forecast_frozen.csv"
@@ -94,17 +102,6 @@ const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
-
-## Values of the `fit` column, which names the model a row's forecast or
-## estimate came from: a spec id, or `baseline` for the persistence
-## baseline, which is no model's output. `joint` is also the fit a plain
-## `forecast.csv` carries, that asset predating the per-stream fits.
-const JOINT_FIT = "joint"
-const BASELINE_FIT = "baseline"
-## The fit label the frozen-fit forecasts (`forecast_frozen.csv`) are scored
-## under. That asset carries no `fit` column (it is the joint model at each
-## frozen cut-off), so the label is applied at scoring time.
-const FROZEN_FIT = "frozen"
 
 ## Release tags whose forecast is excluded from scoring because the
 ## RECONSTRUCTION failed, not because the model performed badly: a chain

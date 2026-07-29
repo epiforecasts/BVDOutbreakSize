@@ -2247,59 +2247,94 @@ diagnostics_table( #hide
 
 # #### Forecast scoring against a persistence baseline
 #
-# Every forecast above, and every past release's saved forecast, is scored
-# with the continuous ranked probability score (CRPS), on both the raw and
-# the log scale (`log_crps`, which downweights the largest counts rather
-# than treating an error of a hundred cases the same at every scale).
-# The CRPS decomposes into the ensemble's own spread (dispersion) and the
-# extra cost of over- or under-predicting the observation, so a fit
-# reading consistently high carries more overprediction than
-# underprediction and the reverse for a fit reading low.
-# Coverage is the share of forecasts whose 50% or 90% predictive interval
-# contained the observation, which should sit near 0.5 and 0.9 for a
-# well-calibrated fit; bias is signed, running from -1 (every forecast too
-# low) to 1 (every forecast too high).
-# A relative skill is the ratio of two fits' mean CRPS over the matched
-# set of forecasts both scored, not a mean of per-forecast ratios, so a
-# comparator that happened to score zero on one forecast cannot make the
-# ratio infinite; a ratio below one beats the comparator.
+# Every forecast above, and every stored forecast from a past release, is
+# scored with the continuous ranked probability score, on the count scale
+# and on a log scale that stops the largest counts dominating.
+# We report the score split into the predictive spread and the cost of
+# reading high or low, the share of observations inside the 50% and 90%
+# predictive intervals, and a bias running from $-1$ when every forecast
+# sits below the observation to $1$ when every one sits above it.
+# Relative skill between fits $A$ and $B$ is
 #
-# The count streams are running cumulative totals, so each is scored on
-# its incidence, the increment between one vintage and the next, rather
-# than the cumulative level; the isolation-bed occupancy is a level and is
-# scored as one.
-# A stream is scored only over the period its own reporting source
-# covers, from the day it was first reported to the day it was last
-# updated: outside that period an unmoved cumulative total is the absence
-# of a series rather than an observed zero, and scoring against it would
-# reward persistence for predicting a number nobody measured.
+# ```math
+# \mathrm{RS}_{A/B} =
+#     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
+#     \tag{42}
+# ```
 #
-# Every scored forecast is also compared against a persistence baseline:
-# the last observed occupancy carried forward unchanged for the isolation
-# bed level, matching the COVID-19 Forecast Hub baseline
-# (`COVIDhub-baseline`) directly, and for a count stream's own increments
-# the observed count over the whole horizon-length window ending at the
-# forecast's cut-off, rather than a single day's change; the streams here
-# are sparse, irregularly-timed cumulative counts, so a single most recent
-# increment would be a noisier centre than that window pooled.
-# Its predictive uncertainty comes from an iterated random walk, day by
-# day out to the forecast horizon, each day's step drawn from how much
-# that same quantity has moved historically in the stream's own reporting
-# record, so the interval widens with the square root of the horizon.
-# The baseline is built from the release's own data vintage, frozen no
-# later than the day the forecast was made, so a correction or backfill
-# that landed after a forecast was made cannot leak into its baseline and
-# make the comparison unfair.
-# That guarantee is exact for forecasts scored at a release's own cut-off,
-# where the vintage snapshot and the forecast's made date are the same
-# day or close to it.
-# For the frozen re-fit evaluation below, made_date is a fixed historical
-# cut-off reused across many later release tags, so it can sit weeks
-# before the snapshot's own cut-off; a correction that landed between
-# made_date and the snapshot's cut-off is already baked into the
-# snapshot and can still reach the frozen baseline.
-# Closing that residual gap would need a made_date-specific vintage
-# manifest for each frozen cut-off, which is not archived.
+# each mean taken over the forecasts both fits scored, so a comparator that
+# happens to score zero on one forecast cannot send the ratio to infinity.
+# A value below one beats the comparator.
+#
+# The count streams are running cumulative totals, so each is scored on its
+# increment over the forecast window rather than on the level it reaches,
+# while bed occupancy is a level and is scored as one.
+# A stream is scored only where its own reporting covers the window, from
+# the day it was first reported to the day it was last updated, since
+# outside that period a cumulative total that has not moved is the absence
+# of a series rather than an observed zero.
+#
+# Each forecast is also compared against a persistence baseline built from
+# the same stream.
+# Write the vintages recorded by the day the forecast was made as dates
+# $d_1 < \dots < d_m$ carrying cumulative values $Y_1, \dots, Y_m$, let
+# $Y(t)$ be the value at the last vintage on or before $t$, and let $t_0$ be
+# the day the forecast was made and $h$ the horizon in days.
+# The baseline centres on the occupancy reached, or on the increment over
+# the preceding window of the same length,
+#
+# ```math
+# \mu =
+# \begin{cases}
+#   Y(t_0), & \text{occupancy}, \\
+#   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
+# \end{cases} \tag{43}
+# ```
+#
+# and takes its spread from the record's own first differences, each
+# rescaled to a one-day step and entered with both signs,
+#
+# ```math
+# S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{44}
+# ```
+#
+# Under a driftless walk of per-day variance $\sigma^2$ a change over $w$
+# days has variance $w \sigma^2$, so dividing by $\sqrt{w}$ puts vintages
+# recorded at different spacings on a common one-day scale, and holding both
+# signs makes the pool mean zero so a record that only rises does not give
+# the walk a direction.
+# One predictive draw iterates the walk to the horizon,
+#
+# ```math
+# \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
+# \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
+#     \tag{45}
+# ```
+#
+# so before the floor it has mean $\mu$ and variance $h \sigma^2$ for
+# $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$, and the interval widens with the
+# square root of the horizon.
+# This follows the COVID-19 Forecast Hub baseline, except that the centre
+# for a count stream pools the whole window rather than the single most
+# recent increment, since these vintages are sparse and irregularly spaced.
+# Fewer than three recorded differences leaves no usable pool and the
+# baseline falls back to a Poisson draw around the centre.
+#
+# The baseline reads only the vintages recorded by the day the forecast was
+# made, from the archived data snapshot the release itself was built on, so
+# no later correction or backfill reaches it.
+# For a forecast made at a release's own cut-off that snapshot is the one
+# the forecast was made from and the guarantee is exact.
+# The frozen re-fits below forecast from fixed historical cut-offs reused
+# across later releases, so their snapshot can post-date the day the
+# forecast was made by weeks, and a correction landing in between is already
+# in it.
+# Closing that would need a snapshot archived per frozen cut-off, which does
+# not exist.
+# The earliest releases archived their cut-off totals without the dated
+# vintage record, leaving their baseline no history to draw on, so skill
+# against it is not informative there.
 
 # ## Results
 #
