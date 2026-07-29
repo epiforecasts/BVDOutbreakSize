@@ -15,8 +15,11 @@
     hist = (; days = [10, 17, 24, 31], counts = [100.0, 110.0, 125.0, 145.0])
     grid_date(day) = Date(2026, 1, 1) + Day(day)
     made_date = grid_date(24)
+    ## No break-day fields, so `break_correction` is a no-op: this obs
+    ## carries no `confirmed_break_days` at all.
+    obs = (; confirmed_history = hist)
 
-    diffs = _history_diffs(hist, grid_date, made_date)
+    diffs = _history_diffs(obs, grid_date, "confirmed cases", hist, made_date)
     @test diffs == [(10.0, 7), (15.0, 7)]
 end
 
@@ -26,11 +29,12 @@ end
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     grid_date(day) = Date(2026, 1, 1) + Day(day)
-    @test _history_diffs(
-        (; days = Int[], counts = Float64[]), grid_date, Date(2026, 1, 1)) ==
+    obs = (;)
+    @test _history_diffs(obs, grid_date, "confirmed cases",
+        (; days = Int[], counts = Float64[]), Date(2026, 1, 1)) ==
           Tuple{Float64, Int}[]
-    @test _history_diffs(
-        (; days = [5], counts = [10.0]), grid_date, Date(2026, 2, 1)) ==
+    @test _history_diffs(obs, grid_date, "confirmed cases",
+        (; days = [5], counts = [10.0]), Date(2026, 2, 1)) ==
           Tuple{Float64, Int}[]
 end
 
