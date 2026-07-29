@@ -370,7 +370,7 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 frozen_score_overview_display #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
-# The frozen evaluation scores one fit at each cut-off, so a single series appears in every panel, drawn in the same colour and under the same label as the individual fit above.
+# The frozen evaluation scores one fit at each cut-off, so each panel carries a single series, drawn in the joint colour.
 
 frozen_relative_skill_fig = plot_forecast_relative_skill(
     frozen_score_by_horizon_table);
@@ -401,7 +401,8 @@ frozen_score_by_release_display #hide
 #md # ```
 
 # The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
-# The frozen forecast draws in the individual-fit colour against the persistence baseline; the x-axis is the frozen cut-off each was made from.
+# The frozen forecast draws in the joint colour against the persistence baseline.
+# The x-axis is the frozen cut-off each forecast was made from.
 # The same per-panel axis crop and overflow marker described above applies here too.
 
 #md # ```@raw html
