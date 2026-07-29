@@ -1,9 +1,11 @@
 ## Tests for the relative-skill and per-release R0 additions in
 ## scripts/score_releases.jl: rel_to_baseline_columns (per-row log-CRPS
-## skill to the persistence baseline) and r0_row (the established initial
-## reproduction number, exp(rt_state.log_R0)). The comparison against a
-## stream's individual fit is computed at aggregation time in
-## src/scoring.jl and is tested there, not here.
+## skill to the persistence baseline), r0_row (the established initial
+## reproduction number, exp(rt_state.log_R0)) and stream_estimate_rows (the
+## per-fit estimates each release publishes, keyed to the table each
+## quantity is collected into). The comparison against a stream's individual
+## fit is computed at aggregation time in src/scoring.jl and is tested
+## there, not here.
 
 @testitem "rel_to_baseline_columns scores to the persistence baseline" begin
     using Dates: Date
@@ -107,4 +109,42 @@ end
     end
     @test r0_row("results-vT", no_r0, Date(2026, 7, 1)) === nothing
     @test r0_row("results-vT", nothing, Date(2026, 7, 1)) === nothing
+end
+
+@testitem "stream_estimate_rows keys each quantity to its own table" begin
+    using Dates: Date
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    dir = mktempdir()
+    ## A per-fit estimates asset carrying all three tabulated quantities
+    ## plus one this script does not collect.
+    path = joinpath(dir, "stream_estimates.csv")
+    open(path, "w") do io
+        println(io, "fit,quantity,median,lo30,hi30,lo60,hi60,lo90,hi90")
+        println(io, "joint,R_T,0.9,0.8,1.0,0.7,1.1,0.6,1.2")
+        println(io, "joint,C_T,100,90,110,80,120,70,130")
+        println(io, "joint,R0,2.0,1.9,2.1,1.8,2.2,1.7,2.3")
+        println(io, "cases,R0,2.4,2.3,2.5,2.2,2.6,2.1,2.7")
+        println(io, "joint,sigma_rw,0.1,0.1,0.1,0.1,0.1,0.1,0.1")
+    end
+
+    byqty = stream_estimate_rows("results-vT", path, Date(2026, 7, 1))
+
+    ## Only the quantities with a destination table are collected, and R0
+    ## lands in the per-fit R0 table.
+    @test sort(collect(keys(byqty))) == ["C_T", "R0", "R_T"]
+    @test STREAM_QUANTITY_DEST["R0"] == "r0_by_release_by_stream.csv"
+
+    r0 = byqty["R0"]
+    @test [r.fit for r in r0] == ["joint", "cases"]
+    @test r0[1].release == "results-vT"
+    @test r0[1].date == "2026-07-01"
+    @test r0[1].median == 2.0
+    @test r0[1].lo90 == 1.7
+    @test r0[1].hi90 == 2.3
+
+    ## A release with no such asset is skipped rather than throwing.
+    @test stream_estimate_rows("results-vT", nothing, Date(2026, 7, 1)) ===
+          nothing
 end

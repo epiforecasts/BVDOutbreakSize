@@ -3634,8 +3634,14 @@ function _fit_rt_draws(f)
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end
 
-_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])))
-                      for f in stream_fits]
+## Basic reproduction number per fit, the renewal walk's starting value, a
+## single distribution per fit rather than a daily series. Every current
+## single-stream composer shares the joint's latent submodel and so carries
+## its own walk base, but `r0_walk_draws` probes rather than assumes, so a
+## single-stream model built without its own renewal walk drops out of this
+## quantity instead of breaking the release.
+_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])),
+                          r0_walk_draws(f.chn)) for f in stream_fits]
 
 ## One row per fit and quantity, with the median and the 30/60/90% credible
 ## bounds the report's tables use.
@@ -3646,15 +3652,19 @@ function _stream_estimate_row(fit, quantity, draws)
         lo90 = s.lo90, hi90 = s.hi90)
 end
 stream_estimates = DataFrame([_stream_estimate_row(fit, q, d)
-                              for (fit, rt, ct) in _stream_quantities
-                              for (q, d) in (("R_T", rt), ("C_T", ct))])
+                              for (fit, rt, ct, r0) in _stream_quantities
+                              for (q, d) in (("R_T", rt), ("C_T", ct),
+                                      ("R0", r0))
+                              if !isnothing(d)])
 CSV.write(joinpath(output_dir, "stream_estimates.csv"), stream_estimates);
 
 ## Thinned reproduction-number and outbreak-size draws per fit, so downstream
 ## scoring can recompute its own summaries rather than reuse the intervals.
 stream_draws = DataFrame([(fit = fit, quantity = q, draw = d, value = v)
-                          for (fit, rt, ct) in _stream_quantities
-                          for (q, vals) in (("R_T", rt), ("C_T", ct))
+                          for (fit, rt, ct, r0) in _stream_quantities
+                          for (q, vals) in (("R_T", rt), ("C_T", ct),
+                                  ("R0", r0))
+                          if !isnothing(vals)
                           for (d, v) in enumerate(vals[1:stream_thin:end])])
 CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
 
