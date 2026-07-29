@@ -315,9 +315,9 @@ forecast_overlay_fig #hide
 
 # ## Frozen-fit forecast evaluation
 #
-# The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), scored the same way as the cross-release forecasts above, against the same persistence baseline.
-# The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are dropped rather than scored against a series that had not started.
-# The frozen baseline's data-vintage guarantee is weaker than the cross-release one above: see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for the residual gap this leaves for a frozen made_date reused weeks ahead of its snapshot's own cut-off.
+# The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), scored the same way as the cross-release forecasts above and against the same persistence baseline.
+# The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
+# The baseline here carries a weaker data-vintage guarantee than the cross-release one, since the snapshot behind it was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
@@ -346,13 +346,13 @@ frozen_score_by_horizon_table = drop_individual_fit_columns(
 frozen_score_by_release_table = drop_individual_fit_columns(
     forecast_score_by_release(frozen_scores_df))
 
-## The frozen evaluation scores the current JOINT model alone at every
-## cut-off, so `fit` is single-valued ("joint") by construction in every
-## one of these tables, not just for the releases scored so far. Dropped
-## from the DISPLAY tables below as a degenerate column (see
-## `drop_degenerate_fit_column`); the `..._table` frames above keep `fit`
-## and still feed the relative-skill plots, which read it to colour each
-## series.
+## The frozen evaluation scores the current joint model alone at every
+## cut-off, so `fit` is single-valued ("frozen", `FROZEN_FIT`) by
+## construction in every one of these tables, not just for the releases
+## scored so far. Dropped from the display tables below as a degenerate
+## column (see `drop_degenerate_fit_column`); the `..._table` frames above
+## keep `fit` and still feed the relative-skill plots, which read it to
+## colour each series in the joint role.
 frozen_score_overview_display = drop_degenerate_fit_column(
     frozen_score_overview_table)
 frozen_score_by_horizon_display = drop_degenerate_fit_column(
@@ -365,12 +365,12 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 #md # ```
 
 # The headline frozen table, one row per stream pooled across cut-offs and horizons, against the persistence baseline on both scales, with the same CRPS decomposition, coverage and bias columns described above.
-# Every row is the current JOINT model; the frozen evaluation carries no other model, so the `fit` column is omitted here.
+# Every row is the current joint model, the only model this evaluation carries, so no model column is shown.
 
 frozen_score_overview_display #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
-# The frozen evaluation scores one fit at each cut-off, so a single series appears in every panel, drawn in the same colour and under the same label as the individual fit above.
+# Only the joint model is scored here, so each panel carries a single series in the joint colour.
 
 frozen_relative_skill_fig = plot_forecast_relative_skill(
     frozen_score_by_horizon_table);
@@ -378,7 +378,6 @@ frozen_relative_skill_fig = plot_forecast_relative_skill(
 frozen_relative_skill_fig #hide
 
 # The same columns as a table, broken out by horizon, and again broken out by frozen cut-off, are behind the two dropdowns below.
-# Both are the current joint model only, the same as the headline table above.
 
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
@@ -401,8 +400,8 @@ frozen_score_by_release_display #hide
 #md # ```
 
 # The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
-# The frozen forecast draws in the individual-fit colour against the persistence baseline; the x-axis is the frozen cut-off each was made from.
-# The same per-panel axis crop and overflow marker described above applies here too.
+# The frozen forecast is drawn in the joint colour against the persistence baseline, and the x-axis is the cut-off each forecast was made from.
+# The same per-panel axis crop and overflow marker described above applies here.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
