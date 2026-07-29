@@ -2038,6 +2038,12 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
+# The likelihood therefore admits a negative increment, but the mean above
+# cannot produce one: $F$ is non-decreasing in $\delta$, so the modelled
+# increment is bounded below at zero. Re-dating is absorbed as observation
+# noise rather than modelled, which issue #518 records along with how much
+# of the movement between vintages is downward.
+#
 # $\sigma_u$ collects three sources: counting variation around the cell's
 # own modelled mean; a $\pm 2.1$-case pixel-noise SD on the digitised bar,
 # doubled for a correction since it differences two reads; and a $4.0\%$
