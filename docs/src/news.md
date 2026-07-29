@@ -78,9 +78,10 @@ Changes since v1.9.0.
 - Captured symptom-onset epidemic curves from the DHIS2 line list published
   in the analytique SitRep figures (059–062, 064). Digitised via
   `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port,
-  and recorded as `data/onset_curve_scanned.csv`. The curves are **not
-  fitted** — the model does not read them, but they provide an empirical
-  onset-to-report delay benchmark (~65 % by 7 days, median ~5–6 days).
+  and recorded as `data/onset_curve_scanned.csv`. Later in this same release
+  they became a fitted stream (see Model below); when first captured they
+  were unfitted and served as an empirical onset-to-report delay benchmark
+  (~65 % by 7 days, median ~5–6 days).
 - Re-ran the confirmed/suspect in-care occupancy split on the resumed
   Tableau 7 data (SitReps 052–055), extending
   `treatment_confirmed_incare_history` and
@@ -111,10 +112,10 @@ Changes since v1.9.0.
   than a plot of the modelled count alone. Its band now carries the
   measurement error the likelihood gives a digitised bar, which lifts
   coverage of the observed bars from 0.42 to 0.95 at a nominal 90%. Fixing
-  it exposed two systematic misses that are recorded in #517 and not
-  corrected here: the fitted delay is too slow between 6 and 19 days, and
-  the calendar-time effect is too tightly constrained to follow reporting
-  speeding up over the eleven snapshots.
+  it exposed two systematic misses, both recorded in #517: the fitted delay
+  is too slow between 6 and 19 days, which is not corrected, and the
+  calendar-time effect could not follow reporting speeding up, which is
+  addressed by the widened prior below.
 
 - Split the nowcast/forecast figure's total into the latent sum of its two
   components and the replicate the next vintage will actually print, which
