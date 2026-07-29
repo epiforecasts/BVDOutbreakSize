@@ -68,7 +68,7 @@ function parse_args(args)
     idx == length(args) &&
         error("--only requires a comma-separated list of report numbers")
     numbers = [lpad(strip(s), 3, '0') for s in split(args[idx + 1], ",")]
-    rest = [args[1:idx - 1]; args[idx + 2:end]]
+    rest = [args[1:(idx - 1)]; args[(idx + 2):end]]
     return (; only_numbers = numbers, rest)
 end
 
