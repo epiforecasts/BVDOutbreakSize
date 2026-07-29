@@ -95,15 +95,14 @@ const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
 
 ## Values of the `fit` column, which names the model a row's forecast or
-## estimate came from: a spec id, or `baseline` for the persistence
-## baseline, which is no model's output. `joint` is also the fit a plain
-## `forecast.csv` carries, that asset predating the per-stream fits.
-const JOINT_FIT = "joint"
-const BASELINE_FIT = "baseline"
-## The fit label the frozen-fit forecasts (`forecast_frozen.csv`) are scored
-## under. That asset carries no `fit` column (it is the joint model at each
-## frozen cut-off), so the label is applied at scoring time.
-const FROZEN_FIT = "frozen"
+## estimate came from: a spec id, or `BASELINE_FIT` for the persistence
+## baseline, which is no model's output. `JOINT_FIT` is also the fit a
+## plain `forecast.csv` carries, that asset predating the per-stream fits.
+## `FROZEN_FIT` is the label the frozen-fit forecasts
+## (`forecast_frozen.csv`) are scored under; that asset carries no `fit`
+## column (it is the joint model at each frozen cut-off), so the label is
+## applied at scoring time. All three are exported by `BVDOutbreakSize`,
+## the single source the plotting fit-role mapping also keys off.
 
 ## Release tags whose forecast is excluded from scoring because the
 ## RECONSTRUCTION failed, not because the model performed badly: a chain

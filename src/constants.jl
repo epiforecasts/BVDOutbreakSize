@@ -1,5 +1,33 @@
-# Fixed package constants: published scenarios, Ituri population and
-# travel priors.
+# Fixed package constants: fit-id labels, published scenarios, Ituri
+# population and travel priors.
+
+"""
+    JOINT_FIT
+
+Value of a `fit` column identifying a row as the joint model's forecast or
+estimate. Also the role a frozen-fit row (`FROZEN_FIT`) is mapped to for
+plotting, since a frozen row is the joint model re-fit at a past cut-off,
+not a separate single-stream fit.
+"""
+const JOINT_FIT = "joint"
+
+"""
+    BASELINE_FIT
+
+Value of a `fit` column identifying a row as the persistence baseline,
+which is no model's output.
+"""
+const BASELINE_FIT = "baseline"
+
+"""
+    FROZEN_FIT
+
+Value of a `fit` column identifying a row as a frozen-fit forecast: the
+joint model re-fit and evaluated at a past cut-off
+(`forecast_frozen.csv`). That asset carries no `fit` column of its own, so
+the label is applied at scoring time.
+"""
+const FROZEN_FIT = "frozen"
 
 """
     REPORT_SCENARIOS
