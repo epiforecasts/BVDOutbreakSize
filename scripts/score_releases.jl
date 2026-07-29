@@ -57,8 +57,9 @@
 # same way a not-yet-observed target is not.
 #
 # Each release's `stream_estimates.csv`, when present, also feeds the
-# per-fit `data/rt_by_release_by_stream.csv` and
-# `data/size_by_release_by_stream.csv` R_T and C_T overlays.
+# per-fit `data/rt_by_release_by_stream.csv`,
+# `data/size_by_release_by_stream.csv` and `data/r0_by_release_by_stream.csv`
+# R_T, C_T and R0 overlays.
 #
 # Re-run whenever a new release is published: it always recomputes the
 # tables from every release currently on GitHub, so re-running is
@@ -777,11 +778,16 @@ end
 # Per-stream estimate summary
 # ----------------------------------------------------------------------
 
-## The two quantities a release's `stream_estimates.csv` carries, mapped to
-## the per-release-by-stream table each is collected into.
+## The quantities a release's `stream_estimates.csv` carries, mapped to the
+## per-release-by-stream table each is collected into. "R0" is the per-fit
+## basic reproduction number, `exp(rt_state.log_R0)`, the by-dataset
+## analogue of `r0_row` below; it is absent from every release until a
+## release carries it in `stream_estimates.csv`, so its destination table
+## stays header-only until then.
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
-    "C_T" => "size_by_release_by_stream.csv")
+    "C_T" => "size_by_release_by_stream.csv",
+    "R0" => "r0_by_release_by_stream.csv")
 
 ## The `(release, date, fit, median, lo30, ...)` rows from a release's
 ## `stream_estimates.csv`, one per `(fit, quantity)`, keyed by quantity so
@@ -1257,10 +1263,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println("Wrote $(nrow(r0)) release R0 summaries to " *
             "data/r0_by_release.csv")
 
-    ## `data/rt_by_release_by_stream.csv` and
-    ## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of
-    ## every fit, per release. Written even when empty, since the docs build
-    ## reads them and a missing file throws rather than reading back empty.
+    ## `data/rt_by_release_by_stream.csv`, `data/size_by_release_by_stream.csv`
+    ## and `data/r0_by_release_by_stream.csv`: the R_T, C_T and R0 posteriors
+    ## of every fit, per release. Written even when empty, since the docs
+    ## build reads them and a missing file throws rather than reading back
+    ## empty.
     for file in sort(collect(values(STREAM_QUANTITY_DEST)))
         rows = stream_est_rows[file]
         df = if isempty(rows)

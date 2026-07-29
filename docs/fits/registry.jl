@@ -40,15 +40,17 @@ const FIT_CACHE_SCHEMA = "v1"
 ## `forecast_overlay_frozen.csv` are the per-release R_T, R0 and
 ## forecast-scoring overlays that `scripts/score_releases.jl` rewrites before
 ## rendering from the published releases, so they are excluded for the same
-## reason. `rt_by_release_by_stream.csv` and `size_by_release_by_stream.csv`
-## are the per-fit versions of the same overlay, rewritten the same way.
+## reason. `rt_by_release_by_stream.csv`, `size_by_release_by_stream.csv`
+## and `r0_by_release_by_stream.csv` are the per-fit versions of the same
+## overlay, rewritten the same way.
 ## Every file score_releases.jl writes into data/ MUST be listed here, or the
 ## render's data hash diverges from the fit matrix's and every fit misses.
 const FIT_DATA_EXCLUDE = ("released_estimates.csv",
     "rt_by_release.csv", "r0_by_release.csv",
     "forecast_scores.csv", "forecast_scores_frozen.csv",
     "forecast_overlay.csv", "forecast_overlay_frozen.csv",
-    "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv")
+    "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv",
+    "r0_by_release_by_stream.csv")
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 500, chains::Integer = 2)
