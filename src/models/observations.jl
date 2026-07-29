@@ -3015,8 +3015,8 @@ The reason not to widen it further is the reproduction-number walk rather
 than noise absorption. The two act on overlapping calendar windows and
 both are least constrained over the final fortnight, so a calendar walk
 with too much freedom can start explaining recent onset-date structure
-that belongs to $R_t$. Any change here should report $R_t$ over the final
-fortnight and $C_T$ either side, and treat a material move as a reason to
+that belongs to `R_t`. Any change here should report `R_t` over the final
+fortnight and `C_T` either side, and treat a material move as a reason to
 stop.
 
 Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`; `γ` is length
