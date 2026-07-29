@@ -25,7 +25,7 @@ import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
-                  lines!, scatter!, band!, linesegments!
+                  lines!, scatter!, band!, linesegments!, scatterlines!
 
 export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
@@ -37,7 +37,10 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
-       crps_sample, log_crps_sample, score_draws, forecast_score_summary,
+       crps_sample, log_crps_sample, crps_decomposition, score_draws,
+       forecast_score_overview, forecast_score_by_horizon,
+       forecast_score_by_release, drop_individual_fit_columns,
+       drop_degenerate_fit_column,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,
@@ -48,7 +51,7 @@ export REPORT_SCENARIOS, REPORT_SCENARIOS_CI,
        plot_pair, plot_start_date_pair, plot_estimate_comparison,
        plot_correlation_heatmap, plot_stream_pairs,
        plot_estimate_evolution, plot_evolution_by_group,
-       plot_forecast_overlay,
+       plot_forecast_overlay, plot_forecast_relative_skill,
        plot_projection_comparison,
        plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,

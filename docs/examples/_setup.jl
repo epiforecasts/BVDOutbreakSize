@@ -139,6 +139,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
     chn_confirmed_deaths = _fits["confirmed_deaths"]
     chn_treatment = _fits["treatment"]
     frozen_lastweek = _fits["frozen_validation"]
+    ## One frozen individual fit per stream at the same cut-off as
+    ## `frozen_lastweek`, so the forecast validation section can show each
+    ## stream's own model alongside the frozen joint. Keyed by the same
+    ## `fit` ids the current-data individual fits use (`chn_cases`, …), so
+    ## the two dicts read the same way.
+    frozen_lastweek_streams = Dict(
+        sid => _fits["frozen_validation_$sid"] for sid in VALIDATION_STREAM_IDS)
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]

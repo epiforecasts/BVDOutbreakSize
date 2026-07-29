@@ -141,80 +141,266 @@ end
         Date(2026, 4, 28))]) == String[]
 end
 
-@testitem "forecast_score_summary groups by fit against its baseline" begin
+@testitem "forecast_score_overview aggregates across horizon and release" begin
+    using Dates: Date
     using DataFrames: DataFrame, nrow, names
-    using BVDOutbreakSize: forecast_score_summary
+    using BVDOutbreakSize: forecast_score_overview
 
-    ## Two fits of "confirmed cases" and the baseline it is scored against,
-    ## plus the joint's "recovered" forecast, which has no individual fit.
+    ## Two releases at the same horizon; "confirmed cases" carries a joint,
+    ## an individual ("confirmed") and a baseline fit in both, "recovered"
+    ## carries only the joint and the baseline (no individual model fits
+    ## it).
     scores = DataFrame(
-        stream = ["confirmed cases", "confirmed cases", "confirmed cases",
-            "recovered", "recovered"],
-        horizon = [7, 7, 7, 7, 7],
-        fit = ["joint", "confirmed", "baseline", "joint", "baseline"],
-        crps = [2.0, 4.0, 8.0, 3.0, 6.0],
-        log_crps = [0.2, 0.4, 0.8, 0.3, 0.6],
-        coverage_50 = [1.0, 0.0, 1.0, 1.0, 1.0],
-        coverage_90 = [1.0, 1.0, 1.0, 1.0, 1.0],
-        bias = [0.1, -0.1, 0.0, 0.2, 0.0])
+        release = ["r1", "r1", "r1", "r2", "r2", "r2", "r1", "r1", "r2", "r2"],
+        made_date = fill(Date(2026, 6, 1), 10), horizon = fill(7, 10),
+        stream = vcat(fill("confirmed cases", 6), fill("recovered", 4)),
+        fit = vcat(["joint", "confirmed", "baseline"],
+            ["joint", "confirmed", "baseline"],
+            ["joint", "baseline"], ["joint", "baseline"]),
+        crps = [2.0, 4.0, 8.0, 4.0, 6.0, 12.0, 3.0, 6.0, 3.0, 6.0],
+        log_crps = [0.2, 0.4, 0.8, 0.4, 0.6, 1.2, 0.3, 0.6, 0.3, 0.6],
+        dispersion = fill(0.1, 10), overprediction = fill(0.05, 10),
+        underprediction = fill(0.05, 10),
+        coverage_50 = fill(1.0, 10), coverage_90 = fill(1.0, 10),
+        bias = fill(0.0, 10))
 
-    out = forecast_score_summary(scores)
+    out = forecast_score_overview(scores)
     @test "fit" in names(out)
-    ## One row per non-baseline fit; no baseline row, no empty individual
-    ## row for recovered.
+    ## One row per non-baseline fit; no baseline row survives.
     @test sort(out.fit) == ["confirmed", "joint", "joint"]
     @test !("baseline" in out.fit)
 
-    skill(stream, fit) = only(
-        out[(out.stream .== stream) .& (out.fit .== fit), :].rel_skill)
-    ## rel_skill is each fit's CRPS over the stream's baseline CRPS.
-    @test skill("confirmed cases", "joint") == 0.25    # 2.0 / 8.0
-    @test skill("confirmed cases", "confirmed") == 0.5  # 4.0 / 8.0
-    ## recovered scores the joint against its own baseline, 3.0 / 6.0.
-    @test skill("recovered", "joint") == 0.5
+    row(stream, fit) = only(
+        out[(out.stream .== stream) .& (out.fit .== fit), :])
+    ## rel_to_baseline is the ratio of the two fits' mean CRPS over the
+    ## matched forecasts, pooled across both releases and horizons: joint
+    ## mean (2+4)/2 = 3, baseline mean (8+12)/2 = 10, ratio 0.3. The
+    ## absolute baseline and individual CRPS are not published columns.
+    cc_joint = row("confirmed cases", "joint")
+    @test cc_joint.n == 2
+    @test cc_joint.crps == 3.0
+    @test cc_joint.rel_to_baseline == 0.3
+    ## Against the individual fit: joint mean 3.0, individual mean
+    ## (4+6)/2 = 5.0, ratio 0.6.
+    @test cc_joint.rel_to_individual == 0.6
+    ## Same ratio on the log scale: joint log_crps mean (0.2+0.4)/2 = 0.3,
+    ## individual log_crps mean (0.4+0.6)/2 = 0.5, ratio 0.6.
+    @test cc_joint.log_rel_to_individual == 0.6
+
+    cc_indiv = row("confirmed cases", "confirmed")
+    @test cc_indiv.crps == 5.0
+    @test cc_indiv.rel_to_baseline == 0.5  # 5.0 / 10.0
+    ## The individual fit's own row carries no individual-fit comparison.
+    @test ismissing(cc_indiv.rel_to_individual)
+    @test ismissing(cc_indiv.log_rel_to_individual)
+
+    ## "recovered" has no individual model: those columns stay missing on
+    ## its joint row, and its skill is against its own baseline only.
+    rec_joint = row("recovered", "joint")
+    @test rec_joint.rel_to_baseline == 0.5  # 3.0 / 6.0
+    @test ismissing(rec_joint.rel_to_individual)
+    @test ismissing(rec_joint.log_rel_to_individual)
 end
 
-@testitem "forecast_score_summary keeps the legacy model schema" begin
-    using DataFrames: DataFrame, nrow, names
-    using BVDOutbreakSize: forecast_score_summary
+@testitem "forecast_score_overview drops a group with no matched baseline" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview
 
-    ## A table with the old `model` ∈ {ours, baseline} column and no `fit`
-    ## summarises one row per (stream, horizon) with no `fit` column.
+    ## The baseline is scored under a different horizon to the joint fit,
+    ## so the matched set is empty: the row is dropped rather than
+    ## published with a fabricated ratio.
     scores = DataFrame(
-        stream = ["confirmed cases", "confirmed cases"],
-        horizon = [7, 7],
-        model = ["ours", "baseline"],
-        crps = [2.0, 8.0],
-        log_crps = [0.2, 0.8],
-        coverage_50 = [1.0, 1.0],
-        coverage_90 = [1.0, 1.0],
-        bias = [0.1, 0.0])
+        release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 14], stream = fill("confirmed cases", 2),
+        fit = ["joint", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
+        overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
+        coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
+        bias = [0.0, 0.0])
 
-    out = forecast_score_summary(scores)
-    @test !("fit" in names(out))
-    @test nrow(out) == 1
-    @test only(out.rel_skill) == 0.25
+    out = forecast_score_overview(scores)
+    @test isempty(out)
 end
 
-@testitem "forecast_score_summary returns typed empty frames" begin
+@testitem "forecast_score_overview guards a zero baseline mean" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview
+
+    ## A baseline scored to an exact zero CRPS (a coincidental perfect
+    ## persistence match) would divide by zero; the guard reports the row
+    ## with rel_to_baseline missing instead of Inf.
+    scores = DataFrame(
+        release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["joint", "baseline"], crps = [2.0, 0.0],
+        log_crps = [0.2, 0.0], dispersion = [0.1, 0.0],
+        overprediction = [0.05, 0.0], underprediction = [0.05, 0.0],
+        coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
+        bias = [0.0, 0.0])
+
+    out = forecast_score_overview(scores)
+    @test ismissing(only(out.rel_to_baseline))
+    @test !any(isinf, skipmissing(out.rel_to_baseline))
+end
+
+@testitem "forecast_score_overview returns a typed empty frame" begin
+    using Dates: Date
     using DataFrames: DataFrame, nrow, names
-    using BVDOutbreakSize: forecast_score_summary
+    using BVDOutbreakSize: forecast_score_overview
 
-    ## Empty in, empty out, with the columns that match the input schema so
-    ## the docs build renders before anything is scored.
-    with_fit = forecast_score_summary(DataFrame(
-        stream = String[], horizon = Int[], fit = String[], crps = Float64[],
-        log_crps = Float64[], coverage_50 = Float64[],
-        coverage_90 = Float64[], bias = Float64[]))
-    @test nrow(with_fit) == 0
-    @test "fit" in names(with_fit)
+    empty_scores = DataFrame(
+        release = String[], made_date = Date[], horizon = Int[],
+        stream = String[], fit = String[], crps = Float64[],
+        log_crps = Float64[], dispersion = Float64[],
+        overprediction = Float64[], underprediction = Float64[],
+        coverage_50 = Float64[], coverage_90 = Float64[], bias = Float64[])
 
-    with_model = forecast_score_summary(DataFrame(
-        stream = String[], horizon = Int[], model = String[],
-        crps = Float64[], log_crps = Float64[], coverage_50 = Float64[],
-        coverage_90 = Float64[], bias = Float64[]))
-    @test nrow(with_model) == 0
-    @test !("fit" in names(with_model))
+    out = forecast_score_overview(empty_scores)
+    @test nrow(out) == 0
+    @test "stream" in names(out)
+    @test "fit" in names(out)
+    @test "rel_to_baseline" in names(out)
+    @test "rel_to_individual" in names(out)
+    @test !("crps_baseline" in names(out))
+    @test !("crps_individual" in names(out))
+end
+
+@testitem "drop_individual_fit_columns omits the individual comparison" begin
+    using Dates: Date
+    using DataFrames: DataFrame, names
+    using BVDOutbreakSize: forecast_score_overview, drop_individual_fit_columns
+
+    ## A frozen-style table: only a "frozen" fit and its baseline, so the
+    ## individual-fit columns are always missing throughout.
+    scores = DataFrame(
+        release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["frozen", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
+        overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
+        coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
+        bias = [0.0, 0.0])
+
+    table = forecast_score_overview(scores)
+    @test "rel_to_individual" in names(table)
+
+    out = drop_individual_fit_columns(table)
+    @test !("rel_to_individual" in names(out))
+    @test !("log_rel_to_individual" in names(out))
+    ## Every other column, and the row itself, survives untouched.
+    @test "rel_to_baseline" in names(out)
+    @test only(out.fit) == "frozen"
+end
+
+@testitem "drop_degenerate_fit_column drops a single-valued fit column" begin
+    using Dates: Date
+    using DataFrames: DataFrame, names, nrow
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+
+    ## The frozen-evaluation shape: only ever "frozen" and its baseline, so
+    ## `fit` carries exactly one value ("frozen") throughout the table.
+    scores = DataFrame(
+        release = ["r1", "r1"], made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["frozen", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = [0.1, 0.1],
+        overprediction = [0.05, 0.05], underprediction = [0.05, 0.05],
+        coverage_50 = [1.0, 1.0], coverage_90 = [1.0, 1.0],
+        bias = [0.0, 0.0])
+    table = forecast_score_overview(scores)
+
+    out = drop_degenerate_fit_column(table)
+    @test !("fit" in names(out))
+    ## Every other column survives untouched, in place.
+    @test "bias" in names(out)
+    @test "dispersion" in names(out)
+    @test "overprediction" in names(out)
+    @test "underprediction" in names(out)
+    @test "coverage_50" in names(out)
+    @test "coverage_90" in names(out)
+    @test "crps" in names(out)
+    @test "rel_to_baseline" in names(out)
+    @test nrow(out) == nrow(table)
+end
+
+@testitem "drop_degenerate_fit_column errors on a multi-fit table" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+
+    ## The ordinary joint-vs-baseline shape: joint, confirmed and baseline,
+    ## so `fit` carries more than one value and must not be dropped.
+    scores = DataFrame(
+        release = fill("r1", 3), made_date = fill(Date(2026, 6, 1), 3),
+        horizon = fill(7, 3), stream = fill("confirmed cases", 3),
+        fit = ["joint", "confirmed", "baseline"], crps = [2.0, 2.5, 8.0],
+        log_crps = [0.2, 0.25, 0.8], dispersion = fill(0.1, 3),
+        overprediction = fill(0.05, 3), underprediction = fill(0.05, 3),
+        coverage_50 = fill(1.0, 3), coverage_90 = fill(1.0, 3),
+        bias = fill(0.0, 3))
+    table = forecast_score_overview(scores)
+
+    @test_throws ErrorException drop_degenerate_fit_column(table)
+end
+
+@testitem "drop_degenerate_fit_column leaves an empty table's fit column" begin
+    using BVDOutbreakSize: forecast_score_overview, drop_degenerate_fit_column
+    using DataFrames: DataFrame, names, nrow
+
+    empty = forecast_score_overview(DataFrame())
+    out = drop_degenerate_fit_column(empty)
+    @test "fit" in names(out)
+    @test nrow(out) == 0
+end
+
+@testitem "forecast_score_by_horizon keeps a separate row per horizon" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_by_horizon
+
+    scores = DataFrame(
+        release = ["r1", "r1", "r2", "r2"],
+        made_date = fill(Date(2026, 6, 1), 4),
+        horizon = [7, 7, 14, 14], stream = fill("confirmed cases", 4),
+        fit = ["joint", "baseline", "joint", "baseline"],
+        crps = [2.0, 8.0, 6.0, 12.0], log_crps = [0.2, 0.8, 0.6, 1.2],
+        dispersion = fill(0.1, 4), overprediction = fill(0.05, 4),
+        underprediction = fill(0.05, 4), coverage_50 = fill(1.0, 4),
+        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4))
+
+    out = forecast_score_by_horizon(scores)
+    @test sort(out.horizon) == [7, 14]
+    h7 = only(out[out.horizon .== 7, :])
+    h14 = only(out[out.horizon .== 14, :])
+    @test h7.rel_to_baseline == 0.25   # 2.0 / 8.0
+    @test h14.rel_to_baseline == 0.5   # 6.0 / 12.0
+end
+
+@testitem "forecast_score_by_release averages across horizon" begin
+    using Dates: Date
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_by_release
+
+    ## One made date, two horizons: the by-release row pools both, unlike
+    ## the by-horizon table which would keep them apart.
+    scores = DataFrame(
+        release = ["r1", "r1", "r1", "r1"],
+        made_date = fill(Date(2026, 6, 1), 4),
+        horizon = [7, 7, 14, 14], stream = fill("confirmed cases", 4),
+        fit = ["joint", "baseline", "joint", "baseline"],
+        crps = [2.0, 8.0, 6.0, 12.0], log_crps = [0.2, 0.8, 0.6, 1.2],
+        dispersion = fill(0.1, 4), overprediction = fill(0.05, 4),
+        underprediction = fill(0.05, 4), coverage_50 = fill(1.0, 4),
+        coverage_90 = fill(1.0, 4), bias = fill(0.0, 4))
+
+    out = forecast_score_by_release(scores)
+    row = only(out)
+    @test row.made_date == Date(2026, 6, 1)
+    @test row.n == 2
+    @test row.crps == 4.0          # mean(2.0, 6.0)
+    @test row.rel_to_baseline == 0.4  # mean(2.0, 6.0) / mean(8.0, 12.0)
 end
 
 @testitem "score_release scores every mapped stream, skips the rest" begin
@@ -400,8 +586,83 @@ end
     s = score_draws(5.0, Float64[])
     @test isnan(s.crps)
     @test isnan(s.log_crps)
+    @test isnan(s.dispersion)
+    @test isnan(s.overprediction)
+    @test isnan(s.underprediction)
     @test isnan(s.bias)
     @test s.coverage_50 == false
     @test s.coverage_90 == false
     @test s.n == 0
+end
+
+@testitem "crps_decomposition sums to the CRPS and stays non-negative" begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: crps_sample, crps_decomposition
+
+    ## A mixed ensemble straddling the observation, so both the dispersion
+    ## and the two directional components are all in play at once.
+    rng = MersenneTwister(3)
+    samples = 100.0 .+ 15.0 .* randn(rng, 41)
+    obs = 105.0
+    d = crps_decomposition(obs, samples)
+    @test d.dispersion >= 0
+    @test d.overprediction >= 0
+    @test d.underprediction >= 0
+    @test d.dispersion + d.overprediction + d.underprediction ≈
+          crps_sample(obs, samples)
+end
+
+@testitem "crps_decomposition of a point-mass ensemble has no dispersion" begin
+    using BVDOutbreakSize: crps_sample, crps_decomposition
+
+    ## A point-mass forecast has no spread of its own, so its CRPS is all
+    ## overprediction or underprediction depending on which side `obs` sits.
+    above = crps_decomposition(5.0, fill(20.0, 50))
+    @test above.dispersion ≈ 0.0
+    @test above.underprediction ≈ 0.0
+    @test above.overprediction ≈ crps_sample(5.0, fill(20.0, 50))
+
+    below = crps_decomposition(20.0, fill(5.0, 50))
+    @test below.dispersion ≈ 0.0
+    @test below.overprediction ≈ 0.0
+    @test below.underprediction ≈ crps_sample(20.0, fill(5.0, 50))
+
+    ## A point-mass forecast equal to the observation scores (and
+    ## decomposes to) zero throughout.
+    exact = crps_decomposition(5.0, fill(5.0, 50))
+    @test exact.dispersion ≈ 0.0
+    @test exact.overprediction ≈ 0.0
+    @test exact.underprediction ≈ 0.0
+end
+
+@testitem "crps_decomposition splits an ensemble entirely above obs" begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: crps_sample, crps_decomposition
+
+    ## Every draw sits above the observation: the ensemble reads too high,
+    ## so the extra cost beyond its own spread is all overprediction.
+    rng = MersenneTwister(4)
+    samples = 200.0 .+ 5.0 .* rand(rng, 60)
+    obs = 100.0
+    d = crps_decomposition(obs, samples)
+    @test d.underprediction ≈ 0.0
+    @test d.dispersion >= 0
+    @test d.overprediction >= 0
+    @test d.dispersion + d.overprediction ≈ crps_sample(obs, samples)
+end
+
+@testitem "crps_decomposition splits an ensemble entirely below obs" begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: crps_sample, crps_decomposition
+
+    ## Every draw sits below the observation: the ensemble reads too low,
+    ## so the extra cost beyond its own spread is all underprediction.
+    rng = MersenneTwister(5)
+    samples = 50.0 .+ 5.0 .* rand(rng, 60)
+    obs = 200.0
+    d = crps_decomposition(obs, samples)
+    @test d.overprediction ≈ 0.0
+    @test d.dispersion >= 0
+    @test d.underprediction >= 0
+    @test d.dispersion + d.underprediction ≈ crps_sample(obs, samples)
 end
