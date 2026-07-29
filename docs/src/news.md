@@ -127,6 +127,17 @@ Changes since v1.9.0.
   as the most recent figure prints it, and the model's current estimate of
   both the eventual reports and the onsets themselves.
 
+- Widened the onset-report calendar-walk prior from `Normal⁺(0, 0.1)` to
+  `Normal⁺(0, 0.3)` (#530). At 0.1 the walk could not follow the drift in
+  the data: the mean standardised residual climbed monotonically across the
+  eleven scored snapshots and the most recent vintage was under-predicted by
+  14%. A 14% level shift needs a calendar shift of about 0.32 at delay 8 and
+  0.58 at delay 12 on the logit hazard, which is a 1.6-3σ excursion under the
+  old prior and 0.5-1σ under this one. **Not yet validated against the gate
+  in #517** — in particular whether $R_t$ over the final fortnight and $C_T$
+  move, since the calendar walk and the reproduction-number walk overlap in
+  calendar time and both are least constrained late.
+
 - De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
   log-density path (`confirmed_positivity_link = :composition`): extracted
   the composition-positivity loop to a plain `composition_positivity()`
