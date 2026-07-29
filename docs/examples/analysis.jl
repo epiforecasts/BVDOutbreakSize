@@ -2247,21 +2247,21 @@ diagnostics_table( #hide
 
 # #### Forecast scoring against a persistence baseline
 #
-# Every forecast in this report, past releases included, is scored with the continuous ranked probability score, on the raw count scale and on a log scale that keeps the largest counts from dominating.
-# The score splits into the forecast's own spread and the extra cost of reading high or low, which separates a fit that is merely vague from one that is pointed in the wrong direction.
-# Coverage is the share of forecasts whose 50% or 90% interval contained the observation and should sit near those levels; bias is signed, from minus one when every forecast is too low to one when every forecast is too high.
-# Relative skill is the ratio of two fits' mean scores over the forecasts both were scored on, so a comparator that happened to score zero once cannot send the ratio to infinity, and below one beats the comparator.
+# Every forecast in this report, past releases included, is scored with the continuous ranked probability score (CRPS), on the raw count scale and on a log scale that stops the largest counts dominating.
+# The score splits into the forecast's own dispersion and the extra cost of over- or under-predicting, which separates a vague forecast from a confidently wrong one.
+# Coverage is the share of forecasts whose 50% or 90% interval held the observation and should sit near those levels; bias is signed, from minus one when every forecast is too low to one when every forecast is too high.
+# Relative skill is the ratio of two fits' mean scores over the forecasts both were scored on, so one comparator score of zero cannot send it to infinity, and below one beats the comparator.
 #
 # The count streams are running cumulative totals, so each is scored on the increment from one report to the next rather than on the level, while bed occupancy is a level and is scored as one.
 # A stream is scored only between its first and last report, since outside that an unmoved total is the absence of a series rather than an observed zero.
-# On the two confirmed streams a reported step that is mostly a retrospective integration of harmonised provincial records has that backfill removed from both the target and the baseline, so a window containing one is scored on transmission rather than on transmission plus a backlog.
+# On the two confirmed streams a reported step that is mostly a retrospective integration of harmonised provincial records has that backfill removed from both the target and the baseline, so such a window is scored on transmission rather than on transmission plus a backlog.
 #
 # Every forecast is also compared against a persistence baseline.
 # For bed occupancy this carries the last observed level forward, matching the COVID-19 Forecast Hub baseline.
 # For a count stream it centres on the observed count over a horizon-length window ending at the forecast's cut-off, because these series are sparse and irregularly timed and a single most recent increment would be a noisier centre.
 # Its uncertainty comes from an iterated random walk out to the horizon, each day's step drawn from how much that stream has moved historically, so the interval widens with the square root of the horizon.
-# The baseline sees only the data vintage available on the day the forecast was made, so a later correction cannot make the comparison unfair.
-# That holds exactly where a forecast is scored against its own release's cut-off, but the frozen re-fits below reuse one historical cut-off across many later releases, so a correction landing in between is already in the snapshot and still reaches the baseline.
+# The baseline sees only the counts reported by the day the forecast was made, so a later revision cannot make the comparison unfair.
+# That holds exactly where a forecast is scored against its own release's cut-off, but the frozen re-fits below reuse one historical cut-off across many later releases, so a revision landing in between is already in the snapshot and still reaches the baseline.
 
 # ## Results
 #
