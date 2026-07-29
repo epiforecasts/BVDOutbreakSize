@@ -3171,35 +3171,11 @@ surveillance_pair_fig #hide
 # checks") is therefore the one to read for the second, and the per-cell
 # coverage for the first.
 #
-# Both have been checked, and the answer is not the one the phrase
-# "underdispersed" suggests (issue #507 carries the full numbers).
-# The onset stream is **not** underdispersed.
-# Individual cells are scored about twice as wide as they need to be: the
-# standardised residual has SD 0.71 against the 1.414 a Student-t with four
-# degrees of freedom implies, and the empirical-to-modelled residual ratio
-# does not grow with the cell mean, so there is no evidence for an
-# overdispersion parameter and adding one would widen cells that are already
-# over-covered.
-# What is wrong is the per-snapshot aggregate, where one snapshot in eleven
-# falls inside the nominal 50% interval, against ten of eleven inside the
-# nominal 90%.
-# One in eleven has probability 0.006 under a correct model, so this is a
-# real failure and not small-sample noise.
-# The aggregate variance is nonetheless right (empirical over modelled 1.07),
-# which is what rules out any variance fix: the predictive has about the
-# right spread and puts it in the wrong place, with deviations that are
-# large and two-sided and rarely near the centre.
-# That is the shared-scan fingerprint rather than the overdispersion one,
-# and the scan term is a fifth of the per-snapshot variance, so it is large
-# enough to matter.
-# The likelihood is deliberately left unchanged here: the shared error would
-# have to be smaller than the 4% measured per bar, since moving that figure
-# wholesale from per-cell to per-vintage over-corrects the aggregate variance
-# by about a factor of two.
-# There is also a weak suggestion that the model under-predicts how much is
-# added between snapshots (mean deviation +16 with a standard error of 10),
-# which would be a centring rather than a spread problem; at eleven
-# snapshots it is suggestive and no more.
+# The stream is not underdispersed, and the likelihood is left unchanged
+# here: individual cells are already scored wider than they need to be,
+# while the per-snapshot aggregate is mis-centred rather than mis-scaled.
+# Its variance is right, at 1.07 empirical over modelled, so no variance
+# term fixes it.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3341,6 +3317,11 @@ onset_pair_fig #hide
 # delay](@ref "Symptom-onset reporting delay") Methods section); the
 # panels only cover snapshots at or before the current cut-off (see the
 # [Data](@ref methods-data) section).
+#
+# The panels also show two misses the fitted delay does not absorb: the
+# fitted delay is too slow between 6 and 19 days, and the miss grows across
+# the snapshots.
+# Neither is corrected here.
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
