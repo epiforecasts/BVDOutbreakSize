@@ -67,8 +67,9 @@
 # corrected series (issue #511).
 #
 # Each release's `stream_estimates.csv`, when present, also feeds the
-# per-fit `data/rt_by_release_by_stream.csv` and
-# `data/size_by_release_by_stream.csv` R_T and C_T overlays.
+# per-fit `data/rt_by_release_by_stream.csv`,
+# `data/size_by_release_by_stream.csv` and `data/r0_by_release_by_stream.csv`
+# R_T, C_T and R0 overlays.
 #
 # Re-run whenever a new release is published: it always recomputes the
 # tables from every release currently on GitHub, so re-running is
@@ -95,6 +96,14 @@ using TOML
 
 using BVDOutbreakSize: is_results_release, select_daily_releases
 
+## Values of the `fit` column, which names the model a row's forecast or
+## estimate came from: a per-stream spec id, or one of these three, which
+## the package owns so the plotting fit roles key off the same names.
+## `JOINT_FIT` is also the fit a plain `forecast.csv` carries, that asset
+## predating the per-stream fits. `FROZEN_FIT` is applied at scoring time
+## to `forecast_frozen.csv`, which carries no `fit` column of its own.
+using BVDOutbreakSize: JOINT_FIT, BASELINE_FIT, FROZEN_FIT
+
 const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
 const FROZEN_FORECAST_ASSET = "forecast_frozen.csv"
@@ -103,17 +112,6 @@ const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
-
-## Values of the `fit` column, which names the model a row's forecast or
-## estimate came from: a spec id, or `baseline` for the persistence
-## baseline, which is no model's output. `joint` is also the fit a plain
-## `forecast.csv` carries, that asset predating the per-stream fits.
-const JOINT_FIT = "joint"
-const BASELINE_FIT = "baseline"
-## The fit label the frozen-fit forecasts (`forecast_frozen.csv`) are scored
-## under. That asset carries no `fit` column (it is the joint model at each
-## frozen cut-off), so the label is applied at scoring time.
-const FROZEN_FIT = "frozen"
 
 ## Release tags whose forecast is excluded from scoring because the
 ## RECONSTRUCTION failed, not because the model performed badly: a chain
@@ -913,11 +911,16 @@ end
 # Per-stream estimate summary
 # ----------------------------------------------------------------------
 
-## The two quantities a release's `stream_estimates.csv` carries, mapped to
-## the per-release-by-stream table each is collected into.
+## The quantities a release's `stream_estimates.csv` carries, mapped to the
+## per-release-by-stream table each is collected into. "R0" is the per-fit
+## basic reproduction number, `exp(rt_state.log_R0)`, the by-dataset
+## analogue of `r0_row` below; it is absent from every release until a
+## release carries it in `stream_estimates.csv`, so its destination table
+## stays header-only until then.
 const STREAM_QUANTITY_DEST = Dict(
     "R_T" => "rt_by_release_by_stream.csv",
-    "C_T" => "size_by_release_by_stream.csv")
+    "C_T" => "size_by_release_by_stream.csv",
+    "R0" => "r0_by_release_by_stream.csv")
 
 ## The `(release, date, fit, median, lo30, ...)` rows from a release's
 ## `stream_estimates.csv`, one per `(fit, quantity)`, keyed by quantity so
@@ -1393,10 +1396,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println("Wrote $(nrow(r0)) release R0 summaries to " *
             "data/r0_by_release.csv")
 
-    ## `data/rt_by_release_by_stream.csv` and
-    ## `data/size_by_release_by_stream.csv`: the R_T and C_T posteriors of
-    ## every fit, per release. Written even when empty, since the docs build
-    ## reads them and a missing file throws rather than reading back empty.
+    ## `data/rt_by_release_by_stream.csv`, `data/size_by_release_by_stream.csv`
+    ## and `data/r0_by_release_by_stream.csv`: the R_T, C_T and R0 posteriors
+    ## of every fit, per release. Written even when empty, since the docs
+    ## build reads them and a missing file throws rather than reading back
+    ## empty.
     for file in sort(collect(values(STREAM_QUANTITY_DEST)))
         rows = stream_est_rows[file]
         df = if isempty(rows)

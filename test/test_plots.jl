@@ -450,6 +450,36 @@ end
     @test nticks < length(longer)
 end
 
+@testitem "plot_forecast_overlay draws a frozen fit as joint" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_overlay, FROZEN_FIT, BASELINE_FIT
+    using DataFrames: DataFrame
+    using Dates: Date, Day
+    ## A frozen row is the joint model re-fit at a past cut-off, so it
+    ## takes the joint colour and legend entry rather than the individual
+    ## role's, no individual fit having run at these cut-offs.
+    md = Date(2026, 6, 21)
+    rows = [
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = BASELINE_FIT, observed = 21.0,
+            median = 20.0, lo90 = 16.0, hi90 = 24.0),
+        (; stream = "confirmed cases", made_date = md, horizon = 7,
+            target_date = md + Day(7), fit = FROZEN_FIT, observed = 21.0,
+            median = 22.0, lo90 = 18.0, hi90 = 26.0)
+    ]
+    fig = plot_forecast_overlay(DataFrame(rows))
+    leg = only(x for x in fig.content if x isa CairoMakie.Legend)
+    labels = [e.label[] for (_, es) in leg.entrygroups[] for e in es]
+    @test "joint" in labels
+    @test !("individual" in labels)
+
+    ax = only(x for x in fig.content if x isa CairoMakie.Makie.Axis)
+    scatters = [x for x in ax.scene.plots if x isa CairoMakie.Makie.Scatter]
+    joint_colour = CairoMakie.Makie.to_color(:firebrick)
+    individual_colour = CairoMakie.Makie.to_color(:steelblue)
+    @test any(s -> s.color[] == joint_colour, scatters)
+    @test !any(s -> s.color[] == individual_colour, scatters)
+end
+
 @testitem "plot_forecast_relative_skill empty and filled" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_relative_skill
     using DataFrames: DataFrame
@@ -484,6 +514,21 @@ end
     df2.log_rel_to_baseline = df2.rel_to_baseline
     @test plot_forecast_relative_skill(df2;
         value_col = :log_rel_to_baseline) isa CairoMakie.Makie.Figure
+end
+
+@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup=[HeadlessMakie] begin
+    using BVDOutbreakSize: plot_forecast_relative_skill, FROZEN_FIT
+    using DataFrames: DataFrame
+
+    ## The frozen evaluation scores the joint model alone, so its single
+    ## series belongs to the joint role rather than reading as an
+    ## individual fit that was never run.
+    rows = [(; stream = "confirmed cases", horizon = h, fit = FROZEN_FIT,
+                rel_to_baseline = 0.8 + 0.02 * h) for h in [7, 14, 21]]
+    fig = plot_forecast_relative_skill(DataFrame(rows))
+    leg = only(x for x in fig.content if x isa CairoMakie.Legend)
+    labels = [e.label[] for (_, es) in leg.entrygroups[] for e in es]
+    @test labels == ["joint"]
 end
 
 @testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin

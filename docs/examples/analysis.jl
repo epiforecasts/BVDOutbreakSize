@@ -2247,21 +2247,94 @@ diagnostics_table( #hide
 
 # #### Forecast scoring against a persistence baseline
 #
-# Every forecast in this report, past releases included, is scored with the continuous ranked probability score (CRPS), on the raw count scale and on a log scale that stops the largest counts dominating.
-# The score splits into the forecast's own dispersion and the extra cost of over- or under-predicting, which separates a vague forecast from a confidently wrong one.
-# Coverage is the share of forecasts whose 50% or 90% interval held the observation and should sit near those levels; bias is signed, from minus one when every forecast is too low to one when every forecast is too high.
-# Relative skill is the ratio of two fits' mean scores over the forecasts both were scored on, so one comparator score of zero cannot send it to infinity, and below one beats the comparator.
+# Every forecast above, and every stored forecast from a past release, is
+# scored with the continuous ranked probability score, on the count scale
+# and on a log scale that stops the largest counts dominating.
+# We report the score split into the predictive spread and the cost of
+# reading high or low, the share of observations inside the 50% and 90%
+# predictive intervals, and a bias running from $-1$ when every forecast
+# sits below the observation to $1$ when every one sits above it.
+# Relative skill between fits $A$ and $B$ is
 #
-# The count streams are running cumulative totals, so each is scored on the increment from one report to the next rather than on the level, while bed occupancy is a level and is scored as one.
-# A stream is scored only between its first and last report, since outside that an unmoved total is the absence of a series rather than an observed zero.
-# On the two confirmed streams a reported step that is mostly a retrospective integration of harmonised provincial records has that backfill removed from both the target and the baseline, so such a window is scored on transmission rather than on transmission plus a backlog.
+# ```math
+# \mathrm{RS}_{A/B} =
+#     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
+#     \tag{42}
+# ```
 #
-# Every forecast is also compared against a persistence baseline.
-# For bed occupancy this carries the last observed level forward, matching the COVID-19 Forecast Hub baseline.
-# For a count stream it centres on the observed count over a horizon-length window ending at the forecast's cut-off, because these series are sparse and irregularly timed and a single most recent increment would be a noisier centre.
-# Its uncertainty comes from an iterated random walk out to the horizon, each day's step drawn from how much that stream has moved historically, so the interval widens with the square root of the horizon.
-# The baseline sees only the counts reported by the day the forecast was made, so a later revision cannot make the comparison unfair.
-# That holds exactly where a forecast is scored against its own release's cut-off, but the frozen re-fits below reuse one historical cut-off across many later releases, so a revision landing in between is already in the snapshot and still reaches the baseline.
+# each mean taken over the forecasts both fits scored, so a comparator that
+# happens to score zero on one forecast cannot send the ratio to infinity.
+# A value below one beats the comparator.
+#
+# The count streams are running cumulative totals, so each is scored on its
+# increment over the forecast window rather than on the level it reaches,
+# while bed occupancy is a level and is scored as one.
+# A stream is scored only where its own reporting covers the window, from
+# the day it was first reported to the day it was last updated, since
+# outside that period a cumulative total that has not moved is the absence
+# of a series rather than an observed zero.
+#
+# Each forecast is also compared against a persistence baseline built from
+# the same stream.
+# Write the vintages recorded by the day the forecast was made as dates
+# $d_1 < \dots < d_m$ carrying cumulative values $Y_1, \dots, Y_m$, let
+# $Y(t)$ be the value at the last vintage on or before $t$, and let $t_0$ be
+# the day the forecast was made and $h$ the horizon in days.
+# The baseline centres on the occupancy reached, or on the increment over
+# the preceding window of the same length,
+#
+# ```math
+# \mu =
+# \begin{cases}
+#   Y(t_0), & \text{occupancy}, \\
+#   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
+# \end{cases} \tag{43}
+# ```
+#
+# and takes its spread from the record's own first differences, each
+# rescaled to a one-day step and entered with both signs,
+#
+# ```math
+# S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{44}
+# ```
+#
+# Under a driftless walk of per-day variance $\sigma^2$ a change over $w$
+# days has variance $w \sigma^2$, so dividing by $\sqrt{w}$ puts vintages
+# recorded at different spacings on a common one-day scale, and holding both
+# signs makes the pool mean zero so a record that only rises does not give
+# the walk a direction.
+# One predictive draw iterates the walk to the horizon,
+#
+# ```math
+# \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
+# \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
+#     \tag{45}
+# ```
+#
+# so before the floor it has mean $\mu$ and variance $h \sigma^2$ for
+# $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$, and the interval widens with the
+# square root of the horizon.
+# This follows the COVID-19 Forecast Hub baseline, except that the centre
+# for a count stream pools the whole window rather than the single most
+# recent increment, since these vintages are sparse and irregularly spaced.
+# Fewer than three recorded differences leaves no usable pool and the
+# baseline falls back to a Poisson draw around the centre.
+#
+# The baseline reads only the vintages recorded by the day the forecast was
+# made, from the archived data snapshot the release itself was built on, so
+# no later correction or backfill reaches it.
+# For a forecast made at a release's own cut-off that snapshot is the one
+# the forecast was made from and the guarantee is exact.
+# The frozen re-fits below forecast from fixed historical cut-offs reused
+# across later releases, so their snapshot can post-date the day the
+# forecast was made by weeks, and a correction landing in between is already
+# in it.
+# Closing that would need a snapshot archived per frozen cut-off, which does
+# not exist.
+# The earliest releases archived their cut-off totals without the dated
+# vintage record, leaving their baseline no history to draw on, so skill
+# against it is not informative there.
 
 # ## Results
 #
@@ -3561,8 +3634,14 @@ function _fit_rt_draws(f)
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end
 
-_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])))
-                      for f in stream_fits]
+## Basic reproduction number per fit, the renewal walk's starting value, a
+## single distribution per fit rather than a daily series. Every current
+## single-stream composer shares the joint's latent submodel and so carries
+## its own walk base, but `r0_walk_draws` probes rather than assumes, so a
+## single-stream model built without its own renewal walk drops out of this
+## quantity instead of breaking the release.
+_stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])),
+                          r0_walk_draws(f.chn)) for f in stream_fits]
 
 ## One row per fit and quantity, with the median and the 30/60/90% credible
 ## bounds the report's tables use.
@@ -3573,15 +3652,19 @@ function _stream_estimate_row(fit, quantity, draws)
         lo90 = s.lo90, hi90 = s.hi90)
 end
 stream_estimates = DataFrame([_stream_estimate_row(fit, q, d)
-                              for (fit, rt, ct) in _stream_quantities
-                              for (q, d) in (("R_T", rt), ("C_T", ct))])
+                              for (fit, rt, ct, r0) in _stream_quantities
+                              for (q, d) in (("R_T", rt), ("C_T", ct),
+                                      ("R0", r0))
+                              if !isnothing(d)])
 CSV.write(joinpath(output_dir, "stream_estimates.csv"), stream_estimates);
 
 ## Thinned reproduction-number and outbreak-size draws per fit, so downstream
 ## scoring can recompute its own summaries rather than reuse the intervals.
 stream_draws = DataFrame([(fit = fit, quantity = q, draw = d, value = v)
-                          for (fit, rt, ct) in _stream_quantities
-                          for (q, vals) in (("R_T", rt), ("C_T", ct))
+                          for (fit, rt, ct, r0) in _stream_quantities
+                          for (q, vals) in (("R_T", rt), ("C_T", ct),
+                                  ("R0", r0))
+                          if !isnothing(vals)
                           for (d, v) in enumerate(vals[1:stream_thin:end])])
 CSV.write(joinpath(output_dir, "stream_draws.csv"), stream_draws);
 

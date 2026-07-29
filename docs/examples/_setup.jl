@@ -150,6 +150,22 @@ if !@isdefined(_BVD_SETUP_LOADED)
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
     frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+    ## Basic reproduction number draws from a chain that walks its own
+    ## renewal process, `exp` of the walk's log base `rt_state.log_R0`, the
+    ## walk's starting value and a distinct quantity from the growth-clock
+    ## rate `r0`. `nothing` for a chain carrying no walk base: an absent key
+    ## throws rather than reading back empty, so the lookup is probed, the
+    ## same way `_has_key` in src/forecast.jl probes a chain key.
+    function r0_walk_draws(chn)
+        try
+            exp.(vec(Array(chn[Symbol("rt_state.log_R0")])))
+        catch
+            nothing
+        end
+    end
+    ## Every frozen fit is a full joint fit, so it carries the same walk base
+    ## chn_joint does.
+    frozen_R0(c) = r0_walk_draws(frozen_by_cutoff[c].chn)
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
