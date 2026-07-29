@@ -107,6 +107,26 @@ Changes since v1.9.0.
   level is deliberately not scored, since every vintage rereads the whole
   figure and its ≈4% per-scan level error revises the total both ways.
 
+- Made the reporting-triangle snapshot figure a posterior predictive rather
+  than a plot of the modelled count alone. Its band now carries the
+  measurement error the likelihood gives a digitised bar, which lifts
+  coverage of the observed bars from 0.42 to 0.95 at a nominal 90%. Fixing
+  it exposed two systematic misses that are recorded in #517 and not
+  corrected here: the fitted delay is too slow between 6 and 19 days, and
+  the calendar-time effect is too tightly constrained to follow reporting
+  speeding up over the eleven snapshots.
+
+- Split the nowcast/forecast figure's total into the latent sum of its two
+  components and the replicate the next vintage will actually print, which
+  are different by an order of magnitude in width. The scored quantity is
+  the replicate, and 98% of its variance is the per-scan level error rather
+  than anything epidemiological.
+
+- Added a results section plotting symptom onsets by date of onset: each
+  onset date's bar as the first figure to cover it printed it, the same bar
+  as the most recent figure prints it, and the model's current estimate of
+  both the eventual reports and the onsets themselves.
+
 - De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
   log-density path (`confirmed_positivity_link = :composition`): extracted
   the composition-positivity loop to a plain `composition_positivity()`

@@ -232,7 +232,7 @@ validation_latent_fig #hide
 # Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off, so exports contributes no scored forecast at all and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
 # Only a minority of the daily releases examined across the outbreak contribute a row to the table below, and every one of them is a reconstruction of an earlier version of the model rather than the model as it stands today, so the table below is not a verdict on the current fit.
-# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample properly rather than a genuine forecast (see `scripts/score_releases.jl`, `_FAILED_RECONSTRUCTIONS`).
+# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
 # The releases that do carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet, which is why the comparison against each stream's individual fit is still empty.
 # It will populate once those targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
@@ -457,8 +457,8 @@ frozen_overlay_fig #hide
 # stream's own individual single-stream fit rather than the joint, against
 # the same persistence baseline.
 # Recovered has no individual fit, so it does not appear here.
-# `forecast_score_overview_table` and its by-horizon and by-release
-# counterparts already carry one row per (stream, fit) for every fit
+# The overview scoring table and its by-horizon and by-release
+# counterparts already carry one row per stream and fit for every fit
 # scored, joint and individual alike, so this section reuses those same
 # tables filtered to the individual-fit rows rather than building its own.
 # As noted in [Forecast scoring across releases](@ref "Forecast scoring
@@ -1478,7 +1478,7 @@ clock_sensitivity_T_fig #hide
 # ## Saving sensitivity results
 #
 # The stream-comparison and frozen-fit tables and the per-stream reproduction
-# number figure are written to the shared `output/` directory (the main
+# number figure are written to the shared output directory (the main
 # analysis writes the rest), so the combined release and summary dashboard
 # pick up both pages' outputs.
 
