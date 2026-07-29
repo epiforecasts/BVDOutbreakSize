@@ -2056,6 +2056,11 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
+# The likelihood therefore admits a negative increment, but the mean above
+# cannot produce one: $F$ is non-decreasing in $\delta$, so the modelled
+# increment is bounded below at zero. Re-dating is absorbed as observation
+# noise rather than modelled.
+#
 # $\sigma_u$ collects three sources. The cell counts cases, so it carries
 # counting variation of about its own modelled mean; the digitised bar is
 # read with a $\pm 2.1$-case pixel-noise SD, doubled for a correction since
