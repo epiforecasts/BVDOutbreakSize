@@ -405,6 +405,18 @@ end
 ## — because the vintage it names has not arrived by this `obs`'s cut-off —
 ## contributes nothing, matching `truth_at`/`baseline_draws` never seeing a
 ## vintage that has not happened yet.
+##
+## A break day on the stream's first vintage takes the whole cumulative as
+## its step, the same first-vintage-from-zero reading `data.jl`'s own
+## validation uses and the one `cum_at` gives, since before the first
+## vintage it returns zero.
+##
+## The correction is floored at zero. `data.jl` refuses a gross at or above
+## its vintage's net step when the manifest loads, so on the current
+## manifest the floor never binds; it binds only on a snapshot the
+## declaration was carried onto (see `carry_break_days`), whose own vintage
+## of that day may be smaller, and there a negative correction would inflate
+## the baseline rather than correct it.
 function break_day_corrections(obs, grid_date, stream)
     gross = break_gross_vector(obs, stream)
     gross === nothing && return Tuple{Date, Float64}[]
@@ -418,7 +430,7 @@ function break_day_corrections(obs, grid_date, stream)
         pos === nothing && continue
         net = h.counts[pos] - (pos == 1 ? 0 : h.counts[pos - 1])
         g = i <= length(gross) ? gross[i] : 0
-        push!(out, (grid_date(d), Float64(net - g)))
+        push!(out, (grid_date(d), Float64(max(net - g, 0))))
     end
     return out
 end

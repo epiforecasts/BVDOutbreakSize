@@ -176,3 +176,40 @@ end
     ## the other two steps are untouched.
     @test diffs == [(10.0, 7), (97.0, 7), (21.0, 7)]
 end
+
+@testitem "break_correction floors a gross above its own net step" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    ## A snapshot whose own vintage of the break day steps by only 40, less
+    ## than the 97 printed alongside the day in the current manifest. The
+    ## manifest loader refuses that pairing, so it can only arise on a
+    ## snapshot the declaration was carried onto, and there the correction
+    ## floors at zero rather than adding 57 back to the baseline.
+    hist = (; days = [10, 17, 24], counts = [100.0, 110.0, 150.0])
+    obs = (; confirmed_history = hist,
+        confirmed_break_days = [24], confirmed_break_gross_cases = [97])
+
+    @test break_correction(
+        obs, grid_date, "confirmed cases", grid_date(17), grid_date(24)) ==
+          0.0
+end
+
+@testitem "break_correction on a first vintage counts from zero" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    ## The break day is the stream's first vintage, so its step is the whole
+    ## cumulative, matching what `cum_at` reads before a series has started.
+    hist = (; days = [24, 31], counts = [379.0, 400.0])
+    obs = (; confirmed_history = hist,
+        confirmed_break_days = [24], confirmed_break_gross_cases = [97])
+
+    @test break_correction(
+        obs, grid_date, "confirmed cases", grid_date(17), grid_date(31)) ==
+          282.0  # 379 - 97
+end
