@@ -106,7 +106,8 @@ jobs:
           key: >-
             fit-${{ matrix.id }}-${{ hashFiles(
               'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
-              'src/constants.jl', 'src/data.jl', 'docs/fits/registry.jl', 'data/**') }}
+              'src/constants.jl', 'src/data.jl', 'src/onset_curve.jl',
+              'docs/fits/registry.jl', 'data/**') }}
       # Restore the resolved manifest from `list` (after the depot cache step,
       # so this job's cache key still matches) so instantiate installs those
       # exact versions instead of re-resolving and recompiling.
