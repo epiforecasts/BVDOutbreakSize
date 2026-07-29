@@ -600,10 +600,10 @@ cumulative_density_fig #hide
 # ## Estimate evolution across releases
 #
 # How the outbreak-size estimate has moved as situation reports accrued, three series on one calendar axis.
-# The released series, in blue, is the project's published estimate at each release, a discrete median with nested 30/60/90% interval bars rather than a ribbon.
-# The current model frozen at earlier cut-offs is drawn in red, also as discrete estimates, reusing fits already made for the McCabe comparison, the Chamla comparison and the forecast validation.
-# The current-data, current-model estimate runs as a continuous green trajectory, so the latest estimate reads against the earlier points, and release dates are marked with a dotted vertical rule.
-# A closed-form integral model produced the released series up to v1.3.0, and a renewal model has produced it since, so a jump there can reflect a change of method rather than of data.
+# The estimate published at each release is in blue, drawn as a median with nested 30/60/90% interval bars because each release is its own fit rather than one continuous model.
+# The current model frozen at earlier cut-offs is in red, reusing fits already made for the McCabe and Chamla comparisons and the forecast validation.
+# The current model on current data is the green band, drawn day by day so the latest estimate reads against the earlier points, and dotted vertical rules mark the release dates.
+# The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
@@ -762,10 +762,10 @@ rt_evolution_fig #hide
 
 # ## Reproduction number by release and dataset
 #
-# The reproduction number estimated at each release, one panel per fit, so each dataset's history reads against the others and against the joint.
-# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off value is a discrete median with nested 30/60/90% interval bars.
-# A fit with no saved estimates is dropped rather than drawn empty, and a fit the report runs on its own also carries a current-model reference band, built the same way as the overview above.
-# Confirmed deaths has no band of its own, so its panel carries its release points alone, and every per-dataset history starts later than the overview above, at the release that first published these per-fit estimates.
+# The same release-by-release reproduction number split one panel per dataset, so each dataset's history reads against the others and against the joint.
+# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off value is a median with nested 30/60/90% interval bars.
+# A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above; confirmed deaths carries no band, so its panel shows release points alone.
+# Only the most recent releases published these per-dataset estimates, so every panel spans a much shorter window than the overview above rather than a different history.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number per release by fit</summary>
@@ -816,15 +816,13 @@ function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
 end
 
 ## The single-stream chains and their renewal-walk starts, keyed on the fit
-## id the per-release tables use. The joint walks from `RT_WALK_LEAD` days
-## before the first situation report; the per-stream fits walk from day 1,
-## matching the per-stream implied-Rt figure above. Confirmed deaths has no
-## trajectory here: its panel still draws its release points alone.
-_stream_rt_walk_start = clamp(
-    _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+## id the per-release tables use. Both the joint walk start and the day-1
+## per-stream starts are the ones the per-stream implied-Rt figure above
+## uses, so the bands here match it. Confirmed deaths has no trajectory
+## here: its panel still draws its release points alone.
 _stream_chains = (
     "joint" => (; chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = _stream_rt_walk_start),
+        rt_walk_start = _rt_walk_start_joint),
     "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
