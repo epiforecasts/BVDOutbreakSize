@@ -253,8 +253,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # carry a raster figure of confirmed cases by symptom-onset date, split
 # alive/deceased ("courbe épidémique par date de début des symptômes"),
 # with no accompanying data table. We digitise it with a dependency-free
-# pixel-recovery script (`scripts/digitize_onset_curve.jl`, ported to
-# Python for the automated updater), self-calibrated from each figure's
+# pixel-recovery script (later ported to Python for the automated
+# updater), self-calibrated from each figure's
 # own axis ticks, giving one block of onset-date counts per situation-report
 # vintage; this is the only published source for the onset-date
 # distribution, so we fit it directly rather than leaving it as a data
@@ -269,16 +269,15 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # vintages (a case moves from one bar to a neighbouring one), an
 # individual bar can fall between two vintages even though the running
 # total cannot; this is expected and is not scan error. Some situation
-# reports reprint an earlier vintage's figure unchanged: SitReps 061-062
-# and 069-071 are each byte-identical to the vintage before them, so we
-# collapse each such group to its earliest report date before fitting,
-# keeping ten distinct digitised snapshots (thirteen digitised vintages,
-# three of them reprints) with report dates 12, 13, 14, 17, 18, 19, 20,
-# 21, 22 and 25 July. The fit only ever sees snapshots at or before the
-# current cut-off, the same rule as every other stream (see
-# [`load_onset_curve`](@ref)), so a vintage digitised ahead of the manifest
-# enters automatically, with no code change, once the cut-off advances past
-# its report date.
+# reports reprint an earlier vintage's figure unchanged: SitReps 061-062,
+# 069-071 and 073-074 are each byte-identical to the vintage before them,
+# so we collapse each such group to its earliest report date before
+# fitting, keeping eleven distinct digitised snapshots out of fifteen
+# digitised vintages, with report dates 12, 13, 14, 17, 18, 19, 20, 21,
+# 22, 25 and 26 July. The fit only ever sees snapshots at or before the
+# current cut-off, the same rule as every other stream, so a vintage
+# digitised ahead of the manifest enters automatically, with no code
+# change, once the cut-off advances past its report date.
 #
 # Each figure also stops its horizontal axis short of its own report date,
 # by anything from zero to eight days depending on the vintage, and the
@@ -1968,23 +1967,19 @@ cfr_prior_fig #hide
 
 # ##### Symptom-onset reporting delay
 #
-# Every observation model above sees the shared daily onset series only
-# after a further convolution: a suspected-case report, a death, a
-# laboratory confirmation. The digitised onset epidemic curve (see the
-# [Data](@ref methods-data) section) is the only direct observation of that
-# series, so it can identify things the other streams cannot on their own,
-# plausibly including the report-versus-receipt split the laboratory pipeline
-# currently pins with a soft external constraint
-# (`onset_to_sample_logweight`).
+# Every other observation model sees the shared onset series only after a
+# further convolution: a suspected-case report, a death, or a laboratory
+# confirmation. The digitised onset epidemic curve (the [Data](@ref
+# methods-data) section) is the only direct observation of it, so it can
+# identify things the other streams cannot on their own, plausibly
+# including the split between reporting and laboratory receipt that the
+# laboratory pipeline currently pins with an external constraint.
 #
 # We model the onset-to-report delay as a discrete-time hazard over delay
-# $d = 0,\dots,D-1$ days, $D = 28$ (see `ONSET_REPORT_MAX_DELAY`): the
-# triangle's own between-vintage increments are essentially all signal by
-# around two weeks and settle into digitisation noise, mean increment near
-# zero with frequent sign flips, by about three weeks, so $D = 28$ sits
-# where the true reporting signal has decayed into that noise floor. The
-# baseline hazard is a non-centred logit random effect over the delay,
-# free to rise and fall rather than forced monotone or parametric:
+# $d = 0,\dots,D-1$ days, $D = 28$: by then the triangle's between-vintage
+# increments have decayed into digitisation noise. The baseline hazard is
+# a non-centred logit random effect over the delay, free to rise and fall
+# rather than forced monotone or parametric:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
@@ -1992,13 +1987,13 @@ cfr_prior_fig #hide
 # \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{41}
 # ```
 #
-# The hazard at delay $d$ for an onset on day $u$ is then modified by a
+# The hazard at delay $d$ for an onset on day $u$ is modified by a
 # calendar-time effect indexed on the report day $u + d$: a weekly-knot
 # non-centred random walk on the logit scale, the same construction as the
 # reproduction-number walk above but tightly constrained
 # ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.1)$), so reporting speed
-# can drift gently over calendar time without absorbing the increments'
-# own noise:
+# drifts gently over calendar time without absorbing the increments' own
+# noise:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
@@ -2017,29 +2012,25 @@ cfr_prior_fig #hide
 #     & \delta \ge 0. \end{cases} \tag{43}
 # ```
 #
-# $\delta < 0$ is right truncation, and it is the only place it enters this
-# model: a recent onset date's expected count in a given snapshot is only
-# ever what its own delay allows, so the same onset date's expected count
-# rises as later snapshots see more of it — the same idea EpiNow2 uses for
-# its nowcast. What differs here is the observation model below, which
-# scores per-snapshot corrections to a reporting triangle, not a single
-# evolving total column the way EpiNow2, and every other stream in this
-# package, is scored.
+# $\delta < 0$ is right truncation: a recent onset date's count in a given
+# snapshot is only what its own delay allows, and rises as later snapshots
+# see more of it, the idea EpiNow2 uses for its nowcast. $F$ deliberately
+# does not reach $1$ as $\delta \to D-1$. The hazard's own asymptote
+# absorbs ascertainment instead, so $F(u, D-1)$ is onset date $u$'s
+# modelled ascertainment and $F(u,\delta) / F(u, D-1)$ its normalised delay
+# profile, one mechanism read two ways rather than a second parameter block
+# that would trade against the hazard total.
 #
-# $F$ is deliberately not made to reach $1$ as $\delta \to D - 1$. Instead
-# we let the hazard's own asymptote absorb ascertainment: $F(u, D-1)$ is
-# onset date $u$'s modelled ascertainment, and $F(u,\delta) / F(u, D-1)$
-# its normalised delay profile — one mechanism read two ways, rather than
-# a second free parameter block that would trade against the hazard
-# total.
-#
-# The expected reported count is the shared onset series convolved with
-# $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$, and,
-# to avoid double-counting a case already reported at an earlier snapshot,
-# the likelihood scores the difference between consecutive snapshots
-# $s - 1, s$ at each onset date $u$ in a trailing $D$-day window of the
-# newer snapshot's report day (dropping onset dates further back, which
-# the triangle shows carry only noise by then):
+# The expected reported count is the onset series convolved with $F$,
+# $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$. The
+# likelihood scores the difference between consecutive snapshots at each
+# onset date, in a trailing $D$-day window of the newer snapshot's report
+# day, which avoids double-counting a case already reported earlier and
+# drops the older onset dates that carry only noise by then. A count
+# likelihood cannot be used, since a re-dated case can move a bar down in a
+# later scan even though the true running total cannot fall, so the
+# increment is scored with a Student-$t$ at fixed degrees of freedom
+# ($\nu = 4$, a standard robust-regression choice):
 #
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
@@ -2047,102 +2038,56 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
-# $\sigma_u$ collects three sources. The cell counts cases, so it carries
-# counting variation of about its own modelled mean; the digitised bar is
-# read with a $\pm 2.1$-case pixel-noise SD, doubled for a correction since
-# it differences two reads; and each scan carries a $4.0\%$ level error on
-# its own cumulative reading. Every magnitude entering $\sigma_u$ is the
-# modelled one, never the observed count, so the likelihood's own noise
-# never feeds back into its own variance, and a sampled slack multiplier
-# sits on top of the whole thing. That multiplier can only inflate the
-# scale, never shrink it: each term is a lower bound on the truth, since a
-# bar cannot be read off a raster more precisely than its pixels allow and a
-# count of newly reported cases carries at least its own counting variation,
-# and a fitted scale below them would have a couple of hundred cells
-# claiming a precision the figure cannot support and outvoting every other
-# stream.
+# $\sigma_u$ collects three sources: counting variation around the cell's
+# own modelled mean; a $\pm 2.1$-case pixel-noise SD on the digitised bar,
+# doubled for a correction since it differences two reads; and a $4.0\%$
+# level error on each scan's own cumulative reading. Every magnitude
+# entering $\sigma_u$ is the modelled one and never the observed count, so
+# the likelihood's noise cannot feed into its own variance, and a sampled
+# slack multiplier sits on top. That multiplier can only inflate the scale,
+# because each term is a lower bound on the truth: a bar cannot be read off
+# a raster more precisely than its pixels allow, and a count of newly
+# reported cases carries at least its own counting variation.
 #
-# The very first scored snapshot is differenced against an implicit empty
+# The first scored snapshot is differenced against an implicit empty
 # predecessor, so its cells score levels rather than corrections. That is
-# what recovers it instead of discarding it, and it also does real work:
-# corrections only ever pin differences of $F$, so scaling $F$ up while
-# scaling the onset series down leaves every correction cell unchanged, and
-# something has to score a level for the asymptote to be anchored at all.
-# Those cells are the ones whose counting variation matters most, a bar of
-# 40 cases carrying about $\sqrt{40}$ of it against $2.1$ of reading error.
+# what anchors the asymptote: corrections only ever pin differences of $F$,
+# so scaling $F$ up while scaling the onset series down leaves every
+# correction cell unchanged, and something has to score a level.
 #
-# A count likelihood cannot be used here: the measured increments are
-# frequently negative, since a re-dated case can move a bar down in a later
-# scan even though the true running total cannot fall, so we use a
-# Student-$t$ with fixed degrees of freedom ($\nu = 4$, a standard
-# robust-regression choice) rather than a sampled one, for the same reason
-# the report-to-receipt delay above keeps its own scale nuisance fixed
-# where the data cannot pin it down.
-#
-# **What the triangle separates, and what it does not.** Three
-# time-varying multiplicative objects now act on or near the same latent
-# series: the reproduction-number walk on the infection and hence onset
-# axis, the calendar walk on the report axis, and ascertainment, which is
-# not a free object at all here but the asymptote of the hazard the
-# calendar walk modifies. Each leaves a different footprint on the grid of
-# scored cells, which runs over onset date and snapshot pair. A change in
-# the onset series moves a column, one onset date across every snapshot. A
-# change in the calendar walk moves a row, the hazard on the report days one
-# snapshot pair spans, across every onset date at once. A change in the
-# baseline hazard moves a delay band, running diagonally across both.
-# Column, row and band are distinguishable once there is more than one
-# snapshot, which is the structural reason this stream is worth fitting, and
-# also the reason the calendar walk is indexed on the report date: on the
-# onset axis its footprint would be a column too, the same one the
-# reproduction-number walk already moves, and neither would be identified.
+# Three time-varying objects act on the same latent series: the
+# reproduction-number walk on the onset axis, the calendar walk on the
+# report axis, and ascertainment, which is the hazard's asymptote rather
+# than a free object. Each leaves a different footprint on the grid of
+# scored cells, which runs over onset date and snapshot pair. The onset
+# series moves a column, the calendar walk moves a row, and the baseline
+# hazard moves a diagonal band, and the three are distinguishable once
+# there is more than one snapshot. That is the structural reason this
+# stream is worth fitting, and also the reason the calendar walk is
+# indexed on the report date: on the onset axis its footprint would
+# coincide with the reproduction-number walk's and neither would be
+# identified.
 #
 # Three things stay weak. The asymptote is pinned by the first snapshot's
-# level cells and by the onset series coming from the other streams, not by
-# the corrections, so in the onsets-only fit below the asymptote and the
-# outbreak size are confounded and that fit's $C_T$ is close to
-# prior-driven; it belongs in the comparison as a comparison, not as an
-# estimate. The hazard below about two days' delay is barely observed, for
-# the axis reason given in the Data section, and rests on pooling across
-# delays. And a falling asymptote and a slowing hazard shape both suppress
-# recent bars within one snapshot; right truncation self-corrects for the
-# delay explanation, since a suppressed bar catches up later, but not for
-# an ascertainment fall, which does not recover, so the vintage structure
-# does bear on this, only as strongly as the handful of snapshots covering
-# the affected onset dates allows. Both readouts come from the one fitted
-# calendar effect and are reported with matching uncertainty. Folding
-# ascertainment into the asymptote rather than giving it its own parameter
-# block is deliberate: a separate block would trade against the hazard
-# total with nothing in the data to arbitrate between them.
+# level cells and by the onset series the other streams supply, so in the
+# onsets-only fit below it is confounded with the outbreak size and that
+# fit's $C_T$ is close to prior-driven. The hazard below about two days'
+# delay is barely observed, for the axis reason given in the Data section,
+# and rests on pooling across delays. And a falling asymptote and a
+# slowing hazard both suppress recent bars, where truncation self-corrects
+# for the delay explanation but not for an ascertainment fall.
 #
-# One consequence of folding ascertainment into the asymptote is easy to
-# miss. The triangle counts confirmed cases by onset date, so its asymptote
-# estimates the proportion of onsets eventually confirmed, the same quantity
-# the confirmed pipeline above builds from $p_{\text{DRC}}$, the tested
-# fraction and test positivity. We do not tie the two together. That keeps a
-# digitised figure from pulling on the pooled ascertainment every other
-# stream shares, and it means a disagreement between them is absorbed by the
-# asymptote rather than surfacing as a conflict; the cost is that this
-# stream informs the ascertainment level only through the onset series it
-# shares, and what it contributes of its own is timing. Comparing the fitted
-# asymptote against $p_{\text{DRC}}$ times the tested fraction times
-# positivity from the same fit is a free consistency check, and a large gap
-# is worth investigating rather than ignoring.
-#
-# What we have not been able to check is whether the calendar walk and the
-# reproduction-number walk pull on each other in practice. Their footprints
-# differ, but their calendar windows overlap and both are least constrained
-# in the final fortnight, so the first diagnostic to look at is the
-# calendar walk's step size against the reproduction-number walk's own, and
-# the $R_t$ posterior with and without this stream. The alive/dead split
+# The triangle counts confirmed cases by onset date, so its asymptote
+# estimates the same quantity the confirmed pipeline builds from
+# ascertainment, the tested fraction and test positivity. The two are
+# deliberately not tied together, so that a digitised figure cannot pull
+# on the ascertainment every other stream shares. The alive and dead split
 # the raw figure carries is not modelled separately, since the
-# confirmed-death stream above already carries that split from other data.
-#
-# An earlier line-list-independent reanalysis of this triangle put the
-# median onset-to-report delay at around 6 days and the 7-day reporting
-# fraction at 54-62% (95% interval 43-68%), an interval that wide because
-# the digitisation noise is close in size to the between-vintage
-# increments the estimate rests on; the fitted delay below is read with
-# the same honesty.
+# confirmed-death stream already carries it from other data. An earlier
+# line-list-independent reanalysis of this triangle put the median
+# onset-to-report delay at around 6 days and the 7-day reporting fraction
+# at 54-62%, an interval that wide because the digitisation noise is close
+# in size to the increments the estimate rests on.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_report_hazard_model</summary>
@@ -2188,7 +2133,7 @@ cfr_prior_fig #hide
 # generates prior- and posterior-predictive draws.
 #
 # The symptom-onset reporting triangle is threaded in the same way, as a
-# standard stream rather than an opt-in one: `onset_curve_history` defaults
+# standard stream rather than an opt-in one: the onset-curve input defaults
 # to an empty history, so a missing input file degrades to a no-op rather
 # than an error, but the production path fits it every time alongside the
 # other streams.
@@ -2496,12 +2441,11 @@ diagnostics_table( #hide
 # ```
 #
 # so at the cut-off $T$ the triangle should have printed $S(T)$ while
-# $\sum_{u \le T} \text{onsets}_u$ symptom onsets have actually happened.
-# Their difference is the nowcast: onsets already in the population but not
-# in the figure. Not all of it will ever be reported, because $F$ is
-# deliberately not made to reach one and carries ascertainment as well as
-# delay, so this difference is the reporting backlog and the never-ascertained
-# cases together, not a backlog alone.
+# $\sum_{u \le T} \text{onsets}_u$ onsets have actually happened. Their
+# difference is the nowcast, onsets already in the population but not in
+# the figure. Not all of it will ever be reported, since $F$ carries
+# ascertainment as well as delay, so it is the reporting backlog and the
+# never-ascertained cases together.
 #
 # Splitting $S(T + h) - S(T)$ at the cut-off splits the coming week the same
 # way:
@@ -2519,33 +2463,24 @@ diagnostics_table( #hide
 # flat at its last fitted value across the horizon, the assumption any
 # nowcast makes about reporting behaviour continuing.
 #
-# We score the sum of the two terms, the new reported count the triangle
-# should add over the horizon, and not the triangle's cumulative level. Every
-# vintage rereads the whole figure, so its total moves both from genuine late
-# reporting and from the roughly 4% per-scan level error. In the current data
-# the printed total falls between consecutive vintages more than once: 2531
-# on 25 July against 2523 on 26 July, and 2018 on 17 July against 1996 on 18
-# July. Late reporting only ever adds cases, so a fall of that size is the
-# rescan and not the epidemic. Scoring the level would charge the forecast
-# for a rescan of cases it had already predicted, and would count the same
-# revision again at every later horizon. On the incident basis each revision
-# enters exactly one scored window. This is the same argument that keeps the
-# other cumulative streams out of the scored archive, applied to a stream
-# whose revisions are larger and partly artefactual.
+# We score the sum of the two terms, the increment the triangle should add
+# over the horizon, rather than its cumulative level. Every vintage rereads
+# the whole figure, so the printed total moves with the roughly 4% per-scan
+# level error as well as with genuine late reporting, and it falls between
+# consecutive vintages more than once in the current data. Scoring the level
+# would charge the forecast for a rescan of cases it had already predicted
+# and would count the same revision again at every later horizon.
 #
-# The interval on that increment is dominated by digitisation rather than by
-# epidemic uncertainty: at a total of a couple of thousand cases the
-# per-scan level term alone is worth tens of cases, well above the counting
-# variation of a week's new reports. The onset forecast is therefore worth
-# more as a check that the fitted delay and ascertainment reproduce the next
-# vintage than as a case-count prediction, and its scores should be read that
-# way.
+# The interval on that increment is dominated by the scan error rather than
+# by epidemic uncertainty, so the forecast is worth more as a check that the
+# fitted delay and ascertainment reproduce the next vintage than as a
+# case-count prediction.
 #
 # Each release now saves its forecast as an asset so it can later be scored
 # against what is observed.
 # Earlier releases showed a forecast but did not store it, so those forecasts
 # are reconstructed.
-# `scripts/backfill_forecasts.jl` checks out each past release at its own tag,
+# A backfill script checks out each past release at its own tag,
 # re-runs that release's own model code on that release's data through its own
 # fit, and writes the forecast in the same archive schema, so a reconstructed
 # forecast is the release's own output rather than a current-code
@@ -2597,7 +2532,7 @@ diagnostics_table( #hide
 #
 # Every forecast above, and every past release's saved forecast, is scored
 # with the continuous ranked probability score (CRPS), on both the raw and
-# the log scale (`log_crps`, which downweights the largest counts rather
+# the log scale (which downweights the largest counts rather
 # than treating an error of a hundred cases the same at every scale).
 # The CRPS decomposes into the ensemble's own spread (dispersion) and the
 # extra cost of over- or under-predicting the observation, so a fit
@@ -2641,12 +2576,12 @@ diagnostics_table( #hide
 # That guarantee is exact for forecasts scored at a release's own cut-off,
 # where the vintage snapshot and the forecast's made date are the same
 # day or close to it.
-# For the frozen re-fit evaluation below, made_date is a fixed historical
+# For the frozen re-fit evaluation below, the made date is a fixed historical
 # cut-off reused across many later release tags, so it can sit weeks
 # before the snapshot's own cut-off; a correction that landed between
-# made_date and the snapshot's cut-off is already baked into the
+# the made date and the snapshot's cut-off is already baked into the
 # snapshot and can still reach the frozen baseline.
-# Closing that residual gap would need a made_date-specific vintage
+# Closing that residual gap would need a made-date-specific vintage
 # manifest for each frozen cut-off, which is not archived.
 
 # ## Results
@@ -3081,77 +3016,35 @@ surveillance_pair_fig #hide
 
 # ### Symptom-onset reporting delay and ascertainment
 #
-# The onset-report hazard and its calendar-time drift are stored in the
-# chain only as their non-centred components (see `onset_report_hazard_model`
-# above), so every posterior draw's `logit_h0` and `γ` are rebuilt here the
-# same way `reconstruct_rt` rebuilds the reproduction-number walk from its
-# own non-centred components.
-# The table below reports the hazard's hyperparameters together with two
-# representative derived quantities, rather than the 28 per-delay hazards or
-# the full calendar-walk trajectory: the share of a representative (median)
-# onset date's eventual reports that arrive within 7 days, and the median
-# modelled ascertainment across every onset date whose asymptote is
-# observable within the fitted grid. The first is the cumulative $F$
-# normalised by its own asymptote, since $F$ carries ascertainment as well
-# as delay; the second is that asymptote. Both come from the one fitted
-# calendar effect, so read them together rather than as independent
-# estimates.
-# The pair plot summarises the hyperparameters alone, with the prior
-# overlaid; the fitted curves themselves are shown against the digitised
-# data in the snapshot figure further below.
+# The table reports the onset-report hazard's hyperparameters together with
+# two derived quantities: the share of a representative onset date's
+# eventual reports that arrive within 7 days, and the median modelled
+# ascertainment across the onset dates whose asymptote is observable within
+# the fitted grid.
+# Both come from the one fitted calendar effect, so they are read together
+# rather than as independent estimates (see the [symptom-onset reporting
+# delay](@ref "Symptom-onset reporting delay") Methods section).
+# The pair plot shows the hyperparameters alone, with the prior overlaid.
 #
 # The scale slack row is a diagnostic rather than a quantity of interest.
 # Its prior is bounded below at one, because each term in the observation
-# scale is a lower bound on the truth: a bar cannot be read off a raster
-# more precisely than its pixels allow, and a count of newly reported cases
-# carries at least its own counting variation. So a posterior sitting on
-# that bound says the fit would like a tighter likelihood than the figure
-# can support, which is what the onsets-only fit does (its latent curve is
-# pinned by nothing else and bends onto the bars); a posterior well above
-# one says the scale is missing a term. Read it against the two
-# approximations named in `onset_report_scales`: the per-scan level error is
-# treated as independent across the roughly 28 cells drawn from one scan
-# when it is really one shared dilation of that scan's whole figure, and the
-# counting term is Poisson-like with no separate overdispersion parameter.
-# Those two leave different fingerprints. A missing overdispersion parameter
-# grows the shortfall with the cell mean, since a slack multiplier can
-# inflate every cell but cannot change the mean-variance shape. Correlated
-# scan error leaves the individual cells alone and shows up only when cells
-# from one snapshot are summed, where treating a shared error as independent
-# puts the aggregate predictive's mass in the wrong place. The per-snapshot
-# panel in the [posterior predictive checks](@ref "Posterior predictive
-# checks") is therefore the one to read for the second, and the per-cell
-# coverage for the first.
+# scale is a lower bound on the truth, so a posterior sitting on that bound
+# says the fit would like a tighter likelihood than the figures can support.
 #
-# Both have been checked, and the answer is not the one the phrase
-# "underdispersed" suggests (issue #507 carries the full numbers).
-# The onset stream is **not** underdispersed.
-# Individual cells are scored about twice as wide as they need to be: the
-# standardised residual has SD 0.71 against the 1.414 a Student-t with four
-# degrees of freedom implies, and the empirical-to-modelled residual ratio
-# does not grow with the cell mean, so there is no evidence for an
-# overdispersion parameter and adding one would widen cells that are already
-# over-covered.
-# What is wrong is the per-snapshot aggregate, where one snapshot in eleven
-# falls inside the nominal 50% interval, against ten of eleven inside the
-# nominal 90%.
-# One in eleven has probability 0.006 under a correct model, so this is a
-# real failure and not small-sample noise.
-# The aggregate variance is nonetheless right (empirical over modelled 1.07),
-# which is what rules out any variance fix: the predictive has about the
-# right spread and puts it in the wrong place, with deviations that are
-# large and two-sided and rarely near the centre.
-# That is the shared-scan fingerprint rather than the overdispersion one,
-# and the scan term is a fifth of the per-snapshot variance, so it is large
-# enough to matter.
-# The likelihood is deliberately left unchanged here: the shared error would
-# have to be smaller than the 4% measured per bar, since moving that figure
-# wholesale from per-cell to per-vintage over-corrects the aggregate variance
-# by about a factor of two.
-# There is also a weak suggestion that the model under-predicts how much is
-# added between snapshots (mean deviation +16 with a standard error of 10),
-# which would be a centring rather than a spread problem; at eleven
-# snapshots it is suggestive and no more.
+# The calibration check behind that row (issue #507 carries the numbers)
+# finds the stream is not underdispersed.
+# Individual cells are scored about twice as wide as they need to be, with a
+# standardised residual SD of 0.71 against the 1.414 the likelihood implies,
+# and the residual ratio does not grow with the cell mean.
+# What fails is the per-snapshot aggregate: one snapshot in eleven falls
+# inside the nominal 50% interval and ten of eleven inside the nominal 90%,
+# which has probability 0.006 under a correct model.
+# The aggregate variance is nonetheless right, at 1.07 empirical over
+# modelled, so the predictive has about the right spread and puts it in the
+# wrong place.
+# That is the signature of a scan error shared across a whole figure rather
+# than of overdispersion, no variance term fixes it, and the likelihood is
+# left unchanged here.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3284,15 +3177,29 @@ onset_pair_fig = plot_pair(chn_joint,
 
 onset_pair_fig #hide
 
-# Each panel below is one digitised snapshot: the fitted cumulative
-# onset-date curve (posterior median with a 90% credible band) against
-# that snapshot's own digitised cumulative bars.
+# Each panel below is one digitised snapshot, and each point is one onset
+# date's bar as that snapshot printed it, against the model's count for the
+# same onset date and the same reporting delay.
+# The dark band is the modelled count itself and the pale band adds the
+# measurement error the likelihood gives a digitised bar, so the pale band
+# is the one the points should fall inside: they do for 95% of cells,
+# against 42% for the dark band alone.
 # A recent onset date sits below its eventual value in its own snapshot's
-# panel and catches up in a later snapshot's panel, the right-truncation
-# behaviour the model relies on (see the [symptom-onset reporting
-# delay](@ref "Symptom-onset reporting delay") Methods section); the
-# panels only cover snapshots at or before the current cut-off (see the
-# [Data](@ref methods-data) section).
+# panel and catches up in a later panel, the right-truncation behaviour the
+# model relies on (see the [symptom-onset reporting delay](@ref
+# "Symptom-onset reporting delay") Methods section).
+#
+# The panels also show two misses the fitted delay does not absorb.
+# The figures print 5 to 19% more than the model expects at delays of 6 to
+# 19 days while the two agree at 25 to 27 days, so reporting is faster in
+# its middle range than the fitted profile allows; a latent onset series
+# set too low would scale every delay alike, so this is the shape of the
+# delay rather than its level.
+# And the miss grows over calendar time, from a mean standardised residual
+# near zero in the earliest snapshots to 0.8 in the latest, which is what
+# a calendar-time effect too tightly constrained to follow reporting
+# speeding up would produce.
+# Neither is corrected here; both are recorded in issue #517.
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
@@ -3327,14 +3234,35 @@ _onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
 _onset_daily_draws = [vcat(v[1], diff(v))
                       for v in vec(collect(chn_joint[:cumulative_onsets]))]
 
-## Modelled cumulative count at onset day `u`, report day `R`, per
-## posterior draw: `onsets[u] * F(u, R - u)`, the same expected value
+## Modelled count at onset day `u` as of report day `R`, per posterior
+## draw: `onsets[u] * F(u, R - u)`, the same expected value
 ## `onset_report_expected_total` sums, evaluated at a single onset day.
 function _onset_modelled_cumulative(u::Integer, R::Integer)
     return [_onset_daily_draws[i][u] *
             onset_report_cdf(R - u, _onset_hazard.logit_h0[i],
                 _onset_hazard.γ[i], u, _onset_grid_start)
             for i in eachindex(_onset_daily_draws)]
+end
+
+## The same counts put through the stream's own observation model, so the
+## band is a posterior predictive of a digitised bar rather than of the
+## latent count behind it. A bar is one read off one scan with no previous
+## level to difference against, which is `onset_report_scale`'s level case
+## (`reads = 1`, `level_prev = 0`) — the case the first scored snapshot's
+## own cells carry. Without this the band is the modelled count alone and
+## covers 42% of the observed bars at a nominal 90%.
+_onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
+_onset_ppc_rng = Random.MersenneTwister(20260729)
+## Four replicates per draw rather than one: the band is a 90% interval of
+## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
+## from Monte Carlo error alone.
+function _onset_replicated(draws::AbstractVector)
+    return [begin
+                μ = draws[i]
+                σ = _onset_σ_mult[i] * onset_report_scale(μ, μ, 0.0, 1)
+                μ + σ * rand(_onset_ppc_rng, TDist(4.0))
+            end
+            for _ in 1:4 for i in eachindex(draws)]
 end
 
 onset_fit_fig = let
@@ -3349,14 +3277,18 @@ onset_fit_fig = let
         us = obs.onset_curve_history.onset_days[idx]
         observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
         draws = [_onset_modelled_cumulative(u, R) for u in us]
+        reps = [_onset_replicated(d) for d in draws]
         med = [quantile(d, 0.5) for d in draws]
         lo90 = [quantile(d, 0.05) for d in draws]
         hi90 = [quantile(d, 0.95) for d in draws]
+        plo90 = [quantile(d, 0.05) for d in reps]
+        phi90 = [quantile(d, 0.95) for d in reps]
         xs = Float64.(1:length(us))
         ax = CairoMakie.Axis(fig[r, c]; title = string(snap.report_date),
             xlabel = r == nrow ? "onset day (oldest to newest)" : "",
-            ylabel = c == 1 ? "cumulative cases" : "")
-        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.25))
+            ylabel = c == 1 ? "cases at this onset date" : "")
+        CairoMakie.band!(ax, xs, plo90, phi90; color = (:steelblue, 0.12))
+        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.30))
         CairoMakie.lines!(ax, xs, med; color = :steelblue, linewidth = 2,
             label = "modelled")
         CairoMakie.scatter!(ax, xs, observed; color = :black,
@@ -3367,8 +3299,11 @@ onset_fit_fig = let
         font = :bold, tellwidth = false)
     CairoMakie.Legend(fig[nrow + 1, 1:ncol],
         [CairoMakie.LineElement(color = :steelblue),
+            CairoMakie.PolyElement(color = (:steelblue, 0.30)),
+            CairoMakie.PolyElement(color = (:steelblue, 0.12)),
             CairoMakie.MarkerElement(color = :black, marker = :circle)],
-        ["modelled (median, 90% CrI)", "digitised"];
+        ["modelled median", "modelled count, 90%",
+            "with measurement error, 90%", "digitised"];
         orientation = :horizontal, tellwidth = false)
     fig
 end;
@@ -3379,6 +3314,117 @@ end;
 
 onset_fit_fig #hide
 
+# ### Symptom onsets by date of onset
+#
+# The panels above read one snapshot at a time.
+# This figure reads the other way, along the onset date, and puts three
+# quantities for the same day side by side.
+#
+# The open circles are the bar as the first figure to cover that onset date
+# printed it, which is what a reader had at the time.
+# The filled circles are the same bar as the most recent figure prints it,
+# after every later revision.
+# The gap between them is what late reporting and re-dating have added
+# since, and it widens towards the right, where the first figure to print a
+# date caught only a few days of its reporting.
+#
+# The two bands are the model's current view of the same days.
+# The lower one is the count the triangle should eventually print for that
+# onset date, the modelled onsets multiplied by the fitted asymptote, and
+# is the band the filled circles are converging towards.
+# The upper one is the modelled symptom onsets themselves, which sits above
+# it because the asymptote is the ascertainment and does not reach one.
+# The distance between the two bands is the part of the epidemic this
+# stream will never print, and the distance between the upper band and the
+# filled circles at the right-hand end is the nowcast.
+
+#md # ```@raw html
+#md # <details><summary>Onsets by onset date: as first printed, as printed now, and modelled</summary>
+#md # ```
+
+## First and most recent printed value for each onset date the digitised
+## figures cover. Ordered by report date already, so the first block
+## carrying a date is the earliest to print it and the last is the current
+## reading. A date inside a block's own printed extent but with no row is a
+## zero-height bar and does count; a date outside that extent is not
+## covered by that figure at all and is skipped (the same rule the loader
+## applies, see the [Data](@ref methods-data) section).
+_onset_first_printed = Dict{Int, Float64}()
+_onset_last_printed = Dict{Int, Float64}()
+for snap in _onset_snaps
+    lo, hi = extrema(keys(snap.onsets))
+    for d in lo:Day(1):hi
+        u = obs.n - value(obs.cutoff - d)
+        (1 <= u <= obs.n) || continue
+        v = Float64(get(snap.onsets, d, 0))
+        haskey(_onset_first_printed, u) || (_onset_first_printed[u] = v)
+        _onset_last_printed[u] = v
+    end
+end
+_onset_by_date_days = sort(collect(keys(_onset_last_printed)))
+
+## Modelled onsets on each of those days, and the count the triangle should
+## eventually print for them: the same onsets times the hazard's asymptote,
+## which is this stream's ascertainment. The extrapolated form of the
+## cumulative reported proportion is used because the most recent onset
+## dates sit past the calendar walk's fitted support.
+_onset_by_date_onsets = [[_onset_daily_draws[i][u]
+                          for i in eachindex(_onset_daily_draws)]
+                         for u in _onset_by_date_days]
+_onset_by_date_eventual = [[_onset_daily_draws[i][u] *
+                            onset_report_cdf_extrapolated(
+                                length(_onset_hazard.logit_h0[i]) - 1,
+                                _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
+                                u, _onset_grid_start)
+                            for i in eachindex(_onset_daily_draws)]
+                           for u in _onset_by_date_days]
+
+onset_by_date_fig = let
+    fig = CairoMakie.Figure(; size = (900, 430))
+    ax = CairoMakie.Axis(fig[1, 1];
+        title = "Symptom onsets by date of onset: printed then, printed " *
+                "now, and modelled",
+        xlabel = "onset date", ylabel = "cases")
+    xs = Float64.(_onset_by_date_days)
+    q(ds, p) = [quantile(d, p) for d in ds]
+    for (ds, col) in ((_onset_by_date_onsets, :seagreen),
+        (_onset_by_date_eventual, :mediumpurple))
+        CairoMakie.band!(ax, xs, q(ds, 0.05), q(ds, 0.95);
+            color = (col, 0.20))
+        CairoMakie.band!(ax, xs, q(ds, 0.25), q(ds, 0.75);
+            color = (col, 0.30))
+        CairoMakie.lines!(ax, xs, q(ds, 0.5); color = col, linewidth = 2)
+    end
+    CairoMakie.scatter!(ax, xs,
+        [_onset_first_printed[u] for u in _onset_by_date_days];
+        color = :transparent, marker = :circle, markersize = 8,
+        strokewidth = 1, strokecolor = :grey40)
+    CairoMakie.scatter!(ax, xs,
+        [_onset_last_printed[u] for u in _onset_by_date_days];
+        color = :black, marker = :cross, markersize = 9)
+    ## Calendar labels on a grid-day axis, at weekly ticks so they do not
+    ## collide at this width.
+    _ticks = _onset_by_date_days[1:7:end]
+    ax.xticks = (Float64.(_ticks), string.(grid_date.(_ticks)))
+    ax.xticklabelrotation = pi / 4
+    CairoMakie.Legend(fig[2, 1],
+        [
+            CairoMakie.MarkerElement(color = :transparent, marker = :circle,
+                strokewidth = 1, strokecolor = :grey40),
+            CairoMakie.MarkerElement(color = :black, marker = :cross),
+            CairoMakie.PolyElement(color = (:mediumpurple, 0.30)),
+            CairoMakie.PolyElement(color = (:seagreen, 0.30))],
+        ["as first printed", "as printed now",
+            "modelled eventual reports", "modelled onsets"];
+        orientation = :horizontal, tellwidth = false, tellheight = true)
+    fig
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_by_date_fig #hide
 # ### Posterior predictive checks
 #
 # A posterior predictive check draws replicated observations from the
@@ -4117,23 +4163,19 @@ forecast_flows_fig #hide
 #
 # The onset stream's projection, built as described in the methods
 # [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and
-# forecast"). The table reads top to bottom as the nowcast first and the
-# forecast second, and the two must not be added together: the first three
-# rows describe the state of the outbreak at the cut-off, the next three the
+# forecast").
+# The table reads top to bottom as the nowcast first and the forecast
+# second, and the two halves must not be added together: the first three
+# rows are the state of the outbreak at the cut-off, the next three the
 # coming week.
 #
-# The distinction the table exists to make is between cases that are not yet
-# reported and cases that have not yet happened. The first is knowable now
-# and is what the reporting triangle buys us; the second is a projection and
-# carries the reproduction number's uncertainty. A count of "cases still to
-# come" that mixes the two is not a quantity anyone can act on.
-#
-# One row deserves care. "Onsets not yet reported at T" is not a backlog that
-# will all arrive: the fitted hazard's asymptote is this stream's
-# ascertainment, and it does not reach one, so this row holds the reporting
-# backlog and the cases the surveillance system will never confirm, together.
-# The "reports this week of onsets before T" row is the part of it the coming
-# week should actually clear, and is the smaller number.
+# One row deserves care.
+# "Onsets not yet reported at T" is not a backlog that will all arrive,
+# because the fitted hazard's asymptote does not reach one, so the row
+# holds the reporting backlog and the cases surveillance will never
+# confirm, together.
+# The "reports this week of onsets before T" row is the part of it the
+# coming week should actually clear, and is the smaller number.
 
 #md # ```@raw html
 #md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
@@ -4163,11 +4205,20 @@ onset_forecast_summary #hide
 #md # </details>
 #md # ```
 
-# The figure splits the coming week's new onset reports into the two
-# components: reports of onsets that had already happened by the cut-off
-# (the nowcast made observable) and reports of onsets still to come. The
-# right panel puts the nowcast itself on the same axes, the onsets that have
-# happened against the share of them the triangle has printed.
+# The left panel splits the coming week's new onset reports into reports of
+# onsets that had already happened by the cut-off and reports of onsets
+# still to come, and shows their sum.
+# The fourth bar is the same sum after it has been through the observation
+# model, which is what the next vintage will actually print.
+# It is much wider than the sum it replicates, and the gap is the rescan:
+# at a printed total of a couple of thousand cases the per-scan level error
+# alone is worth tens of cases either way, well above the epidemic
+# uncertainty on a week of new reports.
+# Only the fourth bar is comparable to a digitised figure, and only it is
+# scored.
+#
+# The right panel puts the nowcast itself on the same axes, the onsets that
+# have happened against the share of them the triangle has printed.
 
 #md # ```@raw html
 #md # <details><summary>Symptom-onset nowcast and forecast plot</summary>
@@ -4179,16 +4230,27 @@ onset_forecast_fig = let
     ## label overhangs the axis and is clipped at the figure edge.
     ax1 = CairoMakie.Axis(fig[1, 1];
         title = "New onset reports over the coming week",
-        ylabel = "cases", xticks = (1:3,
-            ["already\nhappened", "not yet\nhappened", "total"]))
-    for (i, d) in enumerate((onset_forecast.onset_reports_backfill,
-        onset_forecast.onset_reports_future,
-        Float64.(onset_forecast.onset_reports_new)))
+        ylabel = "cases", xticks = (1:4,
+            ["already\nhappened", "not yet\nhappened", "sum of\nthe two",
+                "as the next\nfigure reads it"]))
+    ## The first three bars are latent, so the third is exactly the first
+    ## two added. The fourth is that same sum replicated through the
+    ## observation model, which is the scored quantity and the only one
+    ## comparable to a digitised figure; it is wider by the per-scan level
+    ## error, which is why the three latent bars are shown as well rather
+    ## than a decomposition that appears not to add up.
+    _latent_total = onset_forecast.onset_reports_backfill .+
+                    onset_forecast.onset_reports_future
+    for (i, d, col) in ((1, onset_forecast.onset_reports_backfill,
+        :mediumpurple),
+        (2, onset_forecast.onset_reports_future, :mediumpurple),
+        (3, _latent_total, :mediumpurple),
+        (4, Float64.(onset_forecast.onset_reports_new), :slategray))
         s = posterior_summary(d)
         CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo90], [s.hi90];
-            color = :mediumpurple, linewidth = 3)
+            color = col, linewidth = 3)
         CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo60], [s.hi60];
-            color = :mediumpurple, linewidth = 8)
+            color = col, linewidth = 8)
         CairoMakie.scatter!(ax1, [Float64(i)], [quantile(d, 0.5)];
             color = :black, markersize = 9)
     end
@@ -4224,8 +4286,8 @@ onset_forecast_fig #hide
 
 # ## Saving results
 #
-# The tables above are written to an `output/` directory at the repo
-# root so they can be archived and shared. On every push to `main` a
+# The tables above are written to an output directory at the repo
+# root so they can be archived and shared. On every push to the main branch a
 # GitHub Actions workflow regenerates these files and publishes them
 # as a GitHub Release, downloadable from the repository's releases
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
@@ -4233,7 +4295,7 @@ onset_forecast_fig #hide
 # posterior draws, the latent symptom-onset ("symptomatic cases")
 # trajectory over time, the one- to four-week-ahead forecasts of the
 # observed streams (so each release records the forecast it made, for later
-# scoring), and a copy of the input `observations.toml` so
+# scoring), and a copy of the input data manifest so
 # the exact data that produced each result is recorded alongside it.
 
 #md # ```@raw html
