@@ -869,10 +869,9 @@ rt_stream_fig #hide
 
 # ## Basic reproduction number by release
 #
-# The basic reproduction number $R_0$, the renewal walk's starting value before the time-varying decline, is the initial-transmission analogue of the cut-off reproduction number above.
-# Each release's $R_0$ posterior is a discrete estimate, a median with nested 30/60/90% interval bars, in blue.
-# The current model frozen at earlier cut-offs is drawn in red, reusing the same frozen fits as the outbreak-size evolution figure above, and the current fit's $R_0$ posterior sits behind both as a flat reference band, with $R_0 = 1$ marked.
-# The release history is genuinely sparse: the posterior column this quantity reads from landed only a few releases before this page was last regenerated, so only the most recent releases carry a point, and the frozen overlay is what makes the picture readable meanwhile.
+# The basic reproduction number $R_0$ estimated at each release, the initial-transmission counterpart of the reproduction number above, before the time-varying decline.
+# Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars, and the current fit sits behind both as a flat band with $R_0 = 1$ marked.
+# Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release, and the frozen series carries the comparison meanwhile.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release with frozen re-fits and the current-fit band</summary>
@@ -892,22 +891,22 @@ r0_release = [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
 ## The current model frozen at earlier cut-offs, one discrete estimate per
 ## cut-off, reusing the same frozen fits `frozen_matched` above already
 ## computed. No extra fits are run. Each tuple carries the median and
-## 30/60/90% credible bounds of `exp(rt_state.log_R0)` from that frozen
-## fit's own draws, unrounded since R0 is continuous.
+## 30/60/90% credible bounds of that frozen fit's own R0 draws, unrounded
+## since R0 is continuous.
 frozen_r0_matched = [(c, _ci369(frozen_R0(c); round_fn = identity)...)
                      for c in _frozen_matched_cutoffs]
 
-## The current fit's R0 posterior is the exponential of the renewal walk's log
-## base `rt_state.log_R0`, a single distribution rather than a daily series.
-## Summarise it into a flat 30/60/90% reference band spanning the release
-## window (first release date to the cut-off), so it reads across the
-## per-release points like the time-varying band in the Rt figure. When no
-## release has been scored yet the window falls back to the seeding date.
+## The current fit's R0 posterior is a single distribution rather than a
+## daily series, so it summarises into a flat 30/60/90% reference band. The
+## window runs from the earliest mark on the axis, the first frozen cut-off
+## or release point, to the current cut-off, so the band reads behind both
+## series rather than only their recent end.
 r0_reference = let
-    draws = exp.(vec(Array(chn_joint[Symbol("rt_state.log_R0")])))
+    draws = r0_walk_draws(chn_joint)
     q(p) = quantile(draws, p)
-    first_date = isempty(r0_release_df.date) ? obs.seeding :
-                 minimum(r0_release_df.date)
+    first_date = min(minimum(Date.(_frozen_matched_cutoffs)),
+        isempty(r0_release_df.date) ? obs.cutoff :
+        minimum(r0_release_df.date))
     dates = [first_date, obs.cutoff]
     (dates, fill(q(0.35), 2), fill(q(0.65), 2), fill(q(0.20), 2),
         fill(q(0.80), 2), fill(q(0.05), 2), fill(q(0.95), 2))
@@ -931,26 +930,22 @@ r0_evolution_fig #hide
 
 # ## Basic reproduction number by release and dataset
 #
-# The basic reproduction number estimated at each release, one panel per fit, the by-dataset analogue of the reproduction number figure above.
-# Panels share a calendar axis and a y range, each release's value a discrete median with nested 30/60/90% interval bars, and $R_0 = 1$ is marked.
-# A fit with no saved estimates is dropped rather than drawn empty, and a fit the report runs on its own also carries a current-model reference band.
-# No release has published this quantity per fit yet, so every panel is empty for now.
+# The basic reproduction number estimated at each release, one panel per fit, the by-dataset counterpart of the figure above.
+# Panels share a calendar axis and a y range, each release a median with nested 30/60/90% interval bars, $R_0 = 1$ is marked, and every fit the report runs on its own also carries a current-model reference band.
+# Panels fill in from the first release that publishes this quantity per dataset, so a fit with nothing saved yet is left out rather than drawn empty.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release by fit</summary>
 #md # ```
 
-## Per-fit R0 flat reference band, the by-dataset analogue of `r0_reference`
-## above: a single distribution rather than a daily walk, so each fit's band
-## is flat across its own release window. `chn` is guarded rather than
-## assumed to carry `rt_state.log_R0`, so a future single-stream model built
-## without its own renewal walk drops its band instead of erroring.
+## Per-fit R0 flat reference band, the by-dataset counterpart of
+## `r0_reference` above, a single distribution rather than a daily walk, so
+## each fit's band is flat across its own release window. `r0_walk_draws`
+## probes for the walk base, so a single-stream model built without its own
+## renewal walk drops its band instead of erroring.
 function _r0_stream_trajectory(chn, dates)
-    draws = try
-        exp.(vec(Array(chn[Symbol("rt_state.log_R0")])))
-    catch
-        return nothing
-    end
+    draws = r0_walk_draws(chn)
+    isnothing(draws) && return nothing
     q(p) = quantile(draws, p)
     first_date = isempty(dates) ? obs.seeding : minimum(dates)
     ds = [first_date, obs.cutoff]
