@@ -73,6 +73,13 @@ default_frozen_cutoffs() = ["2026-05-20", "2026-05-23", "2026-05-27"]
 ## fit separately from the McCabe frozen set so the confirmed-case projection
 ## rides a vintage with testing data rather than the near-empty 27 May stream.
 default_chamla_cutoff() = "2026-06-08"
+## The individual single-stream models frozen at `validation_cutoff` for
+## the "last week versus now" forecast validation (see `fit_frozen_stream`
+## and `docs/examples/sensitivity.jl`'s "Forecast validation" section).
+## "exports" is excluded (not forecast at all) and there is no
+## individual model for "recovered".
+const VALIDATION_STREAM_IDS = ("cases", "deaths", "confirmed",
+    "confirmed_deaths", "treatment")
 function run_sensitivity_env()
     lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
     ("true", "1", "yes", "on")
@@ -127,6 +134,80 @@ function build_fit_specs(obs;
                 tmrca_days = o.tmrca_days);
             samples = samples, chains = chains, target_accept = 0.95,
             callback = fit_callback("frozen_$(cutoff_date)"))
+        return (; cutoff = o.cutoff, o, chn)
+    end
+
+    ## A single-stream fit at the headline settings to the data frozen at
+    ## `cutoff_date`, mirroring `fit_frozen_joint` but for one of the
+    ## individual per-stream models below (`model_id` one of "cases",
+    ## "deaths", "confirmed", "confirmed_deaths", "treatment"). Used to show
+    ## each stream's own individual model alongside the joint in the
+    ## one-week-back forecast validation, not just the joint alone.
+    function fit_frozen_stream(model_id::AbstractString, cutoff_date)
+        o = freeze_observations(cutoff_date)
+        bp = o.n - o.who_first_sitrep_days
+        chn = if model_id == "cases"
+            nuts_sample(
+                cases_only_model(o.n, o.reported_cases;
+                    reported_history = o.reported_history,
+                    suspected_daily_history = o.suspected_daily_history,
+                    breakpoint = bp);
+                samples = samples, chains = chains,
+                callback = fit_callback("frozen_$(cutoff_date)_cases"))
+        elseif model_id == "deaths"
+            nuts_sample(
+                deaths_only_model(o.n, o.total_deaths;
+                    deaths_history = o.deaths_history,
+                    suspected_daily_deaths_history =
+                    o.suspected_daily_deaths_history,
+                    breakpoint = bp);
+                samples = samples, chains = chains,
+                callback = fit_callback("frozen_$(cutoff_date)_deaths"))
+        elseif model_id == "confirmed"
+            nuts_sample(
+                confirmed_only_model(o.n, o.confirmed_cases;
+                    confirmed_history = o.confirmed_history,
+                    lab_history = o.lab_history,
+                    lab_daily_history = o.lab_daily_history,
+                    confirmed_break_days = o.confirmed_break_days,
+                    confirmed_break_gross_cases = o.confirmed_break_gross_cases,
+                    breakpoint = bp);
+                samples = samples, chains = chains,
+                callback = fit_callback("frozen_$(cutoff_date)_confirmed"))
+        elseif model_id == "confirmed_deaths"
+            nuts_sample(
+                confirmed_deaths_only_model(o.n, o.confirmed_deaths,
+                    o.total_deaths;
+                    deaths_history = o.deaths_history,
+                    confirmed_deaths_history = o.confirmed_deaths_history,
+                    confirmed_break_days = o.confirmed_break_days,
+                    confirmed_break_gross_deaths =
+                    o.confirmed_break_gross_deaths,
+                    breakpoint = bp);
+                samples = samples, chains = chains,
+                callback = fit_callback(
+                    "frozen_$(cutoff_date)_confirmed_deaths"))
+        elseif model_id == "treatment"
+            nuts_sample(
+                treatment_only_model(o.n;
+                    isolation_history = o.isolation_history,
+                    bed_capacity_history = o.bed_capacity_history,
+                    treatment_admissions_history =
+                    o.treatment_admissions_history,
+                    treatment_deaths_history = o.treatment_deaths_history,
+                    treatment_ruleout_history = o.treatment_ruleout_history,
+                    treatment_absconded_history =
+                    o.treatment_absconded_history,
+                    occupancy_break_days = o.occupancy_break_days,
+                    confirmed_break_days = o.confirmed_break_days,
+                    confirmed_break_gross_cases = o.confirmed_break_gross_cases,
+                    breakpoint = bp);
+                samples = samples, chains = chains,
+                callback = fit_callback("frozen_$(cutoff_date)_treatment"))
+        else
+            error("fit_frozen_stream: no frozen single-stream model for " *
+                  "id '$model_id'")
+        end
         return (; cutoff = o.cutoff, o, chn)
     end
 
@@ -315,6 +396,18 @@ function build_fit_specs(obs;
         (; id = "frozen_validation", kind = :frozen,
             thunk = () -> fit_frozen_joint(validation_cutoff))
     ]
+    ## One frozen individual fit per stream at the validation cut-off, so
+    ## the "last week versus now" forecast validation can show each
+    ## stream's own model alongside the frozen joint above, not the joint
+    ## alone. `VALIDATION_STREAM_IDS` names which single-stream models get
+    ## one; "exports" is excluded (not forecast at all, see
+    ## `forecast_reported`) and there is no individual model for
+    ## "recovered".
+    for sid in VALIDATION_STREAM_IDS
+        push!(specs,
+            (; id = "frozen_validation_$sid", kind = :frozen,
+                thunk = () -> fit_frozen_stream(sid, validation_cutoff)))
+    end
     for c in frozen_cutoffs
         push!(specs, (; id = "frozen_$c", kind = :frozen,
             thunk = () -> fit_frozen_joint(c)))

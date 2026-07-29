@@ -83,10 +83,10 @@ revision — SitRep 065's harmonisation moved 6 cases out of Haut-Uélé — so 
 small part of that fall is real.
 See issue #488.
 
-SitReps 061 and 062 reuse one figure, as do 069, 070 and 071, so the thirteen
-scanned vintages hold **ten** distinct onset snapshots (report dates 12, 13,
-14, 17, 18, 19, 20, 21, 22 and 25 July).
-SitReps 059 and 060 are **not** a repeat despite sharing a digitised total of
+SitReps 061 and 062 reuse one figure, as do 069, 070 and 071, and 073 and 074,
+so the fifteen scanned vintages hold eleven distinct onset snapshots (report
+dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25 and 26 July).
+SitReps 059 and 060 are not a repeat despite sharing a digitised total of
 1821: they differ on six days, so they count as two snapshots.
 `load_onset_curve` (`src/onset_curve.jl`) collapses reprints by exact value
 equality over the digitised block rather than by a hardcoded list of vintage

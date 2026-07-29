@@ -2593,6 +2593,62 @@ diagnostics_table( #hide
 #md # </details>
 #md # ```
 
+# #### Forecast scoring against a persistence baseline
+#
+# Every forecast above, and every past release's saved forecast, is scored
+# with the continuous ranked probability score (CRPS), on both the raw and
+# the log scale (`log_crps`, which downweights the largest counts rather
+# than treating an error of a hundred cases the same at every scale).
+# The CRPS decomposes into the ensemble's own spread (dispersion) and the
+# extra cost of over- or under-predicting the observation, so a fit
+# reading consistently high carries more overprediction than
+# underprediction and the reverse for a fit reading low.
+# Coverage is the share of forecasts whose 50% or 90% predictive interval
+# contained the observation, which should sit near 0.5 and 0.9 for a
+# well-calibrated fit; bias is signed, running from -1 (every forecast too
+# low) to 1 (every forecast too high).
+# A relative skill is the ratio of two fits' mean CRPS over the matched
+# set of forecasts both scored, not a mean of per-forecast ratios, so a
+# comparator that happened to score zero on one forecast cannot make the
+# ratio infinite; a ratio below one beats the comparator.
+#
+# The count streams are running cumulative totals, so each is scored on
+# its incidence, the increment between one vintage and the next, rather
+# than the cumulative level; the isolation-bed occupancy is a level and is
+# scored as one.
+# A stream is scored only over the period its own reporting source
+# covers, from the day it was first reported to the day it was last
+# updated: outside that period an unmoved cumulative total is the absence
+# of a series rather than an observed zero, and scoring against it would
+# reward persistence for predicting a number nobody measured.
+#
+# Every scored forecast is also compared against a persistence baseline:
+# the last observed occupancy carried forward unchanged for the isolation
+# bed level, matching the COVID-19 Forecast Hub baseline
+# (`COVIDhub-baseline`) directly, and for a count stream's own increments
+# the observed count over the whole horizon-length window ending at the
+# forecast's cut-off, rather than a single day's change; the streams here
+# are sparse, irregularly-timed cumulative counts, so a single most recent
+# increment would be a noisier centre than that window pooled.
+# Its predictive uncertainty comes from an iterated random walk, day by
+# day out to the forecast horizon, each day's step drawn from how much
+# that same quantity has moved historically in the stream's own reporting
+# record, so the interval widens with the square root of the horizon.
+# The baseline is built from the release's own data vintage, frozen no
+# later than the day the forecast was made, so a correction or backfill
+# that landed after a forecast was made cannot leak into its baseline and
+# make the comparison unfair.
+# That guarantee is exact for forecasts scored at a release's own cut-off,
+# where the vintage snapshot and the forecast's made date are the same
+# day or close to it.
+# For the frozen re-fit evaluation below, made_date is a fixed historical
+# cut-off reused across many later release tags, so it can sit weeks
+# before the snapshot's own cut-off; a correction that landed between
+# made_date and the snapshot's cut-off is already baked into the
+# snapshot and can still reach the frozen baseline.
+# Closing that residual gap would need a made_date-specific vintage
+# manifest for each frozen cut-off, which is not archived.
+
 # ## Results
 #
 # ### Summary
