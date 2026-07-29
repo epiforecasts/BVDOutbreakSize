@@ -870,7 +870,8 @@ rt_stream_fig #hide
 # ## Basic reproduction number by release
 #
 # The basic reproduction number $R_0$ estimated at each release, the initial-transmission counterpart of the reproduction number above, before the time-varying decline.
-# Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars, and the current fit sits behind both as a flat band with $R_0 = 1$ marked.
+# Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars.
+# The current fit sits behind both as a flat band, and $R_0 = 1$ is marked.
 # Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release, and the frozen series carries the comparison meanwhile.
 
 #md # ```@raw html
@@ -931,7 +932,8 @@ r0_evolution_fig #hide
 # ## Basic reproduction number by release and dataset
 #
 # The basic reproduction number estimated at each release, one panel per fit, the by-dataset counterpart of the figure above.
-# Panels share a calendar axis and a y range, each release a median with nested 30/60/90% interval bars, $R_0 = 1$ is marked, and every fit the report runs on its own also carries a current-model reference band.
+# Panels share a calendar axis and a y range, each release a median with nested 30/60/90% interval bars, and $R_0 = 1$ is marked.
+# Every fit the report runs on its own also carries a current-model reference band.
 # Panels fill in from the first release that publishes this quantity per dataset, so a fit with nothing saved yet is left out rather than drawn empty.
 
 #md # ```@raw html
