@@ -150,6 +150,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]
     frozen_C(c) = vec(Array(frozen_by_cutoff[c].chn[:C_T]))
+    ## The frozen fit's basic reproduction number, `exp` of the renewal
+    ## walk's log base (see `r0_reference` in sensitivity.jl). Every frozen
+    ## fit is a full joint fit, so it carries the same walk base chn_joint
+    ## does.
+    frozen_R0(c) = exp.(vec(Array(frozen_by_cutoff[c].chn[
+        Symbol("rt_state.log_R0")])))
     if RUN_SENSITIVITY
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
