@@ -762,7 +762,7 @@ rt_evolution_fig #hide
 
 # ## Reproduction number by release and dataset
 #
-# The same release-by-release reproduction number split one panel per dataset, so each dataset's history reads against the others and against the joint.
+# The same release-by-release reproduction number split into one panel per dataset, so each dataset's history reads against the others and against the joint.
 # Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off value is a median with nested 30/60/90% interval bars.
 # A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above; confirmed deaths carries no band, so its panel shows release points alone.
 # Only the most recent releases published these per-dataset estimates, so every panel spans a much shorter window than the overview above rather than a different history.
