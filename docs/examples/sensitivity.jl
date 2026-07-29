@@ -598,166 +598,13 @@ cumulative_density_fig = plot_cumulative_cases(
 
 cumulative_density_fig #hide
 
-# ## Outbreak size by release and dataset
-#
-# The outbreak size $C_T$ estimated at each release, one panel per fit, the per-dataset analogue of the overall release evolution below.
-# Each dataset constrains the latent size differently, so the panels show how far each fit's history sits from the joint's as data accrued.
-# A dataset the report fits on its own also carries that fit's current-model outbreak-size band, the per-dataset analogue of the current-data trajectory below, so a panel spanning only one saved release still reads against its own current estimate.
-# Confirmed deaths has no band of its own here, so its panel carries its release points alone.
-# The per-dataset release history begins at the release that first published these per-fit estimates, so some panels open later than the overall outbreak-size picture below.
-# Each panel keeps its own y range rather than a shared one, since the datasets span very different scales.
-
-#md # ```@raw html
-#md # <details><summary>Outbreak size per release, faceted by fit</summary>
-#md # ```
-
-## Schema of the per-release, per-fit estimate tables written by
-## scripts/score_releases.jl from each release's stream_estimates.csv. Shared
-## by this section and the reproduction-number-by-dataset section below.
-_by_stream_schema = (; release = String, date = Date, fit = String,
-    median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
-    hi60 = Float64, lo90 = Float64, hi90 = Float64)
-
-## Fits in a fixed order, the joint first, so the panels do not reshuffle
-## between builds. Labels match the per-stream table above (in "Outbreak
-## size estimated by each data stream"). Recovered is absent because it
-## has no individual fit.
-_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
-    "treatment", "exports"]
-_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
-    "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
-    "confirmed_deaths" => "confirmed deaths (DRC)",
-    "treatment" => "isolation (DRC)", "exports" => "exports")
-
-## Group a per-fit estimate table into the label => tuples pairs the faceted
-## plot takes, keyed on the date so the mixed release tag shapes
-## (`results-v1.9.0` and `results-1243`) never reach the axis.
-function _fit_groups(df)
-    return [get(_fit_labels, f, f) =>
-                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
-                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
-            for f in _fit_order]
-end
-
-## Current-data, current-model cumulative-infection trajectory for one
-## single-stream fit, the per-dataset analogue of the joint trajectory built
-## for the release-evolution section below. `dates` is that fit's own saved
-## release dates, so the band starts at the same release its per-fit panel's
-## points begin at.
-function _stream_size_trajectory(chn, dates)
-    mat = chn[:cumulative_infections]
-    trajs = [collect(v) for v in vec(collect(mat))]
-    first_date = isempty(dates) ? obs.seeding : minimum(dates)
-    start_day = obs.n - value(obs.cutoff - first_date)
-    days = max(start_day, 1):obs.n
-    ds = [obs.seeding + Day(d - 1) for d in days]
-    q(d, p) = quantile(Float64[t[d] for t in trajs], p)
-    (ds,
-        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
-end
-
-## Same, for the reproduction number, reconstructing the walk exactly as
-## `plot_rt_streams` does per stream.
-function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
-    mat = reconstruct_rt(chn; n = obs.n, breakpoint = _BREAKPOINT,
-        rt_start = rt_start, rt_walk_start = rt_walk_start,
-        ramp = RT_INTERVENTION_RAMP)
-    first_date = isempty(dates) ? obs.seeding : minimum(dates)
-    first_day = clamp(value(first_date - obs.seeding) + 1, rt_start, obs.n)
-    days = first_day:obs.n
-    ds = [obs.seeding + Day(d - 1) for d in days]
-    q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
-    (ds,
-        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
-        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
-        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
-end
-
-## The single-stream chains and their renewal-walk starts, keyed on the fit
-## id the per-release tables use. The joint walks from `RT_WALK_LEAD` days
-## before the first situation report; the per-stream fits walk from day 1,
-## matching the per-stream implied-Rt figure further below. Confirmed deaths
-## has no trajectory here: its panel still draws its release points alone.
-_stream_rt_walk_start = clamp(
-    _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
-_stream_chains = (
-    "joint" => (; chn = chn_joint, rt_start = _rt_start_plot,
-        rt_walk_start = _stream_rt_walk_start),
-    "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
-    "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
-    "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
-    "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
-    "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
-
-## Build a fit label => trajectory dictionary from a per-release table,
-## restricted to the fits `_stream_chains` names. A fit with no row in `df`
-## gets no trajectory, so its panel still draws its release points alone.
-function _rt_trajectories(df)
-    trajs = Dict{String, Any}()
-    for (fid, cfg) in _stream_chains
-        fdates = df.date[df.fit .== fid]
-        isempty(fdates) && continue
-        trajs[get(_fit_labels, fid, fid)] = _stream_rt_trajectory(
-            cfg.chn, fdates; rt_start = cfg.rt_start,
-            rt_walk_start = cfg.rt_walk_start)
-    end
-    return trajs
-end
-function _size_trajectories(df)
-    trajs = Dict{String, Any}()
-    for (fid, cfg) in _stream_chains
-        fdates = df.date[df.fit .== fid]
-        isempty(fdates) && continue
-        trajs[get(_fit_labels, fid, fid)] = _stream_size_trajectory(
-            cfg.chn, fdates)
-    end
-    return trajs
-end
-
-size_stream_df = _release_data("size_by_release_by_stream.csv",
-    _by_stream_schema)
-## Outbreak size spans very different scales across datasets (exports, a
-## handful of detections, against the joint's tens of thousands of
-## infections), so each panel keeps its own y range rather than sharing one
-## that a single wide-scale dataset would set for every other panel.
-size_stream_fig = plot_evolution_by_group(_fit_groups(size_stream_df);
-    trajectories = _size_trajectories(size_stream_df),
-    ylabel = "Cumulative infections",
-    title = "Outbreak-size estimate as data accrued, by dataset",
-    released_label = "Released estimate (per release)",
-    shared_yrange = false,
-    empty_note = "No per-dataset outbreak sizes saved yet.");
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-size_stream_fig #hide
-
 # ## Estimate evolution across releases
 #
-# How the outbreak-size estimate moved as the situation reports accrued.
-#
-# The project publishes a tagged results release at each data cut-off
-# (<https://github.com/epiforecasts/BVDOutbreakSize/releases>), bundling
-# the posterior draws and input data.
-# The released series, in blue, is the project's published estimate at each
-# release: the closed-form integral model up to v1.3.0, then the renewal
-# model from v1.4.0 on.
-# Each release is its own fit, so it is drawn as a discrete estimate, a
-# median with nested 30/60/90% interval bars, rather than a ribbon.
-# The current model frozen at earlier cut-offs is drawn in red as discrete
-# estimates: at the cut-offs matched to the McCabe et al. reports (20, 23
-# and 27 May), Chamla et al.'s 8 June confirmed-case calibration date, and
-# one week before the current cut-off. These are the frozen joint fits
-# already computed for the matched-in-time comparison, the Chamla comparison
-# and the forecast validation, reused here, so no extra fits are run.
-# The current-data, current-model estimate is drawn in green as the
-# cumulative-infection trajectory over time, a single fit shown across the
-# period so the latest estimate reads against the earlier ones.
-# Each release date is marked with a dotted vertical rule.
+# How the outbreak-size estimate has moved as situation reports accrued, three series on one calendar axis.
+# The released series, in blue, is the project's published estimate at each release, a discrete median with nested 30/60/90% interval bars rather than a ribbon.
+# The current model frozen at earlier cut-offs is drawn in red, also as discrete estimates, reusing fits already made for the McCabe comparison, the Chamla comparison and the forecast validation.
+# The current-data, current-model estimate runs as a continuous green trajectory, so the latest estimate reads against the earlier points, and release dates are marked with a dotted vertical rule.
+# A closed-form integral model produced the released series up to v1.3.0, and a renewal model has produced it since, so a jump there can reflect a change of method rather than of data.
 
 #md # ```@raw html
 #md # <details><summary>Released estimates and the current-model frozen re-fits</summary>
@@ -859,37 +706,6 @@ stream_rt_fig = plot_rt_streams(
 
 stream_rt_fig #hide
 
-# ## Reproduction number by release and dataset
-#
-# The same per-release reproduction number, one panel per fit, so each dataset's history reads against the others and against the joint.
-# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off reproduction number is a median with nested 30/60/90% interval bars.
-# A fit with no saved estimates is dropped rather than drawn empty.
-# A dataset the report fits on its own also carries that fit's current-model reproduction number as a band, reconstructed the same way as the single overall fit below, so a panel spanning only one release still reads against its own current estimate rather than sitting alone.
-# Confirmed deaths has no band of its own here, so its panel carries its release points alone.
-# The per-dataset release history begins at the release that first published these per-fit estimates, so some panels open later than the overall reproduction-number picture below.
-
-#md # ```@raw html
-#md # <details><summary>Reproduction number per release by fit</summary>
-#md # ```
-
-## Schema, fit order/labels and grouping and trajectory helpers are shared
-## with, and already defined by, the outbreak-size-by-dataset section above.
-rt_stream_df = _release_data("rt_by_release_by_stream.csv",
-    _by_stream_schema)
-rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
-    trajectories = _rt_trajectories(rt_stream_df),
-    ylabel = "Reproduction number",
-    title = "Reproduction number as data accrued, by dataset",
-    released_label = "Released estimate (per release)",
-    refline = 1.0,
-    empty_note = "No per-dataset reproduction numbers saved yet.");
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-rt_stream_fig #hide
-
 # ## Reproduction number by release
 #
 # The reproduction number estimated at each release, the same kind of release-by-release picture as the outbreak-size evolution above.
@@ -944,6 +760,108 @@ rt_evolution_fig = plot_estimate_evolution(rt_release;
 #md # ```
 
 rt_evolution_fig #hide
+
+# ## Reproduction number by release and dataset
+#
+# The reproduction number estimated at each release, one panel per fit, so each dataset's history reads against the others and against the joint.
+# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off value is a discrete median with nested 30/60/90% interval bars.
+# A fit with no saved estimates is dropped rather than drawn empty, and a fit the report runs on its own also carries a current-model reference band, built the same way as the overview above.
+# Confirmed deaths has no band of its own, so its panel carries its release points alone, and every per-dataset history starts later than the overview above, at the release that first published these per-fit estimates.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number per release by fit</summary>
+#md # ```
+
+## Schema of the per-release, per-fit estimate tables written by
+## scripts/score_releases.jl from each release's stream_estimates.csv.
+_by_stream_schema = (; release = String, date = Date, fit = String,
+    median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
+    hi60 = Float64, lo90 = Float64, hi90 = Float64)
+
+## Fits in a fixed order, the joint first, so the panels do not reshuffle
+## between builds. Labels match the per-stream table above (in "Outbreak
+## size estimated by each data stream"). Recovered is absent because it
+## has no individual fit.
+_fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
+    "treatment", "exports"]
+_fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
+    "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
+    "confirmed_deaths" => "confirmed deaths (DRC)",
+    "treatment" => "isolation (DRC)", "exports" => "exports")
+
+## Group a per-fit estimate table into the label => tuples pairs the faceted
+## plot takes, keyed on the date so the mixed release tag shapes
+## (`results-v1.9.0` and `results-1243`) never reach the axis.
+function _fit_groups(df)
+    return [get(_fit_labels, f, f) =>
+                [(string(r.date), r.median, r.lo30, r.hi30, r.lo60, r.hi60,
+                     r.lo90, r.hi90) for r in eachrow(df) if r.fit == f]
+            for f in _fit_order]
+end
+
+## Per-fit reproduction-number trajectory, reconstructing the walk exactly as
+## `plot_rt_streams` does per stream.
+function _stream_rt_trajectory(chn, dates; rt_start, rt_walk_start)
+    mat = reconstruct_rt(chn; n = obs.n, breakpoint = _BREAKPOINT,
+        rt_start = rt_start, rt_walk_start = rt_walk_start,
+        ramp = RT_INTERVENTION_RAMP)
+    first_date = isempty(dates) ? obs.seeding : minimum(dates)
+    first_day = clamp(value(first_date - obs.seeding) + 1, rt_start, obs.n)
+    days = first_day:obs.n
+    ds = [obs.seeding + Day(d - 1) for d in days]
+    q(d, p) = quantile(collect(skipmissing(@view mat[:, d])), p)
+    (ds,
+        [q(d, 0.35) for d in days], [q(d, 0.65) for d in days],
+        [q(d, 0.20) for d in days], [q(d, 0.80) for d in days],
+        [q(d, 0.05) for d in days], [q(d, 0.95) for d in days])
+end
+
+## The single-stream chains and their renewal-walk starts, keyed on the fit
+## id the per-release tables use. The joint walks from `RT_WALK_LEAD` days
+## before the first situation report; the per-stream fits walk from day 1,
+## matching the per-stream implied-Rt figure above. Confirmed deaths has no
+## trajectory here: its panel still draws its release points alone.
+_stream_rt_walk_start = clamp(
+    _BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n)
+_stream_chains = (
+    "joint" => (; chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = _stream_rt_walk_start),
+    "cases" => (; chn = chn_cases, rt_start = 1, rt_walk_start = 1),
+    "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
+    "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
+    "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
+    "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
+
+## Build a fit label => trajectory dictionary from a per-release table,
+## restricted to the fits `_stream_chains` names. A fit with no row in `df`
+## gets no trajectory, so its panel still draws its release points alone.
+function _rt_trajectories(df)
+    trajs = Dict{String, Any}()
+    for (fid, cfg) in _stream_chains
+        fdates = df.date[df.fit .== fid]
+        isempty(fdates) && continue
+        trajs[get(_fit_labels, fid, fid)] = _stream_rt_trajectory(
+            cfg.chn, fdates; rt_start = cfg.rt_start,
+            rt_walk_start = cfg.rt_walk_start)
+    end
+    return trajs
+end
+
+rt_stream_df = _release_data("rt_by_release_by_stream.csv",
+    _by_stream_schema)
+rt_stream_fig = plot_evolution_by_group(_fit_groups(rt_stream_df);
+    trajectories = _rt_trajectories(rt_stream_df),
+    ylabel = "Reproduction number",
+    title = "Reproduction number as data accrued, by dataset",
+    released_label = "Released estimate (per release)",
+    refline = 1.0,
+    empty_note = "No per-dataset reproduction numbers saved yet.");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+rt_stream_fig #hide
 
 # ## Basic reproduction number by release
 #
