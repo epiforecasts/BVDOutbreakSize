@@ -2999,10 +2999,25 @@ per-delay random effect free to depart substantially; the fitted delay
 should be read with the same honesty that analysis needed (its 7-day
 reporting fraction carried a 43-68% 95% interval, wide because the
 digitisation noise is comparable in size to the between-vintage increments
-the estimate rests on). `walk_sigma_prior` defaults to the same tight
-half-normal SD 0.1 as `rt_walk_model`'s `sigma_prior`: a gentle week-to-week
-drift in reporting speed/ascertainment, not a free-roaming walk that could
-absorb the increments' own noise.
+the estimate rests on).
+
+`walk_sigma_prior` is a half-normal with SD 0.3, sized so a drift the
+scored triangle can show is reachable rather than extreme. A 14% shift in
+a snapshot's printed level needs a calendar shift of roughly `0.32` at
+delay 8 and `0.58` at delay 12 on the logit hazard, holding the baseline
+at its prior median. The walk is a cumulative sum of `σ_γ .* z_γ`, so
+after the six weekly knots the scored window spans `γ` has SD
+`E[σ_γ]·√6` = `0.586`, putting that shift at 0.5-1σ. It stays a
+proper half-normal concentrated at zero, so a flat reporting profile is
+the default the data has to argue away from.
+
+The reason not to widen it further is the reproduction-number walk rather
+than noise absorption. The two act on overlapping calendar windows and
+both are least constrained over the final fortnight, so a calendar walk
+with too much freedom can start explaining recent onset-date structure
+that belongs to `R_t`. Any change here should report `R_t` over the final
+fortnight and `C_T` either side, and treat a material move as a reason to
+stop.
 
 Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`; `γ` is length
 `max(grid_end - grid_start + 1, 1)`, indexed from `grid_start`.
@@ -3012,7 +3027,7 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`; `γ` is length
         D::Integer = ONSET_REPORT_MAX_DELAY,
         baseline_prior = Normal(logit(0.13), 0.7),
         pooling_prior = truncated(Normal(0.0, 1.0); lower = 0),
-        walk_sigma_prior = truncated(Normal(0.0, 0.1); lower = 0),
+        walk_sigma_prior = truncated(Normal(0.0, 0.3); lower = 0),
         week::Integer = 7)
     ## Non-centred logit random effect over the delay dimension, one value
     ## per delay day `d = 0 … D-1`.

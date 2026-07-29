@@ -2004,10 +2004,10 @@ cfr_prior_fig #hide
 # The hazard at delay $d$ for an onset on day $u$ is then modified by a
 # calendar-time effect indexed on the report day $u + d$: a weekly-knot
 # non-centred random walk on the logit scale, the same construction as the
-# reproduction-number walk above but tightly constrained
-# ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.1)$), so reporting speed
-# can drift gently over calendar time without absorbing the increments'
-# own noise:
+# reproduction-number walk above and concentrated near zero
+# ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$), so a flat reporting
+# profile stays the default the data has to argue away from while the walk
+# can still follow a real drift in reporting speed:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
