@@ -317,7 +317,7 @@ forecast_overlay_fig #hide
 #
 # The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), scored the same way as the cross-release forecasts above, against the same persistence baseline.
 # The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are dropped rather than scored against a series that had not started.
-# The frozen baseline's data-vintage guarantee is weaker than the cross-release one above: see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for the residual gap this leaves for a frozen made_date reused weeks ahead of its snapshot's own cut-off.
+# The frozen baseline's data-vintage guarantee is weaker than the cross-release one above, since a frozen cut-off is reused weeks ahead of its snapshot's own; see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for the residual gap this leaves.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the frozen-fit forecast scores</summary>
