@@ -450,15 +450,13 @@ end
     @test nticks < length(longer)
 end
 
-@testitem "plot_forecast_overlay maps the frozen fit id to the joint
-    role" setup = [HeadlessMakie] begin
+@testitem "plot_forecast_overlay draws a frozen fit as joint" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_overlay, FROZEN_FIT, BASELINE_FIT
     using DataFrames: DataFrame
     using Dates: Date, Day
-    ## The frozen evaluation writes `fit = "frozen"` (FROZEN_FIT): the
-    ## joint model re-fit at a past cut-off, not a genuine individual
-    ## single-stream fit. It must draw and be labelled as the joint role,
-    ## not fall into the individual role's colour and legend entry.
+    ## A frozen row is the joint model re-fit at a past cut-off, so it
+    ## takes the joint colour and legend entry rather than the individual
+    ## role's, no individual fit having run at these cut-offs.
     md = Date(2026, 6, 21)
     rows = [
         (; stream = "confirmed cases", made_date = md, horizon = 7,
@@ -518,14 +516,13 @@ end
         value_col = :log_rel_to_baseline) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_relative_skill maps the frozen fit id to the
-    joint role" setup = [HeadlessMakie] begin
+@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup=[HeadlessMakie] begin
     using BVDOutbreakSize: plot_forecast_relative_skill, FROZEN_FIT
     using DataFrames: DataFrame
 
-    ## The frozen evaluation scores only the joint model (see FROZEN_FIT),
-    ## so its single series must appear under the joint role, not as a
-    ## spurious individual fit no individual model produced.
+    ## The frozen evaluation scores the joint model alone, so its single
+    ## series belongs to the joint role rather than reading as an
+    ## individual fit that was never run.
     rows = [(; stream = "confirmed cases", horizon = h, fit = FROZEN_FIT,
                 rel_to_baseline = 0.8 + 0.02 * h) for h in [7, 14, 21]]
     fig = plot_forecast_relative_skill(DataFrame(rows))
