@@ -78,9 +78,10 @@ floor, which bounds what a reporting-delay estimate built from those
 increments can support.
 See issue #488.
 
-SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
-071, so the thirteen scanned vintages hold nine distinct onset snapshots
-(report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
+SitReps 059 and 060 reuse one figure, as do 061 and 062, 069/070/071, and
+now 073/074 (identical n = 2 567, identical digitised total and day count),
+so the fifteen scanned vintages hold ten distinct onset snapshots (report
+dates 12, 14, 17, 18, 19, 20, 21, 22, 25 and 26 July).
 SitRep 068 (21 July) is now included: its PDF was unreachable while the
 INSP fetch was broken, and it does carry a figure (n = 2 308).
 The embedded figure is re-rendered at whatever size the layout needs and moves
