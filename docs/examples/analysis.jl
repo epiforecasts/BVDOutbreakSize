@@ -3031,20 +3031,10 @@ surveillance_pair_fig #hide
 # scale is a lower bound on the truth, so a posterior sitting on that bound
 # says the fit would like a tighter likelihood than the figures can support.
 #
-# The calibration check behind that row (issue #507 carries the numbers)
-# finds the stream is not underdispersed.
-# Individual cells are scored about twice as wide as they need to be, with a
-# standardised residual SD of 0.71 against the 1.414 the likelihood implies,
-# and the residual ratio does not grow with the cell mean.
-# What fails is the per-snapshot aggregate: one snapshot in eleven falls
-# inside the nominal 50% interval and ten of eleven inside the nominal 90%,
-# which has probability 0.006 under a correct model.
-# The aggregate variance is nonetheless right, at 1.07 empirical over
-# modelled, so the predictive has about the right spread and puts it in the
-# wrong place.
-# That is the signature of a scan error shared across a whole figure rather
-# than of overdispersion, no variance term fixes it, and the likelihood is
-# left unchanged here.
+# The stream is not underdispersed, and the likelihood is left unchanged
+# here: individual cells are already scored wider than they need to be,
+# while the per-snapshot aggregate is mis-centred rather than mis-scaled.
+# Issue #507 carries the numbers and why no variance term fixes it.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3189,17 +3179,9 @@ onset_pair_fig #hide
 # model relies on (see the [symptom-onset reporting delay](@ref
 # "Symptom-onset reporting delay") Methods section).
 #
-# The panels also show two misses the fitted delay does not absorb.
-# The figures print 5 to 19% more than the model expects at delays of 6 to
-# 19 days while the two agree at 25 to 27 days, so reporting is faster in
-# its middle range than the fitted profile allows; a latent onset series
-# set too low would scale every delay alike, so this is the shape of the
-# delay rather than its level.
-# And the miss grows over calendar time, from a mean standardised residual
-# near zero in the earliest snapshots to 0.8 in the latest, which is what
-# a calendar-time effect too tightly constrained to follow reporting
-# speeding up would produce.
-# Neither is corrected here; both are recorded in issue #517.
+# The panels also show two misses the fitted delay does not absorb: it is
+# too slow between 6 and 19 days, and the miss grows across the snapshots.
+# Issue #517 carries both.
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
