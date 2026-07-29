@@ -5,9 +5,8 @@
     JOINT_FIT
 
 Value of a `fit` column identifying a row as the joint model's forecast or
-estimate. Also the role a frozen-fit row (`FROZEN_FIT`) is mapped to for
-plotting, since a frozen row is the joint model re-fit at a past cut-off,
-not a separate single-stream fit.
+estimate. A [`FROZEN_FIT`](@ref) row is drawn in the same role, being the
+same model re-fit at a past cut-off rather than a separate fit.
 """
 const JOINT_FIT = "joint"
 
@@ -22,7 +21,7 @@ const BASELINE_FIT = "baseline"
 """
     FROZEN_FIT
 
-Value of a `fit` column identifying a row as a frozen-fit forecast: the
+Value of a `fit` column identifying a row as a frozen-fit forecast, the
 joint model re-fit and evaluated at a past cut-off
 (`forecast_frozen.csv`). That asset carries no `fit` column of its own, so
 the label is applied at scoring time.

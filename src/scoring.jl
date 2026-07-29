@@ -354,7 +354,7 @@ Returns a typed zero-row frame when `scores` is empty, so the report
 renders before any release carries a forecast.
 """
 function forecast_score_overview(scores::DataFrame;
-        joint_fit = "joint", baseline_fit = "baseline")
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
     empty = _score_summary_schema((; stream = String[], fit = String[]))
     isempty(scores) && return empty
     rows = NamedTuple[]
@@ -377,7 +377,7 @@ The same columns as [`forecast_score_overview`](@ref), one row per
 that beats the baseline on average but not at every cut-off is visible.
 """
 function forecast_score_by_horizon(scores::DataFrame;
-        joint_fit = "joint", baseline_fit = "baseline")
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
     empty = _score_summary_schema((; stream = String[], horizon = Int[],
         fit = String[]))
     isempty(scores) && return empty
@@ -407,7 +407,7 @@ over releases too, baseline rows excluded, so the by-release detail table
 stays compact.
 """
 function forecast_score_by_release(scores::DataFrame;
-        joint_fit = "joint", baseline_fit = "baseline")
+        joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
     empty = _score_summary_schema((; made_date = Date[], stream = String[],
         fit = String[]))
     isempty(scores) && return empty
