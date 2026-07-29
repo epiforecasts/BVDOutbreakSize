@@ -37,6 +37,9 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # the reported occupancy rate starts only on 9 June, so the capacity has no
 # implied-capacity anchor and rides its random walk back to the freeze date,
 # widening the projected bed interval.
+# Unlike the scores further down, the confirmed new-count rows here keep any
+# retrospective harmonisation step the week contained, so a week holding one
+# reads high against a forecast that never predicted it.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>

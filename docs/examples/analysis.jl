@@ -2273,6 +2273,10 @@ diagnostics_table( #hide
 # the day it was first reported to the day it was last updated, since
 # outside that period a cumulative total that has not moved is the absence
 # of a series rather than an observed zero.
+# On the two confirmed streams a reported step that is mostly a retrospective
+# integration of harmonised provincial records has that backfill removed from
+# both the target and the baseline, so such a window is scored on transmission
+# rather than on transmission plus an integration.
 #
 # Each forecast is also compared against a persistence baseline built from
 # the same stream.
