@@ -906,21 +906,18 @@ function plot_evolution_by_group(
     return fig
 end
 
-## Role of a forecast within a stream: the persistence baseline, the
-## current joint model or a stream's own individual single-stream fit.
-## Deriving the role from the fit id keeps the colour stable across
-## streams, whichever single-stream fit produced the individual row, and
-## folds recovered's missing individual into a baseline-versus-joint
-## comparison without a per-stream label. `FROZEN_FIT` maps to the joint
-## role too: it is the joint model re-fit at a past cut-off, not a
-## separate fit. `BASELINE_FIT`, `JOINT_FIT` and `FROZEN_FIT` are the only
-## ids the scoring pipeline names; every other id is a per-stream fit
-## spec, open-ended by design, so it falls to "individual" rather than
-## needing its own case.
+## Role of a forecast within a stream: the persistence baseline, the joint
+## model or the stream's own individual single-stream fit. Deriving the
+## role from the fit id keeps the colour stable across streams, whichever
+## single-stream fit produced the individual row, and folds recovered's
+## missing individual into a baseline-versus-joint comparison without a
+## per-stream label. A frozen row takes the joint role, being the joint
+## model re-fit at a past cut-off. Every other id is a per-stream fit
+## spec, an open-ended set, so it falls through to the individual role.
 function _fit_role(fit)
-    fit == BASELINE_FIT ? "baseline" :
-    fit == JOINT_FIT || fit == FROZEN_FIT ? "joint" :
-    "individual"
+    fit == BASELINE_FIT && return "baseline"
+    (fit == JOINT_FIT || fit == FROZEN_FIT) && return "joint"
+    return "individual"
 end
 
 """
