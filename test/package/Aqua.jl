@@ -38,7 +38,6 @@ end
 
 @testitem "Aqua: persistent_tasks" tags=[:quality] begin
     using Aqua, BVDOutbreakSize
-    using Logging: Error
     using Test: collect_test_logs
     # Aqua's probe builds a throwaway package depending on this one,
     # precompiles it in a subprocess, and has that subprocess write a sentinel
@@ -70,7 +69,12 @@ end
     if Sys.isapple()
         @test_skip "persistent_tasks: macOS CI runner leaves a graphics task"
     else
-        logs, detected = collect_test_logs(min_level = Error) do
+        ## `Base.CoreLogging.Error` rather than `Logging.Error`: the
+        ## constants are the same object, and `Logging` is not a
+        ## declared dependency of the test project, so importing it
+        ## resolves locally but not in a clean CI environment.
+        logs, detected = collect_test_logs(
+            min_level = Base.CoreLogging.Error) do
             Aqua.has_persistent_tasks(Base.PkgId(BVDOutbreakSize); tmax = 600)
         end
         ## collect_test_logs swallows the records, so re-emit them: the probe's

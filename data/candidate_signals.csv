@@ -61,3 +61,35 @@ treatment_admissions_cumulative,072,2026-07-25,894,admissions,Tableau 6 `Total a
 eds_death_alerts,072,2026-07-25,98,alerts,section 7 prose (never a table); Ituri 65 + N-Kivu 33; present from at least SitRep 060 but intermittently - 071 gives no EDS numbers and some vintages give one province only - so a missing province is not a zero; not reconciled against the Tableau 3 dead-alert count of 107
 eds_investigations_performed,072,2026-07-25,80,investigations,section 7 prose; Ituri 50 + N-Kivu 30; intermittent from at least SitRep 060 - see the eds_death_alerts note
 eds_corpses_swabbed,072,2026-07-25,73,corpses,section 7 prose; Ituri 40 + N-Kivu 33; intermittent from at least SitRep 060 - see the eds_death_alerts note; N-Kivu swabs 33 of 33 alerts on 30 EDS performed - looks degenerate
+contacts_under_follow_up,073,2026-07-26,15498,persons,Tableau 4 national `sous suivi`; Ituri 10901 N-Kivu 4447 Haut-Uele 150 Sud-Kivu 0 Tshopo ND
+contacts_seen,073,2026-07-26,12122,persons,Tableau 4 national `vus`
+contact_tracing_coverage,073,2026-07-26,78.2,percent,"page-1 `SUIVI DES CONTACTS NATIONAL`; 12122/15498; Tshopo ND in table despite section-3.3 narrative giving 90.9 percent (discrepancy, table used)"
+alerts_total_day,073,2026-07-26,1303,alerts,Tableau 3 `Total alertes du jour`; report J-1 101 + nouvelles 1202
+alerts_investigated,073,2026-07-26,1078,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,073,2026-07-26,82.7,percent,Tableau 3 `Taux d'investigation (24 h)`; 1078/1303
+alerts_validated_alive,073,2026-07-26,216,alerts,Tableau 3; sums with the dead row to the 326 suspects of the day
+alerts_validated_dead_community,073,2026-07-26,110,alerts,Tableau 3 `Alertes validees decedees (comm.)`; see issue #431
+poe_travellers_screened,073,2026-07-26,152039,persons,Tableau 5 global; Ituri 88216 + N-Kivu 54718 + Tshopo 9105
+poe_corpses_swabbed,073,2026-07-26,0,corpses,"Tableau 5; 0 corps sans vie interceptes ce jour, all provinces 0"
+health_worker_infections_cumulative,073,2026-07-26,134,persons,"Tableau 8 Ituri-zone total 123 + narrative Nord-Kivu 11 = 134; first vintage since at least 069 with a Nord-Kivu PPL line - SitReps 069-072's Tableau 8 (checked directly) is Ituri-only with no Nord-Kivu row, so those vintages' recorded values here were Ituri-only, not truly national"
+health_worker_deaths_cumulative,073,2026-07-26,40,persons,Tableau 8 Ituri-zone total 37 + narrative Nord-Kivu 3 = 40; Ituri-only letalite printed as 30.1 percent; see health_worker_infections_cumulative note on the Nord-Kivu coverage change
+treatment_admissions_cumulative,073,2026-07-26,807,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 594 + N-Kivu 213; distinct from the fitted 24h figure
+eds_death_alerts,073,2026-07-26,78,alerts,"section 7 prose (never a table); Ituri only (67 du jour + 11 reportees de la veille); Nord-Kivu gives no numeric EDS counts this vintage (escort narrative only) - intermittent, see data/README.md eds row"
+eds_investigations_performed,073,2026-07-26,61,investigations,"section 7 prose; Ituri only, 78 percent rate; Nord-Kivu intermittent - see eds_death_alerts note"
+eds_corpses_swabbed,073,2026-07-26,47,corpses,section 7 prose; Ituri only (38 communaute + 9 ESS); Nord-Kivu intermittent - see eds_death_alerts note
+contacts_under_follow_up,074,2026-07-27,17588,persons,Tableau 4 national `sous suivi`; Ituri 12500 N-Kivu 4908 Tshopo 30 Haut-Uele 150 Sud-Kivu 0
+contacts_seen,074,2026-07-27,13882,persons,Tableau 4 national `vus`
+contact_tracing_coverage,074,2026-07-27,78.9,percent,"page-1 `SUIVI DES CONTACTS NATIONAL`; 13882/17588; Ituri 77.6 percent, Haut-Uele 60.0 percent, N-Kivu 82.6 percent, Tshopo 100.0 percent, Sud-Kivu suivi clos/NA"
+alerts_total_day,074,2026-07-27,1425,alerts,Tableau 3 `Total alertes du jour`; report J-1 162 + nouvelles 1263
+alerts_investigated,074,2026-07-27,1142,alerts,Tableau 3 `Alertes investiguees`
+alert_investigation_rate,074,2026-07-27,80.1,percent,Tableau 3 `Taux d'investigation (24 h)`; 1142/1425
+alerts_validated_alive,074,2026-07-27,213,alerts,Tableau 3; sums with the dead row to the 321 suspects of the day
+alerts_validated_dead_community,074,2026-07-27,108,alerts,Tableau 3 `Alertes validees decedees (comm.)`; see issue #431
+poe_travellers_screened,074,2026-07-27,196371,persons,"Tableau 5 global (printed with an asterisk, Haut-Uele/Tshopo ND); Ituri 112101 + N-Kivu 72711 + Sud-Kivu 11559"
+poe_corpses_swabbed,074,2026-07-27,1,corpses,Tableau 5; 100.0 percent of 1 intercepted (Nord-Kivu)
+health_worker_infections_cumulative,074,2026-07-27,134,persons,"Tableau 8 Ituri-zone total 123 + narrative Nord-Kivu 11 = 134; table (all zone rows) and narrative BYTE-IDENTICAL to SitRep 073, an unrefreshed carry-forward tile - this vintage drops 073's trailing explicit-national-total sentence but the components are unchanged"
+health_worker_deaths_cumulative,074,2026-07-27,40,persons,"Tableau 8 Ituri-zone total 37 + narrative Nord-Kivu 3 = 40; see health_worker_infections_cumulative note, same carry-forward"
+treatment_admissions_cumulative,074,2026-07-27,859,admissions,Tableau 6 `Total admissions (cumul)`; Ituri 630 + N-Kivu 229; distinct from the fitted 24h figure
+eds_investigations_performed,074,2026-07-27,37,investigations,"section 7 prose (never a table); Nord-Kivu only this vintage (the REVERSE of 073's Ituri-only coverage) - Ituri's EDS paragraph is training/logistics narrative with no numeric counts; intermittent, see data/README.md eds row"
+eds_corpses_swabbed,074,2026-07-27,39,corpses,section 7 prose; Nord-Kivu only (39 sur 42 alertes remontees en escorte); Ituri intermittent - see eds_investigations_performed note
+eds_death_alerts,074,2026-07-27,42,alerts,"section 7 prose (never a table); Nord-Kivu only this vintage (37 EDS realises, 39 corps swabes sur 42 alertes remontees en escorte); Ituri intermittent - see eds_investigations_performed note"

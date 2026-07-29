@@ -78,9 +78,10 @@ floor, which bounds what a reporting-delay estimate built from those
 increments can support.
 See issue #488.
 
-SitReps 059 and 060 reuse one figure, as do 061 and 062, and 069, 070 and
-071, so the thirteen scanned vintages hold nine distinct onset snapshots
-(report dates 12, 14, 17, 18, 19, 20, 21, 22 and 25 July).
+SitReps 059 and 060 reuse one figure, as do 061 and 062, 069/070/071, and
+now 073/074 (identical n = 2 567, identical digitised total and day count),
+so the fifteen scanned vintages hold ten distinct onset snapshots (report
+dates 12, 14, 17, 18, 19, 20, 21, 22, 25 and 26 July).
 SitRep 068 (21 July) is now included: its PDF was unreachable while the
 INSP fetch was broken, and it does carry a figure (n = 2 308).
 The embedded figure is re-rendered at whatever size the layout needs and moves
@@ -253,7 +254,7 @@ being silently dropped as the report format evolves. Known candidates:
 | `Taux de suivi des contacts` national % (+ Tableau 4 contacts sous suivi / vus) | Contact-tracing coverage; a surveillance-intensity signal. |
 | `Alertes validées — décédées (comm.)` (Tableau 3) | Community suspect-death proxy — the candidate replacement basis for the frozen `suspected_daily_deaths_history` (needs a methodology decision, issue #431). |
 | PoE/PoC screening (Tableau 5): travellers screened, alerts, corpses swabbed | Cross-border importation pressure. |
-| SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. |
+| SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. Tableau 8's own printed total is Ituri-zones only; SitReps 069-072 carry no Nord-Kivu line at all, so the `health_worker_infections_cumulative` / `health_worker_deaths_cumulative` values recorded for those vintages are Ituri-only, not national. From SitRep 073 a narrative sentence beneath the table adds Nord-Kivu and states an explicit national cumulative (134 confirmed / 40 deaths); use the narrative total where it is given, the Tableau 8 total otherwise, and note which in `source_note`. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
 | Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
