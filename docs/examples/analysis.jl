@@ -3599,23 +3599,14 @@ function _fit_rt_draws(f)
     return Float64[rt[i, obs.n] for i in axes(rt, 1)]
 end
 
-## Basic reproduction number per fit, `exp(rt_state.log_R0)`, the renewal
-## walk's starting value: a single distribution per fit rather than a daily
-## series. Every current single-stream composer shares the joint's latent
-## submodel and so carries its own walk base, but the extraction is guarded
-## rather than assumed, so a future single-stream model built without its
-## own renewal walk drops out of this quantity instead of breaking the
-## release.
-function _fit_r0_draws(f)
-    try
-        exp.(vec(Array(f.chn[Symbol("rt_state.log_R0")])))
-    catch
-        nothing
-    end
-end
-
+## Basic reproduction number per fit, the renewal walk's starting value, a
+## single distribution per fit rather than a daily series. Every current
+## single-stream composer shares the joint's latent submodel and so carries
+## its own walk base, but `r0_walk_draws` probes rather than assumes, so a
+## single-stream model built without its own renewal walk drops out of this
+## quantity instead of breaking the release.
 _stream_quantities = [(f.fit, _fit_rt_draws(f), vec(Array(f.chn[:C_T])),
-                          _fit_r0_draws(f)) for f in stream_fits]
+                          r0_walk_draws(f.chn)) for f in stream_fits]
 
 ## One row per fit and quantity, with the median and the 30/60/90% credible
 ## bounds the report's tables use.
