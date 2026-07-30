@@ -6,6 +6,14 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.11.0
+
+Changes since v1.10.0
+
+- Updated data processing and added digitised onset data
+- Updated forecast evalaution but this remains highly experimental
+- Added break days for confirmed cases and deaths due to a data harmoisation adding backdated data.
+
 ## v1.10.0
 
 Changes since v1.9.0.
