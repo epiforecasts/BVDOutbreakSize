@@ -53,11 +53,11 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 4, SD near 3 (truncated Normal(4, 3); lower 0): `m` counts
+    ## Centre near 5.8, SD near 3.4 (truncated Normal(5, 4); lower 0): `m` counts
     ## only the CRYPTIC doublings. The prior is deliberately wide so the
     ## cryptic duration stays uncertain.
-    @test 3.5 < mean(m) < 4.8
-    @test 2.3 < std(m) < 3.2
+    @test 5.3 < mean(m) < 6.3
+    @test 3.0 < std(m) < 3.8
     ## The growth rate is centred on the BEAST X 11.7-day doubling (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
     ## The induced cryptic duration T = m·τ is correspondingly wide.
