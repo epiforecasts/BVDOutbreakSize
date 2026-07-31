@@ -6,6 +6,34 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.12.0
+
+Changes since v1.11.0
+
+### Model
+
+- Widened and shifted the prior on the cryptic-phase doubling count `m`,
+  from `truncated(Normal(3, 3); lower = 0)` to
+  `truncated(Normal(5, 4); lower = 0)`. Field epidemiology in Mongbwalu
+  traced a sustained transmission chain to a death on 25 January 2026,
+  with 500+ suspected cases between mid-January and mid-May
+  [kupferschmidt2026](@cite), and the genetic TMRCA
+  [mbalaplacide2026](@cite) is a lower bound on the outbreak age
+  consistent with an origin that early. The new centre places the implied
+  prior on the outbreak origin at the end of January (at the central
+  11.7-day doubling, `m = 5` gives a cryptic duration of ~58.5 d, i.e. an
+  origin around 30 January), with the wider SD letting the data and the
+  genetic seeding bound pull it earlier or later (#533). The main fit's `m`
+  prior is now set directly in `exponential_growth_model`; the backfill's
+  advancing centre (`m_prior_centre`) is unchanged and tracked separately
+  by #534.
+- Corrected the growth-rate `r` prior prose (eq 9) to match the code and
+  its actual source: the BEAST X reanalysis of 139 BDBV genomes
+  [mbalaplacide2026](@cite) reports an Exponential-growth doubling time
+  of 11.7 d (95% HPD 6.8--17.5), so the prior is
+  `LogNormal(log(log 2 / 11.7), 0.28)`. The text had previously described
+  an older, generic 20 d estimate that the model no longer uses.
+
 ## v1.11.0
 
 Changes since v1.10.0

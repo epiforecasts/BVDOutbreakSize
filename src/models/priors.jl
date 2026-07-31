@@ -275,22 +275,28 @@ established renewal share ONE growth source — the sampled growth rate — and
 the established reproduction number is consistent with the genetic growth
 under our generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(M_PRIOR_BASE, 3); lower = 0)` is deliberately WIDE.
-Since `m` now counts only the CRYPTIC doublings (not the cut-off case
-total), its centre is much lower than the integral model's: with the
-≈11.7-day doubling, `M_PRIOR_BASE` doublings span `M_PRIOR_BASE · τ` cryptic
-days, placing the origin in the genetically-plausible window (origin roughly
-late Mar). The spread keeps the cryptic duration wide.
+`m ~ truncated(Normal(5, 4); lower = 0)` is deliberately WIDE. The centre
+and spread are elicited from the field epidemiology and the genetics: field
+work in Mongbwalu traced a sustained transmission chain back to a death on
+25 January 2026 and identified 500+ suspected cases between mid-January and
+mid-May (kupferschmidt2026), and the genetic TMRCA (mbalaplacide2026) is a
+lower bound on the outbreak age consistent with an origin that early. Since
+`m` counts only the CRYPTIC doublings (not the cut-off case total), with the
+≈11.7-day doubling a centre of 5 spans `5 · τ ≈ 58.5` cryptic days, placing
+the implied prior origin at the end of January (at the documented first
+deaths); the SD of 4 lets the data and the genetic seeding bound pull the
+origin earlier (into December) or later without over-committing (#533).
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override
 (e.g. an `m_prior`
-whose centre advances via [`m_prior_centre`](@ref) for a later cut-off).
+whose centre advances via [`m_prior_centre`](@ref) for a later cut-off;
+the backfill's advancing centre is tracked separately by #534).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
-        m_prior = truncated(Normal(M_PRIOR_BASE, 3.0); lower = 0))
+        m_prior = truncated(Normal(5.0, 4.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
     τ := log(2) / r
