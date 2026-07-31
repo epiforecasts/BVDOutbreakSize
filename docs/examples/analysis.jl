@@ -582,25 +582,31 @@ vintage_table #hide
 # unobserved cryptic exponential phase, doubling $m$ times before sustained
 # transmission was established. The cryptic phase grows the seed to $2^m$
 # infections at the renewal start, the day the renewal takes over, over a
-# duration $m\,\tau$ with $\tau$ the doubling time. The doubling count has a
-# wide prior centred on three cryptic doublings:
+# duration $m\,\tau$ with $\tau$ the doubling time. Field epidemiology in
+# Mongbwalu traced a sustained transmission chain back to a death on
+# 25 January 2026 and identified more than 500 suspected cases between
+# mid-January and mid-May [kupferschmidt2026](@cite); the genetic TMRCA
+# [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is
+# consistent with, but does not by itself fix, an origin that early. We
+# place a wide prior on $m$ centred so that the implied origin sits at the
+# end of January, at the documented first deaths:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(3,\ 3), \qquad
+# m \sim \mathrm{Normal}^{+}(5,\ 4), \qquad
 # \tau = \frac{\log 2}{r}, \qquad
 # T_{\text{cryptic}} = m\,\tau. \tag{8}
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs. The
-# genetic reanalysis reports the epidemic doubling time as 15.2 to 24.5 d
-# across substitution-rate assumptions, with a centre near 20 d. We put a
-# log-normal prior on $r$ equivalent to a log-normal prior on the doubling
-# time centred on 20 d, with its log spread read from that range and
+# BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite) reports
+# an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5). We put
+# a log-normal prior on $r$ equivalent to a log-normal prior on the doubling
+# time centred on 11.7 d, with its log spread read from that HPD and
 # inflated a little, so the prior is slightly wider in spread than the
 # source but unbiased relative to it:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{20},\ 0.15\right). \tag{9}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.28\right). \tag{9}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward
