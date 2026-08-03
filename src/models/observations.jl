@@ -3047,7 +3047,7 @@ asymptote needing `D` days of walk to become observable, so it is returned
 over the walk's full span with no restriction.
 
 The anchor is clamped into `(0, 1)` before the logit, the same guard
-[`composition_positivity`](@ref) applies to its own probability. An anchor
+`composition_positivity` applies to its own probability. An anchor
 of exactly `0` or `1` is not reachable through the confirmed pipeline,
 whose positivity is already clamped, but it is reachable if every hazard
 underflows so that [`onset_report_anchor`](@ref)'s weights sum to zero.
