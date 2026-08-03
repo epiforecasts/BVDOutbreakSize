@@ -3495,10 +3495,14 @@ joint_ppc_fig #hide
 # two derived quantities: the share of a representative onset date's
 # eventual reports that arrive within 7 days, and the median modelled
 # ascertainment over the onset dates the ascertainment walk spans.
-# Both come from the one fitted calendar effect, so they are read together
-# rather than as independent estimates (see the [symptom-onset reporting
-# delay](@ref "Symptom-onset reporting delay") Methods section).
-# The pair plot shows the hyperparameters alone, with the prior overlaid.
+# The first comes from the delay hazard and the second from the
+# ascertainment level anchored on the confirmed pipeline, so they are
+# separate estimates (see the [symptom-onset reporting delay](@ref
+# "Symptom-onset reporting delay") Methods section).
+# The pair plot shows the hyperparameters, with the prior overlaid.
+# The ascertainment offset is the row to read first, since it is the
+# triangle's departure from the confirmed pipeline's own ascertainment and
+# its prior is centred on no departure at all.
 #
 # The scale slack row is a diagnostic rather than a quantity of interest.
 # Its prior is bounded below at one, because each term in the observation
@@ -3554,6 +3558,8 @@ _onset_labels = merge(display_names,
         Symbol("onset_report_state.η0") => "onset-report hazard baseline (logit)",
         Symbol("onset_report_state.σ_h0") => "onset-report hazard pooling SD",
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
+        Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
+        Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
         Symbol("onset_report_state.σ_mult") => "onset-report scale slack"));
 
 #md # ```@raw html
@@ -3612,6 +3618,7 @@ onset_summary #hide
 onset_pair_fig = plot_pair(chn_joint,
     [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
+        Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
         Symbol("onset_report_state.σ_mult")];
     prior = prior_chn, labels = _onset_labels);
 
