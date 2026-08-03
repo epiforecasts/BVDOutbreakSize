@@ -1978,38 +1978,42 @@ cfr_prior_fig #hide
 # ```
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases,
-# reported within $\delta$ days, is the survival product of the daily
-# hazards along that onset date's diagonal:
+# reported within $\delta$ days, is the survival product of the daily hazards
+# along that onset date's diagonal, normalised to its own limit and multiplied
+# by an explicit ascertainment level $\alpha(u)$:
 #
 # ```math
-# F(u, \delta) = \begin{cases} 0 & \delta < 0 \\
+# \mathrm{cdf}(u, \delta) = \begin{cases} 0 & \delta < 0 \\
 #     1 - \prod_{j=0}^{\min(\delta,\, D-1)} \bigl(1 - h(j, u + j)\bigr)
-#     & \delta \ge 0. \end{cases} \tag{43}
+#     & \delta \ge 0, \end{cases}
+# \qquad
+# G(u, \delta) = \frac{\mathrm{cdf}(u, \delta)}{\mathrm{cdf}(u, D-1)},
+# \qquad
+# F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
+# \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
+#     + \beta + \omega_u\bigr). \tag{43}
 # ```
 #
-# $\delta < 0$ is right truncation, and it is the only place it enters this
-# model: a recent onset date's expected count in a given snapshot is only
-# ever what its own delay allows, so the same onset date's expected count
-# rises as later snapshots see more of it — the same idea EpiNow2 uses for
-# its nowcast. What differs here is the observation model below, which
-# scores per-snapshot corrections to a reporting triangle, not a single
-# evolving total column the way EpiNow2, and every other stream in this
-# package, is scored.
+# $G(u, D-1) = 1$, a proper delay distribution rather than an asymptote that
+# drifts with the hazard level, and $\delta < 0$ is right truncation, unchanged.
+# $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset, $\omega$ a
+# weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$),
+# and $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily
+# ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto
+# the onset axis, tying this triangle's ascertainment to the confirmed
+# pipeline's rather than leaving it free. `onsets_only_model` has no confirmed
+# pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$,
+# and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
-# $F$ is deliberately not made to reach $1$ as $\delta \to D - 1$. Instead
-# we let the hazard's own asymptote absorb ascertainment: $F(u, D-1)$ is
-# onset date $u$'s modelled ascertainment, and $F(u,\delta) / F(u, D-1)$
-# its normalised delay profile — one mechanism read two ways, rather than
-# a second free parameter block that would trade against the hazard
-# total.
-#
-# The expected reported count is the shared onset series convolved with
-# $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$, and,
-# to avoid double-counting a case already reported at an earlier snapshot,
-# the likelihood scores the difference between consecutive snapshots
-# $s - 1, s$ at each onset date $u$ in a trailing $D$-day window of the
-# newer snapshot's report day (dropping onset dates further back, which
-# the triangle shows carry only noise by then):
+# The expected reported count is the onset series convolved with $F$, $\mathbb
+# E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$. The likelihood scores
+# the difference between consecutive snapshots at each onset date, in a trailing
+# $D$-day window of the newer snapshot's report day, which avoids
+# double-counting a case already reported earlier and drops the older onset
+# dates that carry only noise by then. A count likelihood cannot be used, since
+# a re-dated case can move a bar down in a later scan even though the true
+# running total cannot fall, so the increment is scored with a Student-$t$ at
+# fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
@@ -2017,107 +2021,50 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
-# The likelihood therefore admits a negative increment, but the mean above
-# cannot produce one: $F$ is non-decreasing in $\delta$, so the modelled
-# increment is bounded below at zero. Re-dating is absorbed as observation
-# noise rather than modelled.
+# The likelihood admits a negative increment, but the mean above cannot produce
+# one: $F$ is non-decreasing in $\delta$, so the modelled increment is bounded
+# below at zero. Re-dating is absorbed as observation noise rather than modelled
+# (issue #518).
 #
-# $\sigma_u$ collects three sources. The cell counts cases, so it carries
-# counting variation of about its own modelled mean; the digitised bar is
-# read with a $\pm 2.1$-case pixel-noise SD, doubled for a correction since
-# it differences two reads; and each scan carries a $4.0\%$ level error on
-# its own cumulative reading. Every magnitude entering $\sigma_u$ is the
-# modelled one, never the observed count, so the likelihood's own noise
-# never feeds back into its own variance, and a sampled slack multiplier
-# sits on top of the whole thing. That multiplier can only inflate the
-# scale, never shrink it: each term is a lower bound on the truth, since a
-# bar cannot be read off a raster more precisely than its pixels allow and a
-# count of newly reported cases carries at least its own counting variation,
-# and a fitted scale below them would have a couple of hundred cells
-# claiming a precision the figure cannot support and outvoting every other
-# stream.
+# $\sigma_u$ collects three sources: counting variation around the cell's own
+# modelled mean; a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled
+# for a correction since it differences two reads; and a $4.0\%$ level error on
+# each scan's own cumulative reading. Every magnitude entering $\sigma_u$ is the
+# modelled one and never the observed count, so the likelihood's noise cannot
+# feed into its own variance, and a sampled slack multiplier sits on top, which
+# can only inflate the scale, because each term is a lower bound on the truth: a
+# bar cannot be read more precisely than its pixels allow, and a new count
+# carries at least its own counting variation.
 #
-# The very first scored snapshot is differenced against an implicit empty
-# predecessor, so its cells score levels rather than corrections. That is
-# what recovers it instead of discarding it, and it also does real work:
-# corrections only ever pin differences of $F$, so scaling $F$ up while
-# scaling the onset series down leaves every correction cell unchanged, and
-# something has to score a level for the asymptote to be anchored at all.
-# Those cells are the ones whose counting variation matters most, a bar of
-# 40 cases carrying about $\sqrt{40}$ of it against $2.1$ of reading error.
+# The first scored snapshot is differenced against an implicit empty
+# predecessor, so its cells score levels rather than corrections. That is what
+# anchors $\alpha$: corrections only ever pin differences of $F$, so scaling
+# $\alpha$ up while scaling the onset series down leaves every correction cell
+# unchanged, and something has to score a level.
 #
-# A count likelihood cannot be used here: the measured increments are
-# frequently negative, since a re-dated case can move a bar down in a later
-# scan even though the true running total cannot fall, so we use a
-# Student-$t$ with fixed degrees of freedom ($\nu = 4$, a standard
-# robust-regression choice) rather than a sampled one, for the same reason
-# the report-to-receipt delay above keeps its own scale nuisance fixed
-# where the data cannot pin it down.
+# Four time-varying objects act on the same latent series: the
+# reproduction-number walk and ascertainment walk $\omega$ on the onset axis,
+# the calendar walk $\gamma$ on the report axis, and the baseline hazard
+# $\mathrm{logit}\,h_0$. The onset series moves a column of scored cells,
+# $\gamma$ a row, and $\mathrm{logit}\,h_0$ a diagonal band, distinguishable
+# once there is more than one snapshot. $\omega$ shares its axis with the
+# reproduction-number walk instead, a genuine identifiability tension, both
+# least constrained over the final fortnight.
 #
-# **What the triangle separates, and what it does not.** Three
-# time-varying multiplicative objects now act on or near the same latent
-# series: the reproduction-number walk on the infection and hence onset
-# axis, the calendar walk on the report axis, and ascertainment, which is
-# not a free object at all here but the asymptote of the hazard the
-# calendar walk modifies. Each leaves a different footprint on the grid of
-# scored cells, which runs over onset date and snapshot pair. A change in
-# the onset series moves a column, one onset date across every snapshot. A
-# change in the calendar walk moves a row, the hazard on the report days one
-# snapshot pair spans, across every onset date at once. A change in the
-# baseline hazard moves a delay band, running diagonally across both.
-# Column, row and band are distinguishable once there is more than one
-# snapshot, which is the structural reason this stream is worth fitting, and
-# also the reason the calendar walk is indexed on the report date: on the
-# onset axis its footprint would be a column too, the same one the
-# reproduction-number walk already moves, and neither would be identified.
+# Three things stay weak. $\alpha$ is pinned by the first snapshot's level cells
+# and the onset series the other streams supply, confounded with outbreak size
+# in the onsets-only fit below, whose $C_T$ sits close to prior-driven. The
+# hazard below two days' delay is barely observed (the Data section's axis
+# reason) and rests on pooling across delays. A falling $\alpha$ and a slowing
+# hazard both suppress recent bars, where truncation self-corrects for delay but
+# not an ascertainment fall.
 #
-# Three things stay weak. The asymptote is pinned by the first snapshot's
-# level cells and by the onset series coming from the other streams, not by
-# the corrections, so in the onsets-only fit below the asymptote and the
-# outbreak size are confounded and that fit's $C_T$ is close to
-# prior-driven; it belongs in the comparison as a comparison, not as an
-# estimate. The hazard below about two days' delay is barely observed, for
-# the axis reason given in the Data section, and rests on pooling across
-# delays. And a falling asymptote and a slowing hazard shape both suppress
-# recent bars within one snapshot; right truncation self-corrects for the
-# delay explanation, since a suppressed bar catches up later, but not for
-# an ascertainment fall, which does not recover, so the vintage structure
-# does bear on this, only as strongly as the handful of snapshots covering
-# the affected onset dates allows. Both readouts come from the one fitted
-# calendar effect and are reported with matching uncertainty. Folding
-# ascertainment into the asymptote rather than giving it its own parameter
-# block is deliberate: a separate block would trade against the hazard
-# total with nothing in the data to arbitrate between them.
-#
-# One consequence of folding ascertainment into the asymptote is easy to
-# miss. The triangle counts confirmed cases by onset date, so its asymptote
-# estimates the proportion of onsets eventually confirmed, the same quantity
-# the confirmed pipeline above builds from $p_{\text{DRC}}$, the tested
-# fraction and test positivity. We do not tie the two together. That keeps a
-# digitised figure from pulling on the pooled ascertainment every other
-# stream shares, and it means a disagreement between them is absorbed by the
-# asymptote rather than surfacing as a conflict; the cost is that this
-# stream informs the ascertainment level only through the onset series it
-# shares, and what it contributes of its own is timing. Comparing the fitted
-# asymptote against $p_{\text{DRC}}$ times the tested fraction times
-# positivity from the same fit is a free consistency check, and a large gap
-# is worth investigating rather than ignoring.
-#
-# What we have not been able to check is whether the calendar walk and the
-# reproduction-number walk pull on each other in practice. Their footprints
-# differ, but their calendar windows overlap and both are least constrained
-# in the final fortnight, so the first diagnostic to look at is the
-# calendar walk's step size against the reproduction-number walk's own, and
-# the $R_t$ posterior with and without this stream. The alive/dead split
-# the raw figure carries is not modelled separately, since the
-# confirmed-death stream above already carries that split from other data.
-#
-# An earlier line-list-independent reanalysis of this triangle put the
-# median onset-to-report delay at around 6 days and the 7-day reporting
-# fraction at 54-62% (95% interval 43-68%), an interval that wide because
-# the digitisation noise is close in size to the between-vintage
-# increments the estimate rests on; the fitted delay below is read with
-# the same honesty.
+# The alive and dead split the raw figure carries is not modelled separately,
+# since the confirmed-death stream already carries it from other data. An
+# earlier line-list-independent reanalysis of this triangle put the median
+# onset-to-report delay at around 6 days and the 7-day reporting fraction at
+# 54-62%, an interval that wide because the digitisation noise is close in size
+# to the increments the estimate rests on.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_report_hazard_model</summary>
@@ -3093,256 +3040,6 @@ surveillance_pair_fig = plot_pair(chn_joint,
 
 surveillance_pair_fig #hide
 
-# ### Symptom-onset reporting delay and ascertainment
-#
-# The onset-report hazard and its calendar-time drift are stored in the
-# chain only as their non-centred components (see `onset_report_hazard_model`
-# above), so every posterior draw's `logit_h0` and `γ` are rebuilt here the
-# same way `reconstruct_rt` rebuilds the reproduction-number walk from its
-# own non-centred components.
-# The table below reports the hazard's hyperparameters together with two
-# representative derived quantities, rather than the 28 per-delay hazards or
-# the full calendar-walk trajectory: the share of a representative (median)
-# onset date's eventual reports that arrive within 7 days, and the median
-# modelled ascertainment across every onset date whose asymptote is
-# observable within the fitted grid. The first is the cumulative $F$
-# normalised by its own asymptote, since $F$ carries ascertainment as well
-# as delay; the second is that asymptote. Both come from the one fitted
-# calendar effect, so read them together rather than as independent
-# estimates.
-# The pair plot summarises the hyperparameters alone, with the prior
-# overlaid; the fitted curves themselves are shown against the digitised
-# data in the snapshot figure further below.
-#
-# The scale slack row is a diagnostic rather than a quantity of interest.
-# Its prior is bounded below at one, because each term in the observation
-# scale is a lower bound on the truth, so a posterior sitting on that bound
-# says the fit would like a tighter likelihood than the figures can support.
-
-#md # ```@raw html
-#md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
-#md # ```
-
-## The report-date grid the calendar walk spans is a fixed function of the
-## digitised triangle, not sampled, so it is recomputed once directly from
-## `obs.onset_curve_history` rather than pulled from the chain (mirroring
-## `onset_reporting_model`'s own `grid_start`/`grid_end` construction).
-_onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
-                    minimum(obs.onset_curve_history.onset_days)
-_onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
-                  _onset_grid_start :
-                  max(maximum(obs.onset_curve_history.report_days),
-    _onset_grid_start)
-
-## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
-## (the report-date calendar walk), rebuilt from the non-centred
-## innovations the chain stores. `reconstruct_onset_hazard` is the package
-## function the onset forecast also uses, so the hazard plotted here and
-## the one projected forward are the same object rather than two copies of
-## the same reconstruction that could drift apart.
-_onset_hazard = reconstruct_onset_hazard(chn_joint;
-    grid_start = _onset_grid_start, grid_end = _onset_grid_end)
-
-## A representative onset day (the median scored onset date), so the 7-day
-## fraction below reflects a typical, not an edge, calendar day.
-_onset_u_ref = isempty(obs.onset_curve_history.onset_days) ?
-               _onset_grid_start :
-               round(Int, quantile(obs.onset_curve_history.onset_days, 0.5))
-## The delay profile is the cumulative F normalised by its own asymptote,
-## since F itself is deliberately not made to reach 1 and so carries
-## ascertainment as well as delay. The two are reported separately below.
-_onset_7d_fraction = [begin
-                          D = length(_onset_hazard.logit_h0[i])
-                          f7 = onset_report_cdf(6,
-                              _onset_hazard.logit_h0[i],
-                              _onset_hazard.γ[i], _onset_u_ref,
-                              _onset_grid_start)
-                          fa = onset_report_cdf(D - 1,
-                              _onset_hazard.logit_h0[i],
-                              _onset_hazard.γ[i], _onset_u_ref,
-                              _onset_grid_start)
-                          fa > 0 ? f7 / fa : NaN
-                      end
-                      for i in eachindex(_onset_hazard.logit_h0)]
-filter!(isfinite, _onset_7d_fraction)
-
-## Per-draw median ascertainment over every onset date whose asymptote is
-## observable within the fitted grid (`onset_report_ascertainment`), then
-## summarised across draws: the one fitted calendar effect read as an
-## ascertainment level rather than a delay profile (see the identifiability
-## discussion in the Methods section above).
-_onset_ascertainment_draws = Float64[]
-for i in eachindex(_onset_hazard.logit_h0)
-    a = onset_report_ascertainment(_onset_hazard.logit_h0[i],
-        _onset_hazard.γ[i], _onset_grid_start, _onset_grid_end)
-    isempty(a) || push!(_onset_ascertainment_draws, quantile(a, 0.5))
-end
-
-_onset_labels = merge(display_names,
-    Dict(
-        Symbol("onset_report_state.η0") => "onset-report hazard baseline (logit)",
-        Symbol("onset_report_state.σ_h0") => "onset-report hazard pooling SD",
-        Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
-        Symbol("onset_report_state.σ_mult") => "onset-report scale slack"));
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Symptom-onset reporting-delay summary table</summary>
-#md # ```
-
-## Derived-quantity rows built with the same pre-prettify column schema
-## `summary_table` uses, so they `vcat` cleanly onto its output.
-onset_derived_raw = DataFrame(
-    quantity = String[],
-    lower_90 = Float64[], lower_60 = Float64[],
-    lower_30 = Float64[], upper_30 = Float64[],
-    upper_60 = Float64[], upper_90 = Float64[])
-for (label, draws) in [
-    ("share of eventual reports arriving within 7 days (median onset date)",
-        _onset_7d_fraction),
-    ("median modelled ascertainment", _onset_ascertainment_draws)]
-    s = posterior_summary(draws)
-    push!(onset_derived_raw,
-        (label, round(s.lo90; digits = 3), round(s.lo60; digits = 3),
-            round(s.lo30; digits = 3), round(s.hi30; digits = 3),
-            round(s.hi60; digits = 3), round(s.hi90; digits = 3)))
-end
-onset_derived_table = BVDOutbreakSize._prettify(onset_derived_raw)
-
-onset_summary = vcat(
-    summary_table(chn_joint,
-        [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
-            Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.σ_mult")];
-        digits = 3, labels = _onset_labels),
-    onset_derived_table);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Show symptom-onset reporting-delay summary table</summary>
-#md # ```
-
-onset_summary #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-#md # ```@raw html
-#md # <details><summary>Symptom-onset reporting-delay pair plot (prior overlaid)</summary>
-#md # ```
-
-onset_pair_fig = plot_pair(chn_joint,
-    [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
-        Symbol("onset_report_state.σ_γ"),
-        Symbol("onset_report_state.σ_mult")];
-    prior = prior_chn, labels = _onset_labels);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-onset_pair_fig #hide
-
-# Each panel below is one digitised snapshot: the fitted cumulative
-# onset-date curve (posterior median with a 90% credible band) against
-# that snapshot's own digitised cumulative bars.
-# A recent onset date sits below its eventual value in its own snapshot's
-# panel and catches up in a later panel, the right-truncation behaviour the
-# model relies on (see the [symptom-onset reporting delay](@ref
-# "Symptom-onset reporting delay") Methods section).
-
-#md # ```@raw html
-#md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
-#md # ```
-
-## The digitised, deduplicated, cut-off-filtered snapshot blocks
-## `load_onset_curve` scores, kept here for their raw cumulative
-## onset-date counts: the fitted stream only ever sees between-vintage
-## increments, so the observed cumulative levels this figure plots are
-## read back from the source blocks directly rather than reconstructed
-## from the fitted increments.
-_onset_path = joinpath(pkgdir(BVDOutbreakSize), "data",
-    "onset_curve_scanned.csv")
-_onset_snaps = filter(b -> b.report_date <= obs.cutoff,
-    BVDOutbreakSize._dedup_onset_blocks(
-        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)))
-## Keyed by report day rather than kept in order: a snapshot whose printed
-## extent misses the scored window contributes no cells, so the panels and
-## the snapshot blocks are not guaranteed to line up positionally.
-_onset_snap_by_day = Dict(
-    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps)
-
-## Cell indices grouped by their snapshot's report day, and the daily
-## onsets series per posterior draw (the diff of the chain's stored
-## `cumulative_onsets` trajectory; the model does not store the daily
-## series itself, only its running sum).
-_onset_cells_by_report = Dict{Int, Vector{Int}}()
-for (i, r) in enumerate(obs.onset_curve_history.report_days)
-    push!(get!(_onset_cells_by_report, r, Int[]), i)
-end
-_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
-_onset_daily_draws = [vcat(v[1], diff(v))
-                      for v in vec(collect(chn_joint[:cumulative_onsets]))]
-
-## Modelled cumulative count at onset day `u`, report day `R`, per
-## posterior draw: `onsets[u] * F(u, R - u)`, the same expected value
-## `onset_report_expected_total` sums, evaluated at a single onset day.
-function _onset_modelled_cumulative(u::Integer, R::Integer)
-    return [_onset_daily_draws[i][u] *
-            onset_report_cdf(R - u, _onset_hazard.logit_h0[i],
-                _onset_hazard.γ[i], u, _onset_grid_start)
-            for i in eachindex(_onset_daily_draws)]
-end
-
-onset_fit_fig = let
-    ncol = 3
-    nrow = cld(length(_onset_report_grid_days), ncol)
-    fig = CairoMakie.Figure(; size = (330 * ncol, 260 * nrow + 60))
-    for (k, R) in enumerate(_onset_report_grid_days)
-        r, c = fldmod1(k, ncol)
-        snap = _onset_snap_by_day[R]
-        idx = sort(_onset_cells_by_report[R];
-            by = i -> obs.onset_curve_history.onset_days[i])
-        us = obs.onset_curve_history.onset_days[idx]
-        observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-        draws = [_onset_modelled_cumulative(u, R) for u in us]
-        med = [quantile(d, 0.5) for d in draws]
-        lo90 = [quantile(d, 0.05) for d in draws]
-        hi90 = [quantile(d, 0.95) for d in draws]
-        xs = Float64.(1:length(us))
-        ax = CairoMakie.Axis(fig[r, c]; title = string(snap.report_date),
-            xlabel = r == nrow ? "onset day (oldest to newest)" : "",
-            ylabel = c == 1 ? "cumulative cases" : "")
-        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.25))
-        CairoMakie.lines!(ax, xs, med; color = :steelblue, linewidth = 2,
-            label = "modelled")
-        CairoMakie.scatter!(ax, xs, observed; color = :black,
-            markersize = 6, label = "digitised")
-    end
-    CairoMakie.Label(fig[0, 1:ncol],
-        "Symptom-onset reporting triangle: fitted vs digitised";
-        font = :bold, tellwidth = false)
-    CairoMakie.Legend(fig[nrow + 1, 1:ncol],
-        [CairoMakie.LineElement(color = :steelblue),
-            CairoMakie.MarkerElement(color = :black, marker = :circle)],
-        ["modelled (median, 90% CrI)", "digitised"];
-        orientation = :horizontal, tellwidth = false)
-    fig
-end;
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-onset_fit_fig #hide
-
 # ### Posterior predictive checks
 #
 # A posterior predictive check draws replicated observations from the
@@ -3792,6 +3489,361 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
+# ### Symptom-onset reporting delay and ascertainment
+#
+# The table reports the onset-report hazard's hyperparameters together with
+# two derived quantities: the share of a representative onset date's
+# eventual reports that arrive within 7 days, and the median modelled
+# ascertainment over the onset dates the ascertainment walk spans.
+# Both come from the one fitted calendar effect, so they are read together
+# rather than as independent estimates (see the [symptom-onset reporting
+# delay](@ref "Symptom-onset reporting delay") Methods section).
+# The pair plot shows the hyperparameters alone, with the prior overlaid.
+#
+# The scale slack row is a diagnostic rather than a quantity of interest.
+# Its prior is bounded below at one, because each term in the observation
+# scale is a lower bound on the truth, so a posterior sitting on that bound
+# says the fit would like a tighter likelihood than the figures can support.
+
+#md # ```@raw html
+#md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
+#md # ```
+
+## The report-date grid the calendar walk spans is a fixed function of the
+## digitised triangle, not sampled, so it is recomputed once directly from
+## `obs.onset_curve_history` rather than pulled from the chain (mirroring
+## `onset_reporting_model`'s own `grid_start`/`grid_end` construction).
+_onset_grid_start = isempty(obs.onset_curve_history.onset_days) ? 1 :
+                    minimum(obs.onset_curve_history.onset_days)
+_onset_grid_end = isempty(obs.onset_curve_history.report_days) ?
+                  _onset_grid_start :
+                  max(maximum(obs.onset_curve_history.report_days),
+    _onset_grid_start)
+
+## Every posterior draw's `logit_h0` (the baseline delay hazard) and `γ`
+## (the report-date calendar walk), rebuilt from the non-centred
+## innovations the chain stores. `reconstruct_onset_hazard` is the package
+## function the onset forecast also uses, so the hazard plotted here and
+## the one projected forward are the same object rather than two copies of
+## the same reconstruction that could drift apart.
+_onset_hazard = reconstruct_onset_hazard(chn_joint;
+    grid_start = _onset_grid_start, grid_end = _onset_grid_end)
+
+## A representative onset day (the median scored onset date), so the 7-day
+## fraction below reflects a typical, not an edge, calendar day.
+_onset_u_ref = isempty(obs.onset_curve_history.onset_days) ?
+               _onset_grid_start :
+               round(Int, quantile(obs.onset_curve_history.onset_days, 0.5))
+## The delay profile is the normalised delay CDF, which reaches one by
+## construction, so the 7-day fraction is read straight off it.
+_onset_7d_fraction = [onset_report_G(6, _onset_hazard.logit_h0[i],
+                          _onset_hazard.γ[i], _onset_u_ref,
+                          _onset_grid_start)
+                      for i in eachindex(_onset_hazard.logit_h0)]
+filter!(isfinite, _onset_7d_fraction)
+
+## Per-draw median ascertainment over the onset dates the ascertainment
+## walk spans, then summarised across draws. Ascertainment is its own
+## level rather than the delay hazard's asymptote (see the [symptom-onset
+## reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+_onset_ascertainment_draws = [quantile(_onset_hazard.alpha[i], 0.5)
+                              for i in eachindex(_onset_hazard.alpha)]
+
+_onset_labels = merge(display_names,
+    Dict(
+        Symbol("onset_report_state.η0") => "onset-report hazard baseline (logit)",
+        Symbol("onset_report_state.σ_h0") => "onset-report hazard pooling SD",
+        Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
+        Symbol("onset_report_state.σ_mult") => "onset-report scale slack"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset reporting-delay summary table</summary>
+#md # ```
+
+## Derived-quantity rows built with the same pre-prettify column schema
+## `summary_table` uses, so they `vcat` cleanly onto its output.
+onset_derived_raw = DataFrame(
+    quantity = String[],
+    lower_90 = Float64[], lower_60 = Float64[],
+    lower_30 = Float64[], upper_30 = Float64[],
+    upper_60 = Float64[], upper_90 = Float64[])
+for (label, draws) in [
+    ("share of eventual reports arriving within 7 days (median onset date)",
+        _onset_7d_fraction),
+    ("median modelled ascertainment", _onset_ascertainment_draws)]
+    s = posterior_summary(draws)
+    push!(onset_derived_raw,
+        (label, round(s.lo90; digits = 3), round(s.lo60; digits = 3),
+            round(s.lo30; digits = 3), round(s.hi30; digits = 3),
+            round(s.hi60; digits = 3), round(s.hi90; digits = 3)))
+end
+onset_derived_table = BVDOutbreakSize._prettify(onset_derived_raw)
+
+onset_summary = vcat(
+    summary_table(chn_joint,
+        [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
+            Symbol("onset_report_state.σ_γ"),
+            Symbol("onset_report_state.σ_mult")];
+        digits = 3, labels = _onset_labels),
+    onset_derived_table);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Show symptom-onset reporting-delay summary table</summary>
+#md # ```
+
+onset_summary #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Symptom-onset reporting-delay pair plot (prior overlaid)</summary>
+#md # ```
+
+onset_pair_fig = plot_pair(chn_joint,
+    [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
+        Symbol("onset_report_state.σ_γ"),
+        Symbol("onset_report_state.σ_mult")];
+    prior = prior_chn, labels = _onset_labels);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_pair_fig #hide
+
+# Each panel below is one digitised snapshot, and each point is one onset
+# date's bar as that snapshot printed it, against the model's count for the
+# same onset date and the same reporting delay.
+# The dark band is the modelled count itself and the pale band adds the
+# measurement error the likelihood gives a digitised bar, so the pale band
+# is the one the points should fall inside: they do for 95% of cells,
+# against 42% for the dark band alone.
+# A recent onset date sits below its eventual value in its own snapshot's
+# panel and catches up in a later panel, the right-truncation behaviour the
+# model relies on (see the [symptom-onset reporting delay](@ref
+# "Symptom-onset reporting delay") Methods section).
+
+#md # ```@raw html
+#md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
+#md # ```
+
+## The digitised, deduplicated, cut-off-filtered snapshot blocks
+## `load_onset_curve` scores, kept here for their raw cumulative
+## onset-date counts: the fitted stream only ever sees between-vintage
+## increments, so the observed cumulative levels this figure plots are
+## read back from the source blocks directly rather than reconstructed
+## from the fitted increments.
+_onset_path = joinpath(pkgdir(BVDOutbreakSize), "data",
+    "onset_curve_scanned.csv")
+_onset_snaps = filter(b -> b.report_date <= obs.cutoff,
+    BVDOutbreakSize._dedup_onset_blocks(
+        BVDOutbreakSize._read_onset_curve_blocks(_onset_path)))
+## Keyed by report day rather than kept in order: a snapshot whose printed
+## extent misses the scored window contributes no cells, so the panels and
+## the snapshot blocks are not guaranteed to line up positionally.
+_onset_snap_by_day = Dict(
+    obs.n - value(obs.cutoff - b.report_date) => b for b in _onset_snaps)
+
+## Cell indices grouped by their snapshot's report day, and the daily
+## onsets series per posterior draw (the diff of the chain's stored
+## `cumulative_onsets` trajectory; the model does not store the daily
+## series itself, only its running sum).
+_onset_cells_by_report = Dict{Int, Vector{Int}}()
+for (i, r) in enumerate(obs.onset_curve_history.report_days)
+    push!(get!(_onset_cells_by_report, r, Int[]), i)
+end
+_onset_report_grid_days = sort(collect(keys(_onset_cells_by_report)))
+_onset_daily_draws = [vcat(v[1], diff(v))
+                      for v in vec(collect(chn_joint[:cumulative_onsets]))]
+
+## Ascertainment at onset day `u` for draw `i`, held flat at the ends of
+## the fitted grid the same way the model extrapolates it.
+function _onset_alpha(i::Integer, u::Integer)
+    a = _onset_hazard.alpha[i]
+    return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
+end
+
+## Modelled count at onset day `u` as of report day `R`, per posterior
+## draw: `onsets[u] * F(u, R - u)`, the same expected value
+## `onset_report_expected_total` sums, evaluated at a single onset day.
+function _onset_modelled_cumulative(u::Integer, R::Integer)
+    return [_onset_daily_draws[i][u] *
+            onset_report_F(R - u, _onset_hazard.logit_h0[i],
+                _onset_hazard.γ[i], u, _onset_grid_start,
+                _onset_alpha(i, u))
+            for i in eachindex(_onset_daily_draws)]
+end
+
+## The same counts put through the stream's own observation model, so the
+## band is a posterior predictive of a digitised bar rather than of the
+## latent count behind it. A bar is one read off one scan with no previous
+## level to difference against, which is `onset_report_scale`'s level case
+## (`reads = 1`, `level_prev = 0`) — the case the first scored snapshot's
+## own cells carry. Without this the band is the modelled count alone and
+## covers 42% of the observed bars at a nominal 90%.
+_onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
+_onset_ppc_rng = Random.MersenneTwister(20260729)
+## Four replicates per draw rather than one: the band is a 90% interval of
+## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
+## from Monte Carlo error alone.
+function _onset_replicated(draws::AbstractVector)
+    return [begin
+                μ = draws[i]
+                σ = _onset_σ_mult[i] * onset_report_scale(μ, μ, 0.0, 1)
+                μ + σ * rand(_onset_ppc_rng, TDist(4.0))
+            end
+            for _ in 1:4 for i in eachindex(draws)]
+end
+
+onset_fit_fig = let
+    ncol = 3
+    nrow = cld(length(_onset_report_grid_days), ncol)
+    fig = CairoMakie.Figure(; size = (330 * ncol, 260 * nrow + 60))
+    for (k, R) in enumerate(_onset_report_grid_days)
+        r, c = fldmod1(k, ncol)
+        snap = _onset_snap_by_day[R]
+        idx = sort(_onset_cells_by_report[R];
+            by = i -> obs.onset_curve_history.onset_days[i])
+        us = obs.onset_curve_history.onset_days[idx]
+        observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
+        draws = [_onset_modelled_cumulative(u, R) for u in us]
+        reps = [_onset_replicated(d) for d in draws]
+        med = [quantile(d, 0.5) for d in draws]
+        lo90 = [quantile(d, 0.05) for d in draws]
+        hi90 = [quantile(d, 0.95) for d in draws]
+        plo90 = [quantile(d, 0.05) for d in reps]
+        phi90 = [quantile(d, 0.95) for d in reps]
+        xs = Float64.(1:length(us))
+        ax = CairoMakie.Axis(fig[r, c]; title = string(snap.report_date),
+            xlabel = r == nrow ? "onset day (oldest to newest)" : "",
+            ylabel = c == 1 ? "cases at this onset date" : "")
+        CairoMakie.band!(ax, xs, plo90, phi90; color = (:steelblue, 0.12))
+        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.30))
+        CairoMakie.lines!(ax, xs, med; color = :steelblue, linewidth = 2,
+            label = "modelled")
+        CairoMakie.scatter!(ax, xs, observed; color = :black,
+            markersize = 6, label = "digitised")
+    end
+    CairoMakie.Label(fig[0, 1:ncol],
+        "Symptom-onset reporting triangle: fitted vs digitised";
+        font = :bold, tellwidth = false)
+    CairoMakie.Legend(fig[nrow + 1, 1:ncol],
+        [CairoMakie.LineElement(color = :steelblue),
+            CairoMakie.PolyElement(color = (:steelblue, 0.30)),
+            CairoMakie.PolyElement(color = (:steelblue, 0.12)),
+            CairoMakie.MarkerElement(color = :black, marker = :circle)],
+        ["modelled median", "modelled count, 90%",
+            "with measurement error, 90%", "digitised"];
+        orientation = :horizontal, tellwidth = false)
+    fig
+end;
+
+onset_fit_fig #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+#
+# The posterior predictive below reads the same reporting triangle along
+# the onset date instead of the report date.
+# It compares the latest digitised bar for each onset date against the
+# model's posterior predictive for that bar, and against the modelled
+# onsets themselves.
+# The gap between the two bands is the part of the epidemic the latest
+# figure does not carry, whether because it is never ascertained or because
+# it has not been reported yet.
+
+#md # ```@raw html
+#md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
+#md # ```
+
+## Latest printed value for each onset date the digitised figures cover.
+## Ordered by report date already, so the last block carrying a date gives
+## the current reading. A date inside a block's own printed extent but with
+## no row is a zero-height bar and does count; a date outside that extent is
+## not covered by that figure at all and is skipped (the same rule the
+## loader applies, see the [Data](@ref methods-data) section).
+_onset_last_printed = Dict{Int, Float64}()
+for snap in _onset_snaps
+    lo, hi = extrema(keys(snap.onsets))
+    for d in lo:Day(1):hi
+        u = obs.n - value(obs.cutoff - d)
+        (1 <= u <= obs.n) || continue
+        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
+    end
+end
+_onset_by_date_days = sort(collect(keys(_onset_last_printed)))
+
+## Modelled onsets on each of those days, and the count the latest figure
+## should print for them: the same onsets times the cumulative reported
+## proportion at that figure's own delay, `_onset_grid_end - u`, so the
+## band is a predictive for the bar actually plotted rather than for the
+## eventual total. `onset_report_F` holds the calendar walk flat past its
+## fitted support, which the most recent onset dates run into.
+_onset_by_date_onsets = [[_onset_daily_draws[i][u]
+                          for i in eachindex(_onset_daily_draws)]
+                         for u in _onset_by_date_days]
+_onset_by_date_printed = [[_onset_daily_draws[i][u] *
+                           onset_report_F(_onset_grid_end - u,
+                               _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
+                               u, _onset_grid_start, _onset_alpha(i, u))
+                           for i in eachindex(_onset_daily_draws)]
+                          for u in _onset_by_date_days]
+## That count put through the same measurement error a single digitised
+## bar carries (`onset_report_scale`'s level case, as above the snapshot
+## grid), replicated four times per draw for the same reason.
+_onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
+
+onset_ppc_by_date_fig = let
+    fig = CairoMakie.Figure(; size = (900, 380))
+    ax = CairoMakie.Axis(fig[1, 1];
+        title = "Symptom onsets by date of onset: modelled vs digitised",
+        xlabel = "onset date", ylabel = "cases")
+    xs = Float64.(_onset_by_date_days)
+    q(ds, p) = [quantile(d, p) for d in ds]
+    CairoMakie.band!(ax, xs, q(_onset_by_date_onsets, 0.05),
+        q(_onset_by_date_onsets, 0.95); color = (:seagreen, 0.20))
+    CairoMakie.lines!(ax, xs, q(_onset_by_date_onsets, 0.5);
+        color = :seagreen, linewidth = 2)
+    CairoMakie.band!(ax, xs, q(_onset_by_date_reps, 0.05),
+        q(_onset_by_date_reps, 0.95); color = (:mediumpurple, 0.20))
+    CairoMakie.lines!(ax, xs, q(_onset_by_date_reps, 0.5);
+        color = :mediumpurple, linewidth = 2)
+    CairoMakie.scatter!(ax, xs,
+        [_onset_last_printed[u] for u in _onset_by_date_days];
+        color = :black, marker = :cross, markersize = 9)
+    ## Calendar labels on a grid-day axis, at weekly ticks so they do not
+    ## collide at this width.
+    _ticks = _onset_by_date_days[1:7:end]
+    ax.xticks = (Float64.(_ticks), string.(grid_date.(_ticks)))
+    ax.xticklabelrotation = pi / 4
+    CairoMakie.Legend(fig[2, 1],
+        [
+            CairoMakie.MarkerElement(color = :black, marker = :cross),
+            CairoMakie.PolyElement(color = (:mediumpurple, 0.30)),
+            CairoMakie.PolyElement(color = (:seagreen, 0.30))],
+        ["digitised (latest)", "modelled posterior predictive",
+            "modelled onsets"];
+        orientation = :horizontal, tellwidth = false, tellheight = true)
+    fig
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+onset_ppc_by_date_fig #hide
+
 # ### Posterior correlations and stream totals
 #
 # The heatmap is the posterior correlation between each pair of headline
@@ -4092,12 +4144,13 @@ forecast_flows_fig #hide
 # carries the reproduction number's uncertainty. A count of "cases still to
 # come" that mixes the two is not a quantity anyone can act on.
 #
-# One row deserves care. "Onsets not yet reported at T" is not a backlog that
-# will all arrive: the fitted hazard's asymptote is this stream's
-# ascertainment, and it does not reach one, so this row holds the reporting
-# backlog and the cases the surveillance system will never confirm, together.
-# The "reports this week of onsets before T" row is the part of it the coming
-# week should actually clear, and is the smaller number.
+# One row deserves care.
+# "Onsets not yet reported at T" is not a backlog that will all arrive,
+# because ascertainment does not reach one, so the row holds the
+# reporting backlog and the cases surveillance will never confirm,
+# together.
+# The "reports this week of onsets before T" row is the part of it the
+# coming week should actually clear, and is the smaller number.
 
 #md # ```@raw html
 #md # <details><summary>Generate the symptom-onset nowcast and forecast</summary>
