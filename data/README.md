@@ -129,10 +129,16 @@ days for most vintages, close to the reporting delay itself, so reading it as
 first five days and pile the missing mass onto the delay at which the axis
 first covers the date.
 
-This stream is **not fitted**: the model does not yet read
-`onset_curve_scanned.csv`.
-It is captured so an onset-based likelihood and a reporting-delay component
-can be added later.
+This stream is fitted.
+`load_onset_curve` (`src/onset_curve.jl`) reads the file, collapses reprints,
+drops vintages reported after the manifest cut-off and builds the
+between-vintage increment cells; `onset_reporting_model`
+(`src/models/observations.jl`) fits them through a discrete reporting-delay
+hazard whose asymptote carries ascertainment.
+It is the only direct observation of the latent onset series, every other
+stream seeing it only after a further convolution.
+Advancing `as_of_date` in `observations.toml` past a newly digitised
+vintage's report date picks that vintage up with no code change.
 
 ### Rough onset-to-report delay
 

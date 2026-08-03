@@ -251,51 +251,12 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also
 # carry a raster figure of confirmed cases by symptom-onset date, split
-# alive/deceased ("courbe épidémique par date de début des symptômes"),
-# with no accompanying data table. We digitise it with a dependency-free
-# pixel-recovery script (`scripts/digitize_onset_curve.jl`, ported to
-# Python for the automated updater), self-calibrated from each figure's
-# own axis ticks, giving one block of onset-date counts per situation-report
-# vintage; this is the only published source for the onset-date
-# distribution, so we fit it directly rather than leaving it as a data
-# table (see the [symptom-onset reporting delay](@ref "Symptom-onset
-# reporting delay") submodel below).
-# Digitisation carries measured error: per-vintage totals run -3.0% to
-# +1.6% against the figure's own printed total (the sign is not one-sided),
-# a per-bar pixel-noise SD of roughly $\pm 2.1$ cases, and an independent
-# per-scan level error with SD roughly $4.0\%$ shared by every bar in a
-# single vintage's figure (a shared dilation of that one read of the whole
-# curve). Because a case's onset date is sometimes corrected between
-# vintages (a case moves from one bar to a neighbouring one), an
-# individual bar can fall between two vintages even though the running
-# total cannot; this is expected and is not scan error. Some situation
-# reports reprint an earlier vintage's figure unchanged: SitReps 061-062
-# and 069-071 are each byte-identical to the vintage before them, so we
-# collapse each such group to its earliest report date before fitting,
-# keeping ten distinct digitised snapshots (thirteen digitised vintages,
-# three of them reprints) with report dates 12, 13, 14, 17, 18, 19, 20,
-# 21, 22 and 25 July. The fit only ever sees snapshots at or before the
-# current cut-off, the same rule as every other stream (see
-# [`load_onset_curve`](@ref)), so a vintage digitised ahead of the manifest
-# enters automatically, with no code change, once the cut-off advances past
-# its report date.
-#
-# Each figure also stops its horizontal axis short of its own report date,
-# by anything from zero to eight days depending on the vintage, and the
-# last bar it does print is often a substantial count rather than a tail
-# fading to zero. An onset date past that axis is not a bar of height zero,
-# it is a date the figure says nothing about, so we drop those cells rather
-# than scoring them as zeros: the axis gap is about five days for most
-# vintages, close to the reporting delay itself, and reading it as "nothing
-# reported yet" would force the fitted hazard to near zero over the first
-# five days and pile the missing mass onto the delay at which the axis
-# first covers the date. The publisher's choice of axis limit does not
-# depend on the counts it hides, so treating those cells as missing rather
-# than zero is the conservative reading. The price is that a correction
-# needs both vintages of a pair to print the date, which leaves the very
-# shortest delays thinly observed: no cell in the current triangle reaches
-# delay zero, and the fitted hazard there rests on pooling across delays
-# rather than on data.
+# alive/deceased ("courbe épidémique par date de début des symptômes").
+# It has no accompanying data table, so we digitise it directly from the
+# figure.
+# Digitisation introduces error into the resulting counts.
+# See the [symptom-onset reporting delay](@ref "Symptom-onset reporting
+# delay") submodel below for how the model accounts for that error.
 #
 # The first table lists each figure at the cut-off, or at the date
 # reporting stopped for that stream. The second table gives the per-date
@@ -3155,32 +3116,8 @@ surveillance_pair_fig #hide
 #
 # The scale slack row is a diagnostic rather than a quantity of interest.
 # Its prior is bounded below at one, because each term in the observation
-# scale is a lower bound on the truth: a bar cannot be read off a raster
-# more precisely than its pixels allow, and a count of newly reported cases
-# carries at least its own counting variation. So a posterior sitting on
-# that bound says the fit would like a tighter likelihood than the figure
-# can support, which is what the onsets-only fit does (its latent curve is
-# pinned by nothing else and bends onto the bars); a posterior well above
-# one says the scale is missing a term. Read it against the two
-# approximations named in `onset_report_scales`: the per-scan level error is
-# treated as independent across the roughly 28 cells drawn from one scan
-# when it is really one shared dilation of that scan's whole figure, and the
-# counting term is Poisson-like with no separate overdispersion parameter.
-# Those two leave different fingerprints. A missing overdispersion parameter
-# grows the shortfall with the cell mean, since a slack multiplier can
-# inflate every cell but cannot change the mean-variance shape. Correlated
-# scan error leaves the individual cells alone and shows up only when cells
-# from one snapshot are summed, where treating a shared error as independent
-# puts the aggregate predictive's mass in the wrong place. The per-snapshot
-# panel in the [posterior predictive checks](@ref "Posterior predictive
-# checks") is therefore the one to read for the second, and the per-cell
-# coverage for the first.
-#
-# The stream is not underdispersed, and the likelihood is left unchanged
-# here: individual cells are already scored wider than they need to be,
-# while the per-snapshot aggregate is mis-centred rather than mis-scaled.
-# Its variance is right, at 1.07 empirical over modelled, so no variance
-# term fixes it.
+# scale is a lower bound on the truth, so a posterior sitting on that bound
+# says the fit would like a tighter likelihood than the figures can support.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3317,16 +3254,9 @@ onset_pair_fig #hide
 # onset-date curve (posterior median with a 90% credible band) against
 # that snapshot's own digitised cumulative bars.
 # A recent onset date sits below its eventual value in its own snapshot's
-# panel and catches up in a later snapshot's panel, the right-truncation
-# behaviour the model relies on (see the [symptom-onset reporting
-# delay](@ref "Symptom-onset reporting delay") Methods section); the
-# panels only cover snapshots at or before the current cut-off (see the
-# [Data](@ref methods-data) section).
-#
-# The panels also show two misses the fitted delay does not absorb: the
-# fitted delay is too slow between 6 and 19 days, and the miss grows across
-# the snapshots.
-# Neither is corrected here.
+# panel and catches up in a later panel, the right-truncation behaviour the
+# model relies on (see the [symptom-onset reporting delay](@ref
+# "Symptom-onset reporting delay") Methods section).
 
 #md # ```@raw html
 #md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
