@@ -6,6 +6,26 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.13.0
+
+Changes since v1.12.0
+
+### Model
+
+- Widened the growth-rate `r` prior (eq 9) to
+  `LogNormal(log(log 2 / 11.7), 0.40)`, a doubling time of 5.3--25.6 d at
+  95%. The centre still matches the BEAST X reanalysis of 139 BDBV
+  genomes [mbalaplacide2026](@cite), which reports an Exponential-growth
+  doubling time of 11.7 d (95% HPD 6.8--17.5). That HPD is conditional on
+  a single-rate coalescent. This is the assumption the Mongbwalu field
+  epidemiology contradicts [kupferschmidt2026](@cite), the same evidence
+  behind the `m` change in v1.12.0. An independent reanalysis of the
+  earlier genomes puts the doubling time at 15.2--24.5 d
+  [cuomodannenburg2026](@cite), which the old spread largely excluded.
+- Corrected the growth-rate citation in the `rt_walk_model` docstring,
+  which still named a generic 20 d molecular-clock estimate the model no
+  longer uses.
+
 ## v1.12.0
 
 Changes since v1.11.0

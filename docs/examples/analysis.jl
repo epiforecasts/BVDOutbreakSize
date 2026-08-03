@@ -601,12 +601,15 @@ vintage_table #hide
 # BEAST X reanalysis of 139 BDBV genomes [mbalaplacide2026](@cite) reports
 # an Exponential-growth doubling time of 11.7 d (95% HPD 6.8--17.5). We put
 # a log-normal prior on $r$ equivalent to a log-normal prior on the doubling
-# time centred on 11.7 d, with its log spread read from that HPD and
-# inflated a little, so the prior is slightly wider in spread than the
-# source but unbiased relative to it:
+# time centred on 11.7 d. Its log spread is wider than that HPD implies.
+# The HPD is conditional on a single-rate coalescent, the assumption the
+# field epidemiology above contradicts [kupferschmidt2026](@cite), and an
+# independent reanalysis of the earlier genomes puts the doubling time at
+# 15.2--24.5 d [cuomodannenburg2026](@cite). The spread we use covers both,
+# giving a doubling time of 5.3--25.6 d at 95%:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.28\right). \tag{9}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{9}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward
