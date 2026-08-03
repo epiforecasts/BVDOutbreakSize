@@ -213,7 +213,20 @@ the `source =` string and prefer the auditable value.
   (page-1 isolement count *and* occupancy rate byte-identical to the prior day
   with no fresh Tableau to corroborate) is a reporting gap: record the raw
   value in the CSV note but exclude it from the fitted series (precedent:
-  30 June, 3–4 July).
+  30 June, 3–4 July). A **carried-forward Ensemble column** is a narrower
+  variant: the per-province rows and the `Total sorties (24h)` row are fresh
+  and balance-close, but the table's own printed `Ensemble`/Global cell for
+  one row block (typically the Sorties breakdown: Décédés/Non-cas/Guéris/
+  Évadés/Transférés) is a byte-identical copy of the *previous* vintage's
+  Ensemble cell rather than that day's own row sum. Detect it by summing the
+  per-province cells yourself and comparing to the printed Ensemble cell and
+  to the previous vintage's Ensemble cell for the same row; if it matches the
+  prior vintage rather than this vintage's own row sum, use the auditable
+  row sum (it will also match the prose paragraph and the `Total sorties`
+  row) and record the printed Ensemble cell as the discrepancy (precedent:
+  SitRep 079, 1 August — Ensemble cells 18/71/15/2/0 were a byte-identical
+  copy of SitRep 078's own Ensemble cells, while the row sums 25/86/42/4/1
+  matched the prose and `Total sorties (24h)` = 158 exactly).
 - **Unpublished reports**: some SitRep numbers were never issued (029/12 Jun,
   043/26 Jun, 045/28 Jun). The series simply step over the missing date; note
   it in the `source =` string.
