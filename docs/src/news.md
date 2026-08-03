@@ -78,10 +78,8 @@ Changes since v1.9.0.
 - Captured symptom-onset epidemic curves from the DHIS2 line list published
   in the analytique SitRep figures (059–062, 064). Digitised via
   `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port,
-  and recorded as `data/onset_curve_scanned.csv`. Later in this same release
-  they became a fitted stream (see Model below); when first captured they
-  were unfitted and served as an empirical onset-to-report delay benchmark
-  (~65 % by 7 days, median ~5–6 days).
+  and recorded as `data/onset_curve_scanned.csv`. Fitted as a stream, see
+  Model below.
 - Re-ran the confirmed/suspect in-care occupancy split on the resumed
   Tableau 7 data (SitReps 052–055), extending
   `treatment_confirmed_incare_history` and
@@ -91,14 +89,24 @@ Changes since v1.9.0.
 
 ### Model
 
-- Made the digitised symptom-onset reporting triangle a **fitted stream**
+- Made the digitised symptom-onset reporting triangle a fitted stream
   (`onset_reporting_model`), scored on its between-vintage increments
   through a discrete reporting-delay hazard that is nonparametric over the
-  delay and drifts over calendar time. Ascertainment is the hazard's own
-  asymptote rather than a separate parameter block. Fitted by `bvd_joint`
-  alongside every other stream and by a new `onsets_only_model`
-  single-stream composer.
-- Added a symptom-onset **nowcast and forecast** (`forecast_onsets`),
+  delay and drifts over calendar time. Fitted by `bvd_joint` alongside
+  every other stream and by a new `onsets_only_model` single-stream
+  composer. The snapshot figure is a posterior predictive, so its band
+  carries the measurement error the likelihood gives a digitised bar.
+
+- Gave that stream an explicit ascertainment. The reporting hazard is
+  normalised to reach one, so it carries the delay shape alone, and
+  ascertainment is a separate level. It is anchored on the confirmed
+  pipeline's own `p_drc · τ_test · positivity` averaged over the delay
+  distribution, with a logit-scale offset and a slow walk over onset date.
+  Not yet validated. The ascertainment walk and the reproduction-number
+  walk share the onset axis and are both least constrained late, so $R_t$
+  over the final fortnight and $C_T$ need reporting either side of this
+  change.
+- Added a symptom-onset nowcast and forecast (`forecast_onsets`),
   splitting the coming week's new onset reports into the part arising from
   onsets that have already happened but are not yet reported and the part
   from onsets that have not yet happened. The latent onset trajectory
@@ -108,36 +116,11 @@ Changes since v1.9.0.
   level is deliberately not scored, since every vintage rereads the whole
   figure and its ≈4% per-scan level error revises the total both ways.
 
-- Made the reporting-triangle snapshot figure a posterior predictive rather
-  than a plot of the modelled count alone. Its band now carries the
-  measurement error the likelihood gives a digitised bar, which lifts
-  coverage of the observed bars from 0.42 to 0.95 at a nominal 90%. Fixing
-  it exposed two systematic misses, both recorded in #517: the fitted delay
-  is too slow between 6 and 19 days, which is not corrected, and the
-  calendar-time effect could not follow reporting speeding up, which is
-  addressed by the widened prior below.
-
-- Split the nowcast/forecast figure's total into the latent sum of its two
-  components and the replicate the next vintage will actually print, which
-  are different by an order of magnitude in width. The scored quantity is
-  the replicate, and 98% of its variance is the per-scan level error rather
-  than anything epidemiological.
-
-- Added a results section plotting symptom onsets by date of onset: each
-  onset date's bar as the first figure to cover it printed it, the same bar
-  as the most recent figure prints it, and the model's current estimate of
-  both the eventual reports and the onsets themselves.
-
-- Widened the onset-report calendar-walk prior from `Normal⁺(0, 0.1)` to
-  `Normal⁺(0, 0.3)` (#530). At 0.1 the walk could not follow the drift in
-  the data: the mean standardised residual climbed monotonically across the
-  eleven scored snapshots and the most recent vintage was under-predicted by
-  14%. A 14% level shift needs a calendar shift of about 0.32 at delay 8 and
-  0.58 at delay 12 on the logit hazard, which is a 1.6-3σ excursion under the
-  old prior and 0.5-1σ under this one. **Not yet validated against the gate
-  in #517** — in particular whether $R_t$ over the final fortnight and $C_T$
-  move, since the calendar walk and the reproduction-number walk overlap in
-  calendar time and both are least constrained late.
+- Added a results figure reading the triangle along the onset date: the
+  latest digitised bar for each onset date against the posterior predictive
+  for that bar and against the modelled onsets. The nowcast and forecast
+  figure separates the latent components from the replicate the next
+  vintage will print, since only the replicate is scored.
 
 - De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
   log-density path (`confirmed_positivity_link = :composition`): extracted
