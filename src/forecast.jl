@@ -477,23 +477,23 @@ happened.
 
 The reported total as of grid day `a` is
 [`onset_report_expected_total`](@ref)'s
-`Σ_u onsets[u] · F(u, a - u)`, with `F` the fitted delay hazard's
-cumulative reported proportion ([`onset_report_cdf`](@ref)). Splitting
-that sum at the cut-off `n` and differencing it between `n` and `n + h`
-gives the columns below. Onsets after the cut-off are projected by
-carrying the cut-off daily onset rate forward under the same evolving
-growth-rate path every other forecast uses (see
-[`forecast_reported`](@ref)); the calendar-time effect `γ` is held flat at
-its last fitted value over the horizon
-([`onset_report_cdf_extrapolated`](@ref)), the same assumption a nowcast
-makes.
+`Σ_u onsets[u] · F(u, a - u)`, with `F(u, δ) = α(u) · G(u, δ)`
+([`onset_report_F`](@ref)) the fitted delay hazard's cumulative reported
+proportion, `α(u)` the fitted ascertainment level. Splitting that sum at
+the cut-off `n` and differencing it between `n` and `n + h` gives the
+columns below. Onsets after the cut-off are projected by carrying the
+cut-off daily onset rate forward under the same evolving growth-rate path
+every other forecast uses (see [`forecast_reported`](@ref)); the calendar-
+time effect `γ` and the ascertainment level `α` are both held flat at their
+last fitted value over the horizon ([`onset_report_F`](@ref) already does
+this, see [`onset_report_G`](@ref)), the same assumption a nowcast makes.
 
 Columns, all per draw:
 
   - `onsets_to_date` — symptom onsets that have already happened by the
     cut-off, `Σ_{u ≤ n} onsets[u]`. This is the nowcast: the model's view
     of what the epidemic has already done, free of reporting delay and of
-    the ascertainment the hazard's asymptote carries.
+    the ascertainment level `α`.
   - `onset_reports_to_date` — of those, the number the triangle should
     already have printed, `Σ_{u ≤ n} onsets[u] · F(u, n - u)`. The
     quantity the digitised total is an observation of.
@@ -587,6 +587,8 @@ function forecast_onsets(chn;
         o = daily[i]
         lh0 = hazard.logit_h0[i]
         γ = hazard.γ[i]
+        α = hazard.alpha[i]
+        na = length(α)
         ## Future daily onsets, the cut-off rate carried forward under the
         ## evolving growth path (or the constant cut-off rate when the
         ## chain does not carry the walk), so the projected onsets match
@@ -602,25 +604,25 @@ function forecast_onsets(chn;
 
         ## Reported totals at the cut-off and at the horizon, split by
         ## whether the onset date is on or after the cut-off. `F` is
-        ## evaluated with the calendar walk held flat outside its fitted
-        ## support, which is what carries the last fitted reporting
-        ## behaviour over the horizon.
+        ## evaluated with the calendar walk and the ascertainment level both
+        ## held flat outside their fitted support, which is what carries the
+        ## last fitted reporting behaviour over the horizon.
         past_now = 0.0
         past_then = 0.0
         ge = min(n, length(o))
         for u in 1:ge
-            f_now = onset_report_cdf_extrapolated(n - u, lh0, γ, u, grid_start)
-            f_then = onset_report_cdf_extrapolated(
-                n + h - u, lh0, γ, u, grid_start)
+            αu = α[clamp(u - grid_start + 1, 1, na)]
+            f_now = onset_report_F(n - u, lh0, γ, u, grid_start, αu)
+            f_then = onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
             past_now += o[u] * f_now
             past_then += o[u] * f_then
         end
         fut_then = 0.0
         for d in 1:h
             u = n + d
+            αu = α[clamp(u - grid_start + 1, 1, na)]
             fut_then += fut[d] *
-                        onset_report_cdf_extrapolated(
-                n + h - u, lh0, γ, u, grid_start)
+                        onset_report_F(n + h - u, lh0, γ, u, grid_start, αu)
         end
 
         onsets_to_date[i] = sum(@view o[1:ge])

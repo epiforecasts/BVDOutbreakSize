@@ -392,33 +392,122 @@ end
     onsets = fill(10.0, 60)
     logit_h0 = fill(logit(0.1), 28)
     γ = zeros(60)
+    alpha = fill(0.8, 60)
     u = 20
-    early = onset_report_moments(onsets, logit_h0, γ, 1, [u], [u + 3], [0])
-    late = onset_report_moments(onsets, logit_h0, γ, 1, [u], [u + 10], [0])
+    early = onset_report_moments(onsets, logit_h0, γ, 1, alpha, [u], [u + 3],
+        [0])
+    late = onset_report_moments(onsets, logit_h0, γ, 1, alpha, [u], [u + 10],
+        [0])
     @test late.level_cur[1] >= early.level_cur[1]
 end
 
-@testitem "onset_report_expected_total / onset_report_ascertainment stay in bounds" begin
-    using BVDOutbreakSize: onset_report_expected_total,
-                           onset_report_ascertainment
+@testitem "onset_report_G reaches one at D-1, is monotone, and stays finite when hazards underflow" begin
+    using BVDOutbreakSize: onset_report_G
+    using Random: seed!
+
+    seed!(20260803)
+    grid_start = 1
+    u = 10
+    for _ in 1:20
+        D = 28
+        logit_h0 = randn(D) .* 1.5 .- 1.0
+        γ = randn(60) .* 0.3
+        vals = [onset_report_G(δ, logit_h0, γ, u, grid_start)
+                for δ in (-3):(D + 5)]
+        @test all(==(0.0), vals[1:3])
+        @test issorted(vals)
+        @test all(v -> -1e-8 <= v <= 1 + 1e-8, vals)
+        g_D1 = onset_report_G(D - 1, logit_h0, γ, u, grid_start)
+        @test g_D1 ≈ 1.0 atol=1e-8
+    end
+
+    ## Every hazard underflows to ≈ 0: numerator and denominator both
+    ## underflow together, so the safe-rate guard must return a finite
+    ## ratio rather than `0 / 0 = NaN`.
+    logit_h0 = fill(-40.0, 28)
+    γ = zeros(40)
+    for δ in (0, 5, 27)
+        @test isfinite(onset_report_G(δ, logit_h0, γ, 5, 1))
+    end
+end
+
+@testitem "onset_report_F reaches alpha at D-1 and is zero for delta < 0" begin
+    using BVDOutbreakSize: onset_report_F
+    using Random: seed!
+
+    seed!(20260803)
+    D = 28
+    grid_start = 1
+    u = 7
+    for _ in 1:10
+        logit_h0 = randn(D) .* 1.2 .- 0.8
+        γ = randn(40) .* 0.2
+        α = rand()
+        f_D1 = onset_report_F(D - 1, logit_h0, γ, u, grid_start, α)
+        @test f_D1 ≈ α atol=1e-8
+        @test onset_report_F(-1, logit_h0, γ, u, grid_start, α) == 0.0
+    end
+end
+
+@testitem "onset_report_ascertainment keeps a finite gradient at an anchor of zero or one" begin
+    using BVDOutbreakSize: onset_report_ascertainment
+    using ForwardDiff: gradient
+
+    ## `logit(0)` is `-Inf`, whose forward value survives but whose
+    ## gradient is `NaN`, and a `NaN` there would spread to the whole
+    ## log-density rather than to this stream alone.
+    f(x) = onset_report_ascertainment([x[1]], 0.0, [0.0])[1]
+    for anchor in (0.0, 1e-300, 0.15, 1.0)
+        α = f([anchor])
+        @test isfinite(α)
+        @test 0.0 < α < 1.0
+        @test all(isfinite, gradient(f, [anchor]))
+    end
+
+    ## An anchor inside the guarded range passes through untouched when the
+    ## offset and the walk are both zero, so the guard costs nothing there.
+    @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
+end
+
+@testitem "onset_report_anchor is a weighted average of a, exact for a constant a" begin
+    using BVDOutbreakSize: onset_report_anchor
+    using Random: seed!
+    using StatsFuns: logit
+
+    seed!(20260803)
+    D = 28
+    grid_start = 1
+    u = 10
+    a = 0.05 .+ 0.5 .* rand(80)
+    for _ in 1:20
+        logit_h0 = randn(D) .* 1.2 .- 0.8
+        γ = randn(80) .* 0.3
+        anc = onset_report_anchor(logit_h0, γ, u, grid_start, a)
+        @test minimum(a) <= anc <= maximum(a)
+    end
+
+    ## A constant anchor series reproduces that constant exactly, since the
+    ## delay weights sum to one regardless of the hazard.
+    logit_h0 = fill(logit(0.15), D)
+    γ = zeros(40)
+    const_a = fill(0.23, 60)
+    @test onset_report_anchor(logit_h0, γ, 10, 1, const_a) ≈ 0.23
+end
+
+@testitem "onset_report_expected_total stays in bounds" begin
+    using BVDOutbreakSize: onset_report_expected_total
     using StatsFuns: logit
 
     onsets = fill(5.0, 100)
     logit_h0 = fill(logit(0.1), 28)
     for (grid_start, grid_end) in ((1, 100), (1, 10), (5, 40), (50, 55))
-        γ = zeros(max(grid_end - grid_start + 1, 1))
+        nt = max(grid_end - grid_start + 1, 1)
+        γ = zeros(nt)
+        alpha = fill(0.3, nt)
         total = onset_report_expected_total(onsets, logit_h0, γ, grid_start,
-            grid_end)
+            alpha, grid_end)
         @test isfinite(total)
         @test total >= 0
-        asc = onset_report_ascertainment(logit_h0, γ, grid_start, grid_end)
-        @test all(a -> 0 <= a <= 1, asc)
-        ## Degenerate short grid (grid_end - grid_start + 1 < D): no `u` has
-        ## a fully computable asymptote, so an empty vector is returned
-        ## rather than reading `γ` out of bounds.
-        if grid_end - grid_start + 1 < length(logit_h0)
-            @test isempty(asc)
-        end
     end
 end
 
@@ -426,8 +515,8 @@ end
     ## Regression test: `expected_onset_reported_T` must sum the FULL
     ## `1:n` onset series like every other stream's `expected_*_T`, not
     ## just the triangle's own `grid_start:grid_end` window (see
-    ## `onset_report_cdf_extrapolated`).
-    using BVDOutbreakSize: onset_report_expected_total, onset_report_cdf
+    ## `onset_report_G`).
+    using BVDOutbreakSize: onset_report_expected_total, onset_report_F
     using StatsFuns: logit
 
     n = 100
@@ -436,17 +525,19 @@ end
     grid_start = 60
     grid_end = 90
     γ = zeros(grid_end - grid_start + 1)
+    alpha = fill(0.4, grid_end - grid_start + 1)
 
     ## A window-restricted sum (the pre-fix behaviour) only over
     ## `grid_start:grid_end`, for comparison.
     restricted = sum(
-        onsets[u] * onset_report_cdf(grid_end - u, logit_h0, γ, u, grid_start)
+        onsets[u] * onset_report_F(grid_end - u, logit_h0, γ, u, grid_start,
+            alpha[u - grid_start + 1])
     for u in grid_start:grid_end)
     total = onset_report_expected_total(onsets, logit_h0, γ, grid_start,
-        grid_end)
+        alpha, grid_end)
 
     ## The onset dates before `grid_start` (days 1:59) are old enough by
-    ## `grid_end` that they sit at the hazard's asymptote and each
+    ## `grid_end` that they sit at the ascertainment level and each
     ## contribute onsets[u] * F(u, D-1) > 0, so the full total must exceed
     ## the window-restricted sum.
     @test total > restricted
@@ -454,9 +545,9 @@ end
 
     ## The extrapolated contribution for a day well before `grid_start`
     ## should match the flat asymptote computed at the earliest known
-    ## calendar day (γ held at γ[1] = 0 here).
-    F_edge = onset_report_cdf(length(logit_h0) - 1, logit_h0, γ, grid_start,
-        grid_start)
+    ## calendar day and ascertainment level (both held flat at index 1).
+    F_edge = onset_report_F(length(logit_h0) - 1, logit_h0, γ, grid_start,
+        grid_start, alpha[1])
     @test total ≈ restricted + (grid_start - 1) * 5.0 * F_edge
 end
 
@@ -621,6 +712,27 @@ end
     @test all(>=(0), et)
 end
 
+@testitem "onsets_only_model: unanchored ascertainment prior has median near 0.15" begin
+    ## No confirmed pipeline to anchor on, so the ascertainment level's
+    ## prior is exactly `logistic(logit(0.15) + β)` with `β ~ Normal(0,
+    ## 0.75)` (the onset-axis walk is near-flat a priori): median ≈ 0.15,
+    ## 90% interval roughly [0.05, 0.38].
+    using BVDOutbreakSize: onsets_only_model
+    using Turing: Prior, sample
+    using Statistics: median, quantile
+
+    oc = (; onset_days = [10, 11, 12, 13, 10, 11, 12, 13, 14],
+        report_days = [15, 15, 15, 15, 20, 20, 20, 20, 20],
+        prev_report_days = [0, 0, 0, 0, 15, 15, 15, 15, 0],
+        increments = [2, 3, 1, 0, 1, 2, 3, 4, 5])
+    chn = sample(onsets_only_model(40; onset_curve_history = oc), Prior(),
+        2000; progress = false)
+    flat = reduce(vcat, vec(collect(chn[:onset_ascertainment])))
+    @test isapprox(median(flat), 0.15; atol = 0.05)
+    @test 0.02 < quantile(flat, 0.05) < 0.10
+    @test 0.25 < quantile(flat, 0.95) < 0.55
+end
+
 @testitem "AD gradient: onsets_only_model differentiates (Mooncake)" tags = [
     :ad] begin
     using Turing: DynamicPPL
@@ -750,12 +862,15 @@ end
 
 ## --- Hazard reconstruction and the onset nowcast/forecast ---------------
 
-@testitem "reconstruct_onset_hazard rebuilds the fitted cut-off total" begin
+@testitem "reconstruct_onset_hazard rebuilds the fitted cut-off total and round-trips alpha" begin
     ## The reconstruction is exact rather than approximate: feeding it back
     ## into `onset_report_expected_total` with the chain's own onset
     ## trajectory must reproduce the `expected_onset_reported_T` the model
     ## computed for that same draw. A wrong grid, a wrong knot count or a
     ## mis-scaled walk all break this and nothing else in the report would.
+    ## `alpha` is read straight off the chain rather than reconstructed from
+    ## non-centred components, so this also checks it round-trips through
+    ## the same total.
     using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard,
                            onset_report_expected_total
     using Turing: Prior, sample
@@ -777,8 +892,9 @@ end
 
     @test length(hz.logit_h0) == 20
     @test all(length(g) == grid_end - grid_start + 1 for g in hz.γ)
+    @test all(length(a) == grid_end - grid_start + 1 for a in hz.alpha)
     rebuilt = [onset_report_expected_total(daily[i], hz.logit_h0[i],
-                   hz.γ[i], grid_start, n) for i in 1:20]
+                   hz.γ[i], grid_start, hz.alpha[i], n) for i in 1:20]
     @test all(isapprox.(rebuilt, et; rtol = 1e-8))
 end
 

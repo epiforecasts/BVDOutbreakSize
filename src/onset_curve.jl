@@ -159,10 +159,10 @@ predecessor via the sentinel `prev_report_days[i] = 0`: since
 for every onset day `>= 1`), this recovers signal from the first digitised
 vintage as a "difference from nothing" rather than discarding it, with no
 extra branch anywhere downstream. Those cells score a level rather than a
-correction, which is what anchors the hazard's asymptote: corrections only
-ever pin differences of `F`, so without a level somewhere the asymptote
-would float. [`onset_report_scales`](@ref) gives them the counting variation
-a level carries and a correction largely does not.
+correction, which is what anchors `alpha`: corrections only ever pin
+differences of `F`, so without a level somewhere `alpha` would float.
+[`onset_report_scales`](@ref) gives them the counting variation a level
+carries and a correction largely does not.
 
 `horizon` defaults to `max_delay` (a deliberate tie, not a second free
 hyperparameter): it is exactly the hazard's own support, so scoring covers
