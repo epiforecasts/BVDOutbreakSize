@@ -605,8 +605,8 @@ vintage_table #hide
 # The HPD is conditional on a single-rate coalescent, the assumption the
 # field epidemiology above contradicts [kupferschmidt2026](@cite), and an
 # independent reanalysis of the earlier genomes puts the doubling time at
-# 15.2--24.5 d [cuomodannenburg2026](@cite). The spread we use covers both,
-# giving a doubling time of 5.3--25.6 d at 95%:
+# 15.2--24.5 d [cuomodannenburg2026](@cite). Our 95% interval on the
+# doubling time is 5.3--25.6 d, which contains both ranges:
 #
 # ```math
 # r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{9}

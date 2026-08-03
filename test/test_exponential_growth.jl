@@ -37,7 +37,7 @@
 end
 
 @testitem "exponential_growth_model: r and m priors are WIDE" begin
-    using Statistics: mean, std
+    using Statistics: mean, std, quantile
     using Turing: @model, to_submodel, sample, Prior
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
@@ -60,6 +60,19 @@ end
     @test 3.0 < std(m) < 3.8
     ## The growth rate is centred on the BEAST X 11.7-day doubling (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
+    ## `r` is LogNormal, so `log r` pins both the centre and the spread
+    ## directly. The centre is log(log 2 / 11.7) ≈ -2.826 and the log-SD is
+    ## 0.40. At 4000 draws the standard error on each is under 0.007, so
+    ## these bounds hold the prior to the documented values rather than
+    ## merely to the right order of magnitude.
+    @test -2.86 < mean(log.(r)) < -2.79
+    @test 0.37 < std(log.(r)) < 0.43
+    ## The induced doubling time τ = log 2 / r is LogNormal(log 11.7, 0.40),
+    ## a 95% interval of 5.3-25.6 d. This is the interval the analysis text
+    ## quotes, so it is guarded here.
+    τ = log(2) ./ r
+    @test 4.9 < quantile(τ, 0.025) < 5.8
+    @test 23.6 < quantile(τ, 0.975) < 27.8
     ## The induced cryptic duration T = m·τ is correspondingly wide.
     @test std(T) > 30.0
 end

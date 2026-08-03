@@ -179,7 +179,8 @@ growth rate `r` and the generation interval through Euler–Lotka
 sits on the growth rate (see [`exponential_growth_model`](@ref)), grounded
 on the BEAST X molecular-clock doubling time (mbalaplacide2026), and the
 established reproduction number is whatever that growth implies under OUR
-generation interval rather than a separately asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55` under THEIR
+generation interval rather than a separately asserted `R0` prior. The
+genetic report gives `R0 ≈ 1.31–1.55` under THEIR
 generation interval; deriving `R0` forward from the shared growth rate under
 our generation interval is the consistent thing to do. This single growth
 source pins the ESTABLISHED reproduction number (the walk base at the
