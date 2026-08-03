@@ -1623,14 +1623,17 @@ end
 
 Reconstruct each posterior draw's symptom-onset reporting-delay hazard
 from the non-centred components the chain stores, returning
-`(; logit_h0, γ)` as two `ndraws`-long vectors of vectors. Mirrors
+`(; logit_h0, γ, alpha)` as three `ndraws`-long vectors of vectors. Mirrors
 [`onset_report_hazard_model`](@ref) exactly: `logit_h0` is the baseline
 delay random effect `η0 .+ σ_h0 .* z_h0`, and `γ` is the report-date
 calendar walk, weekly knots ([`knot_days`](@ref)) following a non-centred
 cumulative sum of `σ_γ .* z_γ` linearly interpolated
 ([`interpolate_knots`](@ref)) onto the daily grid `[grid_start,
 grid_end]`. The same relationship [`reconstruct_rt`](@ref) has to
-[`rt_walk_model`](@ref).
+[`rt_walk_model`](@ref). `alpha` is read directly off the chain's
+`onset_ascertainment` deterministic rather than rebuilt, since it already
+depends on inputs (the confirmed pipeline's anchor series) that are not
+themselves stored.
 
 `grid_start` and `grid_end` are properties of the digitised triangle
 rather than of the chain (`onset_reporting_model` derives them from the
@@ -1651,6 +1654,7 @@ function reconstruct_onset_hazard(chn; grid_start::Integer,
            for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))]
     zγ = [collect(z)
           for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))]
+    alpha = [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
 
     nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
     days = knot_days(nt; week, start = 1)
@@ -1662,6 +1666,12 @@ function reconstruct_onset_hazard(chn; grid_start::Integer,
               "(minimum onset day to maximum report day of the scored " *
               "cells).")
     end
+    if !isempty(alpha) && length(alpha[1]) != nt
+        error("reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
+              "gives $nt onset dates but the chain's `onset_ascertainment` " *
+              "has length $(length(alpha[1])); pass the same grid the fit " *
+              "used.")
+    end
 
     ndraws = length(η0)
     logit_h0 = Vector{Vector{Float64}}(undef, ndraws)
@@ -1671,7 +1681,7 @@ function reconstruct_onset_hazard(chn; grid_start::Integer,
         steps = σ_γ[i] .* zγ[i][1:max(nb - 1, 0)]
         γ[i] = interpolate_knots(vcat(0.0, cumsum(steps)), days, nt)
     end
-    return (; logit_h0, γ)
+    return (; logit_h0, γ, alpha)
 end
 
 ## Per-day quantile `pr` of an established-window Rt matrix, skipping the

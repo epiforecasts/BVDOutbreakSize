@@ -252,20 +252,21 @@ delay hazard, calendar-time drift, right-truncation and ascertainment
 maths.
 
 Unlike every other single-stream composer, this stream needs no dispersion
-or ascertainment submodel of its own: the reporting-delay hazard's
-asymptote plays that role directly (see [`onset_report_cdf`](@ref)), so
-`onset_report` is the only injected submodel, mirroring
-[`deaths_only_model`](@ref)'s shape.
+submodel of its own; `onset_report` (the reporting-triangle model, which
+samples its own ascertainment level) is the only injected submodel,
+mirroring [`deaths_only_model`](@ref)'s shape. No confirmed pipeline is
+available to anchor ascertainment on, so `onset_report` falls back to its
+constant `0.15` anchor.
 
 Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the same un-prefixed name [`bvd_joint`](@ref)
 uses, so the two carry one key and can be compared directly (see
 `expected_confirmed_T` on [`confirmed_only_model`](@ref) for the
-precedent). With the shared `cumulative_onsets` trajectory from `_latent`
-that is everything [`forecast_onsets`](@ref) needs, so this fit nowcasts
-and forecasts the onset stream like any other, scored on the reported
-increment rather than on the digitised level (see
-[`forecast_stream`](@ref)).
+precedent), and the modelled ascertainment as `onset_ascertainment`. With
+the shared `cumulative_onsets` trajectory from `_latent` that is everything
+[`forecast_onsets`](@ref) needs, so this fit nowcasts and forecasts the
+onset stream like any other, scored on the reported increment rather than
+on the digitised level (see [`forecast_stream`](@ref)).
 """
 @model function onsets_only_model(n::Integer;
         onset_curve_history = (; onset_days = Int[], report_days = Int[],
@@ -280,7 +281,8 @@ increment rather than on the digitised level (see
         onset_report(onset_curve_history, latent.onsets))
     expected_onset_reported_T := onset_report_expected_total(
         latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, n)
+        onset_report_state.grid_start, onset_report_state.alpha, n)
+    onset_ascertainment := onset_report_state.alpha
 end
 
 """
@@ -629,14 +631,6 @@ death-confirmation positivity (`death_confirmation`).
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, onsets, k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
-    ## Symptom-onset reporting-triangle stream
-    ## ([`onset_reporting_model`](@ref)): the only direct observation of the
-    ## shared latent onset series `onsets`, every other stream sees it only
-    ## after a further onset-to-event convolution. No dependency on any
-    ## other stream's state, so it runs alongside `deaths_state` rather
-    ## than being deferred to the confirmed pipeline.
-    onset_report_state ~ to_submodel(
-        onset_report(onset_curve_history, onsets))
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
@@ -646,6 +640,18 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
         positivity_link = confirmed_positivity_link))
+    ## Symptom-onset reporting-triangle stream
+    ## ([`onset_reporting_model`](@ref)): the only direct observation of the
+    ## shared latent onset series `onsets`, every other stream sees it only
+    ## after a further onset-to-event convolution. Runs after
+    ## `confirmed_state` so its daily ascertainment
+    ## (`p_drc · τ_test · p_pos_grid`) is available to anchor this stream's
+    ## own ascertainment level on.
+    onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
+                         confirmed_state.p_pos_grid
+    onset_report_state ~ to_submodel(
+        onset_report(onset_curve_history, onsets;
+        anchor = onset_anchor_daily))
     ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
     ## analysed volume scales the modelled case analysed volume
     ## (`confirmed_state.analysed_daily`) at the per-day suspected
@@ -789,16 +795,13 @@ death-confirmation positivity (`death_confirmation`).
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
     ## Cut-off expected onset-reported total and the modelled per-onset-date
-    ## ascertainment (the reporting-delay hazard's asymptote,
-    ## [`onset_report_ascertainment`](@ref)), both off the same fitted hazard
-    ## as the delay itself; see [`onset_reporting_model`](@ref) for what the
-    ## vintage structure does and does not separate here.
+    ## ascertainment level, off the same fitted hazard and ascertainment
+    ## walk; see [`onset_reporting_model`](@ref) for what the vintage
+    ## structure does and does not separate here.
     expected_onset_reported_T := onset_report_expected_total(
         onsets, onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, n)
-    onset_ascertainment := onset_report_ascertainment(
-        onset_report_state.logit_h0, onset_report_state.γ,
-        onset_report_state.grid_start, onset_report_state.grid_end)
+        onset_report_state.grid_start, onset_report_state.alpha, n)
+    onset_ascertainment := onset_report_state.alpha
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -

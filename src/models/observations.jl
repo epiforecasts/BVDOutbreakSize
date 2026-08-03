@@ -2625,35 +2625,24 @@ end
 """
     onset_report_cdf(δ, logit_h0, γ, u, grid_start)
 
-Cumulative reported proportion `F(u, δ)` of onset date `u`'s eventual
-symptom-onset cases reported within `δ` days, under the discrete hazard
-`h(d, t) = logistic(logit_h0[d+1] + γ[t - grid_start + 1])` (delay `d`,
-report calendar day `t = u + d`, indexed into the calendar-time random-walk
-vector `γ` which starts at grid day `grid_start`):
+Un-normalised reported proportion of onset date `u`'s eventual symptom-onset
+cases reported within `δ` days, under the discrete hazard `h(d, t) =
+logistic(logit_h0[d+1] + γ[t - grid_start + 1])` (delay `d`, report calendar
+day `t = u + d`, indexed into the calendar-time random-walk vector `γ` which
+starts at grid day `grid_start`):
 
 ```math
-F(u, \\delta) = \\begin{cases} 0 & \\delta < 0 \\\\
+\\text{cdf}(u, \\delta) = \\begin{cases} 0 & \\delta < 0 \\\\
     1 - \\prod_{j=0}^{\\min(\\delta, D-1)} \\bigl(1 - h(j, u + j)\\bigr)
     & \\delta \\ge 0 \\end{cases}, \\qquad D = \\text{length}(logit\\_h0).
 ```
 
-`δ < 0` (the onset date has not yet had time to be reported at all by this
-snapshot) returns exactly `0`: this is right truncation, and it is the only
-place it enters the model (see [`onset_report_moments`](@ref) and
-[`onset_reporting_model`](@ref)) — not a correction applied afterwards. For
-a fixed onset date `u` the expected count `onsets[u] * F(u, R_s - u)` can
-only rise as a later snapshot's report day `R_s` grows, which is what lets
-the vintage structure separate a filling-in truncation effect from a
-genuine fall in reporting (a fall does not recover as later snapshots see
-it; truncation does).
-
-`F` is deliberately NOT constrained to reach `1` as `δ → D-1`: the same
-hazard's asymptote `F(u, D-1)` is onset date `u`'s modelled ascertainment
-(see [`onset_report_ascertainment`](@ref)), and `F(u, δ) / F(u, D-1)` its
-normalised delay profile — one mechanism read two ways, rather than a
-separate ascertainment parameter block. `δ` is capped at `D-1`, so the
-returned value is constant for every `δ >= D-1` (the hazard has no support
-beyond the tracked delay window).
+This is the delay shape only: it is not the reported proportion `F` the
+model scores, which also carries ascertainment (see [`onset_report_G`](@ref)
+and [`onset_report_F`](@ref)). `δ < 0` returns exactly `0`, the right-
+truncation case, and is the building block both `G` and the delay-weighted
+[`onset_report_anchor`](@ref) rely on. `δ` is capped at `D-1`, so the
+returned value is constant for every `δ >= D-1`.
 
 Pure, top-level and allocation-free (a single indexed `@inbounds` loop, no
 closures), so it AD-transparently composes into the vectorised moment and
@@ -2677,7 +2666,121 @@ function onset_report_cdf(δ::Integer, logit_h0::AbstractVector,
 end
 
 """
-    onset_report_moments(onsets, logit_h0, γ, grid_start, onset_idx,
+    onset_report_G(δ, logit_h0, γ, u, grid_start)
+
+Normalised delay CDF `G(u, δ) = cdf(u, δ) / cdf(u, D-1)`
+([`onset_report_cdf_extrapolated`](@ref) supplying both terms), so
+`G(u, D-1) = 1` by construction and `G` is a proper delay distribution
+rather than an asymptote that drifts with the hazard level. Built on the
+extrapolated cdf (calendar index clamped rather than assumed in-range)
+because the denominator always reaches `D - 1` days ahead of `u`, which for
+an onset date within `D - 1` days of `grid_end` runs past `γ`'s fitted
+support even though every scored `δ` itself stays in range; the calendar
+effect is held flat at the walk's nearest edge there, same as everywhere
+else this package extrapolates a fitted walk. Agrees exactly with the
+in-range calculation whenever every index touched is already in-range. The
+denominator is guarded with [`safe_rate`](@ref) so it is never divided by
+zero. `G(u, δ) = 0` for `δ < 0`, since the numerator already returns `0`
+there.
+
+`G(u, D-1) = 1` holds except in one corner. The numerator never exceeds
+the denominator, so the guard can only shrink the ratio, and if every
+`h(j, ·)` is small enough that each `1 - h` rounds to `1` then both terms
+underflow to exactly `0` and `G` is `0` rather than `1`. That needs all
+`D` baseline hazards below about `1e-16` at once, a joint excursion the
+prior puts roughly 30 standard deviations away, and it degrades quietly
+rather than producing `NaN`. [`onset_report_ascertainment`](@ref) clamps
+against the one consequence that would spread, an anchor of exactly zero.
+Pure, top-level, allocation-free.
+"""
+function onset_report_G(δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer)
+    D = length(logit_h0)
+    num = onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
+    den = onset_report_cdf_extrapolated(D - 1, logit_h0, γ, u, grid_start)
+    return num / safe_rate(den)
+end
+
+"""
+    onset_report_F(δ, logit_h0, γ, u, grid_start, α)
+
+Cumulative reported proportion `F(u, δ) = α * G(u, δ)` of onset date `u`'s
+eventual symptom-onset cases reported within `δ` days, with `α` the
+ascertainment level for onset date `u` ([`onset_report_ascertainment`](@ref))
+and `G` the normalised delay CDF ([`onset_report_G`](@ref)). `F(u, D-1) = α`
+exactly, so the hazard's delay shape and its ascertainment level are two
+separate factors rather than one asymptote. Pure, top-level, allocation-free.
+"""
+function onset_report_F(δ::Integer, logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer, α::Real)
+    return α * onset_report_G(δ, logit_h0, γ, u, grid_start)
+end
+
+"""
+    onset_report_anchor(logit_h0, γ, u, grid_start, a)
+
+Delay-weighted average of the calendar-indexed daily ascertainment series
+`a` over onset date `u`'s reporting window, `anchor(u) = Σ_d g(u, d) *
+a[clamp(u + d, 1, length(a))]`, with `g(u, d) = G(u, d) - G(u, d-1)`
+([`onset_report_G`](@ref)) the normalised delay PMF, `d = 0 … D-1`. Since
+`Σ_d g(u, d) = 1`, `anchor(u)` is a genuine weighted average of `a` and so
+lies within `[minimum(a), maximum(a)]`, and a constant `a` gives back that
+constant exactly. Both hold wherever `G` reaches one, so they inherit the
+single underflow corner [`onset_report_G`](@ref) documents, where the
+weights sum to zero and the anchor with them. `a` is indexed on the
+calendar/report axis and clamped at
+both ends, which is what reconciles the onset-indexed `anchor(u)` with a
+report-indexed series such as the confirmed pipeline's daily ascertainment
+(see [`onset_reporting_model`](@ref)). Pure, top-level, allocation-free.
+"""
+function onset_report_anchor(logit_h0::AbstractVector, γ::AbstractVector,
+        u::Integer, grid_start::Integer, a::AbstractVector)
+    D = length(logit_h0)
+    T = promote_type(eltype(logit_h0), eltype(γ), eltype(a))
+    na = length(a)
+    ng = length(γ)
+    ## `G(u, d)` shares one survival product across every `d`, and its
+    ## denominator does not depend on `d`, so the whole weighted sum runs in
+    ## a single pass rather than rebuilding `G` from scratch per delay.
+    invden = inv(safe_rate(onset_report_cdf_extrapolated(
+        D - 1, logit_h0, γ, u, grid_start)))
+    surv = one(T)
+    g_prev = zero(T)
+    acc = zero(T)
+    @inbounds for d in 0:(D - 1)
+        gi = clamp(u + d - Int(grid_start) + 1, 1, ng)
+        surv *= (one(T) - logistic(logit_h0[d + 1] + γ[gi]))
+        g_cur = (one(T) - surv) * invden
+        acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
+        g_prev = g_cur
+    end
+    return acc
+end
+
+"""
+    onset_report_anchor_series(logit_h0, γ, grid_start, grid_end, a)
+
+[`onset_report_anchor`](@ref) evaluated for every onset date `u in
+grid_start:grid_end`, the onset-date grid the ascertainment walk spans (see
+[`onset_reporting_model`](@ref)). Returns an empty vector when `grid_end <
+grid_start`. Pure, top-level, single indexed loop.
+"""
+function onset_report_anchor_series(logit_h0::AbstractVector,
+        γ::AbstractVector, grid_start::Integer, grid_end::Integer,
+        a::AbstractVector)
+    lo = Int(grid_start)
+    hi = Int(grid_end)
+    T = promote_type(eltype(logit_h0), eltype(γ), eltype(a))
+    hi < lo && return T[]
+    out = Vector{T}(undef, hi - lo + 1)
+    @inbounds for (k, u) in enumerate(lo:hi)
+        out[k] = onset_report_anchor(logit_h0, γ, u, grid_start, a)
+    end
+    return out
+end
+
+"""
+    onset_report_moments(onsets, logit_h0, γ, grid_start, alpha, onset_idx,
         cur_report_idx, prev_report_idx)
 
 Per-cell modelled increment mean and the two modelled cumulative levels it
@@ -2693,8 +2796,10 @@ builds). For cell `i`,
 \\text{mean}_i = \\ell_{\\text{cur},i} - \\ell_{\\text{prev},i},
 ```
 
-with `δ = report_idx - u_i` and [`onset_report_cdf`](@ref) supplying `F`
-(so `δ_prev < 0` at the sentinel `prev_report_idx = 0`, the virtual empty
+with `δ = report_idx - u_i` and [`onset_report_F`](@ref) supplying `F`,
+`alpha` indexed at onset date `u_i` (clamped into `1:length(alpha)`, the
+`grid_start:grid_end` ascertainment grid) for its `α` argument (so
+`δ_prev < 0` at the sentinel `prev_report_idx = 0`, the virtual empty
 predecessor for the very first scored vintage, contributes `ℓ_prev = 0` with
 no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
@@ -2706,22 +2811,26 @@ AD-safety rationale.
 """
 function onset_report_moments(onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
+        alpha::AbstractVector,
         onset_idx::AbstractVector{<:Integer},
         cur_report_idx::AbstractVector{<:Integer},
         prev_report_idx::AbstractVector{<:Integer})
     m = length(onset_idx)
-    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ))
+    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
+        eltype(alpha))
     means = Vector{T}(undef, m)
     level_cur = Vector{T}(undef, m)
     level_prev = Vector{T}(undef, m)
     n = length(onsets)
+    na = length(alpha)
     @inbounds for i in 1:m
         u = onset_idx[i]
         onset_rate = (u >= 1 && u <= n) ? onsets[u] : zero(T)
+        α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
         δ_cur = cur_report_idx[i] - u
         δ_prev = prev_report_idx[i] - u
-        F_cur = onset_report_cdf(δ_cur, logit_h0, γ, u, grid_start)
-        F_prev = onset_report_cdf(δ_prev, logit_h0, γ, u, grid_start)
+        F_cur = onset_report_F(δ_cur, logit_h0, γ, u, grid_start, α)
+        F_prev = onset_report_F(δ_prev, logit_h0, γ, u, grid_start, α)
         level_cur[i] = onset_rate * F_cur
         level_prev[i] = onset_rate * F_prev
         means[i] = level_cur[i] - level_prev[i]
@@ -2885,7 +2994,7 @@ function onset_report_cdf_extrapolated(δ::Integer, logit_h0::AbstractVector,
 end
 
 """
-    onset_report_expected_total(onsets, logit_h0, γ, grid_start, as_of)
+    onset_report_expected_total(onsets, logit_h0, γ, grid_start, alpha, as_of)
 
 Expected reported symptom-onset total as of grid day `as_of`,
 `Σ_u onsets[u] · F(u, as_of - u)` for `u` in `1:as_of` (clamped to
@@ -2896,63 +3005,64 @@ Expected reported symptom-onset total as of grid day `as_of`,
 series; passing the triangle's own last report day instead would give a
 total anchored a few days earlier than every sibling.
 
-`γ`'s own support spans only the digitised triangle's own report-day grid
-(see [`onset_reporting_model`](@ref)), which starts after grid day 1 and
-ends at or before `as_of`, so both the oldest and the most recent terms need
-a calendar effect the walk has no estimate for. Those terms use
-[`onset_report_cdf_extrapolated`](@ref), which holds the calendar effect
-flat at the walk's nearest fitted edge rather than dropping the term: the
-old terms sit at their asymptote anyway (`δ = as_of - u ≫ D - 1`) so the
-choice barely moves them, and the most recent terms carry the last fitted
-reporting behaviour forward, the same assumption a nowcast makes. The
-extrapolation agrees with [`onset_report_cdf`](@ref) exactly wherever the
-walk does have support, so the summand is continuous across both joins.
+`γ` and `alpha` both span only the digitised triangle's own grid (see
+[`onset_reporting_model`](@ref)), which starts after grid day 1 and ends at
+or before `as_of`, so both the oldest and the most recent terms need a
+calendar effect and an ascertainment level the fit has no estimate for.
+[`onset_report_F`](@ref) already holds both flat at their nearest fitted
+edge (see [`onset_report_G`](@ref)), so no separate extrapolated form is
+needed here.
 
-Safe for any `as_of` and any `γ` length, including the degenerate
-`length(γ) < D` case, because the calendar index is clamped rather than
-assumed in range. Pure, top-level, single indexed loop.
+Safe for any `as_of` and any `γ`/`alpha` length, including the degenerate
+`length(γ) < D` case, because both indices are clamped rather than assumed
+in range. Pure, top-level, single indexed loop.
 """
 function onset_report_expected_total(onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector,
-        grid_start::Integer, as_of::Integer)
-    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ))
+        grid_start::Integer, alpha::AbstractVector, as_of::Integer)
+    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
+        eltype(alpha))
     total = zero(T)
     n = length(onsets)
+    na = length(alpha)
     ge = min(Int(as_of), n)
     @inbounds for u in 1:ge
         δ = as_of - u
-        total += onsets[u] *
-                 onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
+        α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
+        total += onsets[u] * onset_report_F(δ, logit_h0, γ, u, grid_start, α)
     end
     return total
 end
 
 """
-    onset_report_ascertainment(logit_h0, γ, grid_start, grid_end)
+    onset_report_ascertainment(anchor_series, β, ω)
 
-Modelled ascertainment `F(u, D-1)` (the hazard's asymptote, see
-[`onset_report_cdf`](@ref)) for every onset date `u` whose full asymptote is
-computable without reading `γ` past `grid_end`, i.e.
-`u in grid_start:(grid_end - D + 1)`. Onset dates closer to `grid_end` than
-`D - 1` days are excluded rather than extrapolated: their asymptote is not
-yet observable within the grid the calendar-time walk was fitted on.
-Returns an empty vector when no such `u` exists (`grid_end - D + 1 <
-grid_start`), which is expected for a short grid or a small `D`. Pure,
-top-level, single indexed loop; the returned length is a fixed function of
-`(grid_start, grid_end, D)`, so it is stable across draws of a given fit.
+Ascertainment level `α(u) = logistic(logit(anchor(u)) + β + ω(u))` for
+every onset date `u` the ascertainment walk spans, `anchor_series[k]` being
+the delay-weighted anchor at onset date `grid_start + k - 1`
+([`onset_report_anchor_series`](@ref)), `β` a sampled logit-scale offset and
+`ω` the calendar-time random walk over the same onset dates
+([`onset_ascertainment_model`](@ref)). `α` is a level rather than an
+asymptote needing `D` days of walk to become observable, so it is returned
+over the walk's full span with no restriction.
+
+The anchor is clamped into `(0, 1)` before the logit, the same guard
+[`composition_positivity`](@ref) applies to its own probability. An anchor
+of exactly `0` or `1` is not reachable through the confirmed pipeline,
+whose positivity is already clamped, but it is reachable if every hazard
+underflows so that [`onset_report_anchor`](@ref)'s weights sum to zero.
+`logit(0)` is `-Inf`, and while the forward value stays finite the
+gradient is `NaN`, which would poison the whole log-density rather than
+this stream's part of it. Pure, top-level, elementwise broadcast.
 """
-function onset_report_ascertainment(logit_h0::AbstractVector,
-        γ::AbstractVector, grid_start::Integer, grid_end::Integer)
-    D = length(logit_h0)
-    T = promote_type(eltype(logit_h0), eltype(γ))
-    lo = Int(grid_start)
-    hi = Int(grid_end) - D + 1
-    hi < lo && return T[]
-    out = Vector{T}(undef, hi - lo + 1)
-    @inbounds for (k, u) in enumerate(lo:hi)
-        out[k] = onset_report_cdf(D - 1, logit_h0, γ, u, grid_start)
-    end
-    return out
+function onset_report_ascertainment(anchor_series::AbstractVector,
+        β::Real, ω::AbstractVector)
+    T = promote_type(eltype(anchor_series), typeof(β), eltype(ω))
+    lo = convert(T, 1e-8)
+    hi = one(T) - lo
+    safe = clamp.(ifelse.(isfinite.(anchor_series), anchor_series, lo),
+        lo, hi)
+    return logistic.(logit.(safe) .+ β .+ ω)
 end
 
 """
@@ -3054,145 +3164,146 @@ Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`; `γ` is length
 end
 
 """
+Ascertainment level over the onset-date grid `[grid_start, grid_end]`: a
+logit-scale offset and slow random walk on top of a delay-weighted anchor
+series `anchor_series` ([`onset_report_anchor_series`](@ref)),
+
+```math
+\\beta \\sim \\text{beta\\_prior}, \\quad
+\\sigma_a \\sim \\text{pooling\\_prior}, \\quad
+z_{a,k} \\sim \\mathcal N(0,1), \\quad
+\\omega_{\\text{knot},1} = 0, \\
+\\omega_{\\text{knot},k+1} = \\omega_{\\text{knot},k} + \\sigma_a z_{a,k},
+```
+
+with `alpha` given by [`onset_report_ascertainment`](@ref). `beta_prior =
+Normal(0, 0.75)` is a zero-centred logit-scale departure from the anchor,
+so the triangle's ascertainment defaults to the anchor series' own level
+and can depart by roughly a factor of two either way. `pooling_prior =
+truncated(Normal(0, 0.1); lower = 0)` is deliberately tight: `omega` shares
+the onset-date axis with [`rt_walk_model`](@ref), so a flat ascertainment
+level is the default the data has to argue away from. Weekly knots,
+linearly interpolated ([`knot_days`](@ref)/[`interpolate_knots`](@ref)),
+first knot pinned at zero, mirroring [`onset_report_hazard_model`](@ref)'s
+calendar walk exactly.
+
+Returns `(; alpha, β, σ_a, z_a, ω)`, `alpha` and `ω` length `nt =
+max(grid_end - grid_start + 1, 1)`.
+"""
+@model function onset_ascertainment_model(anchor_series::AbstractVector,
+        grid_start::Integer, grid_end::Integer;
+        beta_prior = Normal(0.0, 0.75),
+        pooling_prior = truncated(Normal(0.0, 0.1); lower = 0),
+        week::Integer = 7)
+    nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
+    days = knot_days(nt; week, start = 1)
+    nb = length(days)
+    β ~ beta_prior
+    σ_a ~ pooling_prior
+    z_a ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
+    steps = σ_a .* z_a[1:max(nb - 1, 0)]
+    ω_knots = vcat(zero(σ_a), cumsum(steps))
+    ω = interpolate_knots(ω_knots, days, nt)
+    alpha = onset_report_ascertainment(anchor_series, β, ω)
+    return (; alpha, β, σ_a, z_a, ω)
+end
+
+"""
 Symptom-onset reporting-triangle observation model: fits the between-vintage
 increments of the digitised reporting triangle
 ([`load_onset_curve`](@ref)) against the shared latent daily onset series
-`onsets`, through the nonparametric delay hazard
-([`onset_report_hazard_model`](@ref)). See that docstring for the hazard
-and calendar-walk maths, and [`onset_report_cdf`](@ref) for how right
-truncation and ascertainment share one mechanism.
+`onsets`, through a nonparametric delay hazard
+([`onset_report_hazard_model`](@ref)) and an explicit ascertainment level
+([`onset_ascertainment_model`](@ref)). See [`onset_report_F`](@ref) for how
+the two combine and [`onset_report_cdf`](@ref) for how right truncation
+enters.
 
-This is close in spirit to how the R package `baselinenowcast` treats a
-reporting triangle: a triangle of between-vintage increments, not a single
-total column. It differs from how [`reported_cases_model`](@ref) and every
-other stream in this package are scored (and from EpiNow2, whose nowcast
-likelihood scores a single evolving total column): the same right-
-truncation mechanism (`F(u, δ) = 0` for `δ < 0`, see
-[`onset_report_cdf`](@ref)) is applied here to corrections between
-snapshots rather than to a level, so a case already scored in an earlier
-snapshot is never counted again.
+Close in spirit to how the R package `baselinenowcast` treats a reporting
+triangle: a triangle of between-vintage increments, not a single total
+column. It differs from how [`reported_cases_model`](@ref) and every other
+stream here is scored (and from EpiNow2, which nowcasts a single evolving
+total): the same right-truncation mechanism (`F(u, δ) = 0` for `δ < 0`) is
+applied to corrections between snapshots rather than to a level, so a case
+already scored in an earlier snapshot is never counted again.
 
-**What the triangle separates, and what it does not.** Three time-varying
-multiplicative objects now act on or near the same latent series: the
-reproduction-number walk ([`rt_walk_model`](@ref)) on the infection and
-hence onset axis, this stream's calendar walk `γ` on the report axis, and
-ascertainment, which is no longer a free object at all but the asymptote of
-the same hazard `γ` modifies. Each leaves a different footprint on the
-grid of scored cells, which runs over onset date and snapshot pair. A change
-in the onset series moves a column: one onset date, every snapshot. A change
-in `γ` moves a row: the hazard on the report days one snapshot pair spans,
-across every onset date at once. A change in the baseline `logit_h0` moves a
-delay band, which runs diagonally across both. Column, row and band are
+**What the triangle separates.** Four time-varying multiplicative objects
+now act on or near the same latent series: the reproduction-number walk
+([`rt_walk_model`](@ref)) on the infection/onset axis, this stream's
+calendar walk `γ` on the report axis, the delay shape's baseline
+`logit_h0`, and the ascertainment walk `ω` on the onset axis. A change in
+the onset series moves a column of scored cells; a change in `γ` moves a
+row; a change in `logit_h0` moves a diagonal band. Column, row and band are
 distinguishable once there is more than one snapshot, which is the
-structural reason this stream is worth fitting, and also the reason `γ` is
-indexed on the report day rather than the onset day: on the onset axis its
-footprint would be a column too, the same one `rt_walk_model` already moves,
-and neither would be identified.
+structural reason this stream is worth fitting, and the reason `γ` is
+indexed on the report day rather than the onset day (indexing it on onset
+date would make it unidentified against `rt_walk_model`).
 
-Three things are genuinely weak, and are stated rather than papered over.
-First, the asymptote is pinned by levels, not by corrections. Corrections
-constrain only differences of `F`, so scaling `F` up while scaling the onset
-series down leaves every correction cell unchanged; what breaks that tie is
-the first snapshot's cells, which are differenced against an empty
-predecessor and so score levels (see [`load_onset_curve`](@ref)), together
-with the onset series being pinned by the other streams. In a single-stream
-[`onsets_only_model`](@ref) fit the second of those is absent, so the
-asymptote and the outbreak size are confounded there and that fit's `C_T` is
-close to prior-driven; it is worth running as a comparison, not as an
-estimate.
+Ascertainment is anchored on the confirmed pipeline's own daily
+ascertainment (`p_drc · τ_test · p_pos_grid`, delay-weighted onto the onset
+axis by [`onset_report_anchor`](@ref)) rather than left free: `bvd_joint`
+passes that series in as `anchor`, `onsets_only_model` falls back to a
+constant `0.15` anchor (no confirmed pipeline to borrow from). `β` and `ω`
+let the fitted level depart from that anchor, with `ω`'s tight prior making
+a flat departure the default the data has to argue away from (see
+[`onset_ascertainment_model`](@ref)).
 
-Second, the hazard at the very shortest delays is barely observed. The
-published figures stop their x axis short of the report date, so no
-correction cell reaches delay zero and few reach delays one or two (see
-[`load_onset_curve`](@ref)). Those hazards are held by partial pooling to
-`η0`, not by data, and the reported delay distribution should be read as
-uninformative below about two days.
+Three things stay genuinely weak. First, `logit_h0` and `alpha` are pinned
+by levels, not by corrections: corrections constrain only differences of
+`F`, so what breaks the tie is the first snapshot's cells (differenced
+against an empty predecessor, see [`load_onset_curve`](@ref)) together with
+the onset series being pinned by the other streams. A single-stream
+[`onsets_only_model`](@ref) fit has neither, so its ascertainment and `C_T`
+stay close to prior-driven; worth running as a comparison, not an estimate.
+Second, the hazard at the shortest delays is barely observed (published
+figures stop short of the report date), so those hazards rest on partial
+pooling to `η0`, not data. Third, a falling ascertainment and a slowing
+delay shape both suppress recent bars within one snapshot; right truncation
+self-corrects for the delay explanation but not a genuine ascertainment
+fall, so the vintage structure is what separates them, and only as well as
+the (under-ten) snapshots covering the affected dates allow.
 
-Third, a falling asymptote and a slowing hazard shape both suppress recent
-bars within a single snapshot. Right truncation self-corrects for the
-reporting explanation (a suppressed bar catches up in later snapshots) but
-not for a genuine ascertainment fall, so the vintage structure does bear on
-this; the separation is only as strong as the number of snapshots covering
-the affected onset dates, which is under ten. Both readouts,
-[`onset_report_ascertainment`](@ref) and the delay profile
-`F(u, δ) / F(u, D-1)`, come from the one fitted `γ` and are reported with
-matching uncertainty. Folding ascertainment into the asymptote rather than
-giving it its own parameter block is deliberate: a separate block would be
-free to trade against the hazard total with nothing in the data to arbitrate
-between them.
-
-One consequence of folding ascertainment into the asymptote deserves
-naming, because it is easy to miss. The triangle counts confirmed cases by
-onset date, so its asymptote estimates the proportion of onsets eventually
-confirmed — the same quantity the confirmed pipeline builds from `p_drc`,
-the tested fraction and test positivity. The two are not tied together
-here. That is deliberate: it keeps a digitised figure from pulling on the
-pooled ascertainment every other stream shares, and it means a disagreement
-between them is absorbed quietly by the asymptote rather than surfacing as
-a conflict. The cost is that this stream informs the ascertainment level
-only through the onset series it shares, not directly; what it contributes
-of its own is timing. Comparing the fitted asymptote against
-`p_drc · τ_test · positivity` from the same fit is therefore a free
-consistency check, and a large gap between them is worth investigating
-rather than ignoring.
-
-What has not been checked here is whether `γ` and `rt_walk_model` pull on
-each other in practice. Their footprints differ, but their calendar windows
-overlap and both are least constrained in the final fortnight. The first
-diagnostic a production fit should look at is `σ_γ` against the
-reproduction-number walk's own step size, and the `R_t` posterior with and
-without this stream.
+What has not been checked is whether `γ`, `ω` and `rt_walk_model` pull on
+each other in practice: all three act on overlapping calendar windows and
+are least constrained over the final fortnight. Any change here should
+report `R_t` over the final fortnight and `C_T` either side, treating a
+material move as a reason to stop rather than a result.
 
 The alive/dead split the raw triangle carries is NOT modelled separately:
-only `confirmed_total` is fitted. The existing confirmed-death stream
-already carries that split from other data, so re-deriving it here would
-add complexity without new identifying information.
+only `confirmed_total` is fitted, since the confirmed-death stream already
+carries that split from other data.
 
 `onset_curve_history` is the [`load_onset_curve`](@ref) return shape
 `(; onset_days, report_days, prev_report_days, increments)`; the default
-empty history (`onset_days = Int[]`, …) makes every loop here a no-op, the
-degrade-gracefully path for a missing input file (this stream has no
-opt-in flag, see `bvd_joint`). `increments` may be `missing` to sample
-instead of condition (the predictive-generator path, mirroring
-[`vintage_increments_model`](@ref)).
+empty history makes every loop here a no-op, the degrade-gracefully path
+for a missing input file. `increments` may be `missing` to sample instead
+of condition (the predictive-generator path).
 
-The observation scale ([`onset_report_scales`](@ref)) is built from the
-counting variation of the cases each cell reports plus the measured
-digitisation error (`pixel_sd` ≈2.1 cases/bar, `scan_frac` ≈4.0% per scan),
-and is corrected by a sampled multiplicative slack `σ_mult ~ slack_prior`
-that can only inflate it (`slack_prior` is bounded below at 1). The bound
-is deliberate. Each term in the scale is a lower bound on the truth: a bar
-cannot be read off a raster more precisely than its pixels allow, and a
-count of newly reported cases carries at least its own counting variation.
-A fitted scale below them would have a couple of hundred cells claiming a
-precision the figure cannot support and outvoting every other stream. A
-short onsets-only run does pull the slack onto the bound, which is expected
-there: with no other stream pinning the onset series, the latent curve is
-free to bend towards the bars and leave residuals smaller than the
-measurement floor. In the joint fit the onset series is pinned elsewhere,
-so the informative diagnostic is the other direction, a `σ_mult` posterior
-well above 1 saying the scale is missing a term.
+The observation scale ([`onset_report_scales`](@ref)) is built from
+counting variation, measured digitisation error (`pixel_sd` ≈2.1
+cases/bar, `scan_frac` ≈4.0% per scan), and a sampled multiplicative slack
+`σ_mult ~ slack_prior` bounded below at 1 (each scale term is a lower bound
+on the truth, so a fitted scale below them would let a couple of hundred
+cells outvote every other stream). A short onsets-only run pulling the
+slack to the bound is expected there; in the joint fit a `σ_mult` posterior
+well above 1 says the scale is missing a term.
 
-The likelihood is Student-t with fixed degrees of
-freedom `ν` (default 4, a standard robust-regression choice with
-meaningfully heavier tails than Normal): with only a few hundred cells, `ν`
-is notoriously weakly identified, and the repo's own `lab_delay_model`
-docstring makes the same argument against sampling a nuisance parameter the
-data cannot pin down. The heavy tail is what lets the (frequently negative)
-measured increments score as large-but-plausible residuals rather than
-breaking a count likelihood.
+The likelihood is Student-t with fixed degrees of freedom `ν` (default 4):
+with only a few hundred cells, `ν` is weakly identified, and the repo's own
+`lab_delay_model` docstring makes the same argument against sampling it.
+The heavy tail lets the (frequently negative) measured increments score as
+large-but-plausible residuals rather than breaking a count likelihood.
 
-Returns `(; increments, modelled, logit_h0, γ, grid_start, grid_end, σ_mult,
-η0, σ_h0, σ_γ)` with `modelled` the per-cell increment means, `grid_end`
-the report-date grid day the calendar walk was built up to
-(`max(report_days)`, or `grid_start` when the history is empty), and the
-last four the hazard/slack hyperparameters re-exposed at this level for the
-pairs-plot summary (the same quantities [`onset_report_hazard_model`](@ref)
-already returns via `hazard_state`, not re-sampled).
+Returns `(; increments, modelled, logit_h0, γ, grid_start, grid_end, alpha,
+σ_mult, η0, σ_h0, σ_γ, β, σ_a)` with `modelled` the per-cell increment
+means, `grid_end` the report-date grid day the calendar walk was built up
+to (`max(report_days)`, or `grid_start` when the history is empty), and the
+hyperparameters re-exposed at this level for the pairs-plot summary.
 """
 @model function onset_reporting_model(
         onset_curve_history, onsets::AbstractVector;
         hazard = onset_report_hazard_model,
+        ascertainment = onset_ascertainment_model,
+        anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
         pixel_sd::Real = 2.1, scan_frac::Real = 0.04,
         slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
@@ -3214,11 +3325,23 @@ already returns via `hazard_state`, not re-sampled).
     ## double-nested `onset_report_state.hazard_state.η0` a prefixed
     ## attachment would give — the flat form the pairs-plot summary uses.
     hazard_state ~ to_submodel(hazard(grid_start, grid_end; D), false)
+
+    ## Delay-weighted anchor series over the onset-date grid, built from the
+    ## fitted hazard and the caller-supplied calendar-indexed daily
+    ## ascertainment `anchor` (the confirmed pipeline's own series, or the
+    ## length-1 constant default). Attached unprefixed for the same reason
+    ## `hazard_state` is: the ascertainment hyperparameters (`β`, `σ_a`, …)
+    ## surface as flat `onset_report_state.β` etc.
+    anchor_series = onset_report_anchor_series(hazard_state.logit_h0,
+        hazard_state.γ, grid_start, grid_end, anchor)
+    asc_state ~ to_submodel(
+        ascertainment(anchor_series, grid_start, grid_end), false)
+    alpha = asc_state.alpha
     σ_mult ~ slack_prior
 
     moments = onset_report_moments(onsets, hazard_state.logit_h0,
-        hazard_state.γ, hazard_state.grid_start, onset_days, report_days,
-        prev_report_days)
+        hazard_state.γ, hazard_state.grid_start, alpha, onset_days,
+        report_days, prev_report_days)
     scales = onset_report_scales(moments.means, moments.level_cur,
         moments.level_prev, prev_report_days; pixel_sd, scan_frac)
 
@@ -3236,7 +3359,7 @@ already returns via `hazard_state`, not re-sampled).
 
     return (; increments, modelled = moments.means,
         logit_h0 = hazard_state.logit_h0, γ = hazard_state.γ,
-        grid_start = hazard_state.grid_start, grid_end, σ_mult,
+        grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
         η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
-        σ_γ = hazard_state.σ_γ)
+        σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a)
 end
