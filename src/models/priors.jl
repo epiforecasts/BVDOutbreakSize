@@ -177,10 +177,9 @@ quantity: the first reproduction number is derived FORWARD from the sampled
 growth rate `r` and the generation interval through Euler–Lotka
 (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)). The prior therefore
 sits on the growth rate (see [`exponential_growth_model`](@ref)), grounded
-on Cuomo-Dannenburg & Ghafari's molecular-clock doubling time (centre 20 d,
-range 15.2–24.5 d), and the established reproduction number is whatever that
-growth implies under OUR generation interval rather than a separately
-asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55` under THEIR
+on the BEAST X molecular-clock doubling time (mbalaplacide2026), and the
+established reproduction number is whatever that growth implies under OUR
+generation interval rather than a separately asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55` under THEIR
 generation interval; deriving `R0` forward from the shared growth rate under
 our generation interval is the consistent thing to do. This single growth
 source pins the ESTABLISHED reproduction number (the walk base at the
@@ -262,12 +261,14 @@ start, and the magnitude is independent of `r`. The composer
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.28)`, with median doubling time (11.7 d)
+M_PRIOR_DOUBLING_DAYS), 0.40)`, with median doubling time (11.7 d)
 matching the BEAST X estimate (mbalaplacide2026, Exponential growth
-model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the asymmetric HPD as
-roughly a 95% interval (log-SD ≈ 0.24 from the HPD ratio) and slightly
-inflates it to cover the skew towards shorter doubling times, so the
-prior is modestly wider than the source but unbiased. The first
+model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than the ≈0.24 that
+HPD implies. The HPD is conditional on a single-rate coalescent, the
+assumption the field epidemiology contradicts (kupferschmidt2026). An
+independent reanalysis puts the doubling time at 15.2–24.5 d
+(cuomodannenburg2026). The induced doubling-time prior is
+`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first
 reproduction number is then derived FORWARD from this `r` and OUR generation
 interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
@@ -295,7 +296,7 @@ the backfill's advancing centre is tracked separately by #534).
 Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
         m_prior = truncated(Normal(5.0, 4.0); lower = 0))
     r ~ r_prior
     m ~ m_prior
