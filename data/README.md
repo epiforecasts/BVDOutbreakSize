@@ -55,10 +55,15 @@ each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate, and the error is a few percent in either
 direction per scan, independent between vintages.
-Against the printed figure `n` it ranges from −3.0% (SitReps 069/070/071:
-2260 against n = 2 329) to +1.6% (SitRep 068: 2344 against n = 2 308), with
-SitRep 064 at −2.2% (2018 against n = 2 064) and SitRep 072 at +0.4% (2531
-against n = 2 521).
+Against the printed figure `n` it ranges from −5.0% (SitReps 079/080: 2770
+against n = 2 915) to +1.6% (SitRep 068: 2344 against n = 2 308), with
+SitRep 064 at −2.2% (2018 against n = 2 064), SitRep 072 at +0.4% (2531
+against n = 2 521), and SitReps 069/070/071 at −3.0% (2260 against n = 2 329).
+The 079/080 figure is the largest shortfall seen so far, a couple of points
+past the previous −3.0% floor rather than an order of magnitude off, so it is
+recorded as extending the known range rather than rejected (section 4b: check
+neighbours before excluding, and this is not a new image — see the duplicate
+note below).
 Individual daily bars carry roughly ±1–2 cases of pixel noise.
 Some of the shortfall is the faded bars inside the
 `données potentiellement incomplètes` band at the right of each figure, whose
@@ -78,10 +83,12 @@ floor, which bounds what a reporting-delay estimate built from those
 increments can support.
 See issue #488.
 
-SitReps 059 and 060 reuse one figure, as do 061 and 062, 069/070/071, and
-now 073/074 (identical n = 2 567, identical digitised total and day count),
-so the fifteen scanned vintages hold ten distinct onset snapshots (report
-dates 12, 14, 17, 18, 19, 20, 21, 22, 25 and 26 July).
+SitReps 059 and 060 reuse one figure, as do 061 and 062, 069/070/071,
+073/074 (identical n = 2 567, identical digitised total and day count), and
+now 079/080 (identical n = 2 915, identical digitised total 2 770 and day
+count, md5-verified byte-identical embedded images), so the nineteen scanned
+vintages hold thirteen distinct onset snapshots (report dates 12, 14, 17, 18,
+19, 20, 21, 22, 25, 26, 30, 31 July and 1 August).
 SitRep 068 (21 July) is now included: its PDF was unreachable while the
 INSP fetch was broken, and it does carry a figure (n = 2 308).
 The embedded figure is re-rendered at whatever size the layout needs and moves
@@ -91,6 +98,18 @@ Both moves have broken detection once — the shrink by falling under an absolut
 blue floor, the growth by pushing anti-aliasing over an absolute orange cut —
 which is why the figure-detection and axis-tick thresholds in both scripts are
 pixel fractions rather than counts.
+SitRep 080 broke the page-locator instead of the pixel thresholds: the chart
+image sits on page 5 as usual, but its own selectable caption text this
+vintage misreads `par semaine de notification` while the matching `date de
+debut des symptomes` phrase appears only on page 6, with no image of its own
+there, so a same-page caption lookup landed on the wrong page. Both scripts
+now fall back to the immediate neighbouring pages when the caption page has
+no qualifying image. That widened search pulled in a second blue-heavy image
+- the provincial case map - which passed the old blue-fraction floor (0.02);
+raising it to 0.055 (measured range: onset charts 0.066-0.125, the map
+0.045-0.047 across every vintage checked) separates them with margin on both
+sides. Both fixes were verified to reproduce every previously committed block
+(059-079) unchanged before the SitRep 080 block was accepted.
 
 This stream is **not fitted**: the model does not yet read
 `onset_curve_scanned.csv`.

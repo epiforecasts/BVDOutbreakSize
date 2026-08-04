@@ -84,7 +84,8 @@ const CONFIG = [
     ("074", Date(2026, 7, 27), Date(2026, 7, 22)),
     ("077", Date(2026, 7, 30), Date(2026, 7, 29)),
     ("078", Date(2026, 7, 31), Date(2026, 7, 29)),
-    ("079", Date(2026, 8, 1), Date(2026, 7, 29))
+    ("079", Date(2026, 8, 1), Date(2026, 7, 29)),
+    ("080", Date(2026, 8, 2), Date(2026, 7, 29))
 ]
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -144,18 +145,23 @@ end
 # 1009x583, and SitRep 072's larger 1277x799 rendering then pushed the
 # crimson/pink-band anti-aliasing to 631 orange pixels, past a 500 cut.
 #
-# Measured over SitReps 059-072, the two classes are two orders of
-# magnitude apart, so the thresholds sit clear of both edges:
-#   blue fraction    onset 0.085-0.098   other images <= 0.006
+# Measured over SitReps 059-080, on the caption page and its immediate
+# neighbours (the page-fallback in onset_image widens the search there,
+# which brings the provincial case map into the candidate pool - it is
+# blue-heavy too, from the lake/river fill and legend swatches):
+#   blue fraction    onset 0.066-0.125   province map 0.045-0.047
 #   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
 #   red fraction     onset >= 0.046      (a floor, not a discriminator:
 #                                        the notification-week chart is
 #                                        also crimson-heavy)
+# The map's blue fraction sits clear below every onset chart seen so far, so
+# 0.055 (roughly the midpoint of the two clusters) discriminates with margin
+# on both sides without needing a caption-text match.
 function is_onset_curve(R, G, B)
     m = masks(R, G, B)
     orange = (R .> 200) .& (G .> 110) .& (G .< 195) .& (B .< 90)
     npx = length(R)
-    return sum(m.blue) / npx > 0.02 && sum(orange) / npx < 0.01 &&
+    return sum(m.blue) / npx > 0.055 && sum(orange) / npx < 0.01 &&
            sum(m.red) / npx > 0.01
 end
 
@@ -290,34 +296,58 @@ function digitize(R, G, B, last_tick::Date)
     return rows
 end
 
-# Extract the onset-curve figure from a SitRep PDF as R, G, B matrices.
-function onset_image(pdf)
+function _onset_page(pdf)
+    # The onset figure usually sits on the page whose text carries its
+    # caption.
     npages = parse(Int, match(r"Pages:\s*(\d+)",
         read(`pdfinfo $pdf`, String)).captures[1])
-    page = nothing
     for p in 1:npages
         txt = lowercase(read(`pdftotext -layout -f $p -l $p $pdf -`, String))
         if occursin("date de debut des symptom", txt) ||
            occursin("date de début des symptôm", txt)
-            page = p
-            break
+            return p, npages
         end
     end
-    page === nothing && return nothing
+    return nothing, npages
+end
+
+function _best_onset_image(pdf, page, wd)
+    # pdfimages writes PPM (P6) for RGB images by default; no format flag
+    run(`pdfimages -f $page -l $page $pdf $(joinpath(wd, "p"))`)
     best = nothing
-    mktempdir() do wd
-        # pdfimages writes PPM (P6) for RGB images by default; no format flag
-        run(`pdfimages -f $page -l $page $pdf $(joinpath(wd, "p"))`)
-        for name in sort(readdir(wd))
-            endswith(name, ".ppm") || continue
-            R, G, B = read_ppm(joinpath(wd, name))
-            if is_onset_curve(R, G, B) &&
-               (best === nothing || length(R) > length(best[1]))
-                best = (R, G, B)
-            end
+    for name in sort(readdir(wd))
+        endswith(name, ".ppm") || continue
+        R, G, B = read_ppm(joinpath(wd, name))
+        if is_onset_curve(R, G, B) &&
+           (best === nothing || length(R) > length(best[1]))
+            best = (R, G, B)
         end
+        rm(joinpath(wd, name))
     end
     return best
+end
+
+# Extract the onset-curve figure from a SitRep PDF as R, G, B matrices.
+function onset_image(pdf)
+    page, npages = _onset_page(pdf)
+    page === nothing && return nothing
+    best = mktempdir(wd -> _best_onset_image(pdf, page, wd))
+    best !== nothing && return best
+    # SitRep 080 embeds the chart on page 5 under a mislabelled caption ("par
+    # semaine de notification") while the matching "date de debut des
+    # symptomes" caption text sits on page 6 with no image of its own, so the
+    # caption-text page lookup lands one page short of the real figure. Widen
+    # to the immediate neighbours only (not the whole document): the map and
+    # other embedded figures elsewhere in the report are large enough, and
+    # blue enough in places (lakes, legends), to satisfy is_onset_curve too,
+    # so a document-wide scan silently grabs the wrong image.
+    for q in (page - 1, page + 1)
+        if 1 <= q <= npages
+            best = mktempdir(wd -> _best_onset_image(pdf, q, wd))
+            best !== nothing && return best
+        end
+    end
+    return nothing
 end
 
 function main(pdf_dir = "data/sitrep_pdfs",

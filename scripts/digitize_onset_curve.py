@@ -101,6 +101,7 @@ CONFIG = {
     "077": ("2026-07-30", "2026-07-29"),
     "078": ("2026-07-31", "2026-07-29"),
     "079": ("2026-08-01", "2026-07-29"),
+    "080": ("2026-08-02", "2026-07-29"),
 }
 
 
@@ -124,21 +125,27 @@ def _is_onset_curve(im):
     # rendering then pushed the crimson/pink-band anti-aliasing to 631
     # orange pixels, past a 500 cut.
     #
-    # Measured over SitReps 059-072, the two classes are two orders of
-    # magnitude apart, so the thresholds sit clear of both edges:
-    #   blue fraction    onset 0.085-0.098   other images <= 0.006
+    # Measured over SitReps 059-080, on the caption page and its immediate
+    # neighbours (the page-fallback in extract_onset_image widens the search
+    # there, which brings the provincial case map into the candidate pool -
+    # it is blue-heavy too, from the lake/river fill and legend swatches):
+    #   blue fraction    onset 0.066-0.125   province map 0.045-0.047
     #   orange fraction  onset <= 0.0007     age/sex pyramids >= 0.053
     #   red fraction     onset >= 0.046      (a floor, not a discriminator:
     #                                        the notification-week chart is
     #                                        also crimson-heavy)
+    # The map's blue fraction sits clear below every onset chart seen so far,
+    # so 0.055 (roughly the midpoint of the two clusters) discriminates with
+    # margin on both sides without needing a caption-text match.
     blue, red, orange, _ = _masks(im)
     npx = im.shape[0] * im.shape[1]
-    return (blue.sum() / npx > 0.02 and orange.sum() / npx < 0.01
+    return (blue.sum() / npx > 0.055 and orange.sum() / npx < 0.01
             and red.sum() / npx > 0.01)
 
 
 def _onset_page(pdf):
-    # The onset figure sits on the page whose text carries its caption.
+    # The onset figure usually sits on the page whose text carries its
+    # caption.
     npages = int(subprocess.run(
         ["pdfinfo", pdf], check=True, capture_output=True, text=True
     ).stdout.split("Pages:")[1].split()[0])
@@ -149,16 +156,13 @@ def _onset_page(pdf):
         ).stdout.lower()
         if ("date de debut des symptom" in txt
                 or "date de début des symptôm" in txt):
-            return p
-    return None
+            return p, npages
+    return None, npages
 
 
-def extract_onset_image(pdf, workdir):
-    p = _onset_page(pdf)
-    if p is None:
-        return None
+def _best_onset_image(pdf, page, workdir):
     subprocess.run(
-        ["pdfimages", "-png", "-f", str(p), "-l", str(p), pdf,
+        ["pdfimages", "-png", "-f", str(page), "-l", str(page), pdf,
          os.path.join(workdir, "p")],
         check=True, capture_output=True,
     )
@@ -170,7 +174,31 @@ def extract_onset_image(pdf, workdir):
         im = im.astype(int)
         if _is_onset_curve(im) and (best is None or im.size > best.size):
             best = im
+        os.remove(os.path.join(workdir, name))
     return best
+
+
+def extract_onset_image(pdf, workdir):
+    p, npages = _onset_page(pdf)
+    if p is None:
+        return None
+    best = _best_onset_image(pdf, p, workdir)
+    if best is not None:
+        return best
+    # SitRep 080 embeds the chart on page 5 under a mislabelled caption ("par
+    # semaine de notification") while the matching "date de debut des
+    # symptomes" caption text sits on page 6 with no image of its own, so the
+    # caption-text page lookup lands one page short of the real figure. Widen
+    # to the immediate neighbours only (not the whole document): the map and
+    # other embedded figures elsewhere in the report are large enough, and
+    # blue enough in places (lakes, legends), to satisfy _is_onset_curve too,
+    # so a document-wide scan silently grabs the wrong image.
+    for q in (p - 1, p + 1):
+        if 1 <= q <= npages:
+            best = _best_onset_image(pdf, q, workdir)
+            if best is not None:
+                return best
+    return None
 
 
 def _longest_run(colmask):
