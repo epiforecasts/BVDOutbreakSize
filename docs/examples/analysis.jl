@@ -1938,22 +1938,19 @@ cfr_prior_fig #hide
 
 # ##### Symptom-onset reporting delay
 #
-# Every observation model above sees the shared daily onset series only
-# after a further convolution: a suspected-case report, a death, a
-# laboratory confirmation. The digitised onset epidemic curve (see the
-# [Data](@ref methods-data) section) is the only direct observation of that
-# series, so it can identify things the other streams cannot on their own,
-# plausibly including the report-versus-receipt split the laboratory pipeline
-# currently pins with a soft external constraint.
+# Every other observation model sees the shared onset series only after a
+# further convolution: a suspected-case report, a death, or a laboratory
+# confirmation. The digitised onset epidemic curve (the [Data](@ref
+# methods-data) section) is the only direct observation of it, so it can
+# identify things the other streams cannot on their own, plausibly
+# including the split between reporting and laboratory receipt that the
+# laboratory pipeline currently pins with an external constraint.
 #
 # We model the onset-to-report delay as a discrete-time hazard over delay
-# $d = 0,\dots,D-1$ days, $D = 28$: the
-# triangle's own between-vintage increments are essentially all signal by
-# around two weeks and settle into digitisation noise, mean increment near
-# zero with frequent sign flips, by about three weeks, so $D = 28$ sits
-# where the true reporting signal has decayed into that noise floor. The
-# baseline hazard is a non-centred logit random effect over the delay,
-# free to rise and fall rather than forced monotone or parametric:
+# $d = 0,\dots,D-1$ days, $D = 28$: by then the triangle's between-vintage
+# increments have decayed into digitisation noise. The baseline hazard is
+# a non-centred logit random effect over the delay, free to rise and fall
+# rather than forced monotone or parametric:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
@@ -1961,7 +1958,7 @@ cfr_prior_fig #hide
 # \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{41}
 # ```
 #
-# The hazard at delay $d$ for an onset on day $u$ is then modified by a
+# The hazard at delay $d$ for an onset on day $u$ is modified by a
 # calendar-time effect indexed on the report day $u + d$: a weekly-knot
 # non-centred random walk on the logit scale, the same construction as the
 # reproduction-number walk above and concentrated near zero
@@ -2417,12 +2414,11 @@ diagnostics_table( #hide
 # ```
 #
 # so at the cut-off $T$ the triangle should have printed $S(T)$ while
-# $\sum_{u \le T} \text{onsets}_u$ symptom onsets have actually happened.
-# Their difference is the nowcast: onsets already in the population but not
-# in the figure. Not all of it will ever be reported, because $F$ is
-# deliberately not made to reach one and carries ascertainment as well as
-# delay, so this difference is the reporting backlog and the never-ascertained
-# cases together, not a backlog alone.
+# $\sum_{u \le T} \text{onsets}_u$ onsets have actually happened. Their
+# difference is the nowcast, onsets already in the population but not in
+# the figure. Not all of it will ever be reported, since $F$ carries
+# ascertainment as well as delay, so it is the reporting backlog and the
+# never-ascertained cases together.
 #
 # Splitting $S(T + h) - S(T)$ at the cut-off splits the coming week the same
 # way:
@@ -2440,33 +2436,24 @@ diagnostics_table( #hide
 # flat at its last fitted value across the horizon, the assumption any
 # nowcast makes about reporting behaviour continuing.
 #
-# We score the sum of the two terms, the new reported count the triangle
-# should add over the horizon, and not the triangle's cumulative level. Every
-# vintage rereads the whole figure, so its total moves both from genuine late
-# reporting and from the roughly 4% per-scan level error. In the current data
-# the printed total falls between consecutive vintages more than once: 2531
-# on 25 July against 2523 on 26 July, and 2018 on 17 July against 1996 on 18
-# July. Late reporting only ever adds cases, so a fall of that size is the
-# rescan and not the epidemic. Scoring the level would charge the forecast
-# for a rescan of cases it had already predicted, and would count the same
-# revision again at every later horizon. On the incident basis each revision
-# enters exactly one scored window. This is the same argument that keeps the
-# other cumulative streams out of the scored archive, applied to a stream
-# whose revisions are larger and partly artefactual.
+# We score the sum of the two terms, the increment the triangle should add
+# over the horizon, rather than its cumulative level. Every vintage rereads
+# the whole figure, so the printed total moves with the roughly 4% per-scan
+# level error as well as with genuine late reporting, and it falls between
+# consecutive vintages more than once in the current data. Scoring the level
+# would charge the forecast for a rescan of cases it had already predicted
+# and would count the same revision again at every later horizon.
 #
-# The interval on that increment is dominated by digitisation rather than by
-# epidemic uncertainty: at a total of a couple of thousand cases the
-# per-scan level term alone is worth tens of cases, well above the counting
-# variation of a week's new reports. The onset forecast is therefore worth
-# more as a check that the fitted delay and ascertainment reproduce the next
-# vintage than as a case-count prediction, and its scores should be read that
-# way.
+# The interval on that increment is dominated by the scan error rather than
+# by epidemic uncertainty, so the forecast is worth more as a check that the
+# fitted delay and ascertainment reproduce the next vintage than as a
+# case-count prediction.
 #
 # Each release now saves its forecast as an asset so it can later be scored
 # against what is observed.
 # Earlier releases showed a forecast but did not store it, so those forecasts
 # are reconstructed.
-# `scripts/backfill_forecasts.jl` checks out each past release at its own tag,
+# A backfill script checks out each past release at its own tag,
 # re-runs that release's own model code on that release's data through its own
 # fit, and writes the forecast in the same archive schema, so a reconstructed
 # forecast is the release's own output rather than a current-code
@@ -4139,16 +4126,11 @@ forecast_flows_fig #hide
 #
 # The onset stream's projection, built as described in the methods
 # [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and
-# forecast"). The table reads top to bottom as the nowcast first and the
-# forecast second, and the two must not be added together: the first three
-# rows describe the state of the outbreak at the cut-off, the next three the
+# forecast").
+# The table reads top to bottom as the nowcast first and the forecast
+# second, and the two halves must not be added together: the first three
+# rows are the state of the outbreak at the cut-off, the next three the
 # coming week.
-#
-# The distinction the table exists to make is between cases that are not yet
-# reported and cases that have not yet happened. The first is knowable now
-# and is what the reporting triangle buys us; the second is a projection and
-# carries the reproduction number's uncertainty. A count of "cases still to
-# come" that mixes the two is not a quantity anyone can act on.
 #
 # One row deserves care.
 # "Onsets not yet reported at T" is not a backlog that will all arrive,
@@ -4267,8 +4249,8 @@ onset_forecast_fig #hide
 
 # ## Saving results
 #
-# The tables above are written to an `output/` directory at the repo
-# root so they can be archived and shared. On every push to `main` a
+# The tables above are written to an output directory at the repo
+# root so they can be archived and shared. On every push to the main branch a
 # GitHub Actions workflow regenerates these files and publishes them
 # as a GitHub Release, downloadable from the repository's releases
 # page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
@@ -4276,7 +4258,7 @@ onset_forecast_fig #hide
 # posterior draws, the latent symptom-onset ("symptomatic cases")
 # trajectory over time, the one- to four-week-ahead forecasts of the
 # observed streams (so each release records the forecast it made, for later
-# scoring), and a copy of the input `observations.toml` so
+# scoring), and a copy of the input data manifest so
 # the exact data that produced each result is recorded alongside it.
 
 #md # ```@raw html

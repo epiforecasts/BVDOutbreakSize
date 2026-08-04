@@ -11,7 +11,7 @@ model hardcodes counts.
 |---|---|
 | `observations.toml` | The manifest the model loads. Every stream is a value or a dated `dates`/`values` history plus a prose `source =` citation. Edit this to advance the analysis. |
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
-| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Not fitted; see the section below. |
+| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
 
@@ -149,9 +149,14 @@ vintages while recent ones fill in as more confirmations arrive (e.g. onset
 20 and 22 July snapshots).
 Taking the latest snapshot as the near-complete reference for onset dates at
 least ~12 days old, the empirical proportion of eventually-reported confirmed
-cases reported within `d` days of onset is roughly 60% by 7 days, 85% by
+cases reported within `d` days of onset is around 55–60% by 7 days, 85% by
 ~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by
 ~3 weeks (median ~5–6 days).
+The 7-day figure is the least well determined of these: a fuller reanalysis of
+the same triangle put it at 54–62% with a 95% interval of 43–68%, wide because
+the digitisation noise is close in size to the between-vintage increments the
+estimate rests on.
+Quote the interval, not the point.
 This supersedes the earlier three-snapshot estimate and shifts it slightly
 later; the seven-snapshot curve is flatter through the second week than the
 three-snapshot one suggested.
@@ -316,7 +321,7 @@ being silently dropped as the report format evolves. Known candidates:
 | PoE/PoC screening (Tableau 5): travellers screened, alerts, corpses swabbed | Cross-border importation pressure. |
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. Tableau 8's own printed total is Ituri-zones only; SitReps 069-072 carry no Nord-Kivu line at all, so the `health_worker_infections_cumulative` / `health_worker_deaths_cumulative` values recorded for those vintages are Ituri-only, not national. From SitRep 073 a narrative sentence beneath the table adds Nord-Kivu and states an explicit national cumulative (134 confirmed / 40 deaths); use the narrative total where it is given, the Tableau 8 total otherwise, and note which in `source_note`. From SitRep 077 a Haut-Uele PPL count also appears in the narrative for the first time (checked directly against 069-074, none mention it) but with no death figure, and the explicit national-total sentence stops being printed (077/078 give only the three separate province figures), so from 077 onward `source_note` records a maintainer-computed sum of whichever province figures are printed that vintage, naming them. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
-| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; fitted as the reporting-triangle stream (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 | EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. **The 059 boundary is deliberate, not the edge of the data.** 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
