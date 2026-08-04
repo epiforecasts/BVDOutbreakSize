@@ -115,12 +115,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
             joinpath(pkgdir(BVDOutbreakSize), c)
         end
     end
-    _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in ("all", "true", "1")
-    ## In CI the per-fit matrix produces every fit before the render, so a render
-    ## cache miss is a bug (usually a wrong `BVD_FIT_CACHE`). `BVD_FIT_STRICT`
-    ## makes such a miss fail in seconds naming the key, rather than silently
-    ## refitting the whole report and hitting the render-job timeout. Off by
-    ## default so a local cold build still fits.
+    _refit_all = lowercase(strip(get(ENV, "BVD_REFIT", ""))) in
+                 ("all", "true", "1")
+    ## In CI the per-fit matrix produces every fit before the render, so a
+    ## render cache miss is a bug (usually a wrong `BVD_FIT_CACHE`).
+    ## `BVD_FIT_STRICT` makes such a miss fail in seconds naming the key,
+    ## rather than silently refitting the whole report and hitting the
+    ## render-job timeout. Off by default so a local cold build still fits.
     _strict = lowercase(strip(get(ENV, "BVD_FIT_STRICT", ""))) in
               ("all", "true", "1", "yes", "on")
     _fit_specs = build_fit_specs(obs;
