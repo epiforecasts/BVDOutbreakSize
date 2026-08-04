@@ -261,12 +261,12 @@ function build_fit_specs(obs;
     end
 
     ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
-    deaths_community_delay = (history, total, onsets, k; kwargs...) ->
-        deaths_model(history, total, onsets, k;
-            onset_to_death = gamma_delay_model(40;
-                alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-                theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
-            kwargs...)
+    deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
+        history, total, onsets, k;
+        onset_to_death = gamma_delay_model(40;
+            alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
+            theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
+        kwargs...)
 
     ## Exponential growth tree prior: common ancestor ~7 days earlier than
     ## the Skygrid baseline (2026-03-08 vs 2026-03-15).
@@ -430,8 +430,7 @@ function build_fit_specs(obs;
     if run_sensitivity
         push!(specs,
             (; id = "sens_community_delay", kind = :chain,
-                thunk = () ->
-                    refit_joint_variant(deaths = deaths_community_delay)),
+                thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_exp_growth_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0)))
@@ -441,6 +440,6 @@ end
 
 "Ordered fit ids for the current data and sensitivity setting."
 function fit_ids(
-    obs = load_observations(); run_sensitivity = run_sensitivity_env())
+        obs = load_observations(); run_sensitivity = run_sensitivity_env())
     [s.id for s in build_fit_specs(obs; run_sensitivity)]
 end

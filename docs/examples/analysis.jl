@@ -253,11 +253,11 @@ observations_table #hide
 
 # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
 # The model fits the between-report increments of these series, so a single date reduces to the cut-off total.
+# Each stream's source is recorded alongside the observation data itself.
 # Two columns are the exception.
 # The new-suspect column is a per-day count, not a cumulative total, fitted directly as a daily incidence.
 # It picks up where the cumulative suspected-case column freezes on 26 May.
 # The isolated-patients column is a daily count of patients in an isolation/treatment bed, fitted as the suspect inflow carried through a length-of-stay survival.
-# The source of each stream is recorded alongside the observation data.
 
 #md # ```@raw html
 #md # <details><summary>Building the per-date time-series table</summary>

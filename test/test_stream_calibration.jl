@@ -75,8 +75,7 @@ end
     ## replicate is its own daily count, scored directly against the observed
     ## daily count. Centre the draws on the observed value for calibration.
     observed = [5, 8, 3, 6]
-    replicates = [
-        observed .+ rand(rng, -2:2, length(observed)) for _ in 1:3_000]
+    replicates = [observed .+ rand(rng, -2:2, length(observed)) for _ in 1:3_000]
     panel = (; title = "Daily", observed = observed,
         replicates = replicates, cumulative = false)
 

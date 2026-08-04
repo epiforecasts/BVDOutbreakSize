@@ -237,14 +237,12 @@ end
     @test "DRC isolation beds" ∉ tbl2[!, "Stream"]
     ## baseline shifts the new-count observed: the confirmed "new this week"
     ## row is scored against observed - baseline = 70 - 40 = 30.
-    conf_new = tbl[(tbl.Stream .== "DRC confirmed cases") .&
-                   (tbl.Quantity .== "new this week"), :]
+    conf_new = tbl[(tbl.Stream .== "DRC confirmed cases") .& (tbl.Quantity .== "new this week"), :]
     @test only(conf_new.Observed) == 30
     ## Absent baseline defaults to zero, so the new-count observed is the full
     ## observed cumulative.
     tbl3 = forecast_vs_truth(fc; observed = (confirmed_cum = 70,))
-    c3 = tbl3[(tbl3.Stream .== "DRC confirmed cases") .&
-              (tbl3.Quantity .== "new this week"), :]
+    c3 = tbl3[(tbl3.Stream .== "DRC confirmed cases") .& (tbl3.Quantity .== "new this week"), :]
     @test only(c3.Observed) == 70
 end
 

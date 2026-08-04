@@ -204,14 +204,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
         Symbol("deaths_state.od_state.ad.θ") => "admission-to-death scale",
         Symbol("exports_state.detect_state.α") => "onset-to-detection shape",
         Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
-        Symbol("confirmed_state.receipt_state.d.delay_mean") =>
-            "report-to-receipt mean",
-        Symbol("confirmed_state.receipt_state.d.delay_sd") =>
-            "report-to-receipt SD",
+        Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
+        Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
         :isolation_bvd_los_mean => "in-care BVD length-of-stay mean (mixture)",
         :isolation_death_los_mean => "in-care admission-to-death stay mean",
-        :isolation_recovery_los_mean =>
-            "in-care admission-to-recovery stay mean",
+        :isolation_recovery_los_mean => "in-care admission-to-recovery stay mean",
         :isolation_admission_delay_mean => "suspected-to-admission delay mean",
         :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
         :incare_cfr => "in-care fatality (CFR_iso)",
@@ -219,8 +216,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
-        Symbol("exports_state.travel_state.daily_travellers") =>
-            "daily travellers")
+        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers")
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
     ## with the model, shared by the main and sensitivity R(t) plots.
