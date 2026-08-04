@@ -1,9 +1,9 @@
 # Registry of the expensive model fits in the analysis report. Each fit is
 # defined once here as an `(id, kind, thunk)` entry, so it can be run and
-# cached independently — one per CI matrix job, or an HPC task — and the docs
-# build then loads the chains through the content-addressed cache instead of
-# refitting them inline. `build_fit_specs` mirrors the model calls in
-# `docs/examples/analysis.jl`; keep the two in step.
+# cached independently — one per CI matrix job, or an HPC task — and the
+# docs build then loads the chains through the content-addressed cache
+# instead of refitting them inline. `build_fit_specs` mirrors the model
+# calls in `docs/examples/analysis.jl`; keep the two in step.
 
 include(joinpath(@__DIR__, "cache.jl"))
 
@@ -258,12 +258,12 @@ function build_fit_specs(obs;
     end
 
     ## Community-pathway onset-to-death delay (Isiro 2012 line-list reanalysis).
-    deaths_community_delay = (history, total, onsets, k; kwargs...) -> deaths_model(
-        history, total, onsets, k;
-        onset_to_death = gamma_delay_model(40;
-            alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
-            theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
-        kwargs...)
+    deaths_community_delay = (history, total, onsets, k; kwargs...) ->
+        deaths_model(history, total, onsets, k;
+            onset_to_death = gamma_delay_model(40;
+                alpha_prior = truncated(Normal(5.48, 2.0); lower = 0.01),
+                theta_prior = truncated(Normal(1.49, 0.5); lower = 0.1)),
+            kwargs...)
 
     ## Exponential growth tree prior: common ancestor ~7 days earlier than
     ## the Skygrid baseline (2026-03-08 vs 2026-03-15).

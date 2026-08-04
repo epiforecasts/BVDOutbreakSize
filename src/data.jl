@@ -231,10 +231,11 @@ function load_observations(
                 error("confirmed_break_dates: $date has a printed 24h $label " *
                       "count of $g against a net vintage increment of " *
                       "$(inc[pos]), so the gross does not sit below the net. " *
-                      "That is a provincial TRANSFER, not a base integration: " *
-                      "an integration reattaches records and so ADDS to cases " *
-                      "and deaths together, whereas a transfer moves both " *
-                      "DOWN (SitRep 065, 18 July 2026: +83 gross vs +77 net " *
+                      "That is a provincial transfer, not a base " *
+                      "integration. An integration reattaches records and " *
+                      "so adds to cases and deaths together, whereas a " *
+                      "transfer moves both down (SitRep 065, 18 July " *
+                      "2026: +83 gross vs +77 net " *
                       "cases and +40 vs +37 net deaths). Listing it de-anchors " *
                       "the positivity denominator with no backlog to absorb, " *
                       "which measured 94 divergences and a min bulk ESS of 15 " *

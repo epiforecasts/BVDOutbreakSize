@@ -127,9 +127,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
     _fit_specs = build_fit_specs(obs;
         breakpoint = _BREAKPOINT, frozen_cutoffs = frozen_cutoffs,
         chamla_cutoff = chamla_cutoff,
-        validation_cutoff = validation_cutoff, run_sensitivity = RUN_SENSITIVITY)
+        validation_cutoff = validation_cutoff,
+        run_sensitivity = RUN_SENSITIVITY)
     _fit_results = fit_parallel([() -> fit_or_load(fit_key(s.id), s.thunk;
-                                     cache_dir = _fit_cache_dir, refit = _refit_all,
+                                     cache_dir = _fit_cache_dir,
+                                     refit = _refit_all,
                                      strict = _strict)
                                  for s in _fit_specs])
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
@@ -200,11 +202,14 @@ if !@isdefined(_BVD_SETUP_LOADED)
         Symbol("deaths_state.od_state.ad.θ") => "admission-to-death scale",
         Symbol("exports_state.detect_state.α") => "onset-to-detection shape",
         Symbol("exports_state.detect_state.θ") => "onset-to-detection scale",
-        Symbol("confirmed_state.receipt_state.d.delay_mean") => "report-to-receipt mean",
-        Symbol("confirmed_state.receipt_state.d.delay_sd") => "report-to-receipt SD",
+        Symbol("confirmed_state.receipt_state.d.delay_mean") =>
+            "report-to-receipt mean",
+        Symbol("confirmed_state.receipt_state.d.delay_sd") =>
+            "report-to-receipt SD",
         :isolation_bvd_los_mean => "in-care BVD length-of-stay mean (mixture)",
         :isolation_death_los_mean => "in-care admission-to-death stay mean",
-        :isolation_recovery_los_mean => "in-care admission-to-recovery stay mean",
+        :isolation_recovery_los_mean =>
+            "in-care admission-to-recovery stay mean",
         :isolation_admission_delay_mean => "suspected-to-admission delay mean",
         :isolation_ruleout_los_mean => "isolation non-BVD rule-out stay mean",
         :incare_cfr => "in-care fatality (CFR_iso)",
@@ -212,7 +217,8 @@ if !@isdefined(_BVD_SETUP_LOADED)
         :incare_confirm_modifier => "in-care confirmation-rate modifier",
         :abscond_fraction => "daily abscond fraction",
         :recovery_delay_mean => "confirmation-to-recovery mean",
-        Symbol("exports_state.travel_state.daily_travellers") => "daily travellers")
+        Symbol("exports_state.travel_state.daily_travellers") =>
+            "daily travellers")
 
     ## Renewal-start day used to align the reconstructed R(t) knot grid
     ## with the model, shared by the main and sensitivity R(t) plots.
