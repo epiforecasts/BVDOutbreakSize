@@ -183,6 +183,9 @@ Keep the two in agreement: if this section changes in a way that affects the sum
 - No project or issue history in the narrative: no PR or issue numbers, no "we previously used X", "this was changed to Y", "after refactoring".
   State the current design only.
   A difference from work being replicated, or a limitation of an external dependency, is the exception, written as a present-tense fact.
+  An issue number may also stay where the issue is the record for something still unresolved, such as a workaround pointing at the open root cause it does not fix, or a data decision whose reasoning lives in the issue.
+  The test is whether the number still tells the reader something they cannot get from the code.
+  "Tracked by #495" earns its place; "changed in #495" does not.
 - Label quantities accurately.
   Do not call suspected cases onsets, and prefer "current cumulative" over "final cumulative".
 - For a latent quantity (infections, onsets, deaths) report the modelled estimate without overlaying observed data that sits downstream of unmodelled processes.
