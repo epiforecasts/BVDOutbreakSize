@@ -273,7 +273,7 @@ end
     ## (20 July): the vintage a forecast made on the 15th could have seen.
     @test ov.cutoff == Date(2026, 7, 15)
     ## The manifest's own history, converted back to calendar dates through
-    ## `ogd` (NOT the placeholder), reproduces the vintages as written.
+    ## `ogd` (not the placeholder), reproduces the vintages as written.
     @test [string(ogd(d)) for d in ov.confirmed_history.days] ==
           ["2026-07-01", "2026-07-08", "2026-07-15"]
     @test ov.confirmed_history.counts == [50, 80, 100]
@@ -295,7 +295,7 @@ end
         confirmed_dates = ["2026-07-01", "2026-07-08", "2026-07-15"],
         confirmed_values = [50, 80, 100])
 
-    ## The CURRENT manifest, as it stands today: INSP later revised the
+    ## The current manifest, as it stands today: INSP later revised the
     ## 15 July vintage upward to 150 (backfilled cases attributed to that
     ## report after the fact). A baseline built from this directly would
     ## see an increment of 70 the forecast itself never had.

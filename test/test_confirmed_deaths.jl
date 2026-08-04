@@ -6,7 +6,7 @@
 
     ## The 28 May data: analysed cumulative stalls 24-25 May (flat at 295).
     ## The first confirmed vintage (day 1, count 33) is the testing-onset
-    ## BASELINE and is NOT scored, so the early windows are the vintages AFTER
+    ## baseline and is not scored, so the early windows are the vintages after
     ## it up to the first lab date; `early_start` carries that baseline day so
     ## the model pins the early-window volume there. The observed windows
     ## (24-28 May) merge the zero-denominator stall to positives
@@ -36,7 +36,7 @@ end
     w0 = confirmed_positivity_windows(empty, lab)
     @test isempty(w0.obs_analysed) && isempty(w0.early_increments)
     ## No lab history: the first confirmed vintage is the baseline and every
-    ## vintage AFTER it is an early window.
+    ## vintage after it is an early window.
     conf = (; days = [3, 5], counts = [2, 6])
     w1 = confirmed_positivity_windows(conf, empty)
     @test isempty(w1.obs_analysed)
@@ -195,7 +195,7 @@ end
     @test !any(k -> occursin("cdeath_step", string(k)), keys(θ0))
     @test isfinite(logjoint(m0, θ0))
 
-    ## `bvd_joint` forwards each confirmed stream its OWN gross vector, so the
+    ## `bvd_joint` forwards each confirmed stream its own gross vector, so the
     ## cases and deaths steps are both sampled and neither keyword is crossed.
     conf = (; days = [20, 30, 35, 40], counts = [500, 600, 969, 990])
     j = bvd_joint(40, missing, 800, missing, missing, 990, missing;
@@ -221,7 +221,7 @@ end
 
     ## Nulling the cut-off scalar is the generator gate, so `predict` resamples
     ## the increments while the dated history still supplies the vintage grid
-    ## AND the published discrepancy the step is centred on. Emptying the
+    ## and the published discrepancy the step is centred on. Emptying the
     ## history instead loses the discrepancy, which is why the scalar is the
     ## gate on this stream as it already is on the cases stream.
     hist = (; days = [20, 30, 35, 40], counts = [200, 240, 476, 490])

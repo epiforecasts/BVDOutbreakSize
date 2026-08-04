@@ -43,7 +43,7 @@ const FIT_CACHE_SCHEMA = "v1"
 ## reason. `rt_by_release_by_stream.csv`, `size_by_release_by_stream.csv`
 ## and `r0_by_release_by_stream.csv` are the per-fit versions of the same
 ## overlay, rewritten the same way.
-## Every file score_releases.jl writes into data/ MUST be listed here, or the
+## Every file score_releases.jl writes into data/ must be listed here, or the
 ## render's data hash diverges from the fit matrix's and every fit misses.
 const FIT_DATA_EXCLUDE = ("released_estimates.csv",
     "rt_by_release.csv", "r0_by_release.csv",
@@ -292,18 +292,22 @@ function build_fit_specs(obs;
                     isolation_history = obs.isolation_history,
                     bed_capacity_history = obs.bed_capacity_history,
                     recovered_history = obs.recovered_history,
-                    treatment_admissions_history = obs.treatment_admissions_history,
+                    treatment_admissions_history =
+                    obs.treatment_admissions_history,
                     treatment_deaths_history = obs.treatment_deaths_history,
                     treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history = obs.treatment_absconded_history,
+                    treatment_absconded_history =
+                    obs.treatment_absconded_history,
                     treatment_confirmed_incare_history =
                     obs.treatment_confirmed_incare_history,
                     treatment_suspect_incare_history =
                     obs.treatment_suspect_incare_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
-                    confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
+                    confirmed_break_gross_cases =
+                    obs.confirmed_break_gross_cases,
+                    confirmed_break_gross_deaths =
+                    obs.confirmed_break_gross_deaths,
                     export_case_days = obs.export_case_days,
                     export_death_days = obs.export_death_days,
                     breakpoint = breakpoint,
@@ -350,7 +354,8 @@ function build_fit_specs(obs;
                     lab_history = obs.lab_history,
                     lab_daily_history = obs.lab_daily_history,
                     confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+                    confirmed_break_gross_cases =
+                    obs.confirmed_break_gross_cases,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed"))),
@@ -373,13 +378,16 @@ function build_fit_specs(obs;
                 treatment_only_model(obs.n;
                     isolation_history = obs.isolation_history,
                     bed_capacity_history = obs.bed_capacity_history,
-                    treatment_admissions_history = obs.treatment_admissions_history,
+                    treatment_admissions_history =
+                    obs.treatment_admissions_history,
                     treatment_deaths_history = obs.treatment_deaths_history,
                     treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history = obs.treatment_absconded_history,
+                    treatment_absconded_history =
+                    obs.treatment_absconded_history,
                     occupancy_break_days = obs.occupancy_break_days,
                     confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+                    confirmed_break_gross_cases =
+                    obs.confirmed_break_gross_cases,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("treatment"))),
@@ -410,7 +418,8 @@ function build_fit_specs(obs;
     if run_sensitivity
         push!(specs,
             (; id = "sens_community_delay", kind = :chain,
-                thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
+                thunk = () ->
+                    refit_joint_variant(deaths = deaths_community_delay)),
             (; id = "sens_exp_growth_clock", kind = :chain,
                 thunk = () -> refit_joint_variant(
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0)))
@@ -419,6 +428,7 @@ function build_fit_specs(obs;
 end
 
 "Ordered fit ids for the current data and sensitivity setting."
-function fit_ids(obs = load_observations(); run_sensitivity = run_sensitivity_env())
+function fit_ids(
+    obs = load_observations(); run_sensitivity = run_sensitivity_env())
     [s.id for s in build_fit_specs(obs; run_sensitivity)]
 end

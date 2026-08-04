@@ -106,7 +106,7 @@ end
     ## publishes a 24h analysed count and is anchored. The late group is a
     ## single submodel over all late days, so its predict-key vector has one
     ## entry per late day and the docs PPC reconstruction (early ++ obs ++
-    ## late) lines up with the window-day grid (regression guard for #235).
+    ## late) lines up with the window-day grid.
     n = 40
     dh = (; days = [13, 18, 40], counts = [10, 14, 18])
     rh = (; days = [13, 18, 40], counts = [340, 516, 905])

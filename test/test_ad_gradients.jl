@@ -1,13 +1,12 @@
 ## AD-gradient smoke check: the package default backend (Mooncake) must be
 ## able to differentiate the models — the one property the NUTS sampler
 ## actually relies on. A single unconstrained-space log-density gradient is
-## the minimal, fast way to assert that, and it replaces the slow full NUTS
-## fits that previously stood in as the "the models differentiate" coverage
-## (those took ~25 min and flaked during sampler adaptation rather than in
-## the gradient itself).
+## the minimal, fast way to assert that, avoiding a full NUTS fit as a
+## differentiability check: that takes ~25 min and can flake during sampler
+## adaptation rather than in the gradient itself.
 ##
 ## A composer (exports_only_model) exercises the renewal + onset + likelihood
-## AD path quickly. The full bvd_joint's gradient is NOT checked here on its
+## AD path quickly. The full bvd_joint's gradient is not checked here on its
 ## own: differentiating it under Mooncake takes ~10 min and is unstable on the
 ## Julia LTS runner (the same path that makes the bvd_joint NUTS fits flaky
 ## there), so a dedicated check would reintroduce exactly the slowness and

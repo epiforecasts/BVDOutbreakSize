@@ -97,7 +97,7 @@
           maximum(obs.deaths_history.days)
 
     ## The daily isolation/treatment-bed occupancy ("Patients en isolement"):
-    ## a per-day STOCK (point prevalence, never cumulative), so every count is
+    ## a per-day stock (point prevalence, never cumulative), so every count is
     ## a positive occupancy, sorted oldest-first and within the grid. An
     ## invariant rather than a literal echo, which would break on every
     ## SitRep advance. The fitted series starts at the all-patients column
@@ -127,7 +127,7 @@
     end
 
     ## The cumulative recovered-among-confirmed series ("cumul guéris"): a
-    ## CUMULATIVE count, so non-decreasing and positive, sorted oldest-first
+    ## cumulative count, so non-decreasing and positive, sorted oldest-first
     ## and within the grid, ending at the `recovered_cases` cut-off scalar.
     ## An invariant rather than a literal echo.
     @test !isempty(obs.recovered_history.counts)
@@ -308,8 +308,8 @@ end
     blk = raw["confirmed_break_dates"]
 
     ## Derive both dates from the manifest's own listed day so the fixture does
-    ## not pin a date that a later cut-off or data update invalidates, and write
-    ## them DESCENDING so sorting has something to do.
+    ## not pin a date that a later cut-off or data update invalidates, and
+    ## write them descending so sorting has something to do.
     later = Date(String(blk["value"][1]))
     earlier = later - Day(1)
     blk["value"] = [string(later), string(earlier)]
