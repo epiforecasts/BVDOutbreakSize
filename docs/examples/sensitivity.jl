@@ -237,12 +237,8 @@ validation_latent_fig #hide
 # It will populate once those targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
 #
-# The symptom-onset reporting triangle is scored as "onset reports", the new reported count it adds over the horizon, against its own per-vintage cumulative total.
-# Its level is deliberately not scored: every vintage rereads the whole figure, so the printed total moves from genuine late reporting and from the roughly 4% per-scan level error alike, and in the current data it falls between consecutive vintages more than once.
-# Scoring the level would charge the forecast for a rescan of cases it had already predicted, and would recount the same revision at every horizon.
-# Two things follow for the table below.
-# The stream appears only from the first release that carried it, since no earlier release stored an onset forecast and the backfill reconstructs each release's own output rather than adding a stream it never had.
-# And its intervals are dominated by digitisation rather than by epidemic uncertainty, so its coverage says more about the scan error than about the fitted delay; the CRPS comparison against the baseline is the more informative column for it.
+# The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure and its printed total therefore moves with the scan error as well as with late reporting.
+# It appears only from the release that first carried it, and its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -812,11 +808,12 @@ _by_stream_schema = (; release = String, date = Date, fit = String,
 ## size estimated by each data stream"). Recovered is absent because it
 ## has no individual fit.
 _fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
-    "treatment", "exports"]
+    "treatment", "onsets", "exports"]
 _fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
     "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
     "confirmed_deaths" => "confirmed deaths (DRC)",
-    "treatment" => "isolation (DRC)", "exports" => "exports")
+    "treatment" => "isolation (DRC)", "onsets" => "onsets (DRC)",
+    "exports" => "exports")
 
 ## Group a per-fit estimate table into the label => tuples pairs the faceted
 ## plot takes, keyed on the date so the mixed release tag shapes
@@ -857,6 +854,7 @@ _stream_chains = (
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
+    "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
 
 ## Build a fit label => trajectory dictionary from a per-release table,
