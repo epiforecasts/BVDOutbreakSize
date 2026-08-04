@@ -36,13 +36,24 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 ## `recovered_new` column (materialised only when the recovered origin is
 ## given), letting the recovered stream be scored against the observed count
 ## below like the other streams.
+## The onset grid is the one the FROZEN fit saw, not the live one, so the
+## validation forecast carries an `onset reports` row scored on the triangle
+## the frozen fit was actually fitted to.
+_val_onset_days = frozen_lastweek.o.onset_curve_history.onset_days
+_val_grid_start = isempty(_val_onset_days) ? nothing :
+                  minimum(_val_onset_days)
+_val_grid_end = isnothing(_val_grid_start) ? nothing :
+                max(maximum(frozen_lastweek.o.onset_curve_history.report_days),
+    _val_grid_start)
 validation_forecast = forecast_reported(frozen_lastweek.chn;
     horizon = 7,
     obs_cases = frozen_lastweek.o.reported_cases,
     obs_deaths = frozen_lastweek.o.total_deaths,
     obs_confirmed = frozen_lastweek.o.confirmed_cases,
     obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-    obs_recovered = frozen_lastweek.o.recovered_cases);
+    obs_recovered = frozen_lastweek.o.recovered_cases,
+    grid_n = frozen_lastweek.o.n,
+    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end);
 
 ## Each frozen individual (single-stream) fit's own one-week-ahead new-count
 ## forecast at the same cut-off as `frozen_lastweek`, from
@@ -199,12 +210,17 @@ validation_latent_fig #hide
 # Only a minority of the daily releases examined contribute a row to the table below, each a reconstruction of an earlier model version rather than the current fit.
 # The table below is therefore not a verdict on the current fit.
 # One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
-# This is the signature of a chain that failed to sample properly rather than a genuine forecast.
+# This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
 # The releases that carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet.
 # This is why the comparison against each stream's individual fit is still empty.
 # It will populate once those targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 # A ratio here should therefore be read as an early signal rather than a settled result.
+#
+# The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
+# Its printed total therefore moves with the scan error as well as with late reporting.
+# It appears only from the release that first carried it.
+# Its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -484,6 +500,7 @@ streams_C_table = streams_table(
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
     "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
     "joint" => posterior_C_joint);
 
 #md # ```@raw html
@@ -526,7 +543,10 @@ stream_traj_fig = plot_stream_trajectories(
             colour = :goldenrod),
         (; label = "isolation (DRC)", trajs = _cuminf(chn_treatment),
             last_day = _last_day(obs.isolation_history.days),
-            colour = :darkorange)];
+            colour = :darkorange),
+        (; label = "onsets (DRC)", trajs = _cuminf(chn_onsets),
+            last_day = _last_day(obs.onset_curve_history.report_days),
+            colour = :mediumpurple)];
     n = obs.n, seeding = obs.seeding);
 
 #md # ```@raw html
@@ -553,6 +573,7 @@ cumulative_density_fig = plot_cumulative_cases(
     "cases (DRC)" => posterior_C_cases,
     "confirmed (DRC)" => posterior_C_confirmed,
     "isolation (DRC)" => posterior_C_treatment,
+    "onsets (DRC)" => posterior_C_onsets,
     "joint" => posterior_C_joint;
     scenarios = [], xmax = density_xmax);
 
@@ -662,7 +683,9 @@ stream_rt_fig = plot_rt_streams(
         (; label = "confirmed (DRC)", chn = chn_confirmed, rt_start = 1,
             rt_walk_start = 1, colour = :goldenrod),
         (; label = "isolation (DRC)", chn = chn_treatment, rt_start = 1,
-            rt_walk_start = 1, colour = :darkorange)];
+            rt_walk_start = 1, colour = :darkorange),
+        (; label = "onsets (DRC)", chn = chn_onsets, rt_start = 1,
+            rt_walk_start = 1, colour = :mediumpurple)];
     joint = (; label = "joint", chn = chn_joint, rt_start = _rt_start_plot,
         rt_walk_start = _rt_walk_start_joint),
     n = obs.n, breakpoint = _BREAKPOINT,
@@ -754,11 +777,12 @@ _by_stream_schema = (; release = String, date = Date, fit = String,
 ## size estimated by each data stream"). Recovered is absent because it
 ## has no individual fit.
 _fit_order = ["joint", "cases", "deaths", "confirmed", "confirmed_deaths",
-    "treatment", "exports"]
+    "treatment", "onsets", "exports"]
 _fit_labels = Dict("joint" => "joint", "cases" => "cases (DRC)",
     "deaths" => "deaths (DRC)", "confirmed" => "confirmed (DRC)",
     "confirmed_deaths" => "confirmed deaths (DRC)",
-    "treatment" => "isolation (DRC)", "exports" => "exports")
+    "treatment" => "isolation (DRC)", "onsets" => "onsets (DRC)",
+    "exports" => "exports")
 
 ## Group a per-fit estimate table into the label => tuples pairs the faceted
 ## plot takes, keyed on the date so the mixed release tag shapes
@@ -799,6 +823,7 @@ _stream_chains = (
     "deaths" => (; chn = chn_deaths, rt_start = 1, rt_walk_start = 1),
     "confirmed" => (; chn = chn_confirmed, rt_start = 1, rt_walk_start = 1),
     "treatment" => (; chn = chn_treatment, rt_start = 1, rt_walk_start = 1),
+    "onsets" => (; chn = chn_onsets, rt_start = 1, rt_walk_start = 1),
     "exports" => (; chn = chn_exports, rt_start = 1, rt_walk_start = 1))
 
 ## Build a fit label => trajectory dictionary from a per-release table,

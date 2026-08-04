@@ -54,8 +54,16 @@ CI uses `--project=docs` because that environment is already instantiated at tha
 The pre-commit hook and `task lint` both call it directly.
 It takes no project flag.
 
-## Gradient-cost diagnostic (`--project=.`)
+## Developer diagnostics (`--project=.`)
 
-`bench_convolve.jl` times the Mooncake gradient of the renewal convolution, scalar loop against a vectorised rewrite.
-Its finding is cited from a docstring in `src/renewal.jl`, which justifies keeping the simpler scalar loop.
-Run it with `julia --project=. scripts/bench_convolve.jl` if you touch that code path.
+These are not wired into CI, the Taskfile or any workflow.
+Reach for them when a fit misbehaves or a hot path changes.
+Each documents its own invocation in its header comment.
+
+| Script | What it does |
+| --- | --- |
+| `bench_convolve.jl` | Times the Mooncake gradient of the renewal convolution, scalar loop against a vectorised rewrite. Its finding is cited from a docstring in `src/renewal.jl`, which justifies keeping the simpler scalar loop. Run it if you touch that code path. |
+| `bench_discretise.jl` | Times the Mooncake gradient of the censored delay discretisation. Documents the reasoning behind the CDF-difference form in `src/renewal.jl`. |
+| `summarise_chain.jl` | Prints posterior summaries and fit diagnostics for a saved chain. |
+| `prior_vs_posterior.jl` | Samples the prior and sets it beside a saved posterior, so a parameter the data does not inform is visible. |
+| `fit_joint_stream.jl` | Fits the full joint model outside the fit cache and CI, streaming live progress to `logs/joint_fit.log` so a long fit can be watched with `tail -f`. Writes the chain to `logs/joint_chain.jls`. The name refers to the streamed progress, not to fitting a single data stream. |

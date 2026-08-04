@@ -166,18 +166,22 @@ shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp`
 transmission changes gradually rather than instantly; `breakpoint =
 missing` drops the term. `Rt = exp.(log_Rt)`.
 
-The walk base `log_R0` is not sampled here; it is passed in, derived
-forward from the sampled growth rate `r` and the generation interval
-through Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)).
-The prior sits on the growth rate (see [`exponential_growth_model`](@ref)),
-grounded on Cuomo-Dannenburg & Ghafari's molecular-clock doubling time
-(centre 20 d, range 15.2–24.5 d); the established reproduction number is
-whatever that growth implies under our generation interval, rather than a
-separately asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55`
-under its own generation interval, so deriving `R0` forward under ours
-keeps the cryptic phase and the established renewal on one shared growth
-source. Grid days before the renewal start are filled by the analytic
-cryptic exponential; the walk clamps to `R0` before its first knot.
+The walk base `log_R0` is not sampled here. It is passed in as a derived
+quantity: the first reproduction number is derived forward from the sampled
+growth rate `r` and the generation interval through Euler–Lotka
+(`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)). The prior therefore
+sits on the growth rate (see [`exponential_growth_model`](@ref)), grounded
+on the BEAST X molecular-clock doubling time (mbalaplacide2026). The
+established reproduction number is whatever that growth implies under our
+generation interval, rather than a separately asserted `R0` prior. The
+genetic report gives `R0 ≈ 1.31–1.55` under its own generation interval.
+Deriving `R0` forward from the shared growth rate under our generation
+interval is the consistent thing to do. This single growth source pins both
+the established reproduction number (the walk base at the genetic bound)
+and, through the renewal seeding, the cryptic exponential phase, so the
+outbreak has one growth source. The grid days before the renewal start are
+filled by the analytic cryptic exponential and so are unused by the walk.
+The walk clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
@@ -247,15 +251,17 @@ the observation span `τ_obs = n − renewal_start` to get the total outbreak
 age `T_total = m·τ + τ_obs`, which carries the genetic seeding bound
 ([`genetic_seeding_model`](@ref)).
 
-The growth rate carries the prior
-`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.28)`, with median
-doubling time (11.7 d) matching the BEAST X estimate (mbalaplacide2026,
-Exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the
-asymmetric HPD as roughly a 95% interval (log-SD ≈ 0.24 from the HPD
-ratio) and slightly inflates it to cover the skew towards shorter doubling
-times, so the prior is modestly wider than the source but unbiased. The
-first reproduction number is derived forward from this `r` and our
-generation interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
+The growth rate carries the prior `r ~ LogNormal(log(log2 /
+M_PRIOR_DOUBLING_DAYS), 0.40)`, with median doubling time (11.7 d)
+matching the BEAST X estimate (mbalaplacide2026, Exponential growth
+model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than the ≈0.24 that
+HPD implies. The HPD is conditional on a single-rate coalescent, the
+assumption the field epidemiology contradicts (kupferschmidt2026). An
+independent reanalysis puts the doubling time at 15.2–24.5 d
+(cuomodannenburg2026). The induced doubling-time prior is
+`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first
+reproduction number is then derived forward from this `r` and our generation
+interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
 established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
@@ -280,7 +286,7 @@ e.g. one whose centre advances via [`m_prior_centre`](@ref) for a later
 cut-off. Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
-        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
+        r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
         m_prior = truncated(Normal(5.0, 4.0); lower = 0))
     r ~ r_prior
     m ~ m_prior

@@ -6,6 +6,80 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+Changes since v1.13.0
+
+### Corrections
+
+- The analysis prose stated the confirmation-process sensitivity prior as
+  `Beta(10, 1.76)` where `test_sensitivity_model` samples `Beta(38, 2)`, and
+  gave the wrong rationale for it. The prior reflects that a suspect is
+  confirmed or ruled out through repeat control tests rather than one assay
+  draw, so the effective sensitivity is about 98% with two controls rather
+  than the roughly 85% of a single draw. Both the number and the rationale
+  are corrected (#548).
+- The analysis prose stated a 15-day TMRCA censoring SD where the model
+  uses 16. Corrected to match the code (#548).
+- `plot_rt`, `plot_cumulative_trajectories` and the single-stream overlay
+  (`plot_stream_trajectories`) each drew a 50%-width credible band while an
+  inline comment and docstring described it as part of a 30/60/90% ribbon
+  trio. All three now compute a genuine 30/60/90% ribbon and drop the
+  unused median-line description, so the figure and its documentation
+  agree. This changes what the three plots draw, not any estimate.
+- `docs/src/contributing.md` documented an abstract-marker mechanism
+  (`<!-- ABSTRACT:START/END -->`) that does not exist in `README.md` (the
+  real marker is `<!-- SHARED:END -->`), six submodel and composer function
+  names that do not exist in `src/`, and a surveillance dispersion prior of
+  `truncated(Normal(0, 1); lower = 0)` where the code uses
+  `truncated(Normal(0.6, 0.2); lower = 0)`. Rewrote the repository layout,
+  running-and-testing and model-architecture sections against the current
+  code and `Taskfile.yml`.
+
+### Prose
+
+- Reflowed every write-up page, comment and docstring to the repository's
+  prose rules: one sentence per line, shorter sentences, no run-ons, no
+  restated points, no development history, and no code identifiers inside
+  narrative prose.
+- Removed emphasis-caps and issue/PR references from `src/`, `test/` and
+  the report pages; that history now lives here instead.
+
+### Repository
+
+- Removed `predict_committed` and its three helpers from
+  `src/counterfactual.jl`. They called `delay_convolution` and
+  `DEATH_INTEGRAL_ALG`, neither of which is defined anywhere in `src/`,
+  left behind by the rename to `convolve_delay` in `renewal.jl`. Nothing
+  referenced them, so removing them changes nothing (#545).
+- Removed eight unused one-off scripts. `scripts/Project.toml` gained a
+  missing `Base64` dependency, and `scripts/README.md` now documents which
+  Julia project each script needs.
+- Removed the `notes/` folder; its remaining open items are filed as
+  issues #544-#549.
+- Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
+  `scripts/README.md`.
+
+## v1.13.0
+
+Changes since v1.12.0
+
+### Model
+
+- Widened the growth-rate `r` prior (eq 9) to
+  `LogNormal(log(log 2 / 11.7), 0.40)`, a doubling time of 5.3--25.6 d at
+  95%. The centre still matches the BEAST X reanalysis of 139 BDBV
+  genomes [mbalaplacide2026](@cite), which reports an Exponential-growth
+  doubling time of 11.7 d (95% HPD 6.8--17.5). That HPD is conditional on
+  a single-rate coalescent. This is the assumption the Mongbwalu field
+  epidemiology contradicts [kupferschmidt2026](@cite), the same evidence
+  behind the `m` change in v1.12.0. An independent reanalysis of the
+  earlier genomes puts the doubling time at 15.2--24.5 d
+  [cuomodannenburg2026](@cite), which the old spread largely excluded.
+- Corrected the growth-rate citation in the `rt_walk_model` docstring,
+  which still named a generic 20 d molecular-clock estimate the model no
+  longer uses.
+
 ## v1.12.0
 
 Changes since v1.11.0
@@ -58,9 +132,8 @@ Changes since v1.9.0.
 - Captured symptom-onset epidemic curves from the DHIS2 line list published
   in the analytique SitRep figures (059–062, 064). Digitised via
   `scripts/digitize_onset_curve.jl` (Julia) and a byte-identical Python port,
-  and recorded as `data/onset_curve_scanned.csv`. The curves are **not
-  fitted** — the model does not read them, but they provide an empirical
-  onset-to-report delay benchmark (~65 % by 7 days, median ~5–6 days).
+  and recorded as `data/onset_curve_scanned.csv`. Fitted as a stream, see
+  Model below.
 - Re-ran the confirmed/suspect in-care occupancy split on the resumed
   Tableau 7 data (SitReps 052–055), extending
   `treatment_confirmed_incare_history` and
@@ -69,6 +142,39 @@ Changes since v1.9.0.
   comparing published INSP SitReps against the latest recorded vintage.
 
 ### Model
+
+- Made the digitised symptom-onset reporting triangle a fitted stream
+  (`onset_reporting_model`), scored on its between-vintage increments
+  through a discrete reporting-delay hazard that is nonparametric over the
+  delay and drifts over calendar time. Fitted by `bvd_joint` alongside
+  every other stream and by a new `onsets_only_model` single-stream
+  composer. The snapshot figure is a posterior predictive, so its band
+  carries the measurement error the likelihood gives a digitised bar.
+
+- Gave that stream an explicit ascertainment. The reporting hazard is
+  normalised to reach one, so it carries the delay shape alone, and
+  ascertainment is a separate level. It is anchored on the confirmed
+  pipeline's own `p_drc · τ_test · positivity` averaged over the delay
+  distribution, with a logit-scale offset and a slow walk over onset date.
+  Not yet validated. The ascertainment walk and the reproduction-number
+  walk share the onset axis and are both least constrained late, so $R_t$
+  over the final fortnight and $C_T$ need reporting either side of this
+  change.
+- Added a symptom-onset nowcast and forecast (`forecast_onsets`),
+  splitting the coming week's new onset reports into the part arising from
+  onsets that have already happened but are not yet reported and the part
+  from onsets that have not yet happened. The latent onset trajectory
+  `cumulative_onsets` moved from `bvd_joint` to the shared `_latent`
+  submodel so every composer carries it. The reported increment is scored
+  across releases as the `onset reports` stream; the triangle's cumulative
+  level is deliberately not scored, since every vintage rereads the whole
+  figure and its ≈4% per-scan level error revises the total both ways.
+
+- Added a results figure reading the triangle along the onset date: the
+  latest digitised bar for each onset date against the posterior predictive
+  for that bar and against the modelled onsets. The nowcast and forecast
+  figure separates the latent components from the replicate the next
+  vintage will print, since only the replicate is scored.
 
 - De-boxed the anonymous `map(do)` closures on `bvd_joint`'s default
   log-density path (`confirmed_positivity_link = :composition`): extracted

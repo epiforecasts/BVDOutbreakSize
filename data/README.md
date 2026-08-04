@@ -10,7 +10,7 @@ Nothing in the model hardcodes counts.
 |---|---|
 | `observations.toml` | The manifest the model loads. Every stream is a value or a dated `dates`/`values` history plus a prose `source =` citation. Edit this to advance the analysis. |
 | `insp_sitrep_scanned.csv` | Our own direct scan of the INSP SitRep PDFs, one row per report (`date de rapportage`), with a free-text `notes` column recording the headline tiles, laboratory section and table figures. The audit trail behind the PDF-sourced streams in `observations.toml`. |
-| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Not fitted; see the section below. |
+| `onset_curve_scanned.csv` | Confirmed cases by symptom-onset date, digitised from the analytique-format SitReps' onset epidemic-curve figure (one block per vintage). Fitted as the symptom-onset reporting-triangle stream; see the section below. |
 | `released_estimates.csv` | Published point estimates for comparison. |
 | `report-snapshot*.toml` | Frozen Imperial report point estimates at fixed vintages. |
 
@@ -37,7 +37,9 @@ Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate, and the error is a few percent in either direction per scan, independent between vintages.
-Against the printed figure `n` it ranges from −3.0% (SitReps 069/070/071: 2260 against n = 2 329) to +1.6% (SitRep 068: 2344 against n = 2 308), with SitRep 064 at −2.2% (2018 against n = 2 064) and SitRep 072 at +0.4% (2531 against n = 2 521).
+Against the printed figure `n` it ranges from −5.0% (SitReps 079/080: 2770 against n = 2 915) to +1.6% (SitRep 068: 2344 against n = 2 308), with SitRep 064 at −2.2% (2018 against n = 2 064), SitRep 072 at +0.4% (2531 against n = 2 521), and SitReps 069/070/071 at −3.0% (2260 against n = 2 329).
+The 079/080 figure is the largest shortfall seen so far, a couple of points past the previous −3.0% floor rather than an order of magnitude off, so it is recorded as extending the known range rather than rejected (section 4b: check neighbours before excluding).
+It is also not a new image, as the duplicate note below explains.
 Individual daily bars carry roughly ±1–2 cases of pixel noise.
 Some of the shortfall is the faded bars inside the `données potentiellement incomplètes` band at the right of each figure, whose lightened fill falls outside the colour masks.
 This mechanism can only lose cases and so does not explain the overshoots.
@@ -49,19 +51,41 @@ On onset dates more than three weeks before the earliest report date in the file
 A between-vintage increment of a few cases is therefore at or below the noise floor, which bounds what a reporting-delay estimate built from those increments can support.
 See issue #488.
 
-SitReps 059 and 060 reuse one figure, as do 061 and 062, 069/070/071, and now 073/074 (identical n = 2 567, identical digitised total and day count), so the fifteen scanned vintages hold ten distinct onset snapshots (report dates 12, 14, 17, 18, 19, 20, 21, 22, 25 and 26 July).
+SitReps 061 and 062 reuse one figure, as do 069/070/071, 073/074 (identical n = 2 567, identical digitised total and day count), and now 079/080 (identical n = 2 915, identical digitised total 2 770 and day count, md5-verified byte-identical embedded images), so the nineteen scanned vintages hold fourteen distinct onset snapshots (report dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25, 26, 30, 31 July and 1 August).
+SitReps 059 and 060 are not a repeat despite sharing a digitised total of 1821: they differ on three days, so they count as two snapshots.
+Reprints are collapsed by exact value equality over the digitised block rather than by a list of vintage ids, so a new reprint is caught without a change to the loader.
+Treating a reprint as a fresh snapshot would fabricate an increment of exactly zero and bias the fitted delay towards fast reporting.
 SitRep 068 (21 July) is now included: its PDF was unreachable while the INSP fetch was broken, and it does carry a figure (n = 2 308).
 The embedded figure is re-rendered at whatever size the layout needs and moves in both directions: it shrinks to 1009×583 at SitRep 069 (against 1257×698 for SitRep 064) and then grows to 1277×799 at SitRep 072.
 Both moves have broken detection once (the shrink by falling under an absolute blue floor, the growth by pushing anti-aliasing over an absolute orange cut).
 This is why the figure-detection and axis-tick thresholds in both scripts are pixel fractions rather than counts.
+SitRep 080 broke the page-locator instead of the pixel thresholds.
+The chart image sits on page 5 as usual, but its own selectable caption text this vintage misreads `par semaine de notification`.
+The matching `date de debut des symptomes` phrase appears only on page 6, with no image of its own there, so a same-page caption lookup landed on the wrong page.
+Both scripts now fall back to the immediate neighbouring pages when the caption page has no qualifying image.
+That widened search pulled in a second blue-heavy image, the provincial case map, which passed the old blue-fraction floor (0.02).
+Raising it to 0.055 (measured range: onset charts 0.066–0.125, the map 0.045–0.047 across every vintage checked) separates them with margin on both sides.
+Both fixes were verified to reproduce every previously committed block (059–079) unchanged before the SitRep 080 block was accepted.
 
-This stream is not fitted: the model does not yet read `onset_curve_scanned.csv`.
-It is captured so an onset-based likelihood and a reporting-delay component can be added later.
+Each figure also stops its x axis short of its own report date, by anything from zero to eight days, and the last bar it prints is often a substantial count rather than a tail fading to zero.
+An onset date past that axis is a date the figure says nothing about, not a bar of height zero.
+Those cells are dropped rather than read as zeros.
+The axis gap is about five days for most vintages, close to the reporting delay itself.
+Reading it as "nothing reported yet" would force the fitted hazard to near zero over the first five days and pile the missing mass onto the delay at which the axis first covers the date.
+
+This stream is fitted.
+`load_onset_curve` (`src/onset_curve.jl`) reads the file, collapses reprints, drops vintages reported after the manifest cut-off and builds the between-vintage increment cells.
+`onset_reporting_model` (`src/models/observations.jl`) fits them through a discrete reporting-delay hazard whose asymptote carries ascertainment.
+It is the only direct observation of the latent onset series, every other stream seeing it only after a further convolution.
+Advancing `as_of_date` in `observations.toml` past a newly digitised vintage's report date picks that vintage up with no code change.
 
 ### Rough onset-to-report delay
 
 Because each vintage redraws the same onset cohort at a later report date, the scanned curves form a reporting triangle: old onset dates are stable across vintages while recent ones fill in as more confirmations arrive (e.g. onset 10 July reads 4 → 9 → 27 → 33 → 37 → 39 → 40 across the 12, 14, 17, 18, 19, 20 and 22 July snapshots).
-Taking the latest snapshot as the near-complete reference for onset dates at least ~12 days old, the empirical proportion of eventually-reported confirmed cases reported within `d` days of onset is roughly 60% by 7 days, 85% by ~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by ~3 weeks (median ~5–6 days).
+Taking the latest snapshot as the near-complete reference for onset dates at least ~12 days old, the empirical proportion of eventually-reported confirmed cases reported within `d` days of onset is around 55–60% by 7 days, 85% by ~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by ~3 weeks (median ~5–6 days).
+The 7-day figure is the least well determined of these.
+A fuller reanalysis of the same triangle put it at 54–62% with a 95% interval of 43–68%, wide because the digitisation noise is close in size to the between-vintage increments the estimate rests on.
+Quote the interval, not the point.
 This supersedes the earlier three-snapshot estimate and shifts it slightly later.
 The seven-snapshot curve is flatter through the second week than the three-snapshot one suggested.
 This is still a coarse estimate: it rests on seven digitised snapshots over a ten-day window, the reference snapshot is itself right-truncated for its most recent onsets, and the delay it measures is onset → confirmed-and-reported (it folds together care-seeking, lab confirmation and reporting).
@@ -69,7 +93,10 @@ This is still a coarse estimate: it rests on seven digitised snapshots over a te
 Two caveats have been added since these figures were computed, and neither has been folded into them.
 The 21 and 25 July snapshots now exist (nine distinct snapshots, not seven), so the estimate is one report behind at both ends.
 More importantly, the scan noise documented above is two-sided and of the same order as the between-vintage increments this estimate is built from, so the quoted percentages are almost certainly more precise than the data supports.
-Treat them as indicative until the triangle is re-estimated with that noise carried through.
+Treat them as indicative.
+The model now carries the noise through.
+The fitted reporting-delay hazard in `onset_reporting_model` scores the increments under a heavy-tailed likelihood whose scale is built from the measured digitisation error, and the analysis report quotes the delay with its posterior interval.
+Prefer that estimate over the arithmetic above.
 
 ### Fetching a SitRep from INSP directly
 
@@ -199,7 +226,7 @@ being silently dropped as the report format evolves. Known candidates:
 | PoE/PoC screening (Tableau 5): travellers screened, alerts, corpses swabbed | Cross-border importation pressure. |
 | SMSPS / PPL (Tableau 7/8): front-line-worker infections cumulative, psychosocial follow-up | Health-system-strain signals. Tableau 8's own printed total is Ituri-zones only; SitReps 069-072 carry no Nord-Kivu line at all, so the `health_worker_infections_cumulative` / `health_worker_deaths_cumulative` values recorded for those vintages are Ituri-only, not national. From SitRep 073 a narrative sentence beneath the table adds Nord-Kivu and states an explicit national cumulative (134 confirmed / 40 deaths); use the narrative total where it is given, the Tableau 8 total otherwise, and note which in `source_note`. From SitRep 077 a Haut-Uele PPL count also appears in the narrative for the first time (checked directly against 069-074, none mention it) but with no death figure, and the explicit national-total sentence stops being printed (077/078 give only the three separate province figures), so from 077 onward `source_note` records a maintainer-computed sum of whichever province figures are printed that vintage, naming them. |
 | CTE bed-capacity strain (§ défis): per-province occupancy vs beds | Local saturation the single national `bed_capacity_history` cannot represent. |
-| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; not fitted (see above). |
+| Symptom-onset epidemic curve (analytique figure) | Digitised separately to `onset_curve_scanned.csv`; fitted as the reporting-triangle stream (see above). |
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 | EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. The 059 boundary is deliberate, not the edge of the data. 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |

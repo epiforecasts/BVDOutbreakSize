@@ -143,6 +143,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     chn_confirmed = _fits["confirmed"]
     chn_confirmed_deaths = _fits["confirmed_deaths"]
     chn_treatment = _fits["treatment"]
+    chn_onsets = _fits["onsets"]
     frozen_lastweek = _fits["frozen_validation"]
     ## One frozen individual fit per stream at the same cut-off as
     ## `frozen_lastweek`, so the forecast validation section can show each
@@ -183,6 +184,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
     posterior_C_confirmed = vec(Array(chn_confirmed[:C_T]))
     posterior_C_confirmed_deaths = vec(Array(chn_confirmed_deaths[:C_T]))
     posterior_C_treatment = vec(Array(chn_treatment[:C_T]))
+    posterior_C_onsets = vec(Array(chn_onsets[:C_T]))
 
     ## Clean display names for the summary tables and pair plots. The submodel
     ## prefixes (`rt_state.`, `gi_state.`, ...) are kept in the model so the

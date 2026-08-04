@@ -1626,6 +1626,72 @@ function reconstruct_rt(chn; n::Integer, breakpoint::Real,
     return rt
 end
 
+"""
+    reconstruct_onset_hazard(chn; grid_start, grid_end, week = 7)
+
+Reconstruct each posterior draw's symptom-onset reporting-delay hazard
+from the non-centred components the chain stores, returning
+`(; logit_h0, γ, alpha)` as three `ndraws`-long vectors of vectors. Mirrors
+[`onset_report_hazard_model`](@ref) exactly: `logit_h0` is the baseline
+delay random effect `η0 .+ σ_h0 .* z_h0`, and `γ` is the report-date
+calendar walk, weekly knots ([`knot_days`](@ref)) following a non-centred
+cumulative sum of `σ_γ .* z_γ` linearly interpolated
+([`interpolate_knots`](@ref)) onto the daily grid `[grid_start,
+grid_end]`. The same relationship [`reconstruct_rt`](@ref) has to
+[`rt_walk_model`](@ref). `alpha` is read directly off the chain's
+`onset_ascertainment` deterministic rather than rebuilt, since it already
+depends on inputs (the confirmed pipeline's anchor series) that are not
+themselves stored.
+
+`grid_start` and `grid_end` are properties of the digitised triangle
+rather than of the chain (`onset_reporting_model` derives them from the
+scored cells' own onset and report days), so the caller supplies them.
+Passing a grid whose knot count disagrees with the stored innovation
+length raises rather than silently building a walk of the wrong length.
+
+Shared by the report's reporting-delay figures and by
+[`forecast_onsets`](@ref), so the fitted hazard the analysis plots and
+the one the forecast projects forward are the same object.
+"""
+function reconstruct_onset_hazard(chn; grid_start::Integer,
+        grid_end::Integer, week::Integer = 7)
+    η0 = _draws(chn, Symbol("onset_report_state.η0"))
+    σ_h0 = _draws(chn, Symbol("onset_report_state.σ_h0"))
+    σ_γ = _draws(chn, Symbol("onset_report_state.σ_γ"))
+    zh0 = [collect(z)
+           for z in vec(collect(chn[Symbol("onset_report_state.z_h0")]))]
+    zγ = [collect(z)
+          for z in vec(collect(chn[Symbol("onset_report_state.z_γ")]))]
+    alpha = [collect(a) for a in vec(collect(chn[:onset_ascertainment]))]
+
+    nt = max(Int(grid_end) - Int(grid_start) + 1, 1)
+    days = knot_days(nt; week, start = 1)
+    nb = length(days)
+    if !isempty(zγ) && length(zγ[1]) != max(nb - 1, 1)
+        error("reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
+              "gives $(max(nb - 1, 1)) calendar-walk steps but the chain " *
+              "has $(length(zγ[1])); pass the same grid the fit used " *
+              "(minimum onset day to maximum report day of the scored " *
+              "cells).")
+    end
+    if !isempty(alpha) && length(alpha[1]) != nt
+        error("reconstruct_onset_hazard: the grid [$grid_start, $grid_end] " *
+              "gives $nt onset dates but the chain's `onset_ascertainment` " *
+              "has length $(length(alpha[1])); pass the same grid the fit " *
+              "used.")
+    end
+
+    ndraws = length(η0)
+    logit_h0 = Vector{Vector{Float64}}(undef, ndraws)
+    γ = Vector{Vector{Float64}}(undef, ndraws)
+    for i in 1:ndraws
+        logit_h0[i] = η0[i] .+ σ_h0[i] .* zh0[i]
+        steps = σ_γ[i] .* zγ[i][1:max(nb - 1, 0)]
+        γ[i] = interpolate_knots(vcat(0.0, cumsum(steps)), days, nt)
+    end
+    return (; logit_h0, γ, alpha)
+end
+
 ## Per-day quantile `pr` of an established-window Rt matrix, skipping the
 ## masked (pre-renewal) days: `missing` where a day has no established draws.
 function _rt_quantile(rt::AbstractMatrix, d::Integer, pr::Real)

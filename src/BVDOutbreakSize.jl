@@ -18,7 +18,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
                      LogNormal, Beta,
-                     Gamma, truncated, censored, product_distribution
+                     Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
 import CairoMakie
@@ -32,8 +32,9 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        CHAMLA_CONFIRMED_CENTRAL, CHAMLA_CONFIRMED_W12,
        ITURI_POPULATION, ITURI_DAILY_TRAVEL,
        ITURI_DAILY_TRAVEL_SD, RENEWAL_START_LEAD, RT_WALK_LEAD,
-       RT_INTERVENTION_RAMP,
+       RT_INTERVENTION_RAMP, ONSET_REPORT_MAX_DELAY,
        load_observations, freeze_observations, m_prior_centre,
+       load_onset_curve,
        summary_table, posterior_summary, markdown_table,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
@@ -58,9 +59,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        plot_vintage_incidence_ppc, plot_stream_calibration,
        plot_rt, plot_rt_streams,
-       reconstruct_rt,
+       reconstruct_rt, reconstruct_onset_hazard,
        predict_no_onward_deaths, plot_no_onward_deaths,
        forecast_reported, forecast_stream, forecast_table, forecast_archive,
+       forecast_onsets, onset_forecast_table,
        plot_forecast,
        plot_forecast_latent, plot_forecast_beds, plot_forecast_flows,
        forecast_vs_truth, forecast_vs_truth_trajectory,
@@ -103,15 +105,24 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_deaths_model,
        treatment_flow_model, recovered_model,
        exports_model, exports_deaths_model,
+       safe_studentt, onset_report_cdf, onset_report_cdf_extrapolated,
+       onset_report_G, onset_report_F,
+       onset_report_anchor, onset_report_anchor_series,
+       onset_report_moments, onset_report_scales, onset_report_scale,
+       onset_report_expected_total,
+       onset_report_ascertainment, onset_report_hazard_model,
+       onset_ascertainment_model, onset_reporting_model,
 # joint composers
        exports_only_model, deaths_only_model, cases_only_model,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
-       exports_deaths_only_model, exports_joint_only_model, bvd_joint
+       exports_deaths_only_model, exports_joint_only_model, bvd_joint,
+       onsets_only_model
 
 include("docstrings.jl")
 include("constants.jl")
 include("data.jl")
+include("onset_curve.jl")
 include("sampling.jl")
 include("renewal.jl")
 include("summaries.jl")
