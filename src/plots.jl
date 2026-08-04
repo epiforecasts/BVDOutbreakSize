@@ -54,8 +54,8 @@ symptom onsets and cumulative deaths, all modelled BVD-only latent renewal
 quantities (the deaths row is the BVD death series, excluding the non-BVD
 background, so it stays as smooth as the infection and onset rows). The
 left column is the modelled expected cumulative trajectory over the grid as
-50% and 90% ribbons; the right column is the posterior
-density of the current cut-off cumulative. The chain must carry the vector
+30%, 60% and 90% ribbons with no median line. The right column is the
+posterior density of the current cut-off cumulative. The chain must carry the vector
 deterministics `cumulative_infections`, `cumulative_onsets` and
 `cumulative_expected_deaths` (one per draw). `seeding` is the calendar date
 of grid day 1, so day `d` is `seeding + (d - 1)`. No observed data is

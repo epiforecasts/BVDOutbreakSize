@@ -10,6 +10,10 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.13.0
 
+Every change below is textual: prose, comments, docstrings, plot rendering
+or repository housekeeping.
+No model, prior, computation or data changed.
+
 ### Corrections
 
 - The analysis prose stated the confirmation-process sensitivity prior as
@@ -29,8 +33,9 @@ Changes since v1.13.0
   agree. This changes what the three plots draw, not any estimate.
 - `docs/src/contributing.md` documented an abstract-marker mechanism
   (`<!-- ABSTRACT:START/END -->`) that does not exist in `README.md` (the
-  real marker is `<!-- SHARED:END -->`), six submodel and composer function
-  names that do not exist in `src/`, and a surveillance dispersion prior of
+  real marker is `<!-- SHARED:END -->`), eleven integrator, submodel and
+  composer function names that do not exist in `src/`, two integration
+  constants that do not exist either, and a surveillance dispersion prior of
   `truncated(Normal(0, 1); lower = 0)` where the code uses
   `truncated(Normal(0.6, 0.2); lower = 0)`. Rewrote the repository layout,
   running-and-testing and model-architecture sections against the current
@@ -42,8 +47,12 @@ Changes since v1.13.0
   prose rules: one sentence per line, shorter sentences, no run-ons, no
   restated points, no development history, and no code identifiers inside
   narrative prose.
-- Removed emphasis-caps and issue/PR references from `src/`, `test/` and
-  the report pages; that history now lives here instead.
+- Removed emphasis-caps and issue and pull request references from `src/`,
+  `test/`, `scripts/` and the report pages. That history now lives here
+  instead.
+- Added a carve-out to the no-issue-numbers rule in `contributing.md`. An
+  issue number may stay where it is the provenance record for a still-open
+  decision, rather than an account of what changed.
 
 ### Repository
 
@@ -55,10 +64,11 @@ Changes since v1.13.0
 - Removed eight unused one-off scripts. `scripts/Project.toml` gained a
   missing `Base64` dependency, and `scripts/README.md` now documents which
   Julia project each script needs.
-- Removed the `notes/` folder; its remaining open items are filed as
-  issues #544-#549.
+- Removed the `notes/` folder, including the prose style guide the rules
+  were derived from, which now lives in `contributing.md`. Its remaining
+  open items are filed as issues #544 to #549.
 - Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
-  `scripts/README.md`.
+  `scripts/README.md`, so a session starts with the rules in context.
 
 ## v1.13.0
 
