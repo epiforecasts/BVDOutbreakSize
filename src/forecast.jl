@@ -69,7 +69,7 @@ end
 ## the chain does not carry the walk and generation-interval parameters, so
 ## the caller can fall back to the constant rate. Single-stream fits carry
 ## the walk and generation interval but not the cut-off `R_T` (the joint
-## alone exposes it un-prefixed); pass their reconstructed `R_T` draws as
+## alone exposes it un-prefixed). Pass their reconstructed `R_T` draws as
 ## `R_T` so they take the same evolving path as the joint.
 function _evolving_rates(chn, horizon::Integer;
         R_T::Union{Nothing, AbstractVector} = nothing)
@@ -335,7 +335,7 @@ function forecast_reported(chn;
                         _nb_rand(rng, k[i], _new_h(deaths_daily_obs[i]))
         ## New latent infections over the horizon, continuing the cut-off
         ## daily infections `I_T` forward. With the reproduction number
-        ## evolving the daily rate drifts across the horizon; otherwise it
+        ## evolving the daily rate drifts across the horizon. Otherwise it
         ## is the constant-rate geometric sum. Latent, so carries parameter
         ## (not observation) uncertainty across draws.
         infections_new[i] = _new_h(infections_T[i])
@@ -353,8 +353,8 @@ function forecast_reported(chn;
         end
         ## Projected bed demand (need under unconstrained supply) and the
         ## supply-limited occupancy it produces against the bed capacity, plus
-        ## cumulative recovered. The demand replicate carries the dispersion;
-        ## the occupancy is that same replicate capped at the capacity,
+        ## cumulative recovered. The demand replicate carries the dispersion.
+        ## The occupancy is that same replicate capped at the capacity,
         ## `min(demand, C)`, matching the fitted occupancy and the censored
         ## likelihood, so per draw the occupancy never exceeds the demand or
         ## the capacity.
@@ -529,12 +529,12 @@ end
 Validate a [`forecast_reported`](@ref) projection against the counts that
 were later observed. `observed` is a `NamedTuple` mapping each stream's
 cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
-cumulative count at the forecast target date; `baseline` maps the same
+cumulative count at the forecast target date. `baseline` maps the same
 columns to the cumulative count at the forecast origin (default `0`). A
 stream is scored only when its cumulative column is in the forecast and a key
 for it is in `observed`. The scored streams are the reported cases, suspected
-deaths, laboratory-confirmed cases, confirmed deaths and recovered — the same
-set [`plot_forecast_vs_truth`](@ref) draws — so the call site can pass the
+deaths, laboratory-confirmed cases, confirmed deaths and recovered (the same
+set [`plot_forecast_vs_truth`](@ref) draws), so the call site can pass the
 same `observed`/`baseline` NamedTuples it builds for the plot.
 
 Each scored stream gets two rows, mirroring the plot's two panels and the
@@ -657,7 +657,7 @@ end
 ## is spelled out per stream rather than derived by munging the stream name.
 ##
 ## - `expected`: the stream's cut-off expected count. The nested name comes
-##   first because both fit kinds carry it; the un-prefixed joint alias is
+##   first because both fit kinds carry it. The un-prefixed joint alias is
 ##   the fallback. The names differ in whether they carry a `_T` suffix
 ##   (`deaths_state.expected_deaths_T` and `exports_state.expected_exports_T`
 ##   do, `cases_state.expected_reports` does not). `:confirmed_cases` is the
@@ -674,7 +674,7 @@ end
 ##   per-stream aliases (`k_cases`, `isolation_dispersion`, …), since
 ##   `pooled_dispersion_model` returns its pooled `k` vector rather than
 ##   `:=`-exposing it and `treatment_flow_model` skips its own dispersion
-##   when the joint injects `k_external`; the single-stream fits carry only
+##   when the joint injects `k_external`. The single-stream fits carry only
 ##   the nested scalar they sample. The joint alias is listed first so a
 ##   pooled vector could never be reached ahead of a stream's scalar, and
 ##   `forecast_stream` guards on the resolved length as a backstop. The
@@ -683,14 +683,14 @@ end
 ##   preserved rather than harmonised.
 ## - `trajectory`: the stream's cumulative trajectory, whose last increment
 ##   is the cut-off daily rate. Only the joint exposes any (as un-prefixed
-##   `:=` aliases); an empty list means the daily rate is always inferred
+##   `:=` aliases). An empty list means the daily rate is always inferred
 ##   from the cut-off cumulative instead.
 ## - `kind`: `:cumulative` streams report a total accrued to the cut-off, so
 ##   the forecast is the new count over the horizon. `:level` streams report
 ##   a prevalence, so the forecast is the level at the horizon.
 ## - `noise`: the observation model the replicate is drawn through.
-##   Exports are Poisson ([`exports_model`](@ref)) and carry no dispersion;
-##   every other stream is negative-binomial.
+##   Exports are Poisson ([`exports_model`](@ref)) and carry no dispersion.
+##   Every other stream is negative-binomial.
 const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
     :reported_cases => (
         expected = [Symbol("cases_state.expected_reports"),
@@ -741,8 +741,8 @@ const _STREAM_SPEC = Dict{Symbol, NamedTuple}(
 ## The capacity is instead recovered from the two deterministics the
 ## submodel does expose, `expected_isolation := safe_rate(occ_T)` and
 ## `bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)`. Their ratio is
-## `safe_rate(C_T)` exactly — the occupancy cancels, including its
-## [`safe_rate`](@ref) flooring — so this recovers the same quantity the
+## `safe_rate(C_T)` exactly (the occupancy cancels, including its
+## [`safe_rate`](@ref) flooring), so this recovers the same quantity the
 ## joint aliases rather than approximating it, and needs none of the
 ## walk-reconstruction machinery `reconstruct_rt` needs for `R_t`.
 ##
@@ -768,7 +768,7 @@ function _bed_capacity(chn)
 end
 
 ## Cut-off reproduction-number draws. The joint exposes `R_T :=
-## infection_state.Rt[n]`; single-stream composers do not (the alias lives
+## infection_state.Rt[n]`. Single-stream composers do not (the alias lives
 ## in `bvd_joint`, not in the shared `_latent` submodel), so `R_T` is
 ## rebuilt from the walk parameters every chain carries. That needs the grid
 ## length `n` and the intervention `breakpoint`, which are data rather than
@@ -789,12 +789,12 @@ function _cutoff_rt(chn; n, breakpoint, rt_start, rt_walk_start)
     return Float64[rt[i, n] for i in axes(rt, 1)]
 end
 
-## Cut-off growth-rate draws. The joint exposes `r := infection_state.r`;
-## single-stream fits do not, so it is derived the way
-## [`infection_model`](@ref) itself derives it — forward Euler–Lotka from
+## Cut-off growth-rate draws. The joint exposes `r := infection_state.r`.
+## Single-stream fits do not, so it is derived the way
+## [`infection_model`](@ref) itself derives it: forward Euler–Lotka from
 ## the cut-off reproduction number through the draw's own generation
 ## interval, which keeps `r < 0` exactly when `R_T < 1`. The chain's
-## `growth_state.r` is NOT this quantity: that is the cryptic clock rate the
+## `growth_state.r` is not this quantity: that is the cryptic clock rate the
 ## joint exposes as `r0`, which is the early growth of the seeded phase
 ## rather than the growth at the cut-off.
 ##
@@ -815,8 +815,8 @@ function _cutoff_r(chn, R_T)
 end
 
 ## Total outbreak-age draws at the cut-off. The joint exposes `T :=
-## infection_state.T`; single-stream fits carry only `growth_state.T`, the
-## CRYPTIC duration, to which [`infection_model`](@ref) adds the observed
+## infection_state.T`. Single-stream fits carry only `growth_state.T`, the
+## cryptic duration, to which [`infection_model`](@ref) adds the observed
 ## span `n - rt_start` to reach the total. Falls back to an infinite age
 ## (the `_approx_daily` limit) when neither is recoverable, matching
 ## [`forecast_reported`](@ref).
@@ -830,7 +830,7 @@ end
 """
     forecast_stream(chn, stream; horizon, obs_value, n, breakpoint) -> Vector
 
-Posterior-predictive forecast of a SINGLE observed stream from either a
+Posterior-predictive forecast of a single observed stream from either a
 single-stream fit or the joint, returning one replicate per draw. Where
 [`forecast_reported`](@ref) projects every stream the joint carries at once,
 this projects one named stream and resolves its chain keys for both fit
@@ -839,9 +839,9 @@ dataset against the joint and against a baseline.
 
 `stream` is one of `:reported_cases`, `:suspected_deaths`,
 `:confirmed_cases`, `:confirmed_deaths`, `:isolation_beds` and `:exports`.
-The incident streams (everything but `:isolation_beds`) return the NEW count
-accrued over the horizon, matching [`forecast_archive`](@ref)'s convention;
-`:isolation_beds` returns the supply-limited occupancy LEVEL at the horizon
+The incident streams (everything but `:isolation_beds`) return the new count
+accrued over the horizon, matching [`forecast_archive`](@ref)'s convention.
+`:isolation_beds` returns the supply-limited occupancy level at the horizon
 (the projected demand replicate capped at the bed capacity, `min(demand, C)`,
 as the fitted occupancy is).
 
@@ -854,11 +854,11 @@ it anchors the reported quantity rather than changing it.
 
 The reproduction number keeps evolving over the horizon exactly as in
 [`forecast_reported`](@ref). The joint carries the cut-off `R_T`, `r` and `T`
-as un-prefixed deterministics; a single-stream fit carries none of them, so
+as un-prefixed deterministics. A single-stream fit carries none of them, so
 they are rebuilt from the reproduction-number walk ([`reconstruct_rt`](@ref))
 and the generation interval, which every chain does carry. That needs the
-grid length `n` and the intervention `breakpoint` — data rather than chain
-contents. Pass both for a single-stream chain (with `rt_start` /
+grid length `n` and the intervention `breakpoint` (data rather than chain
+contents). Pass both for a single-stream chain (with `rt_start` /
 `rt_walk_start` if the fit used non-default ones); without them a
 single-stream chain cannot be projected and an error says so. They are
 unnecessary for the joint, which is read directly.
@@ -912,8 +912,8 @@ function forecast_stream(chn, stream::Symbol;
             ")."))
         ## The joint's nested `dispersion_state.k` is the pooled six-element
         ## vector, so a flattened resolution would silently mismatch the
-        ## draws. Every candidate above should be per-draw scalar; fail loudly
-        ## if one is not rather than replicating against the wrong `k`.
+        ## draws. Every candidate above should be per-draw scalar. Fail
+        ## loudly if one is not, rather than replicating against the wrong `k`.
         length(k) == nd || throw(ArgumentError(
             "forecast_stream: dispersion for `:$stream` resolved to " *
             "$(length(k)) values for $nd draws; expected a scalar per draw."))
@@ -945,7 +945,7 @@ function forecast_stream(chn, stream::Symbol;
         return out
     end
 
-    ## Cumulative: project the NEW count the stream adds over the horizon
+    ## Cumulative: project the new count the stream adds over the horizon
     ## from its cut-off daily rate. That rate is the last increment of the
     ## stream's cumulative trajectory when the chain carries it, otherwise
     ## inferred from the cut-off cumulative under exponential growth over the

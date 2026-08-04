@@ -872,7 +872,8 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     ## binned from `early_start`.
     if isempty(lab_history.counts)
         ed = Int[Int(d) for d in cdays[2:end]]
-        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1]) for i in 2:length(ccounts)]
+        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1])
+                  for i in 2:length(ccounts)]
         return (; obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = ed, early_increments = inc,
             early_start, late_days = Int[], late_increments = Int[],
@@ -1077,8 +1078,8 @@ analysis.
 
 The observed-window positives are conditioned on the observed analysed
 denominator, so the Binomial conditioning that removes the multiplicative
-ascertainment ridge is preserved; only the early and unanchored late windows use the
-modelled analysed volume as the denominator.
+ascertainment ridge is preserved; only the early and unanchored late
+windows use the modelled analysed volume as the denominator.
 
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
@@ -1156,9 +1157,10 @@ quantities.
                  clamp(Int(lab_history.days[1]), 1, n) : 1)
 
     ## Analysed-specimen volume: the suspected pipeline carried through the
-    ## report-to-analysed delay and thinned by the tested fraction, fit to the
-    ## analysed series and reused as the denominator in the early and unanchored late
-    ## windows below. `bg_daily` is the per-day non-BVD background.
+    ## report-to-analysed delay and thinned by the tested fraction, fit to
+    ## the analysed series and reused as the denominator in the early and
+    ## unanchored late windows below. `bg_daily` is the per-day non-BVD
+    ## background.
     receipt_state ~ to_submodel(receipt)
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
     analysed_daily = τ_test .* convolve_delay(suspected_daily,
@@ -1559,7 +1561,7 @@ rate and the daily at-risk prevalence for reuse by
         expected_exports_T := safe_rate(pre + sum(μ_day))
     end
 
-    ## Travel-scaled at-risk prevalence WITHOUT the export-case ascertainment
+    ## Travel-scaled at-risk prevalence without the export-case ascertainment
     ## `p_uganda`: a death among an exported case would be reported whether or
     ## not the case itself was ascertained as an import, so the export-death
     ## model accrues over the travelled person-time `q · prevalence`, not the
@@ -1572,8 +1574,8 @@ end
 
 """
 Deaths-among-exported-cases likelihood, dated per-day. Deaths accrue among
-the TRAVELLED at-risk person-time `q · prevalence` from
-[`exports_model`](@ref), BEFORE the export-case ascertainment `p_uganda`: a
+the travelled at-risk person-time `q · prevalence` from
+[`exports_model`](@ref), before the export-case ascertainment `p_uganda`: a
 death among an exported case would be reported whether or not the case was
 ascertained as an import, so the death model is not thinned by `p_uganda`
 (unlike the export-case count). The day-`t` expected export-death increment
@@ -1686,7 +1688,7 @@ positivity and the expected confirmed-death count.
         ## confirmed-death cumulative by +236 against a printed 24h count of
         ## +62, and this stream fits between-vintage increments too, so the
         ## backlog would otherwise be read as one day of confirmed deaths.
-        ## Empty (the default) → no-op. See issue #484.
+        ## Empty (the default) is a no-op.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
         ## As on the cases path: the residual uncertainty around the published
@@ -1751,7 +1753,8 @@ positivity and the expected confirmed-death count.
             ## stay a subset of suspected and the realised τ_death ≤ 1.
             min(v, susp_death[t])
         end
-        τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
+        τ_death = susp_death[n] > lo ?
+                  death_volume[n] / susp_death[n] : zero(sc)
     else
         test_state ~ to_submodel(testing)
         τ_death = test_state.τ_death
@@ -1937,7 +1940,8 @@ function clinical_stay_survival(death_pmf::AbstractVector,
     cum = zero(T)
     @inbounds for d in 1:L
         pd = d <= length(death_pmf) ? death_pmf[d] : zero(eltype(death_pmf))
-        pr = d <= length(recover_pmf) ? recover_pmf[d] : zero(eltype(recover_pmf))
+        pr = d <= length(recover_pmf) ? recover_pmf[d] :
+             zero(eltype(recover_pmf))
         cum += cfr * pd + (one_T - cfr) * pr
         S[d] = one_T - cum
     end
@@ -1956,24 +1960,26 @@ O_\\text{conf}(t) = \\sum_{u \\le t} A_\\text{bvd}(u)\\,
     \\text{CDF}_\\text{conf}(u, t)\\, S_\\text{clin}(t - u),
 ```
 
-a product of two clocks running from admission. The confirmation clock is the
-per-cohort cumulative confirmation probability under the time-varying daily
-hazard `conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab pipeline, with
-exposure from the day after admission:
+a product of two clocks running from admission. The confirmation clock is
+the per-cohort cumulative confirmation probability under the time-varying
+daily hazard `conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab
+pipeline, with exposure from the day after admission:
 
 ```math
 \\text{CDF}_\\text{conf}(u, t) = 1 - \\prod_{j = u+1}^{t}\\bigl(1 -
     \\text{conf\\_hazard}(j)\\bigr),
 ```
 
-so a just-admitted cohort (`u = t`) has `CDF_conf = 0`. The clinical clock is
-the BVD stay survival `S_clin(d) = P(stay > d)` ([`clinical_stay_survival`](@ref)),
-so `Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)` reconstructs the abscond-free BVD stock.
-The confirmed-and-present cohort is a subset of the present cohort, so
-`O_conf ≤ O_bvd` holds by construction, without the proportional split's
-mean-field approximation: a true case that dies before its test returns is never
-counted as confirmed. Returns the length-`n` confirmed-in-care sub-stock; the
-caller forms the suspect sub-stock as the demand remainder `D − O_conf`.
+so a just-admitted cohort (`u = t`) has `CDF_conf = 0`. The clinical clock
+is the BVD stay survival `S_clin(d) = P(stay > d)`
+([`clinical_stay_survival`](@ref)), so
+`Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)` reconstructs the abscond-free BVD
+stock. The confirmed-and-present cohort is a subset of the present
+cohort, so `O_conf ≤ O_bvd` holds by construction, without the
+proportional split's mean-field approximation: a true case that dies
+before its test returns is never counted as confirmed. Returns the
+length-`n` confirmed-in-care sub-stock; the caller forms the suspect
+sub-stock as the demand remainder `D − O_conf`.
 """
 function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
         S_clin::AbstractVector)
@@ -2055,11 +2061,12 @@ convolution. The "Patients en isolement" figure is the daily occupied-bed
 count, fitted as latent bed demand right-censored at the implied-capacity
 bound.
 
-Admissions are the reported suspects ([`reported_cases_model`](@ref)) carried
-through a short suspected→admission delay and split into a BVD true-case inflow
-`A_bvd = p_iso_bvd · p_drc · bvd_reports` at the severity-skewed rate `p_iso_bvd`
-([`isolation_severity_model`](@ref)) and a non-BVD inflow `A_bg = p_iso ·
-bg_daily` at the base rate ([`isolation_admission_model`](@ref)).
+Admissions are the reported suspects ([`reported_cases_model`](@ref))
+carried through a short suspected→admission delay and split into a BVD
+true-case inflow `A_bvd = p_iso_bvd · p_drc · bvd_reports` at the
+severity-skewed rate `p_iso_bvd` ([`isolation_severity_model`](@ref)) and
+a non-BVD inflow `A_bg = p_iso · bg_daily` at the base rate
+([`isolation_admission_model`](@ref)).
 
 The clinical layer sets the total occupancy and discharge flows and is
 label-independent, so a true case can die before confirmation. A BVD true case
@@ -2079,33 +2086,37 @@ confirmation. The in-care fatality `CFR_iso = logistic(logit(CFR) + β_iso)`
 adjusts the infection CFR to the admitted population by a sampled modifier
 `β_iso`; it is conditional on admission, not a causal treatment effect.
 
-A label overlay carves the occupied stock into confirmed and suspect sub-stocks
-without removing anyone from the total. Confirmation relabels an occupied true
-case at the daily hazard `ρ · τ_test · p_pos`, the community hazard
-`τ_test · p_pos` borrowed from the lab pipeline ([`confirmed_cases_model`](@ref))
-scaled by a sampled in-care modifier `ρ = exp(γ_conf)`. In-care confirmation
-runs slower than the community rate (`ρ < 1`), the confirmed/suspect census
-identifying the modifier. The confirmed sub-stock is the confirmed subset of the
-occupied BVD stock and the suspect sub-stock the remainder
-`O_susp(t) = D(t) − O_conf(t)`, so a case that dies before confirmation is a
-suspect death in the combined deaths flow.
+A label overlay carves the occupied stock into confirmed and suspect
+sub-stocks without removing anyone from the total. Confirmation relabels
+an occupied true case at the daily hazard `ρ · τ_test · p_pos`, the
+community hazard `τ_test · p_pos` borrowed from the lab pipeline
+([`confirmed_cases_model`](@ref)) scaled by a sampled in-care modifier
+`ρ = exp(γ_conf)`. In-care confirmation runs slower than the community
+rate (`ρ < 1`), the confirmed/suspect census identifying the modifier.
+The confirmed sub-stock is the confirmed subset of the occupied BVD
+stock and the suspect sub-stock the remainder
+`O_susp(t) = D(t) − O_conf(t)`, so a case that dies before confirmation
+is a suspect death in the combined deaths flow.
 
-Capacity enters only as a fixed, data-derived censoring bound; the latent demand
-is uncapped. The occupancy likelihood is a NegativeBinomial around the demand,
-right-censored at the recorded implied-capacity series ([`censoring_cap`](@ref),
-[`censored_occupancy_model`](@ref)); admissions are censored at the recorded
-free-bed headroom `C_fix(t) − occupancy(t-1)`. The capacity walk `C(t)`
-([`bed_capacity_walk_model`](@ref)) carries the implied-capacity likelihood, and
-unmet demand `D(t) − censored occupancy` is a returned diagnostic.
+Capacity enters only as a fixed, data-derived censoring bound; the
+latent demand is uncapped. The occupancy likelihood is a
+NegativeBinomial around the demand, right-censored at the recorded
+implied-capacity series ([`censoring_cap`](@ref),
+[`censored_occupancy_model`](@ref)); admissions are censored at the
+recorded free-bed headroom `C_fix(t) − occupancy(t-1)`. The capacity
+walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries the
+implied-capacity likelihood, and unmet demand
+`D(t) − censored occupancy` is a returned diagnostic.
 
-The daily in-care outcome flows (deaths, rule-outs, admissions, absconds) are
-each an optional NegativeBinomial stream scored against the Tableau 6
-patient-movement counts, a no-op when their history is empty. The two sub-stocks
-are scored against the Tableau 6 census breakdown (`dont confirmés` / `dont
-suspects`) where published, in place of the total on those days. An opt-in
-occupancy offset Δ(t) on the supplied `occupancy_break_days`
-([`cumulative_occupancy_offset`](@ref)) absorbs a between-report measurement-basis
-discontinuity in the isolation series; empty (the default) is a no-op.
+The daily in-care outcome flows (deaths, rule-outs, admissions,
+absconds) are each an optional NegativeBinomial stream scored against
+the Tableau 6 patient-movement counts, a no-op when their history is
+empty. The two sub-stocks are scored against the Tableau 6 census
+breakdown (`dont confirmés` / `dont suspects`) where published, in place
+of the total on those days. An opt-in occupancy offset Δ(t) on the
+supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
+absorbs a between-report measurement-basis discontinuity in the
+isolation series; empty (the default) is a no-op.
 
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
 BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
@@ -2129,10 +2140,11 @@ series for forecasting and replication.
         ## default, leaving the total-occupancy likelihood alone.
         confirmed_incare_history = (; days = Int[], counts = Int[]),
         suspect_incare_history = (; days = Int[], counts = Int[]),
-        ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from the
-        ## lab pipeline ([`confirmed_cases_model`](@ref)). `nothing` (standalone,
-        ## no lab stream) gives a zero hazard, so the confirmed sub-stock stays
-        ## empty and the suspect sub-stock carries the whole occupancy.
+        ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from
+        ## the lab pipeline ([`confirmed_cases_model`](@ref)). `nothing`
+        ## (standalone, no lab stream) gives a zero hazard, so the confirmed
+        ## sub-stock stays empty and the suspect sub-stock carries the whole
+        ## occupancy.
         conf_hazard_daily::Union{Nothing, AbstractVector} = nothing,
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
@@ -2147,7 +2159,8 @@ series for forecasting and replication.
         abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
         ## In-care confirmation-rate modifier prior (log scale): γ_conf scales
         ## the borrowed community hazard to the effective in-care rate
-        ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the split.
+        ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the
+        ## split.
         incare_confirm_log_prior = Normal(0.0, 0.5),
         ## Short suspected→admission delay (report → reaching a bed: triage,
         ## transport, bed-wait), distinct from the report→lab receipt delay.
@@ -2194,12 +2207,13 @@ series for forecasting and replication.
     n = length(bvd_reports_daily)
     ## In-care fatality CFR_iso = logistic(logit(CFR) + β_iso): a log-odds
     ## modifier on the infection CFR, identified by the in-care death flow
-    ## (Tableau 6 décédés) relative to admissions and occupancy. β_iso < 0 means
-    ## treatment lowers the in-care fatality below the infection CFR. This is a
-    ## conditional-on-admission (in-care) fatality, not a causal treatment
-    ## effect. The recovered-among-confirmed ("cumul guéris") stream is modelled
-    ## separately off the confirmed cases ([`recovered_model`](@ref)) — guéris is
-    ## the confirmed-and-discharged subset, not all in-care recoveries.
+    ## (Tableau 6 décédés) relative to admissions and occupancy. β_iso < 0
+    ## means treatment lowers the in-care fatality below the infection CFR.
+    ## This is a conditional-on-admission (in-care) fatality, not a causal
+    ## treatment effect. The recovered-among-confirmed ("cumul guéris")
+    ## stream is modelled separately off the confirmed cases
+    ## ([`recovered_model`](@ref)): guéris is the confirmed-and-discharged
+    ## subset, not all in-care recoveries.
     β_iso ~ cfr_modifier_prior
     CFR_iso = logistic(logit(CFR) + β_iso)
     ## Time-varying bed capacity `C(t)` (a random walk), started at the first
@@ -2274,14 +2288,16 @@ series for forecasting and replication.
         conf_hazard_daily
     end
 
-    ## The split census is identified only when the borrowed hazard is non-zero
-    ## (a lab stream supplies it). With a structural zero the confirmed sub-stock
-    ## is empty, so the split likelihood no-ops and those days stay on the total.
+    ## The split census is identified only when the borrowed hazard is
+    ## non-zero (a lab stream supplies it). With a structural zero the
+    ## confirmed sub-stock is empty, so the split likelihood no-ops and
+    ## those days stay on the total.
     split_active = any(>(zero(eltype(borrowed_hazard))), borrowed_hazard)
 
-    ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed hazard.
-    ## Sampled only when the hazard is non-zero, so no unidentified dimension is
-    ## added when the split is absent (matching the `k_external` pattern).
+    ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed
+    ## hazard. Sampled only when the hazard is non-zero, so no unidentified
+    ## dimension is added when the split is absent (matching the
+    ## `k_external` pattern).
     if split_active
         incare_confirm_log ~ incare_confirm_log_prior
     else
@@ -2298,19 +2314,20 @@ series for forecasting and replication.
     demand = acc.demand
     O_bvd = acc.O_bvd
 
-    ## Two-clock confirmed-in-care sub-stock: cohort-tracked confirmed-and-present
-    ## prevalence, exact in the fast-death tail where the running balance's
-    ## proportional drain is only mean-field. Demand and `O_bvd` stay as
-    ## `accumulate_occupancy` built them; `O_conf` (and `O_susp = D − O_conf`) is
-    ## replaced.
+    ## Two-clock confirmed-in-care sub-stock: cohort-tracked
+    ## confirmed-and-present prevalence, exact in the fast-death tail where
+    ## the running balance's proportional drain is only mean-field. Demand
+    ## and `O_bvd` stay as `accumulate_occupancy` built them; `O_conf` (and
+    ## `O_susp = D − O_conf`) is replaced.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
-    ## `O_conf ≤ O_bvd` holds by construction; clamp into `[0, O_bvd]` as a guard
-    ## under any prior draw. The suspect sub-stock is the demand remainder.
+    ## `O_conf ≤ O_bvd` holds by construction; clamp into `[0, O_bvd]` as a
+    ## guard under any prior draw. The suspect sub-stock is the demand
+    ## remainder.
     O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
     O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
-    ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`; day 1
-    ## has no prior stock.
+    ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`;
+    ## day 1 has no prior stock.
     abscond_daily = [t == 1 ? zero(eltype(demand)) : κ * O_susp[t - 1]
                      for t in 1:n]
     if eltype(demand) === Any
@@ -2480,7 +2497,7 @@ end
 
 """
 DRC recovered-among-confirmed likelihood ("cumul guéris"), an incidence
-(scaled-convolution) stream — the renewal analogue of the convolution-and-
+(scaled-convolution) stream: the renewal analogue of the convolution-and-
 scaling secondary-observation model of EpiNow2 [epinow2](@cite). Recoveries
 are the survivors among laboratory-confirmed cases: the modelled daily
 confirmed-case incidence `confirmed_daily` (from
@@ -2498,16 +2515,16 @@ The recovery fraction `p_recover` is grounded on the case-fatality ratio
 `CFR` (a recovered case is one that did not die), adjusted for the confirmed
 population by a sampled log-odds offset (see
 [`recovery_probability_model`](@ref)). A case is taken to be confirmed
-BEFORE it is recorded as recovered: the report's "cumul guéris" counts
+before it is recorded as recovered: the report's "cumul guéris" counts
 recoveries among confirmed cases, so the recovery follows confirmation by
 the confirmation-to-recovery delay. In principle a positive result could
-return after a patient has already recovered and been discharged, but we
-assume the reported total reflects confirmed cases carefully recorded as
-recovered, so the confirmation-then-recovery ordering holds.
+return after a patient has already recovered and been discharged; the
+reported total is assumed to reflect confirmed cases carefully recorded
+as recovered, so the confirmation-then-recovery ordering holds.
 
 The cumulative recovered series ends at the cut-off, so its between-vintage
 increments are fitted as observed `~` data with a NegativeBinomial whose
-dispersion is sampled here, NOT shared with the other streams (the recovered
+dispersion is sampled here, not shared with the other streams (the recovered
 signal has its own observation noise). The convolution right-censors
 recoveries that have not yet resolved by the cut-off, so a small observed
 recovered count is consistent with a high eventual survival fraction and a

@@ -257,12 +257,12 @@ end
     @test acc_d.demand[end] < acc_d.demand[peak]
 end
 
-@testitem "clinical_stay_survival: discharge-complement matches the stock balance" begin
+@testitem "clinical_stay_survival: complement matches stock balance" begin
     using BVDOutbreakSize: clinical_stay_survival, accumulate_occupancy,
                            convolve_delay
     ## The clinical-stay survival is the complement of the mixed discharge CDF,
-    ## `S_clin(d) = 1 − Σ_{j≤d}(CFR·death_pmf + (1−CFR)·recover_pmf)`. With no
-    ## same-day discharge it starts at 1 and is non-increasing toward 0.
+    ## `S_clin(d) = 1 − Σ_{j≤d}(CFR·death_pmf + (1−CFR)·recover_pmf)`.
+    ## With no same-day discharge it starts at 1, non-increasing toward 0.
     death_pmf = [0.0, 0.30, 0.35, 0.20, 0.10, 0.05]
     recover_pmf = vcat(zeros(8), [0.15, 0.25, 0.30, 0.20, 0.10])
     CFR = 0.45
@@ -284,7 +284,8 @@ end
     deaths = convolve_delay(CFR .* A_bvd, death_pmf)
     recover = convolve_delay((1 - CFR) .* A_bvd, recover_pmf)
     ruleout = convolve_delay(A_bg, [0.0, 0.3, 0.4, 0.3])
-    ## No absconds → the BVD stock is exactly the cohort survival reconstruction.
+    ## No absconds → the BVD stock is exactly the cohort survival
+    ## reconstruction.
     acc0 = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.0,
         fill(0.3, n))
     @test all(abs.(acc0.O_bvd .- convolve_delay(A_bvd, S)) .< 1e-8)
@@ -308,9 +309,9 @@ end
     conf_hazard = [d < 8 ? 0.05 : 0.30 for d in 1:n]
 
     ## Zero abscond: the raw cohort confirmed stock is a strict subset of the
-    ## occupied BVD stock everywhere, no clamp needed — the two clocks are both
-    ## referenced to admission, so the confirmed-and-present cohort can never
-    ## exceed the present cohort.
+    ## occupied BVD stock everywhere, no clamp needed. The two clocks are
+    ## both referenced to admission, so the confirmed-and-present cohort can
+    ## never exceed the present cohort.
     acc0 = accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, 0.0,
         conf_hazard)
     raw0 = two_clock_confirmed(A_bvd, conf_hazard, S)
@@ -337,9 +338,10 @@ end
 
     ## Fast-death tail: against the proportional-share split, the two-clock
     ## confirmed share is lower early because cases that die before confirming
-    ## are excluded from the confirmed pool (the comparator's whole point). The
-    ## proportional split drains the confirmed pool at the pool-average discharge
-    ## rate, over-attributing confirmed deaths in the early fast-death window.
+    ## are excluded from the confirmed pool (the comparator's whole point).
+    ## The proportional split drains the confirmed pool at the pool-average
+    ## discharge rate, over-attributing confirmed deaths in the early
+    ## fast-death window.
     O_conf_prop = acc0.O_conf
     O_bvd = acc0.O_bvd
     early = 3:12
@@ -394,7 +396,7 @@ end
     @test any(O_susp[i] < st.demand[i] - 1e-9 for i in 1:n)
 end
 
-@testitem "admission_headroom: fixed bound above obs, never on the boundary" begin
+@testitem "admission_headroom: bound above obs, never on the boundary" begin
     using BVDOutbreakSize: admission_headroom
     ## Capacity 400 with previous-day occupancy 260 leaves 140 free beds; a
     ## slack admission count is censored at the headroom, a saturated count is
@@ -406,8 +408,8 @@ end
     adm_obs = [50, 300]
     head = admission_headroom(adm_days, adm_obs, capacity_history,
         isolation_history)
-    @test head[1] ≈ 410 - 260            # day 10: capacity 410 less prev occ 260
-    @test head[2] > adm_obs[2]           # day 11: saturated, strictly above obs
+    @test head[1] ≈ 410 - 260         # day 10: capacity 410 less prev occ 260
+    @test head[2] > adm_obs[2]        # day 11: saturated, strictly above obs
     @test all(head .> adm_obs .- 1e-9)
     ## No capacity record gives a large no-op headroom.
     nocap = admission_headroom([10], [50], (; days = Int[], counts = Int[]),
@@ -415,7 +417,9 @@ end
     @test only(nocap) > 1.0e5
 end
 
-@testitem "occupancy split: sub-stock parameters sampled, fit stays positive" tags=[:slow] begin
+@testitem "occupancy split: sub-stock parameters sampled, stays positive" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: treatment_only_model
@@ -448,9 +452,10 @@ end
     @test any(k -> occursin("occupancy_break", k), ks)
     @test !any(k -> occursin("total_break", k), ks)
     @test any(k -> occursin("abscond_frac", k), ks)
-    ## With a non-zero borrowed hazard the in-care confirmation-rate modifier is
-    ## sampled (its log parameter) and exposed as a finite positive deterministic
-    ## ρ, the free lever the confirmed/suspected-in-care split identifies.
+    ## With a non-zero borrowed hazard the in-care confirmation-rate modifier
+    ## is sampled (its log parameter) and exposed as a finite positive
+    ## deterministic ρ, the free lever the confirmed/suspected-in-care split
+    ## identifies.
     @test any(k -> occursin("incare_confirm_log", k), ks)
     ρ_key = first(k for k in keys(chn)
     if occursin("incare_confirm_modifier", string(k)))
@@ -468,18 +473,20 @@ end
     @test all(ab .>= 0)
 end
 
-@testitem "occupancy split: predictive path samples the sub-stock censuses" tags=[:slow] begin
+@testitem "occupancy split: predictive path samples sub-stock censuses" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: treatment_only_model
 
-    ## Days but no counts on the split histories: the two sub-stock censuses are
-    ## predictive generators, so their per-day increments are sampled under the
-    ## `confirmed_incare_obs` / `suspect_incare_obs` submodels. The split is only
-    ## identified when the in-care confirmation overlay is non-zero, so the lab /
-    ## confirmed stream is conditioned to supply the hazard (the coherent
-    ## config); without it the split would be unscored (the guarded path is
-    ## covered separately below).
+    ## Days but no counts on the split histories: the two sub-stock censuses
+    ## are predictive generators, so their per-day increments are sampled
+    ## under the `confirmed_incare_obs` / `suspect_incare_obs` submodels. The
+    ## split is only identified when the in-care confirmation overlay is
+    ## non-zero, so the lab/confirmed stream is conditioned to supply the
+    ## hazard (the coherent config); without it the split would be unscored
+    ## (the guarded path is covered separately below).
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     confirmed_history = (; days = [28, 30, 32], counts = [40, 70, 110])
@@ -503,9 +510,10 @@ end
     import FlexiChains
     using BVDOutbreakSize: treatment_only_model
 
-    ## With no split history the two sub-stock census likelihoods score nothing
-    ## (no days → no scored or sampled increments), so no split-observation keys
-    ## appear, while the total-occupancy backbone still runs.
+    ## With no split history the two sub-stock census likelihoods score
+    ## nothing (no days → no scored or sampled increments), so no
+    ## split-observation keys appear, while the total-occupancy backbone
+    ## still runs.
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     chn = sample(
@@ -520,19 +528,21 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "occupancy split: no lab data leaves the split unscored and finite" tags=[:slow] begin
+@testitem "occupancy split: no lab data leaves it unscored and finite" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: treatment_only_model
 
-    ## A published split census but no lab/confirmed data: the borrowed in-care
-    ## confirmation hazard `τ_test · p_pos` is then structurally zero, so the
-    ## modelled confirmed sub-stock is empty by construction. The split-census
-    ## likelihood must no-op (the split is identified only in the joint where the
-    ## lab pipeline exists) rather than score the observed confirmed-in-care
-    ## against a zero sub-stock and blow up. The fit must run and stay finite,
-    ## with no split-observation keys scored, and the split days fall back to the
-    ## total-occupancy backbone.
+    ## A published split census but no lab/confirmed data: the borrowed
+    ## in-care confirmation hazard `τ_test · p_pos` is then structurally
+    ## zero, so the modelled confirmed sub-stock is empty by construction.
+    ## The split-census likelihood must no-op (the split is identified only
+    ## in the joint where the lab pipeline exists) rather than score the
+    ## observed confirmed-in-care against a zero sub-stock and blow up. The
+    ## fit must run and stay finite, with no split-observation keys scored,
+    ## and the split days fall back to the total-occupancy backbone.
     isolation_history = (; days = [28, 29, 30, 31, 32, 33],
         counts = [206, 233, 258, 267, 283, 309])
     confirmed_incare = (; days = [31, 32, 33], counts = [120, 130, 140])
@@ -566,7 +576,7 @@ end
     @test all(dem .< 1.0e6)
 end
 
-@testitem "occupancy split: occupancy extends past the census end (no-flow days)" begin
+@testitem "occupancy split: occupancy outlasts the census (no-flow days)" begin
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity
     using Random: seed!
@@ -633,7 +643,7 @@ end
     end
 end
 
-@testitem "cumulative_occupancy_offset: steps accumulate from the break day" begin
+@testitem "cumulative_occupancy_offset: accumulates from the break day" begin
     using BVDOutbreakSize: cumulative_occupancy_offset
     iso_days = [10, 11, 12, 13, 14]
     ## Two manual break days: +5 from day 12, −3 from day 14. Δ is zero before

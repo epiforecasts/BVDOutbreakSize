@@ -78,9 +78,11 @@ function plot_cumulative_trajectories(chn;
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
         lo90 = [q(d, 0.05) for d in 1:n]
         hi90 = [q(d, 0.95) for d in 1:n]
-        lo50 = [q(d, 0.25) for d in 1:n]
-        hi50 = [q(d, 0.75) for d in 1:n]
-        return lo90, hi90, lo50, hi50
+        lo60 = [q(d, 0.20) for d in 1:n]
+        hi60 = [q(d, 0.80) for d in 1:n]
+        lo30 = [q(d, 0.35) for d in 1:n]
+        hi30 = [q(d, 0.65) for d in 1:n]
+        return lo90, hi90, lo60, hi60, lo30, hi30
     end
 
     rows = (
@@ -92,13 +94,14 @@ function plot_cumulative_trajectories(chn;
     fig = Figure(; size = (940, 1020))
     for (i, (key, name, colour)) in enumerate(rows)
         trajs = _trajectories(key)
-        lo90, hi90, lo50, hi50 = _ribbon(trajs)
+        lo90, hi90, lo60, hi60, lo30, hi30 = _ribbon(trajs)
         ax = Axis(fig[i, 1];
             xlabel = "Date", ylabel = "Cumulative $name",
             title = "Modelled cumulative $name over time",
             xticklabelrotation = pi / 6)
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
-        band!(ax, x, lo50, hi50; color = (colour, 0.30))
+        band!(ax, x, lo60, hi60; color = (colour, 0.28))
+        band!(ax, x, lo30, hi30; color = (colour, 0.42))
         loax = floor(Int, minimum(x))
         hiax = ceil(Int, maximum(x))
         ax.xticks = collect(loax:14:hiax)
@@ -119,7 +122,7 @@ end
 """
 Overlaid cumulative-infection trajectories, one per single-stream fit, each
 projected out to the cut-off on day `n` even when that stream's data stops
-earlier. Each stream is drawn as 50% and 90% credible ribbons only, no
+earlier. Each stream is drawn as 30%, 60% and 90% credible ribbons only, no
 median line, matching the ribbon style of [`plot_rt`](@ref) and
 [`plot_cumulative_trajectories`](@ref). A dotted vertical rule on each
 stream's colour marks the date that stream's data stops reporting, so the
@@ -151,12 +154,15 @@ function plot_stream_trajectories(streams::AbstractVector;
         q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
         lo90 = [q(d, 0.05) for d in 1:n]
         hi90 = [q(d, 0.95) for d in 1:n]
-        lo50 = [q(d, 0.25) for d in 1:n]
-        hi50 = [q(d, 0.75) for d in 1:n]
+        lo60 = [q(d, 0.20) for d in 1:n]
+        hi60 = [q(d, 0.80) for d in 1:n]
+        lo30 = [q(d, 0.35) for d in 1:n]
+        hi30 = [q(d, 0.65) for d in 1:n]
         ymax = max(ymax, maximum(hi90))
         colour = s.colour
         band!(ax, x, lo90, hi90; color = (colour, 0.12))
-        h = band!(ax, x, lo50, hi50; color = (colour, 0.30))
+        band!(ax, x, lo60, hi60; color = (colour, 0.28))
+        h = band!(ax, x, lo30, hi30; color = (colour, 0.42))
         push!(handles, h)
         push!(labels, s.label)
         ## Dotted rule in the stream's colour where its data stops reporting.
@@ -523,9 +529,9 @@ Posterior correlation heatmap over the named scalar quantities `params`
 (tracked deterministics or sampled parameters). Each cell is the Pearson
 correlation of two quantities' posterior draws, drawn on a symmetric
 red–blue scale with the value printed in the cell. Unlike the block-grouped
-[`plot_pair`](@ref) corners — which keep the infection, delay and
-surveillance parameters in separate plots — this surfaces the whole joint
-identifiability structure in one panel, including the CROSS-block
+[`plot_pair`](@ref) corners (which keep the infection, delay and
+surveillance parameters in separate plots), this surfaces the whole joint
+identifiability structure in one panel, including the cross-block
 degeneracies those corners split apart: the size–ascertainment seesaw
 (`C_T` vs `p_drc`), the weaker size–fatality tilt (`C_T` vs `CFR`), and the
 pooled `p_drc`–`p_uganda` link. `labels` maps a parameter symbol to a
@@ -561,14 +567,15 @@ function plot_correlation_heatmap(chn, params::AbstractVector{Symbol};
 end
 
 """
-Pairs plot of the per-stream modelled totals: a [`PairPlots`](https://sefffal.github.io/PairPlots.jl/)
-corner of the per-draw modelled stream totals (`modelled`, a `NamedTuple`
+Pairs plot of the per-stream modelled totals: a
+[`PairPlots`](https://sefffal.github.io/PairPlots.jl/) corner of the
+per-draw modelled stream totals (`modelled`, a `NamedTuple`
 of one per-draw vector per stream, each summed to that stream's own
 observed support) with the observed totals (`observed`, a `NamedTuple` of
 scalars) drawn as crosshair reference lines. The diagonals show how much
 predictive density sits above or below each observed value (the
 over/under-shoot), and the off-diagonals whether those shoots move together
-across draws — the posterior-predictive view of data-stream conflict, the
+across draws: the posterior-predictive view of data-stream conflict, the
 counterpart to the parameter-space [`plot_correlation_heatmap`](@ref).
 Returns the `Figure`.
 """
@@ -586,8 +593,8 @@ lo90, hi90)` tuples, one per published project release, drawn in blue.
 `renewal` is the same tuple shape, the current renewal model re-fit
 frozen at each release date, drawn in red: the current method evaluated
 at a past cut-off. Each release and each frozen re-fit is its own
-independent fit, so both are drawn as discrete per-date estimates — a
-median marker with nested 30/60/90% vertical interval bars — rather than
+independent fit, so both are drawn as discrete per-date estimates (a
+median marker with nested 30/60/90% vertical interval bars) rather than
 a connected ribbon. Marks sharing a date (an integral and a renewal
 release at one cut-off, or a release and its frozen re-fit) are dodged
 horizontally so each reads as a separate estimate.
@@ -1638,8 +1645,9 @@ non-centred Gaussian walk (`rt_state.log_R0` plus the cumulative sum of
 ([`sigmoid_ramp`](@ref)) centred at the outbreak-response `breakpoint`.
 
 The estimated window runs from `rt_start` (the renewal start, where the
-random walk begins) to the cut-off; only that period is drawn, the median
-with 50% and 90% ribbons, and
+random walk begins) to the cut-off.
+Only that period is drawn, as 30%, 60% and 90% credible ribbons with no
+median line, and
 about `n_traj` thinned sampled trajectories are overlaid thin and faint to
 show the per-draw spread. The intervention breakpoint, the end of the
 intervention scale-up (`breakpoint + ramp`) as a dotted rule, and the cut-off
@@ -1659,11 +1667,10 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     med = [q(d, 0.5) for d in 1:n]
     lo90 = [q(d, 0.05) for d in 1:n]
     hi90 = [q(d, 0.95) for d in 1:n]
-    lo50 = [q(d, 0.25) for d in 1:n]
-    hi50 = [q(d, 0.75) for d in 1:n]
+    lo60 = [q(d, 0.20) for d in 1:n]
+    hi60 = [q(d, 0.80) for d in 1:n]
     est = findall(!ismissing, med)
 
-    ## 30% inner band for the third credible level alongside the 50/90.
     lo30 = [q(d, 0.35) for d in 1:n]
     hi30 = [q(d, 0.65) for d in 1:n]
 
@@ -1694,7 +1701,7 @@ function plot_rt(chn; n::Integer, breakpoint::Real,
     ## 30/60/90% credible ribbons over the established window, no median line.
     band!(ax, xe, Float64[lo90[d] for d in est], Float64[hi90[d] for d in est];
         color = (:purple, 0.15))
-    band!(ax, xe, Float64[lo50[d] for d in est], Float64[hi50[d] for d in est];
+    band!(ax, xe, Float64[lo60[d] for d in est], Float64[hi60[d] for d in est];
         color = (:purple, 0.28))
     band!(ax, xe, Float64[lo30[d] for d in est], Float64[hi30[d] for d in est];
         color = (:purple, 0.42))

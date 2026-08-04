@@ -449,9 +449,8 @@ vintage_table #hide
 
 # ##### Seeding and growth
 #
-# We assume the outbreak started from a single seed case introduced by a
-# zoonotic spillover. The initial infection count $I_0$ on the last day of
-# the seeding window has a prior centred on a single seed:
+# We assume the outbreak started from a single seed case introduced by a zoonotic spillover.
+# The initial infection count $I_0$ on the last day of the seeding window has a prior centred on a single seed:
 #
 # ```math
 # I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
@@ -520,9 +519,7 @@ vintage_table #hide
 # This is because the sampled tree is almost entirely from Bunia.
 # Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
 #
-# We treat the TMRCA day as a right-censored, noisy reading of the total
-# outbreak age $T$ (the cryptic duration plus the observed window, defined
-# in the infection process below):
+# We treat the TMRCA day as a right-censored, noisy reading of the total outbreak age $T$ (the cryptic duration plus the observed window, defined in the infection process below):
 #
 # ```math
 # \text{tmrca}_{\text{days}} \sim
@@ -531,15 +528,11 @@ vintage_table #hide
 # \qquad \sigma = 15\ \text{d}. \tag{10}
 # ```
 #
-# The renewal starts on the grid day on which the renewal recursion begins
-# and sustained transmission is treated as established. We place it 14 days
-# after the genetic TMRCA day, past the molecular-clock uncertainty, so the
-# observed window from the renewal start to the cut-off is shorter than the
-# TMRCA age. The bound therefore stays informative on the cryptic duration,
-# pulling the origin to sit at or before the most recent common ancestor and
-# bounding the cryptic phase from below. It is one-sided, leaving the age
-# free above the TMRCA. We fix the clock and do not propagate cross-outbreak
-# or clock uncertainty.
+# The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
+# We place it 14 days after the genetic TMRCA day, past the molecular-clock uncertainty, so the observed window from the renewal start to the cut-off is shorter than the TMRCA age.
+# The bound therefore stays informative on the cryptic duration, pulling the origin to sit at or before the most recent common ancestor and bounding the cryptic phase from below.
+# It is one-sided, leaving the age free above the TMRCA.
+# We fix the clock and do not propagate cross-outbreak or clock uncertainty.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: genetic_seeding_model</summary>
@@ -690,9 +683,8 @@ vintage_table #hide
 # \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{16}
 # ```
 #
-# and the onset-to-death PMF is the convolution of the two discretised
-# components (implied mean about 13 d). The source is shown with the deaths
-# submodel below, where the delay is injected.
+# and the onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
+# The source is shown with the deaths submodel below, where the delay is injected.
 #
 # ##### Onset-to-detection delay (exports)
 #
@@ -1014,8 +1006,8 @@ cfr_prior_fig #hide
 # (x * f)_t = \sum_{s \ge 0} x_{t-s}\, f_s,
 # ```
 #
-# used for every delay below. We write the BVD onset-to-report series at unit
-# ascertainment as
+# used for every delay below.
+# We write the BVD onset-to-report series at unit ascertainment as
 #
 # ```math
 # \text{bvd}_t = \sum_{s \ge 0} \text{onsets}_{t-s}\, f_{\text{rep},s}.
@@ -1091,11 +1083,8 @@ cfr_prior_fig #hide
 # Death is clinical and happens under either label, so a true case may die before its test confirms it.
 # Separating the two keeps the operational churn in the suspected pool out of the part of the occupancy the infection estimate leans on.
 #
-# A proportion $p_{\text{iso}}$ of the reported suspects need a bed. These
-# admissions split into a BVD true-case inflow, admitted at a severity-skewed
-# rate $p_{\text{iso,bvd}} = \mathrm{logit}^{-1}(\mathrm{logit}\,p_{\text{iso}} +
-# \delta_{\text{iso}})$ above the base rate, and a non-BVD background inflow at
-# the base rate,
+# A proportion $p_{\text{iso}}$ of the reported suspects need a bed.
+# These admissions split into a BVD true-case inflow, admitted at a severity-skewed rate $p_{\text{iso,bvd}} = \mathrm{logit}^{-1}(\mathrm{logit}\,p_{\text{iso}} + \delta_{\text{iso}})$ above the base rate, and a non-BVD background inflow at the base rate,
 #
 # ```math
 # A_{\text{bvd},t} = p_{\text{iso,bvd}}\,p_{\text{DRC}}\,\text{bvd}_t,
@@ -1109,11 +1098,8 @@ cfr_prior_fig #hide
 # A non-case is ruled out by a negative test over the rule-out stay, or absconds.
 # The death-stay prior is the admission-to-death delay from the line-list reanalysis [bdbv_linelist_analysis_2026](@cite), and the non-BVD rule-out stay takes the report-to-receipt laboratory turnaround.
 #
-# Occupancy is the running balance of these latent events rather than a
-# length-of-stay convolution: each day the bed stock is yesterday's stock plus
-# the day's admissions less the day's deaths, recoveries, rule-outs and absconds.
-# The abscond outflow drains the suspected pool at a small daily fraction
-# $\kappa$ of the previous day's suspected occupancy,
+# Occupancy is the running balance of these latent events rather than a length-of-stay convolution: each day the bed stock is yesterday's stock plus the day's admissions less the day's deaths, recoveries, rule-outs and absconds.
+# The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
 # \text{absconds}_t = \kappa\, O_{\text{susp},t-1}, \tag{27}
@@ -1771,16 +1757,13 @@ diagnostics_table( #hide
 #
 # #### Delay-corrected confirmed case-fatality ratio
 #
-# The case-fatality ratio above is the onset-level CFR, the share of
-# symptomatic infections that die.
+# The case-fatality ratio above is the onset-level CFR, the share of symptomatic infections that die.
 # It is hard to read directly off the data because the case and death streams are ascertained differently.
 # A reader who wants a figure anchored in the observed counts is left with the naive confirmed ratio, the cumulative confirmed deaths over the cumulative confirmed cases.
 # That naive ratio is biased low in real time.
-# A case confirmed close to the cut-off has not yet had time to die, so it
-# enters the denominator before it can enter the numerator.
+# A case confirmed close to the cut-off has not yet had time to die, so it enters the denominator before it can enter the numerator.
 #
-# We report a delay-corrected confirmed CFR that debiases the real-time ratio
-# following [nishiura2009](@cite).
+# We report a delay-corrected confirmed CFR that debiases the real-time ratio following [nishiura2009](@cite).
 # The denominator is shrunk from all confirmed cases to those expected to have had their death confirmed by the cut-off.
 # Each day of confirmed-case incidence is weighted by the probability that a case confirmed that day, if it is going to die, has had its death confirmed by the cut-off:
 #
@@ -1794,10 +1777,8 @@ diagnostics_table( #hide
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
 # $X_d$ is the onset-to-death-confirmation lag (onset-to-death convolved with the report-to-receipt laboratory delay), and $X_c$ is the onset-to-confirmation lag (onset-to-report convolved with the same laboratory delay).
 # The common receipt delay therefore cancels in the mean, and the residual centres on onset-to-death minus onset-to-report.
-# Both lags and the confirmed trajectories are taken per posterior draw from
-# the joint fit, so the corrected ratio carries the joint uncertainty.
-# As the outbreak matures and recent incidence resolves the correction shrinks
-# and the corrected ratio approaches the eventual confirmed CFR.
+# Both lags and the confirmed trajectories are taken per posterior draw from the joint fit, so the corrected ratio carries the joint uncertainty.
+# As the outbreak matures and recent incidence resolves, the correction shrinks and the corrected ratio approaches the eventual confirmed CFR.
 # It is the confirmed-case counterpart of the structural CFR, anchored in the confirmed counts rather than the latent infections.
 # The gap between the two reflects the difference in case and death ascertainment that the structural CFR has to absorb.
 # The result is shown in the [confirmed case-fatality ratio results](@ref "Confirmed case-fatality ratio") below.
