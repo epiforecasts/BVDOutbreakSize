@@ -3,9 +3,9 @@
 # of the generative process — a single prior, a delay, the reproduction
 # number, the generating infection process, or the onset staging — so it
 # can be reused across composers without duplication. Delays are sampled
-# from priors and discretised with CensoredDistributions; nothing is fixed.
+# from priors and discretised with CensoredDistributions. Nothing is fixed.
 
-## --- Delay submodels (priors only; all delays sampled) ------------------
+## --- Delay submodels (priors only, all delays sampled) -------------------
 
 """
 Generic delay submodel parameterised by mean and SD, discretised to a
@@ -40,7 +40,7 @@ an SD on the mean of ≈1.17 d), not a self-assigned spread. Gamma
 shape/scale differentiate cleanly under Mooncake, so this is AD-stable.
 
 Discretised through the same double-interval-censoring route as the other
-delays ([`discretise_censored`](@ref)); the lag-0 bin is dropped and the
+delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
 remainder renormalised, left-truncating the generation interval at one day
 so an infectee is infected strictly after its infector. Returns
 `(; g, gi_mean, gi_sd, gi_alpha, gi_theta)`.
@@ -120,11 +120,12 @@ continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
 3.46–7.84).
 
 The confirmed onset→report→receipt convolution is grounded on its mean and
-median. The mean is the sum of the two legs' means and the variance the sum of
-their variances; the median follows by [`gamma_median_wh`](@ref). Each is fitted
-to the reported value as a Normal observation whose SD is the reported 95% CrI
-half-width over 1.96 (`mean_se`, `median_se`), so the cohort's uncertainty
-enters directly and the constraint is soft. Returns a NamedTuple
+median. The mean is the sum of the two legs' means and the variance the
+sum of their variances. The median follows by [`gamma_median_wh`](@ref).
+Each is fitted to the reported value as a Normal observation whose SD is
+the reported 95% CrI half-width over 1.96 (`mean_se`, `median_se`), so
+the cohort's uncertainty enters directly and the constraint is soft.
+Returns a NamedTuple
 `(; mean_obs, mean_se, median_obs, median_se)` for
 the `onset_to_sample` argument of [`bvd_joint`](@ref).
 """
@@ -163,7 +164,7 @@ Daily log-`R_t` is the linear interpolation between knots
 first WHO situation report) adds a sampled effect `intervention_effect`
 shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp`
 (default 21 days, roughly the time a response takes to bite), so
-transmission changes gradually rather than instantly; `breakpoint =
+transmission changes gradually rather than instantly. `breakpoint =
 missing` drops the term. `Rt = exp.(log_Rt)`.
 
 The walk base `log_R0` is not sampled here. It is passed in as a derived
@@ -212,11 +213,11 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
     nb = length(days)
     ## The established `R0` at the genetic bound is the base the random walk
     ## grows from. It is derived (forward Euler–Lotka from the sampled growth
-    ## rate) and passed in, not sampled here; it is tracked as a deterministic
+    ## rate) and passed in, not sampled here. It is tracked as a deterministic
     ## so the walk base stays available on the chain. The days before the
     ## renewal start (`rt_start`) are filled by the analytic cryptic
-    ## exponential in `infection_model`, so the walk values there are unused;
-    ## the interpolation clamps to `log_R0` before the first knot, which is
+    ## exponential in `infection_model`, so the walk values there are unused.
+    ## The interpolation clamps to `log_R0` before the first knot, which is
     ## harmless.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
@@ -274,7 +275,7 @@ death on 25 January 2026 and identified 500+ suspected cases between
 mid-January and mid-May (kupferschmidt2026), and the genetic TMRCA
 (mbalaplacide2026) is a lower bound on the outbreak age consistent with an
 origin that early. `m` counts only the cryptic doublings, not the cut-off
-case total; with the ≈11.7-day doubling a centre of 5 spans
+case total. With the ≈11.7-day doubling, a centre of 5 spans
 `5 · τ ≈ 58.5` cryptic days, placing the implied prior origin at the end
 of January (the documented first deaths). The SD of 4 lets the data and
 the genetic seeding bound pull the origin earlier (into December) or
@@ -299,7 +300,7 @@ end
 """
 Seed submodel: the latent infection count `I0` on the last day of the
 seeding window, representing the zoonotic introduction. Default prior is a
-truncated Normal centred on a single seed; the prior is injectable. The
+truncated Normal centred on a single seed. The prior is injectable. The
 seeding window is filled by exponential growth at the implied rate in
 [`infection_model`](@ref).
 """
@@ -322,8 +323,8 @@ separate clock-rate prior or the walk asserting a separate `R0` prior.
 
 The renewal runs only over the observation window
 `[renewal_start, cut-off]`, where `renewal_start` is the genetic-TMRCA
-grid day `rt_start` (the day the reproduction-number walk starts; before
-it `R_t` is held flat). The cryptic exponential phase from the origin to
+grid day `rt_start` (the day the reproduction-number walk starts, before
+which `R_t` is held flat). The cryptic exponential phase from the origin to
 the renewal start is analytic and off the renewal grid except for the
 days needed as recursion history. The seed at the renewal start is the
 cryptic-phase realised size `2^m` ([`seed_at_renewal_start`](@ref)), where
@@ -332,16 +333,16 @@ independent of `r`, so `r` (hence the derived `R0`) leaves the seed
 magnitude alone and appears only in the renewal growth. A back-scaled
 seed `2^m e^{−r·τ_obs}` would put `r` into both the seed and the renewal
 growth, cancelling for a fixed realised size and opening a flat ridge
-along which `R0` slides to 1; keeping the seed `r`-independent avoids
+along which `R0` slides to 1. Keeping the seed `r`-independent avoids
 this. The grid days `1 … renewal_start` before the renewal start are
 filled smoothly by the cryptic exponential curve at rate `r` ending at
 `2^m` ([`seed_infections`](@ref)), giving the recursion a full generation
-interval of differentiable history; the renewal recursion
+interval of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`.
 
 The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
-observation span `τ_obs = n − renewal_start`); the genetic seeding bound
+observation span `τ_obs = n − renewal_start`). The genetic seeding bound
 is applied to this total `T` at the composer. The renewal start sits a
 small lead after the genetic TMRCA day, past the TMRCA uncertainty where
 sustained transmission is confident, so `τ_obs = n − renewal_start <
@@ -391,7 +392,7 @@ seeding_age)`.
     ## walk-from-renewal-start case.
     rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
     Rt = rt_state.Rt
-    ## renewal_start = genetic-TMRCA grid day (`rt_start`); the observation
+    ## renewal_start = genetic-TMRCA grid day (`rt_start`). The observation
     ## span is τ_obs = n − renewal_start. The renewal-start seed magnitude is
     ## `2^m` directly (the cryptic phase grows one import to `2^m` over `m`
     ## doublings, `r`-free). Fill grid days 1…renewal_start with the cryptic
@@ -434,7 +435,7 @@ fitted from the BDBV line list (no exposure dates), so the line-list
 reanalysis recommends the MacNeil et al. (2010) Bundibugyo estimate from
 the 2007 Uganda outbreak: mean 6.3 d (95% CI 5.2-7.3, n = 24). The mean
 prior `Normal(6.3, 0.54)` reproduces MacNeil's reported 95% CI (SD = CI
-half-width / 1.96); MacNeil give no interval on the spread, so the SD
+half-width / 1.96). MacNeil give no interval on the spread, so the SD
 prior is a weakly-informative modelling choice centred on the
 CV-implied spread (≈ 3.5 d). Returns
 `(; onsets, incubation_pmf, incubation_mean, incubation_sd)`.
@@ -456,7 +457,7 @@ end
 One-sided molecular-clock seeding bound on the outbreak age `T` (see
 [`infection_model`](@ref)). The TMRCA is treated as a right-censored,
 noisy reading of the seeding time, so deeper or wider sampling only pushes
-it older; the likelihood contributes `P(read ≥ tmrca_days)`. Passing
+it older. The likelihood contributes `P(read ≥ tmrca_days)`. Passing
 `tmrca_days = missing` makes the submodel a no-op.
 """
 @model function genetic_seeding_model(T::Real,
@@ -496,7 +497,7 @@ Non-BVD background rate for the suspected-death stream
 ([`deaths_model`](@ref)), the death analogue of the suspected-case
 background `λ_bg` ([`test_positivity_model`](@ref)). The DRC sitrep
 suspected-death definition is symptomatic-then-deceased, so a death need
-not be a true BVD death; this submodel samples the per-day non-BVD
+not be a true BVD death. This submodel samples the per-day non-BVD
 background death rate `λ_bg_death`. Its cumulative contribution over the
 grid is `λ_bg_death · n`.
 
@@ -534,7 +535,7 @@ case (`p_drc ≈ 0.75`). The SD 0.5 gives a 90% prior interval of roughly
 0.80–0.95, admitting moderate under-ascertainment without letting the death
 stream slide to an implausibly low capture. `p_death` is weakly identified
 on its own (it trades off with the CFR for the suspected-death level), so it
-leans on this prior; the export-death stream and the CFR prior pin the CFR
+leans on this prior. The export-death stream and the CFR prior pin the CFR
 separately. Pass `ascertainment_prior` to override. Returns
 `(; p_death, logit_p_death)`.
 """
@@ -595,15 +596,15 @@ A background-noise process must not be able to explain more suspected
 cases than were ever reported. With SD 1.0 the median background is
 ≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
 ≈ 1077 suspected cases observed by the last stable suspected-case vintage
-while still admitting a genuine non-BVD signal; a wider SD (e.g. SD 5) left
-a second
-posterior mode in which the background explains the majority of suspected
-cases (positivity ≈ 0.2, background ≈ 2.3× the observed total). Pass
+while still admitting a genuine non-BVD signal. A wider SD (e.g. SD 5)
+left a second posterior mode in which the background explains the
+majority of suspected cases (positivity ≈ 0.2, background ≈ 2.3× the
+observed total). Pass
 `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
 (mean ≈ 0.71).
 
 The derived per-suspected positivity is exposed inside
-[`reported_cases_model`](@ref); the per-test positivity inside
+[`reported_cases_model`](@ref). The per-test positivity inside
 [`confirmed_cases_model`](@ref). Returns `(; λ_bg, τ_test)`.
 """
 @model function test_positivity_model(;
@@ -628,7 +629,7 @@ The default `Beta(2, 2)` is weakly informative on `(0, 1)` with mean ½ and
 no mass piled at the bounds. `p_iso` is partially confounded with the
 length-of-stay mean for the occupancy level (Little's law: mean occupancy
 ≈ `p_iso · admissions · (E[LOS] + 1)`), so the length-of-stay prior carries
-the duration and `p_iso` absorbs the admission/retention fraction; the
+the duration and `p_iso` absorbs the admission/retention fraction. The
 length-of-stay also sets the lag and smoothing of occupancy relative to the
 inflow, which the daily occupancy series identifies. Pass `p_prior` to
 override. Returns `(; p_iso)`.
@@ -644,14 +645,14 @@ Samples `δ_iso ≥ 0`, the log-odds by which a BVD suspect is more likely to be
 admitted to and retained in an isolation bed than a non-BVD rule-out at the
 same base intensity `p_iso` ([`isolation_admission_model`](@ref)), so the BVD
 admission probability is `logistic(logit(p_iso) + δ_iso)`. Admission cannot
-condition on the unobserved BVD status of a suspect; the skew instead
+condition on the unobserved BVD status of a suspect. The skew instead
 represents the net effect of severity-based triage, where the sicker
 patients are isolated and BVD presents more severely, enriching BVD among
 the admitted. The non-negative truncation keeps a BVD suspect at least as
 likely to be admitted as a rule-out.
 
 The isolation stream observes only total occupancy, so the skew is weakly
-identified from it alone; its effect is to enrich the long-stay BVD
+identified from it alone. Its effect is to enrich the long-stay BVD
 component of demand, which the occupancy persistence informs only mildly,
 so the half-normal `truncated(Normal(0, 0.75); lower = 0)` carries most of
 the weight (`δ_iso = 0` recovers a shared admission rate). Pass
@@ -710,11 +711,11 @@ daily walk, avoiding the high-dimensional funnel. The baseline carries
 the same weakly-informative `LogNormal(log 450, 0.42)` prior as the
 scalar model (median 450 beds, ≈0.44 CV), so `C0` is sampled on the log
 scale and the whole capacity `log C(t) = log C0 + walk` is fully
-log-scale; the implied-capacity series the isolation submodel fits pins
+log-scale. The implied-capacity series the isolation submodel fits pins
 `C(t)` on the days a rate is published.
 
 Knots run only from `start`, the first day with occupancy or capacity
-data; capacity is flat at `C0` before it. Off-window capacity carries no
+data. Capacity is flat at `C0` before it. Off-window capacity carries no
 likelihood, so walking it adds unidentified innovations that leave the
 posterior poorly conditioned, and `start` keeps the knots to the days the
 data speaks to. Pass `start = 1` for knots over the whole grid, or `week`
@@ -790,7 +791,7 @@ submodel's hyperparameters.
 
 The baseline `λ_mu` is the scalar background rate on its natural
 half-normal scale, with the same informative default as the scalar
-`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases; pass a tighter
+`λ_bg` (`truncated(Normal(0, 1.0); lower = 0)` for cases. Pass a tighter
 `baseline_prior` for deaths). The per-vintage rate is a multiplicative
 log-normal deviation from this baseline,
 
@@ -800,7 +801,7 @@ log-normal deviation from this baseline,
 ```
 
 with `σ_bg` the pooling SD, passed in rather than sampled here so the
-suspected-case and suspected-death streams can share one pooling SD; see
+suspected-case and suspected-death streams can share one pooling SD. See
 [`background_pooling_model`](@ref), which samples it once at the composer
 level. The deviation is multiplicative so the per-vintage rate stays
 positive without a clamp and `σ_bg → 0` recovers the scalar baseline
@@ -859,7 +860,7 @@ knot values `\\log\\lambda` and knot days `d`,
 
 `σ_rw` (passed in, shared across the suspected-case and suspected-death
 streams via [`background_pooling_model`](@ref)) is the per-knot innovation
-SD on the log scale; a tight prior keeps the background close to constant
+SD on the log scale. A tight prior keeps the background close to constant
 (a gentle drift, not week-to-week jumps), which regularises the
 background/outbreak-size degeneracy (closing the high-background second
 posterior mode that breaks convergence) and keeps the series smooth (so a
@@ -898,7 +899,7 @@ series (zero before `onset`).
     ## window, so the gated background grows in from zero instead of stepping
     ## straight to `λ_mu` at the surveillance boundary (which would put a
     ## one-day jump into the suspected-death trajectory scaled from it). The
-    ## ramp reaches 1 within the window; `onset_ramp ≤ 1` gives a hard onset
+    ## ramp reaches 1 within the window. `onset_ramp ≤ 1` gives a hard onset
     ## (a step to `λ_mu`).
     rr = clamp(Int(onset_ramp), 1, nw)
     ramp = [min(i, rr) / rr for i in 1:nw]
@@ -912,7 +913,7 @@ end
 Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean
 of 0.95 with a tight spread. Confirmation runs on the altona RealStar
 Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA
-copies per reaction; the Zaire-specific GeneXpert Ebola assay does not
+copies per reaction. The Zaire-specific GeneXpert Ebola assay does not
 reliably detect Bundibugyo. A single assay draw is sensitive to about
 0.85, but a suspect is confirmed or ruled out through repeat control
 tests rather than one PCR, so the effective process sensitivity is
@@ -977,7 +978,7 @@ by [`censored_delay_model`](@ref) so it convolves cleanly onto the
 renewal onsets. The mean and SD carry weakly-informative priors centred
 on a short turnaround with a heavy right tail allowing for specimen
 shipment to a confirmatory lab. No per-sample outbreak data grounds this
-delay, so the likelihood does not identify the turnaround mean or SD; the
+delay, so the likelihood does not identify the turnaround mean or SD. The
 priors are therefore kept tight around the documented turnaround belief
 (mean ≈ 4.5 d, SD ≈ 4 d) rather than wide, since a wide prior on an
 unidentified nuisance delay only makes the sampler wander it (it was the
@@ -1026,7 +1027,7 @@ end
 """
 Severity-enrichment prior for the composition-linked confirmed positivity
 (`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
-that mode the per-window tested BVD share is not a free random effect; it
+that mode the per-window tested BVD share is not a free random effect. It
 is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
 λ_bg_v)` over each laboratory window, upsampled by a severity enrichment
 that decays as testing widens:
@@ -1045,7 +1046,7 @@ confirmed/positivity data identify the non-BVD background rather than it
 being absorbed by a free per-window random effect, correcting the model's
 treatment of suspected cases as a large overestimate of true BVD.
 
-`δ₀` is the early severity log-odds enrichment of BVD; lower-truncated at 0
+`δ₀` is the early severity log-odds enrichment of BVD. Lower-truncated at 0
 because severity triage upsamples BVD, never down. The default
 `truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
 bounded: even severity-triaged testing cannot be near-pure BVD (other
@@ -1191,10 +1192,10 @@ Partially pooled ascertainment fractions for the DRC and Uganda
 surveillance systems, sampled in non-centred form to avoid the funnel
 geometry. Both logit-scale fractions share a hyperprior with mean `μ`
 and pooling strength `τ`. Used by [`reported_cases_model`](@ref),
-[`exports_model`](@ref) and [`exports_deaths_model`](@ref); this is the
+[`exports_model`](@ref) and [`exports_deaths_model`](@ref). This is the
 composer default. The shared mean defaults to a reporting fraction of
 0.75 (logit scale), reflecting the active case-finding of a declared
-Ebola response; a lower ascertainment inflates the inferred infections
+Ebola response. A lower ascertainment inflates the inferred infections
 (and so the outbreak size `C_T`) for the same observed counts.
 """
 @model function pooled_ascertainment_model(;
