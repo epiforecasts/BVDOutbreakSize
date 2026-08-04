@@ -94,7 +94,9 @@ end
     rm(path; force = true)
 end
 
-@testitem "tensorboard_callback streams grouped scalars and histograms" tags=[:slow] begin
+@testitem "tensorboard_callback streams grouped scalars and histograms" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using TensorBoardLogger: TBLogger, map_summaries
@@ -173,7 +175,9 @@ end
     @test !isdir(joinpath(dir, "tensorboard", "unit"))
 end
 
-@testitem "fit_callback: all streams progress and TensorBoard" tags=[:slow] begin
+@testitem "fit_callback: all streams progress and TensorBoard" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using TensorBoardLogger

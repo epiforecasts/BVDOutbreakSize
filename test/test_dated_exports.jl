@@ -22,7 +22,7 @@
     @test counts3 == [1, 1]
 end
 
-@testitem "dated_poisson_model scores observed counts and generates when missing" begin
+@testitem "dated_poisson_model scores counts and generates when missing" begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: dated_poisson_model
@@ -83,7 +83,9 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "exports_only last_offset stops the clock before the cut-off" tags=[:slow] begin
+@testitem "exports_only last_offset stops the clock before the cut-off" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: exports_only_model

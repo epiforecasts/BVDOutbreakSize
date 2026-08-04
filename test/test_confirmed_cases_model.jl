@@ -42,7 +42,7 @@
     @test all(0 .<= st.p_pos .<= 1)
 end
 
-@testitem "confirmed_cases_model composition link ties positivity to λ_bg" begin
+@testitem "confirmed_cases_model composition ties positivity to λ_bg" begin
     using BVDOutbreakSize: confirmed_cases_model, reported_cases_model,
                            infection_model, onset_incidence_model,
                            severity_enrichment_model

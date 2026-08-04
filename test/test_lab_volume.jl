@@ -112,7 +112,9 @@ end
     for k in keys(pp))
 end
 
-@testitem "bvd_joint fits the analysed volume without a received stream" tags=[:slow] begin
+@testitem "bvd_joint fits the analysed volume without a received stream" tags=[
+    :slow
+] begin
     using BVDOutbreakSize: bvd_joint, load_observations
     using Turing.DynamicPPL: logjoint
     using Random: MersenneTwister

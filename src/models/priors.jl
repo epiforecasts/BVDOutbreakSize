@@ -26,7 +26,7 @@ Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
-Generation-interval submodel. Samples a Gamma SHAPE `α` and SCALE `θ`,
+Generation-interval submodel. Samples a Gamma shape `α` and scale `θ`,
 parameterised directly from the source's reported generation-time
 distribution rather than moment-matching a LogNormal from mean/SD priors.
 The source is the Ebola virus disease serial interval as a generation-time
@@ -36,9 +36,8 @@ maps once to a Gamma shape `α ≈ 2.71` and scale `θ ≈ 5.65`
 `α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
 keep the Gamma well defined. The SDs propagate the source's reported
 uncertainty (the NEJM serial-interval mean carries a 95% CI of 13.0–17.6 d,
-an SD on the mean of ≈1.17 d) — this is the source's reported uncertainty,
-NOT a self-assigned spread. Gamma shape/scale differentiate cleanly under
-Mooncake, so this is AD-stable.
+an SD on the mean of ≈1.17 d), not a self-assigned spread. Gamma
+shape/scale differentiate cleanly under Mooncake, so this is AD-stable.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)); the lag-0 bin is dropped and the
@@ -59,15 +58,15 @@ so an infectee is infected strictly after its infector. Returns
 end
 
 """
-Natural-parameter Gamma delay submodel. Samples a Gamma SHAPE `α` and SCALE
-`θ` directly from the priors, builds `Gamma(α, θ)`, and discretises to a
-daily PMF over lags `0 … nmax` by double interval censoring
+Natural-parameter Gamma delay submodel. Samples a Gamma shape `α` and
+scale `θ` directly from the priors, builds `Gamma(α, θ)`, and discretises
+to a daily PMF over lags `0 … nmax` by double interval censoring
 ([`discretise_censored`](@ref)), keeping the lag-0 bin (an onset-to-event
 delay can be same-day, unlike the generation interval). This carries a
-line-list delay reanalysis through on its NATURAL parameters with the
-reported posterior uncertainty, rather than moment-matching a LogNormal from
-mean/SD priors. Gamma shape/scale differentiate cleanly under Mooncake.
-Returns `(; pmf, dist, mean, sd, alpha, theta)`.
+line-list delay reanalysis through on its natural parameters with the
+reported posterior uncertainty, rather than moment-matching a LogNormal
+from mean/SD priors. Gamma shape/scale differentiate cleanly under
+Mooncake. Returns `(; pmf, dist, mean, sd, alpha, theta)`.
 """
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
@@ -78,15 +77,15 @@ Returns `(; pmf, dist, mean, sd, alpha, theta)`.
 end
 
 """
-Onset-to-death delay as the CONVOLUTION of two natural-parameter Gamma
-atomic delays — onset→admission (`oa`) and admission→death (`ad`) — each
-sampled through [`gamma_delay_model`](@ref) and combined by convolving their
-PMFs. This matches the companion line-list reanalysis, which fits the atomic
-components and convolves them rather than fitting onset→death directly, so
-no moment-matching is needed: each atomic delay keeps its own Gamma shape
-and scale prior with the reanalysis's reported uncertainty. The convolved
-PMF is truncated back to lags `0 … nmax` and renormalised. Returns
-`(; pmf, mean, sd, oa_mean, ad_mean)`.
+Onset-to-death delay as the convolution of two natural-parameter Gamma
+atomic delays, onset→admission (`oa`) and admission→death (`ad`), each
+sampled through [`gamma_delay_model`](@ref) and combined by convolving
+their PMFs. This matches the companion line-list reanalysis, which fits
+the atomic components and convolves them rather than fitting onset→death
+directly, so no moment-matching is needed: each atomic delay keeps its
+own Gamma shape and scale prior with the reanalysis's reported
+uncertainty. The convolved PMF is truncated back to lags `0 … nmax` and
+renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 """
 @model function onset_to_death_model(nmax::Integer;
         oa_alpha_prior, oa_theta_prior, ad_alpha_prior, ad_theta_prior)
@@ -103,11 +102,11 @@ end
 
 """
 Wilson–Hilferty approximation to the continuous median of a `Gamma` as a
-function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`. Smooth in
-the mean and SD with no quantile inversion, so it enters a gradient-based
-likelihood cleanly, and accurate to a few percent for the shapes here. Used to
-match the confirmed onset-to-sample convolution's continuous median to the
-cohort's reported median.
+function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`.
+Smooth in the mean and SD with no quantile inversion, so it enters a
+gradient-based likelihood cleanly, and accurate to a few percent for the
+shapes here. Used to match the confirmed onset-to-sample convolution's
+continuous median to the cohort's reported median.
 """
 gamma_median_wh(mean::Real, sd::Real) = mean * (1 - sd^2 / (9 * mean^2))^3
 
@@ -158,57 +157,45 @@ Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
 ([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
 cumulative-sum form: standard-normal innovations are scaled by `sigma_rw`
-and accumulated, avoiding the funnel geometry of the centred recursion and
-matching the non-centred ascertainment block. Daily log-`R_t` is the
-linear interpolation between knots ([`interpolate_knots`](@ref)). An
-intervention at `breakpoint` (e.g. the first WHO situation report) adds a
-sampled effect `intervention_effect` shaped by a logistic ramp
-([`sigmoid_ramp`](@ref)), so transmission changes gradually over the ramp
-window rather than instantly; `breakpoint = missing` drops the term. The
-ramp scale `ramp` defaults to 21 days, an about-three-week transition
-reflecting that a response (case finding, isolation, vaccination) takes
-weeks to bite rather than switching at a single date; pass `ramp` to widen
-or narrow it.
-`Rt = exp.(log_Rt)`. Returns
-`(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
+and accumulated, avoiding the funnel geometry of the centred recursion.
+Daily log-`R_t` is the linear interpolation between knots
+([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
+first WHO situation report) adds a sampled effect `intervention_effect`
+shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp`
+(default 21 days, roughly the time a response takes to bite), so
+transmission changes gradually rather than instantly; `breakpoint =
+missing` drops the term. `Rt = exp.(log_Rt)`.
 
-The walk base `log_R0` is NOT sampled here. It is passed in as a DERIVED
-quantity: the first reproduction number is derived FORWARD from the sampled
-growth rate `r` and the generation interval through Euler–Lotka
-(`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)). The prior therefore
-sits on the growth rate (see [`exponential_growth_model`](@ref)), grounded
-on Cuomo-Dannenburg & Ghafari's molecular-clock doubling time (centre 20 d,
-range 15.2–24.5 d), and the established reproduction number is whatever that
-growth implies under OUR generation interval rather than a separately
-asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55` under THEIR
-generation interval; deriving `R0` forward from the shared growth rate under
-our generation interval is the consistent thing to do. This single growth
-source pins the ESTABLISHED reproduction number (the walk base at the
-genetic bound) AND, through the renewal seeding, the cryptic exponential
-phase, so the outbreak has ONE growth source. The grid days before the
-renewal start are filled by the analytic cryptic exponential and so are
-unused by the walk;
-the walk simply clamps to `R0` before its first knot.
+The walk base `log_R0` is not sampled here; it is passed in, derived
+forward from the sampled growth rate `r` and the generation interval
+through Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)).
+The prior sits on the growth rate (see [`exponential_growth_model`](@ref)),
+grounded on Cuomo-Dannenburg & Ghafari's molecular-clock doubling time
+(centre 20 d, range 15.2–24.5 d); the established reproduction number is
+whatever that growth implies under our generation interval, rather than a
+separately asserted `R0` prior. The genetic report gives `R0 ≈ 1.31–1.55`
+under its own generation interval, so deriving `R0` forward under ours
+keeps the cryptic phase and the established renewal on one shared growth
+source. Grid days before the renewal start are filled by the analytic
+cryptic exponential; the walk clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
 one week to the next. The walk starts at the first situation report
-(`rt_start` is the breakpoint at the composer), so every knot sits in the
-observed window and the step flexibility is spent where the data support
-it, letting `R_t` bend to a slowdown or acceleration over the sitreps
-rather than drifting over the unobserved pre-report stretch.
+(`rt_start`), so every knot sits in the observed window and `R_t` bends to
+a slowdown or acceleration over the sitreps rather than drifting over the
+unobserved pre-report stretch.
 
-The intervention effect is constrained to be non-positive
+The intervention effect is constrained non-positive
 (`truncated(Normal(0, 0.4); upper = 0)`): a declared WHO response (case
 finding, isolation, vaccination) can only reduce transmission or leave it
-unchanged, never increase it, so the ramp's effect on log-`R_t` is bounded
-at or below zero. This is stronger than the earlier symmetric
-`Normal(0, 0.5)` (under which the effect was unidentified and `R_t`
-drifted up unchecked) and the one-sided lean `Normal(-0.3, 0.4)`: the
-response now has a definite non-increasing effect, with the half-normal
-admitting anything from no effect (mode) to a substantial decline. Because
-the breakpoint is only ≈11 days before the cut-off and the ramp is three
-weeks, the response damps `R_t` only partially by the cut-off.
+unchanged, so the ramp's effect on log-`R_t` is bounded at or below zero.
+The half-normal admits anything from no effect (mode) to a substantial
+decline. The breakpoint sits only around 11 days before the cut-off and
+the ramp runs three weeks, so the response damps `R_t` only partially by
+the cut-off.
+
+Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
 @model function rt_walk_model(n::Integer, log_R0_base::Real;
         week::Integer = 7,
@@ -220,7 +207,7 @@ weeks, the response damps `R_t` only partially by the cut-off.
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
     ## The established `R0` at the genetic bound is the base the random walk
-    ## grows from. It is DERIVED (forward Euler–Lotka from the sampled growth
+    ## grows from. It is derived (forward Euler–Lotka from the sampled growth
     ## rate) and passed in, not sampled here; it is tracked as a deterministic
     ## so the walk base stays available on the chain. The days before the
     ## renewal start (`rt_start`) are filled by the analytic cryptic
@@ -242,57 +229,55 @@ end
 ## --- Seeding and the generating infection process -----------------------
 
 """
-Molecular-clock growth-and-size prior for the renewal cryptic phase. SAMPLES
-the exponential growth rate `r` directly (the primary epidemiological
-assumption, placed on the genetic doubling time) and the doubling count `m`,
-then exposes
+Molecular-clock growth-and-size prior for the renewal cryptic phase.
+Samples the exponential growth rate `r` directly (the primary
+epidemiological assumption, placed on the genetic doubling time) and the
+doubling count `m`, then exposes
 
 ```math
 \\tau = \\log 2 / r,\\qquad T_\\text{cryptic} = m\\,\\tau,
 \\qquad C_T = 2^m,
 ```
 
-as deterministics. `T = m·τ` is the CRYPTIC-PHASE duration (origin →
+as deterministics. `T = m·τ` is the cryptic-phase duration (origin →
 renewal start): `m` counts the doublings during the cryptic phase, so the
-cryptic phase grows a single import to `2^m` infections AT the renewal
-start, and the magnitude is independent of `r`. The composer
-([`infection_model`](@ref)) adds the observation span
-`τ_obs = n − renewal_start` to get the TOTAL outbreak age
-`T_total = m·τ + τ_obs`, which carries the genetic seeding bound
+cryptic phase grows a single import to `2^m` infections at the renewal
+start, independent of `r`. The composer ([`infection_model`](@ref)) adds
+the observation span `τ_obs = n − renewal_start` to get the total outbreak
+age `T_total = m·τ + τ_obs`, which carries the genetic seeding bound
 ([`genetic_seeding_model`](@ref)).
 
-The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.28)`, with median doubling time (11.7 d)
-matching the BEAST X estimate (mbalaplacide2026, Exponential growth
-model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the asymmetric HPD as
-roughly a 95% interval (log-SD ≈ 0.24 from the HPD ratio) and slightly
-inflates it to cover the skew towards shorter doubling times, so the
-prior is modestly wider than the source but unbiased. The first
-reproduction number is then derived FORWARD from this `r` and OUR generation
-interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
+The growth rate carries the prior
+`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.28)`, with median
+doubling time (11.7 d) matching the BEAST X estimate (mbalaplacide2026,
+Exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.28 reads the
+asymmetric HPD as roughly a 95% interval (log-SD ≈ 0.24 from the HPD
+ratio) and slightly inflates it to cover the skew towards shorter doubling
+times, so the prior is modestly wider than the source but unbiased. The
+first reproduction number is derived forward from this `r` and our
+generation interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
 [`infection_model`](@ref)), so the cryptic exponential phase and the
-established renewal share ONE growth source — the sampled growth rate — and
-the established reproduction number is consistent with the genetic growth
-under our generation interval rather than pinned by a separate `R0` prior.
+established renewal share one growth source, and the established
+reproduction number is consistent with the genetic growth under our
+generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(5, 4); lower = 0)` is deliberately WIDE. The centre
-and spread are elicited from the field epidemiology and the genetics: field
-work in Mongbwalu traced a sustained transmission chain back to a death on
-25 January 2026 and identified 500+ suspected cases between mid-January and
-mid-May (kupferschmidt2026), and the genetic TMRCA (mbalaplacide2026) is a
-lower bound on the outbreak age consistent with an origin that early. Since
-`m` counts only the CRYPTIC doublings (not the cut-off case total), with the
-≈11.7-day doubling a centre of 5 spans `5 · τ ≈ 58.5` cryptic days, placing
-the implied prior origin at the end of January (at the documented first
-deaths); the SD of 4 lets the data and the genetic seeding bound pull the
-origin earlier (into December) or later without over-committing (#533).
+`m ~ truncated(Normal(5, 4); lower = 0)` is deliberately wide. The centre
+and spread are elicited from the field epidemiology and the genetics:
+field work in Mongbwalu traced a sustained transmission chain back to a
+death on 25 January 2026 and identified 500+ suspected cases between
+mid-January and mid-May (kupferschmidt2026), and the genetic TMRCA
+(mbalaplacide2026) is a lower bound on the outbreak age consistent with an
+origin that early. `m` counts only the cryptic doublings, not the cut-off
+case total; with the ≈11.7-day doubling a centre of 5 spans
+`5 · τ ≈ 58.5` cryptic days, placing the implied prior origin at the end
+of January (the documented first deaths). The SD of 4 lets the data and
+the genetic seeding bound pull the origin earlier (into December) or
+later without over-committing.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
-renewal recursion grows forward under `R_t`. Pass `m_prior` to override
-(e.g. an `m_prior`
-whose centre advances via [`m_prior_centre`](@ref) for a later cut-off;
-the backfill's advancing centre is tracked separately by #534).
-Returns `(; τ, r, m, T, C_T)`.
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override,
+e.g. one whose centre advances via [`m_prior_centre`](@ref) for a later
+cut-off. Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.28),
@@ -318,60 +303,60 @@ seeding window is filled by exponential growth at the implied rate in
 end
 
 """
-Generating infection process for the two-phase renewal seeding. Samples the
-generation interval and the cryptic exponential growth rate `r` (the prior
-sits on `r`, the molecular-clock growth, in
-[`exponential_growth_model`](@ref)), then derives the SINGLE established
-reproduction number `R0` (= the first `R_t`) FORWARD from that `r` and the
+Generating infection process for the two-phase renewal seeding. Samples
+the generation interval and the cryptic exponential growth rate `r` (the
+prior sits on `r`, the molecular-clock growth, in
+[`exponential_growth_model`](@ref)), then derives the established
+reproduction number `R0` (= the first `R_t`) forward from that `r` and the
 generation interval through Euler–Lotka (`R0 = r_to_R0(r, g)`) and passes
-`log R0` as the walk base to the reproduction-number submodel. The cryptic
-phase and the established renewal therefore share ONE growth source — the
-sampled growth rate `r` — rather than the cryptic phase carrying a separate
-clock-rate prior or the walk asserting a separate `R0` prior.
+`log R0` as the walk base to the reproduction-number submodel. The
+cryptic phase and the established renewal share one growth source, the
+sampled growth rate `r`, rather than the cryptic phase carrying a
+separate clock-rate prior or the walk asserting a separate `R0` prior.
 
 The renewal runs only over the observation window
-`[renewal_start, cut-off]`, where the `renewal_start` is the genetic-TMRCA
-grid day `rt_start` (the day the reproduction-number walk starts; before it
-`R_t` is held flat). The cryptic exponential phase from the origin to the
-renewal start is analytic and off the renewal grid except for the days
-needed as recursion history. The seed AT the renewal start is the
+`[renewal_start, cut-off]`, where `renewal_start` is the genetic-TMRCA
+grid day `rt_start` (the day the reproduction-number walk starts; before
+it `R_t` is held flat). The cryptic exponential phase from the origin to
+the renewal start is analytic and off the renewal grid except for the
+days needed as recursion history. The seed at the renewal start is the
 cryptic-phase realised size `2^m` ([`seed_at_renewal_start`](@ref)), where
 `m` counts the doublings during the cryptic phase: the magnitude is
-`r`-INDEPENDENT, so `r` (hence the derived `R0`) leaves the seed magnitude
-entirely and appears only in the renewal growth. An earlier formulation
-back-scaled
-`2^m e^{−r·τ_obs}`, putting `r` into both the seed and the renewal growth so
-the two cancelled for a fixed realised size — a flat ridge along which `R0`
-slid to 1. The grid days `1 … renewal_start` before the renewal start are
-filled smoothly by the cryptic exponential curve at rate `r` ending at `2^m`
-([`seed_infections`](@ref)), giving the recursion a full generation interval
-of differentiable history; the renewal recursion
+independent of `r`, so `r` (hence the derived `R0`) leaves the seed
+magnitude alone and appears only in the renewal growth. A back-scaled
+seed `2^m e^{−r·τ_obs}` would put `r` into both the seed and the renewal
+growth, cancelling for a fixed realised size and opening a flat ridge
+along which `R0` slides to 1; keeping the seed `r`-independent avoids
+this. The grid days `1 … renewal_start` before the renewal start are
+filled smoothly by the cryptic exponential curve at rate `r` ending at
+`2^m` ([`seed_infections`](@ref)), giving the recursion a full generation
+interval of differentiable history; the renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`.
 
-The TOTAL outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
-observation span `τ_obs = n − renewal_start`); the genetic seeding bound is
-applied to this total `T` at the composer. The renewal start sits a small
-lead AFTER the genetic TMRCA day (past the TMRCA uncertainty, where
-sustained transmission is confident), so `τ_obs = n − renewal_start <
+The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
+observation span `τ_obs = n − renewal_start`); the genetic seeding bound
+is applied to this total `T` at the composer. The renewal start sits a
+small lead after the genetic TMRCA day, past the TMRCA uncertainty where
+sustained transmission is confident, so `τ_obs = n − renewal_start <
 tmrca_days` and the censored bound
-`tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays INFORMATIVE: it
-pulls the origin to sit at or before the MRCA, so the cryptic duration `m·τ`
-cannot be too short. The genetic bound therefore defines the cryptic-phase
-length through `T`.
+`tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays informative:
+it pulls the origin to sit at or before the MRCA, so the cryptic duration
+`m·τ` cannot be too short. The genetic bound therefore defines the
+cryptic-phase length through `T`.
 
-The realized cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
-forwarded to the reproduction-number submodel. Exposes the daily infections
-and cumulative sum, the total prior
-outbreak age `T`, cryptic doubling count `m`/`τ` and prior size scale
-`C_T_prior`, the realized cut-off size `C_T`, the established reproduction
-number `R0` and its implied cryptic rate `r0` (with
-`doubling_time_initial`), the current growth `r`/`doubling_time` derived
-from the cut-off reproduction number `Rt[n]` through forward Euler–Lotka
-(so `r` is sign-consistent with `R_T := Rt[n]` by construction), and the
-diagnostic-only `seeding_age`. Returns
-`(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ, R0, r0, r,
-doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
+The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
+forwarded to the reproduction-number submodel. Exposes the daily
+infections and cumulative sum, the total prior outbreak age `T`, cryptic
+doubling count `m`/`τ` and prior size scale `C_T_prior`, the realised
+cut-off size `C_T`, the established reproduction number `R0` and its
+implied cryptic rate `r0` (with `doubling_time_initial`), the current
+growth `r`/`doubling_time` derived from the cut-off reproduction number
+`Rt[n]` through forward Euler–Lotka (so `r` is sign-consistent with
+`R_T := Rt[n]` by construction), and the diagnostic-only `seeding_age`.
+Returns `(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ,
+R0, r0, r, doubling_time_initial, T, C_T, C_T_prior, doubling_time,
+seeding_age)`.
 """
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
@@ -383,10 +368,10 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)))
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
-    ## ONE growth source: the prior is on the cryptic exponential growth rate
-    ## `r` (sampled in `growth`), and the SINGLE established reproduction
-    ## number `R0` (= the walk base, the first `R_t`) is derived FORWARD from
-    ## that `r` and the generation interval through Euler–Lotka. The cryptic
+    ## One growth source: the prior is on the cryptic exponential growth rate
+    ## `r` (sampled in `growth`), and the established reproduction number
+    ## `R0` (= the walk base, the first `R_t`) is derived forward from that
+    ## `r` and the generation interval through Euler–Lotka. The cryptic
     ## phase and the established renewal therefore share `r`.
     growth_state ~ to_submodel(growth())
     r_clock = growth_state.r
@@ -402,7 +387,7 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     Rt = rt_state.Rt
     ## renewal_start = genetic-TMRCA grid day (`rt_start`); the observation
     ## span is τ_obs = n − renewal_start. The renewal-start seed magnitude is
-    ## `2^m` DIRECTLY (the cryptic phase grows one import to `2^m` over `m`
+    ## `2^m` directly (the cryptic phase grows one import to `2^m` over `m`
     ## doublings, `r`-free). Fill grid days 1…renewal_start with the cryptic
     ## exponential curve at rate `r` ending at `2^m` (a full GI of history),
     ## then run the renewal forward from renewal_start+1.
@@ -418,12 +403,12 @@ doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`.
     ## reproduction number `Rt[n]` and the generation interval through forward
     ## Euler–Lotka (the inverse of the `r_to_R0` that derives `R0` from the
     ## clock growth above). This makes the reported current growth rate
-    ## consistent with `R_T := Rt[n]` BY CONSTRUCTION: `r < 0` iff `R_T < 1`.
-    ## An earlier formulation read `r` off the realised last-two-days slope
-    ## `log I[n] − log I[n-1]`, but the intervention ramp depresses the final
-    ## renewal step (`I[n] < I[n-1]` while `Rt[n] ≥ 1`), so that realised
-    ## slope disagreed in sign with `R_T` at the cut-off — an end-of-
-    ## trajectory edge artifact rather than the instantaneous growth.
+    ## consistent with `R_T := Rt[n]` by construction: `r < 0` iff `R_T < 1`.
+    ## The realised last-two-days slope `log I[n] − log I[n-1]` is not used
+    ## for this: the intervention ramp depresses the final renewal step
+    ## (`I[n] < I[n-1]` while `Rt[n] ≥ 1`), so that slope can disagree in
+    ## sign with `R_T` at the cut-off, an end-of-trajectory edge artifact
+    ## rather than the instantaneous growth.
     r = euler_lotka_r(@inbounds(Rt[n]), g)
     return (; infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
@@ -537,7 +522,7 @@ death analogue of the suspected-case ascertainment `p_drc`
 ([`pooled_ascertainment_model`](@ref)).
 
 The default `Normal(logit(0.9), 0.5)` on the logit scale is deliberately
-informative and centred on a HIGH ascertainment: a death is a salient event
+informative and centred on a high ascertainment: a death is a salient event
 in an Ebola response and is reported more reliably than a living suspected
 case (`p_drc ≈ 0.75`). The SD 0.5 gives a 90% prior interval of roughly
 0.80–0.95, admitting moderate under-ascertainment without letting the death
@@ -557,14 +542,15 @@ end
 """
 Background case-fatality ratio `cfr_bg` for the non-BVD suspected-death
 background ([`deaths_model`](@ref)). The renewal joint ties the non-BVD
-suspected-death background to the (already identified) non-BVD suspected-
-CASE background `λ_bg` ([`test_positivity_model`](@ref)) rather than giving
-deaths a free, outbreak-size-degenerate background rate of their own: the
-per-day background suspected deaths are `cfr_bg · λ_bg_v`, a background CFR
-applied to the per-day non-BVD suspected-case rate. A non-BVD suspected case
-(other severe febrile or haemorrhagic illness that meets the suspect
-definition) carries its own fatality risk, and `cfr_bg` is the share of that
-background pool that is reported as a suspected death.
+suspected-death background to the (already identified) non-BVD
+suspected-case background `λ_bg` ([`test_positivity_model`](@ref)) rather
+than giving deaths a free, outbreak-size-degenerate background rate of
+their own: the per-day background suspected deaths are `cfr_bg · λ_bg_v`,
+a background CFR applied to the per-day non-BVD suspected-case rate. A
+non-BVD suspected case (other severe febrile or haemorrhagic illness that
+meets the suspect definition) carries its own fatality risk, and
+`cfr_bg` is the share of that background pool that is reported as a
+suspected death.
 
 Tying the death background to the case background removes the degeneracy that
 keeps a free `λ_bg_death` switched off: the case background is pinned by the
@@ -683,12 +669,13 @@ demand directly.
 The default `LogNormal(log 450, 0.42)` is weakly informative and positive by
 construction (no truncation boundary), with median 450 and a ≈0.44
 coefficient of variation, centred on the bed count implied by the reported
-occupancy rates (the "Taux d'occupation" gives `capacity = occupancy / rate
-≈ 400–452` over 9–13 June). The capacity is identified by the implied-capacity series the
-isolation submodel fits, so the prior only has to bracket it. A single
-national capacity is a limitation: it cannot represent local saturation (one
-province full while another has slack), which is the level the supply
-constraint operates at, and it averages over a growing capacity. Pass
+occupancy rates (the "Taux d'occupation" gives `capacity = occupancy /
+rate ≈ 400–452` over 9–13 June). The capacity is identified by the
+implied-capacity series the isolation submodel fits, so the prior only
+has to bracket it. A single national capacity is a limitation: it
+averages over a growing capacity and cannot represent local saturation
+(one province full while another has slack, see
+[`bed_capacity_walk_model`](@ref) for the time-varying form). Pass
 `capacity_prior` to override. Returns `(; capacity)`.
 """
 @model function bed_capacity_model(;
@@ -701,34 +688,34 @@ end
 Time-varying isolation/treatment-bed capacity over the daily grid, a
 multiplicative random walk: the supply-limited occupancy stream
 ([`treatment_flow_model`](@ref)) uses `C(t)` as the ceiling the latent
-bed demand saturates against on each day. Capacity is not fixed — beds are
-being added (SitRep 030 records mattress and bed deliveries and new treatment
-centres opening) — so a single scalar capacity ([`bed_capacity_model`](@ref))
-cannot track the growth or be projected forward; the walk does both.
+bed demand saturates against on each day. Capacity is not fixed (beds are
+being added: SitRep 030 records mattress and bed deliveries and new
+treatment centres opening), so the walk tracks the growth a single scalar
+capacity ([`bed_capacity_model`](@ref)) cannot.
 
-The walk is a non-centred cumulative log-deviation from a baseline bed count
-`C0` on WEEKLY knots, linearly interpolated to the daily grid (the same
-parameterisation as the reproduction-number and background walks): with knot
-values `\\log C` and knot days `d`, `C(t) = C0 · exp(\\text{interp}(σ_cap ·
-cumsum(z)))` with `z ~ Normal(0, 1)` per knot and a tight innovation SD
-`σ_cap`, keeping capacity a gentle drift rather than per-day jumps. Knots
-need far fewer innovations than a daily walk, avoiding the high-dimensional
-funnel. The baseline carries the same weakly-informative
-`LogNormal(log 450, 0.42)` prior as the scalar model (median 450 beds, ≈0.44
-CV), so `C0` is sampled on the log scale and the whole capacity
-`log C(t) = log C0 + walk` is fully log-scale; the implied-capacity series the
-isolation submodel fits pins `C(t)` on the days a rate is published.
+The walk is a non-centred cumulative log-deviation from a baseline bed
+count `C0` on weekly knots, linearly interpolated to the daily grid (the
+same parameterisation as the reproduction-number and background walks):
+with knot values `\\log C` and knot days `d`,
+`C(t) = C0 · exp(\\text{interp}(σ_cap · cumsum(z)))` with `z ~ Normal(0, 1)`
+per knot and a tight innovation SD `σ_cap`, keeping capacity a gentle
+drift rather than per-day jumps. Knots need far fewer innovations than a
+daily walk, avoiding the high-dimensional funnel. The baseline carries
+the same weakly-informative `LogNormal(log 450, 0.42)` prior as the
+scalar model (median 450 beds, ≈0.44 CV), so `C0` is sampled on the log
+scale and the whole capacity `log C(t) = log C0 + walk` is fully
+log-scale; the implied-capacity series the isolation submodel fits pins
+`C(t)` on the days a rate is published.
 
-Knots run only from `start`, the first day with occupancy or capacity data;
-capacity is flat at `C0` before it. Off-window capacity carries no
+Knots run only from `start`, the first day with occupancy or capacity
+data; capacity is flat at `C0` before it. Off-window capacity carries no
 likelihood, so walking it adds unidentified innovations that leave the
 posterior poorly conditioned, and `start` keeps the knots to the days the
 data speaks to. Pass `start = 1` for knots over the whole grid, or `week`
-to change the knot spacing. A single national capacity remains a limitation:
-it cannot represent local saturation (one province full while another has
-slack), the level the supply constraint actually operates at. Pass
-`baseline_prior` / `innovation_prior` to override. Returns `(; C, C0, σ_cap)`
-with `C` a length-`n` vector.
+to change the knot spacing. A single national capacity remains a
+limitation: it cannot represent local saturation, one province full
+while another has slack. Pass `baseline_prior` / `innovation_prior` to
+override. Returns `(; C, C0, σ_cap)` with `C` a length-`n` vector.
 """
 @model function bed_capacity_walk_model(n::Integer; start::Integer = 1,
         week::Integer = 7,
@@ -756,8 +743,8 @@ end
 Recovery probability for the recovered-among-confirmed stream
 ([`recovered_model`](@ref)). The fraction of confirmed cases whose outcome
 is recovery rather than death is the confirmed-case survival fraction, the
-complement of the case-fatality ratio, so it is GROUNDED on the model's CFR
-rather than estimated from scratch. The confirmed cases are a slightly
+complement of the case-fatality ratio, so it is grounded on the model's
+CFR rather than estimated from scratch. The confirmed cases are a slightly
 different population from the one the CFR is defined over (they have been
 laboratory-confirmed and brought into care), so the survival fraction is the
 complement of the CFR adjusted on the log-odds scale by a sampled offset,
@@ -807,8 +794,7 @@ log-normal deviation from this baseline,
 ```
 
 with `σ_bg` the pooling SD, passed in rather than sampled here so the
-suspected-case and suspected-death streams can SHARE one pooling SD (the
-same non-BVD reporting environment drives both); see
+suspected-case and suspected-death streams can share one pooling SD; see
 [`background_pooling_model`](@ref), which samples it once at the composer
 level. The deviation is multiplicative so the per-vintage rate stays
 positive without a clamp and `σ_bg → 0` recovers the scalar baseline
@@ -846,17 +832,18 @@ a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
 end
 
 """
-Non-BVD background rate as a SMOOTH weekly lognormal random walk over the
-surveillance window, the replacement for the per-vintage step random effect
-([`background_re_model`](@ref)). The log-rate follows a non-centred random
-walk on WEEKLY knots and is linearly interpolated to the daily grid, the same
-parameterisation as the reproduction-number walk ([`rt_walk_model`](@ref)):
-the background is a slow drift, so a knot per `week` carries the time variation
-with far fewer innovations than a daily walk, which avoids the
-high-dimensional funnel a daily walk over a long window opens. The series is
-gated to zero before the surveillance `onset` — the non-BVD background does
-not exist before surveillance began — and ramps in over the first `onset_ramp`
-days of the window. With knot values `\\log\\lambda` and knot days `d`,
+Non-BVD background rate as a smooth weekly lognormal random walk over the
+surveillance window, the alternative to the per-vintage step random
+effect ([`background_re_model`](@ref)). The log-rate follows a
+non-centred random walk on weekly knots and is linearly interpolated to
+the daily grid, the same parameterisation as the reproduction-number walk
+([`rt_walk_model`](@ref)): the background is a slow drift, so a knot per
+`week` carries the time variation with far fewer innovations than a daily
+walk, avoiding the high-dimensional funnel a daily walk over a long
+window opens. The series is gated to zero before the surveillance
+`onset` (the non-BVD background does not exist before surveillance
+began) and ramps in over the first `onset_ramp` days of the window. With
+knot values `\\log\\lambda` and knot days `d`,
 
 ```math
 \\log \\lambda_d = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < d} z_s,
@@ -865,16 +852,16 @@ days of the window. With knot values `\\log\\lambda` and knot days `d`,
 ```
 
 `σ_rw` (passed in, shared across the suspected-case and suspected-death
-streams via [`background_pooling_model`](@ref)) is the per-knot innovation SD
-on the log scale; a TIGHT prior keeps the background fairly CONSTANT (a gentle
-drift, not week-to-week jumps), which both regularises the well-known
+streams via [`background_pooling_model`](@ref)) is the per-knot innovation
+SD on the log scale; a tight prior keeps the background close to constant
+(a gentle drift, not week-to-week jumps), which regularises the
 background/outbreak-size degeneracy (closing the high-background second
 posterior mode that breaks convergence) and keeps the series smooth (so a
-death background scaled from it carries no steps). Knots run only over the
-surveillance window `[onset, n]`, so the number of innovations is small.
-`onset ≤ 1` runs it over the whole grid. Pass `week` to change the knot
-spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
-(zero before `onset`).
+death background scaled from it carries no steps). Knots run only over
+the surveillance window `[onset, n]`, so the number of innovations is
+small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
+knot spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily
+series (zero before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
@@ -885,8 +872,8 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal baseline on the NATURAL scale, the SAME informative prior as
-    ## the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
+    ## Half-normal baseline on the natural scale, the same informative prior
+    ## as the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
     ## background level tightly (a lognormal/log-scale level has a heavy right
     ## tail the background/outbreak-size degeneracy exploits to run away), so
     ## the background cannot blow up to explain the suspected stream.
@@ -901,11 +888,12 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
     log_knots = vcat(zero(σ_rw), cumsum(steps))
     walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
-    ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the window,
-    ## so the gated background grows in from zero instead of stepping straight to
-    ## `λ_mu` at the surveillance boundary (which would put a one-day jump into
-    ## the suspected-death trajectory scaled from it). The ramp reaches 1 within
-    ## the window; `onset_ramp ≤ 1` recovers the old hard onset.
+    ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the
+    ## window, so the gated background grows in from zero instead of stepping
+    ## straight to `λ_mu` at the surveillance boundary (which would put a
+    ## one-day jump into the suspected-death trajectory scaled from it). The
+    ## ramp reaches 1 within the window; `onset_ramp ≤ 1` gives a hard onset
+    ## (a step to `λ_mu`).
     rr = clamp(Int(onset_ramp), 1, nw)
     ramp = [min(i, rr) / rr for i in 1:nw]
     λ_window = ramp .* λ_window
@@ -915,16 +903,18 @@ spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series
 end
 
 """
-Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean of
-0.95 with a tight spread. Confirmation runs on the altona RealStar Filovirus
-Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA copies per reaction;
-the Zaire-specific GeneXpert Ebola assay does not reliably detect Bundibugyo. A
-single assay draw is sensitive to about 0.85, but a suspect is confirmed or
-ruled out through repeat control tests rather than one PCR, so the effective
-process sensitivity is higher (two controls give about 0.98) and `Beta(38, 2)`
-credits that process (issue #374). Under the severe-first backlog the first
-vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1 positivity ≈ `s`
-identifies the sensitivity from the early data. Returns `(; s_test)`.
+Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean
+of 0.95 with a tight spread. Confirmation runs on the altona RealStar
+Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA
+copies per reaction; the Zaire-specific GeneXpert Ebola assay does not
+reliably detect Bundibugyo. A single assay draw is sensitive to about
+0.85, but a suspect is confirmed or ruled out through repeat control
+tests rather than one PCR, so the effective process sensitivity is
+higher (two controls give about 0.98) and `Beta(38, 2)` credits that
+process. Under the severe-first backlog the
+first vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1
+positivity ≈ `s` identifies the sensitivity from the early data. Returns
+`(; s_test)`.
 """
 @model function test_sensitivity_model(;
         sensitivity_prior = Beta(38.0, 2.0))
@@ -952,19 +942,20 @@ end
 Confirmed-positives overdispersion prior. The confirmed positives in each
 laboratory window are scored as an overdispersed `BetaBinomial` of the
 observed analysed denominator (see [`safe_betabinomial`](@ref) and
-[`confirmed_cases_model`](@ref)) rather than a plain `Binomial`, because the
-per-window positivity `p_pos` is a smooth pooled / composition-linked curve
-that does not capture the day-to-day laboratory batching and within-window
-positivity heterogeneity the confirmed counts carry. A plain `Binomial` on
-denominators of several hundred specimens gives predictive intervals far
-too tight, so the confirmed stream is systematically under-covered. The
-intra-window correlation `ρ ∈ (0, 1)` inflates the window variance to
-`n·p·(1 − p)·(1 + (n − 1)·ρ)`, with `ρ → 0` recovering the `Binomial`. The
-default `Beta(1, 24)` (mean ≈ 0.04, 90% ≈ 0.002–0.12) is weakly informative:
-it favours a small overdispersion and shrinks toward the `Binomial` when the
-data support it, while a single scalar identified across the laboratory
-windows lets the confirmed positives themselves set the spread. Returns
-`(; ρ)`.
+[`confirmed_cases_model`](@ref)) rather than a plain `Binomial`, because
+the per-window positivity `p_pos` is a smooth pooled / composition-linked
+curve that does not capture the day-to-day laboratory batching and
+within-window positivity heterogeneity the confirmed counts carry. A
+plain `Binomial` on denominators of several hundred specimens gives
+predictive intervals far too tight, so the confirmed stream is
+systematically under-covered. The intra-window correlation
+`ρ ∈ (0, 1)` inflates the window variance to
+`n·p·(1 − p)·(1 + (n − 1)·ρ)`, with `ρ → 0` recovering the `Binomial`.
+The default `Beta(1, 24)` (mean ≈ 0.04, 90% ≈ 0.002–0.12) is weakly
+informative: it favours a small overdispersion and shrinks toward the
+`Binomial` when the data support it, while a single scalar identified
+across the laboratory windows lets the confirmed positives themselves
+set the spread. Returns `(; ρ)`.
 """
 @model function confirmed_overdispersion_model(;
         overdispersion_prior = Beta(1.0, 24.0))
@@ -987,7 +978,8 @@ unidentified nuisance delay only makes the sampler wander it (it was the
 worst-mixing quantity in the joint, dragging the confirmation PMFs convolved
 from it). Returns `(; pmf, dist, mean, sd)`.
 """
-@model function lab_delay_model(nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
+@model function lab_delay_model(
+        nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
         mean_prior = truncated(Normal(4.5, 1.0); lower = 1),
         sd_prior = truncated(Normal(4.0, 0.75); lower = 1))
     d ~ to_submodel(censored_delay_model(nmax; mean_prior, sd_prior))
@@ -1026,11 +1018,11 @@ Returns `(; p_pos, q_mu, σ_q)` with `p_pos` a length-`nv` vector.
 end
 
 """
-Severity-enrichment prior for the COMPOSITION-LINKED confirmed positivity
+Severity-enrichment prior for the composition-linked confirmed positivity
 (`positivity_link = :composition` in [`confirmed_cases_model`](@ref)). In
 that mode the per-window tested BVD share is not a free random effect; it
 is the suspect-pool composition `φ_v = (p_drc · BVD)_v / ((p_drc · BVD)_v +
-λ_bg_v)` over each laboratory window, UPSAMPLED by a severity enrichment
+λ_bg_v)` over each laboratory window, upsampled by a severity enrichment
 that decays as testing widens:
 
 ```math

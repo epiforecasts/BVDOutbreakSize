@@ -55,7 +55,7 @@ end
     @test s.σ_q >= 0
 end
 
-@testitem "confirmed_deaths_model gives a bounded confirmation probability" begin
+@testitem "confirmed_deaths_model bounds the confirmation probability" begin
     using BVDOutbreakSize: confirmed_deaths_model
     using Turing: returned
     using Random: MersenneTwister
@@ -98,29 +98,32 @@ end
     sd = returned(delayed, rand(MersenneTwister(seed), delayed))
     @test sd.p_death_conf ≈ sb.p_death_conf
     @test sd.expected_confirmed_deaths < sb.expected_confirmed_deaths
-    @test sd.expected_confirmed_deaths ≈ (35 / 40) * sb.expected_confirmed_deaths rtol=1e-6
+    @test sd.expected_confirmed_deaths ≈
+          (35 / 40) * sb.expected_confirmed_deaths rtol=1e-6
 end
 
-@testitem "confirmed_deaths_model gates the capacity before the testing onset" begin
+@testitem "confirmed_deaths_model gates capacity before the testing onset" begin
     using BVDOutbreakSize: confirmed_deaths_model
     using Turing: returned
     using Random: MersenneTwister
 
     ## No deaths are confirmed before testing began: with a flat death series,
     ## gating the death "analysed" volume at day 21 of 40 zeroes the first 20
-    ## days, so the expected confirmed deaths fall to 20/40 of the ungated total.
-    ## The default `capacity_start = 0` leaves it ungated.
+    ## days, so the expected confirmed deaths fall to 20/40 of the ungated
+    ## total. The default `capacity_start = 0` leaves it ungated.
     bvd_deaths = fill(5.5, 40)
     bg_death = fill(0.5, 40)
     deaths_daily = bvd_deaths .+ bg_death
     seed = 4
-    ung = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
+    ung = confirmed_deaths_model(
+        17, 246, deaths_daily, bvd_deaths, bg_death, 5.0)
     gat = confirmed_deaths_model(17, 246, deaths_daily, bvd_deaths, bg_death,
         5.0; capacity_start = 21)
     su = returned(ung, rand(MersenneTwister(seed), ung))
     sg = returned(gat, rand(MersenneTwister(seed), gat))
     @test sg.expected_confirmed_deaths < su.expected_confirmed_deaths
-    @test sg.expected_confirmed_deaths ≈ (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
+    @test sg.expected_confirmed_deaths ≈
+          (20 / 40) * su.expected_confirmed_deaths rtol=1e-6
 end
 
 @testitem "confirmed_deaths_model scales the case analysed volume" begin
@@ -255,13 +258,13 @@ end
         case_bg_daily = case_bg)
     st = returned(m, rand(MersenneTwister(seed), m))
 
-    ## The death background is the case background scaled by cfr_bg and lagged by
-    ## the onset-to-death delay, pointwise.
+    ## The formula above holds pointwise, not just on the totals.
     @test st.bg_death_daily ≈ st.cfr_bg .* convolve_delay(case_bg, st.od_pmf)
-    ## Gated: zero before the case-background onset (the lag only shifts later).
+    ## Gated: zero before the case-background onset (the lag only shifts
+    ## later).
     @test all(st.bg_death_daily[1:(onset - 1)] .== 0)
-    ## Smooth: no day-to-day jump in the background exceeds the tight random-walk
-    ## innovation scale (a per-vintage step background would jump abruptly).
+    ## Smooth: no day-to-day jump exceeds the tight random-walk innovation
+    ## scale (a per-vintage step background would jump abruptly).
     Δ = diff(st.bg_death_daily[onset:end])
     level = maximum(st.bg_death_daily)
     @test maximum(abs.(Δ)) <= 0.3 * level

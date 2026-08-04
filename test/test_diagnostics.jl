@@ -3,7 +3,9 @@
 ## bulk-ESS and numerical-error (divergence) information the helpers
 ## read.
 
-@testitem "fit_diagnostics summarises rhat, ess and divergences" tags=[:slow] begin
+@testitem "fit_diagnostics summarises rhat, ess and divergences" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using BVDOutbreakSize: nuts_sample, fit_diagnostics

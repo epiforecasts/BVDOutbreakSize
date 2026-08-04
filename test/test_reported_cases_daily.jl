@@ -1,7 +1,9 @@
 ## Smoke tests for the per-vintage reported-cases likelihood exercised
 ## through `cases_only_model` with a history `(; days, counts)`.
 
-@testitem "reported_cases: prior draws are finite and non-negative" tags=[:slow] begin
+@testitem "reported_cases: prior draws are finite and non-negative" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model

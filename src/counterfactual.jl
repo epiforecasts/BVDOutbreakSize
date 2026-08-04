@@ -101,13 +101,13 @@ end
 # Committed laboratory-confirmed deaths under the counterfactual: the
 # already-observed confirmed deaths plus the forwarded-positive increment of
 # the suspect-death backlog drained over the long horizon, with infections
-# held FLAT at `C(T)` after `T` (no onward transmission). Mirrors the
+# held flat at `C(T)` after `T` (no onward transmission). Mirrors the
 # suspect-death forward of `_forecast_confirmed_deaths_increment` but on the
 # flat infection trajectory, so the BVD-death pool plateaus rather than
 # growing exponentially over the year. The death pool is
-# `os · p_deaths · CFR · ∫₀^u C_flat(s) f_death(u−s) ds` plus the continuing
-# constant-rate background `λ_bg_death·u`; positivity uses the BVD share of
-# the suspect-death pool at the horizon.
+# `os · p_deaths · CFR · ∫₀^u C_flat(s) f_death(u−s) ds` plus the
+# continuing constant-rate background `λ_bg_death·u`. Positivity uses the
+# BVD share of the suspect-death pool at the horizon.
 function _committed_confirmed_deaths_one(r, T, Th, α, θ, CFR, p_deaths,
         λ_bg_death, τ_death, s, spec, obs_confirmed_deaths;
         onset_fraction = 1.0, alg = DEATH_INTEGRAL_ALG)
@@ -137,27 +137,27 @@ confirmed over the `horizon_days` horizon (default one year). Reads the
 posterior `chn` and returns a `DataFrame` with one row per draw and
 columns:
 
-- `:infections` — committed infections, the current outbreak size
-  `C(T) = 2^m` (`:cumulative_infections`); flat, since no new infections
-  occur under the counterfactual.
-- `:bvd_deaths` — committed true BVD deaths, `CFR · C(T)`. Every infection
+- `:infections`: committed infections, the current outbreak size
+  `C(T) = 2^m` (`:cumulative_infections`), held flat since no new
+  infections occur under the counterfactual.
+- `:bvd_deaths`: committed true BVD deaths, `CFR · C(T)`. Every infection
   eventually contributes its death, so over a one-year horizon essentially
   all delayed onset-to-death events occur and the committed toll is the
   closed form `CFR · C(T)` (equivalently the realised deaths plus the
   committed-deaths tail of [`predict_no_onward_deaths`](@ref)).
-- `:confirmed_cases` — committed laboratory-confirmed cases when the chain
+- `:confirmed_cases`: committed laboratory-confirmed cases when the chain
   carries the lab parameters (`:s_test`, `:spec_test`, `:τ_forward`,
   `:α_recv`, `:θ_recv`) and `obs_confirmed` / `obs_analysed` are supplied.
   Computed by draining the committed suspect-case backlog (flat infections,
   continuing background) over the horizon: `obs_confirmed + p_pos ·
   max(received(T + horizon) − obs_analysed, 0)`. The capacity limit is not
   applied because over a year the lab clears the finite committed backlog.
-- `:confirmed_deaths` — committed laboratory-confirmed deaths when the chain
+- `:confirmed_deaths`: committed laboratory-confirmed deaths when the chain
   additionally carries `:τ_death`, `:p_deaths`, `:λ_bg_death` and
   `obs_confirmed_deaths` is supplied: the observed confirmed deaths plus the
   forwarded-positive suspect-death backlog drained over the horizon.
 
-`horizon_days` sets how far the lab drains; the default `365` is long
+`horizon_days` sets how far the lab drains. The default `365` is long
 enough that the committed lab outcomes have effectively saturated. `alg` is
 the quadrature scheme, defaulting to `GaussLegendre(n = 64)`.
 """
@@ -177,7 +177,7 @@ function predict_committed(chn;
 
     ## Lab parameters for the committed confirmed-case backlog. The
     ## forwarding fraction is `τ_forward_out` on the production queue chain
-    ## and `τ_forward` on prior/test chains; resolve whichever is present.
+    ## and `τ_forward` on prior/test chains. Resolve whichever is present.
     fwd_key = _forward_key(chn)
     has_lab = fwd_key !== nothing &&
               all(haskey_chain(chn, n)

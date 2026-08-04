@@ -154,15 +154,13 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
     ## Cut-off expected confirmed count, aliased under the same un-prefixed
     ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
     ## confirmed stream can be forecast from this fit
-    ## ([`forecast_stream`](@ref)). It is aliased HERE, at the composer
-    ## level, rather than `:=`-tracked inside
-    ## [`confirmed_cases_model`](@ref): that submodel deliberately keeps its
-    ## derived quantities on plain `=` because a `:=` there builds a
-    ## DynamicPPL tracking closure over the boxed `p_pos` that Enzyme's
-    ## `nodecayed_phis!` pass cannot differentiate through (see #445, #453).
-    ## The alias below closes over the submodel's returned NamedTuple, which
-    ## is assigned once and not boxed — the same pattern the joint already
-    ## uses for this quantity.
+    ## ([`forecast_stream`](@ref)). Aliased here, at the composer level,
+    ## rather than `:=`-tracked inside [`confirmed_cases_model`](@ref): that
+    ## submodel keeps its derived quantities on plain `=` because a `:=`
+    ## there would build a DynamicPPL tracking closure over the boxed
+    ## `p_pos`, which Enzyme's `nodecayed_phis!` pass cannot differentiate
+    ## through. The alias below closes over the submodel's returned
+    ## NamedTuple, which is assigned once and not boxed.
     expected_confirmed_T := confirmed_state.expected_confirmed
 end
 
@@ -319,10 +317,10 @@ See [`exports_deaths_model`](@ref).
 end
 
 """
-Exports-joint composer: the Uganda export CASES and DEATHS fit together as
-one geographic-spread stream. Runs the infection process and onset staging,
-samples ascertainment and the deaths submodel (for the CFR and
-onset-to-death delay), then conditions on BOTH the export-case and
+Exports-joint composer: the Uganda export cases and deaths fit together
+as one geographic-spread stream. Runs the infection process and onset
+staging, samples ascertainment and the deaths submodel (for the CFR and
+onset-to-death delay), then conditions on both the export-case and
 export-death likelihoods over the one travel-gated at-risk prevalence, so
 the imports and the import deaths inform the outbreak size jointly rather
 than as two separate single-stream fits. Either count may be `missing` to
@@ -369,58 +367,64 @@ and deaths-among-exports, and the optional genetic seeding bound on the
 outbreak age. Each stream argument may be `missing` to drop it, so the
 model doubles as a prior- and posterior-predictive generator.
 
-onset-to-report kernel with the suspected-case stream. A single
-analysed-specimen volume is fit through a report-to-analysed delay and the
-tested fraction; the confirmed positives are scored as a Binomial of the
-observed specimens-analysed denominator (`lab_history`) with a
-partially-pooled per-window positivity, so the confirmed counts no longer
-pass through the multiplicative ascertainment ridge. After the national
-cumulative analysed series stops, the reporting format gives a 24h analysed
-count on some days (`lab_daily_history`); these are fitted as per-day
-analysed volumes and also anchor that day's confirmed positives as a
-Binomial of the observed denominator. The early and unanchored windows
-(days with no published denominator) use the modelled analysed volume as
-the denominator, with the positivity (hence `λ_bg`) carried over from the
-windows that do have data (see [`confirmed_cases_model`](@ref)). The
-optional `suspected_daily_history` adds the post-26 May daily new-suspect
-inflow ("nouveaux cas suspects du jour"), scored against the modelled daily
-suspected series at each report day where the frozen cumulative suspected
-stream stops, on days disjoint from it. The optional
-`suspected_daily_deaths_history` adds the deaths analogue, the post-26 May
-daily new suspected deaths ("cas suspects du jour N (M deces)"), scored
-against the modelled daily suspected-death series where the frozen cumulative
-suspected-death stream stops. The confirmed deaths mirror the
-confirmed-case laboratory pipeline: a death "analysed" volume (the suspected
-deaths carried to laboratory receipt and thinned by the death testing
-fraction `tau_death`) scored through a death-pool composition positivity
-`p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of the
-suspected deaths (see [`confirmed_deaths_model`](@ref)). The suspected deaths
-carry a death ascertainment `p_death` and a non-BVD background tied to the
-case background by a background CFR `cfr_bg` (see [`deaths_model`](@ref)). The
-optional `isolation_history` adds the
-daily isolation/treatment-bed occupancy ("Patients en isolement"), a
-prevalence stream fitted as the suspect inflow (BVD treatment stay plus
-non-BVD rule-out stay) carried through a length-of-stay survival into a
-daily stock (see [`treatment_flow_model`](@ref)). The optional
-`recovered_history` adds the recovered-among-confirmed stream ("cumul
-guéris"), survivors among the modelled daily confirmed cases scaled by the
-recovery probability and lagged by a confirmation-to-recovery delay (see
+The confirmed-case stream shares its onset-to-report kernel with the
+suspected-case stream. A single analysed-specimen volume is fit through a
+report-to-analysed delay and the tested fraction; the confirmed positives
+are scored as a Binomial of the observed specimens-analysed denominator
+(`lab_history`) with a partially-pooled per-window positivity, so the
+confirmed counts do not pass through the multiplicative ascertainment
+ridge. After the national cumulative analysed series stops, the
+reporting format gives a 24h analysed count on some days
+(`lab_daily_history`); these are fitted as per-day analysed volumes and
+also anchor that day's confirmed positives as a Binomial of the observed
+denominator. The early and unanchored windows (days with no published
+denominator) use the modelled analysed volume as the denominator, with
+the positivity (hence `λ_bg`) carried over from the windows that do have
+data (see [`confirmed_cases_model`](@ref)).
+
+The optional `suspected_daily_history` adds the post-26 May daily
+new-suspect inflow ("nouveaux cas suspects du jour"), scored against the
+modelled daily suspected series at each report day where the frozen
+cumulative suspected stream stops, on days disjoint from it. The optional
+`suspected_daily_deaths_history` adds the deaths analogue, the post-26
+May daily new suspected deaths ("cas suspects du jour N (M deces)"),
+scored against the modelled daily suspected-death series where the
+frozen cumulative suspected-death stream stops.
+
+The confirmed deaths mirror the confirmed-case laboratory pipeline: a
+death "analysed" volume (the suspected deaths carried to laboratory
+receipt and thinned by the death testing fraction `tau_death`) scored
+through a death-pool composition positivity
+`p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of
+the suspected deaths (see [`confirmed_deaths_model`](@ref)). The
+suspected deaths carry a death ascertainment `p_death` and a non-BVD
+background tied to the case background by a background CFR `cfr_bg`
+(see [`deaths_model`](@ref)).
+
+The optional `isolation_history` adds the daily isolation/treatment-bed
+occupancy ("Patients en isolement"), a prevalence stream fitted as the
+suspect inflow (BVD treatment stay plus non-BVD rule-out stay) carried
+through a length-of-stay survival into a daily stock (see
+[`treatment_flow_model`](@ref)). The optional `recovered_history` adds
+the recovered-among-confirmed stream ("cumul guéris"), survivors among
+the modelled daily confirmed cases scaled by the recovery probability
+and lagged by a confirmation-to-recovery delay (see
 [`recovered_model`](@ref)).
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
 seeding submodel when `tmrca_days` is given. Tracked deterministics:
-`C_T` (cumulative infections by the cut-off), the single established
+`C_T` (cumulative infections by the cut-off), the established
 reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
-(outbreak age),
-`R_T` (current reproduction number), the per-stream expected counts, the
-testing fraction `tau_test`, the background rate `lambda_bg`, the death
-ascertainment `death_ascertainment`, the background CFR `background_cfr`, the
-death testing fraction `tau_death`, the implied per-suspected
-(`suspected_positivity`) and per-test (`test_positivity`) positivities,
-and the death-pool BVD composition (`death_composition`) and
-death-confirmation positivity (`death_confirmation`).
+(outbreak age), `R_T` (current reproduction number), the per-stream
+expected counts, the testing fraction `tau_test`, the background rate
+`lambda_bg`, the death ascertainment `death_ascertainment`, the
+background CFR `background_cfr`, the death testing fraction `tau_death`,
+the implied per-suspected (`suspected_positivity`) and per-test
+(`test_positivity`) positivities, and the death-pool BVD composition
+(`death_composition`) and death-confirmation positivity
+(`death_confirmation`).
 """
 @model function bvd_joint(
         n::Integer,
@@ -477,22 +481,23 @@ death-confirmation positivity (`death_confirmation`).
         tmrca_days_sd::Real = 16.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
         rt_walk_lead::Integer = RT_WALK_LEAD)
-    ## The renewal start sits `renewal_start_lead` days AFTER the genetic
-    ## TMRCA day (`n - tmrca_days + lead`), past the TMRCA's uncertainty where
-    ## sustained transmission is confident. The lead keeps the observed span
-    ## `τ_obs = n − renewal_start` strictly shorter than `tmrca_days`, so the
-    ## genetic bound on the total age `T = m·τ + τ_obs` stays informative (it
-    ## bounds the cryptic duration `m·τ` from below). The renewal seeds and
-    ## grows from here.
+    ## The renewal start sits `renewal_start_lead` days after the genetic
+    ## TMRCA day (`n - tmrca_days + lead`), past the TMRCA's uncertainty
+    ## where sustained transmission is confident. The lead keeps the
+    ## observed span `τ_obs = n − renewal_start` strictly shorter than
+    ## `tmrca_days`, so the genetic bound on the total age
+    ## `T = m·τ + τ_obs` stays informative (it bounds the cryptic duration
+    ## `m·τ` from below). The renewal seeds and grows from here.
     rt_start = ismissing(tmrca_days) ? 1 :
                clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
-    ## Start the random walk `rt_walk_lead` days (a month by default) BEFORE
-    ## the first situation report (`breakpoint`) rather than exactly at it, so
-    ## R_t is free to move over the weeks of transmission leading up to the
-    ## first report instead of being held flat at R0 right to it (the response
-    ## decline can begin before the outbreak is first reported). The start is
-    ## floored at the renewal start so the walk never precedes the seeded
-    ## trajectory. With no breakpoint the walk falls back to the renewal start.
+    ## Start the random walk `rt_walk_lead` days (a month by default) before
+    ## the first situation report (`breakpoint`) rather than exactly at it,
+    ## so R_t is free to move over the weeks of transmission leading up to
+    ## the first report instead of being held flat at R0 right to it (the
+    ## response decline can begin before the outbreak is first reported).
+    ## The start is floored at the renewal start so the walk never precedes
+    ## the seeded trajectory. With no breakpoint the walk falls back to the
+    ## renewal start.
     rt_walk_start = ismissing(breakpoint) ? rt_start :
                     clamp(round(Int, breakpoint) - rt_walk_lead, rt_start, n)
     latent ~ to_submodel(
@@ -521,21 +526,21 @@ death-confirmation positivity (`death_confirmation`).
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
 
-    ## Non-BVD background as a SMOOTH daily lognormal random walk over the
+    ## Non-BVD background as a smooth daily lognormal random walk over the
     ## surveillance window ([`background_walk_model`](@ref)), with the tight
-    ## innovation SD `σ_rw` driving the suspected-CASE stream. The background is
-    ## gated to zero before the surveillance onset (a report-to-receipt lead
-    ## before the first suspected-case report) — it does not exist before
-    ## surveillance began. The tight innovation SD keeps it fairly constant,
-    ## which regularises the background/outbreak-size degeneracy (the prior used
-    ## a per-vintage STEP random effect whose multiplicative blow-up opened a
-    ## second posterior mode that broke convergence). The suspected-DEATH
-    ## background is NOT a separate random effect: it is tied to the case
+    ## innovation SD `σ_rw` driving the suspected-case stream. The background
+    ## is gated to zero before the surveillance onset (a report-to-receipt
+    ## lead before the first suspected-case report): it does not exist
+    ## before surveillance began. The tight innovation SD keeps it fairly
+    ## constant, which regularises the background/outbreak-size degeneracy:
+    ## a per-vintage step random effect's multiplicative blow-up can open a
+    ## second posterior mode that breaks convergence. The suspected-death
+    ## background is not a separate random effect: it is tied to the case
     ## background by a background CFR (`cfr_bg · case_bg_daily`, see
     ## [`deaths_model`](@ref)), so it inherits the case background's smooth,
-    ## gated, ramped level and time-variation rather than competing as a second
-    ## free, outbreak-size-degenerate rate. With `background_re = false` (the
-    ## renewal default) the case stream keeps its scalar `λ_bg`.
+    ## gated, ramped level and time-variation rather than competing as a
+    ## second free, outbreak-size-degenerate rate. With `background_re =
+    ## false` (the renewal default) the case stream keeps its scalar `λ_bg`.
     ## The pooling SD is sampled only when the random effect is active (the
     ## tilde must stay gated), but `σ_rw_shared` and `bg_onset` are bound
     ## unconditionally to plain values so the closure below captures
@@ -550,14 +555,15 @@ death-confirmation positivity (`death_confirmation`).
         σ_rw_shared = 0.0
     end
     ## Onset of the suspected pool's non-BVD background: a report-to-receipt
-    ## lead BEFORE the first suspected-case report, not exactly at it. The
+    ## lead before the first suspected-case report, not exactly at it. The
     ## suspects in the first report were already in the pipeline, and the
-    ## background feeds the laboratory analysed volume through the report-to-
-    ## receipt convolution, so it must begin early enough for that convolution
-    ## to be fully formed by the first report. The lead is the MAX lag of the
-    ## report-to-receipt kernel (its truncation `nmax`, the default
-    ## `lab_delay_model` support), not its mean, so no tail contribution is cut
-    ## off at the onset. Bound unconditionally (unused when the effect is off).
+    ## background feeds the laboratory analysed volume through the
+    ## report-to-receipt convolution, so it must begin early enough for that
+    ## convolution to be fully formed by the first report. The lead is the
+    ## max lag of the report-to-receipt kernel (its truncation `nmax`, the
+    ## default `lab_delay_model` support), not its mean, so no tail
+    ## contribution is cut off at the onset. Bound unconditionally (unused
+    ## when the effect is off).
     bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
     bg_onset = isempty(reported_history.days) ? 1 :
                clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
@@ -605,13 +611,14 @@ death-confirmation positivity (`death_confirmation`).
         confirmed_break_sd,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily))
-    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)): occupancy
-    ## plus the in-care outcome flows, with the in-care fatality CFR_iso
-    ## identified by the in-care death flow. The occupancy split borrows the
-    ## in-care confirmation hazard `τ_test · p_pos` from the confirmed pipeline to
-    ## carve the occupied true-case stock into confirmed and suspect sub-stocks,
-    ## scored against the Tableau 6 `dont confirmés` / `dont suspects` census. The
-    ## known DHIS2 harmonisation days carry the overnight total reporting break.
+    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)):
+    ## occupancy plus the in-care outcome flows, with the in-care fatality
+    ## CFR_iso identified by the in-care death flow. The occupancy split
+    ## borrows the in-care confirmation hazard `τ_test · p_pos` from the
+    ## confirmed pipeline to carve the occupied true-case stock into
+    ## confirmed and suspect sub-stocks, scored against the Tableau 6
+    ## `dont confirmés` / `dont suspects` census. The known DHIS2
+    ## harmonisation days carry the overnight total reporting break.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(
         treatment(isolation_history, cases_state.bvd_reports_daily,
@@ -626,10 +633,11 @@ death-confirmation positivity (`death_confirmation`).
         occupancy_break_days = occupancy_break_days,
         conf_hazard_daily = conf_hazard_daily,
         k_external = k_isolation))
-    ## Recovered among confirmed ("cumul guéris"): survivors among the modelled
-    ## daily confirmed cases (the confirmed-and-discharged subset, not all
-    ## in-care recoveries), with a recovery fraction grounded on the CFR and
-    ## lagged by a confirmation-to-recovery delay (see [`recovered_model`](@ref)).
+    ## Recovered among confirmed ("cumul guéris"): survivors among the
+    ## modelled daily confirmed cases (the confirmed-and-discharged subset,
+    ## not all in-care recoveries), with a recovery fraction grounded on the
+    ## CFR and lagged by a confirmation-to-recovery delay (see
+    ## [`recovered_model`](@ref)).
     recovered_state ~ to_submodel(
         recovered(recovered_history, recovered_cases,
         confirmed_state.confirmed_daily, deaths_state.CFR;
@@ -653,21 +661,22 @@ death-confirmation positivity (`death_confirmation`).
     ## over the grid. Exposed as vector deterministics so the ribbon panels
     ## reconstruct from the chain without re-running the renewal. All three
     ## are BVD-only latent renewal quantities: deaths uses the BVD death
-    ## series (onsets convolved with the onset-to-death delay), NOT the
+    ## series (onsets convolved with the onset-to-death delay), not the
     ## fitted total, so it stays smooth like infections and onsets. The
     ## additive non-BVD background is a daily random walk and belongs to the
     ## observation side, not this latent trajectory. `cumulative_infections`
     ## and `C_T` are exposed once by the shared `_latent` submodel above.
     cumulative_onsets := cumsum(onsets)
     cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
-    ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
-    ## the per-window tested-positive probability applied to the modelled,
-    ## testing-onset-gated analysed volume), so the cumulative trajectory carries
-    ## the confirmed-case timing for the delay-corrected confirmed-CFR
-    ## reconstruction. The onset-to-confirmation kernel (onset-to-report ⊕
-    ## receipt) and the onset-to-death-confirmation kernel (onset-to-death ⊕
-    ## receipt) are exposed alongside so the residual delay between a confirmed
-    ## case and its confirmed death can be rebuilt per draw off the chain.
+    ## Modelled daily laboratory-confirmed cases (from
+    ## `confirmed_cases_model`: the per-window tested-positive probability
+    ## applied to the modelled, testing-onset-gated analysed volume), so the
+    ## cumulative trajectory carries the confirmed-case timing for the
+    ## delay-corrected confirmed-CFR reconstruction. The onset-to-confirmation
+    ## kernel (onset-to-report ⊕ receipt) and the onset-to-death-confirmation
+    ## kernel (onset-to-death ⊕ receipt) are exposed alongside so the residual
+    ## delay between a confirmed case and its confirmed death can be rebuilt
+    ## per draw off the chain.
     ## Re-add the testing-onset baseline: the laboratory capacity is gated to
     ## zero before testing began and the first confirmed vintage is treated as
     ## the initial condition (a baseline the early windows do not score), so the
@@ -682,14 +691,17 @@ death-confirmation positivity (`death_confirmation`).
                 clamp(Int(confirmed_history.days[1]), 1, n)
     _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
-    onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
-    onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
+    onset_to_confirmation_pmf := convolve_pmf(
+        cases_state.report_pmf, confirmed_state.receipt_pmf)
+    onset_to_death_confirmation_pmf := convolve_pmf(
+        deaths_state.od_pmf, confirmed_state.receipt_pmf)
     ## External onset-to-sample constraint on the confirmed sampling delay
     ## (grounded on the NEJM DRC 2026 cohort by default, see
-    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt legs
-    ## convolve to the confirmed onset-to-sample delay, so its continuous mean is
-    ## the sum of the two legs' means and its continuous SD the root-sum of their
-    ## variances; both are exposed here. The cohort's reported (continuous) mean
+    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt
+    ## legs convolve to the confirmed onset-to-sample delay, so its
+    ## continuous mean is the sum of the two legs' means and its continuous
+    ## SD the root-sum of their variances; both are exposed here. The
+    ## cohort's reported (continuous) mean
     ## and median are fitted to these as soft Normal observations
     ## ([`onset_to_sample_logweight`](@ref)), grounding the otherwise-
     ## unidentified receipt (lab-turnaround) leg without touching either prior.

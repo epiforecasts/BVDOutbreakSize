@@ -1,9 +1,9 @@
 ## Tests for the molecular-clock growth-and-size prior and the two-phase
 ## renewal-start seeding it drives in `infection_model`. The growth
-## submodel now SAMPLES the cryptic rate `r` (the prior sits on the genetic
+## submodel samples the cryptic rate `r` (the prior sits on the genetic
 ## doubling time) along with the doubling count `m`, so the cryptic duration
-## `m·τ` is prior-dominated; the established `R0` is derived FORWARD from `r`
-## in `infection_model`. The renewal-start seed magnitude is `2^m` DIRECTLY
+## `m·τ` is prior-dominated; the established `R0` is derived forward from `r`
+## in `infection_model`. The renewal-start seed magnitude is `2^m` directly
 ## (no back-scaling), and the total age `T = m·τ + τ_obs` carries the genetic
 ## bound while the renewal sets the realized size.
 
@@ -12,7 +12,7 @@
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
-    ## `r` is now SAMPLED (the growth-rate prior), along with `m`.
+    ## `r` is sampled (the growth-rate prior), along with `m`.
     ## `to_submodel(x, false)` re-exposes `r`, `m` and the `:=` (`τ`, `T`,
     ## `C_T`) names at the parent.
     @model function _wrap()
@@ -36,7 +36,7 @@
     @test all(isapprox.(C_T, 2.0 .^ m; rtol = 1e-8))
 end
 
-@testitem "exponential_growth_model: r and m priors are WIDE" begin
+@testitem "exponential_growth_model: r and m priors are wide" begin
     using Statistics: mean, std
     using Turing: @model, to_submodel, sample, Prior
     import FlexiChains
@@ -53,12 +53,13 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 5.8, SD near 3.4 (truncated Normal(5, 4); lower 0): `m` counts
-    ## only the CRYPTIC doublings. The prior is deliberately wide so the
-    ## cryptic duration stays uncertain.
+    ## Centre near 5.8, SD near 3.4 (truncated Normal(5, 4); lower 0): `m`
+    ## counts only the cryptic doublings. The prior is deliberately wide so
+    ## the cryptic duration stays uncertain.
     @test 5.3 < mean(m) < 6.3
     @test 3.0 < std(m) < 3.8
-    ## The growth rate is centred on the BEAST X 11.7-day doubling (r ≈ 0.059).
+    ## The growth rate is centred on the BEAST X 11.7-day doubling
+    ## (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
     ## The induced cryptic duration T = m·τ is correspondingly wide.
     @test std(T) > 30.0
@@ -91,12 +92,12 @@ end
     m = vec(Array(chn[:m]))
 
     @test all(isfinite, T) && all(isfinite, C_T) && all(C_T .> 0)
-    ## Total age T = m·τ + τ_obs is WIDE (prior-dominated by the m prior)
+    ## Total age T = m·τ + τ_obs is wide (prior-dominated by the m prior)
     ## and ≥ τ_obs by construction (the cryptic phase adds m·τ ≥ 0).
     @test std(T) > 20.0
     @test all(T .>= τ_obs)
     @test mean(T) > τ_obs    # origin sits before the renewal start (cryptic)
-    ## The renewal-start seed magnitude is `2^m` DIRECTLY, r-independent (no
+    ## The renewal-start seed magnitude is `2^m` directly, r-independent (no
     ## back-scaling): keeps the single R0 out of the seed magnitude.
     @test all(sa .> 0)
     @test all(isapprox.(sa, 2.0 .^ m; rtol = 1e-6))
@@ -109,10 +110,10 @@ end
 
     ## The renewal/seeding starts at `rt_start` (the genetic-TMRCA renewal
     ## start), but the reproduction-number random walk can be held flat at the
-    ## established `R0` until a LATER day `rt_walk_start` (the first situation
+    ## established `R0` until a later day `rt_walk_start` (the first situation
     ## report), so no unsupported Rt drift happens over the pre-surveillance
     ## window where the dynamics are unidentified. With `breakpoint = missing`
-    ## there is no intervention ramp, so `Rt` must be EXACTLY constant on every
+    ## there is no intervention ramp, so `Rt` must be exactly constant on every
     ## day from day 1 up to the first walk knot at `rt_walk_start`, while the
     ## renewal still seeds and grows from the earlier `rt_start`.
     n = 109
@@ -134,8 +135,8 @@ end
     end
 
     ## Default `rt_walk_start = rt_start`: the walk starts at the renewal
-    ## start, so Rt is free to vary from `rt_start` onward (the old behaviour
-    ## is preserved when the walk start is not decoupled).
+    ## start, so Rt is free to vary from `rt_start` onward whenever the walk
+    ## start is not decoupled from it.
     seed!(13)
     m0 = infection_model(n; rt_start)
     s0 = returned(m0, rand(rng, m0))
@@ -147,14 +148,14 @@ end
     using Random: default_rng, seed!
     using BVDOutbreakSize: infection_model, doubling_time, euler_lotka_r
 
-    ## The reported CURRENT growth rate `r` and the cut-off reproduction
-    ## number `R_T = Rt[n]` describe the SAME instant, so they must never
+    ## The reported current growth rate `r` and the cut-off reproduction
+    ## number `R_T = Rt[n]` describe the same instant, so they must never
     ## disagree in sign: `r < 0` must imply `R_T < 1` and `r >= 0` must imply
     ## `R_T >= 1`. The realised last-two-days slope `log I[n] - log I[n-1]`
-    ## did NOT satisfy this — the intervention ramp depresses the final
-    ## renewal step so `I[n] < I[n-1]` while `Rt[n] >= 1` — so the reported
-    ## `r` is derived from `R_T` and the generation interval via Euler–Lotka
-    ## instead, making the relationship exact by construction.
+    ## can disagree (the intervention ramp can depress the final renewal step
+    ## so `I[n] < I[n-1]` while `Rt[n] >= 1`), so `r` is instead derived from
+    ## `R_T` and the generation interval via Euler–Lotka, which keeps the
+    ## relationship exact by construction.
     n = 109
     rt_start = 45       # genetic-TMRCA day + renewal-start lead
     breakpoint = 84     # intervention ramp near the cut-off

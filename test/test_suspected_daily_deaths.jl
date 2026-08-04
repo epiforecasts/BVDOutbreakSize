@@ -3,7 +3,9 @@
 ## series at each report day, the deaths analogue of the daily new-suspect
 ## inflow. Exercised through `deaths_only_model` and `bvd_joint`.
 
-@testitem "suspected daily deaths: conditioned fit stays positive" tags=[:slow] begin
+@testitem "suspected daily deaths: conditioned fit stays positive" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: deaths_only_model
@@ -25,7 +27,9 @@
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily deaths: predictive path samples the counts" tags=[:slow] begin
+@testitem "suspected daily deaths: predictive path samples the counts" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: deaths_only_model
@@ -65,7 +69,9 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily deaths: joint prior runs with the live data" tags=[:slow] begin
+@testitem "suspected daily deaths: joint prior runs with the live data" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model

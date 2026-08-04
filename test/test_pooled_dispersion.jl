@@ -66,7 +66,9 @@ end
     end
 end
 
-@testitem "bvd_joint: exposes partially-pooled per-stream dispersions" tags=[:slow] begin
+@testitem "bvd_joint: exposes partially-pooled per-stream dispersions" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model

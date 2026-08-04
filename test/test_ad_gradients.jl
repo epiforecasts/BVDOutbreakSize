@@ -20,7 +20,9 @@
 ## AD-sensitive items. The gradient pattern mirrors the Enzyme-extension
 ## check in `test/enzyme/runtests.jl`, which validates the same model.
 
-@testitem "AD gradient: exports_only_model differentiates (Mooncake)" tags = [:ad] begin
+@testitem "AD gradient: exports_only_model differentiates (Mooncake)" tags=[
+    :ad
+] begin
     using Turing: DynamicPPL
     using LogDensityProblems: logdensity_and_gradient
     using Random: seed!

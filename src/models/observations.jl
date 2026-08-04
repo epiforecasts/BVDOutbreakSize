@@ -91,15 +91,15 @@ end
 """
 Zero a daily series `v` before grid day `start` (1-based), modelling a
 process that did not exist before `start`. Used to gate the laboratory
-analysed-specimen CAPACITY before testing began: no specimens are analysed
-before the testing system exists, so the modelled analysed volume (and the
-confirmed counts derived from it) must not accrue over the pre-surveillance
-cryptic phase. The suspected-case and suspected-death streams are NOT gated —
-those counts did accumulate over the cryptic phase, so their first per-vintage
-bin legitimately rolls from grid day 1. `start ≤ 1` returns `v` unchanged.
-Pure and AD-transparent; the element type follows `v`. Callers concretise any
-`Vector{Any}` (predict mode) before gating, so `zero(eltype(v))` is well
-defined.
+analysed-specimen capacity before testing began: no specimens are
+analysed before the testing system exists, so the modelled analysed
+volume (and the confirmed counts derived from it) must not accrue over
+the pre-surveillance cryptic phase. The suspected-case and suspected-death
+streams are not gated: those counts did accumulate over the cryptic
+phase, so their first per-vintage bin legitimately rolls from grid day 1.
+`start ≤ 1` returns `v` unchanged. Pure and AD-transparent; the element
+type follows `v`. Callers concretise any `Vector{Any}` (predict mode)
+before gating, so `zero(eltype(v))` is well defined.
 """
 function gate_before(v::AbstractVector, start::Integer)
     start <= 1 && return v
@@ -261,7 +261,7 @@ end
 
 """
 Right-censored occupancy likelihood. Each day's observed bed count `obs[i]`
-is a NegBinomial around the latent bed DEMAND `means[i]`, right-censored at
+is a NegBinomial around the latent bed demand `means[i]`, right-censored at
 the effective capacity `ceilings[i]`: below the ceiling the count reflects
 demand directly, and once demand reaches the ceiling the count is censored
 there. Unlike a smooth saturation of the mean, the censored tail probability
@@ -287,29 +287,30 @@ end
 """
     censoring_cap(iso_days, iso_obs, capacity_history)
 
-Per-report-day right-censoring bound for the isolation-occupancy likelihood,
-built from DATA only (no sampled parameter), so the censored NegativeBinomial
-never sits against a moving `-Inf` wall. Each isolation day takes the nearest
-recorded implied-capacity value (`capacity_history`, the occupancy / reported
-occupancy-rate series), floored at that day's observed occupancy so the bound
-is never below the count (a count above the cap has zero probability under the
-censored NB, the discontinuity that drives the divergences). With the cap
-fixed, the censored likelihood is smooth in the sampled demand: below the cap
-the count identifies demand directly, and at the cap it contributes the
-one-sided `demand ≥ capacity` tail. A `capacity_history` with no counts
-(empty, or days-only as the predictive generator supplies) returns a large
-finite cap far above any bed count, so the censoring is a no-op and the
+Per-report-day right-censoring bound for the isolation-occupancy
+likelihood, built from data only (no sampled parameter), so the censored
+NegativeBinomial never sits against a moving `-Inf` wall. Each isolation
+day takes the nearest recorded implied-capacity value (`capacity_history`,
+the occupancy / reported occupancy-rate series), floored at that day's
+observed occupancy so the bound is never below the count (a count above
+the cap has zero probability under the censored NB, the discontinuity
+that drives the divergences). With the cap fixed, the censored likelihood
+is smooth in the sampled demand: below the cap the count identifies
+demand directly, and at the cap it contributes the one-sided
+`demand ≥ capacity` tail. A `capacity_history` with no counts (empty, or
+days-only as the predictive generator supplies) returns a large finite
+cap far above any bed count, so the censoring is a no-op and the
 likelihood is the plain NB (a literal `Inf` cannot be used because
-[`safe_rate`](@ref) maps non-finite values to `eps`); a `missing` `iso_obs`
-skips the occupancy floor.
+[`safe_rate`](@ref) maps non-finite values to `eps`); a `missing`
+`iso_obs` skips the occupancy floor.
 
-The latent bed demand itself is left UNCENSORED: the cap enters only as the
-observation bound, so demand above capacity is carried by the renewal /
-length-of-stay demand model and its priors, not by the bound. Demand above a
-saturated capacity is only partially identified from occupancy (occupancy can
-say "demand was at least the beds filled", not how much more), so the bed
-shortfall is a prior/model-informed quantity, not pinned by the occupancy data
-— see [`treatment_flow_model`](@ref).
+The latent bed demand itself is left uncensored: the cap enters only as
+the observation bound, so demand above capacity is carried by the
+renewal / length-of-stay demand model and its priors, not by the bound.
+Demand above a saturated capacity is only partially identified from
+occupancy (occupancy can say "demand was at least the beds filled", not
+how much more), so the bed shortfall is a prior/model-informed quantity,
+not pinned by the occupancy data. See [`treatment_flow_model`](@ref).
 """
 function censoring_cap(iso_days, iso_obs, capacity_history)
     cdays = Int.(capacity_history.days)
@@ -317,10 +318,10 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
     ## Large finite no-op cap (bed counts are in the hundreds), used when there
     ## is no recorded capacity. Not `Inf`: `safe_rate` maps non-finite to eps.
     nocap = 1.0e6
-    ## Censor only where recorded capacity COUNTS exist. The predictive
-    ## generator passes the capacity history days-only (counts emptied), so the
-    ## guard is on the counts, not the days — otherwise the nearest-day lookup
-    ## would index an empty counts vector.
+    ## Censor only where recorded capacity counts exist. The predictive
+    ## generator passes the capacity history days-only (counts emptied), so
+    ## the guard is on the counts, not the days: otherwise the nearest-day
+    ## lookup would index an empty counts vector.
     have_cap = !isempty(ccounts)
     m = length(iso_days)
     cap = Vector{Float64}(undef, m)
@@ -375,33 +376,36 @@ end
 """
     break_step_centres(window_days, increments, break_days, gross)
 
-Break days that land on a scored window, paired with the DATA-DERIVED centre
-for each one's fitted step. The centre is `observed increment − gross`: the
-part of that vintage's step the report itself attributes to integrating a
-harmonised provincial base rather than to the day's own notifications, where
-`gross` is the printed 24h new-confirmed count. On 22 July 2026 that is
-`369 − 97 = 272` cases and `236 − 62 = 174` deaths.
+Break days that land on a scored window, paired with the data-derived
+centre for each one's fitted step. The centre is
+`observed increment − gross`: the part of that vintage's step the report
+itself attributes to integrating a harmonised provincial base rather
+than to the day's own notifications, where `gross` is the printed 24h
+new-confirmed count. On 22 July 2026 that is `369 − 97 = 272` cases and
+`236 − 62 = 174` deaths.
 
 Centring on published data rather than zero is what makes the step
 identifiable: a zero-centred step with a wide prior has to discover the
-harmonisation magnitude from a single observation, whereas the report states
-it. The sampled deviation around the centre then carries only the residual
-uncertainty about how much of the discrepancy is truly retrospective.
+harmonisation magnitude from a single observation, whereas the report
+states it. The sampled deviation around the centre then carries only the
+residual uncertainty about how much of the discrepancy is truly
+retrospective.
 
-Break days not matching a window are dropped so no inert step is sampled. A
-missing/short `gross` is treated as a gross of zero, so the centre becomes the
-WHOLE increment: the entire vintage step is attributed to the artefact. That is
-the conservative fallback rather than a neutral one, and it is deliberate — the
-de-anchor drops the day's positivity denominator, and a step centred near zero
-over a de-anchored day is the pathological configuration (measured on
-`confirmed_only_model`: 94 divergences and a min bulk ESS of 15, against 20 and
-522 with no break day, because nothing absorbs the backlog and the fit books it
-as incidence). Supply the printed count so the split is data-derived; omitting
-it errs towards artefact, never towards incidence.
+Break days not matching a window are dropped so no inert step is
+sampled. A missing/short `gross` is treated as a gross of zero, so the
+centre becomes the whole increment: the entire vintage step is
+attributed to the artefact. This is a deliberately conservative fallback
+rather than a neutral one: the de-anchor drops the day's positivity
+denominator, and a step centred near zero over a de-anchored day is the
+pathological configuration (measured on `confirmed_only_model`: 94
+divergences and a min bulk ESS of 15, against 20 and 522 with no break
+day, because nothing absorbs the backlog and the fit books it as
+incidence). Supply the printed count so the split is data-derived;
+omitting it errs towards artefact, never towards incidence.
 
-`increments` may itself be `missing`, the generator
-path where no cumulative counts are supplied to difference: the day still gets
-a step, so a predictive keeps the fitted chain's dimensions, but there is no
+`increments` may itself be `missing`, the generator path where no
+cumulative counts are supplied to difference: the day still gets a step,
+so a predictive keeps the fitted chain's dimensions, but there is no
 published discrepancy to centre it on and the centre falls back to zero.
 Returns `(days, centres)`, both possibly empty.
 """
@@ -427,13 +431,14 @@ end
 """
     confirmed_break_offset(late_days, break_days, b)
 
-Per-late-window confirmed harmonisation offset from the fitted break steps `b`
-on the manually specified `break_days` (grid day-indices). Unlike
-[`cumulative_occupancy_offset`](@ref) this is NOT cumulative: the confirmed
-likelihood fits between-vintage INCREMENTS, so a one-off retrospective base
-integration inflates exactly one increment — every later vintage differences
-against the new, higher base and is unaffected. Each entry is therefore the
-step for that window alone, zero on every non-break window.
+Per-late-window confirmed harmonisation offset from the fitted break
+steps `b` on the manually specified `break_days` (grid day-indices).
+Unlike [`cumulative_occupancy_offset`](@ref) this is not cumulative: the
+confirmed likelihood fits between-vintage increments, so a one-off
+retrospective base integration inflates exactly one increment; every
+later vintage differences against the new, higher base and is
+unaffected. Each entry is therefore the step for that window alone, zero
+on every non-break window.
 
 Added to the modelled confirmed mean of the break window in
 [`confirmed_cases_model`](@ref) and [`confirmed_deaths_model`](@ref), so the
@@ -576,7 +581,7 @@ ascertainment and the background CFR for reuse by
     ## Daily new suspected deaths ("cas suspects du jour N (M deces)"): per-day
     ## counts scored against the modelled daily suspected-death series at each
     ## report day. The mean for day `d` is the single-day `deaths_daily[d]`
-    ## (clamped into the grid), NOT a between-vintage increment — this is a
+    ## (clamped into the grid), not a between-vintage increment: this is a
     ## genuine daily count, so it never differences a falling cumulative. Empty
     ## by default; a `missing` count vector samples (the predictive path). The
     ## deaths analogue of the suspected-case daily inflow.
@@ -617,11 +622,11 @@ pipeline and dispersion with the cumulative stream and is empty by default.
 Its days fall strictly after the cumulative series ends, so the two suspected
 likelihoods cover disjoint days.
 
-The background and testing fraction
-are sampled by an injected [`test_positivity_model`](@ref), and the
-onset-to-report delay is injected, defaulting to a weakly-informative
-prior on the onset-to-notification delay (mean 4.5 d, SD 3.6 d),
-consistent with Ebola surveillance reporting delays.
+The background and testing fraction are sampled by an injected
+[`test_positivity_model`](@ref), and the onset-to-report delay is
+injected, defaulting to a weakly-informative prior on the
+onset-to-notification delay (mean 4.5 d, SD 3.6 d), consistent with
+Ebola surveillance reporting delays.
 
 Returns the onset-to-report PMF and the BVD onset-to-report daily series
 (unit ascertainment, no background) so [`confirmed_cases_model`](@ref) can
@@ -641,9 +646,9 @@ sitrep.
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
         ## suspect-case and export streams. The line-list onset→notification
-        ## delay (~20 d) is NOT used — we assume it reflects a longer pathway
-        ## (likely confirmation and administrative processing), though what it
-        ## captures is uncertain.
+        ## delay (~20 d) is not used: it is assumed to reflect a longer
+        ## pathway (likely confirmation and administrative processing),
+        ## though what it captures is uncertain.
         onset_to_report = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
@@ -690,7 +695,7 @@ sitrep.
     ## Daily new-suspect inflow ("nouveaux cas suspects du jour"): per-day
     ## counts scored against the modelled daily series at each report day. The
     ## mean for day `d` is the single-day `reports_daily[d]` (clamped into the
-    ## grid), NOT a between-vintage increment — this is a genuine daily
+    ## grid), not a between-vintage increment: this is a genuine daily
     ## incidence, so it never differences a falling cumulative. Empty by
     ## default; a `missing` count vector samples (the predictive path).
     sd_days = suspected_daily_history.days
@@ -853,7 +858,7 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         return i == 0 ? 0 : Int(ccounts[i])
     end
 
-    ## The first confirmed vintage is the BASELINE (the initial cumulative
+    ## The first confirmed vintage is the baseline (the initial cumulative
     ## level the surveillance system was at when reporting began); it is not
     ## scored. The vintaging "starts with the data" from there, so no window's
     ## modelled volume rolls over the pre-surveillance cryptic phase. This
@@ -862,9 +867,9 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     ## early windows pin their modelled-volume accumulation at it.
     early_start = Int(cdays[1])
 
-    ## No laboratory denominators: every confirmed vintage AFTER the baseline is
-    ## an early window scored through the modelled laboratory volume, binned
-    ## from `early_start`.
+    ## No laboratory denominators: every confirmed vintage after the baseline
+    ## is an early window scored through the modelled laboratory volume,
+    ## binned from `early_start`.
     if isempty(lab_history.counts)
         ed = Int[Int(d) for d in cdays[2:end]]
         inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1]) for i in 2:length(ccounts)]
@@ -875,9 +880,10 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     end
 
     first_lab_day = Int(lab_history.days[1])
-    ## Early windows: confirmed vintages AFTER the first confirmed (baseline) up
-    ## to and including the first laboratory date, scored against the modelled
-    ## laboratory volume binned over each window's own range from `early_start`.
+    ## Early windows: confirmed vintages after the first confirmed (baseline)
+    ## up to and including the first laboratory date, scored against the
+    ## modelled laboratory volume binned over each window's own range from
+    ## `early_start`.
     early_days = Int[]
     early_increments = Int[]
     prev = Int(ccounts[1])
@@ -956,7 +962,7 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         pos === nothing || (late_analysed[pos] = Int(c))
     end
 
-    ## Retrospective harmonisation days are DE-ANCHORED: their published 24h
+    ## Retrospective harmonisation days are de-anchored: their published 24h
     ## analysed count is dropped, so the window falls to the modelled-volume
     ## NegativeBinomial branch instead of entering the BetaBinomial as
     ## same-day positives. On such a day most of the confirmed increment is a
@@ -1096,8 +1102,8 @@ quantities.
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
         overdispersion = confirmed_overdispersion_model(),
-        ## When false, the early/late windows (confirmed vintages with NO
-        ## observed analysed denominator) are not scored — only the
+        ## When false, the early/late windows (confirmed vintages with no
+        ## observed analysed denominator) are not scored: only the
         ## observed-denominator Binomial windows contribute, so confirmed
         ## informs positivity without extrapolating a denominator from
         ## incidence. Used to probe the no-test-data extrapolation.
@@ -1106,17 +1112,17 @@ quantities.
         ## days whose cumulative confirmed step is mostly a provincial base
         ## integration rather than 24h notifications. De-anchored from the
         ## positivity denominator and given a fitted level step in the
-        ## modelled mean. Empty (the default) → no-op. See issue #484.
+        ## modelled mean. Empty (the default) is a no-op.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         ## Printed 24h new-confirmed counts on each break day. The step is
         ## centred on `observed increment − gross`, the part of the vintage
         ## step the report attributes to base integration, so the magnitude
         ## comes from published data rather than a prior guess. Empty or
-        ## all-zero centres on the WHOLE increment, attributing all of it to
-        ## the artefact — conservative, not neutral.
+        ## all-zero centres on the whole increment, attributing all of it to
+        ## the artefact: conservative, not neutral.
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
         ## Residual uncertainty about how much of that discrepancy is truly
-        ## retrospective rather than coincident same-day incidence — NOT the
+        ## retrospective rather than coincident same-day incidence, not the
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
         ## Zero pins the step at the published discrepancy and samples no
         ## parameter, taking the printed count as exact.
@@ -1138,11 +1144,12 @@ quantities.
     ## Laboratory capacity onset. No specimens are analysed before testing
     ## existed, so the modelled analysed volume is gated to zero before the
     ## first confirmed-case vintage (the earliest evidence of testing; the
-    ## first laboratory date is the fallback). Modelling a pre-testing analysed
-    ## volume would invent capacity that did not exist AND roll it into the
-    ## first laboratory and early-confirmed bins, vastly over-predicting the
-    ## early confirmed counts. The suspected-case pipeline feeding the volume is
-    ## NOT gated — suspected cases did accumulate over the cryptic phase.
+    ## first laboratory date is the fallback). Modelling a pre-testing
+    ## analysed volume would invent capacity that did not exist and roll it
+    ## into the first laboratory and early-confirmed bins, vastly
+    ## over-predicting the early confirmed counts. The suspected-case
+    ## pipeline feeding the volume is not gated: suspected cases did
+    ## accumulate over the cryptic phase.
     cap_start = !isempty(confirmed_history.days) ?
                 clamp(Int(confirmed_history.days[1]), 1, n) :
                 (!isempty(lab_history.days) ?
@@ -1269,20 +1276,21 @@ quantities.
     end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
-    ## modelled analysed volume), the volume binned over each window's OWN day
-    ## range pinned at `early_start` (the first confirmed vintage, the testing-
-    ## onset baseline), so the first early increment is scored from the data
-    ## start rather than rolling the (now-gated) pre-testing volume. Mirrors the
-    ## late-window pinning at `late_start`.
+    ## modelled analysed volume), the volume binned over each window's own
+    ## day range pinned at `early_start` (the first confirmed vintage, the
+    ## testing-onset baseline), so the first early increment is scored from
+    ## the data start rather than rolling the (now-gated) pre-testing volume.
+    ## Mirrors the late-window pinning at `late_start`.
     early_p = p_pos[1:n_early]
     ## `early_volume` is bound unconditionally to one array allocation site
-    ## (a `bin_increments(...)[2:end]`) rather than a two-branch ternary.
-    ## ternary. The two-allocation ternary compiles to a pointer that is one
-    ## of two array allocations depending on a branch, which Enzyme's
-    ## `nodecayed_phis!` LLVM pass cannot trace (an `EnzymeInternalError`; see
-    ## #445). With no late/early window days the edge is the singleton
-    ## `[start]`, so `bin_increments(...)[2:end]` is empty — same value as the
-    ## former `similar(analysed_daily, 0)` branch. Mooncake is unaffected.
+    ## (`bin_increments(...)[2:end]`) rather than a two-branch ternary: the
+    ## ternary compiles to a pointer that is one of two array allocations
+    ## depending on a branch, which Enzyme's `nodecayed_phis!` LLVM pass
+    ## cannot trace (an `EnzymeInternalError`). With no late/early window
+    ## days the edge is the singleton `[start]`, so
+    ## `bin_increments(...)[2:end]` is empty, the same value a
+    ## `similar(analysed_daily, 0)` branch would give. Mooncake is
+    ## unaffected.
     early_edges = n_early > 0 ?
                   vcat(windows.early_start, windows.early_days) :
                   [windows.early_start]
@@ -1304,20 +1312,19 @@ quantities.
 
     ## Late windows: confirmed-only vintages after the last laboratory date.
     ## A day that publishes a 24h analysed count (`late_analysed > 0`) is
-    ## scored as an overdispersed BetaBinomial of that observed denominator —
-    ## like an observed window, anchoring its positivity to data — and each
-    ## remaining unanchored day
-    ## as NegBinomial(positivity × modelled volume). The modelled volume is
-    ## binned over each late window's own day range, with the running edge
-    ## PINNED at the last laboratory day (`late_start`): `bin_increments`
-    ## runs its running `prev` from day 0, so prepending `late_start` to the
-    ## late day edges and dropping the synthetic first bin starts the
-    ## accumulation at `late_start`, avoiding double-counting the
-    ## observed-window volume.
+    ## scored as an overdispersed BetaBinomial of that observed denominator,
+    ## like an observed window, anchoring its positivity to data; each
+    ## remaining unanchored day is NegBinomial(positivity × modelled
+    ## volume). The modelled volume is binned over each late window's own
+    ## day range, with the running edge pinned at the last laboratory day
+    ## (`late_start`): `bin_increments` runs its running `prev` from day 0,
+    ## so prepending `late_start` to the late day edges and dropping the
+    ## synthetic first bin starts the accumulation at `late_start`, avoiding
+    ## double-counting the observed-window volume.
     late_p = p_pos[(n_early + n_obs + 1):nv]
-    ## Unconditional single-allocation binding (see `early_volume` above):
-    ## avoid the two-allocation `? bin_increments : similar` pointer-PHI that
-    ## Enzyme's `nodecayed_phis!` pass cannot trace. Empty when `n_late = 0`.
+    ## Unconditional single-allocation binding, avoiding the same
+    ## two-allocation pointer-PHI Enzyme's `nodecayed_phis!` pass cannot
+    ## trace (see `early_volume` above). Empty when `n_late = 0`.
     late_edges = n_late > 0 ? vcat(windows.late_start, windows.late_days) :
                  [windows.late_start]
     late_volume = bin_increments(analysed_daily, late_edges)[2:end]
@@ -1340,7 +1347,7 @@ quantities.
     if isempty(conf_brk_days)
         cb = Float64[]
     elseif iszero(confirmed_break_sd)
-        ## `confirmed_break_sd = 0` is the DETERMINISTIC correction: the report
+        ## `confirmed_break_sd = 0` is the deterministic correction: the report
         ## publishes the 24h count, so the artefact size is taken as exact and
         ## the increment is fitted against the gross count with no sampled
         ## parameter. Two fewer parameters, and no ridge between a step and the
@@ -1385,25 +1392,26 @@ quantities.
     ## DynamicPPL tracking closure that captures `p_pos` (assigned in both the
     ## `:composition` and `else` positivity branches, so boxed in a
     ## `Core.Box`), and Enzyme's `nodecayed_phis!` LLVM pass cannot
-    ## differentiate through the resulting boxed pointer-PHI (see #445).
+    ## differentiate through the resulting boxed pointer-PHI.
     expected_analysed = safe_rate(sum(analysed_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
     ## modelled early volume, the observed cumulative analysed windows and the
-    ## late windows (anchored days contribute `p · analysed`, unanchored days the
-    ## modelled `p · volume`). The window vectors are empty when a vintage has
-    ## no such window, and in predict mode their element type can widen to
-    ## `Any`, so each sum is given a concrete `init` to skip `reduce_empty`'s
-    ## `zero(Any)`. The init is taken from the scalar `τ_test` (always
-    ## concrete), NOT from `eltype(p_pos)`, which can widen to `Any`.
+    ## late windows (anchored days contribute `p · analysed`, unanchored days
+    ## the modelled `p · volume`). The window vectors are empty when a
+    ## vintage has no such window, and in predict mode their element type
+    ## can widen to `Any`, so each sum is given a concrete `init` to skip
+    ## `reduce_empty`'s `zero(Any)`. The init is taken from the scalar
+    ## `τ_test` (always concrete), not from `eltype(p_pos)`, which can widen
+    ## to `Any`.
     z = zero(τ_test)
     amask = windows.late_analysed .> 0
     late_den_a = float.(windows.late_analysed)
     ## Unconditional broadcasts (single allocation site each): with
     ## `n_late = 0` every operand (`amask`, `late_den_a`, `late_volume`,
-    ## `late_mean`) is empty, so the `ifelse.` result is empty too — the same
-    ## value the former `? … : similar(…, 0)` ternary produced, without the
-    ## two-allocation pointer-PHI that Enzyme's `nodecayed_phis!` pass cannot
-    ## trace (see #445). Mooncake is unaffected.
+    ## `late_mean`) is empty, so the `ifelse.` result is empty too, the same
+    ## value a `? … : similar(…, 0)` ternary would produce, without the
+    ## two-allocation pointer-PHI that Enzyme's `nodecayed_phis!` pass
+    ## cannot trace. Mooncake is unaffected.
     late_den = ifelse.(amask, late_den_a, late_volume)
     late_expected = ifelse.(amask, late_p .* late_den_a, late_mean)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
@@ -1441,7 +1449,7 @@ moves and is exported during incubation (pre-symptomatic) and stays at
 risk of being exported and detected abroad only until the
 infection→detection delay has elapsed. The expected detected exports by
 the cut-off therefore accumulate the per-capita travel rate `q =
-daily_travellers / source_population` over the at-risk PERSON-TIME, not
+daily_travellers / source_population` over the at-risk person-time, not
 over single-day onset events:
 
 ```math
@@ -1456,13 +1464,11 @@ infections that have already completed the infection→detection delay by
 day `s`. The infection→detection delay is the sampled onset-to-detection
 delay convolved with the shared incubation PMF (so incubation sits inside
 it, keyed to infection like `C(s)`); `detected` is the running sum of
-`convolve_delay(infections, f_det)`. Summing the daily at-risk
-prevalence is the discrete person-time integral, the discrete analogue of
-the integral model's at-risk person-time export integral; the earlier
-onset-incidence form summed `q · onsets`, charging each case only a
-single day of travel risk and so under-counting exports by roughly the
-mean at-risk dwell time. Samples the traveller volume and the
-onset-to-detection delay via injected submodels. The onset-to-detection
+`convolve_delay(infections, f_det)`. Summing the daily at-risk prevalence
+is the discrete person-time integral. Summing `q · onsets` instead would
+charge each case only a single day of travel risk, under-counting exports
+by roughly the mean at-risk dwell time. Samples the traveller volume and
+the onset-to-detection delay via injected submodels. The onset-to-detection
 prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
 SD 4.7 d; WHO Ebola Response Team 2014, NEJM), the delay from symptom
 onset to detection at a point of entry abroad.

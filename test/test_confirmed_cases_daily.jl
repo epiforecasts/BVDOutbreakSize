@@ -99,10 +99,10 @@ end
 
     ## Empty break days are a no-op, and a break day that matches no late
     ## window is ignored rather than shifting another day's denominator.
-    @test confirmed_positivity_windows(confirmed, lab, daily, Int[]).late_analysed ==
-          w.late_analysed
-    @test confirmed_positivity_windows(confirmed, lab, daily, [99]).late_analysed ==
-          w.late_analysed
+    @test confirmed_positivity_windows(confirmed, lab, daily,
+        Int[]).late_analysed == w.late_analysed
+    @test confirmed_positivity_windows(confirmed, lab, daily,
+        [99]).late_analysed == w.late_analysed
 end
 
 @testitem "confirmed_break_offset places one step on each break window" begin
@@ -112,7 +112,8 @@ end
     ## integration inflates exactly one window: the offset is per-window, not
     ## cumulative (unlike the occupancy reclassification offset).
     late_days = [21, 22, 23, 24]
-    @test confirmed_break_offset(late_days, [22], [250.0]) == [0.0, 250.0, 0.0, 0.0]
+    @test confirmed_break_offset(late_days, [22], [250.0]) ==
+          [0.0, 250.0, 0.0, 0.0]
 
     ## Two break days each get their own step, and later windows stay at zero.
     @test confirmed_break_offset(late_days, [21, 24], [10.0, -5.0]) ==
@@ -125,7 +126,7 @@ end
     @test length(confirmed_break_offset(Int[], [22], [1.0])) == 0
 end
 
-@testitem "break_step_centres derives the step from the printed gross count" begin
+@testitem "break_step_centres derives the step from the gross count" begin
     using BVDOutbreakSize: break_step_centres
 
     ## The centre is `observed increment - printed 24h count`: the part of the
@@ -140,7 +141,8 @@ end
     @test dcentres == [174.0]
 
     ## A break day matching no window is dropped, so no inert step is sampled.
-    @test break_step_centres([21, 23], [10, 15], [22], [97]) == (Int[], Float64[])
+    @test break_step_centres([21, 23], [10, 15], [22], [97]) ==
+          (Int[], Float64[])
 
     ## A missing/short gross is read as a gross of zero, so the centre is the
     ## WHOLE increment: all of it attributed to the artefact rather than
@@ -273,7 +275,7 @@ end
     @test isfinite(logjoint(m, θ))
 
     ## Without a break day no step is sampled — the block is opt-in and empty
-    ## by default, so an unlisted vintage keeps the previous behaviour.
+    ## by default, so an unlisted vintage's likelihood is unaffected.
     m0 = confirmed_only_model(40, 444;
         confirmed_history = hist, lab_history = lab,
         lab_daily_history = daily)
