@@ -69,7 +69,7 @@ function plot_cumulative_trajectories(chn;
     x = Float64[epoch + (d - 1) for d in 1:n]
 
     ## Each trajectory deterministic is an iter×chain matrix of per-draw
-    ## vectors; flatten to one vector of per-draw trajectories.
+    ## vectors. Flatten to one vector of per-draw trajectories.
     function _trajectories(key)
         mat = chn[key]
         return [collect(v) for v in vec(collect(mat))]
@@ -366,7 +366,7 @@ either of the first two panels, and supply `pp_cases` and/or
 `pp_exports_deaths` to add the reported-cases and deaths-among-exports
 panels. Observed values are drawn as red `vlines`. With four streams
 the panels are laid out as a 2×2 grid (exports cases, exports deaths,
-DRC deaths, DRC reported cases); fewer streams are placed in a single
+DRC deaths, DRC reported cases). Fewer streams are placed in a single
 row.
 """
 function plot_posterior_predictive(
@@ -448,10 +448,10 @@ replicates from the joint fit, conditioning on all observed streams.
 Observed values shown as red vertical lines.
 
 Each `NamedTuple` carries a subset of `(; exports, exports_deaths,
-deaths, cases, tests, confirmed)`; columns are drawn in that canonical
+deaths, cases, tests, confirmed)`. Columns are drawn in that canonical
 order for whichever streams are present in `individual` (the
 `confirmed`/`tests` columns appear only when the laboratory pipeline is
-included). Each panel is a histogram of replicated counts; rows share
+included). Each panel is a histogram of replicated counts. Rows share
 the same x-axis (the stream's count) so the per-stream and joint
 predictives are directly comparable.
 """
@@ -505,7 +505,7 @@ so the data's contribution to each marginal is visible.
 
 `labels` is an optional map from the raw chain symbol to a clean display
 name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
-axis labels only; the model's variable names are unchanged. Symbols absent
+axis labels only. The model's variable names are unchanged. Symbols absent
 from the map keep their raw name.
 """
 function plot_pair(chn, params::AbstractVector{Symbol};
@@ -543,7 +543,7 @@ Returns the `Figure`.
 function plot_correlation_heatmap(chn, params::AbstractVector{Symbol};
         labels::AbstractDict = Dict{Symbol, String}())
     ## Render tick labels as LaTeX so subscripts (R_T, p_drc, λ_bg) typeset
-    ## properly; callers pass plain LaTeX math strings.
+    ## properly. Callers pass plain LaTeX math strings.
     name(p) = CairoMakie.Makie.latexstring(get(labels, p, string(p)))
     mat = reduce(hcat, (_draws(chn, p) for p in params))
     R = cor(mat)
@@ -824,7 +824,7 @@ the largest of them, so groups whose quantity sits on a comparable scale
 read directly against each other. Set it to `false` when the groups span
 very different scales (e.g. outbreak size, where one dataset's count can be
 orders of magnitude larger than another's), so a wide-scale group does not
-squash every other panel's band to an invisible sliver; each panel then
+squash every other panel's band to an invisible sliver. Each panel then
 uses its own range, floored at `1.0`.
 
 Returns a figure carrying `empty_note` in place of the panels when no group
@@ -1124,7 +1124,7 @@ excluded, carrying `stream`, `horizon`, `fit` and the column named by
 
 The skill axis is log-scaled, so a fit twice as good and a fit twice as bad
 sit the same distance from the reference line at one, drawn as a dashed
-horizontal rule; a series below the line beats the baseline on average at
+horizontal rule. A series below the line beats the baseline on average at
 that horizon. A `(stream, horizon, fit)` cell whose skill is missing or
 non-finite (the aggregation guard against a zero-mean baseline) is simply
 absent from its series rather than drawn as a break, and a stream with no
@@ -1245,7 +1245,7 @@ function plot_estimate_comparison(
         y = n - i + 1
         col = _colour(i)
         ## A deterministic point estimate has no interval, so draw a bare
-        ## marker; otherwise draw the bar with the central point on top.
+        ## marker. Otherwise, draw the bar with the central point on top.
         if hi[i] > lo[i]
             lines!(ax, [lo[i], hi[i]], [y, y];
                 color = (col, 0.8), linewidth = 3)
@@ -1266,7 +1266,7 @@ end
 Calendar time-series comparison of cumulative-count projections against the
 data observed since. `external` is another group's published projection and
 `ours` is our own forward projection, each drawn as a central line with a
-shaded `[lower, upper]` band so the two fans read directly against each other;
+shaded `[lower, upper]` band so the two fans read directly against each other.
 `observed` is the data observed so far, drawn as a marked line. Each is a
 vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
 are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
@@ -1335,15 +1335,16 @@ end
 
 """
 Faceted point-and-interval comparison of published scenario estimates, one
-panel per date of estimation so the figure spreads sideways instead of into one
-tall column. `scenarios` is `REPORT_SCENARIOS_CI`-shaped
+panel per date of estimation so the figure spreads sideways instead of into
+one tall column. `scenarios` is `REPORT_SCENARIOS_CI`-shaped
 `(date, label, central, lower, upper)` with `label` of the form
-`"M1|M2 <family>, <swept level>"` (for example `"M2 τ=14 d, CFR 26%"`). Within a
-panel each `(method, family)` is one row, and the swept nuisance level (the CFR,
-window or doubling time) is dodged onto that single line so every scenario keeps
-its own interval while the sweep no longer adds rows. Method sets the colour.
-`ours` maps a date string to our matched `(median, lower, upper)` estimate, drawn
-as a grey reference band with a dashed median in that date's panel.
+`"M1|M2 <family>, <swept level>"` (for example `"M2 τ=14 d, CFR 26%"`).
+Within a panel each `(method, family)` is one row, and the swept nuisance
+level (the CFR, window or doubling time) is dodged onto that single line so
+every scenario keeps its own interval while the sweep no longer adds rows.
+Method sets the colour. `ours` maps a date string to our matched
+`(median, lower, upper)` estimate, drawn as a grey reference band with a
+dashed median in that date's panel.
 `date_titles` are `date => title` pairs giving each panel its heading.
 """
 function plot_scenario_comparison(scenarios::AbstractVector;
@@ -1396,7 +1397,7 @@ function plot_scenario_comparison(scenarios::AbstractVector;
         fams, members = grouped[d]
         geo = [f for f in fams if f[1] == "M1"]
         bc = [f for f in fams if f[1] == "M2"]
-        ## Geographic families fill the top block (`maxrow` down); back-calc
+        ## Geographic families fill the top block (`maxrow` down). Back-calc
         ## families fill the bottom block (`maxbc` down), so both align in y.
         ypos = Dict{Tuple{String, String}, Int}()
         for (i, f) in enumerate(geo)
@@ -1421,8 +1422,8 @@ function plot_scenario_comparison(scenarios::AbstractVector;
                 color = :black, linestyle = :dash, linewidth = 1.5)
         end
 
-        ## Each family row carries its swept levels dodged around the row centre,
-        ## each a point with its interval, coloured by method.
+        ## Each family row carries its swept levels dodged around the row
+        ## centre, each a point with its interval, coloured by method.
         for key in fams
             y = ypos[key]
             col = get(method_colours, key[1], :grey)
@@ -1485,7 +1486,7 @@ and the structural (infection-based) CFR from a
 [`delay_corrected_confirmed_cfr`](@ref) result `res`, with the naive observed
 confirmed ratio drawn as a solid vertical rule and the median uncorrected
 modelled confirmed ratio as a dashed rule. The gap between the naive rule and
-the corrected density shows the real-time delay debiasing; the gap to the
+the corrected density shows the real-time delay debiasing. The gap to the
 structural density shows the residual case/death ascertainment difference.
 Plotted on the CFR percentage scale.
 """
@@ -1555,7 +1556,7 @@ function plot_start_date_pair(chn;
 
     dt_draws = _draws(chn, :doubling_time)
     ## Clip extreme doubling times (near-zero growth) to keep the pair
-    ## plot readable; a finite cap at 200 days covers the credible range.
+    ## plot readable. A finite cap at 200 days covers the credible range.
     dt_clipped = clamp.(dt_draws, -200.0, 200.0)
     pair_df = DataFrame(doubling_time = dt_clipped, T = T_draws)
     PairPlots.pairplot(fig[1, 2], pair_df[1:thin:end, :])
@@ -1587,11 +1588,11 @@ function reconstruct_rt(chn; n::Integer, breakpoint::Real,
     zmat = chn[Symbol("rt_state.z")]
     zrows = [collect(z) for z in vec(collect(zmat))]
 
-    ## The knot grid is built from the model's WALK start `rt_walk_start`
+    ## The knot grid is built from the model's walk start `rt_walk_start`
     ## (the first situation report, the breakpoint grid day), which is
     ## decoupled from `rt_start` (the renewal/established-window start used for
     ## the mask below). The innovation vector length is fixed by that walk
-    ## start; if the caller passes a mismatching one the knot grid here will
+    ## start. If the caller passes a mismatching one the knot grid here will
     ## not match, so fail with a clear message rather than a downstream bounds
     ## error.
     days = knot_days(n; week, start = rt_walk_start)
@@ -1614,7 +1615,7 @@ function reconstruct_rt(chn; n::Integer, breakpoint::Real,
         log_R = log_R0[i] .+ vcat(0.0, cumsum(steps))
         walk = interpolate_knots(log_R, days, n)
         ## Days before the renewal start clamp to the established R0 (the
-        ## walk base); they are filled by the analytic cryptic exponential in
+        ## walk base). They are filled by the analytic cryptic exponential in
         ## the model and are not plotted (masked from `rt_start` onward).
         log_Rt = walk .+ effect[i] .* ramp_shape
         start = clamp(rt_start, 1, n)
@@ -1626,7 +1627,7 @@ function reconstruct_rt(chn; n::Integer, breakpoint::Real,
 end
 
 ## Per-day quantile `pr` of an established-window Rt matrix, skipping the
-## masked (pre-renewal) days; `missing` where a day has no established draws.
+## masked (pre-renewal) days: `missing` where a day has no established draws.
 function _rt_quantile(rt::AbstractMatrix, d::Integer, pr::Real)
     col = collect(skipmissing(@view rt[:, d]))
     return isempty(col) ? missing : quantile(col, pr)
@@ -1769,7 +1770,7 @@ stream in its colour on top (the panel title is in that colour). One panel
 per stream rather than a single overlay, so the wide per-stream ribbons stay
 legible. The y-axis is shared across panels and capped from the panels'
 90% bands so a weakly-informed stream (the confirmed-only fit) does not
-stretch the scale; ribbon above the cap is clipped.
+stretch the scale. Ribbon above the cap is clipped.
 
 Each `stream` is a `NamedTuple`
 `(; label, chn, rt_start, rt_walk_start, colour)` and `joint` is
@@ -1793,7 +1794,7 @@ function plot_rt_streams(streams::AbstractVector;
     x = Float64[epoch + (d - 1) for d in 1:n]
     ds = clamp(display_start, 1, n)
 
-    ## Reconstruct the joint once and each stream's bands; the joint is the
+    ## Reconstruct the joint once and each stream's bands. The joint is the
     ## shared reference drawn behind every stream.
     bj = _rt_bands(joint.chn; n, breakpoint, rt_start = joint.rt_start,
         rt_walk_start = joint.rt_walk_start, week, ramp, ds)
@@ -1908,7 +1909,7 @@ One-week-ahead forecast of the unobserved (latent) quantities from
 [`forecast_reported`](@ref): new infections, new symptom onsets and new
 deaths over the horizon, with the reproduction number left to keep evolving
 over the horizon. Each count panel histograms the projected new latent
-count with its 90% predictive interval shaded; the reproduction-number
+count with its 90% predictive interval shaded. The reproduction-number
 panel shows the posterior of the end-of-horizon forecast `R_t` with the
 no-growth line at one marked.
 These are the latent counterparts of the observed-stream forecast in
@@ -2006,17 +2007,17 @@ end
 
 """
 One-week-ahead isolation/treatment-bed forecast from
-[`forecast_reported`](@ref): the projected bed DEMAND (the need a week ahead,
+[`forecast_reported`](@ref): the projected bed demand (the need a week ahead,
 under unconstrained supply) against the supply-limited occupancy (the beds
 actually filled), and the shortfall between them. The left panel overlays the
 two predictive distributions, so the gap between the need and the
-supply-limited occupancy is the unmet demand; the right panel histograms the
+supply-limited occupancy is the unmet demand. The right panel histograms the
 shortfall directly. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
-Because the model carries a SINGLE national bed capacity it cannot represent
-LOCAL saturation — on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
-at 21.9% — so the national shortfall understates the local unmet need (beds
+Because the model carries a single national bed capacity it cannot represent
+local saturation (on 13 June Ituri was at 93.9% occupancy while Sud-Kivu was
+at 21.9%), so the national shortfall understates the local unmet need (beds
 free in one province cannot serve patients who need them in another).
 """
 function plot_forecast_beds(fc::DataFrame)
@@ -2055,16 +2056,16 @@ isolation-bed occupancy with the 90% predictive interval shaded and the
 so last week's bed forecast is scored against what the beds held. Drawn only
 when the forecast carries `isolation_level`.
 
-`individual`, when given, is a second predictive sample — the frozen
+`individual`, when given, is a second predictive sample: the frozen
 individual (treatment-only) model's own forecast draws at the same
-cut-off, from [`forecast_stream`](@ref) — overlaid as a dotted density so
+cut-off, from [`forecast_stream`](@ref), overlaid as a dotted density so
 the joint and the individual model's bed forecasts are both visible
 against the observed occupancy, rather than the joint alone.
 
 At a one-week-back freeze the bed capacity has no implied-capacity anchor
 (the reported occupancy rate starts only on 9 June), so the projected
 occupancy rides the capacity random walk back to the freeze date and the
-interval is wide — the bed forecast is the weakest of the validated streams.
+interval is wide. The bed forecast is the weakest of the validated streams.
 """
 function plot_forecast_beds_vs_truth(fc::DataFrame;
         isolation::Union{Real, Missing},
@@ -2114,13 +2115,13 @@ laboratory-confirmed cases, confirmed deaths and recovered, each shown only
 when the forecast carries that stream's `*_cum`/`*_new` columns and an observed
 cumulative count is supplied for it. `observed` is a `NamedTuple` mapping a
 stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
-cumulative count at the target date; a stream absent from `observed` is
+cumulative count at the target date. A stream absent from `observed` is
 skipped. `baseline` maps the same columns to the cumulative count at the
 forecast origin (default `0`), so the observed new count is
 `max(observed − baseline, 0)`. `individual` is an optional `NamedTuple`
-mapping a stream's NEW-count column (`:confirmed_new`, `:cases_new`, …) to
+mapping a stream's new-count column (`:confirmed_new`, `:cases_new`, …) to
 that stream's own frozen individual (single-stream) model's forecast draws
-of the new count, from [`forecast_stream`](@ref); a stream present in
+of the new count, from [`forecast_stream`](@ref). A stream present in
 `individual` gets a second, dotted density overlaid on both its panels (the
 cumulative panel from `baseline + individual` new-count draws), so the joint
 and the individual fit's forecasts are both visible rather than the joint
@@ -2247,7 +2248,7 @@ preceding sitrep. This is the "filtered" one-step-ahead predictive: it
 isolates the model's per-step increment prediction and does not let
 errors compound across the series, unlike a running sum of the modelled
 increments. The result is summarised by vintage as shaded 30/60/90%
-predictive ribbons; the observed cumulative counts are overlaid as
+predictive ribbons. The observed cumulative counts are overlaid as
 points. Each `panel` is a `NamedTuple`
 `(; title, dates, replicates, observed)`, where `replicates` is a vector
 of per-draw increment vectors (one entry per vintage, oldest first) and
@@ -2275,7 +2276,7 @@ function plot_vintage_conditional_ppc(
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
-    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## into tiny panels. With the treatment-centre flows there are ~14 streams,
     ## giving a readable 4-column, ~4-row grid.
     ncols = min(npanels, 4)
     nrows = cld(npanels, ncols)
@@ -2283,7 +2284,7 @@ function plot_vintage_conditional_ppc(
     for (j, p) in enumerate(panels)
         row, col = cld(j, ncols), mod1(j, ncols)
         ## Drop vintages past the shared cap so every panel ends on the
-        ## same date; the replicates and observed counts are truncated to
+        ## same date. The replicates and observed counts are truncated to
         ## match, keeping the conditional baselines aligned.
         keep = isnothing(cap) ? eachindex(p.dates) :
                [i for i in eachindex(p.dates) if Date(p.dates[i]) <= cap]
@@ -2299,7 +2300,7 @@ function plot_vintage_conditional_ppc(
         ## own per-day count directly.
         cumulative = get(p, :cumulative, true)
         ## Observed cumulative at the previous vintage is the conditioning
-        ## baseline for each step (`y_0 = 0`); `obs_prev[v]` is `y_{v-1}`.
+        ## baseline for each step (`y_0 = 0`). `obs_prev[v]` is `y_{v-1}`.
         obs_cum = float.(observed)
         obs_prev = cumulative ?
                    [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
@@ -2320,7 +2321,7 @@ function plot_vintage_conditional_ppc(
         ## Truncate the y-axis to a robust ceiling driven by the observed
         ## counts and the 60% band, so a heavy upper tail in any one stream
         ## (the 90% band can run far above the data) does not flatten the
-        ## visible detail; the band clips at the axis limit.
+        ## visible detail. The band clips at the axis limit.
         yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
@@ -2345,7 +2346,7 @@ consecutive vintages rather than the running cumulative, so trends (a rise
 or a slowdown) read directly off the height of each bar-like step instead of
 the slope of a near-straight cumulative line. For a cumulative panel the
 observed incidence is the between-vintage increment (the first vintage is
-its own baseline); for a non-cumulative panel (a standalone per-day count
+its own baseline). For a non-cumulative panel (a standalone per-day count
 such as the 24h analysed volume or the daily new-suspect inflow) it is the
 count itself. The replicates are already per-vintage increments, so they are
 the modelled incidence directly and are summarised as 30/60/90% credible
@@ -2360,7 +2361,7 @@ function plot_vintage_incidence_ppc(
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
-    ## into tiny panels; with the treatment-centre flows there are ~14 streams,
+    ## into tiny panels. With the treatment-centre flows there are ~14 streams,
     ## giving a readable 4-column, ~4-row grid.
     ncols = min(npanels, 4)
     nrows = cld(npanels, ncols)
@@ -2415,13 +2416,13 @@ table that function returns (its prettified columns `Stream`, `50% coverage`,
 y-axis of streams: the left panel marks each stream's empirical 50% and 90%
 coverage with vertical dashed reference lines at the nominal 0.5 and 0.9, so a
 well-calibrated stream sits on its line and a marker to the left of its line
-flags under-coverage; the right panel marks the mean forecast `Bias` (negative
+flags under-coverage. The right panel marks the mean forecast `Bias` (negative
 = the stream is under-predicted, positive = over-predicted) with a dashed line
 at zero. Streams are read off the shared row labels, so all ~14 stay legible
 without splitting the figure into columns.
 """
 function plot_stream_calibration(tbl::DataFrame)
-    ## Read the prettified columns the table carries; oldest-first order is
+    ## Read the prettified columns the table carries. Oldest-first order is
     ## kept but reversed for the y-axis so the first stream reads at the top.
     streams = string.(tbl[!, "Stream"])
     cov50 = float.(tbl[!, "50% coverage"])
@@ -2447,7 +2448,7 @@ function plot_stream_calibration(tbl::DataFrame)
     CairoMakie.axislegend(ax1, [h50, h90], ["50% interval", "90% interval"];
         position = :lt, framevisible = false)
 
-    ## Bias panel: zero is unbiased; sign flags over/under-prediction.
+    ## Bias panel: zero is unbiased. Sign flags over/under-prediction.
     bmax = max(1.0, maximum(abs.(bias)) * 1.1)
     ax2 = Axis(fig[1, 2];
         xlabel = "Mean forecast bias", title = "Forecast bias",

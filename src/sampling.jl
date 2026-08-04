@@ -32,14 +32,14 @@ every kept post-warmup draw, logs through the sampler-agnostic
 `AbstractMCMC.ParamsWithStats` interface to two grouped tag prefixes so
 the dashboard stays navigable:
 
-  * `params/<name>` — every sampled parameter
-  * `diagnostics/<name>` — log-density (`logjoint`), divergence flag
+  * `params/<name>`: every sampled parameter
+  * `diagnostics/<name>`: log-density (`logjoint`), divergence flag
     (`numerical_error`), step size, tree depth, acceptance rate, ...
 
 Each scalar streams every step as a `.../value` time series. With
 `histograms = true` (the default) a running histogram of the draws so
 far is also logged every `every` steps as `.../distribution`,
-populating the TensorBoard HISTOGRAMS and DISTRIBUTIONS dashboards. Set
+populating the TensorBoard histograms and distributions dashboards. Set
 `histograms = false` for scalar traces only, or widen `every` to log
 histograms less often.
 
@@ -163,12 +163,12 @@ each call site repeating the callback construction.
 Recognised `spec` values (case-insensitive), defaulting to `"all"` when
 `BVD_FIT_LOG` is unset:
 
-- `"all"` — both the dependency-free [`progress_callback`](@ref) (a
+- `"all"`: both the dependency-free [`progress_callback`](@ref) (a
   `<name>.log` file under `logdir`) and the [`tensorboard_callback`](@ref)
   (a `tensorboard/<name>` run directory under `logdir`).
-- `"progress"` — the file progress stream only.
-- `"tensorboard"` (or `"tb"`) — the TensorBoard stream only.
-- `"none"` — no logging; returns `nothing`. CI sets this to keep release
+- `"progress"`: the file progress stream only.
+- `"tensorboard"` (or `"tb"`): the TensorBoard stream only.
+- `"none"`: no logging, returns `nothing`. CI sets this to keep release
   builds quiet (`BVD_FIT_LOG=none`).
 
 TensorBoard logging needs `TensorBoardLogger` loaded (it activates the

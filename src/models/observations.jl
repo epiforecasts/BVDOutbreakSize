@@ -2368,7 +2368,8 @@ series for forecasting and replication.
     isolation ~ to_submodel(
         censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
 
-    ## Capacity likelihood: the implied bed count is a noisy observation of C(t).
+    ## Capacity likelihood: the implied bed count is a noisy observation of
+    ## C(t).
     cap_days = capacity_history.days
     cap_modelled = [C[clamp(Int(d), 1, n)] for d in cap_days]
     cap_obs = isempty(capacity_history.counts) ? missing :
@@ -2376,9 +2377,9 @@ series for forecasting and replication.
     bed_capacity ~ to_submodel(
         vintage_increments_model(cap_modelled, cap_obs, k))
 
-    ## Split likelihoods: on days with a published split, score the two sub-stock
-    ## censuses instead of the total. Guarded by `split_active`, so they no-op
-    ## when the hazard is structurally zero.
+    ## Split likelihoods: on days with a published split, score the two
+    ## sub-stock censuses instead of the total. Guarded by `split_active`,
+    ## so they no-op when the hazard is structurally zero.
     ci_days = split_active ? confirmed_incare_history.days : Int[]
     ci_obs = (!split_active || isempty(confirmed_incare_history.counts)) ?
              missing : collect(Int.(confirmed_incare_history.counts))
@@ -2390,8 +2391,9 @@ series for forecasting and replication.
     suspect_incare_obs ~ to_submodel(vintage_increments_model(
         [max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
          for d in si_days], si_obs, k))
-    ## Confirmed-in-care deaths, attributed as the death flow times the confirmed
-    ## share of the BVD stock. Exposed for the report, not separately scored.
+    ## Confirmed-in-care deaths, attributed as the death flow times the
+    ## confirmed share of the BVD stock. Exposed for the report, not
+    ## separately scored.
     bvd_stock = acc.O_bvd
     conf_share = [bvd_stock[t] > zero(eltype(demand)) ?
                   O_conf[t] / bvd_stock[t] : zero(eltype(demand)) for t in 1:n]
@@ -2436,7 +2438,8 @@ series for forecasting and replication.
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    expected_admissions := safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    expected_admissions := safe_rate(isempty(admit_daily) ? z0 :
+                                     admit_daily[end])
     expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
                                         deaths_daily[end])
     expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :

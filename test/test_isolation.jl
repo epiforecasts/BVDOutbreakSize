@@ -646,8 +646,9 @@ end
 @testitem "cumulative_occupancy_offset: accumulates from the break day" begin
     using BVDOutbreakSize: cumulative_occupancy_offset
     iso_days = [10, 11, 12, 13, 14]
-    ## Two manual break days: +5 from day 12, −3 from day 14. Δ is zero before
-    ## the first break, then cumulates the steps at or before each iso day.
+    ## Two manual break days: +5 from day 12, −3 from day 14. Δ is zero
+    ## before the first break, then cumulates the steps at or before each
+    ## iso day.
     Δ = cumulative_occupancy_offset(iso_days, [12, 14], [5.0, -3.0])
     @test Δ == [0.0, 0.0, 5.0, 5.0, 2.0]
     ## No break days is a no-op (all zeros).

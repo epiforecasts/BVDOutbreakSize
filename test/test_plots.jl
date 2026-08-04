@@ -326,7 +326,9 @@ end
     @test !any(p -> p isa CairoMakie.Makie.Band, joint_ax.scene.plots)
 end
 
-@testitem "plot_evolution_by_group with shared_yrange=false uses per-panel limits" setup=[HeadlessMakie] begin
+@testitem "plot_evolution_by_group honours shared_yrange=false" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_evolution_by_group
 
     ## "joint" reaches far higher than "exports", the outbreak-size case where
@@ -391,7 +393,7 @@ end
     using DataFrames: DataFrame
     using Dates: Date, Day
     ## One stream and horizon, with a joint interval far wider than the
-    ## observed value or either fit's median, the case that used to squash
+    ## observed value or either fit's median, the case that can squash
     ## every series in the panel to a line near the bottom.
     md = Date(2026, 6, 21)
     rows = [
@@ -630,8 +632,8 @@ end
                 log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                 abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
-            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
-                -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
+                reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
@@ -705,11 +707,13 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc draws a daily (non-cumulative) panel" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_conditional_ppc draws a non-cumulative panel" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(22)
-    ## The daily new-suspect inflow: per-day counts, NOT cumulated. With
+    ## The daily new-suspect inflow: per-day counts, not cumulated. With
     ## `cumulative = false` the observed are the raw daily counts and each
     ## replicate is its own daily count (no running baseline).
     dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
@@ -794,8 +798,9 @@ end
     fig = plot_forecast(fc)
     @test fig isa CairoMakie.Makie.Figure
     @test naxes(fig) == 5
-    ## A single-stream fit that carries only the confirmed columns still draws
-    ## just those two panels (backward-compatible with the confirmed-only frame).
+    ## A single-stream fit that carries only the confirmed columns still
+    ## draws just those two panels (backward-compatible with the
+    ## confirmed-only frame).
     fc_conf = DataFrame(
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_new = rand(rng, 0:5, n)
@@ -983,8 +988,9 @@ end
 ] begin
     using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
     ## External projection from the packaged Chamla central trajectory; our
-    ## projection as a dated fan (ribbon) including a zero-width anchor; observed
-    ## a dated value series, all with dates out of order to exercise sorting.
+    ## projection as a dated fan (ribbon) including a zero-width anchor;
+    ## observed a dated value series, all with dates out of order to
+    ## exercise sorting.
     ours = [("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
         ("2026-06-10", 700, 500, 950), ("2026-06-03", 430, 330, 560),
         ("2026-06-17", 930, 660, 1300)]

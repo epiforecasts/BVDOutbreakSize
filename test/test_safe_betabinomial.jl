@@ -31,7 +31,8 @@ end
     v_hi = var(safe_betabinomial(n, p, 0.1))
     @test v_lo > binom_var
     @test v_hi > v_lo
-    ## The inflation matches `1 + (n − 1)·ρ` for the intra-class correlation.
+    ## The inflation matches `1 + (n − 1)·ρ` for the intra-class
+    ## correlation.
     @test var(safe_betabinomial(n, p, 0.05)) ≈
           binom_var * (1 + (n - 1) * 0.05) rtol = 1e-6
 end

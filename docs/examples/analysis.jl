@@ -56,7 +56,7 @@
 #
 # - *Delays re-estimated with uncertainty.* McCabe et al. [mccabe2026](@cite) take the onset-to-death delay from the Isiro 2012 point estimate of Rosello et al. [rosello2015](@cite).
 #   We instead use a Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite) that re-estimates the delay with uncertainty.
-#   We sample every other delay (generation interval, incubation period, onset-to-report, onset-to-confirmation and onset-to-detection abroad) from a prior centred on published Ebola estimates.
+#   We sample every other delay (generation interval, incubation period, onset-to-report, onset-to-confirmation and onset-to-hospitalisation abroad) from a prior centred on published Ebola estimates.
 #   Each is discretised with double interval censoring [charniga2024](@cite), so the delay uncertainty propagates.
 #
 # **Likelihoods and data streams**
@@ -338,7 +338,7 @@ vintage_table #hide
 # | Background CFR $\mathrm{cfr}_{\text{bg}}$ |  | ● |  |  |  | ● |  |
 # | Onset-to-report delay |  |  | ● | ● | ● |  |  |
 # | Receipt delay |  |  |  | ● | ● | ● |  |
-# | Onset-to-detection delay | ● |  |  |  |  |  |  |
+# | Onset-to-hospitalisation delay | ● |  |  |  |  |  |  |
 # | Assay sensitivity / specificity |  |  |  |  | ● | ● |  |
 # | Severity enrichment $\delta_0$ |  |  |  |  | ● |  |  |
 # | Death testing fraction $\tau_{\text{death}}$ |  |  |  |  |  | ● |  |
@@ -361,7 +361,7 @@ vintage_table #hide
 # ##### Reproduction number
 #
 # The reproduction number is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
+# It is then assumed to follow a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The month-long lead lets $R_t$ start moving before the first report, since transmission may already have turned before the outbreak was formally reported.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
@@ -525,7 +525,7 @@ vintage_table #hide
 # \text{tmrca}_{\text{days}} \sim
 #   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
 #   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
-# \qquad \sigma = 15\ \text{d}. \tag{10}
+# \qquad \sigma = 16\ \text{d}. \tag{10}
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
@@ -686,7 +686,7 @@ vintage_table #hide
 # and the onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
 # The source is shown with the deaths submodel below, where the delay is injected.
 #
-# ##### Onset-to-detection delay (exports)
+# ##### Onset-to-hospitalisation delay (exports)
 #
 # An exported case is detected at a point of entry abroad when it first enters surveillance, the same event as a domestic suspected-case report.
 # The export model therefore uses the same line-list onset-to-admission delay [bdbv_linelist_analysis_2026](@cite) as the onset-to-report delay above, with the same natural shape and scale priors:
@@ -835,14 +835,15 @@ cfr_prior_fig #hide
 # This positivity is built from the same assay sensitivity and specificity as the confirmed cases, but uses the death-pool BVD share $q_{\text{death}}$.
 # Confirmation runs on the altona RealStar Filovirus Screen RT-PCR rather than the Zaire-specific GeneXpert Ebola assay.
 # The GeneXpert assay does not reliably detect Bundibugyo virus.
-# Sensitivity for Bundibugyo virus is less well characterised than for Zaire ebolavirus, so we centre the sensitivity prior below the values reported for other strains and give it a wide spread.
+# A single assay draw is sensitive to about 85%, but a suspect is confirmed or ruled out through repeat control tests rather than one draw.
+# The effective process sensitivity is therefore higher, about 98% with two controls, so we centre the sensitivity prior there and give it a tight spread.
 # The specificity is high but imperfect.
 # The severity enrichment is moderate and one-sided (triage upsamples BVD, never down).
 # The death testing-intensity scaling is a tight log-normal centred on one, since no death-testing data grounds it:
 #
 # ```math
 # \tau_{\text{test}} \sim \mathrm{Beta}(5,\ 2), \qquad
-# s \sim \mathrm{Beta}(10,\ 1.76), \qquad
+# s \sim \mathrm{Beta}(38,\ 2), \qquad
 # \mathrm{spec} \sim \mathrm{Beta}(60,\ 2),
 # ```
 #
@@ -1475,7 +1476,7 @@ cfr_prior_fig #hide
 # The exports stream is travel-gated, so the at-risk clock runs from infection.
 # An infected person travels to Uganda at the daily per-capita travel rate $q = N_{\text{travel}} / N_{\text{source}}$ and stays at risk of being exported and detected only until the infection-to-detection delay has elapsed.
 # The daily at-risk export prevalence is the infections still infected and not yet detected, scaled by the Uganda ascertainment and the travel rate.
-# The infection-to-detection delay is the onset-to-detection delay convolved with the incubation period, so the survival clock runs from infection.
+# The infection-to-detection delay is the onset-to-hospitalisation delay convolved with the incubation period, so the survival clock runs from infection.
 # Write the cumulative infections and the infections that have completed the detection delay as
 #
 # ```math

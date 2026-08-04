@@ -4,7 +4,7 @@
 ## each draw their own negative-binomial dispersion from a shared population
 ## rather than sharing one global `k`.
 
-@testitem "pooled_dispersion_model: per-stream draws from a shared population" begin
+@testitem "pooled_dispersion_model draws each stream from one population" begin
     using Turing: returned
     using Random: default_rng, seed!
     using BVDOutbreakSize: pooled_dispersion_model
@@ -97,7 +97,7 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
 
     ## Every per-stream dispersion (including the isolation and recovered
-    ## streams, now pooled rather than independent in the joint), the
+    ## streams, pooled rather than independent in the joint), the
     ## population value and the pooling SD are exposed and positive.
     for key in (:k, :k_cases, :k_deaths, :k_confirmed, :k_confirmed_deaths,
         :isolation_dispersion, :recovered_dispersion)

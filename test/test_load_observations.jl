@@ -398,11 +398,12 @@ end
     using Dates: Date, Day
     using TOML
 
-    ## The quietest failure of the three: a date that matches no vintage does
-    ## nothing at all — no step, no de-anchor — and the gross bar cannot fire
-    ## because there is no increment to compare against. A transposed digit or
-    ## the wrong month therefore presents as silence while the user believes a
-    ## harmonisation is being absorbed, so the loader refuses it.
+    ## The quietest failure of the three: a date that matches no vintage
+    ## does nothing at all — no step, no de-anchor — and the gross bar
+    ## cannot fire because there is no increment to compare against. A
+    ## transposed digit or the wrong month therefore presents as silence
+    ## while the user believes a harmonisation is being absorbed, so the
+    ## loader refuses it.
     path = joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml")
     raw = TOML.parsefile(path)
     blk = raw["confirmed_break_dates"]

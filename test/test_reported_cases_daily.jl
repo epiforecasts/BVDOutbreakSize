@@ -26,7 +26,9 @@
     @test all(0 .< p_drc .< 1)
 end
 
-@testitem "reported_cases: tiny fit with history and total stays positive" tags=[:slow] begin
+@testitem "reported_cases: a tiny fit with a total stays positive" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model
