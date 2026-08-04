@@ -37,7 +37,8 @@ Both self-calibrate each figure from its axis ticks.
 The only manual input is each vintage's rightmost x-axis tick date (in the script `CONFIG`).
 
 These counts are approximate, and the error is a few percent in either direction per scan, independent between vintages.
-Against the printed figure `n` it ranges from −5.0% (SitReps 079/080: 2770 against n = 2 915) to +1.6% (SitRep 068: 2344 against n = 2 308), with SitRep 064 at −2.2% (2018 against n = 2 064), SitRep 072 at +0.4% (2531 against n = 2 521), and SitReps 069/070/071 at −3.0% (2260 against n = 2 329).
+Against the printed figure `n` it ranges from −5.0% (SitReps 079/080: 2770 against n = 2 915) to +1.6% (SitRep 068: 2344 against n = 2 308).
+Per-vintage, SitRep 064 sits at −2.2% (2018 against n = 2 064), SitRep 072 at +0.4% (2531 against n = 2 521), and SitReps 069/070/071 at −3.0% (2260 against n = 2 329).
 The 079/080 figure is the largest shortfall seen so far, a couple of points past the previous −3.0% floor rather than an order of magnitude off, so it is recorded as extending the known range rather than rejected (section 4b: check neighbours before excluding).
 It is also not a new image, as the duplicate note below explains.
 Individual daily bars carry roughly ±1–2 cases of pixel noise.
@@ -47,11 +48,14 @@ Treat the sign as unknown.
 
 One consequence deserves emphasis before anyone fits this stream.
 Late reporting only ever adds cases, so an onset date's count must be non-decreasing across vintages, and the scans do not respect that.
-On onset dates more than three weeks before the earliest report date in the file (12 July, so onsets before 21 June), the scanned totals move both ways between consecutive distinct snapshots: 064 → 065 falls by a net 36 cases across 34 of 54 such days, and every other consecutive pair falls somewhere too.
+On onset dates more than three weeks before the earliest report date in the file (12 July, so onsets before 21 June), the scanned totals move both ways between consecutive distinct snapshots.
+For example, 064 → 065 falls by a net 36 cases across 34 of 54 such days, and every other consecutive pair falls somewhere too.
 A between-vintage increment of a few cases is therefore at or below the noise floor, which bounds what a reporting-delay estimate built from those increments can support.
 See issue #488.
 
-SitReps 061 and 062 reuse one figure, as do 069/070/071, 073/074 (identical n = 2 567, identical digitised total and day count), and now 079/080 (identical n = 2 915, identical digitised total 2 770 and day count, md5-verified byte-identical embedded images), so the nineteen scanned vintages hold fourteen distinct onset snapshots (report dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25, 26, 30, 31 July and 1 August).
+SitReps 061 and 062 reuse one figure, as do 069/070/071 and 073/074 (identical n = 2 567, identical digitised total and day count).
+SitReps 079/080 now reuse one too (identical n = 2 915, identical digitised total 2 770 and day count, md5-verified byte-identical embedded images).
+The nineteen scanned vintages therefore hold fourteen distinct onset snapshots (report dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25, 26, 30, 31 July and 1 August).
 SitReps 059 and 060 are not a repeat despite sharing a digitised total of 1821: they differ on three days, so they count as two snapshots.
 Reprints are collapsed by exact value equality over the digitised block rather than by a list of vintage ids, so a new reprint is caught without a change to the loader.
 Treating a reprint as a fresh snapshot would fabricate an increment of exactly zero and bias the fitted delay towards fast reporting.
@@ -81,8 +85,10 @@ Advancing `as_of_date` in `observations.toml` past a newly digitised vintage's r
 
 ### Rough onset-to-report delay
 
-Because each vintage redraws the same onset cohort at a later report date, the scanned curves form a reporting triangle: old onset dates are stable across vintages while recent ones fill in as more confirmations arrive (e.g. onset 10 July reads 4 → 9 → 27 → 33 → 37 → 39 → 40 across the 12, 14, 17, 18, 19, 20 and 22 July snapshots).
-Taking the latest snapshot as the near-complete reference for onset dates at least ~12 days old, the empirical proportion of eventually-reported confirmed cases reported within `d` days of onset is around 55–60% by 7 days, 85% by ~10 days, 90%+ by ~12 days and 95% by ~2.5 weeks, near-complete (98–99%) by ~3 weeks (median ~5–6 days).
+Because each vintage redraws the same onset cohort at a later report date, the scanned curves form a reporting triangle.
+Old onset dates are stable across vintages while recent ones fill in as more confirmations arrive, for example onset 10 July reads 4 → 9 → 27 → 33 → 37 → 39 → 40 across the 12, 14, 17, 18, 19, 20 and 22 July snapshots.
+Taking the latest snapshot as the near-complete reference for onset dates at least ~12 days old, the empirical proportion of eventually-reported confirmed cases reported within `d` days of onset is around 55–60% by 7 days, 85% by ~10 days and 90%+ by ~12 days.
+By ~2.5 weeks that proportion reaches 95%, near-complete (98–99%) by ~3 weeks, with a median of ~5–6 days.
 The 7-day figure is the least well determined of these.
 A fuller reanalysis of the same triangle put it at 54–62% with a 95% interval of 43–68%, wide because the digitisation noise is close in size to the between-vintage increments the estimate rests on.
 Quote the interval, not the point.
@@ -132,7 +138,8 @@ This is the guard against the manifest silently drifting weeks behind again.
 
 Read these from the PDF (the `date de rapportage`, not the filename or the publication date, is the key each row is stored under) and record them in the matching `observations.toml` history.
 Advance every stream in the table below on each update, whenever the SitRep prints the value, not just the confirmed/suspected headlines.
-The isolation, bed-capacity, recovered, laboratory and CTE patient-movement streams move together with the headlines: the treatment/occupancy streams share one Tableau, and the loader invariants tie the latest treatment-flow day to the isolation window, so advancing the headlines while leaving these behind both drops data and can break the loader test.
+The isolation, bed-capacity, recovered, laboratory and CTE patient-movement streams move together with the headlines: the treatment/occupancy streams share one Tableau, and the loader invariants tie the latest treatment-flow day to the isolation window.
+Advancing the headlines while leaving these behind both drops data and can break the loader test.
 
 | From the SitRep | `observations.toml` stream |
 |---|---|
@@ -149,75 +156,41 @@ Note any disagreement in the `source =` string and prefer the auditable value.
 
 ## Inclusion rules and conventions
 
-- **Cut-off 28 May 2026 (SitRep 014)**: the last vintage with a coherent
-  national laboratory total. The suspected cumulative streams freeze at their
-  last stable vintage (26 May). Confirmed cases/deaths and the post-cut-off
-  daily streams are recorded and, for the streams the model reads
-  (e.g. the 24h analysed denominators), fitted beyond the cut-off.
-- **24h analysed denominator**: only include a day whose confirmed-case
-  increment does not exceed that day's national `analysed` count (you cannot
-  confirm more specimens than you analysed). A province that reports
-  "reçus / en cours d'analyse" but no completed count contributes 0, like a
-  non-reporting province. Sum only completed per-province analysed counts. A
-  province worded "documentés dans le réseau de collecte" rather than
-  "analysés" is a shade looser but usable (precedent: SitRep 065, 18 July,
-  Ituri 167 + Nord-Kivu 127 = 294); note the wording in the `source =` string.
-- **Occupation table (Tableau 6/7)**: use it only when it balance-closes
-  (`Patients au lit (J-1) + Total admissions (24h) − Total sorties (24h) =
-  Patients en isolement (Fin J)`) and the `dont confirmés + dont suspects`
-  split sums to the Fin J total. Bed capacity = Fin J ÷ `taux d'occupation`,
-  which should equal the printed `Nombre de lits`. A carried-forward tile
-  (page-1 isolement count and occupancy rate byte-identical to the prior day
-  with no fresh Tableau to corroborate) is a reporting gap: record the raw
-  value in the CSV note but exclude it from the fitted series (precedent:
-  30 June, 3–4 July). A carried-forward Ensemble column is a narrower
-  variant: the per-province rows and the `Total sorties (24h)` row are fresh
-  and balance-close, but the table's own printed `Ensemble`/Global cell for
-  one row block (typically the Sorties breakdown: Décédés/Non-cas/Guéris/
-  Évadés/Transférés) is a byte-identical copy of the previous vintage's
-  Ensemble cell rather than that day's own row sum. Detect it by summing the
-  per-province cells yourself and comparing to the printed Ensemble cell and
-  to the previous vintage's Ensemble cell for the same row; if it matches the
-  prior vintage rather than this vintage's own row sum, use the auditable
-  row sum (it will also match the prose paragraph and the `Total sorties`
-  row) and record the printed Ensemble cell as the discrepancy (precedent:
-  SitRep 079, 1 August — Ensemble cells 18/71/15/2/0 were a byte-identical
-  copy of SitRep 078's own Ensemble cells, while the row sums 25/86/42/4/1
-  matched the prose and `Total sorties (24h)` = 158 exactly).
-- **Unpublished reports**: some SitRep numbers were never issued (029/12 Jun,
-  043/26 Jun, 045/28 Jun). The series simply step over the missing date; note
-  it in the `source =` string.
-- **Headline vs table disagreement**: prefer the auditable table sum and
-  record the headline as the discrepancy (precedent: SitRep 009's 220 over
-  the erroneous 119; SitRep 061's Fin J 736 over the page-1 typo 737).
-- **Retrospective harmonisation steps**: when a vintage's asterisked headline
-  jumps far beyond its own 24h new-case count because a provincial base was
-  integrated, record the harmonised headline (it is what the INRB-UMIE
-  `national_*` CSV carries) and state the gross-vs-net split in the
-  `source =` string, so the artefact is visible to whoever reads the
-  increment the daily likelihood actually fits. State the split for both
-  confirmed streams, since a break day now applies to cases and deaths alike.
-  Precedents: SitRep 065 (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross
-  vs +77 net cases and +40 gross vs +37 net deaths — both downward, which is
-  what a transfer between provinces looks like rather than a base
-  integration) and SitRep 069 (22 July, Ituri/Nord-Kivu base integration,
-  +97 gross vs +369 net cases and +62 gross vs +236 net deaths — much the
-  largest so far, and called out in the report's own footnote).
-- **Format change from SitRep 059**: the analytique format moved the 24h
-  analysed counts to §3.2 Laboratoire bullets, dropped the page-1 suspect-
-  death-of-day subtitle, and reports the daily suspect total in Tableau 3.
-  The DHIS2 suspect-death-of-day measure is not continuous in this format, so
-  `suspected_daily_deaths_history` is frozen at 11 July; see its `source =`
-  string.
+- **Cut-off 28 May 2026 (SitRep 014)**: the last vintage with a coherent national laboratory total.
+  The suspected cumulative streams freeze at their last stable vintage (26 May).
+  Confirmed cases/deaths and the post-cut-off daily streams are recorded and, for the streams the model reads (e.g. the 24h analysed denominators), fitted beyond the cut-off.
+- **24h analysed denominator**: only include a day whose confirmed-case increment does not exceed that day's national `analysed` count (you cannot confirm more specimens than you analysed).
+  A province that reports "reçus / en cours d'analyse" but no completed count contributes 0, like a non-reporting province.
+  Sum only completed per-province analysed counts.
+  A province worded "documentés dans le réseau de collecte" rather than "analysés" is a shade looser but usable (precedent: SitRep 065, 18 July, Ituri 167 + Nord-Kivu 127 = 294).
+  Note the wording in the `source =` string.
+- **Occupation table (Tableau 6/7)**: use it only when it balance-closes (`Patients au lit (J-1) + Total admissions (24h) − Total sorties (24h) = Patients en isolement (Fin J)`) and the `dont confirmés + dont suspects` split sums to the Fin J total.
+  Bed capacity = Fin J ÷ `taux d'occupation`, which should equal the printed `Nombre de lits`.
+  A carried-forward tile (page-1 isolement count and occupancy rate byte-identical to the prior day with no fresh Tableau to corroborate) is a reporting gap: record the raw value in the CSV note but exclude it from the fitted series (precedent: 30 June, 3–4 July).
+  A carried-forward Ensemble column is a narrower variant: the per-province rows and the `Total sorties (24h)` row are fresh and balance-close.
+  However, the table's own printed `Ensemble`/Global cell for one row block (typically the Sorties breakdown: Décédés/Non-cas/Guéris/Évadés/Transférés) is a byte-identical copy of the previous vintage's Ensemble cell rather than that day's own row sum.
+  Detect it by summing the per-province cells yourself and comparing to the printed Ensemble cell and to the previous vintage's Ensemble cell for the same row.
+  If it matches the prior vintage rather than this vintage's own row sum, use the auditable row sum (it will also match the prose paragraph and the `Total sorties` row) and record the printed Ensemble cell as the discrepancy.
+  Precedent: SitRep 079, 1 August — Ensemble cells 18/71/15/2/0 were a byte-identical copy of SitRep 078's own Ensemble cells, while the row sums 25/86/42/4/1 matched the prose and `Total sorties (24h)` = 158 exactly.
+- **Unpublished reports**: some SitRep numbers were never issued (029/12 Jun, 043/26 Jun, 045/28 Jun).
+  The series simply step over the missing date.
+  Note it in the `source =` string.
+- **Headline vs table disagreement**: prefer the auditable table sum and record the headline as the discrepancy.
+  Precedents: SitRep 009's 220 over the erroneous 119, and SitRep 061's Fin J 736 over the page-1 typo 737.
+- **Retrospective harmonisation steps**: when a vintage's asterisked headline jumps far beyond its own 24h new-case count because a provincial base was integrated, record the harmonised headline (it is what the INRB-UMIE `national_*` CSV carries) and state the gross-vs-net split in the `source =` string.
+  This makes the artefact visible to whoever reads the increment the daily likelihood actually fits.
+  State the split for both confirmed streams, since a break day now applies to cases and deaths alike.
+  Precedents: SitRep 065 (18 July, Haut-Uélé/Nia-Nia reattachment, +83 gross vs +77 net cases and +40 gross vs +37 net deaths — both downward, which is what a transfer between provinces looks like rather than a base integration) and SitRep 069 (22 July, Ituri/Nord-Kivu base integration, +97 gross vs +369 net cases and +62 gross vs +236 net deaths — much the largest so far, and called out in the report's own footnote).
+- **Format change from SitRep 059**: the analytique format moved the 24h analysed counts to §3.2 Laboratoire bullets, dropped the page-1 suspect-death-of-day subtitle, and reports the daily suspect total in Tableau 3.
+  The DHIS2 suspect-death-of-day measure is not continuous in this format, so `suspected_daily_deaths_history` is frozen at 11 July.
+  See its `source =` string.
 
 ## Other signals to scan for and flag (not yet fitted)
 
-Each SitRep also prints indicators the model does not (yet) read. On every
-update, scan the PDF for any such signal, and if it is present and plausibly
-useful, surface it in the PR under a **"Data available but not fitted (for
-@seabbs to consider tracking)"** heading with its current value, so the
-maintainer can decide whether to add a stream. This keeps new signals from
-being silently dropped as the report format evolves. Known candidates:
+Each SitRep also prints indicators the model does not (yet) read.
+On every update, scan the PDF for any such signal, and if it is present and plausibly useful, surface it in the PR under a **"Data available but not fitted (for @seabbs to consider tracking)"** heading with its current value, so the maintainer can decide whether to add a stream.
+This keeps new signals from being silently dropped as the report format evolves.
+Known candidates:
 
 | Signal (SitRep location) | Note |
 |---|---|
@@ -233,7 +206,7 @@ being silently dropped as the report format evolves. Known candidates:
 
 If a genuinely new indicator appears that is not in this list or the fitted table, add a row here in the same PR so the procedure stays current.
 Before calling anything new, moved or dropped, grep the adjacent vintages for it (`pdftotext -layout` over `sitrep_pdfs/`), because a two-reader check of one report cannot see what the neighbouring reports do.
-Three claims of that kind in PR #490 turned out to describe changes that had happened ten or more vintages earlier, or not at all.
+A claim of novelty that skips this check has turned out to describe a change that had actually happened ten or more vintages earlier, or not at all.
 
 Values for these signals accumulate in `candidate_signals.csv` (`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row per signal per vintage, so a series builds from the day a signal first appears rather than from the day someone decides to fit it.
 Extend it on every update alongside the fitted streams, and open one issue per signal proposing it for fitting (one per signal, not one per vintage).

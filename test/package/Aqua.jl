@@ -45,7 +45,7 @@ end
     # subprocess to exit; one still alive after loading is the persistent task
     # the check looks for.
     #
-    # The probe conflates two outcomes. When the subprocess exits WITHOUT
+    # The probe conflates two outcomes. When the subprocess exits without
     # writing the sentinel — a failed or killed precompilation, nothing to do
     # with tasks — Aqua logs `<file> was not created, but precompilation
     # exited` and reports a persistent task regardless. `tmax` does not cover

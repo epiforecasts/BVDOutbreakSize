@@ -18,7 +18,7 @@
 #   * baseline (count 0) = the widest dark horizontal row in the lower panel;
 #   * count scale = the y-axis tick marks (0/20/40/60), evenly spaced, giving
 #     pixels-per-count = tick-spacing / 20;
-#   * date scale = the weekly x-axis tick marks, anchored on the RIGHTMOST
+#   * date scale = the weekly x-axis tick marks, anchored on the rightmost
 #     tick (whose date is in CONFIG, read off the axis) stepping back 7 days;
 #   * each daily bar height = the 75th-percentile column in a one-day window,
 #     flooded up from the baseline counting light-blue (Vivant) and crimson
@@ -26,7 +26,7 @@
 #     segments but stopping at the wide white gap up to the floating label /
 #     dashed line above the bar.
 #
-# Accuracy: the error is a few percent in EITHER direction, per scan, and it is
+# Accuracy: the error is a few percent in either direction, per scan, and it is
 # independent between vintages. Against the printed `n` it ranges from -3.0%
 # (SitRep 069/070/071: 2260 vs n=2 329) to +1.6% (SitRep 068: 2344 vs n=2 308),
 # with SitRep 064 at -2.2% (2018 vs n=2 064) and 072 at +0.4% (2531 vs n=2 521).
@@ -36,8 +36,8 @@
 # is one-sided and does not explain the overshoots, so treat the sign as
 # unknown.
 #
-# The consequence that matters: the scans do NOT preserve a property the
-# underlying data has. Late reporting only ever ADDS cases, so an onset date's
+# The consequence that matters: the scans do not preserve a property the
+# underlying data has. Late reporting only ever adds cases, so an onset date's
 # count must be non-decreasing across vintages, yet on onset dates more than
 # three weeks before the earliest report date in the file (12 July, so onsets
 # before 21 June) the scanned totals move both ways between consecutive
@@ -47,7 +47,7 @@
 # anything built on those increments (a reporting-delay estimate, say) has to
 # account for it.
 #
-# The values are approximate and are NOT fitted by the model; they are captured
+# The values are approximate and are not fitted by the model; they are captured
 # for later use (see data/README.md and #488).
 #
 # Dependencies: poppler (`pdfimages`, `pdftotext`, `pdfinfo`) on PATH. No
@@ -138,7 +138,7 @@ end
 
 # The onset figure is a blue-dominant daily bar chart with no orange (the
 # age/sex pyramids use orange; the notification-week chart uses a darker
-# steel blue and prints value labels). The tests are pixel FRACTIONS, not
+# steel blue and prints value labels). The tests are pixel fractions, not
 # counts, because INSP re-renders the figure at whatever size the layout
 # needs and an absolute threshold silently flips as the size moves: the
 # blue floor already had to be lowered once when the figure shrank to

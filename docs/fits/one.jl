@@ -1,4 +1,4 @@
-# Run and cache a SINGLE fit from the registry, for the per-fit CI matrix (or
+# Run and cache a single fit from the registry, for the per-fit CI matrix (or
 # an HPC task). Select the fit with the `BVD_FIT_ID` environment variable; the
 # result is serialised into `BVD_FIT_CACHE` under its content-addressed key, so
 # the docs build can load it instead of refitting.
