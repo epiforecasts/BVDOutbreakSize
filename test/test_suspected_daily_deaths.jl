@@ -34,9 +34,10 @@ end
     import FlexiChains
     using BVDOutbreakSize: deaths_only_model
 
-    ## Days but no counts: the daily inflow is a predictive generator, so its
-    ## per-day counts are sampled under the `deaths_state.suspected_daily_deaths`
-    ## submodel rather than conditioned.
+    ## Days but no counts: the daily inflow is a predictive generator, so
+    ## its per-day counts are sampled under the
+    ## `deaths_state.suspected_daily_deaths` submodel rather than
+    ## conditioned.
     deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246])
     suspected_daily_deaths_history = (; days = [30, 31, 32, 33], counts = Int[])
     chn = sample(

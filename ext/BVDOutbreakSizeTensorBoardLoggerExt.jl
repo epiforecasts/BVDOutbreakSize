@@ -13,19 +13,19 @@ using TensorBoardLogger: TBLogger, log_value, log_histogram
 # than a fixed field layout), then logged to the `TBLogger` at `logdir` under
 # two grouped tag prefixes so the TensorBoard dashboard stays navigable:
 #
-#   * `params/<name>`      — every sampled parameter
-#   * `diagnostics/<name>` — log-density (`logjoint`), divergence flag
+#   * `params/<name>`      every sampled parameter
+#   * `diagnostics/<name>` log-density (`logjoint`), divergence flag
 #                            (`numerical_error`), step size, tree depth, ...
 #
 # Each scalar is logged every step as a `.../value` time series via
 # `log_value` (with an explicit per-chain `step`, so parallel chains do not
 # fight over a shared step counter). When `histograms = true` (the default) a
 # running histogram of the draws so far is also logged every `every` steps as
-# `.../distribution` via `log_histogram`, populating the TensorBoard HISTOGRAMS
-# / DISTRIBUTIONS dashboards. The returned closure matches the AbstractMCMC
-# callback signature and is passed straight to
+# `.../distribution` via `log_histogram`, populating the TensorBoard
+# histograms / distributions dashboards. The returned closure matches the
+# AbstractMCMC callback signature and is passed straight to
 # `nuts_sample(model; callback = ...)`. A single `TBLogger` is shared across
-# the threads `MCMCThreads()` spawns; writes are guarded by a `ReentrantLock`
+# the threads `MCMCThreads()` spawns. Writes are guarded by a `ReentrantLock`
 # and the whole body is wrapped in `try`/`catch` so a fit is never aborted by
 # the callback. View the run with `tensorboard --logdir <logdir>`.
 function BVDOutbreakSize.tensorboard_callback(

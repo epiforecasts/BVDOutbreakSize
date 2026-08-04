@@ -1,11 +1,12 @@
 # Shared setup for the analysis and sensitivity report pages. This is plain
 # Julia (not a Literate page): both `analysis.jl` and `sensitivity.jl` include
 # it so each page can render on its own from the same fitted chains. It loads
-# the packages, the observations, the fit registry (`docs/fits/registry.jl`) and every
-# model fit through the content-addressed cache (`fit_or_load`), then unpacks
-# the named chains, cumulative-infection draws and display labels the pages
-# share. In CI the fits are pre-populated by the per-fit matrix and loaded
-# here; locally a missing fit is computed and cached on first use.
+# the packages, the observations, the fit registry (`docs/fits/registry.jl`)
+# and every model fit through the content-addressed cache (`fit_or_load`),
+# then unpacks the named chains, cumulative-infection draws and display
+# labels the pages share. In CI the fits are pre-populated by the per-fit
+# matrix and loaded here; locally a missing fit is computed and cached on
+# first use.
 
 using Turing
 using Distributions
@@ -43,11 +44,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## run to it, or the freeze date for streams that stop earlier).
     hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
 
-    ## The fits are defined once in `docs/fits/registry.jl` as a registry, so each can be
-    ## run and cached independently — one per CI matrix job, or an HPC task — and
-    ## loaded here through the content-addressed cache instead of being refitted
-    ## inline. `_BREAKPOINT`, `validation_cutoff` and `frozen_cutoffs` come from the
-    ## same registry so the report and the standalone fits agree.
+    ## The fits are defined once in `docs/fits/registry.jl` as a registry, so
+    ## each can be run and cached independently — one per CI matrix job, or
+    ## an HPC task — and loaded here through the content-addressed cache
+    ## instead of being refitted inline. `_BREAKPOINT`, `validation_cutoff`
+    ## and `frozen_cutoffs` come from the same registry so the report and the
+    ## standalone fits agree.
     include(joinpath(pkgdir(BVDOutbreakSize), "docs", "fits", "registry.jl"))
     _BREAKPOINT = default_breakpoint(obs)
 
@@ -76,9 +78,9 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## the estimate-evolution overlay.
     chamla_cutoff = default_chamla_cutoff()
 
-    ## The frozen-joint, sensitivity-variant and delay/clock helpers used by the
-    ## re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so they can be run from
-    ## the standalone per-fit entry point too.
+    ## The frozen-joint, sensitivity-variant and delay/clock helpers used by
+    ## the re-fits live in `docs/fits/registry.jl` (`build_fit_specs`), so
+    ## they can be run from the standalone per-fit entry point too.
 
     ## Sensitivity refits (onset-to-death delay, molecular clock) are slow extra
     ## joint fits, gated on the `BVD_RUN_SENSITIVITY` env var. They run on
@@ -93,11 +95,11 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## Every fit is loaded through the content-addressed cache (`fit_or_load`):
     ## reused when a fit with the same model source, data and settings already
     ## exists — produced once by the per-fit CI matrix (`.github/workflows/
-    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set `BVD_REFIT=all`
-    ## to force a full refit. The loads still run through `fit_parallel`, so on a
-    ## cold cache the joint overlaps the per-stream, frozen and (gated) sensitivity
-    ## re-fits and keeps all cores busy; on a warm cache they deserialise in
-    ## parallel.
+    ## fit-matrix.yml`) or on the HPC — and refitted otherwise. Set
+    ## `BVD_REFIT=all` to force a full refit. The loads still run through
+    ## `fit_parallel`, so on a cold cache the joint overlaps the per-stream,
+    ## frozen and (gated) sensitivity re-fits and keeps all cores busy; on a
+    ## warm cache they deserialise in parallel.
     ## Resolve the cache dir against the package root, never the working
     ## directory: Literate executes the page with the cwd changed to docs/src,
     ## so a relative `BVD_FIT_CACHE` (as CI passes) would point at

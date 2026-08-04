@@ -77,10 +77,14 @@ end
     ## every replicated count must be non-negative and finite.
     w = confirmed_positivity_windows(ch, lh)
     keys = (
-        FlexiChains.Parameter(@varname(cases_state.reported_increments.increments)),
-        FlexiChains.Parameter(@varname(confirmed_state.early_increments.increments)),
-        FlexiChains.Parameter(@varname(confirmed_state.confirmed_positives.positives)),
-        FlexiChains.Parameter(@varname(deaths_state.death_increments.increments)))
+        FlexiChains.Parameter(
+            @varname(cases_state.reported_increments.increments)),
+        FlexiChains.Parameter(
+            @varname(confirmed_state.early_increments.increments)),
+        FlexiChains.Parameter(
+            @varname(confirmed_state.confirmed_positives.positives)),
+        FlexiChains.Parameter(
+            @varname(deaths_state.death_increments.increments)))
     lens = (length(rh.days), length(w.early_days), length(w.obs_analysed),
         length(dh.days))
     for (key, m) in zip(keys, lens)

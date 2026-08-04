@@ -14,7 +14,7 @@ using Enzyme: Enzyme
 # The `SpecialFunctions.gamma` EnzymeRule that the Beta and
 # NegativeBinomial normalising constants need is supplied by
 # `CensoredDistributions`'s own Enzyme extension (a package dependency),
-# so it is not redefined here — doing so would overwrite that method and
+# so it is not redefined here. Doing so would overwrite that method and
 # break precompilation.
 function BVDOutbreakSize.enzyme_adtype()
     return AutoEnzyme(;

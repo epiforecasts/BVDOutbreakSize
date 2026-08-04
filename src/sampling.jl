@@ -12,12 +12,12 @@ default_adtype() = AutoMooncake(; config = Mooncake.Config())
 
 Enzyme reverse-mode AD type, an opt-in alternative to the default
 [`default_adtype`](@ref) (Mooncake). Defined by the package's Enzyme
-weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`); calling it
+weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`). Calling it
 without `Enzyme` loaded raises a `MethodError`. Load `Enzyme` to activate
 the extension. The `SpecialFunctions.gamma` `EnzymeRule` that the Beta and
 NegativeBinomial normalising constants reach is supplied by
 CensoredDistributions' own Enzyme extension. Enzyme differentiates the
-single-stream composers and matches Mooncake; differentiating the full
+single-stream composers and matches Mooncake. Differentiating the full
 joint is platform-dependent (it can hit an upstream Enzyme/LLVM compile
 failure on some systems, see `test/test_enzyme.jl`), so Mooncake remains
 the package default for fitting.
@@ -43,7 +43,7 @@ populating the TensorBoard histograms and distributions dashboards. Set
 `histograms = false` for scalar traces only, or widen `every` to log
 histograms less often.
 
-`tensorboard_callback` is a stub; loading TensorBoardLogger
+`tensorboard_callback` is a stub. Loading TensorBoardLogger
 (`using TensorBoardLogger`) activates the method via
 `BVDOutbreakSizeTensorBoardLoggerExt`. Calling it without
 TensorBoardLogger loaded raises an informative `ErrorException`.
@@ -56,7 +56,7 @@ nuts_sample(model; callback = tensorboard_callback("logs/run"))
 ```
 
 then view the run with `tensorboard --logdir logs/run`. Use `chains = 1`
-for clean live traces; parallel chains share one logger and interleave.
+for clean live traces. Parallel chains share one logger and interleave.
 
 See also: [`progress_callback`](@ref), [`nuts_sample`](@ref).
 """
@@ -133,7 +133,7 @@ end
 
 """
 Compose several `nuts_sample` step callbacks into one. Each argument is
-either a callback with the AbstractMCMC step signature or `nothing`;
+either a callback with the AbstractMCMC step signature or `nothing`.
 `nothing` entries are dropped. The composite invokes the surviving
 callbacks in order on every step. Returns the single callback unchanged
 when only one survives, and `nothing` when none do (so `nuts_sample` sees
@@ -217,21 +217,20 @@ in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
-`target_accept` defaults to 0.85. The earlier integral model needed 0.95
-to keep the multimodal small-outbreak geometry from diverging, but the
-renewal joint conditions the confirmed counts on the observed analysed
+`target_accept` defaults to 0.85. The integral model needs 0.95 to keep
+the multimodal small-outbreak geometry from diverging, but the renewal
+joint conditions the confirmed counts on the observed analysed
 denominator (removing the multiplicative ascertainment ridge) and samples
 the random-walk and ascertainment blocks in non-centred form, so the
 posterior geometry is benign (the sanity fit converges with ≈1 divergence).
 A lower target acceptance shortens the average NUTS trajectory, cutting
 leapfrog steps (and so gradient evaluations) per iteration, so 0.85 trims
 the per-iteration gradient cost while staying above the conventional 0.8
-floor; raise it back toward 0.9–0.99 if a model variant reintroduces
+floor. Raise it back toward 0.9–0.99 if a model variant reintroduces
 divergences. The default
 is two chains (500 post-warmup draws each, 1000 total) rather than four
-shorter ones, mirroring the integral model (#211). The total was halved
-from 2000 draws to trade some effective sample size for a roughly halved
-sampling wall-clock.
+shorter ones, mirroring the integral model. This trades some effective
+sample size for a shorter sampling wall-clock.
 
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
@@ -264,7 +263,7 @@ its adaptation phase by default, so warmup is silent. Set
 which streams them to the callback so step-size adaptation and early
 divergences are visible live. Those warmup draws are then also retained
 in the returned chain, so the first `n_adapts` draws are adaptation
-steps rather than posterior samples; raise `samples` accordingly or drop
+steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
 """
 function nuts_sample(model;
@@ -302,13 +301,13 @@ end
 """
     fit_parallel(thunks; chains = 2)
 
-Run independent model fits — each a zero-argument `thunk` returning a chain —
+Run independent model fits (each a zero-argument `thunk` returning a chain)
 with model-level parallelism bounded by the available threads. At most
 `Threads.nthreads() ÷ chains` fits run at once (so each fit keeps `chains`
 threads for its own chains), clamped to the number of fits. This is
 self-limiting and CI-safe: with two threads (e.g. CI's
-`JULIA_NUM_THREADS=2`, the default `chains`) it runs the fits SEQUENTIALLY,
-identical to a plain loop and with the same peak memory; on a many-core
+`JULIA_NUM_THREADS=2`, the default `chains`) it runs the fits sequentially,
+identical to a plain loop and with the same peak memory. On a many-core
 machine with more threads it fans the fits out (eight threads → four fits at
 once). Each fit seeds its own RNG, so the results do not depend on the
 schedule. Returns the chains in input order.
