@@ -1944,11 +1944,10 @@ cfr_prior_fig #hide
 # [Data](@ref methods-data) section) is the only direct observation of that
 # series, so it can identify things the other streams cannot on their own,
 # plausibly including the report-versus-receipt split the laboratory pipeline
-# currently pins with a soft external constraint
-# (`onset_to_sample_logweight`).
+# currently pins with a soft external constraint.
 #
 # We model the onset-to-report delay as a discrete-time hazard over delay
-# $d = 0,\dots,D-1$ days, $D = 28$ (see `ONSET_REPORT_MAX_DELAY`): the
+# $d = 0,\dots,D-1$ days, $D = 28$: the
 # triangle's own between-vintage increments are essentially all signal by
 # around two weeks and settle into digitisation noise, mean increment near
 # zero with frequent sign flips, by about three weeks, so $D = 28$ sits
@@ -2001,7 +2000,7 @@ cfr_prior_fig #hide
 # and $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily
 # ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto
 # the onset axis, tying this triangle's ascertainment to the confirmed
-# pipeline's rather than leaving it free. `onsets_only_model` has no confirmed
+# pipeline's rather than leaving it free. The onsets-only fit has no confirmed
 # pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$,
 # and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
@@ -2023,8 +2022,8 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but the mean above cannot produce
 # one: $F$ is non-decreasing in $\delta$, so the modelled increment is bounded
-# below at zero. Re-dating is absorbed as observation noise rather than modelled
-# (issue #518).
+# below at zero. Re-dating is absorbed as observation noise rather than
+# modelled.
 #
 # $\sigma_u$ collects three sources: counting variation around the cell's own
 # modelled mean; a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled
@@ -2110,7 +2109,7 @@ cfr_prior_fig #hide
 # generates prior- and posterior-predictive draws.
 #
 # The symptom-onset reporting triangle is threaded in the same way, as a
-# standard stream rather than an opt-in one: `onset_curve_history` defaults
+# standard stream rather than an opt-in one: the onset-curve input defaults
 # to an empty history, so a missing input file degrades to a no-op rather
 # than an error, but the production path fits it every time alongside the
 # other streams.
@@ -2529,7 +2528,7 @@ diagnostics_table( #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{42}
+#     \tag{46}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that
@@ -2562,7 +2561,7 @@ diagnostics_table( #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{43}
+# \end{cases} \tag{47}
 # ```
 #
 # and takes its spread from the record's own first differences, each
@@ -2570,7 +2569,7 @@ diagnostics_table( #hide
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{44}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{48}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$ a change over $w$
@@ -2583,7 +2582,7 @@ diagnostics_table( #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{45}
+#     \tag{49}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for
@@ -4187,11 +4186,20 @@ onset_forecast_summary #hide
 #md # </details>
 #md # ```
 
-# The figure splits the coming week's new onset reports into the two
-# components: reports of onsets that had already happened by the cut-off
-# (the nowcast made observable) and reports of onsets still to come. The
-# right panel puts the nowcast itself on the same axes, the onsets that have
-# happened against the share of them the triangle has printed.
+# The left panel splits the coming week's new onset reports into reports of
+# onsets that had already happened by the cut-off and reports of onsets
+# still to come, and shows their sum.
+# The fourth bar is the same sum after it has been through the observation
+# model, which is what the next vintage will actually print.
+# It is much wider than the sum it replicates, and the gap is the rescan:
+# at a printed total of a couple of thousand cases the per-scan level error
+# alone is worth tens of cases either way, well above the epidemic
+# uncertainty on a week of new reports.
+# Only the fourth bar is comparable to a digitised figure, and only it is
+# scored.
+#
+# The right panel puts the nowcast itself on the same axes, the onsets that
+# have happened against the share of them the triangle has printed.
 
 #md # ```@raw html
 #md # <details><summary>Symptom-onset nowcast and forecast plot</summary>
@@ -4203,16 +4211,27 @@ onset_forecast_fig = let
     ## label overhangs the axis and is clipped at the figure edge.
     ax1 = CairoMakie.Axis(fig[1, 1];
         title = "New onset reports over the coming week",
-        ylabel = "cases", xticks = (1:3,
-            ["already\nhappened", "not yet\nhappened", "total"]))
-    for (i, d) in enumerate((onset_forecast.onset_reports_backfill,
-        onset_forecast.onset_reports_future,
-        Float64.(onset_forecast.onset_reports_new)))
+        ylabel = "cases", xticks = (1:4,
+            ["already\nhappened", "not yet\nhappened", "sum of\nthe two",
+                "as the next\nfigure reads it"]))
+    ## The first three bars are latent, so the third is exactly the first
+    ## two added. The fourth is that same sum replicated through the
+    ## observation model, which is the scored quantity and the only one
+    ## comparable to a digitised figure; it is wider by the per-scan level
+    ## error, which is why the three latent bars are shown as well rather
+    ## than a decomposition that appears not to add up.
+    _latent_total = onset_forecast.onset_reports_backfill .+
+                    onset_forecast.onset_reports_future
+    for (i, d, col) in ((1, onset_forecast.onset_reports_backfill,
+        :mediumpurple),
+        (2, onset_forecast.onset_reports_future, :mediumpurple),
+        (3, _latent_total, :mediumpurple),
+        (4, Float64.(onset_forecast.onset_reports_new), :slategray))
         s = posterior_summary(d)
         CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo90], [s.hi90];
-            color = :mediumpurple, linewidth = 3)
+            color = col, linewidth = 3)
         CairoMakie.rangebars!(ax1, [Float64(i)], [s.lo60], [s.hi60];
-            color = :mediumpurple, linewidth = 8)
+            color = col, linewidth = 8)
         CairoMakie.scatter!(ax1, [Float64(i)], [quantile(d, 0.5)];
             color = :black, markersize = 9)
     end
