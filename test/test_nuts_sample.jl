@@ -4,7 +4,9 @@
 ## returns by default (a FlexiChains.VNChain here) and check shape +
 ## finite draws.
 
-@testitem "nuts_sample returns a sample container with finite draws" tags=[:slow] begin
+@testitem "nuts_sample returns a sample container with finite draws" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using BVDOutbreakSize: nuts_sample

@@ -2,7 +2,9 @@
 ## suspects du jour"), scored against the modelled daily suspected series at
 ## each report day, exercised through `cases_only_model` and `bvd_joint`.
 
-@testitem "suspected daily inflow: conditioned fit stays positive" tags=[:slow] begin
+@testitem "suspected daily inflow: conditioned fit stays positive" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model
@@ -24,7 +26,9 @@
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily inflow: predictive path samples the counts" tags=[:slow] begin
+@testitem "suspected daily inflow: predictive path samples the counts" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model
@@ -64,7 +68,9 @@ end
     @test all(C_T .> 0)
 end
 
-@testitem "suspected daily inflow: joint prior runs with the live data" tags=[:slow] begin
+@testitem "suspected daily inflow: joint prior runs with the live data" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model

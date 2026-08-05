@@ -33,7 +33,9 @@
     )
 end
 
-@testitem "forecast_reported returns the documented columns" tags=[:slow] setup=[ForecastFixtures] begin
+@testitem "forecast_reported returns the documented columns" tags=[
+    :slow
+] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported
 
@@ -69,7 +71,9 @@ end
     @test all(fc.confirmed_deaths_cum .<= fc.deaths_cum)
 end
 
-@testitem "forecast_reported projects isolation beds and recovered" tags=[:slow] begin
+@testitem "forecast_reported projects isolation beds and recovered" tags=[
+    :slow
+] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated
     import FlexiChains
@@ -133,7 +137,9 @@ end
     @test "DRC isolation beds" ∉ vt0[!, "Stream"]
 end
 
-@testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[ForecastFixtures] begin
+@testitem "forecast_table has expected rows and columns" tags=[:slow] setup=[
+    ForecastFixtures
+] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported, forecast_table
 
@@ -158,7 +164,9 @@ end
           Set(["cumulative by T+7", "new this week"])
 end
 
-@testitem "forecast_vs_truth compares forecast to observed counts" tags=[:slow] setup=[ForecastFixtures] begin
+@testitem "forecast_vs_truth compares forecast to observed counts" tags=[
+    :slow
+] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame, nrow
     using BVDOutbreakSize: forecast_reported, forecast_vs_truth
 
@@ -238,7 +246,9 @@ end
     @test only(c3.Observed) == 70
 end
 
-@testitem "forecast_archive returns tidy long scored streams" tags=[:slow] setup=[ForecastFixtures] begin
+@testitem "forecast_archive returns tidy long scored streams" tags=[
+    :slow
+] setup=[ForecastFixtures] begin
     using DataFrames: DataFrame, nrow
     using Dates: Date, Day
     using BVDOutbreakSize: forecast_reported, forecast_archive
@@ -301,16 +311,18 @@ end
     @test Set(arch0.stream) == Set(["isolation beds"])
 end
 
-@testitem "forecast cumulative streams never fall below the cut-off" tags=[:slow] begin
+@testitem "forecast cumulative streams never fall below the cut-off" tags=[
+    :slow
+] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated
     import FlexiChains
     using Statistics: median
     using BVDOutbreakSize: forecast_reported
 
-    ## A DECLINING chain (growth rate r < 0, R_T < 1): the regime where the
-    ## previous stock-scaling projection (`cumulative_T * exp(r * horizon)`)
-    ## shrank the cumulative below the observed cut-off — an impossible
+    ## A declining chain (growth rate r < 0, R_T < 1): the regime where a
+    ## stock-scaling projection (`cumulative_T * exp(r * horizon)`) can
+    ## shrink the cumulative below the observed cut-off, an impossible
     ## decreasing cumulative. The outbreak age `:T` is carried so the daily
     ## incidence at the cut-off is inferred from the cumulative total.
     @model function _forecast_decline_test()
@@ -342,8 +354,8 @@ end
     @test all(f7.confirmed_cum .>= obs_confirmed)
     @test all(f21.confirmed_cum .>= obs_confirmed)
 
-    ## The cumulative grows with the horizon (more new counts accrue), rather
-    ## than decaying as the buggy stock-scaling did.
+    ## The cumulative grows with the horizon (more new counts accrue) rather
+    ## than shrinking, which a stock-scaling projection would do here.
     @test median(f21.cases_cum) >= median(f7.cases_cum)
     @test median(f21.deaths_cum) >= median(f7.deaths_cum)
     @test median(f21.confirmed_cum) >= median(f7.confirmed_cum)
@@ -395,8 +407,8 @@ end
     ## duration only, and there is no `r`, `R_T` or `T`.
     ##
     ## Confirmed cases are the exception to the nested naming: their
-    ## submodel keeps `expected_confirmed` on a plain `=` for Enzyme (#445,
-    ## #453), so `confirmed_only_model` aliases the cut-off count
+    ## submodel keeps `expected_confirmed` on a plain `=` (required for
+    ## Enzyme's AD), so `confirmed_only_model` aliases the cut-off count
     ## un-prefixed as `expected_confirmed_T`, exactly as the joint does.
     @model function _stream_nested()
         var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
@@ -442,7 +454,9 @@ end
     const STREAM_ALL = collect(keys(STREAM_OBS))
 end
 
-@testitem "forecast_stream projects every stream from a joint-shaped chain" tags=[:slow] setup=[StreamFixtures] begin
+@testitem "forecast_stream covers every stream from a joint-shaped chain" tags=[
+    :slow
+] setup=[StreamFixtures] begin
     using BVDOutbreakSize: forecast_stream
 
     chn=_toplevel_chain(200)
@@ -460,7 +474,9 @@ end
     @test maximum(beds) > 300
 end
 
-@testitem "forecast_stream projects every stream from a nested chain" tags=[:slow] setup=[StreamFixtures] begin
+@testitem "forecast_stream projects every stream from a nested chain" tags=[
+    :slow
+] setup=[StreamFixtures] begin
     using BVDOutbreakSize: forecast_stream
 
     chn=_nested_chain(200)
@@ -476,7 +492,9 @@ end
     @test maximum(beds) > 300
 end
 
-@testitem "forecast_stream incident streams grow with the horizon" tags=[:slow] setup=[StreamFixtures] begin
+@testitem "forecast_stream incident streams grow with the horizon" tags=[
+    :slow
+] setup=[StreamFixtures] begin
     using Statistics: median
     using BVDOutbreakSize: forecast_stream
 
@@ -495,7 +513,9 @@ end
     @test median(f21) >= median(f7)
 end
 
-@testitem "forecast_stream rejects unknown and unfitted streams" tags=[:slow] setup=[StreamFixtures] begin
+@testitem "forecast_stream rejects unknown and unfitted streams" tags=[
+    :slow
+] setup=[StreamFixtures] begin
     using BVDOutbreakSize: forecast_stream
 
     chn=_toplevel_chain(50)
@@ -509,7 +529,9 @@ end
         horizon = 7, obs_value = 905)
 end
 
-@testitem "every composer carries its own stream's forecast keys" tags=[:slow] begin
+@testitem "every composer carries its own stream's forecast keys" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     import FlexiChains
     using BVDOutbreakSize: cases_only_model, deaths_only_model,
@@ -519,10 +541,8 @@ end
 
     ## The fixtures above pin `forecast_stream`'s key resolution against
     ## hand-written chains, which cannot catch `_STREAM_SPEC` naming a key
-    ## the real model never exposes — how the confirmed-case binding went
-    ## stale when its submodel dropped the `:=` (#445, #453). Sample each
-    ## single-stream composer from the prior and check its OWN stream
-    ## resolves off a real chain.
+    ## the real model never exposes. Sample each single-stream composer
+    ## from the prior and check its own stream resolves off a real chain.
     m_cases = cases_only_model(40, missing)
     m_deaths = deaths_only_model(33, missing;
         deaths_history = (; days = [13, 18, 23], counts = [131, 204, 246]))
@@ -552,7 +572,9 @@ end
     end
 end
 
-@testitem "forecast_stream recovers bed capacity on a standalone fit" tags=[:slow] begin
+@testitem "forecast_stream recovers bed capacity on a standalone fit" tags=[
+    :slow
+] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated, product_distribution
     using Statistics: mean
@@ -595,7 +617,9 @@ end
     end
 end
 
-@testitem "forecast_stream beds reproduce forecast_reported's occupancy" tags=[:slow] begin
+@testitem "forecast_stream beds reproduce forecast_reported's occupancy" tags=[
+    :slow
+] begin
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated
     using Statistics: median, mean
@@ -636,12 +660,14 @@ end
     end
 end
 
-@testitem "forecast_stream reconstructs cut-off R_T at the model's ramp" tags=[:slow] setup=[StreamFixtures] begin
+@testitem "forecast_stream reconstructs cut-off R_T at the model's ramp" tags=[
+    :slow
+] setup=[StreamFixtures] begin
     using BVDOutbreakSize: _cutoff_rt, reconstruct_rt
 
     ## A single-stream chain carries no top-level `R_T`, so `_cutoff_rt`
     ## rebuilds it from the walk. The reconstruction is ramp-sensitive, and
-    ## the model's ramp is 21 (`sigmoid_ramp` / `rt_walk_model`), NOT
+    ## the model's ramp is 21 (`sigmoid_ramp` / `rt_walk_model`), not
     ## `reconstruct_rt`'s lighter 14 default. Pin that `_cutoff_rt` uses 21:
     ## it must equal the ramp = 21 cut-off column and differ from ramp = 14,
     ## so a regression back to the default would fail here.

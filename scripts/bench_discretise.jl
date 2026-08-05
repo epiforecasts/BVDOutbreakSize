@@ -5,12 +5,12 @@
 # `double_interval_censored` distribution once per draw, and the reverse pass
 # walks the censored-CDF evaluations. The PMF was built as
 # `[pdf(dic, d) for d in 0:nmax]`, which evaluates every interior integer
-# boundary CDF TWICE (lag `d` reads `cdf(d)` and `cdf(d+1)`, lag `d+1` reads
+# boundary CDF twice (lag `d` reads `cdf(d)` and `cdf(d+1)`, lag `d+1` reads
 # `cdf(d+1)` and `cdf(d+2)`, …). Differencing one CDF path over `0:nmax+1`
 # evaluates each boundary once and halves those evaluations, numerically
 # identical to the `pdf` differences it replaces.
 #
-# This times the OLD pdf-loop against the CURRENT `discretise_censored`
+# This times the old pdf-loop against the current `discretise_censored`
 # (cdf-difference) under Mooncake, for the delays the model uses, confirming
 # the values match and reporting the gradient-cost delta.
 #

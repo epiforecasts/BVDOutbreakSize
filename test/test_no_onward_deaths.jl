@@ -4,7 +4,9 @@
 ## composer re-exposes these; the single-stream composers expose only
 ## `C_T`).
 
-@testitem "predict_no_onward_deaths returns the documented columns" tags=[:slow] begin
+@testitem "predict_no_onward_deaths returns the documented columns" tags=[
+    :slow
+] begin
     using DataFrames: DataFrame, nrow
     using Turing: sample, Prior
     import FlexiChains

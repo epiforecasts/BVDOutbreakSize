@@ -184,7 +184,7 @@ from the scored cells, which cover only the trailing `horizon` window.
 `last_total` is the final entry of `total_counts` (a convenience scalar for
 stream-comparison plots), or `missing` when no vintage survives.
 
-The per-vintage totals are NOT monotone across vintages: the ≈4%
+The per-vintage totals are not monotone across vintages: the ≈4%
 per-scan level error means a later scan can read a smaller total than an
 earlier one even though late reporting only ever adds cases. It happens
 more than once in the current data (2531 on 25 July against 2523 on 26

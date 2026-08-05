@@ -1,17 +1,7 @@
 # # Sensitivity and comparison analyses
 #
-# This page continues the [main analysis](analysis.md) from the
-# one-week-ahead forecast onward: how last week's forecast held up, how every
-# release's forecasts scored against what has since been observed, the
-# reproduction number by release, the outbreak size each data stream implies on
-# its own, how the estimate has evolved across releases, comparisons with
-# McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity
-# re-fits. The tree-prior
-# sensitivity compares the Skygrid and Exponential growth TMRCA estimates
-# [mbalaplacide2026](@cite) (~1.1E-3 subs/site/year, 139 BDBV genomes).
-# It renders from the same fitted chains as the main analysis, loaded through
-# the shared setup, so no model is re-fit here beyond the frozen and (gated)
-# sensitivity re-fits.
+# This page continues the [main analysis](analysis.md) from the one-week-ahead forecast onward: forecast validation, forecast scoring across releases, the reproduction number by release, the outbreak size each data stream implies alone, how the estimate has evolved across releases, comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity re-fits.
+# It renders from the same fitted chains as the main analysis, loaded through the shared setup, so no model is re-fit here beyond the frozen re-fits and the optional sensitivity re-fits below.
 
 #md # ```@raw html
 #md # <details><summary>Load packages, data and fitted chains</summary>
@@ -26,20 +16,15 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 #md # </details>
 #md # ```
 
-# ## Forecast validation (last week versus now)
+# ## Forecast validation
 #
-# How last week's forecast held up against the data since observed, using the
-# frozen re-fit and one-week projection defined in the methods
-# [forecast-versus-frozen evaluation](@ref
-# "Forecast-versus-frozen evaluation"). The frozen fit also conditions on
-# the isolation beds, so the projected bed occupancy is scored against the
-# beds held a week later. The bed validation is weak at a one-week-back freeze:
-# the reported occupancy rate starts only on 9 June, so the capacity has no
-# implied-capacity anchor and rides its random walk back to the freeze date,
-# widening the projected bed interval.
-# Unlike the scores further down, the confirmed new-count rows here keep any
-# retrospective harmonisation step the week contained, so a week holding one
-# reads high against a forecast that never predicted it.
+# How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
+# The frozen fit also conditions on the isolation beds, so the projected bed occupancy is scored against the beds held a week later.
+# The bed validation is weak at a one-week-back freeze.
+# The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
+# This widens the projected bed interval.
+# Unlike the scores further down, the confirmed new-count rows here keep any retrospective harmonisation step the week contained.
+# This means a week holding one reads high against a forecast that never predicted it.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -140,17 +125,11 @@ validation_table #hide
 #md # </details>
 #md # ```
 
-# The observation panels histogram the one-week-ahead forecast made from the
-# frozen fit, a cumulative and a new-count panel for each fitted count stream
-# the forecast carries (reported cases, suspected deaths, confirmed cases,
-# confirmed deaths and recovered), with the 90% predictive interval shaded and
-# the count actually observed by the current cut-off drawn as a dashed black
-# rule. Each stream draws only when the forecast carries its column, so a fit
-# observing fewer streams shows fewer panels.
-# Where a stream has its own individual (single-stream) fit, that fit's own
-# forecast, made from the same frozen cut-off, is overlaid as a dotted density
-# alongside the joint's histogram, so both are visible rather than the joint
-# alone; recovered has no individual fit and draws the joint alone.
+# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each fitted count stream the forecast carries (reported cases, suspected deaths, confirmed cases, confirmed deaths and recovered).
+# The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
+# Each stream draws only when the forecast carries its column, so a fit observing fewer streams shows fewer panels.
+# Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted density alongside the joint's histogram.
+# Recovered has no individual fit and draws the joint alone.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -178,9 +157,7 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
 
 validation_fig #hide
 
-# The bed panel scores last week's projected occupancy against the beds
-# occupied now (the dashed rule), the individual (treatment-only) fit's own
-# projection overlaid as a dotted density alongside the joint.
+# The bed panel scores last week's projected occupancy against the beds occupied now (the dashed rule), with the individual (treatment-only) fit's own projection overlaid as a dotted density alongside the joint.
 
 #md # ```@raw html
 #md # <details><summary>Bed forecast-versus-observed plot</summary>
@@ -195,10 +172,7 @@ validation_beds_fig = plot_forecast_beds_vs_truth(validation_forecast;
 
 validation_beds_fig #hide
 
-# The latent quantities are not observed, so they are scored distribution
-# against distribution: what the frozen fit forecast for the past week's new
-# infections, onsets and deaths against what the current fit now estimates
-# for the same window.
+# The latent quantities are not observed, so they are scored distribution against distribution: what the frozen fit forecast for the past week's new infections, onsets and deaths against what the current fit now estimates for the same window.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-now latent plot</summary>
@@ -227,18 +201,26 @@ validation_latent_fig #hide
 
 # ## Forecast scoring across releases
 #
-# How every release's saved one- to four-week-ahead forecast scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built).
+# Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
+# See [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built.
 # Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
-# Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off, so exports contributes no scored forecast at all and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
+# Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off.
+# Exports therefore contributes no scored forecast, and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
-# Only a minority of the daily releases examined across the outbreak contribute a row to the table below, and every one of them is a reconstruction of an earlier version of the model rather than the model as it stands today, so the table below is not a verdict on the current fit.
-# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values, which is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
-# The releases that do carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet, which is why the comparison against each stream's individual fit is still empty.
+# Only a minority of the daily releases examined contribute a row to the table below, each a reconstruction of an earlier model version rather than the current fit.
+# The table below is therefore not a verdict on the current fit.
+# One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
+# This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
+# The releases that carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet.
+# This is why the comparison against each stream's individual fit is still empty.
 # It will populate once those targets resolve.
-# Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away, so a ratio here should be read as an early signal rather than a settled result.
+# Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
+# A ratio here should therefore be read as an early signal rather than a settled result.
 #
-# The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure and its printed total therefore moves with the scan error as well as with late reporting.
-# It appears only from the release that first carried it, and its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
+# The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
+# Its printed total therefore moves with the scan error as well as with late reporting.
+# It appears only from the release that first carried it.
+# Its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
 
 #md # ```@raw html
 #md # <details><summary>Load and summarise the cross-release forecast scores</summary>
@@ -279,7 +261,9 @@ forecast_score_by_release_table = forecast_score_by_release(forecast_scores_df)
 #md # </details>
 #md # ```
 
-# The headline pools every horizon and release into one row per stream and fit: the mean CRPS and its decomposition, coverage and bias, and the relative skill against the persistence baseline for every fit and, on the joint row where the stream has one, against its own individual fit, on both the natural and the log scale (column definitions in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
+# The headline pools every horizon and release into one row per stream and fit: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline for every fit, on both the natural and the log scale.
+# The joint row also carries relative skill against the stream's own individual fit where one exists.
+# Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
 forecast_score_overview_table #hide
 
@@ -316,7 +300,8 @@ forecast_score_by_release_table #hide
 # Forecasts made at each release against the value observed since, one panel per stream and horizon, the observed value in black.
 # The median and 90% interval are coloured by fit role: the persistence baseline, the stream's individual fit and the joint.
 # The x-axis is the date each forecast was made, so an incident stream's observed window pairs unambiguously with the forecast that made it.
-# Each panel's axis is cropped to a small multiple of what that stream actually reached, so one very wide interval cannot squash every other series flat; an interval or median too wide for the panel is clamped at the top and marked with an open triangle rather than silently cut off.
+# Each panel's axis is cropped to a small multiple of what that stream actually reached, so one very wide interval cannot squash every other series flat.
+# An interval or median too wide for the panel is clamped at the top and marked with an open triangle rather than silently cut off.
 
 #md # ```@raw html
 #md # <details><summary>Forecasts-versus-now overlay</summary>
@@ -332,7 +317,7 @@ forecast_overlay_fig #hide
 
 # ## Frozen-fit forecast evaluation
 #
-# The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), scored the same way as the cross-release forecasts above and against the same persistence baseline.
+# The current model, frozen at earlier data cut-offs (see [Forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation")), is scored the same way as the cross-release forecasts above, against the same persistence baseline.
 # Only the joint model is scored here, so no individual single-stream fit appears in the tables and figures below.
 # The May cut-offs predate the first reported bed occupancy and the first reported recoveries, so those windows are left unscored rather than scored against a series that had not started.
 # The baseline carries a weaker data-vintage guarantee than the cross-release one, since its snapshot was taken weeks after the frozen cut-off and can hold later revisions to earlier days (see [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline")).
@@ -380,7 +365,7 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 #md # </details>
 #md # ```
 
-# The headline frozen table, one row per stream pooled across cut-offs and horizons, against the persistence baseline on both scales, with the same CRPS decomposition, coverage and bias columns described above.
+# The headline frozen table pools one row per stream across cut-offs and horizons, scored against the persistence baseline on both scales, with the CRPS decomposition, coverage and bias columns described above.
 # There is no model column, since only one model is scored.
 
 frozen_score_overview_display #hide
@@ -430,11 +415,8 @@ frozen_overlay_fig = plot_forecast_overlay(frozen_overlay_df);
 
 frozen_overlay_fig #hide
 
-# The frozen re-fits below freeze the renewal data to an earlier cut-off
-# and re-fit, so that a change driven by newer data can be distinguished from
-# one driven by a change of method.
-# Each uses the full headline settings (1000 draws across two chains),
-# reusing the frozen-fit helper defined above.
+# The frozen re-fits below freeze the renewal data to an earlier cut-off and re-fit, so that a change driven by newer data can be distinguished from one driven by a change of method.
+# Each uses the full headline settings: 1000 draws across two chains.
 
 #md # ```@raw html
 #md # <details><summary>Freeze the renewal data to a cut-off and re-fit</summary>
@@ -448,20 +430,11 @@ frozen_overlay_fig #hide
 
 # ## Individual fits against the baseline
 #
-# The same cross-release forecast scoring as [Forecast scoring across
-# releases](@ref "Forecast scoring across releases") above, filtered to each
-# stream's own individual single-stream fit rather than the joint, against
-# the same persistence baseline.
+# This section repeats the cross-release forecast scoring from [Forecast scoring across releases](@ref "Forecast scoring across releases") above, filtered to each stream's own individual fit rather than the joint, against the same persistence baseline.
 # Recovered has no individual fit, so it does not appear here.
-# The overview scoring table and its by-horizon and by-release
-# counterparts already carry one row per stream and fit for every fit
-# scored, joint and individual alike, so this section reuses those same
-# tables filtered to the individual-fit rows rather than building its own.
-# As noted in [Forecast scoring across releases](@ref "Forecast scoring
-# across releases") above, the releases that carry the current model's own
-# individual-stream forecasts are too recent for their targets to be
-# observed yet, so every table and figure in this section is currently
-# empty; it will populate once those targets resolve.
+# These are the individual-fit rows of the cross-release scores above, not a separate computation.
+# As in [Forecast scoring across releases](@ref "Forecast scoring across releases") above, every table and figure in this section is currently empty for the same reason.
+# It will populate once those targets resolve.
 
 #md # ```@raw html
 #md # <details><summary>Individual-fit rows of the cross-release scores</summary>
@@ -515,9 +488,7 @@ individual_score_by_release_table #hide
 # ## Outbreak size estimated by each data stream
 #
 # Each data stream constrains the latent outbreak size differently.
-# The table below puts the posteriors over the infection count side by side,
-# the single-stream fits and the joint, to show what each stream implies on
-# its own and what the joint adds.
+# The table below puts the posteriors over the infection count side by side, the single-stream fits and the joint, to show what each stream implies alone and what the joint adds.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream infection-count table</summary>
@@ -538,10 +509,7 @@ streams_C_table = streams_table(
 
 streams_C_table #hide
 
-# The first figure shows each single-stream fit's cumulative-infection
-# trajectory projected to the cut-off, with a dotted rule in each stream's
-# colour marking where its data stops and the ribbon beyond it becomes a
-# forward projection.
+# The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
 
 #md # ```@raw html
 #md # <details><summary>Per-stream projected-trajectory plot</summary>
@@ -587,10 +555,8 @@ stream_traj_fig = plot_stream_trajectories(
 
 stream_traj_fig #hide
 
-# The second figure is the posterior density of each fit's cumulative
-# infection count at the cut-off; the x-axis is scaled to a multiple of the
-# joint-fit 90% upper bound so the bulk of the streams stays visible rather
-# than being flattened by the wide, ill-defined confirmed-only tail.
+# The second figure is the posterior density of each fit's cumulative infection count at the cut-off.
+# The x-axis is scaled to a multiple of the joint-fit 90% upper bound so the bulk of the streams stays visible rather than being flattened by the wide, ill-defined confirmed-only tail.
 
 #md # ```@raw html
 #md # <details><summary>Cut-off infection-count density plot</summary>
@@ -622,7 +588,8 @@ cumulative_density_fig #hide
 # How the outbreak-size estimate has moved as situation reports accrued, three series on one calendar axis.
 # The estimate published at each release is in blue, drawn as a median with nested 30/60/90% interval bars because each release is its own fit rather than one continuous model.
 # The current model frozen at earlier cut-offs is in red, reusing fits already made for the McCabe and Chamla comparisons and the forecast validation.
-# The current model on current data is the green band, drawn day by day so the latest estimate reads against the earlier points, and dotted vertical rules mark the release dates.
+# The current model on current data is the green band, drawn day by day so the latest estimate reads against the earlier points.
+# Dotted vertical rules mark the release dates.
 # The published series switches from a closed-form integral model to a renewal model on 7 June, so a step there can reflect the change of method rather than of data.
 
 #md # ```@raw html
@@ -789,8 +756,10 @@ rt_evolution_fig #hide
 # ## Reproduction number by release and dataset
 #
 # The same release-by-release reproduction number split into one panel per dataset, so each dataset's history reads against the others and against the joint.
-# Panels share a calendar axis and a y range, $R_t = 1$ is marked, and each release's cut-off value is a median with nested 30/60/90% interval bars.
-# A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above; confirmed deaths carries no band, so its panel shows release points alone.
+# Panels share a calendar axis and a y range, and $R_t = 1$ is marked.
+# Each release's cut-off value is a median with nested 30/60/90% interval bars.
+# A dataset the report also fits on its own carries that fit's current-model band behind its points, built as in the overview above.
+# Confirmed deaths carries no band, so its panel shows release points alone.
 # Only the most recent releases published these per-dataset estimates, so every panel spans a much shorter window than the overview above rather than a different history.
 
 #md # ```@raw html
@@ -893,7 +862,8 @@ rt_stream_fig #hide
 # The basic reproduction number $R_0$ estimated at each release, the initial-transmission counterpart of the reproduction number above, before the time-varying decline.
 # Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars.
 # The current fit sits behind both as a flat band, and $R_0 = 1$ is marked.
-# Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release, and the frozen series carries the comparison meanwhile.
+# Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release.
+# The frozen series carries the comparison meanwhile.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release with frozen re-fits and the current-fit band</summary>
@@ -953,7 +923,8 @@ r0_evolution_fig #hide
 # ## Basic reproduction number by release and dataset
 #
 # The basic reproduction number estimated at each release, one panel per fit, the by-dataset counterpart of the figure above.
-# Panels share a calendar axis and a y range, each release a median with nested 30/60/90% interval bars, and $R_0 = 1$ is marked.
+# Panels share a calendar axis and a y range, and $R_0 = 1$ is marked.
+# Each release is a median with nested 30/60/90% interval bars.
 # Every fit the report runs on its own also carries a current-model reference band.
 # Panels fill in from the first release that publishes this quantity per dataset, so a fit with nothing saved yet is left out rather than drawn empty.
 
@@ -1010,31 +981,17 @@ r0_stream_fig #hide
 
 # ## Comparison with McCabe et al.
 #
-# Our model is a discrete-time renewal model with a time-varying
-# reproduction number and every data stream fitted jointly.
-# McCabe et al. published their estimates as scenarios at fixed
-# situation-report cut-offs, each scenario carrying a 95% confidence
-# interval.
-# We show all three, the 18 May report, the 20 May update and the 27 May
-# Lancet publication, as one panel each, with their intervals kept.
-# Within a panel each method and scenario family is a single line, carrying its
-# sweep over the nuisance assumptions: the case-fatality ratio, the geographic
-# window and the doubling time.
+# Our model is a discrete-time renewal model with a time-varying reproduction number and every data stream fitted jointly.
+# McCabe et al. published their estimates as scenarios at fixed situation-report cut-offs, each scenario carrying a 95% confidence interval.
+# We show all three, the 18 May report, the 20 May update and the 27 May Lancet publication, as one panel each, with their intervals kept.
+# Within a panel each method and scenario family is a single line, carrying its sweep over the nuisance assumptions: the case-fatality ratio, the geographic window and the doubling time.
 # The geographic-spread scenarios come from exported cases and travel volume.
-# Their back-calculation-from-deaths scenarios differ between the reports,
-# since the 18 May report used 88 reported deaths and the 20 May update 131,
-# with a corrected set of case-fatality ratios.
-# McCabe's scenarios estimate cumulative cases at their report dates, though
-# their report is not fully explicit about whether this is symptomatic cases
-# or all infections.
-# We take the like-for-like quantity to be our cumulative symptom onsets, the
-# symptomatic cases, on the same dates, rather than the latent infections
-# (which include the not-yet-symptomatic) or our current cut-off total.
-# We read our value off the joint fit's cumulative-onset trajectory at the
-# grid day for each report date and show it with its credible interval, the
-# 18 May report against our 18 May value, the 20 May update against our
-# 20 May value, and the 27 May Lancet publication against our 27 May value,
-# so each scenario sits beside our estimate for the date it was made.
+# Their back-calculation-from-deaths scenarios differ between the reports, since the 18 May report used 88 reported deaths and the 20 May update 131.
+# The 20 May update also corrected the case-fatality ratios.
+# McCabe's scenarios estimate cumulative cases at their report dates, though their report is not fully explicit about whether this is symptomatic cases or all infections.
+# We take the like-for-like quantity to be our cumulative symptom onsets on the same dates, not the latent infections (which include the not-yet-symptomatic) or our current cut-off total.
+# We read our value off the joint fit's cumulative-onset trajectory at the grid day for each report date, and show it with its credible interval.
+# Each scenario sits beside our estimate for the date it was made: the 18 May report against our 18 May value, the 20 May update against our 20 May value, and the 27 May Lancet publication against our 27 May value.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -1086,11 +1043,8 @@ matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
 
 matched_comparison_fig #hide
 
-# The McCabe scenarios are outbreak-size estimates, the same quantity our
-# renewal model and the released integral model report.
-# Their 95% confidence intervals come from exact negative-binomial counts
-# for the geographic-spread method and a Poisson likelihood profile for the
-# back-calculation from deaths.
+# The McCabe scenarios are outbreak-size estimates, the same quantity our renewal model and the released integral model report.
+# Their 95% confidence intervals come from exact negative-binomial counts for the geographic-spread method and a Poisson likelihood profile for the back-calculation from deaths.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit C_T intervals (kept for the CSV export, not shown)</summary>
@@ -1113,31 +1067,19 @@ frozen_streams_table = streams_table(
 
 # ## Comparison with Chamla et al.
 #
-# A second group, Chamla et al. [chamla2026](@cite) at the World Health
-# Organization Regional Office for Africa, published a stochastic compartmental
-# model of the same outbreak on 25 June 2026.
-# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead
-# ensemble, recalibrated by simulation filtering to the laboratory-confirmed
-# case series, anchored on the 598 confirmed cases reported by 8 June, then run
-# forward to project the confirmed-case trajectory under a low, central and
-# high transmissibility scenario.
+# A second group, Chamla et al. [chamla2026](@cite) at the World Health Organization Regional Office for Africa, published a stochastic compartmental model of the same outbreak on 25 June 2026.
+# Their model is a discrete-time susceptible-exposed-infectious-recovered-dead ensemble, recalibrated by simulation filtering to the laboratory-confirmed case series and anchored on the 598 confirmed cases reported by 8 June.
+# It is then run forward to project the confirmed-case trajectory under a low, central and high transmissibility scenario.
 #
-# Their published quantity is the cumulative confirmed-case count, with the
-# reporting fraction held at one, so it does not adjust for the cases that are
-# infected but never laboratory-confirmed.
-# This is a different quantity from the cumulative cases this analysis and
-# McCabe et al. estimate, which include the unconfirmed and unascertained, and
-# it sits below them: it is a floor on the true size rather than an estimate of
-# it.
-# The like-for-like comparison is therefore against our own confirmed-case
-# projection, not against our cumulative infection count.
+# Their published quantity is the cumulative confirmed-case count, with the reporting fraction held at one, so it does not adjust for the cases that are infected but never laboratory-confirmed.
+# This is a different quantity from the cumulative cases this analysis and McCabe et al. estimate, which include the unconfirmed and unascertained.
+# It therefore sits below them: a floor on the true size rather than an estimate of it.
+# The like-for-like comparison is therefore against our own confirmed-case projection, not against our cumulative infection count.
 #
 # We compare forward projections rather than refitting to their assumptions.
-# We take our fit frozen at 8 June, the exact date of their confirmed-case
-# calibration anchor, and roll its confirmed-case stream forward to the dates
-# Chamla report with the same machinery as the one-week-ahead forecast.
-# Setting our projection, their projection and the confirmed cases observed
-# since on one timeline shows how each projection has held up against the data.
+# We take our fit frozen at 8 June, the exact date of their confirmed-case calibration anchor.
+# We roll its confirmed-case stream forward to the dates Chamla report, using the same machinery as the one-week-ahead forecast.
+# Setting our projection, their projection and the confirmed cases observed since on one timeline shows how each projection has held up against the data.
 
 #md # ```@raw html
 #md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>
@@ -1208,11 +1150,8 @@ chamla_projection_fig = plot_projection_comparison(;
 
 chamla_projection_fig #hide
 
-# By 24 June their central scenario projected just under a thousand confirmed
-# cases, and their low and high scenarios ranged from roughly 870 to 1360.
-# The figure below sets that week-12 scenario spread beside our 8 June
-# projection for the same date and the confirmed count observed by the cut-off,
-# so each reads against their three scenarios at a glance.
+# By 24 June their central scenario projected just under a thousand confirmed cases, and their low and high scenarios ranged from roughly 870 to 1360.
+# The figure below sets that week-12 scenario spread beside our 8 June projection for the same date and the confirmed count observed by the cut-off, so each reads against their three scenarios at a glance.
 
 #md # ```@raw html
 #md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
@@ -1239,8 +1178,7 @@ chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
 
 chamla_w12_fig #hide
 
-# The matched-date numbers behind these figures are in the dropdown below, with
-# the observed column taken to the 23 June cut-off.
+# The matched-date numbers behind these figures are in the dropdown below, with the observed column taken to the 23 June cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
@@ -1269,22 +1207,14 @@ chamla_comparison_table #hide
 #md # </details>
 #md # ```
 
-# Beyond the comparison window their central scenario continues to roughly 8200
-# confirmed cases by mid-September, with the high scenario far higher; those
-# longer projections are not set against data here.
-# Their confirmed-case projections are a floor on the outbreak size, so they sit
-# below our cumulative infection count, which adds the unconfirmed and
-# unascertained cases on top.
+# Beyond the comparison window their central scenario continues to roughly 8200 confirmed cases by mid-September, with the high scenario far higher.
+# Those longer projections are not set against data here.
 
 # ## Reproduction number behind the projection
 #
-# The forward projection above is carried by the reproduction-number trajectory
-# our 8 June fit estimated, a quantity we report in its own right rather than as
-# a comparison.
-# The figure shows that trajectory, the time-varying reproduction number from
-# the renewal walk with its credible intervals, as the fit saw it at 8 June.
-# It declines over the weeks leading to the cut-off, and that decline is what
-# bends the projected trajectory away from sustained early growth.
+# The forward projection above is carried by the reproduction-number trajectory our 8 June fit estimated, a quantity we report in its own right rather than as a comparison.
+# The figure shows that trajectory, the time-varying reproduction number from the renewal walk with its credible intervals, as the fit saw it at 8 June.
+# It declines over the weeks leading to the cut-off, and that decline is what bends the projected trajectory away from sustained early growth.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number as estimated by the 8 June fit</summary>
@@ -1314,20 +1244,14 @@ chamla_rt_fig #hide
 
 # ## Delay sensitivity
 #
-# The death stream dates the outbreak from how far deaths lag symptom onset,
-# so the assumed onset-to-death delay sets the implied infection count.
-# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list
-# reanalysis (onset to admission then admission to death, implied mean about
-# 12 d).
-# We re-fit the joint model under the community-pathway delay from the same
-# reanalysis, the delay for deaths that occur in the community without a
-# recorded admission, which is shorter (implied mean about 8 d).
-# Both pathways come from the line list, so this varies the actual delay
-# assumption rather than an arbitrary scenario.
-# The re-fit uses the full headline settings (1000 draws across two chains).
+# The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
+# The baseline uses the hospital-pathway delay from the Isiro 2012 line-list reanalysis (onset to admission then admission to death, implied mean about 12 d).
+# We re-fit the joint model under the community-pathway delay from the same reanalysis: the delay for deaths that occur in the community without a recorded admission.
+# This delay is shorter (implied mean about 8 d).
+# Both pathways come from the line list, so this varies the actual delay assumption rather than an arbitrary scenario.
+# The re-fit uses the full headline settings: 1000 draws across two chains.
 #
-# The infection count to date shifts with the assumed delay, and the
-# table and overlaid densities below show how far.
+# The infection count to date shifts with the assumed delay, and the table and overlaid densities below show how far.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the community-pathway onset-to-death delay</summary>
@@ -1376,16 +1300,11 @@ delay_sensitivity_fig #hide
 
 # ## Tree-prior sensitivity
 #
-# The outbreak-age estimate depends on the coalescent tree prior assumed
-# in the BEAST X analysis. The baseline uses the more flexible Skygrid
-# non-parametric model, which dates the common ancestor to 15 March 2026
-# ($95\%$ HPD 09 Feb -- 12 Apr). The report also fits an Exponential
-# growth tree prior, which dates the common ancestor about a week earlier
-# to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr)
-# [mbalaplacide2026](@cite). Both priors give very similar evolutionary
-# rates ($\sim 1.1\times10^{-3}$ subs/site/year). We re-fit the joint
-# model under the Exponential growth TMRCA and compare the infection
-# count to date and the outbreak age.
+# The outbreak-age estimate depends on the coalescent tree prior assumed in the BEAST X analysis.
+# The baseline uses the more flexible Skygrid non-parametric model, which dates the common ancestor to 15 March 2026 ($95\%$ HPD 09 Feb -- 12 Apr).
+# The report also fits an Exponential growth tree prior, which dates the common ancestor about a week earlier to 08 March 2026 ($95\%$ HPD 01 Feb -- 05 Apr) [mbalaplacide2026](@cite).
+# Both priors give similar evolutionary rates ($\sim 1.1\times10^{-3}$ subs/site/year).
+# We re-fit the joint model under the Exponential growth TMRCA and compare the infection count to date and the outbreak age.
 
 #md # ```@raw html
 #md # <details><summary>Re-fit the joint under the Exponential growth tree prior</summary>
@@ -1404,9 +1323,7 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 #md # ```
 
 # The infection count to date under the two tree priors, side by side.
-# A slightly earlier common ancestor (Exponential growth) permits a
-# marginally older outbreak, though the difference is small because the
-# evolutionary rates are nearly identical.
+# A slightly earlier common ancestor (Exponential growth) permits a marginally older outbreak, though the difference is small because the evolutionary rates are nearly identical.
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count table</summary>
@@ -1438,8 +1355,7 @@ clock_sensitivity_C_fig = RUN_SENSITIVITY ?
 
 clock_sensitivity_C_fig #hide
 
-# The outbreak age, the number of days from seeding to the cut-off, under
-# the two tree priors.
+# The outbreak age, the number of days from seeding to the cut-off, under the two tree priors.
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior outbreak-age table</summary>
@@ -1475,10 +1391,8 @@ clock_sensitivity_T_fig #hide
 
 # ## Saving sensitivity results
 #
-# The stream-comparison and frozen-fit tables and the per-stream reproduction
-# number figure are written to the shared output directory (the main
-# analysis writes the rest), so the combined release and summary dashboard
-# pick up both pages' outputs.
+# The stream-comparison and frozen-fit tables and the per-stream reproduction number figure are written to the shared output directory.
+# The main analysis writes the rest, so the combined release and summary dashboard pick up both pages' outputs.
 
 #md # ```@raw html
 #md # <details><summary>Write sensitivity outputs</summary>

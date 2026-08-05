@@ -34,7 +34,7 @@ const FROZEN_FIT = "frozen"
 Published point estimates of cumulative cases `C_T` from McCabe et
 al. (Imperial College London, 20 May 2026 update), as `(label, value)`
 tuples in the order they appear in Tables 1 and 2. These are the scenario
-means; the matching 95% confidence intervals are carried by
+means. The matching 95% confidence intervals are carried by
 [`REPORT_SCENARIOS_CI`](@ref).
 """
 const REPORT_SCENARIOS = [
@@ -58,7 +58,7 @@ const REPORT_SCENARIOS = [
 """
     REPORT_SCENARIOS_CI
 
-Published McCabe et al. scenario estimates WITH their reported 95%
+Published McCabe et al. scenario estimates with their reported 95%
 confidence intervals, for three vintages: the 18 May 2026 report
 [mccabe2026](@cite), the 20 May 2026 update [mccabe2026update](@cite) and
 the peer-reviewed Lancet Infectious Diseases publication
@@ -75,13 +75,13 @@ as reported in Tables 1 and 2 of each report.
 
 The 27 May Lancet vintage uses 240 deaths and three Uganda imports, and
 varies the epidemic doubling time `T_d` (7/10/14 d) for both methods
-rather than the earlier geographic window `w` / onset-to-death `τ`; its
+rather than the earlier geographic window `w` / onset-to-death `τ`. Its
 back-calculation fixes the onset-to-death gamma (mean 11.37 d, SD 5.41)
 and assumes 30% of deaths are attributable to Ebola. The published paper
-SWAPS the method numbers (its "method 1" is the back-calculation and its
-"method 2" the geographic spread); we keep this package's convention
+swaps the method numbers (its "method 1" is the back-calculation and its
+"method 2" the geographic spread). This package keeps its own convention
 (M1 = geographic spread, negative-binomial CIs; M2 = back-calculation,
-Poisson CIs), which the paper's reported CI types confirm.
+Poisson CIs), confirmed by the paper's reported CI types.
 """
 const REPORT_SCENARIOS_CI = [
     ## Method 1 (geographic spread): identical across both reports.
@@ -157,17 +157,16 @@ const M_PRIOR_DOUBLING_DAYS = 11.7
 """
     M_PRIOR_BASE
 
-Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the ADVANCING doubling-count
+Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing doubling-count
 prior centre used by the backfill fits via [`m_prior_centre`](@ref):
 `m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-The doubling count `m` counts ONLY the cryptic-phase doublings (the origin to
+The doubling count `m` counts only the cryptic-phase doublings (the origin to
 the renewal-process start): the cryptic duration is `m·τ` and the total
 outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. The
 genetic seeding bound pulls the lower tail of the outbreak age to sit at or
-before the most recent common ancestor. The MAIN fit's `m` prior centre is
-set directly in [`exponential_growth_model`](@ref) from the
-field-intelligence + genetic elicitaiton (#533); whether the backfill's
-centre should advance at all is tracked by #534.
+before the most recent common ancestor. The main fit's `m` prior centre is
+set directly in [`exponential_growth_model`](@ref), from field intelligence
+and genetic evidence.
 """
 const M_PRIOR_BASE = 3.0
 
@@ -175,28 +174,27 @@ const M_PRIOR_BASE = 3.0
     RENEWAL_START_LEAD
 
 Days the renewal start (the day the reproduction-number walk starts, where
-the analytic cryptic phase hands off to the recursion) sits AFTER the
-genetic TMRCA day, past the TMRCA's molecular-clock uncertainty. Placing the
-renewal start a 14-day lead after the TMRCA — rather than exactly on it —
-leaves the observed span `τ_obs = n − renewal_start` strictly shorter than
-`tmrca_days`, so the genetic censored bound on the total age
-`T = m·τ + τ_obs` stays informative (it pulls the origin to sit at or before
-the MRCA, bounding the cryptic duration `m·τ` from below). Two weeks past the
-TMRCA leaves room for the TMRCA's own molecular-clock uncertainty before
-sustained transmission is treated as confidently established.
+the analytic cryptic phase hands off to the recursion) sits after the
+genetic TMRCA day. Placing the renewal start a 14-day lead after the TMRCA,
+rather than exactly on it, leaves the observed span
+`τ_obs = n − renewal_start` strictly shorter than `tmrca_days`, so the
+genetic censored bound on the total age `T = m·τ + τ_obs` stays informative:
+it pulls the origin to sit at or before the MRCA, bounding the cryptic
+duration `m·τ` from below. The lead accounts for the TMRCA's own
+molecular-clock uncertainty before sustained transmission is treated as
+confidently established.
 """
 const RENEWAL_START_LEAD = 14
 
 """
     RT_WALK_LEAD
 
-Days BEFORE the first situation report (`breakpoint`) at which the
+Days before the first situation report (`breakpoint`) at which the
 reproduction-number random walk is allowed to start moving, rather than
-holding `R_t` flat at `R0` right up to the report. A month lets the walk
-capture the transmission dynamics in the period leading up to the first
-report — the response decline can begin before the outbreak is first
-reported — while staying floored at the renewal start so the walk never
-precedes the seeded trajectory.
+holding `R_t` flat at `R0` until the report. A month lets the walk capture
+transmission dynamics before the outbreak is first reported, while staying
+floored at the renewal start so the walk never precedes the seeded
+trajectory.
 """
 const RT_WALK_LEAD = 28
 
@@ -206,11 +204,11 @@ const RT_WALK_LEAD = 28
 Time scale in days of the logistic ramp over which the outbreak-response
 intervention takes effect on `R_t`, centred on the `breakpoint`
 ([`sigmoid_ramp`](@ref)). A ramped rather than instantaneous step: the
-response damps transmission over weeks, not on a single day. The single
-source of truth for this ramp, referenced by both the model (the
-`rt_walk_model` prior and `sigmoid_ramp`) and every `reconstruct_rt` caller
-that rebuilds the daily `R_t` off the chain, so the reconstruction cannot
-drift from the value the model fitted.
+response damps transmission over weeks, not on a single day. This constant
+is the single source of truth for the ramp, referenced by both the model
+(the `rt_walk_model` prior and `sigmoid_ramp`) and every `reconstruct_rt`
+caller that rebuilds the daily `R_t` from the chain, so the reconstruction
+cannot drift from the value the model fitted.
 """
 const RT_INTERVENTION_RAMP = 21.0
 
@@ -247,10 +245,11 @@ Diseases, 2026), as `(date, median, lower_90, upper_90)` tuples from their
 Table 1 (mean accepted `R₀ = 1.71`). Their stochastic SEIRD ensemble is
 calibrated by simulation filtering to 598 cumulative confirmed cases on 8 June
 2026, with the reporting fraction fixed at 1.0, so these are projected
-*confirmed* cases (a floor on the true size) rather than the
+confirmed cases (a floor on the true size) rather than the
 ascertainment-corrected cumulative cases that this package's `C_T` and McCabe
-et al. estimate. The 8/10 June row is their calibration anchor; the dates from
-24 June on are forward projections. The bounds are 90% prediction intervals.
+et al. estimate. The 8/10 June row is their calibration anchor. The dates
+from 24 June on are forward projections. The bounds are 90% prediction
+intervals.
 """
 const CHAMLA_CONFIRMED_CENTRAL = [
     ("2026-05-18", 294, 212, 375),
@@ -268,11 +267,12 @@ const CHAMLA_CONFIRMED_CENTRAL = [
 Chamla et al. [chamla2026](@cite) week-12 (24 June 2026) cumulative
 confirmed-case projection under their three transmissibility scenarios, as
 `(scenario, median, lower_90, upper_90)` tuples (low `R₀ = 1.42`, central
-`R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to this
-analysis's current cut-off, so the scenario spread sits beside the observed
-confirmed count and our matched-date projection. The bounds are 90% prediction
-intervals; the same estimand caveat as [`CHAMLA_CONFIRMED_CENTRAL`](@ref)
-applies (these are confirmed cases, not ascertainment-corrected total cases).
+`R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to
+this analysis's current cut-off, so the scenario spread sits beside the
+observed confirmed count and our matched-date projection. The bounds are
+90% prediction intervals. The same estimand caveat as
+[`CHAMLA_CONFIRMED_CENTRAL`](@ref) applies: these are confirmed cases, not
+ascertainment-corrected total cases.
 """
 const CHAMLA_CONFIRMED_W12 = [
     ("Chamla low (R₀=1.42)", 870, 641, 1133),

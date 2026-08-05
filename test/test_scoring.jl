@@ -88,7 +88,7 @@ end
     using BVDOutbreakSize: select_daily_releases
 
     ## Two version tags and a main build share one timestamp: the higher
-    ## version wins. v1.10.0 sorts BELOW v1.9.0 as a string and above it as
+    ## version wins. v1.10.0 sorts below v1.9.0 as a string and above it as
     ## a version, so this fails if the version is ever compared as text.
     entries = [
         ("results-v1.9.0", DateTime(2026, 6, 9, 22, 58, 13),
@@ -475,7 +475,7 @@ end
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     ## The frozen-fit archive (forecast_frozen.csv) carries the same schema as
-    ## forecast.csv but no `fit` column, and is stamped with a PAST made date.
+    ## forecast.csv but no `fit` column, and is stamped with a past made date.
     n = 40
     cutoff = Date(2026, 7, 15)
     inc = (; days = [26, 33], counts = [100, 150])
