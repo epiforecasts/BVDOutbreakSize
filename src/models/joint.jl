@@ -402,7 +402,6 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
 end
 
-
 """
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
@@ -1263,7 +1262,6 @@ death-confirmation positivity (`death_confirmation`).
     death_composition := confirmed_deaths_state.q_death
     death_confirmation := confirmed_deaths_state.p_death_conf
 end
-
 
 ## --- Patch (multi-population) joint models ------------------------------
 

@@ -664,7 +664,6 @@ source = "McCabe et al. Table 1 — Ituri Province population"
 # Both dates are converted to days before `as_of_date` at load time, so they
 # track changes to the cut-off.
 [genetic_tmrca]
-[genetic_tmrca]
 date        = "2026-03-15"
 days_sd     = 16
 alt_date    = "2026-03-08"

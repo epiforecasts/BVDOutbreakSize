@@ -3539,8 +3539,6 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 
 forecast_flows_fig #hide
 
-
-
 # ### Symptom-onset nowcast and forecast results
 #
 # The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
@@ -3653,7 +3651,6 @@ end;
 
 onset_forecast_fig #hide
 
-
 # ## Spatial structure
 
 #
@@ -3740,7 +3737,6 @@ spatial_sensitivity_table = streams_table(
     "Patch model (headline)" => posterior_C_joint,
     "No spatial structure" => posterior_C_no_patches);
 spatial_sensitivity_table
-
 
 # ## Saving results
 #
