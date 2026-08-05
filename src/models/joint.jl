@@ -680,9 +680,9 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
         lab_history, lab_daily_history, tests_analysed,
-        break_days = confirmed_break_days,
-        break_gross_cases = confirmed_break_gross_cases,
-        break_sd = confirmed_break_sd,
+        confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_cases,
+        confirmed_break_sd,
         positivity_link = confirmed_positivity_link))
     ## Symptom-onset reporting-triangle stream
     ## ([`onset_reporting_model`](@ref)): the only direct observation of the
@@ -704,8 +704,9 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
         case_analysed_daily = confirmed_state.analysed_daily,
         case_suspected_daily = cases_state.reports_daily,
-        break_days = confirmed_break_days,
-        break_gross_deaths = confirmed_break_gross_deaths))
+        confirmed_break_days,
+        confirmed_break_gross = confirmed_break_gross_deaths,
+        confirmed_break_sd))
     ## 5. Uganda exports, from the primary patch (Ituri) only: the border
     ##    crossings this stream describes are Ituri-to-Uganda.
     exports_state ~ to_submodel(exports(exported_cases,
