@@ -586,6 +586,8 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
+        onset_curve_history = (; onset_days = Int[], report_days = Int[],
+            prev_report_days = Int[], increments = Int[]),
         treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
         treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
@@ -607,6 +609,7 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         confirmed_deaths_stream = confirmed_deaths_model,
         treatment = treatment_flow_model,
         recovered = recovered_model,
+        onset_report = onset_reporting_model,
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
@@ -681,6 +684,18 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         break_gross_cases = confirmed_break_gross_cases,
         break_sd = confirmed_break_sd,
         positivity_link = confirmed_positivity_link))
+    ## Symptom-onset reporting-triangle stream
+    ## ([`onset_reporting_model`](@ref)): the only direct observation of the
+    ## shared latent onset series `onsets`, every other stream sees it only
+    ## after a further onset-to-event convolution. Runs after
+    ## `confirmed_state` so its daily ascertainment
+    ## (`p_drc · τ_test · p_pos_grid`) is available to anchor this stream's
+    ## own ascertainment level on.
+    onset_anchor_daily = p_drc .* confirmed_state.τ_test .*
+                         confirmed_state.p_pos_grid
+    onset_report_state ~ to_submodel(
+        onset_report(onset_curve_history, onsets;
+        anchor = onset_anchor_daily))
     ## 4. Confirmed deaths.
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
@@ -911,6 +926,10 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     expected_reports_T := cases_state.expected_reports
     expected_confirmed_T := confirmed_state.expected_confirmed
     expected_analysed_T := confirmed_state.expected_analysed
+    expected_onset_reported_T := onset_report_expected_total(
+        onsets, onset_report_state.logit_h0, onset_report_state.γ,
+        onset_report_state.grid_start, onset_report_state.alpha, n)
+    onset_ascertainment := onset_report_state.alpha
     _ecd = confirmed_deaths_state.expected_confirmed_deaths
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
