@@ -85,16 +85,17 @@ end
              occursin("lp=", l) &&
              occursin("divergences=", l), lines)
     ## The log-density must be a real number pulled from the transition
-    ## statistics, not `missing` — this is what regresses if the stats
-    ## interface stops exposing `logjoint` (the bug the old hand-rolled
-    ## `transition.lp` access hit silently).
+    ## statistics, not `missing` — a silent failure mode if the stats
+    ## interface stops exposing `logjoint`.
     lps = [match(r"lp=(\S+)", l).captures[1] for l in lines]
     @test any(s -> tryparse(Float64, s) !== nothing, lps)
     @test !all(==("missing"), lps)
     rm(path; force = true)
 end
 
-@testitem "tensorboard_callback streams grouped scalars and histograms" tags=[:slow] begin
+@testitem "tensorboard_callback streams grouped scalars and histograms" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using TensorBoardLogger: TBLogger, map_summaries
@@ -173,7 +174,9 @@ end
     @test !isdir(joinpath(dir, "tensorboard", "unit"))
 end
 
-@testitem "fit_callback: all streams progress and TensorBoard" tags=[:slow] begin
+@testitem "fit_callback: all streams progress and TensorBoard" tags=[
+    :slow
+] begin
     using Distributions: Normal
     using Turing: @model
     using TensorBoardLogger

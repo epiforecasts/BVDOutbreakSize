@@ -20,7 +20,9 @@
     @test isapprox(std(λ_bg), 1.0 * sqrt(1 - 2 / pi); atol = 0.05)
 end
 
-@testitem "λ_bg prior keeps background a minority of observed" tags=[:slow] begin
+@testitem "λ_bg prior keeps background a minority of observed" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: median, quantile

@@ -1,8 +1,10 @@
 ## The headline confirmation-sensitivity prior credits the repeat-control
 ## confirmation process (Beta(38, 2), mean 0.95) rather than one analytical
-## assay draw (Beta(10, 1.76), mean 0.85); see issue #374.
+## assay draw (Beta(10, 1.76), mean 0.85).
 
-@testitem "headline process prior is higher and tighter than single-assay" tags=[:slow] begin
+@testitem "headline prior is higher and tighter than single-assay" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: mean, std

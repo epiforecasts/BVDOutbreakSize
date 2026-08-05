@@ -4,13 +4,13 @@
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/stable) [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://epiforecasts.io/BVDOutbreakSize/dev) [![Tests](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml/badge.svg)](https://github.com/epiforecasts/BVDOutbreakSize/actions/workflows/test.yml) [![codecov](https://codecov.io/gh/epiforecasts/BVDOutbreakSize/branch/main/graph/badge.svg)](https://codecov.io/gh/epiforecasts/BVDOutbreakSize) [![Aqua QA](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) [![Code Style: SciML](https://img.shields.io/static/v1?label=code%20style&message=SciML&color=9558b2&labelColor=389826)](https://github.com/SciML/SciMLStyle) [![DOI](https://zenodo.org/badge/1243778099.svg)](https://doi.org/10.5281/zenodo.20312758)
 
-**Last updated:** on each rebuild. This is a live report, re-run as new
-data arrive, so the estimates change between updates.
+**Last updated:** on each rebuild.
+This is a live report, re-run as new data arrive, so the estimates change between updates.
 
-**Data as of:** the most recent situation report. DRC counts come from the
-situation reports of the Institut National de Santé Publique (INSP); Uganda
-imports come from WHO. The rendered report fills in the build date and the
-exact data cut-off automatically.
+**Data as of:** the most recent situation report.
+DRC counts come from the situation reports of the Institut National de Santé Publique (INSP).
+Uganda imports come from WHO.
+The rendered report fills in the build date and the exact data cut-off automatically.
 
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
@@ -22,65 +22,42 @@ exact data cut-off automatically.
 [limitations](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Limitations) ·
 [full joint results](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Results).
 
-**Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus
-(BVD) is ongoing in the Democratic Republic of the Congo (DRC), with
-cases also detected across the border in Uganda.
-This is a real-time joint Bayesian estimate of the current size of that
-outbreak, refreshed as new data arrive.
-Most infections are not yet reported, so the current size has to be
-inferred from the surveillance data that are available.
-The model is a discrete-time renewal process on a daily grid that fits the
-surveillance streams jointly in a single posterior: the DRC suspected
-cases, suspected deaths, laboratory-confirmed cases and confirmed deaths,
-and the cases and deaths exported to Uganda.
-It estimates the latent infections, symptom onsets and deaths over time,
-the reported and confirmed cases, and the time-varying reproduction number
-with its growth rate and doubling time, alongside the case-fatality ratio,
-the ascertainment of each surveillance system, and a short-term forecast of
-each stream over the coming week.
-The DRC data come from the INSP situation reports and the Uganda exports
-from the WHO situation reports and Disease Outbreak News, with a genetic
-bound on the time to the most recent common ancestor and priors taken from
-the McCabe et al. report.
+**Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
+This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
+Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
+The model is a discrete-time renewal process on a daily grid that fits the surveillance streams jointly in a single posterior: the DRC suspected cases, suspected deaths, laboratory-confirmed cases and confirmed deaths, and the cases and deaths exported to Uganda.
+It estimates: the latent infections, symptom onsets and deaths over time; the reported and confirmed cases; the time-varying reproduction number, its growth rate and doubling time; the case-fatality ratio; the ascertainment of each surveillance system; and a short-term forecast of each stream over the coming week.
+The DRC data come from the INSP situation reports, and the Uganda exports come from the WHO situation reports and Disease Outbreak News.
+A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
 
-**Scope.** This work is motivated by adding an external view of the
-current situation, based on our understanding of real-time infectious
-disease dynamics and the infection process that gives rise to observed
-epidemic surveillance counts.
-We are actively developing it and encourage feedback, so please get in
-touch.
-We fully support reuse and adaptation.
-Find out more in the
-[contributing guide](https://epiforecasts.io/BVDOutbreakSize/stable/contributing).
+**Scope.** This work adds an external view of the current situation, drawing on our understanding of real-time infectious disease dynamics and the infection process behind the observed surveillance counts.
+We are developing it and encourage feedback, so please get in touch.
+We support reuse and adaptation.
+Find out more in the [contributing guide](https://epiforecasts.io/BVDOutbreakSize/stable/contributing).
 
-**Use of AI.** The model code and analysis were drafted by a language
-model and reviewed and revised under human oversight; the named authors
-are responsible for that oversight.
+**Use of AI.** The model code and analysis were drafted by a language model, then reviewed and revised under human oversight.
+The named authors are responsible for that oversight.
 
 <!-- SHARED:END -->
 
 ## Installing the package
 
-To use the model and the bundled outbreak data from your own Julia
-environment, add the package from the repository:
+To use the model and the bundled outbreak data from your own Julia environment, add the package from the repository:
 
 ```julia
 using Pkg
 Pkg.add(url = "https://github.com/epiforecasts/BVDOutbreakSize")
 ```
 
-You can then load the model machinery and the data the report is
-fitted to:
+You can then load the model machinery and the data the report is fitted to:
 
 ```julia
 using BVDOutbreakSize
 obs = load_observations()
 ```
 
-This gives you the exported model components, constants and data
-loaders, enough to build your own analysis on top of the package.
-Reproducing the full report (fitting the models and writing the
-result tables and plots) can be done in a few ways, described next.
+This gives you the exported model components, constants and data loaders, enough to build your own analysis on top of the package.
+Reproducing the full report (fitting the models and writing the result tables and plots) can be done in a few ways, described next.
 
 ## Running
 
@@ -95,24 +72,20 @@ julia --project=. -e 'using Pkg; Pkg.instantiate()'
 julia --project=. scripts/run.jl
 ```
 
-`scripts/run.jl` fits the models and writes the output CSVs (the
-analysis literate is also run as part of the docs build). Running
-`docs/examples/analysis.jl` directly instead steps through the full
-narrative.
+`scripts/run.jl` fits the models and writes the output CSVs (the analysis literate is also run as part of the docs build).
+Running `docs/examples/analysis.jl` directly instead steps through the full narrative.
 
 ### Re-fit without cloning
 
-`scripts/reproduce.jl` fetches the package, instantiates its
-environment, and runs the fit:
+`scripts/reproduce.jl` fetches the package, instantiates its environment, and runs the fit:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/epiforecasts/BVDOutbreakSize/main/scripts/reproduce.jl | julia
 ```
 
-Outputs land in `./bvd-output`; set `BVD_OUTPUT_DIR` to write them
-elsewhere, or `BVD_REF` to a release tag to reproduce a specific
-version. The script clones into a temporary directory and runs from
-there, so it leaves your own Julia environments untouched.
+Outputs land in `./bvd-output`.
+Set `BVD_OUTPUT_DIR` to write them elsewhere, or `BVD_REF` to a release tag to reproduce a specific version.
+The script clones into a temporary directory and runs from there, so it leaves your own Julia environments untouched.
 
 ### Render the docs page
 
@@ -125,55 +98,34 @@ julia --project=docs docs/make.jl
 
 ### Updating the data
 
-The observations live in `data/observations.toml`; the literate picks up
-new numbers automatically.
-The figures come from the INSP situation reports, transcribed by
-[INRB-UMIE/BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data),
-and are refreshed for each new sitrep with the `scripts/` tooling
-(`task download-sitreps`, `task confirm-data`):
+The observations live in `data/observations.toml`.
+The literate picks up new numbers automatically.
+The figures come from the INSP situation reports, transcribed by [INRB-UMIE/BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data), and are refreshed for each new sitrep with the `scripts/` tooling (`task download-sitreps`, `task confirm-data`):
 
-- The cumulative confirmed-case and confirmed-death series come from the
-  upstream `national_*` daily CSVs, regenerated and spot-confirmed against
-  our own scan by `scripts/confirm_insp_data.jl`.
-- Every other stream (suspected totals, laboratory cumulatives, the 24h
-  analysed volume, daily new suspects, isolation occupancy, bed capacity
-  and recoveries) is read directly from the situation-report PDFs
-  (fetched by `scripts/download_sitreps.jl` into `data/sitrep_pdfs/`) and
-  recorded in `data/insp_sitrep_scanned.csv`.
+- The cumulative confirmed-case and confirmed-death series come from the upstream `national_*` daily CSVs, regenerated and spot-confirmed against our own scan by `scripts/confirm_insp_data.jl`.
+- Every other stream (suspected totals, laboratory cumulatives, the 24h analysed volume, daily new suspects, isolation occupancy, bed capacity and recoveries) is read directly from the situation-report PDFs (fetched by `scripts/download_sitreps.jl` into `data/sitrep_pdfs/`) and recorded in `data/insp_sitrep_scanned.csv`.
 
-`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream
-national series and exits non-zero on any disagreement.
+`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream national series and exits non-zero on any disagreement.
 
 ## Outputs and releases
 
-Each push to `main` regenerates the model outputs as part of the
-documentation build and publishes them as a GitHub Release. The
-[latest release](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest)
-bundles the saved result tables and plots, thinned posterior draws, a
-copy of the input `observations.toml` that produced them, a
-`site.zip` snapshot of the rendered report site, and `analysis.html`,
-a self-contained single-file copy of the report that opens offline
-([download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html));
-the same artifacts are
-written to the repository's `output/` directory on each build. Browse
-[all releases](https://github.com/epiforecasts/BVDOutbreakSize/releases)
-for earlier output bundles.
+Each push to `main` regenerates the model outputs as part of the documentation build and publishes them as a GitHub Release.
+The [latest release](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest) bundles: the saved result tables and plots; thinned posterior draws; a copy of the input `observations.toml` that produced them; a `site.zip` snapshot of the rendered report site; and `analysis.html`, a self-contained single-file copy of the report that opens offline ([download the latest](https://github.com/epiforecasts/BVDOutbreakSize/releases/latest/download/analysis.html)).
+The same artifacts are written to the repository's `output/` directory on each build.
+Browse [all releases](https://github.com/epiforecasts/BVDOutbreakSize/releases) for earlier output bundles.
 Major versions of the report are kept as GitHub Releases.
 
 The rendered report is published from the
-[`gh-pages` branch](https://github.com/epiforecasts/BVDOutbreakSize/tree/gh-pages),
-where past and development versions of the analysis page can be found.
+[`gh-pages` branch](https://github.com/epiforecasts/BVDOutbreakSize/tree/gh-pages), where past and development versions of the analysis page can be found.
 
 ## Submodules
 
-- `external/bdbv-linelist-analysis` — Bayesian reanalysis of the 2012
-  Isiro BDBV line list (Rosello et al. 2015). Source of the
-  informative onset-to-death gamma shape and scale priors.
+- `external/bdbv-linelist-analysis` — Bayesian reanalysis of the 2012 Isiro BDBV line list (Rosello et al. 2015).
+  Source of the informative onset-to-death gamma shape and scale priors.
 
 ## Citation
 
-If you use or build on this project, please cite the works this
-repository depends on:
+If you use or build on this project, please cite the works this repository depends on:
 
 - **This project** — Abbott, S., Brand, S., Funk, S. (2026).
   *BVDOutbreakSize: joint forward-generative Turing model for the
@@ -239,14 +191,8 @@ repository depends on:
 
 ## Funding
 
-This work was funded by the National Institute for Health and Care
-Research (NIHR) Health Protection Research Unit in Health Analytics &
-Modelling, a partnership between the UK Health Security Agency, Imperial
-College London and the London School of Hygiene & Tropical Medicine
-(grant code NIHR207404).
-The views expressed are those of the author(s) and not necessarily those
-of the NIHR, UK Health Security Agency or the Department of Health and
-Social Care.
+This work was funded by the National Institute for Health and Care Research (NIHR) Health Protection Research Unit in Health Analytics & Modelling, a partnership between the UK Health Security Agency, Imperial College London and the London School of Hygiene & Tropical Medicine (grant code NIHR207404).
+The views expressed are those of the author(s) and not necessarily those of the NIHR, UK Health Security Agency or the Department of Health and Social Care.
 
 ## Further references
 

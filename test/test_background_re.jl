@@ -20,7 +20,9 @@
           [1.0, 1.0, 2.0, 2.0, 2.0]
 end
 
-@testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags=[:slow] begin
+@testitem "background_re_model σ_bg=0 recovers the scalar baseline" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: std
@@ -38,7 +40,9 @@ end
     @test maximum(spreads) < 1e-8
 end
 
-@testitem "background_pooling_model default σ_bg is a tight half-normal" tags=[:slow] begin
+@testitem "background_pooling_model default σ_bg is a tight half-normal" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: median
@@ -94,15 +98,17 @@ end
     ## non-zero day is a small fraction of the baseline and the day-to-day rise
     ## across the boundary is gradual (no one-day jump to the full level).
     n, onset, σ_rw = 40, 18, 0.0
-    st = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
+    st = returned(
+        background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7),
         rand(MersenneTwister(5),
             background_walk_model(n, σ_rw; onset = onset, onset_ramp = 7)))
     @test all(st.λ[1:(onset - 1)] .== 0)
-    @test st.λ[onset] ≈ st.λ_mu / 7         # first window day is 1/ramp of level
-    @test st.λ[onset + 6] ≈ st.λ_mu          # reaches the level after the ramp
-    @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]   # monotone ramp-in
+    @test st.λ[onset] ≈ st.λ_mu / 7  # first window day is 1/ramp of level
+    @test st.λ[onset + 6] ≈ st.λ_mu  # reaches the level after the ramp
+    @test st.λ[onset] < st.λ[onset + 1] < st.λ[onset + 6]  # monotone ramp-in
     ## onset_ramp = 1 recovers the old hard onset (full level on day one).
-    hard = returned(background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
+    hard = returned(
+        background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1),
         rand(MersenneTwister(5),
             background_walk_model(n, σ_rw; onset = onset, onset_ramp = 1)))
     @test hard.λ[onset] ≈ hard.λ_mu
@@ -120,7 +126,8 @@ end
     ## steps.
     n, onset, σ_rw = 30, 8, 0.04
     st = returned(background_walk_model(n, σ_rw; onset = onset),
-        rand(MersenneTwister(11), background_walk_model(n, σ_rw; onset = onset)))
+        rand(MersenneTwister(11),
+            background_walk_model(n, σ_rw; onset = onset)))
     @test length(st.λ) == n
     @test all(st.λ[1:(onset - 1)] .== 0)            # gated before the onset
     @test all(st.λ[onset:end] .> 0)                 # positive after it
@@ -136,7 +143,9 @@ end
     @test all(flat.λ[(onset + 7):end] .≈ flat.λ_mu)
 end
 
-@testitem "background_re_model is a positive perturbation of baseline" tags=[:slow] begin
+@testitem "background_re_model is a positive perturbation of baseline" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using BVDOutbreakSize: background_re_model
@@ -168,7 +177,9 @@ end
     @test mean(λ) < 0.15
 end
 
-@testitem "death_background_model default is a tight half-normal" tags=[:slow] begin
+@testitem "death_background_model default is a tight half-normal" tags=[
+    :slow
+] begin
     using Turing: sample, Prior
     using Random: MersenneTwister
     using Statistics: mean, std

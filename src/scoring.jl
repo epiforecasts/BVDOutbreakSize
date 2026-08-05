@@ -30,9 +30,9 @@ end
 
 """
 Continuous ranked probability score of a predictive `samples` ensemble
-at a single observation `obs`. Lower is better; zero for a perfect point
-forecast. For a point-mass (constant) ensemble the CRPS reduces to the
-absolute error `abs(obs - samples[1])`.
+at a single observation `obs`. Lower is better, and it is zero for a
+perfect point forecast. For a point-mass (constant) ensemble the CRPS
+reduces to the absolute error `abs(obs - samples[1])`.
 """
 function crps_sample(obs::Real, samples::AbstractVector{<:Real})
     return _crps_ensemble(samples, obs)
@@ -40,9 +40,9 @@ end
 
 """
 CRPS on the log scale: both `obs` and every element of `samples` are
-`log1p`-transformed before scoring. This is scoring *on the log
-scale*, i.e. `crps_sample(log1p(obs), log1p.(samples))` — it is not
-the logarithm of [`crps_sample`](@ref). Log-scale scoring downweights
+`log1p`-transformed before scoring, i.e.
+`crps_sample(log1p(obs), log1p.(samples))`. It is not the logarithm of
+[`crps_sample`](@ref). Log-scale scoring downweights
 the influence of large counts, appropriate when forecast accuracy
 matters proportionally rather than in absolute terms (e.g. case
 counts spanning orders of magnitude).
@@ -148,7 +148,7 @@ const _MAIN_RELEASE = r"^results-([0-9]+)$"
 
 ## Whether `tag` names a results release of either kind. The repo also
 ## publishes a release per code tag (`v1.9.0`), and the reconstructed
-## forecasts live under `forecasts-backfill`; neither is a results release.
+## forecasts live under `forecasts-backfill`. Neither is a results release.
 function is_results_release(tag::AbstractString)
     return !isnothing(match(_VERSION_RELEASE, tag)) ||
            !isnothing(match(_MAIN_RELEASE, tag))
@@ -175,7 +175,7 @@ creation timestamp (a UTC `DateTime`, as reported by `gh release list`)
 and the data cut-off it was built from (`as_of_date` in the release's
 `observations.toml`). Both tagged releases (`results-vX.Y.Z`) and
 main-build releases (`results-<run number>`, published by every push to
-`main`) are eligible; any other tag is ignored.
+`main`) are eligible. Any other tag is ignored.
 
 Days are cut-off days, not creation days, because a release's forecast is
 a function of the data it saw. Two releases sharing a cut-off carry the
@@ -450,11 +450,11 @@ end
 [`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
 with its `fit` column dropped, for a table whose `fit` column is
 single-valued by construction rather than merely by the data currently on
-hand — the frozen-fit evaluation, which scores the current joint model
+hand: the frozen-fit evaluation, which scores the current joint model
 alone at past cut-offs, is the only such table in this report.
 
 Every other column (`crps`, `dispersion`, `overprediction`,
-`underprediction`, `coverage_50`, `coverage_90`, …) is left untouched; this
+`underprediction`, `coverage_50`, `coverage_90`, …) is left untouched. This
 drops one column and nothing else. `table` is returned with `fit` still
 present when it is empty, since an empty table carries no evidence either
 way. State which model a de-columned table refers to in the surrounding

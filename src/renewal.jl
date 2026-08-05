@@ -8,7 +8,7 @@
 """
 NaN / Inf-safe positive rate. The renewal recursion can transiently
 overflow on extreme NUTS warmup proposals (large `R_t` compounding),
-giving a non-finite expected count; a plain `max(x, eps)` would
+giving a non-finite expected count. A plain `max(x, eps)` would
 propagate the NaN (`max(NaN, eps) = NaN`) and trip the Poisson /
 NegativeBinomial domain check.
 """
@@ -41,8 +41,8 @@ secondary event) via
 discrete analogue of the continuous onset-to-event densities used by the
 integral model, and is the discretisation route the renewal convolutions
 rely on. For a LogNormal primary the CDF differentiates cleanly under
-Mooncake, so this is AD-safe; extreme warmup proposals that drive the
-quadrature to a non-finite or zero total fall back to a uniform PMF so
+Mooncake, so this is AD-safe. Extreme warmup proposals that drive the
+quadrature to a non-finite or zero total fall back to a uniform PMF, so
 the downstream convolution stays finite (the proposal is still rejected
 through its low log-likelihood). Returns a vector whose element type
 follows the delay parameters.
@@ -53,10 +53,9 @@ function discretise_censored(dist, nmax::Integer)
 end
 
 ## Function barrier: `double_interval_censored` returns a `Union` of solver
-## types, so it is inferred abstractly at the call site above; isolating the
-## PMF loop in its own method lets it specialise on the concrete `dic` type,
-## making the ~`nmax` censored-CDF evaluations type-stable under AD. See
-## CensoredDistributions.jl#367 on the Union return.
+## types, so it is inferred abstractly at the call site above. Isolating
+## the PMF loop in its own method lets it specialise on the concrete `dic`
+## type, making the ~`nmax` censored-CDF evaluations type-stable under AD.
 @inline function _pmf_from_dic(dic, dist, nmax::Integer)
     ## Differencing one CDF path, not `nmax + 1` overlapping `pdf` calls. The
     ## interval-censored lag-`d` mass is `cdf(dic, d+1) − cdf(dic, d)`, and
@@ -67,15 +66,16 @@ end
     ## Mooncake reverse pass walks (each CDF is the expensive part: a
     ## primary-censored, truncation-normalised incomplete-gamma / Normal-CDF
     ## call), and is numerically identical to the `pdf` differences it
-    ## replaces — `IntervalCensored`'s `cdf` floors to the interval, so at an
+    ## replaces. `IntervalCensored`'s `cdf` floors to the interval, so at an
     ## integer boundary it returns the same inner CDF the `pdf` pair reads,
     ## with the same below-minimum→0 / at-maximum→1 edge handling.
     ##
     ## CensoredDistributions' batched `pdf(dic, 0:nmax)` also evaluates each
     ## boundary CDF once (via a `Dict` cache) and is value-identical, but its
-    ## cache path is not Mooncake-differentiable — it hits a bitcast-to-a-
-    ## differentiable-type error in the reverse pass — so the gradient hot path
-    ## stays on this plain-array CDF difference, which Mooncake handles cleanly.
+    ## cache path is not Mooncake-differentiable (it hits a bitcast-to-a-
+    ## differentiable-type error in the reverse pass), so the gradient hot
+    ## path stays on this plain-array CDF difference, which Mooncake handles
+    ## cleanly.
     c = [cdf(dic, float(b)) for b in 0:(nmax + 1)]
     z0 = zero(eltype(c))
     raw = [max(c[i + 1] - c[i], z0) for i in 1:(nmax + 1)]
@@ -94,7 +94,7 @@ Maximum lag for discretising a delay `dist`: the smallest integer covering
 `q` of its CDF (the `q`th quantile rounded up), clamped to `[minlag, cap]`.
 Sizing the truncation by the distribution rather than a hand-set constant
 keeps a consistent tail mass (98% by default) across every delay. This is a
-deterministic function of the PRIOR-centre distribution, evaluated ONCE
+deterministic function of the prior-centre distribution, evaluated once
 outside the Turing model when each delay submodel is constructed, so the PMF
 length is fixed and AD-safe.
 """
@@ -137,11 +137,11 @@ end
 
 """
 Reproduction number `R` implied by an exponential growth rate `r` and a
-generation-interval PMF `g` (indexed from lag 1), the FORWARD Euler–Lotka
+generation-interval PMF `g` (indexed from lag 1), the forward Euler–Lotka
 relation `R = 1 / Σ_s g_s e^{−r s}`. The inverse of [`euler_lotka_r`](@ref):
 where that solves `R · Σ_s g_s e^{−r s} = 1` for `r` given `R`, this returns
 `R` directly for a given `r`, so the prior can be placed on the growth rate
-and the established reproduction number derived from it under OUR generation
+and the reproduction number derived from it under the model's generation
 interval. Uses only arithmetic and `exp`, so it is AD-transparent under
 Mooncake.
 """
@@ -183,29 +183,29 @@ end
 
 """
 Renewal-start seed magnitude for the two-phase renewal: the cumulative
-infection count reached by the analytic cryptic phase AT the renewal-start
+infection count reached by the analytic cryptic phase at the renewal-start
 day. The renewal is two-phase: an analytic exponential cryptic phase from
 the origin to the renewal start (≈ the genetic TMRCA day, off the renewal
 grid), then the renewal recursion on `[renewal_start, cut-off]`. The
-doubling count `m` counts the doublings DURING the cryptic phase
+doubling count `m` counts the doublings during the cryptic phase
 (origin → renewal start), so the cryptic phase grows a single import to
 
 ```math
 \\text{seed\\_at\\_renewal\\_start} = 2^m,
 ```
 
-at the renewal start, INDEPENDENT of the growth rate `r`. The rate `r`
+at the renewal start, independent of the growth rate `r`. The rate `r`
 shapes the cryptic exponential history feeding the recursion just before
 the renewal start (see [`seed_infections`](@ref)), but the magnitude at the
-renewal start is fixed by `m` alone. This deliberately keeps `r` (hence the
-single `R0`) OUT of the seed magnitude: an earlier formulation back-scaled
-a cut-off-referenced size `2^m e^{-rτ_obs}`, which put `r` into both the
-seed and the renewal growth so the two cancelled for a fixed realised
-size — a flat ridge along which `R0` slid to the edge. With the magnitude
-`r`-free the renewal grows `2^m` forward over the observation window under
-the time-varying `R_t`, so the realised cut-off size is data-driven through
+renewal start is fixed by `m` alone. This deliberately keeps `r` (hence
+`R0`) out of the seed magnitude. A cut-off-referenced size
+`2^m e^{-rτ_obs}` would put `r` into both the seed and the renewal growth,
+so the two would cancel for a fixed realised size and leave a flat ridge
+along which `R0` could slide freely. With the magnitude `r`-free, the
+renewal grows `2^m` forward over the observation window under the
+time-varying `R_t`, so the realised cut-off size is data-driven through
 `R_t` while the prior fixes only the renewal-start scale. The argument is
-`C_T_prior = 2^m`; returned unchanged, kept as a named helper for the
+`C_T_prior = 2^m`, returned unchanged and kept as a named helper for the
 seeding call site.
 """
 @inline function seed_at_renewal_start(C_T_prior)
@@ -219,7 +219,7 @@ Daily latent infections from the renewal equation
 a pre-computed `seed` of length `L < n` filling the first `L` days (see
 [`seed_infections`](@ref)). The recursion runs for days `L+1 … n`, so
 `Rt[1]` (used to imply the seeding growth) and the seed are mutually
-consistent. Returns the length-`n` infection trajectory; the output
+consistent. Returns the length-`n` infection trajectory. The output
 element type is promoted from `Rt`, `g` and `seed`.
 """
 function renewal_infections(Rt::AbstractVector, g::AbstractVector,
@@ -252,8 +252,8 @@ and maps infections to onsets, onsets to deaths, onsets to reports and
 onsets to detected exports. Type-stable and AD-transparent.
 
 The scalar double loop is deliberate: a vectorised lag-AXPY rewrite
-(`scripts/bench_convolve.jl`) was no faster under Mooncake (≈0.95x — the
-reverse pass over the scalar loop is already efficient), so the simpler
+(`scripts/bench_convolve.jl`) was no faster under Mooncake (≈0.95x, since
+the reverse pass over the scalar loop is already efficient), so the simpler
 form stays. The per-gradient cost the joint actually pays sits in the delay
 discretisation (the censored-distribution CDF evaluations), which the delay
 `nmax` trims target instead.
@@ -286,12 +286,12 @@ daily admission series `x` and a length-of-stay PMF `los` (indexed from lag
 so an admission on day `s` occupies a bed on days `s, s+1, …` until it is
 discharged: the admission day is always counted (`S(0) = 1`) and a stay of
 `LOS` days contributes to `LOS + 1` daily occupancies. This is the
-prevalence analogue of [`convolve_delay`](@ref)'s incidence convolution —
+prevalence analogue of [`convolve_delay`](@ref)'s incidence convolution:
 the length-of-stay survival replaces the onset-to-event delay PMF, turning
 an inflow into a stock. The survival weights are the reverse-cumulative
 tail sums of the PMF (`S(τ) = Σ_{j ≥ τ} los[j]`), so for a normalised PMF
 `S(0) = 1`, and the occupancy is `convolve_delay(x, S)`. Type-stable and
-AD-transparent; the element type follows the inputs.
+AD-transparent. The element type follows the inputs.
 """
 function convolve_survival(x::AbstractVector, los::AbstractVector)
     L = length(los)
@@ -307,7 +307,7 @@ end
 """
 Discrete convolution of two delay PMFs `a` and `b` (both indexed from
 delay 0 at element 1), giving the PMF of the summed delay `a ⊕ b`. The
-result has length `length(a) + length(b) - 1`; its mass equals
+result has length `length(a) + length(b) - 1`. Its mass equals
 `sum(a) * sum(b)`, so normalised inputs give a normalised output. Used to
 build the infection→detection delay (incubation ⊕ onset-to-detection) and
 the infection→death delay (incubation ⊕ onset-to-death) for the exports
@@ -334,7 +334,7 @@ The first knot sits on day `start` (default 1) and the last knot on day
 and to the end of the grid. With `start > 1` the reproduction number is
 held flat (at the first knot's value) for all days before `start`
 ([`interpolate_knots`](@ref) clamps below the first knot), so the random
-walk only varies `R_t` from `start` onward — used to fix `R_t` over the
+walk only varies `R_t` from `start` onward. This fixes `R_t` over the
 pre-establishment seeding window before the genetic TMRCA bound. Returns a
 sorted vector of unique day indices.
 """
@@ -353,7 +353,7 @@ before `day` to ≈1 well after, with `ramp` setting the transition width
 in days. Multiplied by a sampled effect size and added to log-`R_t`, this
 gives an intervention (e.g. the first WHO situation report) a gradual
 ramped effect on transmission rather than an instantaneous step. Returns
-a length-`n` `Float64` vector; `day = missing` gives an all-zero ramp (no
+a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
 intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
 """
@@ -368,7 +368,7 @@ Outbreak age in days: the elapsed time from the model-implied seeding
 day to the cut-off (day `n`), where the seeding day is the smooth
 crossing at which cumulative infections first reach one. The crossing is
 linearly interpolated between the two days that bracket a cumulative of
-one, so it is a continuous function of the trajectory; before the
+one, so it is a continuous function of the trajectory. Before the
 trajectory reaches one it returns `n` (the full grid). The renewal
 analogue of the integral model's sampled outbreak age `T`, used for the
 seeding-date plots and the genetic-TMRCA bound.
@@ -381,7 +381,7 @@ function seeding_age(cumulative::AbstractVector, n::Integer)
     @inbounds while j < length(cumulative) && cumulative[j] < one_
         j += 1
     end
-    ## j is the first day at or above one; interpolate within [j-1, j].
+    ## j is the first day at or above one. Interpolate within [j-1, j].
     if j == 1
         cross = one(Tp)
     else
@@ -397,12 +397,12 @@ end
 Linearly interpolate the knot values `knot_vals`, placed on the day
 indices `days`, onto the full daily grid `1:n`, returning the length-`n`
 series. Piecewise-linear between bracketing knots, so the series bends
-only at the knots and is otherwise straight; applied on the log-`R_t`
-scale this gives weekly random-walk knots with within-week linear
+only at the knots and is otherwise straight. Applied on the log-`R_t`
+scale, this gives weekly random-walk knots with within-week linear
 interpolation. Type-stable and AD-transparent (the output element type
 follows `knot_vals`).
 
-Outside the knot span the series is held FLAT at the nearest knot value
+Outside the knot span the series is held flat at the nearest knot value
 (the interpolation fraction is clamped to `[0, 1]`), not extrapolated: days
 before the first knot take `knot_vals[1]` and days after the last take
 `knot_vals[end]`. This is what lets the reproduction-number walk start at a

@@ -32,8 +32,8 @@ end
 
     cfg = nejm_onset_to_sample()
     ## Split the reported mean/median across two legs whose convolution
-    ## reproduces them exactly: mean = μ_rep + μ_rec, and an SD whose WH median
-    ## equals the reported median. Solve the SD from the WH relation.
+    ## reproduces them exactly: mean = μ_rep + μ_rec, and an SD whose WH
+    ## median equals the reported median. Solve the SD from the WH relation.
     r = (cfg.median_obs / cfg.mean_obs)^(1 / 3)
     sd_star = 3 * cfg.mean_obs * sqrt(1 - r)          # WH-median SD at 4.8
     @test isapprox(gamma_median_wh(cfg.mean_obs, sd_star), cfg.median_obs;

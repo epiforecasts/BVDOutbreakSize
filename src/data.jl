@@ -18,42 +18,48 @@ to 1-based grid day-indices (day 1 is the seeding day, day `n` the
 cut-off) using the cut-off (`as_of_date`) and a seeding day placed
 `seeding_lead` days before the genetic TMRCA date.
 
-Returns the grid length `n`, the `cutoff` and `seeding` dates, the
+Returns the grid length `n`, the `cutoff` and `seeding` dates, and the
 per-stream cumulative totals at the cut-off (`reported_cases`,
 `total_deaths`, `confirmed_cases`, `confirmed_deaths`, `tests_analysed`,
-`exported_cases`, `exports_deaths`), the dated Uganda export series as
-grid day-indices (`export_case_days`, `export_death_days`, each a sorted
-list of detection/death days on or before the cut-off, fitted with a
-per-day Poisson likelihood), the per-vintage histories as
-`(; days, counts)` with `days` the grid day-indices (`reported_history`,
-`confirmed_history`, `confirmed_deaths_history`, `deaths_history`,
-`lab_history` from the cumulative analysed-specimen series,
-`lab_daily_history` from the post-cutoff 24h analysed counts on the
-trusted post-cutoff days, `suspected_daily_history` from the post-cutoff
-daily new-suspect inflow ("nouveaux cas suspects du jour"),
-`suspected_daily_deaths_history` from the post-cutoff daily new suspected
-deaths ("cas suspects du jour N (M deces)", the deaths analogue),
-`isolation_history` from the post-cutoff daily isolation/hospitalisation
-occupancy ("Patients en isolement", a daily bed count fitted by the
-length-of-stay submodel), `bed_capacity_history` from the implied bed
-capacity (occupancy / reported occupancy rate),
-`recovered_history` from the cumulative recovered-among-confirmed series
-("cumul guéris"),
-`treatment_confirmed_incare_history` and `treatment_suspect_incare_history`
-from the Tableau 6 occupancy split (`dont confirmes (NC+AC)` and `dont
-suspects`, two prevalence sub-stocks that sum to the total occupancy),
-`tests_received_history`), the digitised symptom-onset reporting-triangle
-increments `onset_curve_history` (from `data/onset_curve_scanned.csv`,
-alongside `path`; see [`load_onset_curve`](@ref) for the dedup, cut-off
-filtering and increment construction) together with the same triangle's
-per-vintage cumulative confirmed-by-onset total as `onset_report_history`
-in the usual `(; days, counts)` shape,
-the genetic TMRCA bound `tmrca_days` (days before the cut-off), and
-`who_first_sitrep_days` (days from the first situation report, the
-earliest reported-case vintage, to the cut-off). The intervention
-breakpoint grid day is `n - who_first_sitrep_days`. A cut-off scalar with
-no explicit TOML block is derived from the final vintage of the matching
-history.
+`exported_cases`, `exports_deaths`).
+
+The dated Uganda export series are grid day-indices (`export_case_days`,
+`export_death_days`), each a sorted list of detection/death days on or
+before the cut-off, fitted with a per-day Poisson likelihood.
+
+The per-vintage histories are returned as `(; days, counts)` with `days`
+the grid day-indices: `reported_history`, `confirmed_history`,
+`confirmed_deaths_history`, `deaths_history`, `lab_history` (the
+cumulative analysed-specimen series), `lab_daily_history` (post-cutoff
+24h analysed counts on the trusted post-cutoff days),
+`suspected_daily_history` (post-cutoff daily new-suspect inflow,
+"nouveaux cas suspects du jour"), `suspected_daily_deaths_history`
+(post-cutoff daily new suspected deaths, "cas suspects du jour N (M
+deces)", the deaths analogue), `isolation_history` (post-cutoff daily
+isolation/hospitalisation occupancy, "Patients en isolement", a daily
+bed count fitted by the length-of-stay submodel), `bed_capacity_history`
+(the implied bed capacity, occupancy / reported occupancy rate),
+`recovered_history` (the cumulative recovered-among-confirmed series,
+"cumul guéris"), `treatment_confirmed_incare_history` and
+`treatment_suspect_incare_history` (the Tableau 6 occupancy split, `dont
+confirmes (NC+AC)` and `dont suspects`, two prevalence sub-stocks that
+sum to the total occupancy), and `tests_received_history`.
+
+The digitised symptom-onset reporting triangle is returned as
+`onset_curve_history`, the per-vintage increments read from
+`data/onset_curve_scanned.csv` alongside `path`.
+See [`load_onset_curve`](@ref) for the dedup, cut-off filtering and
+increment construction.
+The same triangle's per-vintage cumulative confirmed-by-onset total is
+returned as `onset_report_history`, in the usual `(; days, counts)`
+shape.
+
+Also returned: the genetic TMRCA bound `tmrca_days` (days before the
+cut-off), and `who_first_sitrep_days` (days from the first situation
+report, the earliest reported-case vintage, to the cut-off). The
+intervention breakpoint grid day is `n - who_first_sitrep_days`. A
+cut-off scalar with no explicit TOML block is derived from the final
+vintage of the matching history.
 """
 function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
@@ -63,7 +69,7 @@ function load_observations(
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
     ## The cut-off is the manifest `as_of_date` unless an earlier
-    ## `cutoff_date` is supplied (used to FREEZE the data to a past
+    ## `cutoff_date` is supplied (used to freeze the data to a past
     ## date, see `freeze_observations`). Freezing only ever moves the
     ## cut-off earlier and never invents vintages, so the grid stays
     ## date-aligned with the full-data fit.
@@ -107,7 +113,7 @@ function load_observations(
 
     ## Dated Uganda export-case detection days and export-death days
     ## (1-based grid indices). Each detection/death contributes one Poisson
-    ## term at its day; days carry the per-day expected export count
+    ## term at its day. Days carry the per-day expected export count
     ## differenced from the at-risk export person-time (see `exports_model`).
     export_case_days = event_days("export_case_dates")
     export_death_days = event_days("export_death_dates")
@@ -116,8 +122,9 @@ function load_observations(
     ## days on which the treatment-flow model fits a level step into the
     ## modelled occupancy mean, absorbing a between-report measurement-basis
     ## discontinuity in the observed isolation series (e.g. a Tableau 6-sum →
-    ## page-1 headline transition) without bending Rt. A dated list filtered to
-    ## the cut-off like the histories; absent or empty → no break days, a no-op.
+    ## page-1 headline transition) without bending Rt. A dated list filtered
+    ## to the cut-off like the histories. Absent or empty → no break days, a
+    ## no-op.
     occupancy_break_days = event_days("occupancy_break_dates")
 
     ## Manually specified retrospective harmonisation-break days (opt-in) for
@@ -128,10 +135,10 @@ function load_observations(
     ## are not same-day positives) and fit a level step into the modelled
     ## confirmed mean, so the increment likelihood does not read the backlog as
     ## one day of incidence. A dated list filtered to the cut-off like the
-    ## histories; absent or empty → no break days, a no-op. See issue #484.
+    ## histories. Absent or empty → no break days, a no-op.
     ## The grid days are returned sorted while the TOML arrays keep the order
     ## they are written in, so the cut-off filter and the sort permutation are
-    ## built once here and shared with the gross vectors below; pairing them
+    ## built once here and shared with the gross vectors below. Pairing them
     ## per-vector instead would silently mismatch an out-of-order block.
     _brk = let key = "confirmed_break_dates"
         if haskey(raw, key)
@@ -150,16 +157,16 @@ function load_observations(
     ## failure below names the date the user wrote rather than a grid index.
     confirmed_break_date_labels = String.(_brk.ds[_brk.keep])[_brk.ord]
 
-    ## The PRINTED 24h new-confirmed counts on each break day, which make the
-    ## step data-derived rather than a guessed prior width: the submodels
+    ## The printed 24h new-confirmed counts on each break day, which make the
+    ## step data-derived rather than a guessed prior width. The submodels
     ## centre each step on `observed increment − gross`, the part of the
     ## vintage step the report itself attributes to base integration rather
     ## than to the day's notifications. Filtered and permuted with the dates so
     ## the three stay aligned. Absent counts default to zeros, which makes each
-    ## centre the WHOLE increment rather than anything neutral: the entire step
-    ## is then attributed to the artefact. That errs towards artefact rather
-    ## than towards incidence, which is the safe direction for a de-anchored
-    ## day (see `break_step_centres`).
+    ## centre the whole increment rather than anything neutral. The entire
+    ## step is then attributed to the artefact. That errs towards artefact
+    ## rather than towards incidence, which is the safe direction for a
+    ## de-anchored day (see `break_step_centres`).
     function break_gross(key)
         _brk.blk === nothing && return Int[]
         haskey(_brk.blk, key) || return zeros(Int, length(_brk.ord))
@@ -186,13 +193,13 @@ function load_observations(
     ## Two configurations are refused, both of which are silent today.
     ##
     ## 1. `gross >= increment`. A day whose printed 24h count already covers its
-    ##    whole vintage step is a provincial TRANSFER, not a base integration.
+    ##    whole vintage step is a provincial transfer, not a base integration.
     ##    The diagnostic is the direction: an integration reattaches cases and
-    ##    deaths and so ADDS to both, while a transfer moves both DOWN (SitRep
-    ##    065, 18 July 2026, is the worked example — +83 gross against +77 net
+    ##    deaths and so adds to both, while a transfer moves both down (SitRep
+    ##    065, 18 July 2026, is the worked example: +83 gross against +77 net
     ##    cases and +40 against +37 net deaths, as Haut-Uele's cumulative was
     ##    revised down to 16 cases and 10 deaths). Listing such a day is harmful
-    ##    rather than merely useless: `confirmed_cases_model` DE-ANCHORS a listed
+    ##    rather than merely useless: `confirmed_cases_model` de-anchors a listed
     ##    day from the laboratory positivity denominator, so it loses its
     ##    `BetaBinomial` term while the step that should absorb the backlog is
     ##    centred at or below zero. Measured on `confirmed_only_model`
@@ -202,8 +209,8 @@ function load_observations(
     ##    books the artefact as incidence. Pinning the step at a published
     ##    discrepancy instead restores 22 divergences and 477 ESS.
     ##
-    ## 2. A date matching NO vintage in the history. It does nothing at all: no
-    ##    step, no de-anchor, no error, and the `gross` bar above cannot fire
+    ## 2. A date matching no vintage in the history. It does nothing at all: no
+    ##    step, no de-anchor, no error, and the `gross` check above cannot fire
     ##    because there is no increment to compare. A transposed digit or wrong
     ##    month therefore presents as silence while the user believes a
     ##    harmonisation is being absorbed.
@@ -233,10 +240,11 @@ function load_observations(
                 error("confirmed_break_dates: $date has a printed 24h $label " *
                       "count of $g against a net vintage increment of " *
                       "$(inc[pos]), so the gross does not sit below the net. " *
-                      "That is a provincial TRANSFER, not a base integration: " *
-                      "an integration reattaches records and so ADDS to cases " *
-                      "and deaths together, whereas a transfer moves both " *
-                      "DOWN (SitRep 065, 18 July 2026: +83 gross vs +77 net " *
+                      "That is a provincial transfer, not a base " *
+                      "integration. An integration reattaches records and " *
+                      "so adds to cases and deaths together, whereas a " *
+                      "transfer moves both down (SitRep 065, 18 July " *
+                      "2026: +83 gross vs +77 net " *
                       "cases and +40 vs +37 net deaths). Listing it de-anchors " *
                       "the positivity denominator with no backlog to absorb, " *
                       "which measured 94 divergences and a min bulk ESS of 15 " *
@@ -257,12 +265,12 @@ function load_observations(
     check_break_gross(confirmed_break_gross_cases, confirmed_history, "cases")
     check_break_gross(confirmed_break_gross_deaths, confirmed_deaths_history,
         "deaths")
-    ## The analysed-specimen series is the laboratory denominator; the
+    ## The analysed-specimen series is the laboratory denominator. The
     ## received series is recorded for the pipeline view but not fitted.
     lab_history = history("tests_analysed_history")
     tests_received_history = history("tests_received_history")
     ## Post-cutoff 24h analysed counts (daily increments, not cumulative)
-    ## on the trusted post-cutoff days; the confirmed model pairs each with
+    ## on the trusted post-cutoff days: the confirmed model pairs each with
     ## that day's confirmed increment as a Binomial-denominator window.
     lab_daily_history = history("tests_analysed_daily_history")
     ## Post-cutoff daily new-suspect inflow ("nouveaux cas suspects du jour"):
@@ -280,11 +288,10 @@ function load_observations(
     ## isolement"): a per-day count of patients in an isolation/treatment bed,
     ## fitted against the modelled bed count on each report day by the
     ## length-of-stay observation submodel. Begins 1 June where the
-    ## all-patients column
-    ## definition is stable (see the manifest note).
+    ## all-patients column definition is stable (see the manifest note).
     isolation_history = history("isolation_history")
     ## Implied isolation/treatment-bed capacity (occupancy / reported
-    ## occupancy rate) on the days a rate is published; fitted by the
+    ## occupancy rate) on the days a rate is published: fitted by the
     ## isolation submodel as noisy observations of the national bed capacity
     ## the latent bed demand saturates against.
     bed_capacity_history = history("bed_capacity_history")
@@ -299,7 +306,7 @@ function load_observations(
     ## "Mouvement des patients", national): per-day counts (not cumulative) of
     ## admissions, in-care deaths (suspects + confirmed), rule-out discharges
     ## (non-cas) and absconded patients. Optional refinements of the
-    ## treatment-flow submodel over their 13-22 June overlap; the longer
+    ## treatment-flow submodel over their 13-22 June overlap. The longer
     ## occupancy / recovered / capacity stock streams carry the earlier window.
     ## An absent block loads empty and is a no-op in the model.
     treatment_admissions_history = history("treatment_admissions_history")
@@ -321,8 +328,8 @@ function load_observations(
     ## class of patient occupying a bed at end-of-day, and the two sum to the
     ## total occupancy (= `isolation_history`) exactly. On the days they are
     ## present the treatment-flow submodel scores the two sub-stocks in place of
-    ## the total occupancy (a per-day total-OR-split switch); an absent or empty
-    ## block falls back to the total-occupancy likelihood and is a no-op.
+    ## the total occupancy (a per-day total-or-split switch). An absent or
+    ## empty block falls back to the total-occupancy likelihood and is a no-op.
     treatment_confirmed_incare_history = history("treatment_confirmed_incare_history")
     treatment_suspect_incare_history = history("treatment_suspect_incare_history")
     ## Digitised symptom-onset reporting-triangle increments, from a sibling
@@ -348,7 +355,7 @@ function load_observations(
     frozen = !isnothing(cutoff_date)
     _scalar(k, h) = (frozen || !haskey(raw, k)) ? _hist_end(h) : Int(_val(k))
     ## The first WHO joint situation report is the earliest reported-case
-    ## vintage; days from it to the cut-off set the intervention breakpoint.
+    ## vintage. Days from it to the cut-off set the intervention breakpoint.
     who_first_sitrep_days = isempty(reported_history.days) ? n :
                             n - reported_history.days[1] + 1
 
@@ -408,7 +415,7 @@ end
 """
     freeze_observations(cutoff_date; path = default manifest)
 
-Load the observation manifest FROZEN to `cutoff_date`: the cut-off is
+Load the observation manifest frozen to `cutoff_date`: the cut-off is
 moved to `cutoff_date` and every dated history is truncated to the
 vintages available by then, so the returned named tuple is what the
 renewal model would have seen on that date. The cut-off scalar totals
@@ -420,7 +427,7 @@ like-for-like, matched-in-time comparison.
 
 `cutoff_date` accepts a `Date` or an ISO date string. It must be on or
 after the earliest history vintage in the manifest (the renewal DRC
-series begins 18 May 2026); an earlier date leaves the suspected
+series begins 18 May 2026). An earlier date leaves the suspected
 streams empty and is not a meaningful renewal fit.
 """
 function freeze_observations(
@@ -447,8 +454,8 @@ The base is McCabe et al.'s first report (18 May 2026; Method 2 central
 501 cases ⇒ `m ≈ 9`), advancing at the outbreak-specific doubling time
 (`M_PRIOR_DOUBLING_DAYS`, the BEAST X estimate of mbalaplacide2026,
 mean 11.7 d), so the prior stays centred on the plausible outbreak
-size as the cut-off moves. `C_T = 2^m` is the cumulative *infection*
-count; 9 is a weakly-informative centre of the same order. Passed into
+size as the cut-off moves. `C_T = 2^m` is the cumulative infection
+count. 9 is a weakly-informative centre of the same order. Passed into
 [`exponential_growth_model`](@ref) as the centre of the wide `m` prior.
 """
 function m_prior_centre(as_of_date::Union{Date, AbstractString};

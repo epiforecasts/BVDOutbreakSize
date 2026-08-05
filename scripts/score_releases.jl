@@ -32,7 +32,7 @@
 # A forecast archive (see `forecast_archive` in `src/forecast.jl`) has one
 # row per (made_date, horizon, target_date, stream, draw, fit): the
 # forecast draws for the incident "confirmed cases", "confirmed deaths",
-# "recovered" and "onset reports" streams and the LEVEL "isolation beds"
+# "recovered" and "onset reports" streams and the level "isolation beds"
 # stream. "onset reports" is the new reported count the digitised
 # symptom-onset triangle adds over the horizon; only releases from the one
 # that first carried it can be scored on it, and no earlier release can be
@@ -51,7 +51,7 @@
 # `observations.toml` vintage, frozen no later than each group's own
 # made_date (`vintage_observations`), not from the current, possibly
 # later-revised manifest, so a correction or backfill that landed after
-# the RELEASE's own cut-off cannot leak into its baseline (a residual gap
+# the release's own cut-off cannot leak into its baseline (a residual gap
 # remains for the frozen archive, where made_date can sit weeks before the
 # release's own cut-off; see the driver's `tag_obs_path` comment). A
 # stream no individual
@@ -118,12 +118,12 @@ const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
 
 ## Release tags whose forecast is excluded from scoring because the
-## RECONSTRUCTION failed, not because the model performed badly: a chain
+## reconstruction failed, not because the model performed badly: a chain
 ## that did not sample properly rather than a genuine forecast. Keyed on
 ## the release tag itself (before the "(backfill)" label is applied), each
 ## value names the signature that identifies it as a failed reconstruction,
 ## kept here rather than in a comment so it prints in the run log. Only the
-## FORECAST is skipped for a listed tag; its `posterior_draws.csv` (the R_T
+## forecast is skipped for a listed tag; its `posterior_draws.csv` (the R_T
 ## and R0 summaries) is a separate, unaffected asset from the real release
 ## and is still scored normally.
 const _FAILED_RECONSTRUCTIONS = Dict(
@@ -272,13 +272,13 @@ function release_cutoff(obs_path)
 end
 
 # ----------------------------------------------------------------------
-# Truth lookup against the CURRENT observations
+# Truth lookup against the current observations
 # ----------------------------------------------------------------------
 
 ## The forecast streams the archive writes, mapped to the observed history
 ## each is scored against (a `(; days, counts)` field on `obs`) and whether
-## it is an INCIDENT quantity (the new count over the horizon window ending
-## at `target_date`) or a LEVEL quantity (isolation beds occupancy AT
+## it is an incident quantity (the new count over the horizon window ending
+## at `target_date`) or a level quantity (isolation beds occupancy at
 ## `target_date`). The single-stream fits forecast six labels: the four
 ## here plus "reported cases" (the cases fit) and "suspected deaths" (the
 ## deaths fit), scored on the same incident basis as "confirmed cases".
@@ -470,7 +470,7 @@ function break_correction(obs, grid_date, stream, from_date, to_date)
 end
 
 ## Observed truth for one (stream, made_date, target_date) forecast group
-## against the CURRENT `obs`, or a `Symbol` naming why the group is not
+## against the current `obs`, or a `Symbol` naming why the group is not
 ## scorable: `:not_yet_observed` when `target_date` is beyond the current
 ## data cut-off, `:stopped_reporting` when it is beyond the stream's own
 ## coverage (see `stream_coverage_end`), so an unmoved cumulative total is
@@ -542,10 +542,10 @@ end
 ## count of several hundred (which makes the baseline a near-point forecast
 ## and any skill ratio against it explode).
 ##
-## The centre is unchanged: for an INCIDENT stream, the observed count over
-## the horizon-length window ENDING at `made_date`; for the LEVEL stream
+## The centre is unchanged: for an incident stream, the observed count over
+## the horizon-length window ending at `made_date`; for the level stream
 ## ("isolation beds"), the last observed occupancy at or before
-## `made_date`. `obs` must reflect only data available AT `made_date` — the
+## `made_date`. `obs` must reflect only data available at `made_date` — the
 ## caller is responsible for passing a `made_date`-vintage manifest (see
 ## `vintage_observations`), not the current, possibly later-revised one, so
 ## the baseline never sees a correction that landed after the forecast was
@@ -557,7 +557,7 @@ end
 ##
 ## The spread simulates the walk explicitly: each of the stream's past
 ## first differences (see `_history_diffs`), a `window`-day change, is
-## converted to a ONE-DAY step by `value / sqrt(window)` rather than
+## converted to a one-day step by `value / sqrt(window)` rather than
 ## `value / window`. Under a zero-drift random walk a `window`-day change
 ## has variance `window * sigma^2` for the walk's own one-day variance
 ## `sigma^2`, so dividing by `sqrt(window)` (not `window`) is what recovers
@@ -577,11 +577,11 @@ end
 ##
 ## Centre-versus-Hub check: `COVIDhub-baseline` centres each target on the
 ## single most recent observation; this baseline instead centres an
-## INCIDENT stream on the observed count over the whole horizon-length
+## incident stream on the observed count over the whole horizon-length
 ## window ending at `made_date`, since the streams here are noisy, sparse
 ## cumulative counts (a handful of vintages, days apart) rather than a
 ## dense daily series, so "yesterday's single value" would be a much
-## noisier centre than the last `horizon` days pooled. The LEVEL stream
+## noisier centre than the last `horizon` days pooled. The level stream
 ## (isolation beds) already centres on the single last observed occupancy,
 ## matching the Hub convention directly. Both centres were left as
 ## pre-existing; only the spread changed here.
@@ -689,7 +689,7 @@ const _VINTAGE_CACHE = Dict{Tuple{String, Date}, Any}()
 ## otherwise leak information the forecast itself never had.
 ##
 ## `obs_path === nothing` falls back to the given `obs`/`grid_date` (the
-## CURRENT manifest) unchanged, e.g. from a test's synthetic `obs` NamedTuple
+## current manifest) unchanged, e.g. from a test's synthetic `obs` NamedTuple
 ## that carries no manifest file to load, or a caller that has no per-release
 ## snapshot available.
 ##
@@ -715,7 +715,7 @@ function vintage_observations(obs_path, made_date, obs, grid_date)
 end
 
 ## Score every (made_date, horizon, target_date, stream, fit) group in a
-## release's forecast archive against `obs` (the CURRENT observations),
+## release's forecast archive against `obs` (the current observations),
 ## returning one row per group plus one persistence-baseline row per
 ## (made_date, horizon, target_date, stream), tagged `fit = "baseline"`.
 ##
@@ -729,11 +729,11 @@ end
 ## with `default_fit = "frozen"`.
 ##
 ## `vintage_obs_path`, when given, is the release's own `observations.toml`
-## snapshot: the persistence baseline is built from THAT manifest, frozen no
+## snapshot: the persistence baseline is built from that manifest, frozen no
 ## later than each group's own `made_date` (see `vintage_observations`),
 ## rather than from `obs`, so a revision or backfill that landed after
 ## `made_date` cannot leak into the baseline. `obs`/`grid_date` are still used
-## for the TRUTH every fit (including the baseline) is scored against, which
+## for the truth every fit (including the baseline) is scored against, which
 ## is correctly the now-observed data regardless.
 ##
 ## Groups whose `target_date` is not yet observed are skipped (counted in
@@ -826,7 +826,7 @@ end
 
 ## The per-row relative skill against the persistence baseline, on the
 ## log-CRPS scale (`log_crps`, CRPS of `log1p`-transformed draws), for every
-## row of a scored table, relative to other fits of the SAME (release,
+## row of a scored table, relative to other fits of the same (release,
 ## made_date, stream, horizon) group: a fit's `log_crps` over its stream's
 ## persistence-baseline `log_crps` in the group. Below 1 beats the baseline.
 ## The baseline row itself is `1.0`. Every scorable stream carries a
@@ -983,7 +983,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     entries = results_release_entries(repo)
     isempty(entries) && error("no releases found for $repo")
 
-    ## The CURRENT observations manifest is the now-observed truth every
+    ## The current observations manifest is the now-observed truth every
     ## release's forecast is scored against.
     obs = load_observations()
     grid_date(day) = obs.cutoff - Day(obs.n - day)
@@ -1078,10 +1078,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## rather than left a silent fallback, since this release was
         ## already selected to be scored.
         ##
-        ## This snapshot is the release's OWN cut-off, not `made_date`'s: for
+        ## This snapshot is the release's own cut-off, not `made_date`'s: for
         ## the ordinary (non-frozen) scoring below `made_date` sits at or
         ## near the release's own cut-off, so the two are close together, but
-        ## for the FROZEN scoring further down `made_date` is a fixed
+        ## for the frozen scoring further down `made_date` is a fixed
         ## historical cut-off (e.g. 20 May) reused across many later release
         ## tags, so it can sit weeks before the snapshot used. `cutoff_date`
         ## in `vintage_observations`/`load_observations` only excludes
@@ -1091,14 +1091,14 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## release's own cut-off. This residual risk is not closed here — it
         ## would need a `made_date`-specific manifest snapshot per frozen
         ## cut-off, which is not archived — so the frozen baseline is honest
-        ## about revisions that land after the RELEASE's cut-off but can
+        ## about revisions that land after the release's cut-off but can
         ## still see one that lands between `made_date` and that cut-off.
         tag_obs_path = let p = joinpath(tagdir(tag), OBS_ASSET)
             isfile(p) ? p : nothing
         end
         isnothing(tag_obs_path) && @warn string(
             tag, ": no observations.toml on disk for this release; its ",
-            "baseline falls back to the CURRENT manifest and can leak a ",
+            "baseline falls back to the current manifest and can leak a ",
             "later revision or backfill into its persistence baseline")
 
         ## A saved forecast wins; a reconstruction stands in only where the
@@ -1343,7 +1343,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
 
     ## The frozen scores get the same relative-skill column, computed
-    ## against their OWN baseline within the frozen made-dates: the frozen
+    ## against their own baseline within the frozen made-dates: the frozen
     ## fit's `log_crps` over its persistence baseline's.
     frozen_scores = _score_frame(frozen_score_rows)
     frozen_base = rel_to_baseline_columns(frozen_scores)

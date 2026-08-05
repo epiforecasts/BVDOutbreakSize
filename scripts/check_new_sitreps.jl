@@ -1,6 +1,6 @@
 #!/usr/bin/env julia
 #
-# Report how many INSP situation reports we have NOT yet recorded.
+# Report how many INSP situation reports we have not yet recorded.
 #
 # The DRC INSP publishes each MVE-17 SitRep at
 # https://insp.cd/ebola-17eme-epidemie/ (posts under the `sitrep`

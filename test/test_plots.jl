@@ -8,7 +8,9 @@
     CairoMakie.activate!(type = "png")
 end
 
-@testitem "plot_cumulative_cases returns a figure-grid" setup=[HeadlessMakie] begin
+@testitem "plot_cumulative_cases returns a figure-grid" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_cumulative_cases
     rng = MersenneTwister(4)
@@ -20,7 +22,9 @@ end
     @test fg.figure isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_density_overlay returns a figure-grid" setup=[HeadlessMakie] begin
+@testitem "plot_density_overlay returns a figure-grid" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_density_overlay
     rng = MersenneTwister(14)
@@ -32,7 +36,9 @@ end
     @test fg.figure isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_posterior_predictive returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_posterior_predictive
     rng = MersenneTwister(5)
@@ -42,7 +48,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive lays out four streams" setup=[HeadlessMakie] begin
+@testitem "plot_posterior_predictive lays out four streams" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_posterior_predictive
     rng = MersenneTwister(15)
@@ -55,7 +63,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_prior_predictive returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_prior_predictive returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_prior_predictive
     rng = MersenneTwister(6)
@@ -65,7 +75,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive_grid lays out four columns" setup=[HeadlessMakie] begin
+@testitem "plot_posterior_predictive_grid lays out four columns" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize
     rng = MersenneTwister(17)
@@ -80,7 +92,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_posterior_predictive_grid floats vector draws" setup=[HeadlessMakie] begin
+@testitem "plot_posterior_predictive_grid floats vector draws" setup=[
+    HeadlessMakie
+] begin
     ## predict returns vector-valued observations (e.g. per-vintage
     ## total_deaths) as a Vector{Vector{Int}}; rendering must not throw
     ## isfinite(::Vector{Int}) under Makie 0.24 / AoG 0.12.
@@ -142,7 +156,9 @@ end
     @test obj !== nothing
 end
 
-@testitem "plot_correlation_heatmap returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_correlation_heatmap returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Distributions: Normal
     using Turing: @model, sample, Prior
     import FlexiChains
@@ -161,7 +177,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_stream_pairs returns a renderable object" setup=[HeadlessMakie] begin
+@testitem "plot_stream_pairs returns a renderable object" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_stream_pairs
     rng = MersenneTwister(7)
@@ -172,7 +190,9 @@ end
     @test obj !== nothing
 end
 
-@testitem "plot_estimate_comparison returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_estimate_comparison returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_estimate_comparison
     rows = [
         ("Source A", 313, 39, 870),
@@ -183,7 +203,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_estimate_evolution returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_estimate_evolution returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_estimate_evolution
     ## Each tuple is (date, median, lo30, hi30, lo60, hi60, lo90, hi90).
     rows = [
@@ -225,7 +247,9 @@ end
           CairoMakie.Makie.Figure
 end
 
-@testitem "plot_estimate_evolution widens a degenerate trajectory" setup=[HeadlessMakie] begin
+@testitem "plot_estimate_evolution widens a degenerate trajectory" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_estimate_evolution
     rows = [
         ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
@@ -267,7 +291,9 @@ end
           CairoMakie.Makie.Figure
 end
 
-@testitem "plot_evolution_by_group draws a per-group trajectory" setup=[HeadlessMakie] begin
+@testitem "plot_evolution_by_group draws a per-group trajectory" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_evolution_by_group
     joint = [
         ("2026-06-21", 1.2, 1.1, 1.3, 1.0, 1.4, 0.9, 1.6),
@@ -300,7 +326,9 @@ end
     @test !any(p -> p isa CairoMakie.Makie.Band, joint_ax.scene.plots)
 end
 
-@testitem "plot_evolution_by_group with shared_yrange=false uses per-panel limits" setup=[HeadlessMakie] begin
+@testitem "plot_evolution_by_group honours shared_yrange=false" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_evolution_by_group
 
     ## "joint" reaches far higher than "exports", the outbreak-size case where
@@ -358,12 +386,14 @@ end
     @test plot_forecast_overlay(DataFrame(rows)) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_overlay crops each panel's y-axis" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_overlay crops each panel's y-axis" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
     using Dates: Date, Day
     ## One stream and horizon, with a joint interval far wider than the
-    ## observed value or either fit's median, the case that used to squash
+    ## observed value or either fit's median, the case that can squash
     ## every series in the panel to a line near the bottom.
     md = Date(2026, 6, 21)
     rows = [
@@ -416,7 +446,9 @@ end
     @test marker_y > 0.9 * cap
 end
 
-@testitem "plot_forecast_overlay tick density scales with made dates" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_overlay tick density scales with made dates" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_forecast_overlay
     using DataFrames: DataFrame
     using Dates: Date, Day
@@ -450,7 +482,9 @@ end
     @test nticks < length(longer)
 end
 
-@testitem "plot_forecast_overlay draws a frozen fit as joint" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_overlay draws a frozen fit as joint" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_forecast_overlay, FROZEN_FIT, BASELINE_FIT
     using DataFrames: DataFrame
     using Dates: Date, Day
@@ -480,7 +514,9 @@ end
     @test !any(s -> s.color[] == individual_colour, scatters)
 end
 
-@testitem "plot_forecast_relative_skill empty and filled" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_relative_skill empty and filled" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_forecast_relative_skill
     using DataFrames: DataFrame
 
@@ -516,7 +552,9 @@ end
         value_col = :log_rel_to_baseline) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_relative_skill draws a frozen fit as joint" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_forecast_relative_skill, FROZEN_FIT
     using DataFrames: DataFrame
 
@@ -531,7 +569,9 @@ end
     @test labels == ["joint"]
 end
 
-@testitem "plot_cumulative_trajectories returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_cumulative_trajectories returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
@@ -553,7 +593,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_start_date_pair returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_start_date_pair returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     import FlexiChains
     using BVDOutbreakSize: plot_start_date_pair
@@ -570,7 +612,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_rt reconstructs and returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_rt reconstructs and returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
@@ -588,8 +632,8 @@ end
                 log.(1.0 .+ abs.(randn(rng, ndraws))), ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.sigma_rw")) => reshape(
                 abs.(randn(rng, ndraws)) .* 0.02, ndraws, 1),
-            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) => reshape(
-                -abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
+            FlexiChains.Parameter(Symbol("rt_state.intervention_effect")) =>
+                reshape(-abs.(randn(rng, ndraws)) .* 0.3, ndraws, 1),
             FlexiChains.Parameter(Symbol("rt_state.z")) => zcol,
             FlexiChains.Parameter(:T) =>
                 reshape(abs.(randn(rng, ndraws)) .* 10 .+ 40, ndraws, 1)))
@@ -599,7 +643,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_rt_streams overlays streams and joint" setup=[HeadlessMakie] begin
+@testitem "plot_rt_streams overlays streams and joint" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using Dates: Date
     import FlexiChains
@@ -641,7 +687,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_conditional_ppc returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(21)
@@ -659,11 +707,13 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_conditional_ppc draws a daily (non-cumulative) panel" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_conditional_ppc draws a non-cumulative panel" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_conditional_ppc
     rng = MersenneTwister(22)
-    ## The daily new-suspect inflow: per-day counts, NOT cumulated. With
+    ## The daily new-suspect inflow: per-day counts, not cumulated. With
     ## `cumulative = false` the observed are the raw daily counts and each
     ## replicate is its own daily count (no running baseline).
     dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
@@ -676,7 +726,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_vintage_incidence_ppc returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using BVDOutbreakSize: plot_vintage_incidence_ppc
     rng = MersenneTwister(23)
@@ -705,7 +757,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_no_onward_deaths returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_no_onward_deaths returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_no_onward_deaths
@@ -744,8 +798,9 @@ end
     fig = plot_forecast(fc)
     @test fig isa CairoMakie.Makie.Figure
     @test naxes(fig) == 5
-    ## A single-stream fit that carries only the confirmed columns still draws
-    ## just those two panels (backward-compatible with the confirmed-only frame).
+    ## A single-stream fit that carries only the confirmed columns still
+    ## draws just those two panels (backward-compatible with the
+    ## confirmed-only frame).
     fc_conf = DataFrame(
         confirmed_new = rand(rng, 0:15, n),
         confirmed_deaths_new = rand(rng, 0:5, n)
@@ -760,7 +815,9 @@ end
     @test naxes(fig_empty) == 0
 end
 
-@testitem "plot_forecast_beds returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_beds returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast_beds
@@ -775,7 +832,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_beds_vs_truth scores beds against observed" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_beds_vs_truth scores beds against observed" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast_beds_vs_truth
@@ -800,7 +859,9 @@ end
         individual = Float64[]) isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_latent returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_latent returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast_latent
@@ -816,7 +877,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast_vs_truth_latent
@@ -835,7 +898,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_forecast_vs_truth returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_forecast_vs_truth returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using Random: MersenneTwister
     using DataFrames: DataFrame
     using BVDOutbreakSize: plot_forecast_vs_truth
@@ -918,11 +983,14 @@ end
     @test naxes(fig7) == 2
 end
 
-@testitem "plot_projection_comparison returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_projection_comparison returns a Makie figure" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_projection_comparison, CHAMLA_CONFIRMED_CENTRAL
     ## External projection from the packaged Chamla central trajectory; our
-    ## projection as a dated fan (ribbon) including a zero-width anchor; observed
-    ## a dated value series, all with dates out of order to exercise sorting.
+    ## projection as a dated fan (ribbon) including a zero-width anchor;
+    ## observed a dated value series, all with dates out of order to
+    ## exercise sorting.
     ours = [("2026-06-24", 1200, 800, 1700), ("2026-05-27", 250, 250, 250),
         ("2026-06-10", 700, 500, 950), ("2026-06-03", 430, 330, 560),
         ("2026-06-17", 930, 660, 1300)]
@@ -934,7 +1002,9 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
-@testitem "plot_scenario_comparison facets the published scenarios" setup=[HeadlessMakie] begin
+@testitem "plot_scenario_comparison facets the published scenarios" setup=[
+    HeadlessMakie
+] begin
     using BVDOutbreakSize: plot_scenario_comparison, REPORT_SCENARIOS_CI
     ## The real scenario set exercises the parser, the dodge of the swept level,
     ## and the geographic/back-calc block layout (18 May has no geographic row).

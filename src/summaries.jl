@@ -20,7 +20,7 @@ function posterior_summary(xs)
 end
 
 ## Human-readable headers for the displayed summary tables. Internal
-## column keys stay machine-friendly; this maps them to nice labels at
+## column keys stay machine-friendly. This maps them to nice labels at
 ## the point each table is returned.
 const _PRETTY_COLS = Dict(
     "quantity" => "Quantity",
@@ -50,7 +50,7 @@ Upper 90%` giving the lower and upper endpoints of the equal-tailed
 
 `labels` is an optional map from the raw chain symbol to a clean display
 name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
-`Quantity` column only; the model's variable names are unchanged. Symbols
+`Quantity` column only. The model's variable names are unchanged. Symbols
 absent from the map keep their raw name.
 """
 function summary_table(chn, params::AbstractVector{Symbol};
@@ -107,13 +107,13 @@ end
 # early cryptic-phase entries are near-degenerate deterministic functions
 # of the seed, so their R-hat / ESS would dominate the headline fit
 # summary without reflecting genuine sampler mixing. Excluded from the
-# convergence pool; the sampled vectors (random-walk innovations) stay in.
+# convergence pool. The sampled vectors (random-walk innovations) stay in.
 const _DIAGNOSTIC_EXCLUDE = (
     "cumulative_infections", "cumulative_onsets", "cumulative_expected_deaths")
 
 # Flat vector of a scalar diagnostic (R-hat or ESS), one entry per scalar
-# parameter in a FlexiChains summary; vector-valued sampled parameters
-# contribute one entry per element. Excluded derived trajectories skipped.
+# parameter in a FlexiChains summary. Vector-valued sampled parameters
+# contribute one entry per element. Trajectories in `exclude` are skipped.
 function _scalar_stats(summary; exclude = _DIAGNOSTIC_EXCLUDE)
     out = Float64[]
     for p in FlexiChains.parameters(summary)
@@ -310,12 +310,12 @@ stream the conditional predictive at every vintage is scored against the
 observed count, and the per-vintage scores are averaged into one row.
 
 Columns: `stream`, the number of scored vintages `n`, the mean forecast
-`bias` (see [`bias_sample`](@ref); negative = the stream is under-predicted,
-positive = over-predicted), and the empirical `coverage_50`/`coverage_90`
-— the fraction of vintages whose observed count falls inside the central
-50% and 90% predictive intervals. A well-calibrated stream has bias near
-zero and coverage near its nominal level; departures flag the streams the
-joint fit reproduces less well.
+`bias` (see [`bias_sample`](@ref): negative means the stream is
+under-predicted, positive means over-predicted), and the empirical
+`coverage_50`/`coverage_90`: the fraction of vintages whose observed count
+falls inside the central 50% and 90% predictive intervals. A well-calibrated
+stream has bias near zero and coverage near its nominal level. Departures
+flag the streams the joint fit reproduces less well.
 """
 function stream_calibration(panels::AbstractVector)
     rows = map(panels) do panel

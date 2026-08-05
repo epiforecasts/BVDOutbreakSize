@@ -62,11 +62,11 @@ end
 Modelled between-vintage increments of a daily series `daily`, summed
 directly into the bins delimited by the vintage day indices `days` (1-based
 into the grid, ascending). The first increment is the cumulative count up
-to the first vintage day (`sum(daily[1:days[1]])`); each later increment is
+to the first vintage day (`sum(daily[1:days[1]])`). Each later increment is
 the inter-vintage sum `sum(daily[days[i-1]+1:days[i]])`, so only the first
 bin needs the cumulative. This avoids the cumulative-then-difference round
 trip — the daily series is binned once into the quantities the likelihood
-scores. Day indices are clamped to the grid. Pure and AD-transparent; the
+scores. Day indices are clamped to the grid. Pure and AD-transparent. The
 output element type follows `daily`.
 """
 function bin_increments(daily::AbstractVector,
@@ -91,15 +91,15 @@ end
 """
 Zero a daily series `v` before grid day `start` (1-based), modelling a
 process that did not exist before `start`. Used to gate the laboratory
-analysed-specimen CAPACITY before testing began: no specimens are analysed
-before the testing system exists, so the modelled analysed volume (and the
-confirmed counts derived from it) must not accrue over the pre-surveillance
-cryptic phase. The suspected-case and suspected-death streams are NOT gated —
-those counts did accumulate over the cryptic phase, so their first per-vintage
-bin legitimately rolls from grid day 1. `start ≤ 1` returns `v` unchanged.
-Pure and AD-transparent; the element type follows `v`. Callers concretise any
-`Vector{Any}` (predict mode) before gating, so `zero(eltype(v))` is well
-defined.
+analysed-specimen capacity before testing began: no specimens are
+analysed before the testing system exists, so the modelled analysed
+volume (and the confirmed counts derived from it) must not accrue over
+the pre-surveillance cryptic phase. The suspected-case and suspected-death
+streams are not gated: those counts did accumulate over the cryptic
+phase, so their first per-vintage bin legitimately rolls from grid day 1.
+`start ≤ 1` returns `v` unchanged. Pure and AD-transparent. The element
+type follows `v`. Callers concretise any `Vector{Any}` (predict mode)
+before gating, so `zero(eltype(v))` is well defined.
 """
 function gate_before(v::AbstractVector, start::Integer)
     start <= 1 && return v
@@ -115,11 +115,11 @@ end
 Expand a per-vintage rate vector `rate` onto a length-`n` daily grid,
 assigning each day the rate of the vintage window it falls in. The
 windows are delimited by the ascending day indices `days` (1-based into
-the grid); day `t ≤ days[1]` takes `rate[1]`, a day in `(days[i-1],
+the grid). Day `t ≤ days[1]` takes `rate[1]`, a day in `(days[i-1],
 days[i]]` takes `rate[i]`, and any day beyond the last vintage takes the
 last rate (a flat carry-forward of the final window). When `days` is
 empty the whole grid takes `rate[1]` if present, else zero, so a scalar
-background is recovered. Pure and AD-transparent; the element type
+background is recovered. Pure and AD-transparent. The element type
 follows `rate`. Used to turn the per-vintage background random effect
 ([`background_re_model`](@ref)) into the additive daily background the
 suspected-case and suspected-death streams consume.
@@ -172,7 +172,7 @@ end
 Per-day Poisson likelihood for a dated event series. Scores the observed
 per-day counts `obs` against the modelled per-day means `means` with one
 Poisson term each, NaN/Inf-safe via [`safe_rate`](@ref). When `obs` is
-`missing` the counts are sampled, the predictive-generator path; the
+`missing` the counts are sampled, the predictive-generator path. The
 indexed `counts[i]` keeps the predict keys (`<prefix>.counts[i]`)
 replicable. Used by [`exports_model`](@ref) and the export-deaths
 likelihood for the dated Uganda export series.
@@ -261,7 +261,7 @@ end
 
 """
 Right-censored occupancy likelihood. Each day's observed bed count `obs[i]`
-is a NegBinomial around the latent bed DEMAND `means[i]`, right-censored at
+is a NegBinomial around the latent bed demand `means[i]`, right-censored at
 the effective capacity `ceilings[i]`: below the ceiling the count reflects
 demand directly, and once demand reaches the ceiling the count is censored
 there. Unlike a smooth saturation of the mean, the censored tail probability
@@ -287,29 +287,30 @@ end
 """
     censoring_cap(iso_days, iso_obs, capacity_history)
 
-Per-report-day right-censoring bound for the isolation-occupancy likelihood,
-built from DATA only (no sampled parameter), so the censored NegativeBinomial
-never sits against a moving `-Inf` wall. Each isolation day takes the nearest
-recorded implied-capacity value (`capacity_history`, the occupancy / reported
-occupancy-rate series), floored at that day's observed occupancy so the bound
-is never below the count (a count above the cap has zero probability under the
-censored NB, the discontinuity that drives the divergences). With the cap
-fixed, the censored likelihood is smooth in the sampled demand: below the cap
-the count identifies demand directly, and at the cap it contributes the
-one-sided `demand ≥ capacity` tail. A `capacity_history` with no counts
-(empty, or days-only as the predictive generator supplies) returns a large
-finite cap far above any bed count, so the censoring is a no-op and the
+Per-report-day right-censoring bound for the isolation-occupancy
+likelihood, built from data only (no sampled parameter), so the censored
+NegativeBinomial never sits against a moving `-Inf` wall. Each isolation
+day takes the nearest recorded implied-capacity value (`capacity_history`,
+the occupancy / reported occupancy-rate series), floored at that day's
+observed occupancy so the bound is never below the count (a count above
+the cap has zero probability under the censored NB, the discontinuity
+that drives the divergences). With the cap fixed, the censored likelihood
+is smooth in the sampled demand: below the cap the count identifies
+demand directly, and at the cap it contributes the one-sided
+`demand ≥ capacity` tail. A `capacity_history` with no counts (empty, or
+days-only as the predictive generator supplies) returns a large finite
+cap far above any bed count, so the censoring is a no-op and the
 likelihood is the plain NB (a literal `Inf` cannot be used because
-[`safe_rate`](@ref) maps non-finite values to `eps`); a `missing` `iso_obs`
-skips the occupancy floor.
+[`safe_rate`](@ref) maps non-finite values to `eps`). A `missing`
+`iso_obs` skips the occupancy floor.
 
-The latent bed demand itself is left UNCENSORED: the cap enters only as the
-observation bound, so demand above capacity is carried by the renewal /
-length-of-stay demand model and its priors, not by the bound. Demand above a
-saturated capacity is only partially identified from occupancy (occupancy can
-say "demand was at least the beds filled", not how much more), so the bed
-shortfall is a prior/model-informed quantity, not pinned by the occupancy data
-— see [`treatment_flow_model`](@ref).
+The latent bed demand itself is left uncensored: the cap enters only as
+the observation bound, so demand above capacity is carried by the
+renewal / length-of-stay demand model and its priors, not by the bound.
+Demand above a saturated capacity is only partially identified from
+occupancy (occupancy can say "demand was at least the beds filled", not
+how much more), so the bed shortfall is a prior/model-informed quantity,
+not pinned by the occupancy data. See [`treatment_flow_model`](@ref).
 """
 function censoring_cap(iso_days, iso_obs, capacity_history)
     cdays = Int.(capacity_history.days)
@@ -317,10 +318,10 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
     ## Large finite no-op cap (bed counts are in the hundreds), used when there
     ## is no recorded capacity. Not `Inf`: `safe_rate` maps non-finite to eps.
     nocap = 1.0e6
-    ## Censor only where recorded capacity COUNTS exist. The predictive
-    ## generator passes the capacity history days-only (counts emptied), so the
-    ## guard is on the counts, not the days — otherwise the nearest-day lookup
-    ## would index an empty counts vector.
+    ## Censor only where recorded capacity counts exist. The predictive
+    ## generator passes the capacity history days-only (counts emptied), so
+    ## the guard is on the counts, not the days: otherwise the nearest-day
+    ## lookup would index an empty counts vector.
     have_cap = !isempty(ccounts)
     m = length(iso_days)
     cap = Vector{Float64}(undef, m)
@@ -375,33 +376,36 @@ end
 """
     break_step_centres(window_days, increments, break_days, gross)
 
-Break days that land on a scored window, paired with the DATA-DERIVED centre
-for each one's fitted step. The centre is `observed increment − gross`: the
-part of that vintage's step the report itself attributes to integrating a
-harmonised provincial base rather than to the day's own notifications, where
-`gross` is the printed 24h new-confirmed count. On 22 July 2026 that is
-`369 − 97 = 272` cases and `236 − 62 = 174` deaths.
+Break days that land on a scored window, paired with the data-derived
+centre for each one's fitted step. The centre is
+`observed increment − gross`: the part of that vintage's step the report
+itself attributes to integrating a harmonised provincial base rather
+than to the day's own notifications, where `gross` is the printed 24h
+new-confirmed count. On 22 July 2026 that is `369 − 97 = 272` cases and
+`236 − 62 = 174` deaths.
 
 Centring on published data rather than zero is what makes the step
 identifiable: a zero-centred step with a wide prior has to discover the
-harmonisation magnitude from a single observation, whereas the report states
-it. The sampled deviation around the centre then carries only the residual
-uncertainty about how much of the discrepancy is truly retrospective.
+harmonisation magnitude from a single observation, whereas the report
+states it. The sampled deviation around the centre then carries only the
+residual uncertainty about how much of the discrepancy is truly
+retrospective.
 
-Break days not matching a window are dropped so no inert step is sampled. A
-missing/short `gross` is treated as a gross of zero, so the centre becomes the
-WHOLE increment: the entire vintage step is attributed to the artefact. That is
-the conservative fallback rather than a neutral one, and it is deliberate — the
-de-anchor drops the day's positivity denominator, and a step centred near zero
-over a de-anchored day is the pathological configuration (measured on
-`confirmed_only_model`: 94 divergences and a min bulk ESS of 15, against 20 and
-522 with no break day, because nothing absorbs the backlog and the fit books it
-as incidence). Supply the printed count so the split is data-derived; omitting
-it errs towards artefact, never towards incidence.
+Break days not matching a window are dropped so no inert step is
+sampled. A missing/short `gross` is treated as a gross of zero, so the
+centre becomes the whole increment: the entire vintage step is
+attributed to the artefact. This is a deliberately conservative fallback
+rather than a neutral one: the de-anchor drops the day's positivity
+denominator, and a step centred near zero over a de-anchored day is the
+pathological configuration (measured on `confirmed_only_model`: 94
+divergences and a min bulk ESS of 15, against 20 and 522 with no break
+day, because nothing absorbs the backlog and the fit books it as
+incidence). Supply the printed count so the split is data-derived.
+Omitting it errs towards artefact, never towards incidence.
 
-`increments` may itself be `missing`, the generator
-path where no cumulative counts are supplied to difference: the day still gets
-a step, so a predictive keeps the fitted chain's dimensions, but there is no
+`increments` may itself be `missing`, the generator path where no
+cumulative counts are supplied to difference: the day still gets a step,
+so a predictive keeps the fitted chain's dimensions, but there is no
 published discrepancy to centre it on and the centre falls back to zero.
 Returns `(days, centres)`, both possibly empty.
 """
@@ -427,13 +431,14 @@ end
 """
     confirmed_break_offset(late_days, break_days, b)
 
-Per-late-window confirmed harmonisation offset from the fitted break steps `b`
-on the manually specified `break_days` (grid day-indices). Unlike
-[`cumulative_occupancy_offset`](@ref) this is NOT cumulative: the confirmed
-likelihood fits between-vintage INCREMENTS, so a one-off retrospective base
-integration inflates exactly one increment — every later vintage differences
-against the new, higher base and is unaffected. Each entry is therefore the
-step for that window alone, zero on every non-break window.
+Per-late-window confirmed harmonisation offset from the fitted break
+steps `b` on the manually specified `break_days` (grid day-indices).
+Unlike [`cumulative_occupancy_offset`](@ref) this is not cumulative: the
+confirmed likelihood fits between-vintage increments, so a one-off
+retrospective base integration inflates exactly one increment. Every
+later vintage differences against the new, higher base and is
+unaffected. Each entry is therefore the step for that window alone, zero
+on every non-break window.
 
 Added to the modelled confirmed mean of the break window in
 [`confirmed_cases_model`](@ref) and [`confirmed_deaths_model`](@ref), so the
@@ -470,7 +475,7 @@ death history ends at the cut-off, so the cut-off total is the final
 increment and is not scored separately. Samples the onset-to-death delay,
 the CFR and the death ascertainment via injected submodels. The onset-to-
 death prior is the convolution of the two atomic line-list components
-(onset-to-admission and admission-to-death; the `bdbv-linelist-analysis`
+(onset-to-admission and admission-to-death, the `bdbv-linelist-analysis`
 submodule), implied mean ≈ 12.8 d, SD ≈ 7.0 d, the same source the integral
 model used.
 
@@ -499,7 +504,7 @@ increment) with NegativeBinomials sharing `k`. This is the deaths analogue of
 the suspected-case daily inflow ([`reported_cases_model`](@ref)): it continues
 the suspected-death signal where the cumulative `deaths_history` stops once
 INSP stopped publishing a national suspected-death total. The inflow is a
-genuine per-day count that never falls, so it fits directly; its days fall
+genuine per-day count that never falls, so it fits directly. Its days fall
 strictly after the cumulative series ends, so the two suspected-death
 likelihoods cover disjoint days. Empty by default.
 
@@ -576,9 +581,9 @@ ascertainment and the background CFR for reuse by
     ## Daily new suspected deaths ("cas suspects du jour N (M deces)"): per-day
     ## counts scored against the modelled daily suspected-death series at each
     ## report day. The mean for day `d` is the single-day `deaths_daily[d]`
-    ## (clamped into the grid), NOT a between-vintage increment — this is a
+    ## (clamped into the grid), not a between-vintage increment: this is a
     ## genuine daily count, so it never differences a falling cumulative. Empty
-    ## by default; a `missing` count vector samples (the predictive path). The
+    ## by default. A `missing` count vector samples (the predictive path). The
     ## deaths analogue of the suspected-case daily inflow.
     sdd_days = suspected_daily_deaths_history.days
     sdd_modelled = [deaths_daily[clamp(Int(d), 1, n)] for d in sdd_days]
@@ -612,16 +617,16 @@ at each report day (a single-day mean, not a between-vintage increment) with
 NegativeBinomials sharing `k`. This continues the suspected signal where the
 cumulative `reported_history` stops, once INSP began reclassifying suspects
 downward and the cumulative total fell. The inflow is a genuine per-day
-incidence that never falls, so it fits directly; it shares the suspect
+incidence that never falls, so it fits directly. It shares the suspect
 pipeline and dispersion with the cumulative stream and is empty by default.
 Its days fall strictly after the cumulative series ends, so the two suspected
 likelihoods cover disjoint days.
 
-The background and testing fraction
-are sampled by an injected [`test_positivity_model`](@ref), and the
-onset-to-report delay is injected, defaulting to a weakly-informative
-prior on the onset-to-notification delay (mean 4.5 d, SD 3.6 d),
-consistent with Ebola surveillance reporting delays.
+The background and testing fraction are sampled by an injected
+[`test_positivity_model`](@ref), and the onset-to-report delay is
+injected, defaulting to a weakly-informative prior on the
+onset-to-notification delay (mean 4.5 d, SD 3.6 d), consistent with
+Ebola surveillance reporting delays.
 
 Returns the onset-to-report PMF and the BVD onset-to-report daily series
 (unit ascertainment, no background) so [`confirmed_cases_model`](@ref) can
@@ -641,9 +646,9 @@ sitrep.
         ## line-list onset→admission delay (d_oa, ~4 d): a case enters
         ## surveillance when first formally seen, so one delay serves both the
         ## suspect-case and export streams. The line-list onset→notification
-        ## delay (~20 d) is NOT used — we assume it reflects a longer pathway
-        ## (likely confirmation and administrative processing), though what it
-        ## captures is uncertain.
+        ## delay (~20 d) is not used: it is assumed to reflect a longer
+        ## pathway (likely confirmation and administrative processing),
+        ## though what it captures is uncertain.
         onset_to_report = gamma_delay_model(cdf_nmax(Gamma(1.178, 3.694));
             alpha_prior = truncated(Normal(1.178, 0.285); lower = 0.01),
             theta_prior = truncated(Normal(3.694, 1.198); lower = 0.1)))
@@ -690,9 +695,9 @@ sitrep.
     ## Daily new-suspect inflow ("nouveaux cas suspects du jour"): per-day
     ## counts scored against the modelled daily series at each report day. The
     ## mean for day `d` is the single-day `reports_daily[d]` (clamped into the
-    ## grid), NOT a between-vintage increment — this is a genuine daily
+    ## grid), not a between-vintage increment: this is a genuine daily
     ## incidence, so it never differences a falling cumulative. Empty by
-    ## default; a `missing` count vector samples (the predictive path).
+    ## default. A `missing` count vector samples (the predictive path).
     sd_days = suspected_daily_history.days
     sd_modelled = [reports_daily[clamp(Int(d), 1, n)] for d in sd_days]
     sd_obs = isempty(suspected_daily_history.counts) ? missing :
@@ -726,7 +731,7 @@ per-window analysed counts `analysed`, positivities `p_pos` and the
 intra-window overdispersion `ρ`, scores the observed `positives` with one
 `BetaBinomial(analysed[i], p_pos[i], ρ)` per window (see
 [`safe_betabinomial`](@ref)). The overdispersion adds the extra-Binomial
-variation the confirmed counts carry; `ρ → 0` recovers the plain
+variation the confirmed counts carry. `ρ → 0` recovers the plain
 `Binomial(analysed[i], p_pos[i])`.
 `positives` is the model argument on the LHS of `~`, so a supplied vector
 is observed data DynamicPPL conditions on (mirroring
@@ -793,7 +798,7 @@ them into three non-overlapping groups so all the confirmed data is used:
 
 - *Observed* windows, where an analysed-specimen increment is available
   (the laboratory series only differences cleanly from its second vintage
-  onward; the first cumulative value is the baseline). Each window's
+  onward. The first cumulative value is the baseline). Each window's
   analysed increment is the `Binomial` denominator and the matching
   confirmed increment the positives. A zero analysed increment (the
   24-25 May analysis stall) or a window whose positives exceed its
@@ -823,7 +828,7 @@ them into three non-overlapping groups so all the confirmed data is used:
   base, so most of the confirmed increment is reattached backlog rather than
   positives out of that day's specimens, and pairing the two would score a
   wildly inflated positivity (22 July 2026: 369 of 414 analysed, 89% implied
-  against the 23% actually reported). The increment is still scored; the
+  against the 23% actually reported). The increment is still scored. The
   backlog is absorbed by a fitted level step in
   [`confirmed_cases_model`](@ref) (see [`confirmed_break_offset`](@ref)).
 
@@ -831,7 +836,7 @@ The three groups partition the confirmed counts at the first and last
 laboratory dates, so no confirmed case is counted twice. Returns
 `(; obs_days, obs_positives, obs_analysed, early_days, early_increments,
 late_days, late_increments, late_analysed, late_start)` of grid
-day-indices and per-window counts; `late_analysed[i]` is the observed 24h
+day-indices and per-window counts. `late_analysed[i]` is the observed 24h
 analysed denominator for late day `i` (0 when none was published). The
 observed and late groups are empty when no laboratory history is present
 and every confirmed vintage becomes an early window. Pure integer
@@ -853,21 +858,22 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         return i == 0 ? 0 : Int(ccounts[i])
     end
 
-    ## The first confirmed vintage is the BASELINE (the initial cumulative
-    ## level the surveillance system was at when reporting began); it is not
+    ## The first confirmed vintage is the baseline (the initial cumulative
+    ## level the surveillance system was at when reporting began). It is not
     ## scored. The vintaging "starts with the data" from there, so no window's
     ## modelled volume rolls over the pre-surveillance cryptic phase. This
     ## matches how the observed and late laboratory windows already treat their
-    ## first value as a baseline. `early_start` is that first confirmed day; the
-    ## early windows pin their modelled-volume accumulation at it.
+    ## first value as a baseline. `early_start` is that first confirmed day.
+    ## The early windows pin their modelled-volume accumulation at it.
     early_start = Int(cdays[1])
 
-    ## No laboratory denominators: every confirmed vintage AFTER the baseline is
-    ## an early window scored through the modelled laboratory volume, binned
-    ## from `early_start`.
+    ## No laboratory denominators: every confirmed vintage after the baseline
+    ## is an early window scored through the modelled laboratory volume,
+    ## binned from `early_start`.
     if isempty(lab_history.counts)
         ed = Int[Int(d) for d in cdays[2:end]]
-        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1]) for i in 2:length(ccounts)]
+        inc = Int[Int(ccounts[i]) - Int(ccounts[i - 1])
+                  for i in 2:length(ccounts)]
         return (; obs_days = Int[], obs_positives = Int[],
             obs_analysed = Int[], early_days = ed, early_increments = inc,
             early_start, late_days = Int[], late_increments = Int[],
@@ -875,9 +881,10 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
     end
 
     first_lab_day = Int(lab_history.days[1])
-    ## Early windows: confirmed vintages AFTER the first confirmed (baseline) up
-    ## to and including the first laboratory date, scored against the modelled
-    ## laboratory volume binned over each window's own range from `early_start`.
+    ## Early windows: confirmed vintages after the first confirmed (baseline)
+    ## up to and including the first laboratory date, scored against the
+    ## modelled laboratory volume binned over each window's own range from
+    ## `early_start`.
     early_days = Int[]
     early_increments = Int[]
     prev = Int(ccounts[1])
@@ -956,7 +963,7 @@ function confirmed_positivity_windows(confirmed_history, lab_history,
         pos === nothing || (late_analysed[pos] = Int(c))
     end
 
-    ## Retrospective harmonisation days are DE-ANCHORED: their published 24h
+    ## Retrospective harmonisation days are de-anchored: their published 24h
     ## analysed count is dropped, so the window falls to the modelled-volume
     ## NegativeBinomial branch instead of entering the BetaBinomial as
     ## same-day positives. On such a day most of the confirmed increment is a
@@ -983,7 +990,7 @@ end
 ## link, extracted from `confirmed_cases_model` as a plain function so its
 ## working variables are function arguments rather than closure captures.
 ## Inside the `@model` this lived in a `map(...) do i` closure nested in an
-## `if positivity_link === :composition` branch; the conditionally-scoped
+## `if positivity_link === :composition` branch. The conditionally-scoped
 ## captures were boxed in a `Base.RefValue`, which Enzyme's reverse mode
 ## cannot differentiate through (Mooncake tolerates the box). As a
 ## top-level function the captures become parameters, and the explicit
@@ -1066,13 +1073,13 @@ laboratory positivity identifies the background `λ_bg` rather than
 absorbing it into a free curve — the structural link that lets the lab data
 pin `λ_bg`. The alternative `:free` link uses a free partially-pooled
 per-window random effect ([`confirmed_positivity_model`](@ref)) decoupled
-from `λ_bg`; it leaves `λ_bg` weakly identified and is kept for sensitivity
+from `λ_bg`. It leaves `λ_bg` weakly identified and is kept for sensitivity
 analysis.
 
 The observed-window positives are conditioned on the observed analysed
 denominator, so the Binomial conditioning that removes the multiplicative
-ascertainment ridge is preserved; only the early and unanchored late windows use the
-modelled analysed volume as the denominator.
+ascertainment ridge is preserved. Only the early and unanchored late
+windows use the modelled analysed volume as the denominator.
 
 The tested fraction `τ_test` and background rate `λ_bg` come from
 [`reported_cases_model`](@ref) so the suspected and laboratory streams
@@ -1096,8 +1103,8 @@ quantities.
         sensitivity = test_sensitivity_model(),
         specificity = test_specificity_model(),
         overdispersion = confirmed_overdispersion_model(),
-        ## When false, the early/late windows (confirmed vintages with NO
-        ## observed analysed denominator) are not scored — only the
+        ## When false, the early/late windows (confirmed vintages with no
+        ## observed analysed denominator) are not scored: only the
         ## observed-denominator Binomial windows contribute, so confirmed
         ## informs positivity without extrapolating a denominator from
         ## incidence. Used to probe the no-test-data extrapolation.
@@ -1106,17 +1113,17 @@ quantities.
         ## days whose cumulative confirmed step is mostly a provincial base
         ## integration rather than 24h notifications. De-anchored from the
         ## positivity denominator and given a fitted level step in the
-        ## modelled mean. Empty (the default) → no-op. See issue #484.
+        ## modelled mean. Empty (the default) is a no-op.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         ## Printed 24h new-confirmed counts on each break day. The step is
         ## centred on `observed increment − gross`, the part of the vintage
         ## step the report attributes to base integration, so the magnitude
         ## comes from published data rather than a prior guess. Empty or
-        ## all-zero centres on the WHOLE increment, attributing all of it to
-        ## the artefact — conservative, not neutral.
+        ## all-zero centres on the whole increment, attributing all of it to
+        ## the artefact: conservative, not neutral.
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
         ## Residual uncertainty about how much of that discrepancy is truly
-        ## retrospective rather than coincident same-day incidence — NOT the
+        ## retrospective rather than coincident same-day incidence, not the
         ## harmonisation magnitude, which `confirmed_break_gross` supplies.
         ## Zero pins the step at the published discrepancy and samples no
         ## parameter, taking the printed count as exact.
@@ -1137,21 +1144,23 @@ quantities.
 
     ## Laboratory capacity onset. No specimens are analysed before testing
     ## existed, so the modelled analysed volume is gated to zero before the
-    ## first confirmed-case vintage (the earliest evidence of testing; the
-    ## first laboratory date is the fallback). Modelling a pre-testing analysed
-    ## volume would invent capacity that did not exist AND roll it into the
-    ## first laboratory and early-confirmed bins, vastly over-predicting the
-    ## early confirmed counts. The suspected-case pipeline feeding the volume is
-    ## NOT gated — suspected cases did accumulate over the cryptic phase.
+    ## first confirmed-case vintage (the earliest evidence of testing. The
+    ## first laboratory date is the fallback). Modelling a pre-testing
+    ## analysed volume would invent capacity that did not exist and roll it
+    ## into the first laboratory and early-confirmed bins, vastly
+    ## over-predicting the early confirmed counts. The suspected-case
+    ## pipeline feeding the volume is not gated: suspected cases did
+    ## accumulate over the cryptic phase.
     cap_start = !isempty(confirmed_history.days) ?
                 clamp(Int(confirmed_history.days[1]), 1, n) :
                 (!isempty(lab_history.days) ?
                  clamp(Int(lab_history.days[1]), 1, n) : 1)
 
     ## Analysed-specimen volume: the suspected pipeline carried through the
-    ## report-to-analysed delay and thinned by the tested fraction, fit to the
-    ## analysed series and reused as the denominator in the early and unanchored late
-    ## windows below. `bg_daily` is the per-day non-BVD background.
+    ## report-to-analysed delay and thinned by the tested fraction, fit to
+    ## the analysed series and reused as the denominator in the early and
+    ## unanchored late windows below. `bg_daily` is the per-day non-BVD
+    ## background.
     receipt_state ~ to_submodel(receipt)
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
     analysed_daily = τ_test .* convolve_delay(suspected_daily,
@@ -1159,7 +1168,7 @@ quantities.
     ## In predict mode (no AD) the daily series can infer as `Vector{Any}`
     ## on some Julia versions, which then makes `reduce_empty` / `zero(Any)`
     ## fail on the empty derived window vectors below. Concretise to the
-    ## working scalar type; this runs only when the element type has widened,
+    ## working scalar type. This runs only when the element type has widened,
     ## so the AD/fit path (concrete eltype) is left untouched.
     if eltype(analysed_daily) === Any
         analysed_daily = convert(Vector{typeof(τ_test)}, analysed_daily)
@@ -1175,7 +1184,7 @@ quantities.
         vintage_increments_model(analysed_inc, vol_obs, k))
 
     ## Post-cutoff 24h analysed volume. After the national cumulative analysed
-    ## series stops, INSP publishes a 24h analysed count on some days; the
+    ## series stops, INSP publishes a 24h analysed count on some days. The
     ## modelled daily analysed volume on each such day is scored against that
     ## count, so the post-cutoff testing throughput is fitted from the same
     ## stream rather than only used as a confirmed denominator. Same
@@ -1269,20 +1278,21 @@ quantities.
     end
 
     ## Early windows: confirmed increment ~ NegBinomial(positivity ×
-    ## modelled analysed volume), the volume binned over each window's OWN day
-    ## range pinned at `early_start` (the first confirmed vintage, the testing-
-    ## onset baseline), so the first early increment is scored from the data
-    ## start rather than rolling the (now-gated) pre-testing volume. Mirrors the
-    ## late-window pinning at `late_start`.
+    ## modelled analysed volume), the volume binned over each window's own
+    ## day range pinned at `early_start` (the first confirmed vintage, the
+    ## testing-onset baseline), so the first early increment is scored from
+    ## the data start rather than rolling the (now-gated) pre-testing volume.
+    ## Mirrors the late-window pinning at `late_start`.
     early_p = p_pos[1:n_early]
     ## `early_volume` is bound unconditionally to one array allocation site
-    ## (a `bin_increments(...)[2:end]`) rather than a two-branch ternary.
-    ## ternary. The two-allocation ternary compiles to a pointer that is one
-    ## of two array allocations depending on a branch, which Enzyme's
-    ## `nodecayed_phis!` LLVM pass cannot trace (an `EnzymeInternalError`; see
-    ## #445). With no late/early window days the edge is the singleton
-    ## `[start]`, so `bin_increments(...)[2:end]` is empty — same value as the
-    ## former `similar(analysed_daily, 0)` branch. Mooncake is unaffected.
+    ## (`bin_increments(...)[2:end]`) rather than a two-branch ternary: the
+    ## ternary compiles to a pointer that is one of two array allocations
+    ## depending on a branch, which Enzyme's `nodecayed_phis!` LLVM pass
+    ## cannot trace (an `EnzymeInternalError`). With no late/early window
+    ## days the edge is the singleton `[start]`, so
+    ## `bin_increments(...)[2:end]` is empty, the same value a
+    ## `similar(analysed_daily, 0)` branch would give. Mooncake is
+    ## unaffected.
     early_edges = n_early > 0 ?
                   vcat(windows.early_start, windows.early_days) :
                   [windows.early_start]
@@ -1304,20 +1314,19 @@ quantities.
 
     ## Late windows: confirmed-only vintages after the last laboratory date.
     ## A day that publishes a 24h analysed count (`late_analysed > 0`) is
-    ## scored as an overdispersed BetaBinomial of that observed denominator —
-    ## like an observed window, anchoring its positivity to data — and each
-    ## remaining unanchored day
-    ## as NegBinomial(positivity × modelled volume). The modelled volume is
-    ## binned over each late window's own day range, with the running edge
-    ## PINNED at the last laboratory day (`late_start`): `bin_increments`
-    ## runs its running `prev` from day 0, so prepending `late_start` to the
-    ## late day edges and dropping the synthetic first bin starts the
-    ## accumulation at `late_start`, avoiding double-counting the
-    ## observed-window volume.
+    ## scored as an overdispersed BetaBinomial of that observed denominator,
+    ## like an observed window, anchoring its positivity to data. Each
+    ## remaining unanchored day is NegBinomial(positivity × modelled
+    ## volume). The modelled volume is binned over each late window's own
+    ## day range, with the running edge pinned at the last laboratory day
+    ## (`late_start`): `bin_increments` runs its running `prev` from day 0,
+    ## so prepending `late_start` to the late day edges and dropping the
+    ## synthetic first bin starts the accumulation at `late_start`, avoiding
+    ## double-counting the observed-window volume.
     late_p = p_pos[(n_early + n_obs + 1):nv]
-    ## Unconditional single-allocation binding (see `early_volume` above):
-    ## avoid the two-allocation `? bin_increments : similar` pointer-PHI that
-    ## Enzyme's `nodecayed_phis!` pass cannot trace. Empty when `n_late = 0`.
+    ## Unconditional single-allocation binding, avoiding the same
+    ## two-allocation pointer-PHI Enzyme's `nodecayed_phis!` pass cannot
+    ## trace (see `early_volume` above). Empty when `n_late = 0`.
     late_edges = n_late > 0 ? vcat(windows.late_start, windows.late_days) :
                  [windows.late_start]
     late_volume = bin_increments(analysed_daily, late_edges)[2:end]
@@ -1330,7 +1339,7 @@ quantities.
     ## count), with `confirmed_break_sd` the residual uncertainty about how much
     ## of that discrepancy is truly retrospective. Symmetric, because that
     ## residual can fall either side. Only break days that land
-    ## on a late window can move the likelihood; others are dropped so no inert
+    ## on a late window can move the likelihood. Others are dropped so no inert
     ## step is sampled. Same conditional-`b`-then-pure-function shape as the
     ## occupancy break (`cumulative_occupancy_offset`), which keeps the
     ## allocation single-site for the AD backends. Empty → Δ = 0, a no-op.
@@ -1340,7 +1349,7 @@ quantities.
     if isempty(conf_brk_days)
         cb = Float64[]
     elseif iszero(confirmed_break_sd)
-        ## `confirmed_break_sd = 0` is the DETERMINISTIC correction: the report
+        ## `confirmed_break_sd = 0` is the deterministic correction: the report
         ## publishes the 24h count, so the artefact size is taken as exact and
         ## the increment is fitted against the gross count with no sampled
         ## parameter. Two fewer parameters, and no ridge between a step and the
@@ -1356,7 +1365,7 @@ quantities.
     late_mean = late_p .* late_volume .+ late_break_offset
     ## Observed late increments: anchored days (24h denominator) carry the
     ## confirmed increment clamped into the Binomial support and are always
-    ## scored; unanchored days are scored only when `fit_unanchored` (the
+    ## scored. Unanchored days are scored only when `fit_unanchored` (the
     ## no-extrapolation probe leaves them latent). A per-entry
     ## `missing`/value vector lets the one submodel observe each accordingly.
     if have_data && n_late > 0
@@ -1385,25 +1394,26 @@ quantities.
     ## DynamicPPL tracking closure that captures `p_pos` (assigned in both the
     ## `:composition` and `else` positivity branches, so boxed in a
     ## `Core.Box`), and Enzyme's `nodecayed_phis!` LLVM pass cannot
-    ## differentiate through the resulting boxed pointer-PHI (see #445).
+    ## differentiate through the resulting boxed pointer-PHI.
     expected_analysed = safe_rate(sum(analysed_daily))
     ## Expected confirmed at the cut-off and the overall positivity, over the
     ## modelled early volume, the observed cumulative analysed windows and the
-    ## late windows (anchored days contribute `p · analysed`, unanchored days the
-    ## modelled `p · volume`). The window vectors are empty when a vintage has
-    ## no such window, and in predict mode their element type can widen to
-    ## `Any`, so each sum is given a concrete `init` to skip `reduce_empty`'s
-    ## `zero(Any)`. The init is taken from the scalar `τ_test` (always
-    ## concrete), NOT from `eltype(p_pos)`, which can widen to `Any`.
+    ## late windows (anchored days contribute `p · analysed`, unanchored days
+    ## the modelled `p · volume`). The window vectors are empty when a
+    ## vintage has no such window, and in predict mode their element type
+    ## can widen to `Any`, so each sum is given a concrete `init` to skip
+    ## `reduce_empty`'s `zero(Any)`. The init is taken from the scalar
+    ## `τ_test` (always concrete), not from `eltype(p_pos)`, which can widen
+    ## to `Any`.
     z = zero(τ_test)
     amask = windows.late_analysed .> 0
     late_den_a = float.(windows.late_analysed)
     ## Unconditional broadcasts (single allocation site each): with
     ## `n_late = 0` every operand (`amask`, `late_den_a`, `late_volume`,
-    ## `late_mean`) is empty, so the `ifelse.` result is empty too — the same
-    ## value the former `? … : similar(…, 0)` ternary produced, without the
-    ## two-allocation pointer-PHI that Enzyme's `nodecayed_phis!` pass cannot
-    ## trace (see #445). Mooncake is unaffected.
+    ## `late_mean`) is empty, so the `ifelse.` result is empty too, the same
+    ## value a `? … : similar(…, 0)` ternary would produce, without the
+    ## two-allocation pointer-PHI that Enzyme's `nodecayed_phis!` pass
+    ## cannot trace. Mooncake is unaffected.
     late_den = ifelse.(amask, late_den_a, late_volume)
     late_expected = ifelse.(amask, late_p .* late_den_a, late_mean)
     denom = sum(early_volume; init = z) + float(sum(windows.obs_analysed)) +
@@ -1441,7 +1451,7 @@ moves and is exported during incubation (pre-symptomatic) and stays at
 risk of being exported and detected abroad only until the
 infection→detection delay has elapsed. The expected detected exports by
 the cut-off therefore accumulate the per-capita travel rate `q =
-daily_travellers / source_population` over the at-risk PERSON-TIME, not
+daily_travellers / source_population` over the at-risk person-time, not
 over single-day onset events:
 
 ```math
@@ -1455,14 +1465,12 @@ with `C(s)` the cumulative infections and `detected(s)` the cumulative
 infections that have already completed the infection→detection delay by
 day `s`. The infection→detection delay is the sampled onset-to-detection
 delay convolved with the shared incubation PMF (so incubation sits inside
-it, keyed to infection like `C(s)`); `detected` is the running sum of
-`convolve_delay(infections, f_det)`. Summing the daily at-risk
-prevalence is the discrete person-time integral, the discrete analogue of
-the integral model's at-risk person-time export integral; the earlier
-onset-incidence form summed `q · onsets`, charging each case only a
-single day of travel risk and so under-counting exports by roughly the
-mean at-risk dwell time. Samples the traveller volume and the
-onset-to-detection delay via injected submodels. The onset-to-detection
+it, keyed to infection like `C(s)`). `detected` is the running sum of
+`convolve_delay(infections, f_det)`. Summing the daily at-risk prevalence
+is the discrete person-time integral. Summing `q · onsets` instead would
+charge each case only a single day of travel risk, under-counting exports
+by roughly the mean at-risk dwell time. Samples the traveller volume and
+the onset-to-detection delay via injected submodels. The onset-to-detection
 prior is centred on the Ebola onset-to-hospitalisation delay (mean 5.0 d,
 SD 4.7 d; WHO Ebola Response Team 2014, NEJM), the delay from symptom
 onset to detection at a point of entry abroad.
@@ -1532,7 +1540,7 @@ rate and the daily at-risk prevalence for reuse by
         exported_cases ~ Poisson(expected_exports_T)
     else
         ## Dated per-day Poisson. The export clock stops at the last import
-        ## `t_last` (the `last_offset` truncation); prevalence past it does
+        ## `t_last` (the `last_offset` truncation). Prevalence past it does
         ## not accrue. `d₁` is the earliest detection day.
         days, counts = dated_event_bins(export_case_days, n)
         d₁ = days[1]
@@ -1541,7 +1549,7 @@ rate and the daily at-risk prevalence for reuse by
         pre = d₁ > 1 ? sum(@view export_prevalence[1:(d₁ - 1)]) :
               zero(@inbounds export_prevalence[begin])
         pre_detection_exports ~ Poisson(safe_rate(pre))
-        ## Per-day-edge increments between consecutive detection days; the
+        ## Per-day-edge increments between consecutive detection days. The
         ## first is measured from the pre-detection weight `pre`, so the
         ## pre-detection term and the increments partition Λ(t_last).
         raw_inc = bin_increments(export_prevalence, days)
@@ -1553,7 +1561,7 @@ rate and the daily at-risk prevalence for reuse by
         expected_exports_T := safe_rate(pre + sum(μ_day))
     end
 
-    ## Travel-scaled at-risk prevalence WITHOUT the export-case ascertainment
+    ## Travel-scaled at-risk prevalence without the export-case ascertainment
     ## `p_uganda`: a death among an exported case would be reported whether or
     ## not the case itself was ascertained as an import, so the export-death
     ## model accrues over the travelled person-time `q · prevalence`, not the
@@ -1566,8 +1574,8 @@ end
 
 """
 Deaths-among-exported-cases likelihood, dated per-day. Deaths accrue among
-the TRAVELLED at-risk person-time `q · prevalence` from
-[`exports_model`](@ref), BEFORE the export-case ascertainment `p_uganda`: a
+the travelled at-risk person-time `q · prevalence` from
+[`exports_model`](@ref), before the export-case ascertainment `p_uganda`: a
 death among an exported case would be reported whether or not the case was
 ascertained as an import, so the death model is not thinned by `p_uganda`
 (unlike the export-case count). The day-`t` expected export-death increment
@@ -1613,7 +1621,7 @@ to the cut-off cumulative Poisson `exports_deaths ~ Poisson(Λ_d(n))`.
         expected_exports_deaths_T := safe_rate(sum(death_daily))
         exports_deaths ~ Poisson(expected_exports_deaths_T)
     else
-        ## Dated per-day Poisson; the clock stops at the last death day.
+        ## Dated per-day Poisson. The clock stops at the last death day.
         days, counts = dated_event_bins(export_death_days, n)
         δ₁ = days[1]
         pre = δ₁ > 1 ? sum(@view death_daily[1:(δ₁ - 1)]) :
@@ -1650,7 +1658,7 @@ Three pieces:
     deaths and cases carried to receipt by the confirmed cases' delay. The case
     volume carries the laboratory capacity onset, so the death volume inherits
     it. The scaling ([`death_testing_scaling_model`](@ref)) is the per-suspect
-    testing-intensity difference between deaths and living suspects; the
+    testing-intensity difference between deaths and living suspects. The
     death-to-case ratio carries the suspect-pool severity and the
     suspected-death level. The death-only composer has no case stream and falls
     back to a death testing fraction ([`death_testing_fraction_model`](@ref)).
@@ -1680,7 +1688,7 @@ positivity and the expected confirmed-death count.
         ## confirmed-death cumulative by +236 against a printed 24h count of
         ## +62, and this stream fits between-vintage increments too, so the
         ## backlog would otherwise be read as one day of confirmed deaths.
-        ## Empty (the default) → no-op. See issue #484.
+        ## Empty (the default) is a no-op.
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross::AbstractVector{<:Integer} = Int[],
         ## As on the cases path: the residual uncertainty around the published
@@ -1705,7 +1713,7 @@ positivity and the expected confirmed-death count.
     susp_death = convolve_delay(deaths_daily, receipt_pmf)
     bvd_death = convolve_delay(bvd_deaths_daily, receipt_pmf)
     ## In predict or check-model mode the series can widen to `Vector{Any}`,
-    ## which trips `zero(Any)` downstream; pin to the sampled scalar type,
+    ## which trips `zero(Any)` downstream. Pin to the sampled scalar type,
     ## leaving the fit path (concrete dual eltype) untouched.
     if eltype(susp_death) === Any
         susp_death = convert(Vector{typeof(s)}, susp_death)
@@ -1745,7 +1753,8 @@ positivity and the expected confirmed-death count.
             ## stay a subset of suspected and the realised τ_death ≤ 1.
             min(v, susp_death[t])
         end
-        τ_death = susp_death[n] > lo ? death_volume[n] / susp_death[n] : zero(sc)
+        τ_death = susp_death[n] > lo ?
+                  death_volume[n] / susp_death[n] : zero(sc)
     else
         test_state ~ to_submodel(testing)
         τ_death = test_state.τ_death
@@ -1808,7 +1817,7 @@ sub-stock by a confirmation overlay.
 The clinical layer is label-independent and carried as two sub-stocks that sum
 to the total demand by construction. The occupied BVD true-case stock `O_bvd`
 accumulates `A_bvd` minus the BVD discharges (`deaths + recover`) and its share
-of the abscond outflow; the occupied non-case stock `O_bg` accumulates `A_bg`
+of the abscond outflow. The occupied non-case stock `O_bg` accumulates `A_bg`
 minus the rule-out exits (`ruleout`) and its share of the abscond outflow:
 
 ```math
@@ -1919,7 +1928,7 @@ end of day `d`. This is the per-cohort weight the running-balance BVD stock
 carries: with no absconds `O_bvd(t) = Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)`. The
 discharge-complement `P(stay > d)`, rather than the inclusive `P(stay ≥ d)` of
 [`convolve_survival`](@ref), keeps the two-clock confirmed sub-stock `≤ O_bvd`
-by construction. The two PMFs need not share a length; each contributes zero
+by construction. The two PMFs need not share a length. Each contributes zero
 beyond its support, so the result takes the longer length.
 """
 function clinical_stay_survival(death_pmf::AbstractVector,
@@ -1931,7 +1940,8 @@ function clinical_stay_survival(death_pmf::AbstractVector,
     cum = zero(T)
     @inbounds for d in 1:L
         pd = d <= length(death_pmf) ? death_pmf[d] : zero(eltype(death_pmf))
-        pr = d <= length(recover_pmf) ? recover_pmf[d] : zero(eltype(recover_pmf))
+        pr = d <= length(recover_pmf) ? recover_pmf[d] :
+             zero(eltype(recover_pmf))
         cum += cfr * pd + (one_T - cfr) * pr
         S[d] = one_T - cum
     end
@@ -1950,24 +1960,26 @@ O_\\text{conf}(t) = \\sum_{u \\le t} A_\\text{bvd}(u)\\,
     \\text{CDF}_\\text{conf}(u, t)\\, S_\\text{clin}(t - u),
 ```
 
-a product of two clocks running from admission. The confirmation clock is the
-per-cohort cumulative confirmation probability under the time-varying daily
-hazard `conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab pipeline, with
-exposure from the day after admission:
+a product of two clocks running from admission. The confirmation clock is
+the per-cohort cumulative confirmation probability under the time-varying
+daily hazard `conf_hazard(t) = τ_test · p_pos(t)` borrowed from the lab
+pipeline, with exposure from the day after admission:
 
 ```math
 \\text{CDF}_\\text{conf}(u, t) = 1 - \\prod_{j = u+1}^{t}\\bigl(1 -
     \\text{conf\\_hazard}(j)\\bigr),
 ```
 
-so a just-admitted cohort (`u = t`) has `CDF_conf = 0`. The clinical clock is
-the BVD stay survival `S_clin(d) = P(stay > d)` ([`clinical_stay_survival`](@ref)),
-so `Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)` reconstructs the abscond-free BVD stock.
-The confirmed-and-present cohort is a subset of the present cohort, so
-`O_conf ≤ O_bvd` holds by construction, without the proportional split's
-mean-field approximation: a true case that dies before its test returns is never
-counted as confirmed. Returns the length-`n` confirmed-in-care sub-stock; the
-caller forms the suspect sub-stock as the demand remainder `D − O_conf`.
+so a just-admitted cohort (`u = t`) has `CDF_conf = 0`. The clinical clock
+is the BVD stay survival `S_clin(d) = P(stay > d)`
+([`clinical_stay_survival`](@ref)), so
+`Σ_{u ≤ t} A_bvd(u) · S_clin(t − u)` reconstructs the abscond-free BVD
+stock. The confirmed-and-present cohort is a subset of the present
+cohort, so `O_conf ≤ O_bvd` holds by construction, without the
+proportional split's mean-field approximation: a true case that dies
+before its test returns is never counted as confirmed. Returns the
+length-`n` confirmed-in-care sub-stock. The caller forms the suspect
+sub-stock as the demand remainder `D − O_conf`.
 """
 function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
         S_clin::AbstractVector)
@@ -2028,7 +2040,7 @@ function admission_headroom(adm_days, adm_obs, capacity_history,
             nocap
         end
         ## Previous day's observed occupancy, the most recent record strictly
-        ## before this admission day; no prior record ⇒ a large no-op headroom.
+        ## before this admission day. No prior record ⇒ a large no-op headroom.
         prev_occ = if have_occ
             prior = findall(<(di), idays)
             isempty(prior) ? -nocap : icounts[prior[argmax(idays[prior])]]
@@ -2049,17 +2061,18 @@ convolution. The "Patients en isolement" figure is the daily occupied-bed
 count, fitted as latent bed demand right-censored at the implied-capacity
 bound.
 
-Admissions are the reported suspects ([`reported_cases_model`](@ref)) carried
-through a short suspected→admission delay and split into a BVD true-case inflow
-`A_bvd = p_iso_bvd · p_drc · bvd_reports` at the severity-skewed rate `p_iso_bvd`
-([`isolation_severity_model`](@ref)) and a non-BVD inflow `A_bg = p_iso ·
-bg_daily` at the base rate ([`isolation_admission_model`](@ref)).
+Admissions are the reported suspects ([`reported_cases_model`](@ref))
+carried through a short suspected→admission delay and split into a BVD
+true-case inflow `A_bvd = p_iso_bvd · p_drc · bvd_reports` at the
+severity-skewed rate `p_iso_bvd` ([`isolation_severity_model`](@ref)) and
+a non-BVD inflow `A_bg = p_iso · bg_daily` at the base rate
+([`isolation_admission_model`](@ref)).
 
 The clinical layer sets the total occupancy and discharge flows and is
 label-independent, so a true case can die before confirmation. A BVD true case
 leaves by death (weight `CFR_iso`) on the admission→death stay or recovery
-(weight `1 − CFR_iso`) on the admission→recovery stay; a non-BVD admission
-rules out on the rule-out stay; absconds drain the suspect pool at
+(weight `1 − CFR_iso`) on the admission→recovery stay. A non-BVD admission
+rules out on the rule-out stay. Absconds drain the suspect pool at
 `κ · O_susp(t−1)`. The total latent demand is the running balance
 
 ```math
@@ -2071,35 +2084,39 @@ with `A = A_bvd + A_bg`. The in-care deaths flow is suspect and confirmed
 combined (the Tableau 6 `décédés` row), scored directly and not gated by
 confirmation. The in-care fatality `CFR_iso = logistic(logit(CFR) + β_iso)`
 adjusts the infection CFR to the admitted population by a sampled modifier
-`β_iso`; it is conditional on admission, not a causal treatment effect.
+`β_iso`. It is conditional on admission, not a causal treatment effect.
 
-A label overlay carves the occupied stock into confirmed and suspect sub-stocks
-without removing anyone from the total. Confirmation relabels an occupied true
-case at the daily hazard `ρ · τ_test · p_pos`, the community hazard
-`τ_test · p_pos` borrowed from the lab pipeline ([`confirmed_cases_model`](@ref))
-scaled by a sampled in-care modifier `ρ = exp(γ_conf)`. In-care confirmation
-runs slower than the community rate (`ρ < 1`), the confirmed/suspect census
-identifying the modifier. The confirmed sub-stock is the confirmed subset of the
-occupied BVD stock and the suspect sub-stock the remainder
-`O_susp(t) = D(t) − O_conf(t)`, so a case that dies before confirmation is a
-suspect death in the combined deaths flow.
+A label overlay carves the occupied stock into confirmed and suspect
+sub-stocks without removing anyone from the total. Confirmation relabels
+an occupied true case at the daily hazard `ρ · τ_test · p_pos`, the
+community hazard `τ_test · p_pos` borrowed from the lab pipeline
+([`confirmed_cases_model`](@ref)) scaled by a sampled in-care modifier
+`ρ = exp(γ_conf)`. In-care confirmation runs slower than the community
+rate (`ρ < 1`), the confirmed/suspect census identifying the modifier.
+The confirmed sub-stock is the confirmed subset of the occupied BVD
+stock and the suspect sub-stock the remainder
+`O_susp(t) = D(t) − O_conf(t)`, so a case that dies before confirmation
+is a suspect death in the combined deaths flow.
 
-Capacity enters only as a fixed, data-derived censoring bound; the latent demand
-is uncapped. The occupancy likelihood is a NegativeBinomial around the demand,
-right-censored at the recorded implied-capacity series ([`censoring_cap`](@ref),
-[`censored_occupancy_model`](@ref)); admissions are censored at the recorded
-free-bed headroom `C_fix(t) − occupancy(t-1)`. The capacity walk `C(t)`
-([`bed_capacity_walk_model`](@ref)) carries the implied-capacity likelihood, and
-unmet demand `D(t) − censored occupancy` is a returned diagnostic.
+Capacity enters only as a fixed, data-derived censoring bound. The
+latent demand is uncapped. The occupancy likelihood is a
+NegativeBinomial around the demand, right-censored at the recorded
+implied-capacity series ([`censoring_cap`](@ref),
+[`censored_occupancy_model`](@ref)). Admissions are censored at the
+recorded free-bed headroom `C_fix(t) − occupancy(t-1)`. The capacity
+walk `C(t)` ([`bed_capacity_walk_model`](@ref)) carries the
+implied-capacity likelihood, and unmet demand
+`D(t) − censored occupancy` is a returned diagnostic.
 
-The daily in-care outcome flows (deaths, rule-outs, admissions, absconds) are
-each an optional NegativeBinomial stream scored against the Tableau 6
-patient-movement counts, a no-op when their history is empty. The two sub-stocks
-are scored against the Tableau 6 census breakdown (`dont confirmés` / `dont
-suspects`) where published, in place of the total on those days. An opt-in
-occupancy offset Δ(t) on the supplied `occupancy_break_days`
-([`cumulative_occupancy_offset`](@ref)) absorbs a between-report measurement-basis
-discontinuity in the isolation series; empty (the default) is a no-op.
+The daily in-care outcome flows (deaths, rule-outs, admissions,
+absconds) are each an optional NegativeBinomial stream scored against
+the Tableau 6 patient-movement counts, a no-op when their history is
+empty. The two sub-stocks are scored against the Tableau 6 census
+breakdown (`dont confirmés` / `dont suspects`) where published, in place
+of the total on those days. An opt-in occupancy offset Δ(t) on the
+supplied `occupancy_break_days` ([`cumulative_occupancy_offset`](@ref))
+absorbs a between-report measurement-basis discontinuity in the
+isolation series. Empty (the default) is a no-op.
 
 Exposes the cut-off occupancy, bed demand and shortfall, the utilisation, the
 BVD share of demand, `CFR_iso` and `β_iso`, the length-of-stay, the two
@@ -2123,17 +2140,18 @@ series for forecasting and replication.
         ## default, leaving the total-occupancy likelihood alone.
         confirmed_incare_history = (; days = Int[], counts = Int[]),
         suspect_incare_history = (; days = Int[], counts = Int[]),
-        ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from the
-        ## lab pipeline ([`confirmed_cases_model`](@ref)). `nothing` (standalone,
-        ## no lab stream) gives a zero hazard, so the confirmed sub-stock stays
-        ## empty and the suspect sub-stock carries the whole occupancy.
+        ## Daily in-care confirmation hazard `τ_test · p_pos` borrowed from
+        ## the lab pipeline ([`confirmed_cases_model`](@ref)). `nothing`
+        ## (standalone, no lab stream) gives a zero hazard, so the confirmed
+        ## sub-stock stays empty and the suspect sub-stock carries the whole
+        ## occupancy.
         conf_hazard_daily::Union{Nothing, AbstractVector} = nothing,
         admission = isolation_admission_model(),
         severity = isolation_severity_model(),
         capacity = bed_capacity_walk_model,
         dispersion = surveillance_dispersion_model(),
         ## Occupancy / flow dispersion can be injected from the joint composer's
-        ## pooled set (`k_external`); standalone it samples its own.
+        ## pooled set (`k_external`). Standalone it samples its own.
         k_external::Union{Nothing, Real} = nothing,
         ## In-care fatality modifier prior: β_iso on the infection CFR.
         cfr_modifier_prior = Normal(0.0, 0.5),
@@ -2141,7 +2159,8 @@ series for forecasting and replication.
         abscond_prior = truncated(Normal(0.01, 0.01); lower = 0),
         ## In-care confirmation-rate modifier prior (log scale): γ_conf scales
         ## the borrowed community hazard to the effective in-care rate
-        ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the split.
+        ## ρ = exp(γ_conf). Centred on zero (ρ = 1) so the census sets the
+        ## split.
         incare_confirm_log_prior = Normal(0.0, 0.5),
         ## Short suspected→admission delay (report → reaching a bed: triage,
         ## transport, bed-wait), distinct from the report→lab receipt delay.
@@ -2188,12 +2207,13 @@ series for forecasting and replication.
     n = length(bvd_reports_daily)
     ## In-care fatality CFR_iso = logistic(logit(CFR) + β_iso): a log-odds
     ## modifier on the infection CFR, identified by the in-care death flow
-    ## (Tableau 6 décédés) relative to admissions and occupancy. β_iso < 0 means
-    ## treatment lowers the in-care fatality below the infection CFR. This is a
-    ## conditional-on-admission (in-care) fatality, not a causal treatment
-    ## effect. The recovered-among-confirmed ("cumul guéris") stream is modelled
-    ## separately off the confirmed cases ([`recovered_model`](@ref)) — guéris is
-    ## the confirmed-and-discharged subset, not all in-care recoveries.
+    ## (Tableau 6 décédés) relative to admissions and occupancy. β_iso < 0
+    ## means treatment lowers the in-care fatality below the infection CFR.
+    ## This is a conditional-on-admission (in-care) fatality, not a causal
+    ## treatment effect. The recovered-among-confirmed ("cumul guéris")
+    ## stream is modelled separately off the confirmed cases
+    ## ([`recovered_model`](@ref)): guéris is the confirmed-and-discharged
+    ## subset, not all in-care recoveries.
     β_iso ~ cfr_modifier_prior
     CFR_iso = logistic(logit(CFR) + β_iso)
     ## Time-varying bed capacity `C(t)` (a random walk), started at the first
@@ -2219,10 +2239,10 @@ series for forecasting and replication.
     ## versus `Fin-J` reclassification) on the manually supplied
     ## `occupancy_break_days`. A level step is fitted at each break day, sampled
     ## non-centred and centred on zero, so the fit partitions it into reporting
-    ## artifact vs real demand. Applied additively to the modelled total only;
-    ## demand (the diagnostic) stays the un-offset latent stock. Empty (the
+    ## artifact vs real demand. Applied additively to the modelled total only.
+    ## Demand (the diagnostic) stays the un-offset latent stock. Empty (the
     ## default) → no sampled step, Δ = 0, a no-op. Only break days on or before
-    ## an observed occupancy day can move the likelihood; later ones are dropped
+    ## an observed occupancy day can move the likelihood. Later ones are dropped
     ## so no inert step is sampled. See `cumulative_occupancy_offset`.
     iso_last = isempty(isolation_history.days) ? 0 :
                maximum(Int.(isolation_history.days))
@@ -2240,7 +2260,7 @@ series for forecasting and replication.
 
     ## Admission inflow through the suspected→admission delay, split into BVD
     ## true-case (`p_iso_bvd`) and non-BVD (`p_iso`) inflows. Uncapped latent
-    ## demand; capacity enters only as a censoring bound below.
+    ## demand. Capacity enters only as a censoring bound below.
     A_bvd = convolve_delay(p_iso_bvd .* p_drc .* bvd_reports_daily,
         adm_delay_state.pmf)
     A_bg = convolve_delay(p_iso .* bg_daily, adm_delay_state.pmf)
@@ -2250,7 +2270,7 @@ series for forecasting and replication.
     end
 
     ## Label-independent clinical discharge events. Deaths and recoveries split
-    ## `A_bvd` by `CFR_iso`; rule-outs discharge `A_bg`.
+    ## `A_bvd` by `CFR_iso`. Rule-outs discharge `A_bg`.
     dpmf = death_los_state.pmf
     rpmf = recovery_los_state.pmf
     deaths_daily = convolve_delay(CFR_iso .* A_bvd, dpmf)
@@ -2259,7 +2279,7 @@ series for forecasting and replication.
     admit_daily = A_bvd .+ A_bg
 
     ## Community confirmation hazard `τ_test · p_pos` borrowed from the lab
-    ## pipeline; `nothing` (standalone) gives a zero hazard.
+    ## pipeline. `nothing` (standalone) gives a zero hazard.
     borrowed_hazard = if conf_hazard_daily === nothing
         zeros(eltype(A_bvd), n)
     elseif eltype(conf_hazard_daily) === Any
@@ -2268,14 +2288,16 @@ series for forecasting and replication.
         conf_hazard_daily
     end
 
-    ## The split census is identified only when the borrowed hazard is non-zero
-    ## (a lab stream supplies it). With a structural zero the confirmed sub-stock
-    ## is empty, so the split likelihood no-ops and those days stay on the total.
+    ## The split census is identified only when the borrowed hazard is
+    ## non-zero (a lab stream supplies it). With a structural zero the
+    ## confirmed sub-stock is empty, so the split likelihood no-ops and
+    ## those days stay on the total.
     split_active = any(>(zero(eltype(borrowed_hazard))), borrowed_hazard)
 
-    ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed hazard.
-    ## Sampled only when the hazard is non-zero, so no unidentified dimension is
-    ## added when the split is absent (matching the `k_external` pattern).
+    ## In-care confirmation-rate modifier ρ = exp(γ_conf) on the borrowed
+    ## hazard. Sampled only when the hazard is non-zero, so no unidentified
+    ## dimension is added when the split is absent (matching the
+    ## `k_external` pattern).
     if split_active
         incare_confirm_log ~ incare_confirm_log_prior
     else
@@ -2292,19 +2314,20 @@ series for forecasting and replication.
     demand = acc.demand
     O_bvd = acc.O_bvd
 
-    ## Two-clock confirmed-in-care sub-stock: cohort-tracked confirmed-and-present
-    ## prevalence, exact in the fast-death tail where the running balance's
-    ## proportional drain is only mean-field. Demand and `O_bvd` stay as
-    ## `accumulate_occupancy` built them; `O_conf` (and `O_susp = D − O_conf`) is
-    ## replaced.
+    ## Two-clock confirmed-in-care sub-stock: cohort-tracked
+    ## confirmed-and-present prevalence, exact in the fast-death tail where
+    ## the running balance's proportional drain is only mean-field. Demand
+    ## and `O_bvd` stay as `accumulate_occupancy` built them. `O_conf` (and
+    ## `O_susp = D − O_conf`) is replaced.
     S_clin = clinical_stay_survival(dpmf, rpmf, CFR_iso)
     O_conf_raw = two_clock_confirmed(A_bvd, conf_hazard, S_clin)
-    ## `O_conf ≤ O_bvd` holds by construction; clamp into `[0, O_bvd]` as a guard
-    ## under any prior draw. The suspect sub-stock is the demand remainder.
+    ## `O_conf ≤ O_bvd` holds by construction. Clamp into `[0, O_bvd]` as a
+    ## guard under any prior draw. The suspect sub-stock is the demand
+    ## remainder.
     O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
     O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
-    ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`; day 1
-    ## has no prior stock.
+    ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`.
+    ## Day 1 has no prior stock.
     abscond_daily = [t == 1 ? zero(eltype(demand)) : κ * O_susp[t - 1]
                      for t in 1:n]
     if eltype(demand) === Any
@@ -2314,13 +2337,13 @@ series for forecasting and replication.
         abscond_daily = convert(Vector{eltype(C)}, abscond_daily)
     end
 
-    ## Add the reclassification offset Δ(t) to the modelled total only; demand
-    ## (the diagnostic) stays the un-offset latent stock.
+    ## Add the reclassification offset Δ(t) to the modelled total only.
+    ## Demand (the diagnostic) stays the un-offset latent stock.
     occ_offset = eltype(occ_break_offset) === Any ?
                  convert(Vector{eltype(C)}, occ_break_offset) : occ_break_offset
     ## Broadcasts, not `map(1:n) do t`: the `do`-block builds an anonymous
     ## closure over `demand`/`occ_offset`/`O_conf` whose reverse-mode shadow
-    ## Enzyme cannot construct; an elementwise broadcast creates no closure
+    ## Enzyme cannot construct. An elementwise broadcast creates no closure
     ## and is bit-identical under Mooncake.
     occ_obs_total = demand .+ occ_offset
 
@@ -2345,7 +2368,8 @@ series for forecasting and replication.
     isolation ~ to_submodel(
         censored_occupancy_model(iso_means, iso_ceil, iso_obs, k))
 
-    ## Capacity likelihood: the implied bed count is a noisy observation of C(t).
+    ## Capacity likelihood: the implied bed count is a noisy observation of
+    ## C(t).
     cap_days = capacity_history.days
     cap_modelled = [C[clamp(Int(d), 1, n)] for d in cap_days]
     cap_obs = isempty(capacity_history.counts) ? missing :
@@ -2353,9 +2377,9 @@ series for forecasting and replication.
     bed_capacity ~ to_submodel(
         vintage_increments_model(cap_modelled, cap_obs, k))
 
-    ## Split likelihoods: on days with a published split, score the two sub-stock
-    ## censuses instead of the total. Guarded by `split_active`, so they no-op
-    ## when the hazard is structurally zero.
+    ## Split likelihoods: on days with a published split, score the two
+    ## sub-stock censuses instead of the total. Guarded by `split_active`,
+    ## so they no-op when the hazard is structurally zero.
     ci_days = split_active ? confirmed_incare_history.days : Int[]
     ci_obs = (!split_active || isempty(confirmed_incare_history.counts)) ?
              missing : collect(Int.(confirmed_incare_history.counts))
@@ -2367,8 +2391,9 @@ series for forecasting and replication.
     suspect_incare_obs ~ to_submodel(vintage_increments_model(
         [max(susp_split[clamp(Int(d), 1, n)], zero(eltype(susp_split)))
          for d in si_days], si_obs, k))
-    ## Confirmed-in-care deaths, attributed as the death flow times the confirmed
-    ## share of the BVD stock. Exposed for the report, not separately scored.
+    ## Confirmed-in-care deaths, attributed as the death flow times the
+    ## confirmed share of the BVD stock. Exposed for the report, not
+    ## separately scored.
     bvd_stock = acc.O_bvd
     conf_share = [bvd_stock[t] > zero(eltype(demand)) ?
                   O_conf[t] / bvd_stock[t] : zero(eltype(demand)) for t in 1:n]
@@ -2402,7 +2427,7 @@ series for forecasting and replication.
 
     ## Cut-off reported quantities. Occupancy is the censored stock — capacity
     ## bounds it at the cut-off, so the reported occupancy is the demand capped
-    ## at the fixed bed count; bed demand is the uncapped latent stock.
+    ## at the fixed bed count. Bed demand is the uncapped latent stock.
     z0 = zero(eltype(C))
     dem_T = isempty(demand) ? z0 : demand[end]
     occ_T = min(dem_T, C_T)
@@ -2413,7 +2438,8 @@ series for forecasting and replication.
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    expected_admissions := safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    expected_admissions := safe_rate(isempty(admit_daily) ? z0 :
+                                     admit_daily[end])
     expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
                                         deaths_daily[end])
     expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :
@@ -2433,11 +2459,11 @@ series for forecasting and replication.
     expected_confirmed_incare := safe_rate(conf_incare_T)
     expected_suspect_incare := safe_rate(susp_incare_T)
     incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
-    ## In-care confirmation-rate modifier ρ (raw; can exceed one, so reported
+    ## In-care confirmation-rate modifier ρ (raw, can exceed one, so reported
     ## directly). ρ < 1 means occupied suspects are confirmed slower than the
     ## borrowed community hazard, held for repeated exclusion testing.
     incare_confirm_modifier := ρ_conf
-    ## Cut-off cumulative occupancy reclassification offset (fitted; can be
+    ## Cut-off cumulative occupancy reclassification offset (fitted, can be
     ## negative, so reported raw rather than through `safe_rate`). Reports how
     ## much of the observed reclassification the model absorbed as a reporting
     ## artifact, the rest carried by real demand. The per-day steps `b` and the
@@ -2474,7 +2500,7 @@ end
 
 """
 DRC recovered-among-confirmed likelihood ("cumul guéris"), an incidence
-(scaled-convolution) stream — the renewal analogue of the convolution-and-
+(scaled-convolution) stream: the renewal analogue of the convolution-and-
 scaling secondary-observation model of EpiNow2 [epinow2](@cite). Recoveries
 are the survivors among laboratory-confirmed cases: the modelled daily
 confirmed-case incidence `confirmed_daily` (from
@@ -2492,20 +2518,20 @@ The recovery fraction `p_recover` is grounded on the case-fatality ratio
 `CFR` (a recovered case is one that did not die), adjusted for the confirmed
 population by a sampled log-odds offset (see
 [`recovery_probability_model`](@ref)). A case is taken to be confirmed
-BEFORE it is recorded as recovered: the report's "cumul guéris" counts
+before it is recorded as recovered: the report's "cumul guéris" counts
 recoveries among confirmed cases, so the recovery follows confirmation by
 the confirmation-to-recovery delay. In principle a positive result could
-return after a patient has already recovered and been discharged, but we
-assume the reported total reflects confirmed cases carefully recorded as
-recovered, so the confirmation-then-recovery ordering holds.
+return after a patient has already recovered and been discharged. The
+reported total is assumed to reflect confirmed cases carefully recorded
+as recovered, so the confirmation-then-recovery ordering holds.
 
 The cumulative recovered series ends at the cut-off, so its between-vintage
 increments are fitted as observed `~` data with a NegativeBinomial whose
-dispersion is sampled here, NOT shared with the other streams (the recovered
+dispersion is sampled here, not shared with the other streams (the recovered
 signal has its own observation noise). The convolution right-censors
 recoveries that have not yet resolved by the cut-off, so a small observed
 recovered count is consistent with a high eventual survival fraction and a
-long recovery delay. Empty by default; a `missing` cut-off total leaves the
+long recovery delay. Empty by default. A `missing` cut-off total leaves the
 increments missing (the predictive-generator path). Returns the recovery
 probability, the recovery-delay mean, the dispersion, the daily recovered
 series and the cut-off total.
@@ -2516,7 +2542,7 @@ series and the cut-off total.
         confirmed_daily::AbstractVector, CFR::Real;
         recovery = recovery_probability_model,
         dispersion = surveillance_dispersion_model(),
-        ## Confirmation-to-recovery (discharge) delay; an Ebola survivor is
+        ## Confirmation-to-recovery (discharge) delay. An Ebola survivor is
         ## discharged a couple of weeks after confirmation, so the default is
         ## a mean ~14 d stay before recovery is recorded.
         confirmation_to_recovery = censored_delay_model(
@@ -2524,7 +2550,7 @@ series and the cut-off total.
             mean_prior = truncated(Normal(14.0, 5.0); lower = 1),
             sd_prior = truncated(Normal(8.0, 4.0); lower = 1)),
         ## Dispersion can be injected from the joint composer's pooled set
-        ## (`k_external`); standalone it samples its own from `dispersion`.
+        ## (`k_external`). Standalone it samples its own from `dispersion`.
         k_external::Union{Nothing, Real} = nothing)
     ## Recovery fraction grounded on the CFR complement (see
     ## `recovery_probability_model`), adjusted for the confirmed population.
@@ -2606,8 +2632,8 @@ tilde's symbol appears in the enclosing model's argument names
 (`DynamicPPL.inargnames`), so a local variable on the left of `~` is treated
 as a latent quantity, silently turning every observation into a sampled
 parameter and dropping the likelihood. Same argument shape as
-[`vintage_increments_model`](@ref); a `missing` argument samples instead
-(the predictive-generator path).
+[`vintage_increments_model`](@ref). A `missing` argument samples
+instead (the predictive-generator path).
 """
 @model function onset_increments_model(means::AbstractVector,
         sds::AbstractVector,
@@ -2675,7 +2701,7 @@ rather than an asymptote that drifts with the hazard level. Built on the
 extrapolated cdf (calendar index clamped rather than assumed in-range)
 because the denominator always reaches `D - 1` days ahead of `u`, which for
 an onset date within `D - 1` days of `grid_end` runs past `γ`'s fitted
-support even though every scored `δ` itself stays in range; the calendar
+support even though every scored `δ` itself stays in range. The calendar
 effect is held flat at the walk's nearest edge there, same as everywhere
 else this package extrapolates a fitted walk. Agrees exactly with the
 in-range calculation whenever every index touched is already in-range. The
@@ -2803,11 +2829,11 @@ with `δ = report_idx - u_i` and [`onset_report_F`](@ref) supplying `F`,
 predecessor for the very first scored vintage, contributes `ℓ_prev = 0` with
 no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
-level_prev)`, each a length-`length(onset_idx)` vector; `level_cur`/
+level_prev)`, each a length-`length(onset_idx)` vector. `level_cur`/
 `level_prev` are reused by [`onset_report_scales`](@ref) to grow the
 observation scale with the modelled (not observed) magnitude. Pure,
-top-level, single indexed loop — see [`onset_report_cdf`](@ref) for the
-AD-safety rationale.
+top-level, single indexed loop (see [`onset_report_cdf`](@ref) for the
+AD-safety rationale).
 """
 function onset_report_moments(onsets::AbstractVector,
         logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
@@ -2856,7 +2882,7 @@ the square root of a variance built from three sources.
     level cells dominate the joint likelihood.
   - Pixel-reading noise, roughly constant per bar read (`pixel_sd`, ≈2.1
     cases). An increment differences two independent reads, so its variance
-    doubles; the first snapshot's level cells read only one bar, so theirs
+    doubles. The first snapshot's level cells read only one bar, so theirs
     does not.
   - Per-scan multiplicative level error (`scan_frac`, ≈4.0%) applied to each
     read's own cumulative level at that onset date.
@@ -2888,7 +2914,7 @@ single indexed loop.
 Two approximations worth naming. First, the ≈4% scan-level error is measured
 per vintage (one shared dilation of that scan's whole figure), so the ~28
 cells drawn from one scan share a single correlated error rather than
-drawing it independently; treating it per cell is a tractability choice that
+drawing it independently. Treating it per cell is a tractability choice that
 likely understates posterior uncertainty on parameters shared across many
 cells from one scan (the calendar-walk `γ` step nearest that scan's report
 day in particular). Second, the counting term is Poisson-like, with no
@@ -2896,26 +2922,24 @@ separate overdispersion parameter.
 
 `σ_mult` is the only lever that can absorb either shortfall, so it is the
 diagnostic for both, but read it in the right direction: its prior
-(`onset_reporting_model`'s `slack_prior`) is bounded BELOW at 1 and is
+(`onset_reporting_model`'s `slack_prior`) is bounded below at 1 and
 unbounded above, so there is no upper edge for a posterior to press against.
 The signature that says a term needs its own parameter is `σ_mult` mass well
-above 1. A posterior sitting on the lower bound says the opposite, that the
-fit would like a tighter likelihood than the measurement floor allows.
+above 1. A posterior sitting on the lower bound says the opposite: the fit
+would like a tighter likelihood than the measurement floor allows.
 
-The two approximations leave different fingerprints, and `σ_mult` alone does
-not separate them. A missing overdispersion parameter grows the shortfall
-with the cell mean, since a uniform multiplier can inflate every cell but
-cannot change the mean-variance shape; the test is the empirical/modelled
-residual ratio across bins of `means`, against the `sqrt(ν/(ν-2))` a
-Student-t likelihood implies rather than against 1. Correlated scan error
-leaves individual cells alone and shows up only once cells from one snapshot
-are summed; the test is per-snapshot coverage, not per-cell. Do not expect
-it to show as an aggregate predictive that is simply too narrow: summing
-independent errors can reproduce the right total spread while putting it in
-the wrong place, so the symptom is central coverage collapsing with the
-90% coverage still near nominal. Both are checked in the report's
-symptom-onset reporting-delay section, and issue #507 carries what they
-returned for the current data.
+The two approximations leave different fingerprints, and `σ_mult` alone
+does not separate them. A missing overdispersion parameter grows the
+shortfall with the cell mean (a uniform multiplier inflates every cell but
+cannot change the mean-variance shape), tested against the
+empirical/modelled residual ratio across bins of `means` versus the
+`sqrt(ν/(ν-2))` a Student-t likelihood implies. Correlated scan error
+instead leaves individual cells alone and shows up only once cells from
+one snapshot are summed, tested on per-snapshot rather than per-cell
+coverage: summing independent errors can reproduce the right total spread
+while putting it in the wrong place, so central coverage can collapse
+while the 90% interval still looks nominal. Both are checked in the
+report's symptom-onset reporting-delay section.
 """
 function onset_report_scales(means::AbstractVector,
         level_cur::AbstractVector,
@@ -2942,7 +2966,7 @@ Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
 increment mean `μ` between two modelled cumulative levels `level_cur`
 and `level_prev` read off `reads` bars (`1` for a level differenced
 against an empty predecessor, `2` for a genuine correction). The vector
-method calls this, so the two cannot drift apart; the forecast
+method calls this, so the two cannot drift apart. The forecast
 ([`forecast_onsets`](@ref)) calls it directly to give a projected
 reporting increment the same three-term observation scale the likelihood
 gives a scored cell. See [`onset_report_scales`](@ref) for what each term
@@ -3002,7 +3026,7 @@ Expected reported symptom-onset total as of grid day `as_of`,
 `expected_*_T` cut-off deterministic. Callers pass the model cut-off `n` for
 `as_of`, so the total is directly comparable to
 `expected_confirmed_T`/`expected_deaths_T`, which sum their full `1:n`
-series; passing the triangle's own last report day instead would give a
+series. Passing the triangle's own last report day instead would give a
 total anchored a few days earlier than every sibling.
 
 `γ` and `alpha` both span only the digitised triangle's own grid (see
@@ -3071,8 +3095,8 @@ and drifting over calendar time. Two non-centred random effects, matching
 the repo's established idioms exactly:
 
   - a baseline logit hazard over the delay dimension `d = 0 … D-1`
-    ([`confirmed_positivity_model`](@ref)'s per-vintage positivity RE,
-    reindexed to delay instead of vintage):
+    ([`confirmed_positivity_model`](@ref)'s per-vintage positivity random
+    effect, reindexed to delay instead of vintage):
     ```math
     \\eta_0 \\sim \\text{baseline\\_prior}, \\quad
     \\sigma_{h0} \\sim \\text{pooling\\_prior}, \\quad
@@ -3091,21 +3115,21 @@ the repo's established idioms exactly:
     ```
 
 The walk is indexed on the grid `[grid_start, grid_end]`, the report-date
-axis, and NOT the onset/infection-date axis
-[`rt_walk_model`](@ref) already carries a smooth calendar-time
-multiplicative effect on: indexing this walk on onset date would make it
-unidentified against the reproduction-number walk (both would be free to
-explain the same onset-date-indexed rise and fall). Report date lags onset
-date by the delay itself (mean ≈6 d) plus the ≈6 d incubation period the
-onset series is already convolved from, so the two walks act on genuinely
-different, if overlapping, calendar windows — see `onset_reporting_model`'s
-docstring for what the vintage structure does and does not separate here.
+axis, not the onset/infection-date axis that [`rt_walk_model`](@ref)
+already carries a smooth calendar-time multiplicative effect on: indexing
+this walk on onset date would make it unidentified against the
+reproduction-number walk (both would be free to explain the same
+onset-date-indexed rise and fall). Report date lags onset date by the
+delay itself (mean ≈6 d) plus the ≈6 d incubation period the onset series
+is already convolved from, so the two walks act on genuinely different,
+if overlapping, calendar windows. See `onset_reporting_model`'s docstring
+for what the vintage structure does and does not separate here.
 
 The default `baseline_prior = Normal(logit(0.13), 0.7)` targets a median
 onset-to-report delay of roughly 5 days under a constant-hazard
-approximation (`(1 - 0.13)^5 ≈ 0.5`), close to the ≈6-day median an earlier
-line-list re-analysis found; the wide SD (0.7 logit-scale) leaves the
-per-delay random effect free to depart substantially; the fitted delay
+approximation (`(1 - 0.13)^5 ≈ 0.5`), close to the ≈6-day median a
+line-list re-analysis found. The wide SD (0.7 logit-scale) leaves the
+per-delay random effect free to depart substantially, so the fitted delay
 should be read with the same honesty that analysis needed (its 7-day
 reporting fraction carried a 43-68% 95% interval, wide because the
 digitisation noise is comparable in size to the between-vintage increments
@@ -3129,7 +3153,7 @@ that belongs to `R_t`. Any change here should report `R_t` over the final
 fortnight and `C_T` either side, and treat a material move as a reason to
 stop.
 
-Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`; `γ` is length
+Returns `(; logit_h0, γ, grid_start, η0, σ_h0, σ_γ)`, with `γ` length
 `max(grid_end - grid_start + 1, 1)`, indexed from `grid_start`.
 """
 @model function onset_report_hazard_model(grid_start::Integer,
@@ -3231,8 +3255,8 @@ now act on or near the same latent series: the reproduction-number walk
 ([`rt_walk_model`](@ref)) on the infection/onset axis, this stream's
 calendar walk `γ` on the report axis, the delay shape's baseline
 `logit_h0`, and the ascertainment walk `ω` on the onset axis. A change in
-the onset series moves a column of scored cells; a change in `γ` moves a
-row; a change in `logit_h0` moves a diagonal band. Column, row and band are
+the onset series moves a column of scored cells. A change in `γ` moves a
+row. A change in `logit_h0` moves a diagonal band. Column, row and band are
 distinguishable once there is more than one snapshot, which is the
 structural reason this stream is worth fitting, and the reason `γ` is
 indexed on the report day rather than the onset day (indexing it on onset
@@ -3253,11 +3277,11 @@ by levels, not by corrections: corrections constrain only differences of
 against an empty predecessor, see [`load_onset_curve`](@ref)) together with
 the onset series being pinned by the other streams. A single-stream
 [`onsets_only_model`](@ref) fit has neither, so its ascertainment and `C_T`
-stay close to prior-driven; worth running as a comparison, not an estimate.
+stay close to prior-driven: worth running as a comparison, not an estimate.
 Second, the hazard at the shortest delays is barely observed (published
 figures stop short of the report date), so those hazards rest on partial
 pooling to `η0`, not data. Third, a falling ascertainment and a slowing
-delay shape both suppress recent bars within one snapshot; right truncation
+delay shape both suppress recent bars within one snapshot. Right truncation
 self-corrects for the delay explanation but not a genuine ascertainment
 fall, so the vintage structure is what separates them, and only as well as
 the (under-ten) snapshots covering the affected dates allow.
@@ -3268,12 +3292,12 @@ are least constrained over the final fortnight. Any change here should
 report `R_t` over the final fortnight and `C_T` either side, treating a
 material move as a reason to stop rather than a result.
 
-The alive/dead split the raw triangle carries is NOT modelled separately:
+The alive/dead split the raw triangle carries is not modelled separately:
 only `confirmed_total` is fitted, since the confirmed-death stream already
 carries that split from other data.
 
 `onset_curve_history` is the [`load_onset_curve`](@ref) return shape
-`(; onset_days, report_days, prev_report_days, increments)`; the default
+`(; onset_days, report_days, prev_report_days, increments)`. The default
 empty history makes every loop here a no-op, the degrade-gracefully path
 for a missing input file. `increments` may be `missing` to sample instead
 of condition (the predictive-generator path).
@@ -3284,7 +3308,7 @@ cases/bar, `scan_frac` ≈4.0% per scan), and a sampled multiplicative slack
 `σ_mult ~ slack_prior` bounded below at 1 (each scale term is a lower bound
 on the truth, so a fitted scale below them would let a couple of hundred
 cells outvote every other stream). A short onsets-only run pulling the
-slack to the bound is expected there; in the joint fit a `σ_mult` posterior
+slack to the bound is expected there. In the joint fit a `σ_mult` posterior
 well above 1 says the scale is missing a term.
 
 The likelihood is Student-t with fixed degrees of freedom `ν` (default 4):
@@ -3323,7 +3347,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## `σ_γ`, …) straight into this frame means they surface as a single
     ## `onset_report_state.η0` etc at the composer level, rather than the
     ## double-nested `onset_report_state.hazard_state.η0` a prefixed
-    ## attachment would give — the flat form the pairs-plot summary uses.
+    ## attachment would give: the flat form the pairs-plot summary uses.
     hazard_state ~ to_submodel(hazard(grid_start, grid_end; D), false)
 
     ## Delay-weighted anchor series over the onset-date grid, built from the

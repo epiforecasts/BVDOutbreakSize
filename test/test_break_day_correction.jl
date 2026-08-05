@@ -4,7 +4,7 @@
 ## break day's retrospective step (net vintage increment minus the printed
 ## 24h gross count) is subtracted from any window it falls inside, for both
 ## the forecast truth and the persistence baseline centre, and leaves every
-## other stream untouched. See issue #511.
+## other stream untouched.
 
 @testitem "truth_at subtracts a break day inside the window" begin
     using Dates: Date, Day
@@ -35,7 +35,7 @@ end
     obs = (; cutoff = grid_date(40), confirmed_history = hist,
         confirmed_break_days = [24], confirmed_break_gross_cases = [97])
 
-    ## made_date sits ON the break day, so (24, 31] does not contain it.
+    ## made_date sits on the break day, so (24, 31] does not contain it.
     made_date = grid_date(24)
     target_date = grid_date(31)
     @test truth_at(obs, grid_date, "confirmed cases", made_date, target_date) ==

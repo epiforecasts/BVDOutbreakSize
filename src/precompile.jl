@@ -1,19 +1,19 @@
 # Precompile the expensive first-call work so a fresh process does not pay it
-# on its first fit. The dominant cost is Mooncake building the reverse rule for
-# `bvd_joint` the first time it differentiates the model (minutes). Compiling a
-# single log-density gradient of a synthetic full-stream joint here bakes those
-# rules into the package precompile cache; CI persists that cache (julia-
-# actions/cache), so a build skips the compile. The Mooncake rules are keyed by
-# method signature, not data size, so a 40-day synthetic fit compiles what the
-# full-size fits reuse, and the synthetic joint mirrors the report's headline
-# call so every precompilable stream's rule is covered. The gradient path (not
-# a NUTS fit) is the exact expensive operation and avoids sampler-adaptation
-# fragility at tiny sizes.
+# on its first fit. The dominant cost is Mooncake building the reverse rule
+# for `bvd_joint` the first time it differentiates the model (minutes).
+# Compiling a single log-density gradient of a synthetic full-stream joint
+# here bakes those rules into the package precompile cache. CI persists that
+# cache (julia-actions/cache), so a build skips the compile. The Mooncake
+# rules are keyed by method signature, not data size, so a 40-day synthetic
+# fit compiles what the full-size fits reuse. The synthetic joint mirrors
+# the report's headline call, so every precompilable stream's rule is
+# covered. The gradient path (not a NUTS fit) is the exact expensive
+# operation and avoids sampler-adaptation fragility at tiny sizes.
 #
 # Opt-in: the workload makes package precompilation slow (it runs the joint
-# Mooncake compile), so it is OFF by default to keep quick local iteration
-# fast, and switched on by a package preference. The report build enables it
-# through `docs/LocalPreferences.toml`; enable it for another environment with
+# Mooncake compile), so it is off by default, for quick local iteration.
+# A package preference switches it on. The report build enables it through
+# `docs/LocalPreferences.toml`. Enable it for another environment with
 #   using Preferences
 #   set_preferences!(BVDOutbreakSize, "precompile_workload" => true)
 # Changing the preference triggers one recompilation.
@@ -30,9 +30,9 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
         ## ascending; counts positive). The isolation/bed stream and the
         ## genetic-seeding TMRCA are left out on purpose: both score a
         ## `Distributions.censored` distribution whose Mooncake rule `eval`s
-        ## into the `Mooncake` module, which cannot run during precompilation,
-        ## so those two rules compile on the report's first fit either way
-        ## (#309). Everything else is cached here.
+        ## into the `Mooncake` module, and that cannot run during
+        ## precompilation. Those two rules compile on the report's first fit
+        ## instead. Everything else is cached here.
         dh = (; days = [13, 18, 40], counts = [10, 14, 18])
         rh = (; days = [13, 18, 40], counts = [340, 516, 905])
         ch = (; days = [13, 18, 40], counts = [9, 17, 27])
@@ -72,8 +72,8 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
                 background_re = true,
                 confirmed_positivity_link = :composition)
             ## A rule that cannot be built during precompilation (the
-            ## `eval`-into-`Mooncake` barrier) must not break the package —
-            ## cache what compiles and skip the rest.
+            ## `eval`-into-`Mooncake` barrier) must not break the package.
+            ## Cache what compiles and skip the rest.
             try
                 vi = link(VarInfo(m), m)
                 ldf = LogDensityFunction(

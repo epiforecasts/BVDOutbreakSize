@@ -6,6 +6,70 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+Changes since v1.13.0
+
+Every change below is textual: prose, comments, docstrings, plot rendering
+or repository housekeeping.
+No model, prior, computation or data changed.
+
+### Corrections
+
+- The analysis prose stated the confirmation-process sensitivity prior as
+  `Beta(10, 1.76)` where `test_sensitivity_model` samples `Beta(38, 2)`, and
+  gave the wrong rationale for it. The prior reflects that a suspect is
+  confirmed or ruled out through repeat control tests rather than one assay
+  draw, so the effective sensitivity is about 98% with two controls rather
+  than the roughly 85% of a single draw. Both the number and the rationale
+  are corrected (#548).
+- The analysis prose stated a 15-day TMRCA censoring SD where the model
+  uses 16. Corrected to match the code (#548).
+- `plot_rt`, `plot_cumulative_trajectories` and the single-stream overlay
+  (`plot_stream_trajectories`) each drew a 50%-width credible band while an
+  inline comment and docstring described it as part of a 30/60/90% ribbon
+  trio. All three now compute a genuine 30/60/90% ribbon and drop the
+  unused median-line description, so the figure and its documentation
+  agree. This changes what the three plots draw, not any estimate.
+- `docs/src/contributing.md` documented an abstract-marker mechanism
+  (`<!-- ABSTRACT:START/END -->`) that does not exist in `README.md` (the
+  real marker is `<!-- SHARED:END -->`), eleven integrator, submodel and
+  composer function names that do not exist in `src/`, two integration
+  constants that do not exist either, and a surveillance dispersion prior of
+  `truncated(Normal(0, 1); lower = 0)` where the code uses
+  `truncated(Normal(0.6, 0.2); lower = 0)`. Rewrote the repository layout,
+  running-and-testing and model-architecture sections against the current
+  code and `Taskfile.yml`.
+
+### Prose
+
+- Reflowed every write-up page, comment and docstring to the repository's
+  prose rules: one sentence per line, shorter sentences, no run-ons, no
+  restated points, no development history, and no code identifiers inside
+  narrative prose.
+- Removed emphasis-caps and issue and pull request references from `src/`,
+  `test/`, `scripts/` and the report pages. That history now lives here
+  instead.
+- Added a carve-out to the no-issue-numbers rule in `contributing.md`. An
+  issue number may stay where it is the provenance record for a still-open
+  decision, rather than an account of what changed.
+
+### Repository
+
+- Removed `predict_committed` and its three helpers from
+  `src/counterfactual.jl`. They called `delay_convolution` and
+  `DEATH_INTEGRAL_ALG`, neither of which is defined anywhere in `src/`,
+  left behind by the rename to `convolve_delay` in `renewal.jl`. Nothing
+  referenced them, so removing them changes nothing (#545).
+- Removed eight unused one-off scripts. `scripts/Project.toml` gained a
+  missing `Base64` dependency, and `scripts/README.md` now documents which
+  Julia project each script needs.
+- Removed the `notes/` folder, including the prose style guide the rules
+  were derived from, which now lives in `contributing.md`. Its remaining
+  open items are filed as issues #544 to #549.
+- Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
+  `scripts/README.md`, so a session starts with the rules in context.
+
 ## v1.13.0
 
 Changes since v1.12.0

@@ -38,9 +38,9 @@
           [Date("2026-03-01"), Date("2026-03-04"), Date("2026-03-06")]
 end
 
-@testitem "_dedup_onset_blocks keeps equal-total, differently-split blocks distinct" begin
+@testitem "_dedup_onset_blocks keeps distinct equal-total split blocks" begin
     ## The real data's 059/060 pair: equal cumulative totals but different
-    ## per-date splits are NOT a reprint and must both survive.
+    ## per-date splits are not a reprint and must both survive.
     using BVDOutbreakSize: _read_onset_curve_blocks, _dedup_onset_blocks
 
     dir = mktempdir()
@@ -69,7 +69,7 @@ end
     @test ismissing(h.last_total)
 end
 
-@testitem "load_onset_curve cut-off filtering recovers a later vintage with no code change" begin
+@testitem "load_onset_curve cut-off filtering recovers a later vintage" begin
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date
 
@@ -103,7 +103,7 @@ end
     @test length(late.onset_days) > length(early.onset_days)
 end
 
-@testitem "load_onset_curve: missing onset date within a block's own extent reads as zero" begin
+@testitem "load_onset_curve: a date missing within a block reads as zero" begin
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date, date2epochdays
 
@@ -135,7 +135,7 @@ end
     @test all(i -> h.increments[i] == -1, idxs)
 end
 
-@testitem "load_onset_curve: hand-built 3-snapshot triangle matches exact expected cells" begin
+@testitem "load_onset_curve: 3-snapshot triangle matches expected cells" begin
     using BVDOutbreakSize: load_onset_curve
     using Dates: Date
 
@@ -263,7 +263,7 @@ end
     @test minimum(v2_days) == 34
 end
 
-@testitem "load_onset_curve: onset dates past a figure's printed extent are dropped, not zeroed" begin
+@testitem "load_onset_curve: out-of-extent dates are dropped, not zeroed" begin
     ## The published figures stop their x axis short of the report date. A
     ## date the figure never covered carries no observation, so its cell is
     ## dropped; reading it as zero would assert nothing had been reported
@@ -354,7 +354,7 @@ end
     @test vals[i27] == vals[i30]
 end
 
-@testitem "onset_report_cdf_extrapolated agrees with onset_report_cdf in-range and stays safe out-of-range" begin
+@testitem "onset_report_cdf_extrapolated matches in-range, safe outside" begin
     using BVDOutbreakSize: onset_report_cdf, onset_report_cdf_extrapolated
     using StatsFuns: logit
 
@@ -382,8 +382,8 @@ end
     end
 end
 
-@testitem "onset_report_moments: a later snapshot sees more of the same onset date" begin
-    ## The literal right-truncation proof: for the SAME onset date and fixed
+@testitem "onset_report_moments: a later snapshot sees more of one date" begin
+    ## The literal right-truncation proof: for the same onset date and fixed
     ## hazards, the modelled current-cumulative level is non-decreasing as
     ## the report day moves later.
     using BVDOutbreakSize: onset_report_moments
@@ -401,7 +401,7 @@ end
     @test late.level_cur[1] >= early.level_cur[1]
 end
 
-@testitem "onset_report_G reaches one at D-1, is monotone, and stays finite when hazards underflow" begin
+@testitem "onset_report_G reaches one at D-1, monotone under underflow" begin
     using BVDOutbreakSize: onset_report_G
     using Random: seed!
 
@@ -449,7 +449,7 @@ end
     end
 end
 
-@testitem "onset_report_ascertainment keeps a finite gradient at an anchor of zero or one" begin
+@testitem "onset_report_ascertainment has a finite gradient at 0 or 1" begin
     using BVDOutbreakSize: onset_report_ascertainment
     using ForwardDiff: gradient
 
@@ -469,7 +469,7 @@ end
     @test onset_report_ascertainment([0.15], 0.0, [0.0])[1] ≈ 0.15
 end
 
-@testitem "onset_report_anchor is a weighted average of a, exact for a constant a" begin
+@testitem "onset_report_anchor weighted-averages a, exact for constant a" begin
     using BVDOutbreakSize: onset_report_anchor
     using Random: seed!
     using StatsFuns: logit
@@ -511,11 +511,10 @@ end
     end
 end
 
-@testitem "onset_report_expected_total covers onset dates before grid_start" begin
-    ## Regression test: `expected_onset_reported_T` must sum the FULL
-    ## `1:n` onset series like every other stream's `expected_*_T`, not
-    ## just the triangle's own `grid_start:grid_end` window (see
-    ## `onset_report_G`).
+@testitem "onset_report_expected_total covers dates before grid_start" begin
+    ## `expected_onset_reported_T` must sum the full `1:n` onset series
+    ## like every other stream's `expected_*_T`, not just the triangle's
+    ## own `grid_start:grid_end` window (see `onset_report_G`).
     using BVDOutbreakSize: onset_report_expected_total, onset_report_F
     using StatsFuns: logit
 
@@ -527,8 +526,8 @@ end
     γ = zeros(grid_end - grid_start + 1)
     alpha = fill(0.4, grid_end - grid_start + 1)
 
-    ## A window-restricted sum (the pre-fix behaviour) only over
-    ## `grid_start:grid_end`, for comparison.
+    ## A sum restricted to just `grid_start:grid_end`, for comparison
+    ## against the full total below.
     restricted = sum(
         onsets[u] * onset_report_F(grid_end - u, logit_h0, γ, u, grid_start,
             alpha[u - grid_start + 1])
@@ -551,7 +550,7 @@ end
     @test total ≈ restricted + (grid_start - 1) * 5.0 * F_edge
 end
 
-@testitem "load_onset_curve: a vintage narrower than an earlier one drops the uncovered date" begin
+@testitem "load_onset_curve: a narrower vintage drops the uncovered date" begin
     ## A date one vintage of a pair does not print carries no observation
     ## from that vintage, so the pair cannot form a correction there. The
     ## cell is dropped rather than read as a zero, which would fabricate a
@@ -592,7 +591,7 @@ end
     @test minimum(h.increments) >= 0
 end
 
-@testitem "onset_report_scales matches the measured-error formula and grows with magnitude" begin
+@testitem "onset_report_scales: error formula match, grows with magnitude" begin
     using BVDOutbreakSize: onset_report_scales
 
     level_cur = [0.0, 100.0, 40.0]
@@ -613,7 +612,7 @@ end
     @test s[2] > s[1]
 end
 
-@testitem "onset_report_scales floors the counting term at a non-negative mean" begin
+@testitem "onset_report_scales floors a negative counting term" begin
     ## `means` is non-negative by construction (F is monotone in δ), but a
     ## degenerate call must not take the square root of a negative variance.
     using BVDOutbreakSize: onset_report_scales
@@ -656,7 +655,7 @@ end
     @test all(isfinite, et)
 end
 
-@testitem "onset_reporting_model conditions on the increments rather than sampling them" begin
+@testitem "onset_reporting_model conditions on increments, not sampled" begin
     ## Regression test for a silent-failure mode specific to DynamicPPL:
     ## observe-versus-assume is decided by whether the tilde's symbol is one
     ## of the enclosing model's argument names, so reading the observations
@@ -696,7 +695,7 @@ end
     @test lp != lp_other
 end
 
-@testitem "onsets_only_model: prior predictive on a synthetic triangle is finite" begin
+@testitem "onsets_only_model: prior predictive on a triangle is finite" begin
     using BVDOutbreakSize: onsets_only_model
     using Turing: Prior, sample
 
@@ -712,7 +711,7 @@ end
     @test all(>=(0), et)
 end
 
-@testitem "onsets_only_model: unanchored ascertainment prior has median near 0.15" begin
+@testitem "onsets_only_model: unanchored ascertainment median near 0.15" begin
     ## No confirmed pipeline to anchor on, so the ascertainment level's
     ## prior is exactly `logistic(logit(0.15) + β)` with `β ~ Normal(0,
     ## 0.75)` (the onset-axis walk is near-flat a priori): median ≈ 0.15,
@@ -772,8 +771,9 @@ end
     @test all(isfinite, et)
 end
 
-@testitem "bvd_joint fits under a short NUTS run with the onset stream wired in" tags = [
-    :slow] begin
+@testitem "bvd_joint: short NUTS run with the onset stream wired in" tags = [
+    :slow
+] begin
     using BVDOutbreakSize: bvd_joint, nuts_sample
 
     n = 40
@@ -811,7 +811,7 @@ end
 
     dir = mktempdir()
     path = joinpath(dir, "onset.csv")
-    ## Three distinct vintages. The third reads a SMALLER total than the
+    ## Three distinct vintages. The third reads a smaller total than the
     ## second, which late reporting cannot produce and the per-scan level
     ## error can: the totals are recorded as read rather than made
     ## monotone.
@@ -862,7 +862,7 @@ end
 
 ## --- Hazard reconstruction and the onset nowcast/forecast ---------------
 
-@testitem "reconstruct_onset_hazard rebuilds the fitted cut-off total and round-trips alpha" begin
+@testitem "reconstruct_onset_hazard rebuilds the total, round-trips alpha" begin
     ## The reconstruction is exact rather than approximate: feeding it back
     ## into `onset_report_expected_total` with the chain's own onset
     ## trajectory must reproduce the `expected_onset_reported_T` the model
@@ -898,7 +898,7 @@ end
     @test all(isapprox.(rebuilt, et; rtol = 1e-8))
 end
 
-@testitem "reconstruct_onset_hazard rejects a grid the chain was not fitted on" begin
+@testitem "reconstruct_onset_hazard rejects a grid it was not fitted on" begin
     using BVDOutbreakSize: onsets_only_model, reconstruct_onset_hazard
     using Turing: Prior, sample
 
@@ -912,7 +912,7 @@ end
         grid_start = 10, grid_end = 110)
 end
 
-@testitem "forecast_onsets separates not-yet-reported from not-yet-happened" begin
+@testitem "forecast_onsets separates not-reported from not-yet-happened" begin
     using BVDOutbreakSize: onsets_only_model, forecast_onsets
     using Turing: Prior, sample
     using DataFrames: nrow
@@ -958,7 +958,7 @@ end
     @test mean(fc.onset_reports_new) > 0
 end
 
-@testitem "forecast_onsets backfill shrinks and future grows with the horizon" begin
+@testitem "forecast_onsets backfill shrinks, future grows with horizon" begin
     using BVDOutbreakSize: onsets_only_model, forecast_onsets
     using Turing: Prior, sample
     using Statistics: mean
@@ -983,7 +983,7 @@ end
     @test mean(f21.onsets_new) > mean(f7.onsets_new)
 end
 
-@testitem "forecast_stream routes the onset stream through forecast_onsets" begin
+@testitem "forecast_stream routes onsets through forecast_onsets" begin
     using BVDOutbreakSize: onsets_only_model, forecast_stream,
                            forecast_onsets
     using Turing: Prior, sample
@@ -1084,10 +1084,10 @@ end
 @testitem "the onset stream spec names keys the onsets fit really carries" begin
     ## `_STREAM_SPEC[:onset_reports]` does not drive the projection — the
     ## `kind = :onset` branch hands the stream to `forecast_onsets` before
-    ## those fields are read — but a spec entry naming a key the model never
-    ## exposes is exactly how the confirmed-case binding went stale (#445,
-    ## #453). Pin it against a real chain so it cannot rot unnoticed if the
-    ## fields are ever wired up.
+    ## those fields are read — but a spec entry naming a key the model
+    ## never exposes cannot be caught by a test that only exercises the
+    ## `:onset` branch. Pin it against a real chain so it cannot rot
+    ## unnoticed if the fields are ever wired up.
     using BVDOutbreakSize: onsets_only_model, _STREAM_SPEC, _resolve_draws,
                            _daily_at_cutoff_any
     using Turing: Prior, sample
