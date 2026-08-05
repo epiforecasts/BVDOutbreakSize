@@ -278,7 +278,19 @@ the `source =` string and prefer the auditable value.
   row) and record the printed Ensemble cell as the discrepancy (precedent:
   SitRep 079, 1 August — Ensemble cells 18/71/15/2/0 were a byte-identical
   copy of SitRep 078's own Ensemble cells, while the row sums 25/86/42/4/1
-  matched the prose and `Total sorties (24h)` = 158 exactly).
+  matched the prose and `Total sorties (24h)` = 158 exactly). The table can
+  also be **entirely absent** from an analytique-format vintage (precedent
+  in the confirmed-based era: SitReps 029, 043, 045, 047–048, 050–051; first
+  seen in the analytique era at SitRep 081, 3 August, confirmed via the
+  document's own section numbering skipping straight from "3 Surveillance"
+  to "4 Santé mentale" with no "Prise en charge" section at all) — when this
+  happens the seven `treatment_*` streams simply have no entry for that date
+  (never interpolated), `isolation_history` is unaffected because its Fin J
+  comes independently from the page-1 tile, and `bed_capacity_history` can
+  sometimes still be recovered by summing whatever per-province bed counts
+  appear in prose elsewhere in the report (e.g. the "Prise en charge
+  holistique" pillar narrative in §6), the same summing convention already
+  used when no Ensemble/Global row is printed.
 - **Unpublished reports**: some SitRep numbers were never issued (029/12 Jun,
   043/26 Jun, 045/28 Jun). The series simply step over the missing date; note
   it in the `source =` string.
@@ -325,6 +337,7 @@ being silently dropped as the report format evolves. Known candidates:
 | Alert-investigation throughput (Tableau 3): `Total alertes du jour`, `Alertes investiguées`, `Taux d'investigation (24 h)` | The denominator behind `Cas suspects du jour` — how much of the alert inflow was actually worked. A direct surveillance-effort covariate for suspect ascertainment; moves independently of the validated-suspect count (19–23 July: 82.6%, 84.1%, 79.5%, 79.8%). |
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 | EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. **The 059 boundary is deliberate, not the edge of the data.** 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
+| `formes sévères ou critiques` (PECH prose, §6) | Severe/critical clinical forms among patients currently in isolation, Ituri only so far (63 on SitRep 080, 57 on 081). A clinical-severity signal distinct from the confirmed/isolation counts. First appears on SitRep 080 (checked 077-079 by grep, zero hits); intermittent and province-partial like the EDS throughput rows above, so treat a missing province as unreported, not zero. |
 
 If a genuinely new indicator appears that is not in this list or the fitted
 table, add a row here in the same PR so the procedure stays current.
