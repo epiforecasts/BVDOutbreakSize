@@ -3389,7 +3389,6 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a)
 end
 
-
 """
 Per-province composition of the confirmed cases, from the Tableau 1
 spatial tables.

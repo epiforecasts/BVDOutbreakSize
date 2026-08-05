@@ -3653,12 +3653,7 @@ end;
 
 onset_forecast_fig #hide
 
-||||||| parent of 93f9d211 (docs(patch): wire the patch model into the analysis)
 
-
-
-# ## Spatial structure
-||||||| parent of 8e88d2eb (refactor: the patch model IS the joint; one model, not two)
 # ## Spatial structure
 
 #

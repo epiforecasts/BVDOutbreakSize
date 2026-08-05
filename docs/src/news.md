@@ -310,8 +310,6 @@ Changes since v1.9.0.
   StatsFuns (2.2.0), SHA (0.7.0), Aqua (0.8.16), TestItemRunner (1.1.5),
   CensoredDistributions (0.2.22), and TestItems (1.0.0).
 
-||||||| parent of fcb943f4 (data: advance province series to SitRep 055 (8 July); add news entry)
-
 ## v1.9.0
 
 Changes since v1.8.0.

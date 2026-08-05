@@ -870,7 +870,6 @@ the implied per-suspected (`suspected_positivity`) and per-test
     death_confirmation := confirmed_deaths_state.p_death_conf
 end
 
-||||||| parent of 8e88d2eb (refactor: the patch model IS the joint; one model, not two)
 """
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),

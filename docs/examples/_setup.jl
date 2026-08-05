@@ -186,10 +186,10 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
     ## inside a model body puts a memcmp foreigncall on the AD tape).
     province_cases = province_increment_matrix(
-        obs.province_confirmed_history, PROVINCE_NAMES, 3);
+        obs.province_confirmed_history, PROVINCE_NAMES, 3)
     province_deaths = province_increment_matrix(
-        obs.province_death_history, PROVINCE_NAMES, 3);
-    posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]));
+        obs.province_death_history, PROVINCE_NAMES, 3)
+    posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))
     posterior_C_exports = vec(Array(chn_exports[:C_T]))

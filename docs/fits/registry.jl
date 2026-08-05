@@ -123,7 +123,6 @@ function build_fit_specs(obs;
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-<<<<<<< HEAD
         samples::Integer = 500,
         joint_samples::Integer = default_joint_samples(),
         chains::Integer = 2)
@@ -349,7 +348,6 @@ function build_fit_specs(obs;
                     province_death_increments = patch_prov_deaths.increments,
                     province_death_days = patch_prov_deaths.days,
                     tmrca_days = obs.tmrca_days);
-<<<<<<< HEAD
                 samples = joint_samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         ## SENSITIVITY: the same model with the spatial structure turned OFF

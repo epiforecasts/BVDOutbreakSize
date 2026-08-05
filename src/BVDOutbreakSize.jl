@@ -118,7 +118,6 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
        exports_deaths_only_model, exports_joint_only_model, bvd_joint,
-<<<<<<< HEAD
        onsets_only_model,
        PROVINCE_NAMES, PROVINCE_POPULATIONS, province_importation_kernel,
        province_increment_matrix,
