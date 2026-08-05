@@ -402,7 +402,6 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
 end
 
-
 ## --- Patch (multi-population) joint models ------------------------------
 
 """
