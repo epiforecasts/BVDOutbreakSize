@@ -6,7 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v1.13.1
+
+Changes since v1.13.0
 
 ### Data
 
