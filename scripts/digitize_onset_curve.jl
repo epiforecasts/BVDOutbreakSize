@@ -85,7 +85,9 @@ const CONFIG = [
     ("077", Date(2026, 7, 30), Date(2026, 7, 29)),
     ("078", Date(2026, 7, 31), Date(2026, 7, 29)),
     ("079", Date(2026, 8, 1), Date(2026, 7, 29)),
-    ("080", Date(2026, 8, 2), Date(2026, 7, 29))
+    ("080", Date(2026, 8, 2), Date(2026, 7, 29)),
+    ("081", Date(2026, 8, 3), Date(2026, 7, 29)),
+    ("082", Date(2026, 8, 4), Date(2026, 8, 5))
 ]
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -234,12 +236,26 @@ function digitize(R, G, B, last_tick::Date)
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
     # it at 4 and losing the axis entirely on the smaller figures.
-    band = vec(sum(dark[(base + 2):min(base + 8, H), :]; dims = 1))
-    xt = Int[]
-    for cut in (4, 3, 2)
-        xt = cluster([x for x in 1:W if band[x] >= cut])
-        length(xt) >= 8 && break
+    band = vec(sum(dark[(base + 2):min(base + 6, H), :]; dims = 1))
+    # The tick marks sit just below the baseline (2-6 rows) and, on the faint
+    # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
+    # come all the way down to 1 to resolve them; the window stops at base+6
+    # so a wide low-cut scan cannot pick up the x-axis date labels further
+    # down. Step down through the cuts and keep the most complete regular
+    # weekly tick row (the true axis has a fixed number of weekly ticks, so a
+    # too-strict cut silently drops every other tick rather than failing).
+    best_n = 0
+    best = Int[]
+    for cut in (4, 3, 2, 1)
+        cand = cluster([x for x in 1:W if band[x] >= cut])
+        length(cand) >= 8 || continue
+        if length(cand) > best_n
+            best_n = length(cand)
+            best = cand
+        end
     end
+    isempty(best) && error("no x-axis weekly tick row found")
+    xt = best
     ppd = median(diff(xt)) / 7.0          # pixels per day
     lastx = xt[end]                       # rightmost tick is always real
     # per-column stacked bar height, flooded up from the baseline

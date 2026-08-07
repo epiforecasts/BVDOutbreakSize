@@ -55,7 +55,7 @@ See issue #488.
 
 SitReps 061 and 062 reuse one figure, as do 069/070/071 and 073/074 (identical n = 2 567, identical digitised total and day count).
 SitReps 079/080 now reuse one too (identical n = 2 915, identical digitised total 2 770 and day count, md5-verified byte-identical embedded images).
-The nineteen scanned vintages therefore hold fourteen distinct onset snapshots (report dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25, 26, 30, 31 July and 1 August).
+The twenty-one scanned vintages therefore hold sixteen distinct onset snapshots (report dates 12, 13, 14, 17, 18, 19, 20, 21, 22, 25, 26, 30, 31 July and 1, 3, 4 August); the 2 August (080) vintage shares its figure with 079 and stays a duplicate, while 3 August (081) and 4 August (082) are both fresh distinct snapshots.
 SitReps 059 and 060 are not a repeat despite sharing a digitised total of 1821: they differ on three days, so they count as two snapshots.
 Reprints are collapsed by exact value equality over the digitised block rather than by a list of vintage ids, so a new reprint is caught without a change to the loader.
 Treating a reprint as a fresh snapshot would fabricate an increment of exactly zero and bias the fitted delay towards fast reporting.
@@ -70,6 +70,7 @@ Both scripts now fall back to the immediate neighbouring pages when the caption 
 That widened search pulled in a second blue-heavy image, the provincial case map, which passed the old blue-fraction floor (0.02).
 Raising it to 0.055 (measured range: onset charts 0.066–0.125, the map 0.045–0.047 across every vintage checked) separates them with margin on both sides.
 Both fixes were verified to reproduce every previously committed block (059–079) unchanged before the SitRep 080 block was accepted.
+SitRep 081 broke the x-axis tick detection instead: its JPEG-compressed figure renders the weekly tick marks only 1px tall (max dark-pixel band value 2 in a 7-row window, against the working threshold of 2), so the old `cut in (4,3,2)` loop recovered only ~10 of the 19 ticks, inflating pixels-per-day and undercounting to 1411 against the printed n = 3 066 (−54%), far outside the noise band. The fix runs the cut loop down to 1 AND narrows the tick band window from `base+2:base+8` to `base+2:base+6` so a low-cut scan cannot pull in the x-axis date-label text further down, keeping the most complete regular weekly tick row. With it, SitRep 081 recovers the full 19-tick axis (ppd 6.714 vs 080's 6.643) and digitises to 2926 against printed n = 3 066 (−4.6%, back inside the band), and SitRep 082 digitises to 2967 (a fresh figure, reported n read off the axis at digitisation time). Both scripts (`.jl` and the byte-identical `.py`) were verified to reproduce every previously committed block (059–080) unchanged before the 081/082 blocks were accepted.
 
 Each figure also stops its x axis short of its own report date, by anything from zero to eight days, and the last bar it prints is often a substantial count rather than a tail fading to zero.
 An onset date past that axis is a date the figure says nothing about, not a bar of height zero.
