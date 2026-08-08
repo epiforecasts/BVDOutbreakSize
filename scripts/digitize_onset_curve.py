@@ -102,6 +102,8 @@ CONFIG = {
     "078": ("2026-07-31", "2026-07-29"),
     "079": ("2026-08-01", "2026-07-29"),
     "080": ("2026-08-02", "2026-07-29"),
+    "081": ("2026-08-03", "2026-07-29"),
+    "082": ("2026-08-04", "2026-08-05"),
 }
 
 
@@ -264,11 +266,24 @@ def digitize(im, last_tick_date):
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
     # it at 4 and losing the axis entirely on the smaller figures.
-    band = dark[base + 2:base + 9, :].sum(axis=0)
-    for cut in (4, 3, 2):
-        xt = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
-        if len(xt) >= 8:
-            break
+    band = dark[base + 2:base + 7, :].sum(axis=0)
+    # The tick marks sit just below the baseline (a few px) and, on the faint
+    # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
+    # come all the way down to 1 to resolve them; the window stops at base+7
+    # so a wide low-cut scan cannot pick up the x-axis date labels further
+    # down. Step down through the cuts and keep the most complete weekly tick
+    # row (the true axis has a fixed number of weekly ticks, so a too-strict
+    # cut silently drops every other tick rather than failing).
+    best_n = 0
+    best = np.array([])
+    for cut in (4, 3, 2, 1):
+        cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
+        if len(cand) >= 8 and len(cand) > best_n:
+            best_n = len(cand)
+            best = cand
+    if len(best) == 0:
+        raise ValueError("no x-axis weekly tick row found")
+    xt = best
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
     lastx = xt[-1]                       # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)

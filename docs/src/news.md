@@ -6,6 +6,20 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.13.1
+
+Changes since v1.13.0
+
+### Data
+
+- Advanced the model cut-off from SitRep 081 (3 August) to SitRep 082
+  (4 August): added SitRep 082 and the missing 3 August (SitRep 081)
+  confirmed-case / confirmed-death cumulative points that the previous
+  data update left at 2 August, and fixed the SitRep 081 onset-curve
+  digitisation (the x-axis tick detection had undercounted that figure
+  to −54%; the fix brings it inside the noise band) so both the 3 and
+  4 August onset snapshots are now included.
+
 ## v1.13.0
 
 Changes since v1.12.0
