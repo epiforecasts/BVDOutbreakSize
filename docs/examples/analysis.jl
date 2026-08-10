@@ -3654,7 +3654,7 @@ onset_forecast_fig #hide
 # ## Spatial structure
 #
 # The headline model runs a renewal equation per province, for Ituri, Nord-Kivu and Sud-Kivu, coupled by importation.
-# Every national stream is fitted against the summed provinces, so the national results above are unchanged in structure.
+# Every national stream is fitted against the summed provinces.
 # Setting `n_patches = 1` collapses the model onto a single well-mixed population, which is the sensitivity fit at the end of this section.
 #
 # Provincial reproduction numbers are the national trend plus deviations that sum to zero, drawn from a correlated random walk.
@@ -3697,16 +3697,15 @@ province_split_table
 #
 # One row per province, each entry a median with a 90% credible interval.
 # The reproduction number and the relative ascertainment must be read together.
-# The case composition identifies only their product, and it is the deaths that tilt the balance between them.
-# A province with a low reproduction number and high ascertainment looks much like one with a high reproduction number and low ascertainment.
+# A province with a low reproduction number and high ascertainment looks much like one with the reverse.
 
 province_overview_table = patch_overview_table(chn_joint, 3);
 province_overview_table
 
 # ### Connectivity
 #
-# The provinces are coupled by importation.
-# There is no mobility or origin-destination data for this outbreak, so the kernel is a structural assumption: a fixed weighting by destination population, with the intensity `epsilon` sampled.
+# There is no mobility or origin-destination data for this outbreak.
+# The kernel is therefore a structural assumption, a fixed weighting by destination population, with the intensity `epsilon` sampled.
 # `epsilon` is weakly identified against the secondary-province seeds, since both raise a secondary province's early incidence.
 # Read it as the scale of coupling the data will tolerate rather than as a measured flow.
 
@@ -3786,7 +3785,8 @@ spatial_hyper_table
 # Splitting the country into provinces adds no national data, so it should not move the national outbreak size.
 # The two posteriors below are therefore a gate rather than a curiosity.
 # Agreement says the spatial structure buys provincial detail without disturbing the headline.
-# Disagreement says the spatial structure is doing something to the national fit that the provincial data alone cannot justify, and the headline should not be read from the patch model until that is explained.
+# Disagreement says it is doing something to the national fit the provincial data cannot justify.
+# The headline should then not be read from the patch model until that is explained.
 
 spatial_sensitivity_table = streams_table(
     "Patch model (headline)" => posterior_C_joint,

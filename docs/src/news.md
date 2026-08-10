@@ -19,6 +19,15 @@ Changes since v1.13.1
   to import between, and there is no per-province likelihood), so there is one
   model rather than two. The single-patch case is fitted as the
   `sens_no_patches` sensitivity, which is the check on the spatial structure.
+- **That check does not currently pass, so the headline outbreak size should
+  not be read off a patch fit yet.** Splitting the country into provinces adds
+  no national data, so the national total should be invariant to the patch
+  count. It is not. Importation manufactures infections instead of moving them
+  (the destination gains `eps * K * I_prev` and the origin loses nothing), and
+  the national seed is replicated per patch rather than partitioned across
+  them. Together these make the prior-predictive national `C_T` about 1.75x
+  larger at three patches than at one, before any data. Both are pinned as
+  `@test_broken` invariants in `test/test_patch_model.jl`.
 - Per-province reproduction numbers are a common national trend plus deviations
   that sum to zero, drawn from a multivariate-normal random walk with a learned
   cross-patch correlation. The deviation scale is sampled, so whether the

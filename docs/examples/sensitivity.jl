@@ -1254,9 +1254,10 @@ chamla_rt_fig #hide
 # two posteriors below are a gate rather than a curiosity.
 # Agreement says the spatial structure buys provincial detail without
 # disturbing the headline.
-# Disagreement says the spatial structure is doing something to the national
-# fit that the provincial data alone cannot justify, and the headline should
-# not be read from the patch model until that is explained.
+# Disagreement says it is doing something to the national fit the provincial
+# data cannot justify.
+# The headline should then not be read from the patch model until that is
+# explained.
 #
 # The per-province split rests on the confirmed deaths.
 # A province's case count is the product of its incidence and its case-finding

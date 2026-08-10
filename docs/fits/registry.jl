@@ -360,9 +360,14 @@ function build_fit_specs(obs;
                 samples = joint_samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         ## SENSITIVITY: the same model with the spatial structure turned OFF
-        ## (`n_patches` defaults to 1). This is the check on the headline --
-        ## if the patch structure were distorting the national fit, the two
-        ## C_T posteriors would part company.
+        ## (`n_patches` defaults to 1). Splitting the country into provinces
+        ## adds no national data, so the two C_T posteriors should agree; a
+        ## gap is a defect in the spatial structure, not a finding about it.
+        ## They do NOT currently agree. Two structural asymmetries inflate the
+        ## national total as patches are added -- importation manufactures
+        ## infections rather than moving them, and the national seed is
+        ## replicated per patch rather than partitioned across them. Both are
+        ## pinned as `@test_broken` in test/test_patch_model.jl.
         (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(
