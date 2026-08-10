@@ -404,8 +404,12 @@ prior constrains, and the surplus compounds over the whole renewal window into
 the national cumulative total. Anchoring makes the deviations pure contrasts
 between provinces and leaves the national level to `mu` alone.
 
-Returns `(; infections, Rt_matrix)`, the second being the realised per-patch
-reproduction numbers after scaling, which is what should be reported.
+Returns `(; infections, Rt_matrix, anchor_scale)`. `Rt_matrix` is the realised
+per-patch reproduction numbers after scaling, which is what should be reported,
+and `anchor_scale` is the daily common factor, one before the renewal starts.
+The scale depends on the forces, so it cannot be recovered from the deviation
+knots alone; carrying it is what lets a saved chain rebuild the provincial
+trajectories (see [`reconstruct_patch_rt`](@ref)).
 """
 function patch_infections_anchored(Rt_matrix::AbstractMatrix,
         g::AbstractVector, seeds_matrix::AbstractMatrix,
@@ -418,6 +422,7 @@ function patch_infections_anchored(Rt_matrix::AbstractMatrix,
         eltype(national_rt))
     I = zeros(Tp, np, n)
     Rt_realised = zeros(Tp, np, n)
+    anchor_scale = ones(Tp, n)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -447,6 +452,7 @@ function patch_infections_anchored(Rt_matrix::AbstractMatrix,
         ## so the choice does not affect the trajectory.
         scale = (total_force > 0 && weighted > 0) ?
                 national_rt[t] * total_force / weighted : one(Tp)
+        anchor_scale[t] = scale
         for p in 1:np
             Rt_realised[p, t] = scale * Rt_matrix[p, t]
             gen[p] = Rt_realised[p, t] * force[p]
@@ -463,7 +469,7 @@ function patch_infections_anchored(Rt_matrix::AbstractMatrix,
                       epsilon * arrivals
         end
     end
-    return (; infections = I, Rt_matrix = Rt_realised)
+    return (; infections = I, Rt_matrix = Rt_realised, anchor_scale)
 end
 
 """

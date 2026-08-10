@@ -846,6 +846,12 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     ## (three patches by ~17 knots), and flattening keeps it a plain vector
     ## deterministic like every other per-patch quantity here.
     delta_knots := vec(patch_state.δ_knots)
+    ## The daily common factor the anchored renewal applies to every patch so
+    ## the implied national reproduction number is the trend exactly. The
+    ## deviation knots alone do not determine it, since it depends on the
+    ## force split across patches, so it is carried here for
+    ## [`reconstruct_patch_rt`](@ref) to rebuild the provincial trajectories.
+    rt_anchor_scale := patch_state.anchor_scale
     ## THE spatial diagnostic: the per-patch scale of the log-Rt deviation
     ## walk. A posterior concentrated near zero says the provinces share one
     ## temporal Rt shape (a fixed ratio between them); pushed away from zero

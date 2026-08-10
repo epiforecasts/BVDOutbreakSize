@@ -702,15 +702,18 @@ end
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol=1e-8
     end
 
-    ## The deviations sum to zero, so the incidence-unweighted geometric mean
-    ## of the provincial Rt is the national trajectory.
+    ## The deviations sum to zero, so the unweighted geometric mean of the
+    ## provincial Rt is the national walk times that day's anchoring factor.
+    ## It is not the walk alone: the renewal rescales every province so the
+    ## force-weighted mean is the walk, and Ituri carries almost all the force.
     nat = reconstruct_rt(chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         rt_start = rt_start, rt_walk_start = rt_walk_start)
+    scales = [collect(v) for v in vec(collect(chn[:rt_anchor_scale]))]
     for i in 1:5, d in (obs.n, obs.n - 7)
 
         gm = exp(sum(log(rt[p][i, d]) for p in 1:3) / 3)
-        @test gm ≈ nat[i, d] rtol=1e-8
+        @test gm≈nat[i, d] * scales[i][d] rtol=1e-8
     end
 
     ## A chain with no patch structure carries no deviation knots, so the

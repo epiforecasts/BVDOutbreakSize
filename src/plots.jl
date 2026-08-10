@@ -1937,15 +1937,23 @@ masked to the draw's established window exactly as [`reconstruct_rt`](@ref)
 masks the national trajectory.
 
 The chain stores the provincial `Rt` only at the cut-off (`R_T_patch`), so
-the trajectory is rebuilt by mirroring [`patch_rt_model`](@ref): the national
-walk from [`reconstruct_rt`](@ref) times `exp(δ_p(t))`, where `δ_p` is the
-sum-to-zero deviation interpolated from the weekly knots the chain carries as
-`delta_knots` ([`interpolate_knots`](@ref)). `delta_knots` is the
-`(n_patches × n_knots)` deviation matrix flattened column-major.
+the trajectory is rebuilt by mirroring the model: the national walk from
+[`reconstruct_rt`](@ref), times `exp(δ_p(t))` with `δ_p` the sum-to-zero
+deviation interpolated from the weekly knots the chain carries as
+`delta_knots` ([`interpolate_knots`](@ref)), times the daily anchoring factor
+`rt_anchor_scale`. `delta_knots` is the `(n_patches × n_knots)` deviation
+matrix flattened column-major.
 
-A chain sampled before the knots were surfaced has no `delta_knots` at all,
-and one sampled with `n_patches = 1` carries a single row of zeros. Both are
-an error here rather than a silent national trajectory repeated per panel.
+The anchoring factor is not optional. The renewal scales every patch by one
+common factor each day so the implied national reproduction number is the
+trend exactly (see [`patch_infections_anchored`](@ref)), and that factor
+depends on how the force is split across patches, so it cannot be recovered
+from the knots. Dropping it would put the panels on a different scale from
+the `R_T_patch` the tables report.
+
+A chain sampled before these were surfaced carries neither, and one sampled
+with `n_patches = 1` carries a single row of zero deviations. Both are an
+error here rather than a silent national trajectory repeated per panel.
 """
 function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
         n_patches::Integer = length(PROVINCE_NAMES),
@@ -1955,13 +1963,14 @@ function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
         week, ramp)
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    knots = try
-        [collect(v) for v in vec(collect(chn[:delta_knots]))]
+    knots, scales = try
+        ([collect(v) for v in vec(collect(chn[:delta_knots]))],
+            [collect(v) for v in vec(collect(chn[:rt_anchor_scale]))])
     catch
-        error("reconstruct_patch_rt: the chain has no `delta_knots`, so the " *
-              "provincial Rt trajectories cannot be rebuilt. It was sampled " *
-              "either with `n_patches = 1` or before `delta_knots` was " *
-              "surfaced; refit with the patch structure on.")
+        error("reconstruct_patch_rt: the chain is missing `delta_knots` or " *
+              "`rt_anchor_scale`, so the provincial Rt trajectories cannot " *
+              "be rebuilt. It was sampled either with `n_patches = 1` or " *
+              "before those were surfaced; refit with the patch structure on.")
     end
     ndraws = size(national, 1)
     expected = n_patches * nb
@@ -1974,11 +1983,12 @@ function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
            for _ in 1:n_patches]
     for i in 1:ndraws
         δ_knots = reshape(knots[i], n_patches, nb)
+        s = scales[i]
         for p in 1:n_patches
             δ_daily = interpolate_knots(δ_knots[p, :], days, n)
             for d in 1:n
                 ismissing(national[i, d]) && continue
-                out[p][i, d] = national[i, d] * exp(δ_daily[d])
+                out[p][i, d] = national[i, d] * exp(δ_daily[d]) * s[d]
             end
         end
     end

@@ -1594,6 +1594,7 @@ patch chain carries the same headline quantities as a single-patch one.
     infections_matrix = renewal_state.infections
     ## Report the realised per-patch reproduction numbers, after anchoring.
     Rt_matrix = renewal_state.Rt_matrix
+    anchor_scale = renewal_state.anchor_scale
     ## 7. Per-patch cumulatives and the national aggregate.
     cumulative_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
@@ -1626,7 +1627,8 @@ patch chain carries the same headline quantities as a single-patch one.
     r = euler_lotka_r(R_T, g)
     T_total = growth_state.T + τ_obs
     return (; infections_matrix, cumulative_matrix, onsets_matrix,
-        Rt_matrix, δ_patch, δ_knots = rt_state.δ_knots, C_T_patch,
+        Rt_matrix, anchor_scale, δ_patch, δ_knots = rt_state.δ_knots,
+        C_T_patch,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
         Ω = rt_state.Ω,
