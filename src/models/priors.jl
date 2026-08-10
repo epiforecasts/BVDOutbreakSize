@@ -1606,7 +1606,7 @@ patch chain carries the same headline quantities as a single-patch one.
     r = euler_lotka_r(R_T, g)
     T_total = growth_state.T + τ_obs
     return (; infections_matrix, cumulative_matrix, onsets_matrix,
-        Rt_matrix, δ_patch, C_T_patch,
+        Rt_matrix, δ_patch, δ_knots = rt_state.δ_knots, C_T_patch,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
         Ω = rt_state.Ω,

@@ -495,6 +495,138 @@ end
     @test_throws ErrorException patch_summary_table(plain, 3)
 end
 
+@testitem "patch reporting: one table per province, and an overview" tags=[:slow] begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+    using DataFrames: DataFrame, nrow, names
+
+    obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    m = bvd_joint(obs.n,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        n_patches = 3,
+        province_increments = prov.increments,
+        province_days = prov.days,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
+    chn = sample(m, Prior(), 100; chain_type = FlexiChains.VNChain,
+        progress = false)
+
+    ## The cross-province overview is one ROW per province, not one row per
+    ## (province, quantity). This is the whole point of it: the long-format
+    ## table is unreadable as a comparison across provinces.
+    ov = patch_overview_table(chn, 3)
+    @test ov isa DataFrame
+    @test nrow(ov) == 3
+    @test ov[!, "Province"] == ["Ituri", "Nord-Kivu", "Sud-Kivu"]
+    @test "Reproduction number" in names(ov)
+    @test "Share of infections (%)" in names(ov)
+    ## Shares are computed per draw and must therefore still sum to 100 in the
+    ## median only approximately, but every entry must be a parseable
+    ## `median (lower–upper)` cell rather than a raw number.
+    for v in ov[!, "Reproduction number"]
+        @test occursin("(", v) && occursin("–", v)
+    end
+
+    ## Selecting one province gives that province's rows only, and drops the
+    ## Patch column, which would otherwise repeat one value down every row.
+    full = patch_summary_table(chn, 3)
+    one = patch_summary_table(chn, 3; patch = "Nord-Kivu")
+    @test nrow(one) == nrow(full) / 3
+    @test !("Patch" in names(one))
+    @test "Quantity" in names(one)
+    ## Selecting by index and by label must agree.
+    @test patch_summary_table(chn, 3; patch = 2) == one
+    ## The selected rows must be the SAME numbers the full table reports for
+    ## that province, not a re-summary of a different patch.
+    nk = full[full[!, "Patch"] .== "Nord-Kivu", :]
+    @test one[!, "Lower 90%"] == nk[!, "Lower 90%"]
+    @test one[!, "Upper 90%"] == nk[!, "Upper 90%"]
+
+    @test_throws ErrorException patch_summary_table(chn, 3; patch = "Kinshasa")
+    @test_throws ErrorException patch_summary_table(chn, 3; patch = 9)
+end
+
+@testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags=[:slow] begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+    using Statistics: median
+
+    obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    m = bvd_joint(obs.n,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        n_patches = 3,
+        province_increments = prov.increments,
+        province_days = prov.days,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
+    chn = sample(m, Prior(), 40; chain_type = FlexiChains.VNChain,
+        progress = false)
+
+    ## The same renewal start and walk start the model derives internally.
+    rt_start = clamp(obs.n - round(Int, obs.tmrca_days) + RENEWAL_START_LEAD,
+        1, obs.n)
+    rt_walk_start = clamp(
+        round(Int, obs.who_first_sitrep_days) - RT_WALK_LEAD, rt_start, obs.n)
+
+    rt = reconstruct_patch_rt(chn; n = obs.n,
+        breakpoint = obs.who_first_sitrep_days, n_patches = 3,
+        rt_start = rt_start, rt_walk_start = rt_walk_start)
+    @test length(rt) == 3
+    @test all(size(r) == (40, obs.n) for r in rt)
+
+    ## THE test that makes the figure trustworthy: rebuilding the provincial
+    ## trajectory from the deviation knots must reproduce, at the cut-off, the
+    ## `R_T_patch` the model itself computed. Without this the panels could
+    ## drift from the tables and nothing would catch it.
+    rtp = [collect(v) for v in vec(collect(chn[:R_T_patch]))]
+    for p in 1:3, i in 1:length(rtp)
+
+        @test rt[p][i, obs.n] ≈ rtp[i][p] rtol=1e-8
+    end
+
+    ## The deviations sum to zero, so the incidence-unweighted geometric mean
+    ## of the provincial Rt is the national trajectory.
+    nat = reconstruct_rt(chn; n = obs.n,
+        breakpoint = obs.who_first_sitrep_days,
+        rt_start = rt_start, rt_walk_start = rt_walk_start)
+    for i in 1:5, d in (obs.n, obs.n - 7)
+
+        gm = exp(sum(log(rt[p][i, d]) for p in 1:3) / 3)
+        @test gm ≈ nat[i, d] rtol=1e-8
+    end
+
+    ## A chain with no patch structure carries no deviation knots, so the
+    ## provincial trajectories cannot be rebuilt. That must be an error rather
+    ## than three copies of the national trajectory.
+    single = bvd_joint(obs.n,
+        obs.exported_cases, obs.total_deaths, obs.reported_cases,
+        obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
+    chn1 = sample(single, Prior(), 5; chain_type = FlexiChains.VNChain,
+        progress = false)
+    @test_throws ErrorException reconstruct_patch_rt(chn1; n = obs.n,
+        breakpoint = obs.who_first_sitrep_days, n_patches = 3,
+        rt_start = rt_start, rt_walk_start = rt_walk_start)
+end
+
 @testitem "province lab data: an exact partition of the national analysed" begin
     using BVDOutbreakSize
 

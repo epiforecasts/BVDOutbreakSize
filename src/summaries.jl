@@ -354,12 +354,82 @@ function _has_key(chn, key::Symbol)
     end
 end
 
+## Per-patch draw vectors for a vector deterministic: `_draw_vectors` gives one
+## vector per draw, so transpose to one draw vector per patch.
+function _per_patch(chn, sym::Symbol, np::Integer)
+    vs = _draw_vectors(chn, sym)
+    return [[v[p] for v in vs] for p in 1:np]
+end
+
+## Median and 90% credible interval as one cell, `median (lower–upper)`. The
+## cross-province overview puts several quantities side by side, so it trades
+## the six-column interval layout for one column per quantity; the per-province
+## tables below keep the full layout.
+function _median_ci(draws; digits::Integer = 2)
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return string(fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
+        fmt(quantile(draws, 0.95)), ")")
+end
+
+"""
+Cross-province overview for the patch model: one row per province and one
+column per quantity, each a median with a 90% credible interval. Reads the
+reproduction number at the cut-off, cumulative infections, the province's
+share of national infections, and its case ascertainment relative to the
+national average.
+
+This is the scannable comparison across provinces. The per-province detail,
+with the full 30/60/90% intervals and the deviation parameters, is in
+[`patch_summary_table`](@ref).
+
+The infection share is computed per draw before summarising, so its interval
+carries the correlation between provinces rather than dividing two
+independently summarised numbers. Ascertainment and the reproduction number
+must be read together: the case composition identifies only their product,
+and it is the per-province deaths that tilt the balance between them.
+"""
+function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 2,
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"])
+    required = [:C_T_patch, :R_T_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+        "not sampled from `bvd_joint`.")
+    np = min(n_patches, length(patch_labels))
+    C_T = _per_patch(chn, :C_T_patch, np)
+    R_T = _per_patch(chn, :R_T_patch, np)
+    ## Share per draw, so the interval reflects that the provinces' shares are
+    ## constrained to sum to one rather than varying independently.
+    totals = sum(C_T)
+    share = [100 .* C_T[p] ./ totals for p in 1:np]
+    asc = _has_key(chn, :province_ascertainment) ?
+          _per_patch(chn, :province_ascertainment, np) : nothing
+    df = DataFrame("Province" => String[],
+        "Reproduction number" => String[],
+        "Cumulative infections" => String[],
+        "Share of infections (%)" => String[])
+    asc === nothing || (df[!, "Relative ascertainment"] = String[])
+    for p in 1:np
+        row = Any[patch_labels[p], _median_ci(R_T[p]; digits),
+            _median_ci(C_T[p]; digits = 0), _median_ci(share[p]; digits = 1)]
+        asc === nothing || push!(row, _median_ci(asc[p]; digits))
+        push!(df, row)
+    end
+    return df
+end
+
 """
 Per-patch outbreak summary for the patch model: one row per province, with
 the cut-off cumulative infections `C_T`, the cut-off reproduction number
 `R_T`, the daily infections at the cut-off, and the log-Rt deviation `δ`
 from the common national trend. Each is reported as the same 90/60/30%
 credible intervals [`summary_table`](@ref) uses.
+
+Pass `patch` to restrict the table to a single province, by index or by
+label. The `Patch` column is then dropped, since it would repeat one value:
+this is how the analysis reports one table per province rather than one
+table of every province stacked together.
 
 The deviations are SUM-TO-ZERO contrasts around the national trend (see
 [`patch_rt_model`](@ref)), so `δ` is read relative to the national average
@@ -375,6 +445,7 @@ quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
 """
 function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         digits::Integer = 2,
+        patch::Union{Nothing, Integer, AbstractString} = nothing,
         patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"])
     required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
     absent = filter(p -> !_has_key(chn, p), required)
@@ -382,12 +453,21 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         "chain is missing the per-patch deterministics $(absent); it was " *
         "not sampled from `bvd_joint`.")
     np = min(n_patches, length(patch_labels))
-    ## `_draw_vectors` gives one vector per draw; transpose to per-patch
-    ## draw vectors so each patch can be summarised independently.
-    per_patch(sym) =
-        let vs = _draw_vectors(chn, sym)
-            [[v[p] for v in vs] for p in 1:np]
-        end
+    ## Which patches to report. A label is matched against `patch_labels`, so
+    ## the caller names the province rather than tracking its index.
+    selected = if patch === nothing
+        1:np
+    elseif patch isa Integer
+        1 <= patch <= np || error(
+            "patch = $patch is out of range; the chain has $np patches.")
+        patch:patch
+    else
+        i = findfirst(==(patch), patch_labels[1:np])
+        i === nothing && error(
+            "patch = \"$patch\" is not one of $(patch_labels[1:np]).")
+        i:i
+    end
+    per_patch(sym) = _per_patch(chn, sym, np)
     C_T = per_patch(:C_T_patch)
     R_T = per_patch(:R_T_patch)
     inf_T = per_patch(:infections_T_patch)
@@ -412,7 +492,7 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
         upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
     )
-    for p in 1:np
+    for p in selected
         rows = Any[("Cumulative infections", C_T[p], 0),
             ("Reproduction number", R_T[p], digits),
             ("Daily infections at cut-off", inf_T[p], 0),
@@ -432,5 +512,9 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
                     round(s.hi60; digits = dg), round(s.hi90; digits = dg)))
         end
     end
-    return _prettify(rename(df, [:patch => "Patch", :quantity => "Quantity"]))
+    ## A single-province table would repeat one patch name down every row, so
+    ## drop the column: the province belongs in the surrounding heading.
+    ## `_prettify` handles the remaining column names.
+    patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
+    _prettify(select(df, Not(:patch)))
 end

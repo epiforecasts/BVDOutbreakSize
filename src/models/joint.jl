@@ -838,6 +838,14 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
     delta_patch := [@inbounds(patch_state.δ_patch[p, n]) for p in 1:n_patches]
     delta_patch_start := [@inbounds(patch_state.δ_patch[p, rt_walk_start])
                           for p in 1:n_patches]
+    ## The deviation at every weekly KNOT, flattened column-major from the
+    ## `(n_patches × n_knots)` matrix, so the whole provincial Rt trajectory
+    ## can be rebuilt for plotting ([`reconstruct_patch_rt`](@ref)) by
+    ## interpolating these onto the day grid and adding the national walk.
+    ## Carrying the knots rather than the daily grid keeps the chain small
+    ## (three patches by ~17 knots), and flattening keeps it a plain vector
+    ## deterministic like every other per-patch quantity here.
+    delta_knots := vec(patch_state.δ_knots)
     ## THE spatial diagnostic: the per-patch scale of the log-Rt deviation
     ## walk. A posterior concentrated near zero says the provinces share one
     ## temporal Rt shape (a fixed ratio between them); pushed away from zero

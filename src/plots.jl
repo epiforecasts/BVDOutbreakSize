@@ -1800,6 +1800,14 @@ end
 ## `est` to draw, mirroring the band style used across the report.
 function _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
     rt = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp)
+    return _rt_bands_matrix(rt; n, ds)
+end
+
+## The band quantiles for an already-reconstructed `ndraws × n` Rt matrix.
+## Split out from `_rt_bands` so the per-province trajectories, which are built
+## from the national walk plus a deviation rather than read from one chain,
+## summarise through exactly the same code.
+function _rt_bands_matrix(rt::AbstractMatrix; n, ds)
     q(pr) = [_rt_quantile(rt, d, pr) for d in 1:n]
     med = q(0.5)
     est = findall(d -> d >= ds && !ismissing(med[d]), 1:n)
@@ -1918,6 +1926,148 @@ function plot_rt_streams(streams::AbstractVector;
         fontsize = 12, padding = (0, 0, 0, 6))
     CairoMakie.Label(fig[0, 1:ncols],
         "Implied Rt by data stream, with the joint fit overlaid";
+        fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+Reconstruct each posterior draw's daily reproduction number for every
+province, returning a vector of `ndraws × n` matrices, one per patch, each
+masked to the draw's established window exactly as [`reconstruct_rt`](@ref)
+masks the national trajectory.
+
+The chain stores the provincial `Rt` only at the cut-off (`R_T_patch`), so
+the trajectory is rebuilt by mirroring [`patch_rt_model`](@ref): the national
+walk from [`reconstruct_rt`](@ref) times `exp(δ_p(t))`, where `δ_p` is the
+sum-to-zero deviation interpolated from the weekly knots the chain carries as
+`delta_knots` ([`interpolate_knots`](@ref)). `delta_knots` is the
+`(n_patches × n_knots)` deviation matrix flattened column-major.
+
+A chain sampled before the knots were surfaced has no `delta_knots` at all,
+and one sampled with `n_patches = 1` carries a single row of zeros. Both are
+an error here rather than a silent national trajectory repeated per panel.
+"""
+function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP)
+    national = reconstruct_rt(chn; n, breakpoint, rt_start, rt_walk_start,
+        week, ramp)
+    days = knot_days(n; week, start = rt_walk_start)
+    nb = length(days)
+    knots = try
+        [collect(v) for v in vec(collect(chn[:delta_knots]))]
+    catch
+        error("reconstruct_patch_rt: the chain has no `delta_knots`, so the " *
+              "provincial Rt trajectories cannot be rebuilt. It was sampled " *
+              "either with `n_patches = 1` or before `delta_knots` was " *
+              "surfaced; refit with the patch structure on.")
+    end
+    ndraws = size(national, 1)
+    expected = n_patches * nb
+    isempty(knots) || length(knots[1]) == expected ||
+        error(
+            "reconstruct_patch_rt: `delta_knots` holds $(length(knots[1])) " *
+            "entries but $n_patches patches by $nb knots is $expected; " *
+            "pass the same `n_patches` and `rt_walk_start` the model used.")
+    out = [Matrix{Union{Missing, Float64}}(missing, ndraws, n)
+           for _ in 1:n_patches]
+    for i in 1:ndraws
+        δ_knots = reshape(knots[i], n_patches, nb)
+        for p in 1:n_patches
+            δ_daily = interpolate_knots(δ_knots[p, :], days, n)
+            for d in 1:n
+                ismissing(national[i, d]) && continue
+                out[p][i, d] = national[i, d] * exp(δ_daily[d])
+            end
+        end
+    end
+    return out
+end
+
+"""
+Faceted reproduction number by province, one panel per patch, each with the
+national trajectory overlaid in grey as the shared reference. Provincial `Rt`
+is rebuilt by [`reconstruct_patch_rt`](@ref); the national reference is
+[`reconstruct_rt`](@ref), the same trajectory [`plot_rt`](@ref) draws.
+
+Every panel draws 30/60/90% credible ribbons with no median line, matching
+the band style used across the report, on a shared y-axis so the provinces
+are compared rather than each rescaled to its own range. The intervention
+breakpoint (dashed), the end of the scale-up (dotted) and the cut-off are
+marked as in [`plot_rt`](@ref).
+
+Because the provincial deviations are sum-to-zero around the national trend,
+the grey reference is the incidence-weighted middle of the panels rather than
+any one province. A panel tracking the grey band says that province moves
+with the national trend; separation between panels is the spatial signal, and
+its scale is what `region_drift_sd` estimates.
+"""
+function plot_rt_patches(chn; n::Integer, breakpoint::Real,
+        as_of_date::AbstractString, seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
+        display_start::Integer = rt_start,
+        week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
+        ncols::Integer = 3,
+        colours = [:firebrick, :steelblue, :seagreen],
+        national_colour = :grey25)
+    np = min(n_patches, length(patch_labels))
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+    ds = clamp(display_start, 1, n)
+
+    patch_rt = reconstruct_patch_rt(chn; n, breakpoint, n_patches = np,
+        rt_start, rt_walk_start, week, ramp)
+    bands = [_rt_bands_matrix(patch_rt[p]; n, ds) for p in 1:np]
+    bn = _rt_bands(chn; n, breakpoint, rt_start, rt_walk_start, week, ramp, ds)
+
+    ## Shared y-cap from the panels' typical 90% upper band, as in
+    ## `plot_rt_streams`: a median over days rather than a maximum, so one
+    ## spiky day in the weakest-informed province does not flatten the rest.
+    function panel_top(b)
+        v = Float64[b.hi90[d] for d in b.est if !ismissing(b.hi90[d])]
+        return isempty(v) ? 0.0 : quantile(v, 0.5)
+    end
+    tops = Float64[panel_top(bn); [panel_top(b) for b in bands]]
+    ytop = max(2.5, ceil(1.3 * maximum(tops) * 2) / 2)
+
+    lo = floor(Int, x[ds])
+    hi = ceil(Int, maximum(x))
+    nrows = cld(np, ncols)
+    fig = Figure(; size = (480 * min(np, ncols), 320 * nrows + 70))
+    for p in 1:np
+        r = cld(p, ncols)
+        c = p - (r - 1) * ncols
+        colour = colours[mod1(p, length(colours))]
+        ax = Axis(fig[r, c]; xlabel = "Date", ylabel = "Rt",
+            title = patch_labels[p], titlecolor = colour,
+            xticklabelrotation = pi / 6)
+        _draw_rt_bands!(ax, x, bn, national_colour;
+            alphas = (0.10, 0.16, 0.22))
+        _draw_rt_bands!(ax, x, bands[p], colour)
+        hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
+            linewidth = 2)
+        vlines!(ax, [Float64(epoch + breakpoint - 1)];
+            color = :firebrick, linestyle = :dash, linewidth = 2)
+        vlines!(ax, [Float64(epoch + breakpoint - 1 + ramp)];
+            color = :firebrick, linestyle = :dot, linewidth = 2)
+        vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
+            color = :grey, linestyle = :dash)
+        CairoMakie.xlims!(ax, lo, hi)
+        CairoMakie.ylims!(ax, 0, ytop)
+        ax.xticks = collect(lo:14:hi)
+        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                  for v in vals]
+    end
+    CairoMakie.Label(fig[nrows + 1, 1:min(np, ncols)],
+        "Bands are 30/60/90% credible intervals. Grey is the national " *
+        "trajectory, the same in every panel; the coloured band is the " *
+        "province named in the panel title.";
+        fontsize = 12, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:min(np, ncols)],
+        "Reproduction number by province";
         fontsize = 16, font = :bold)
     return fig
 end
