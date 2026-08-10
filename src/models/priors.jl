@@ -1536,8 +1536,7 @@ patch chain carries the same headline quantities as a single-patch one.
     ##    of the seed prior (see the docstring).
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
-    seed0_primary = seed_at_renewal_start(growth_state.C_T)
-    seed_primary = seed_infections(seed0_primary, r_clock, renewal_start)
+    seed0_total = seed_at_renewal_start(growth_state.C_T)
     ## With one patch there are no secondary patches to seed, so the seed
     ## fraction is not sampled: it would be a prior-only dimension.
     if n_patches > 1
@@ -1547,17 +1546,30 @@ patch chain carries the same headline quantities as a single-patch one.
         seed_fraction = Float64[]
     end
     Tp = promote_type(eltype(Rt_matrix), eltype(g), typeof(float(r_clock)),
-        eltype(seed_fraction), typeof(float(seed0_primary)))
-    seeds_matrix = zeros(Tp, n_patches, renewal_start)
-    @inbounds for j in 1:renewal_start
-        seeds_matrix[1, j] = seed_primary[j]
-    end
+        eltype(seed_fraction), typeof(float(seed0_total)))
+    ## The fractions partition the national cryptic seed, they do not add to
+    ## it. `growth_state.C_T` is `2^m`, and the `m` prior is elicited as a
+    ## national quantity (the Mongbwalu transmission chain and the genetic
+    ## TMRCA), so it is the size of the whole cryptic phase. Giving the primary
+    ## patch all of `2^m` and then bolting `f_p 2^m` on per secondary would
+    ## make the national initial condition `2^m (1 + Σf)`, growing with the
+    ## patch count, and silently redefine `2^m` as Ituri's cryptic size rather
+    ## than the country's. Dividing through by `(1 + Σf)` keeps the national
+    ## seed at `2^m` for any number of patches, so `C_T` stays comparable
+    ## across `n_patches` and the genetic prior keeps its meaning.
+    seed_denom = one(Tp) + sum(seed_fraction)
+    seed_shares = zeros(Tp, n_patches)
+    seed_shares[1] = one(Tp) / seed_denom
     @inbounds for p in 2:n_patches
-        ## A scaled copy of the primary patch's cryptic curve: the secondary
-        ## province is a fraction of the same epidemic, so it grows at the
-        ## same clock rate `r` over the cryptic window.
+        seed_shares[p] = seed_fraction[p - 1] / seed_denom
+    end
+    seeds_matrix = zeros(Tp, n_patches, renewal_start)
+    @inbounds for p in 1:n_patches
+        ## A scaled copy of the same cryptic curve: each province is a share
+        ## of one epidemic, so it grows at the same clock rate `r` over the
+        ## cryptic window.
         s_p = seed_infections(
-            seed_fraction[p - 1] * seed0_primary, r_clock, renewal_start)
+            seed_shares[p] * seed0_total, r_clock, renewal_start)
         for j in 1:renewal_start
             seeds_matrix[p, j] = s_p[j]
         end
@@ -1572,8 +1584,16 @@ patch chain carries the same headline quantities as a single-patch one.
         importation_epsilon := ε
     end
     ## 6. Multi-patch renewal.
-    infections_matrix = patch_infections(Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε)
+    ## Anchored to the national walk, so the reproduction number implied by
+    ## the summed patches IS `mu(t)` and the deviations are pure contrasts
+    ## between provinces. Without this the country grows at the force-weighted
+    ## arithmetic mean of the patch Rts while the molecular-clock prior
+    ## constrains their geometric mean, and the gap compounds into `C_T`.
+    renewal_state = patch_infections_anchored(Rt_matrix, g, seeds_matrix,
+        importation_kernel, ε, rt_state.Rt_national)
+    infections_matrix = renewal_state.infections
+    ## Report the realised per-patch reproduction numbers, after anchoring.
+    Rt_matrix = renewal_state.Rt_matrix
     ## 7. Per-patch cumulatives and the national aggregate.
     cumulative_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
@@ -1616,7 +1636,7 @@ patch chain carries the same headline quantities as a single-patch one.
         m = growth_state.m, τ = growth_state.τ,
         T = T_total, C_T = @inbounds(cumulative_total[n]),
         doubling_time = doubling_time(r),
-        seed_at_renewal_start = seed0_primary, seed_fraction,
+        seed_at_renewal_start = seed0_total, seed_fraction,
         seeding_age = seeding_age(cumulative_total, n),
         incubation_pmf = inc_state.pmf)
 end

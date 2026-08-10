@@ -1246,8 +1246,8 @@ chamla_rt_fig #hide
 #
 # The headline model runs a renewal equation per province, coupled by
 # importation, with every national stream fitted against the summed provinces.
-# Setting `n_patches = 1` collapses it onto a single well-mixed population,
-# which is the model the earlier releases used.
+# Reducing it to a single province collapses the model onto one well-mixed
+# population, which is the model the earlier releases used.
 #
 # Splitting the country into provinces adds no national data.
 # The national outbreak size should therefore be the same either way, and the

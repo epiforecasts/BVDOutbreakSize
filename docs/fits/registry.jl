@@ -116,11 +116,11 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 ## size stays ample.
 ##
 ## The budget is the `timeout-minutes: 350` on the fit job in
-## `.github/workflows/docs.yml`, NOT GitHub's 6h ceiling. Measured on that
+## `.github/workflows/docs.yml`, not GitHub's 6h ceiling. Measured on that
 ## runner: 800 draws was cancelled at the 350-minute mark without finishing,
 ## and the same model at `n_patches = 1` took 314 minutes at 500 draws. 500 is
 ## therefore the setting that matches the rest of the matrix and has headroom
-## at one patch, but it is NOT yet demonstrated to fit at three patches -- the
+## at one patch, but it is not yet demonstrated to fit at three patches -- the
 ## three-patch fit has never completed under the timeout. Treat a cancelled
 ## "Fit joint" job as this budget being exceeded, and cut draws again rather
 ## than raising the timeout: the ceiling above it is only 360.
@@ -370,7 +370,7 @@ function build_fit_specs(obs;
         province_death_days = patch_prov_deaths.days)
 
     specs = Any[
-        ## HEADLINE FIT. The patch (meta-population) model IS the joint: with
+        ## Headline fit. The patch (meta-population) model IS the joint: with
         ## `n_patches = 1` it collapses exactly onto the single-population
         ## model (the sum-to-zero deviations vanish, no importation, no
         ## composition terms), so there is one model rather than two. The
@@ -384,15 +384,14 @@ function build_fit_specs(obs;
                     joint_common..., patch_only...);
                 samples = joint_samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
-        ## SENSITIVITY: the same model with the spatial structure turned OFF
+        ## Sensitivity: the same model with the spatial structure turned off
         ## (`n_patches` defaults to 1). Splitting the country into provinces
         ## adds no national data, so the two C_T posteriors should agree; a
         ## gap is a defect in the spatial structure, not a finding about it.
-        ## They do NOT currently agree. Two structural asymmetries inflate the
-        ## national total as patches are added -- importation manufactures
-        ## infections rather than moving them, and the national seed is
-        ## replicated per patch rather than partitioned across them. Both are
-        ## pinned as `@test_broken` in test/test_patch_model.jl.
+        ## The renewal is anchored to the national trend, the seed is
+        ## partitioned across patches and importation conserves infections, so
+        ## the two are comparable by construction, and that is pinned in
+        ## test/test_patch_model.jl.
         (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(

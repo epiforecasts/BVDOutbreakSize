@@ -3655,7 +3655,7 @@ onset_forecast_fig #hide
 #
 # The headline model runs a renewal equation per province, for Ituri, Nord-Kivu and Sud-Kivu, coupled by importation.
 # Every national stream is fitted against the summed provinces.
-# Setting `n_patches = 1` collapses the model onto a single well-mixed population, which is the sensitivity fit at the end of this section.
+# Reducing it to a single province collapses the model onto one well-mixed population, which is the sensitivity fit at the end of this section.
 #
 # Provincial reproduction numbers are the national trend plus deviations that sum to zero, drawn from a correlated random walk.
 # The deviation scale is sampled, so whether the provinces share one temporal shape is estimated rather than assumed.
@@ -3705,8 +3705,8 @@ province_overview_table
 # ### Connectivity
 #
 # There is no mobility or origin-destination data for this outbreak.
-# The kernel is therefore a structural assumption, a fixed weighting by destination population, with the intensity `epsilon` sampled.
-# `epsilon` is weakly identified against the secondary-province seeds, since both raise a secondary province's early incidence.
+# The kernel is therefore a structural assumption, a fixed weighting by destination population, with its intensity estimated.
+# That intensity is weakly identified against the seeds of the secondary provinces, since both raise a secondary province's early incidence.
 # Read it as the scale of coupling the data will tolerate rather than as a measured flow.
 
 importation_table = summary_table(chn_joint, [:importation_epsilon];
@@ -3781,7 +3781,7 @@ spatial_hyper_table
 
 # ### Sensitivity: turning the spatial structure off
 #
-# The same model with `n_patches = 1`.
+# The same model run over a single province.
 # Splitting the country into provinces adds no national data, so it should not move the national outbreak size.
 # The two posteriors below are therefore a gate rather than a curiosity.
 # Agreement says the spatial structure buys provincial detail without disturbing the headline.

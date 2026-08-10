@@ -313,11 +313,16 @@ where the importation term couples patches through a kernel `K`:
   [`seed_infections`](@ref)). The seed fills days `1 ... L` and the renewal
   recursion begins on day `L+1`.
 - `importation_kernel`: `n_patches x n_patches` matrix `K` where
-  `K[p, q]` is the per-capita daily travel rate from patch `q` to patch
-  `p`. The diagonal should be zero. The importation term sums over all
-  source patches `q` in kernel-weighted infections from the previous day.
-- `epsilon`: importation intensity -- the fraction of travellers who are
-  infectious and successfully establish a secondary infection. A scalar.
+  `K[p, q]` is the share of patch `q`'s transmission that lands in patch
+  `p` rather than at home. The diagonal should be zero, and each column's
+  off-diagonal sum times `epsilon` must be at most one, so a patch cannot
+  export more transmission than it generates. Both hold for
+  [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
+- `epsilon`: importation intensity, scaling the whole kernel. Coupling
+  conserves infections: the origin patch is debited exactly what the
+  destination patches are credited, so the national total is the same as
+  it would be with `epsilon = 0`. Importation changes where infections
+  occur, never how many.
 
 # Returns
 
@@ -346,23 +351,119 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
             I[p, j] = seeds_matrix[p, j]
         end
     end
+    gen = zeros(Tp, np)
     @inbounds for t in (L + 1):n
+        ## What each patch generates today from its own renewal force.
         for p in 1:np
-            ## Renewal force (local infections): sum_s I[p, t-s] * g[s]
             force = zero(Tp)
             kmax = min(t - 1, length(g))
             for s in 1:kmax
                 force += I[p, t - s] * g[s]
             end
-            ## Importation: epsilon * sum_q K[p, q] * I[q, t-1]
-            imp = zero(Tp)
+            gen[p] = Rt_matrix[p, t] * force
+        end
+        ## Importation redistributes that transmission rather than adding to
+        ## it: a fraction `epsilon * K[p, q]` of what `q` generates is realised
+        ## in `p` instead of at home, so `q` is debited exactly what the
+        ## destinations are credited and the national total is untouched by
+        ## coupling. Crediting the destination without debiting the origin, as
+        ## an earlier version did, makes coupling a net source of infections --
+        ## every patch's total rises and none falls -- and the surplus
+        ## compounds through the renewal into the national cumulative total.
+        for p in 1:np
+            outflow = zero(Tp)
+            arrivals = zero(Tp)
             for q in 1:np
-                imp += importation_kernel[p, q] * I[q, t - 1]
+                q == p && continue
+                outflow += importation_kernel[q, p]
+                arrivals += importation_kernel[p, q] * gen[q]
             end
-            I[p, t] = Rt_matrix[p, t] * force + epsilon * imp
+            I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
+                      epsilon * arrivals
         end
     end
     return I
+end
+
+"""
+As [`patch_infections`](@ref), but anchored so that the reproduction number
+implied by the summed patches is exactly `national_rt` on every day.
+
+`Rt_matrix` is read for its per-patch ratios only. On each day the patch
+reproduction numbers are scaled by one common factor chosen so that the
+force-weighted mean matches `national_rt[t]`, which is the quantity
+[`implied_national_Rt`](@ref) recovers from the national trajectory.
+
+This is what makes `mu(t)` in [`patch_rt_model`](@ref) mean what the model
+says it means. The deviations are centred as `sum_p delta_p = 0`, so `mu` is
+the geometric mean of the patch reproduction numbers, while the national
+epidemic grows at the force-weighted arithmetic mean. The arithmetic mean is
+the larger of the two, and the gap widens as the dominant patch pulls away, so
+without anchoring the country grows faster than the trend the molecular-clock
+prior constrains, and the surplus compounds over the whole renewal window into
+the national cumulative total. Anchoring makes the deviations pure contrasts
+between provinces and leaves the national level to `mu` alone.
+
+Returns `(; infections, Rt_matrix)`, the second being the realised per-patch
+reproduction numbers after scaling, which is what should be reported.
+"""
+function patch_infections_anchored(Rt_matrix::AbstractMatrix,
+        g::AbstractVector, seeds_matrix::AbstractMatrix,
+        importation_kernel::AbstractMatrix, epsilon::Real,
+        national_rt::AbstractVector)
+    np, n = size(Rt_matrix)
+    L = size(seeds_matrix, 2)
+    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
+        eltype(importation_kernel), typeof(float(epsilon)),
+        eltype(national_rt))
+    I = zeros(Tp, np, n)
+    Rt_realised = zeros(Tp, np, n)
+    @inbounds for p in 1:np
+        for j in 1:min(L, n)
+            I[p, j] = seeds_matrix[p, j]
+        end
+        for t in 1:min(L, n)
+            Rt_realised[p, t] = Rt_matrix[p, t]
+        end
+    end
+    force = zeros(Tp, np)
+    gen = zeros(Tp, np)
+    @inbounds for t in (L + 1):n
+        total_force = zero(Tp)
+        weighted = zero(Tp)
+        for p in 1:np
+            f = zero(Tp)
+            kmax = min(t - 1, length(g))
+            for s in 1:kmax
+                f += I[p, t - s] * g[s]
+            end
+            force[p] = f
+            total_force += f
+            weighted += Rt_matrix[p, t] * f
+        end
+        ## The common scale that puts the force-weighted mean on `national_rt`.
+        ## With no force yet, or a degenerate weighted sum, leave the ratios
+        ## alone rather than dividing by zero; those days carry no infections
+        ## so the choice does not affect the trajectory.
+        scale = (total_force > 0 && weighted > 0) ?
+                national_rt[t] * total_force / weighted : one(Tp)
+        for p in 1:np
+            Rt_realised[p, t] = scale * Rt_matrix[p, t]
+            gen[p] = Rt_realised[p, t] * force[p]
+        end
+        for p in 1:np
+            outflow = zero(Tp)
+            arrivals = zero(Tp)
+            for q in 1:np
+                q == p && continue
+                outflow += importation_kernel[q, p]
+                arrivals += importation_kernel[p, q] * gen[q]
+            end
+            I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
+                      epsilon * arrivals
+        end
+    end
+    return (; infections = I, Rt_matrix = Rt_realised)
 end
 
 """

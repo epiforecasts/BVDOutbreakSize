@@ -37,78 +37,96 @@ end
 
     on = patch_infections(Rt, g, seeds, K, 0.5)
     @test all(>(0), on[2, 3:n])            ## epsilon > 0: patch 2 seeded
-    ## Patch 1 is upstream and must be untouched by the coupling.
-    @test on[1, :] ≈ off[1, :]
-    ## The imported amount is exactly epsilon * K[2,1] * I_1[t-1].
+    ## Patch 1 is debited what it exports. Coupling moves transmission, so the
+    ## origin must lose exactly what the destination gains; an earlier version
+    ## left the origin untouched, which made coupling a net source.
+    @test all(on[1, t] < off[1, t] for t in 3:n)
+    ## The imported amount is epsilon * K[2,1] times what patch 1 generates.
     for t in 3:n
-        @test on[2, t] ≈ 0.5 * 0.1 * on[1, t - 1]
+        gen1 = on[1, t] / (1 - 0.5 * 0.1)
+        @test on[2, t] ≈ 0.5 * 0.1 * gen1
     end
 end
 
 @testitem "patch Rt: the aggregate should equal the common trend" begin
-    using BVDOutbreakSize: patch_infections, implied_national_Rt
+    using BVDOutbreakSize: patch_infections, patch_infections_anchored,
+                           implied_national_Rt
 
     ## `patch_rt_model` builds `R_p(t) = exp(log mu(t) + delta_p(t))` with the
-    ## deviations centred UNWEIGHTED across patches, `sum_p delta_p = 0`. That
-    ## makes `mu(t)` the GEOMETRIC mean of the patch Rts. What actually drives
-    ## the national trajectory is the force-weighted ARITHMETIC mean, which is
-    ## what `implied_national_Rt` recovers and what the chain reports as `R_T`.
-    ## Arithmetic exceeds geometric, so the epidemic runs faster than the trend.
+    ## deviations centred unweighted across patches, `sum_p delta_p = 0`, which
+    ## makes `mu(t)` the geometric mean of the patch Rts. What drives the
+    ## national trajectory is the force-weighted arithmetic mean, which is what
+    ## `implied_national_Rt` recovers and what the chain reports as `R_T`. The
+    ## arithmetic mean is the larger of the two, so left alone the country
+    ## grows faster than its own trend.
+    ##
+    ## The renewal is therefore anchored: each day every patch is scaled by one
+    ## common factor so the force-weighted mean is `mu(t)` exactly. The
+    ## deviations become pure contrasts between provinces and the national
+    ## level is left to `mu` alone.
     ##
     ## This matters because the trend is the constrained object. The molecular
     ## clock pins the walk base (`R0 = r_to_R0(r_clock, g)`), i.e. it pins
-    ## `mu`, while the epidemic grows at the aggregate. The excess is spent in
-    ## the pre-surveillance window where no counts contradict it, so the fit can
-    ## arrive at surveillance onset with a much larger epidemic and still match
-    ## every national stream.
-    ##
-    ## The sign is not incidental, it is forced by the data. Ituri carries ~90%
-    ## of the force, and Sud-Kivu is frozen at 3 confirmed cases across every
-    ## vintage, so the compositions push the small patches below trend; centring
-    ## unweighted then pushes the DOMINANT patch above it.
-    ##
-    ## Fix: centre on a force- or incidence-weighted mean, so `mu` is the
-    ## aggregate by construction and the clock prior keeps its meaning.
+    ## `mu`. Unanchored, the excess growth is spent in the pre-surveillance
+    ## window where no counts contradict it, so the fit reaches surveillance
+    ## onset with a much larger epidemic and still matches every national
+    ## stream. The sign is forced by the data: Ituri carries ~90% of the force
+    ## and Sud-Kivu is frozen at 3 confirmed cases across every vintage, so the
+    ## compositions push the small patches below trend and unweighted centring
+    ## pushes the dominant patch above it.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 80
-    mu = 1.2
+    mu = fill(1.2, n)
     ## Sum-to-zero deviations, and patches with very unequal seeds so one
     ## dominates the force, as Ituri does.
     delta = [0.15, -0.10, -0.05]
-    Rt = reduce(vcat, [fill(mu * exp(d), n)' for d in delta])
+    Rt = reduce(vcat, [fill(1.2 * exp(d), n)' for d in delta])
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
-    I = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
-    implied = implied_national_Rt(vec(sum(I; dims = 1)), g)
 
-    ## The aggregate the national streams see should be the trend the prior
-    ## constrains. It is not: it is pulled toward the dominant patch.
-    @test_broken implied[n]≈mu rtol=1e-6
-    ## The symptom, stated directly, with the direction pinned.
-    @test implied[n] > mu
-    @test implied[n] ≈ mu * exp(delta[1]) rtol = 1e-2
+    ## Unanchored, the aggregate is pulled toward the dominant patch and runs
+    ## above the trend the molecular-clock prior constrains.
+    plain = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    implied_plain = implied_national_Rt(vec(sum(plain; dims = 1)), g)
+    @test implied_plain[n] > mu[n]
+
+    ## Anchored, the aggregate is the trend, on every day, and the deviations
+    ## are pure contrasts between provinces.
+    st = patch_infections_anchored(Rt, g, seeds, zeros(3, 3), 0.0, mu)
+    implied = implied_national_Rt(vec(sum(st.infections; dims = 1)), g)
+    for t in (size(seeds, 2) + 1):n
+        @test implied[t]≈mu[t] rtol=1e-8
+    end
+    ## The per-patch ratios are untouched: anchoring rescales every patch by
+    ## one common factor, so what the composition data identify is preserved.
+    for t in (size(seeds, 2) + 1):n, p in 2:3
+
+        @test st.Rt_matrix[p, t] / st.Rt_matrix[1, t] ≈
+              exp(delta[p] - delta[1]) rtol=1e-10
+    end
+    ## Anchoring bites downward here, since the unanchored aggregate was high.
+    @test st.Rt_matrix[1, n] < Rt[1, n]
 end
 
 @testitem "patch_infections: importation should conserve infections" begin
     using BVDOutbreakSize: patch_infections, province_importation_kernel
 
-    ## Importation is meant to be a TRANSFER. An infection that moves from
-    ## Ituri to Nord-Kivu is one infection in a different place, not a second
-    ## infection. The implementation adds `eps * K * I_prev` to the
-    ## destination without taking anything from the origin, so coupling is a
-    ## net SOURCE: every patch's total rises and none falls. The test above
-    ## pins that behaviour (`on[1, :] ≈ off[1, :]`, the origin untouched)
-    ## without noticing that it is the defect.
+    ## Importation is a transfer. An infection that moves from Ituri to
+    ## Nord-Kivu is one infection in a different place, not a second infection,
+    ## so the origin must be debited exactly what the destinations are
+    ## credited and the national total must be untouched by coupling.
     ##
-    ## This matters for the headline. The national total is the sum over
-    ## patches, so manufactured infections land directly in `C_T`, and the
-    ## effect compounds through the renewal over the fitted window. At
-    ## eps = 0.01 over 60 days it is already ~14%, and over the real window it
-    ## is the larger half of a ~1.75x prior-predictive inflation in `C_T`
-    ## going from one patch to three.
+    ## This is worth pinning because the national total is the sum over
+    ## patches: any infection the coupling manufactures lands directly in
+    ## `C_T` and compounds through the renewal over the whole window. Crediting
+    ## the destination without debiting the origin makes every patch's total
+    ## rise and none fall, and leaves national `C_T` incomparable between
+    ## `n_patches = 1` and `n_patches = 3`, which is exactly what the spatial
+    ## sensitivity comparison assumes.
     ##
-    ## Until importation is a redistribution rather than an addition, national
-    ## `C_T` is NOT comparable between `n_patches = 1` and `n_patches = 3`,
-    ## which is exactly what the spatial sensitivity comparison assumes.
+    ## The patches share one `Rt` here so conservation is exact. With patches
+    ## at different `Rt` the national total legitimately moves when infections
+    ## are relocated to a faster-growing province; that is epidemiology, not
+    ## bookkeeping.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 60
     Rt = [fill(1.3, n)'; fill(1.3, n)'; fill(1.3, n)']
@@ -119,11 +137,16 @@ end
     on = patch_infections(Rt, g, seeds, K, 0.01)
 
     ## Moving infections around cannot change how many there are.
-    @test_broken sum(on)≈sum(off) rtol=1e-8
-    ## The symptom, stated directly: coupling raises every patch and lowers
-    ## none, which no transfer can do.
-    @test all(vec(sum(on; dims = 2)) .>= vec(sum(off; dims = 2)))
-    @test sum(on) > sum(off)
+    @test sum(on)≈sum(off) rtol=1e-8
+    ## And it must actually move them: the destination patches gain, the
+    ## origin that dominates the epidemic loses.
+    @test !isapprox(on[1, :], off[1, :])
+    @test sum(on[1, :]) < sum(off[1, :])
+    @test sum(on[2, :]) > sum(off[2, :])
+    ## Conservation must hold day by day, not just in the total.
+    for t in 1:n
+        @test sum(@view on[:, t])≈sum(@view off[:, t]) rtol=1e-8
+    end
 end
 
 @testitem "importation_from_kernel: matches the explicit sum" begin
@@ -708,82 +731,68 @@ end
         rt_start = rt_start, rt_walk_start = rt_walk_start)
 end
 
-@testitem "bvd_joint: the national total should not depend on patch count" tags=[:slow] begin
-    using BVDOutbreakSize
-    using Turing: sample, Prior
-    import FlexiChains
-    using Random: seed!
-    using Statistics: median
+@testitem "the national total does not depend on the patch count" begin
+    using BVDOutbreakSize: patch_infections, patch_infections_anchored,
+                           renewal_infections, seed_infections,
+                           province_importation_kernel
 
     ## Splitting the country into provinces adds no national data and changes
-    ## no national parameter, so the national outbreak size should be the same
-    ## either way. The spatial sensitivity in the analysis rests entirely on
-    ## this: it reads a difference between `n_patches = 1` and `n_patches = 3`
-    ## as evidence about the spatial structure, which is only valid if the two
-    ## are otherwise comparable.
+    ## no national parameter, so the national trajectory must be identical to
+    ## the single-population one given the same trend and the same total seed.
+    ## The whole spatial sensitivity rests on this: it reads a difference
+    ## between `n_patches = 1` and `n_patches = 3` as evidence about the
+    ## spatial structure, which is only valid if the two are otherwise the
+    ## same model.
     ##
-    ## They are not. Three structural asymmetries inflate the national total as
-    ## patches are added, all visible in the PRIOR, before any data:
+    ## Three structural asymmetries used to break it, and this test is what
+    ## holds them fixed:
     ##
-    ## 1. AGGREGATION, the dominant one. The deviations are centred unweighted,
-    ##    so the trend the molecular clock constrains is the geometric mean of
-    ##    the patch Rts while the epidemic runs at the force-weighted
-    ##    arithmetic mean. See "patch Rt: the aggregate should equal the common
-    ##    trend". Measured here at the prior, the aggregate exceeds the trend
-    ##    by ~7.5% at the median (78% of draws above 1), and a persistent
-    ##    excess of that size compounds over the ~100-150 day renewal window.
-    ## 2. SEEDING. The primary patch is seeded from `growth_state.C_T`, sized
-    ##    as if it carried the whole national outbreak, and each secondary
-    ##    patch then adds a further fraction of that seed on top. So the
-    ##    national initial condition grows with the patch count instead of
-    ##    being partitioned across patches.
-    ## 3. IMPORTATION, which manufactures infections rather than moving them.
-    ##    See "patch_infections: importation should conserve infections".
+    ## 1. Aggregation. The deviations are centred unweighted, so `mu(t)` is the
+    ##    geometric mean of the patch Rts while the epidemic runs at the
+    ##    force-weighted arithmetic mean. The renewal is now anchored so the
+    ##    implied national Rt is `mu(t)` exactly. This was by far the largest
+    ##    term: it is exponential in the excess growth rate, so it compounds
+    ##    over the whole renewal window.
+    ## 2. Seeding. The fractions now partition the national cryptic seed `2^m`
+    ##    instead of adding to it.
+    ## 3. Importation, which now conserves infections rather than creating
+    ##    them.
     ##
-    ## Together the prior-predictive national `C_T` is ~1.75x larger at three
-    ## patches than at one, and the posterior gap is larger still because the
-    ## data force the dominant patch above trend rather than leaving it
-    ## symmetric. Until this closes, the headline `C_T` should not be read off
-    ## a patch fit.
-    obs = load_observations()
-    prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
-    provd = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, 3)
-    common = (; reported_history = obs.reported_history,
-        confirmed_history = obs.confirmed_history,
-        deaths_history = obs.deaths_history,
-        breakpoint = obs.who_first_sitrep_days,
-        tmrca_days = obs.tmrca_days)
-    single = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed; common...)
-    patched = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
-        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-        obs.tests_analysed; common...,
-        n_patches = 3,
-        province_increments = prov.increments, province_days = prov.days,
-        province_death_increments = provd.increments,
-        province_death_days = provd.days)
+    ## On the setup below the old code inflated the national cumulative total
+    ## roughly thirtyfold. Deterministic on purpose: a Monte Carlo comparison
+    ## of prior medians cannot resolve this, because the prior on `C_T` is
+    ## heavy-tailed enough that the median is dominated by sampling noise.
+    g = [0.05, 0.1, 0.15, 0.2, 0.2, 0.15, 0.1, 0.05]
+    n, L = 160, 40
+    ## A trend that rises and falls, so the check is not special to constant Rt.
+    mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
+    seed0, r = 32.0, 0.06
 
-    draws = 300
-    seed!(11)
-    c1 = sample(single, Prior(), draws; chain_type = FlexiChains.VNChain,
-        progress = false)
-    seed!(11)
-    c3 = sample(patched, Prior(), draws; chain_type = FlexiChains.VNChain,
-        progress = false)
-    m1 = median(vec(Array(c1[:C_T])))
-    m3 = median(vec(Array(c3[:C_T])))
+    single = renewal_infections(mu, g, seed_infections(seed0, r, L))
 
-    ## The prior on the national outbreak size is the same object in both, so
-    ## the medians should agree up to Monte Carlo error. The tolerance is
-    ## deliberately loose: the prior is very diffuse, and the point is to
-    ## catch a structural factor, not sampling noise.
-    @test_broken 0.8 < m3 / m1 < 1.25
-    ## The direction and rough size of the defect, pinned so a partial fix is
-    ## visible as this failing rather than passing silently.
-    @test m3 > m1
+    ## Three patches: the seed partitioned, deviations that sum to zero, and
+    ## importation live.
+    fracs = [0.17, 0.04]
+    shares = [1.0; fracs] ./ (1 + sum(fracs))
+    seeds = reduce(vcat, [seed_infections(s * seed0, r, L)' for s in shares])
+    @test sum(seeds) ≈ seed0 * sum(seed_infections(1.0, r, L))
+    delta = [0.15, -0.10, -0.05]
+    @test sum(delta)≈0 atol=1e-12
+    Rt = reduce(vcat, [(mu .* exp(d))' for d in delta])
+    st = patch_infections_anchored(Rt, g, seeds,
+        province_importation_kernel(), 0.01, mu)
+    total = vec(sum(st.infections; dims = 1))
+
+    ## Identical day by day, not merely close in the cumulative total.
+    for t in 1:n
+        @test total[t]≈single[t] rtol=1e-10
+    end
+    @test sum(total)≈sum(single) rtol=1e-10
+
+    ## And the provinces genuinely differ, so this is not passing by collapsing
+    ## the spatial structure.
+    @test st.Rt_matrix[1, n] > st.Rt_matrix[2, n]
+    @test !isapprox(st.infections[1, :], st.infections[2, :])
 end
 
 @testitem "province lab data: an exact partition of the national analysed" begin

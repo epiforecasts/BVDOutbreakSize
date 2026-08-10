@@ -19,25 +19,29 @@ Changes since v1.13.1
   to import between, and there is no per-province likelihood), so there is one
   model rather than two. The single-patch case is fitted as the
   `sens_no_patches` sensitivity, which is the check on the spatial structure.
-- **That check does not currently pass, so the headline outbreak size should
-  not be read off a patch fit yet.** Splitting the country into provinces adds
-  no national data, so the national total should be invariant to the patch
-  count. It is not, for three reasons, all visible before any data:
-  - The per-province deviations are centred **unweighted**, so the trend the
-    molecular clock constrains is the geometric mean of the provincial `Rt`s
-    while the epidemic runs at the force-weighted arithmetic mean. Measured at
-    the prior, the aggregate exceeds the trend by ~7.5% at the median. Ituri
-    carries ~90% of the force, so when the compositions push the two small
-    provinces below trend, unweighted centring pushes Ituri above it. This is
-    the dominant term.
-  - Importation manufactures infections instead of moving them: the
-    destination gains `eps * K * I_prev` and the origin loses nothing.
-  - The national seed is replicated per patch rather than partitioned across
-    them.
+- **Fixed three structural asymmetries that made the national outbreak size
+  depend on how many provinces the country was split into.** Splitting the
+  country adds no national data, so the national total must be invariant to the
+  patch count. It was not, for three reasons, all visible before any data:
+  - The per-province deviations are centred unweighted, so the trend the
+    molecular clock constrains was the geometric mean of the provincial
+    reproduction numbers while the epidemic ran at the force-weighted
+    arithmetic mean. The renewal is now anchored, scaling all provinces by one
+    common factor each day so the implied national reproduction number is the
+    trend exactly. The deviations became pure contrasts between provinces and
+    the national level is left to the trend alone. This was much the largest
+    term, being exponential in the excess growth rate.
+  - Importation manufactured infections instead of moving them: the
+    destination gained while the origin lost nothing. Coupling now debits the
+    origin exactly what the destinations are credited.
+  - The seed fractions added to the national cryptic seed instead of
+    partitioning it, so the initial condition grew with the patch count. They
+    now partition it.
 
-  Together the prior-predictive national `C_T` is about 1.75x larger at three
-  provinces than at one. All three are pinned as `@test_broken` invariants in
-  `test/test_patch_model.jl`.
+  With the same trend and the same total seed, three provinces now reproduce
+  the single-population national trajectory exactly, day by day. On the test
+  setup the old code inflated the national cumulative total roughly
+  thirtyfold. Pinned in `test/test_patch_model.jl`.
 - Fixed the headline and control fits drifting apart. They are the two halves
   of the spatial sensitivity, so they must differ only in the patch structure,
   and they had come to differ in **nine** keyword arguments. `genetic` defaults
