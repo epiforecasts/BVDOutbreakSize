@@ -116,15 +116,20 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 ## size stays ample.
 ##
 ## The budget is the `timeout-minutes: 350` on the fit job in
-## `.github/workflows/docs.yml`, not GitHub's 6h ceiling. Measured on that
-## runner: 800 draws was cancelled at the 350-minute mark without finishing,
-## and the same model at `n_patches = 1` took 314 minutes at 500 draws. 500 is
-## therefore the setting that matches the rest of the matrix and has headroom
-## at one patch, but it is not yet demonstrated to fit at three patches -- the
-## three-patch fit has never completed under the timeout. Treat a cancelled
-## "Fit joint" job as this budget being exceeded, and cut draws again rather
-## than raising the timeout: the ceiling above it is only 360.
-default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "500"))
+## `.github/workflows/docs.yml`, not GitHub's 6h ceiling, and three patches is
+## roughly twice the work per draw. Measured: the gradient costs 26.2 ms at one
+## patch (140 parameters) against 53.0 ms at three (220), a factor of 2.03, and
+## the extra dimensions lengthen NUTS trajectories on top of that. The
+## single-patch fit takes 314 minutes at 500 draws, so three patches at 500
+## needs on the order of 700 minutes. Both 800 and 500 draws were duly
+## cancelled at the 350-minute mark without finishing.
+##
+## 200 draws is therefore the setting that fits, at roughly 280 minutes, and it
+## is half what every other fit in the matrix uses. That is a real cost to the
+## headline and worth revisiting: the honest alternatives are a runner without
+## a 6h ceiling, or a cheaper patch model. Raising the timeout is not one of
+## them, since the ceiling above it is only 360.
+default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "200"))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),

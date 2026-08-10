@@ -42,6 +42,13 @@ Changes since v1.13.1
   the single-population national trajectory exactly, day by day. On the test
   setup the old code inflated the national cumulative total roughly
   thirtyfold. Pinned in `test/test_patch_model.jl`.
+- The headline fit runs at 200 draws rather than the 500 every other fit in the
+  matrix uses. Three provinces cost about twice as much per draw as one: the
+  gradient is 53.0 ms at three patches (220 parameters) against 26.2 ms at one
+  (140), and the extra dimensions lengthen the sampler's trajectories on top of
+  that. The single-patch fit takes 314 minutes at 500 draws, so three patches
+  at 500 needs on the order of 700, against a 350-minute job budget. This
+  halves the headline's effective sample size and is worth revisiting.
 - Fixed the headline and control fits drifting apart. They are the two halves
   of the spatial sensitivity, so they must differ only in the patch structure,
   and they had come to differ in **nine** keyword arguments. `genetic` defaults
