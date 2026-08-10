@@ -45,6 +45,44 @@ end
     end
 end
 
+@testitem "patch_infections: importation should conserve infections" begin
+    using BVDOutbreakSize: patch_infections, province_importation_kernel
+
+    ## Importation is meant to be a TRANSFER. An infection that moves from
+    ## Ituri to Nord-Kivu is one infection in a different place, not a second
+    ## infection. The implementation adds `eps * K * I_prev` to the
+    ## destination without taking anything from the origin, so coupling is a
+    ## net SOURCE: every patch's total rises and none falls. The test above
+    ## pins that behaviour (`on[1, :] ≈ off[1, :]`, the origin untouched)
+    ## without noticing that it is the defect.
+    ##
+    ## This matters for the headline. The national total is the sum over
+    ## patches, so manufactured infections land directly in `C_T`, and the
+    ## effect compounds through the renewal over the fitted window. At
+    ## eps = 0.01 over 60 days it is already ~14%, and over the real window it
+    ## is the larger half of a ~1.75x prior-predictive inflation in `C_T`
+    ## going from one patch to three.
+    ##
+    ## Until importation is a redistribution rather than an addition, national
+    ## `C_T` is NOT comparable between `n_patches = 1` and `n_patches = 3`,
+    ## which is exactly what the spatial sensitivity comparison assumes.
+    g = [0.2, 0.3, 0.3, 0.2]
+    n = 60
+    Rt = [fill(1.3, n)'; fill(1.3, n)'; fill(1.3, n)']
+    seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
+    K = province_importation_kernel()
+
+    off = patch_infections(Rt, g, seeds, K, 0.0)
+    on = patch_infections(Rt, g, seeds, K, 0.01)
+
+    ## Moving infections around cannot change how many there are.
+    @test_broken sum(on)≈sum(off) rtol=1e-8
+    ## The symptom, stated directly: coupling raises every patch and lowers
+    ## none, which no transfer can do.
+    @test all(vec(sum(on; dims = 2)) .>= vec(sum(off; dims = 2)))
+    @test sum(on) > sum(off)
+end
+
 @testitem "importation_from_kernel: matches the explicit sum" begin
     using BVDOutbreakSize: importation_from_kernel
 
@@ -625,6 +663,78 @@ end
     @test_throws ErrorException reconstruct_patch_rt(chn1; n = obs.n,
         breakpoint = obs.who_first_sitrep_days, n_patches = 3,
         rt_start = rt_start, rt_walk_start = rt_walk_start)
+end
+
+@testitem "bvd_joint: the national total should not depend on patch count" tags=[:slow] begin
+    using BVDOutbreakSize
+    using Turing: sample, Prior
+    import FlexiChains
+    using Random: seed!
+    using Statistics: median
+
+    ## Splitting the country into provinces adds no national data and changes
+    ## no national parameter, so the national outbreak size should be the same
+    ## either way. The spatial sensitivity in the analysis rests entirely on
+    ## this: it reads a difference between `n_patches = 1` and `n_patches = 3`
+    ## as evidence about the spatial structure, which is only valid if the two
+    ## are otherwise comparable.
+    ##
+    ## They are not. Two structural asymmetries inflate the national total as
+    ## patches are added, both visible in the PRIOR, before any data:
+    ##
+    ## 1. SEEDING. The primary patch is seeded from `growth_state.C_T`, sized
+    ##    as if it carried the whole national outbreak, and each secondary
+    ##    patch then adds a further fraction of that seed on top. So the
+    ##    national initial condition grows with the patch count instead of
+    ##    being partitioned across patches. Worth ~1.33x here.
+    ## 2. IMPORTATION, which manufactures infections rather than moving them.
+    ##    See "patch_infections: importation should conserve infections".
+    ##    Worth a further ~1.31x.
+    ##
+    ## Together the prior-predictive national `C_T` is ~1.75x larger at three
+    ## patches than at one. That is the same direction, and much of the size,
+    ## as the gap seen between the fitted patch model and the single-population
+    ## headline. Until it closes, the headline `C_T` should not be read off a
+    ## patch fit.
+    obs = load_observations()
+    prov = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, 3)
+    provd = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, 3)
+    common = (; reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        deaths_history = obs.deaths_history,
+        breakpoint = obs.who_first_sitrep_days,
+        tmrca_days = obs.tmrca_days)
+    single = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed; common...)
+    patched = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed; common...,
+        n_patches = 3,
+        province_increments = prov.increments, province_days = prov.days,
+        province_death_increments = provd.increments,
+        province_death_days = provd.days)
+
+    draws = 300
+    seed!(11)
+    c1 = sample(single, Prior(), draws; chain_type = FlexiChains.VNChain,
+        progress = false)
+    seed!(11)
+    c3 = sample(patched, Prior(), draws; chain_type = FlexiChains.VNChain,
+        progress = false)
+    m1 = median(vec(Array(c1[:C_T])))
+    m3 = median(vec(Array(c3[:C_T])))
+
+    ## The prior on the national outbreak size is the same object in both, so
+    ## the medians should agree up to Monte Carlo error. The tolerance is
+    ## deliberately loose: the prior is very diffuse, and the point is to
+    ## catch a structural factor, not sampling noise.
+    @test_broken 0.8 < m3 / m1 < 1.25
+    ## The direction and rough size of the defect, pinned so a partial fix is
+    ## visible as this failing rather than passing silently.
+    @test m3 > m1
 end
 
 @testitem "province lab data: an exact partition of the national analysed" begin
