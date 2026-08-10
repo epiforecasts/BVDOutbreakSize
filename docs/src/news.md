@@ -6,21 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## v1.13.1
+## v1.14.0
 
-Changes since v1.13.0
-
-### Data
-
-- Advanced the model cut-off from SitRep 081 (3 August) to SitRep 082
-  (4 August): added SitRep 082 and the missing 3 August (SitRep 081)
-  confirmed-case / confirmed-death cumulative points that the previous
-  data update left at 2 August, and fixed the SitRep 081 onset-curve
-  digitisation (the x-axis tick detection had undercounted that figure
-  to −54%; the fix brings it inside the noise band) so both the 3 and
-  4 August onset snapshots are now included.
-
-## v1.13.0
+Changes since v1.13.1
 
 ### Model
 
@@ -72,6 +60,36 @@ Changes since v1.13.0
   point the same way: Nord-Kivu is finding fewer of its cases, not transmitting
   less.
 
+### Reporting
+
+- The spatial section now leads with a cross-province overview
+  (`patch_overview_table`), one row per province, and then reports each
+  province in its own table (`patch_summary_table(...; patch = ...)`). It
+  previously stacked every province against every quantity in a single
+  twenty-one-row table, which could not be read as a comparison.
+- Added the reproduction number by province over time (`plot_rt_patches`),
+  faceted one panel per province with the national trajectory behind it. The
+  provincial `Rt` was previously reported only at the cut-off, so the question
+  the meta-population model exists to answer was not shown. The trajectory is
+  rebuilt by `reconstruct_patch_rt` from the deviation knots the chain now
+  carries as `delta_knots`, and a test pins that reconstruction against the
+  model's own `R_T_patch`.
+- Reported the importation intensity alongside the kernel it scales, so the
+  coupling between provinces is stated rather than left implicit.
+
+## v1.13.1
+
+Changes since v1.13.0
+
+### Data
+
+- Advanced the model cut-off from SitRep 081 (3 August) to SitRep 082
+  (4 August): added SitRep 082 and the missing 3 August (SitRep 081)
+  confirmed-case / confirmed-death cumulative points that the previous
+  data update left at 2 August, and fixed the SitRep 081 onset-curve
+  digitisation (the x-axis tick detection had undercounted that figure
+  to −54%; the fix brings it inside the noise band) so both the 3 and
+  4 August onset snapshots are now included.
 
 ## v1.13.0
 Changes since v1.12.0
