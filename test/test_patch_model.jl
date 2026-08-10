@@ -45,6 +45,49 @@ end
     end
 end
 
+@testitem "patch Rt: the aggregate should equal the common trend" begin
+    using BVDOutbreakSize: patch_infections, implied_national_Rt
+
+    ## `patch_rt_model` builds `R_p(t) = exp(log mu(t) + delta_p(t))` with the
+    ## deviations centred UNWEIGHTED across patches, `sum_p delta_p = 0`. That
+    ## makes `mu(t)` the GEOMETRIC mean of the patch Rts. What actually drives
+    ## the national trajectory is the force-weighted ARITHMETIC mean, which is
+    ## what `implied_national_Rt` recovers and what the chain reports as `R_T`.
+    ## Arithmetic exceeds geometric, so the epidemic runs faster than the trend.
+    ##
+    ## This matters because the trend is the constrained object. The molecular
+    ## clock pins the walk base (`R0 = r_to_R0(r_clock, g)`), i.e. it pins
+    ## `mu`, while the epidemic grows at the aggregate. The excess is spent in
+    ## the pre-surveillance window where no counts contradict it, so the fit can
+    ## arrive at surveillance onset with a much larger epidemic and still match
+    ## every national stream.
+    ##
+    ## The sign is not incidental, it is forced by the data. Ituri carries ~90%
+    ## of the force, and Sud-Kivu is frozen at 3 confirmed cases across every
+    ## vintage, so the compositions push the small patches below trend; centring
+    ## unweighted then pushes the DOMINANT patch above it.
+    ##
+    ## Fix: centre on a force- or incidence-weighted mean, so `mu` is the
+    ## aggregate by construction and the clock prior keeps its meaning.
+    g = [0.2, 0.3, 0.3, 0.2]
+    n = 80
+    mu = 1.2
+    ## Sum-to-zero deviations, and patches with very unequal seeds so one
+    ## dominates the force, as Ituri does.
+    delta = [0.15, -0.10, -0.05]
+    Rt = reduce(vcat, [fill(mu * exp(d), n)' for d in delta])
+    seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
+    I = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    implied = implied_national_Rt(vec(sum(I; dims = 1)), g)
+
+    ## The aggregate the national streams see should be the trend the prior
+    ## constrains. It is not: it is pulled toward the dominant patch.
+    @test_broken implied[n]≈mu rtol=1e-6
+    ## The symptom, stated directly, with the direction pinned.
+    @test implied[n] > mu
+    @test implied[n] ≈ mu * exp(delta[1]) rtol = 1e-2
+end
+
 @testitem "patch_infections: importation should conserve infections" begin
     using BVDOutbreakSize: patch_infections, province_importation_kernel
 
@@ -679,23 +722,29 @@ end
     ## as evidence about the spatial structure, which is only valid if the two
     ## are otherwise comparable.
     ##
-    ## They are not. Two structural asymmetries inflate the national total as
-    ## patches are added, both visible in the PRIOR, before any data:
+    ## They are not. Three structural asymmetries inflate the national total as
+    ## patches are added, all visible in the PRIOR, before any data:
     ##
-    ## 1. SEEDING. The primary patch is seeded from `growth_state.C_T`, sized
+    ## 1. AGGREGATION, the dominant one. The deviations are centred unweighted,
+    ##    so the trend the molecular clock constrains is the geometric mean of
+    ##    the patch Rts while the epidemic runs at the force-weighted
+    ##    arithmetic mean. See "patch Rt: the aggregate should equal the common
+    ##    trend". Measured here at the prior, the aggregate exceeds the trend
+    ##    by ~7.5% at the median (78% of draws above 1), and a persistent
+    ##    excess of that size compounds over the ~100-150 day renewal window.
+    ## 2. SEEDING. The primary patch is seeded from `growth_state.C_T`, sized
     ##    as if it carried the whole national outbreak, and each secondary
     ##    patch then adds a further fraction of that seed on top. So the
     ##    national initial condition grows with the patch count instead of
-    ##    being partitioned across patches. Worth ~1.33x here.
-    ## 2. IMPORTATION, which manufactures infections rather than moving them.
+    ##    being partitioned across patches.
+    ## 3. IMPORTATION, which manufactures infections rather than moving them.
     ##    See "patch_infections: importation should conserve infections".
-    ##    Worth a further ~1.31x.
     ##
     ## Together the prior-predictive national `C_T` is ~1.75x larger at three
-    ## patches than at one. That is the same direction, and much of the size,
-    ## as the gap seen between the fitted patch model and the single-population
-    ## headline. Until it closes, the headline `C_T` should not be read off a
-    ## patch fit.
+    ## patches than at one, and the posterior gap is larger still because the
+    ## data force the dominant patch above trend rather than leaving it
+    ## symmetric. Until this closes, the headline `C_T` should not be read off
+    ## a patch fit.
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
         PROVINCE_NAMES, 3)

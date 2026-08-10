@@ -22,12 +22,28 @@ Changes since v1.13.1
 - **That check does not currently pass, so the headline outbreak size should
   not be read off a patch fit yet.** Splitting the country into provinces adds
   no national data, so the national total should be invariant to the patch
-  count. It is not. Importation manufactures infections instead of moving them
-  (the destination gains `eps * K * I_prev` and the origin loses nothing), and
-  the national seed is replicated per patch rather than partitioned across
-  them. Together these make the prior-predictive national `C_T` about 1.75x
-  larger at three patches than at one, before any data. Both are pinned as
-  `@test_broken` invariants in `test/test_patch_model.jl`.
+  count. It is not, for three reasons, all visible before any data:
+  - The per-province deviations are centred **unweighted**, so the trend the
+    molecular clock constrains is the geometric mean of the provincial `Rt`s
+    while the epidemic runs at the force-weighted arithmetic mean. Measured at
+    the prior, the aggregate exceeds the trend by ~7.5% at the median. Ituri
+    carries ~90% of the force, so when the compositions push the two small
+    provinces below trend, unweighted centring pushes Ituri above it. This is
+    the dominant term.
+  - Importation manufactures infections instead of moving them: the
+    destination gains `eps * K * I_prev` and the origin loses nothing.
+  - The national seed is replicated per patch rather than partitioned across
+    them.
+
+  Together the prior-predictive national `C_T` is about 1.75x larger at three
+  provinces than at one. All three are pinned as `@test_broken` invariants in
+  `test/test_patch_model.jl`.
+- Fixed the headline and control fits drifting apart. They are the two halves
+  of the spatial sensitivity, so they must differ only in the patch structure,
+  and they had come to differ in **nine** keyword arguments. `genetic` defaults
+  to `nothing`, so the headline was silently running with no genetic TMRCA
+  likelihood while the control had one; the comparison was not controlled at
+  all. Both now splat one shared configuration, so they cannot diverge again.
 - Per-province reproduction numbers are a common national trend plus deviations
   that sum to zero, drawn from a multivariate-normal random walk with a learned
   cross-patch correlation. The deviation scale is sampled, so whether the

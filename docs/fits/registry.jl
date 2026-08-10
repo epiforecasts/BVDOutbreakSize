@@ -315,6 +315,60 @@ function build_fit_specs(obs;
     patch_prov_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES, 3)
 
+    ## The headline fit and its spatial control MUST differ only in the patch
+    ## structure. They are the two halves of the spatial sensitivity: a gap
+    ## between their C_T posteriors is read as evidence about the spatial
+    ## structure, which is only meaningful if nothing else differs.
+    ##
+    ## They previously drifted apart by nine keyword arguments, including
+    ## `genetic`, which defaults to `nothing` -- so the headline silently ran
+    ## with no genetic TMRCA likelihood while the control had one, and the
+    ## comparison was not controlled at all. Splatting one shared NamedTuple
+    ## into both makes that failure structurally impossible rather than a
+    ## thing to remember.
+    joint_common = (;
+        confirmed_deaths = obs.confirmed_deaths,
+        recovered_cases = obs.recovered_cases,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        recovered_history = obs.recovered_history,
+        treatment_admissions_history = obs.treatment_admissions_history,
+        treatment_deaths_history = obs.treatment_deaths_history,
+        treatment_ruleout_history = obs.treatment_ruleout_history,
+        treatment_absconded_history = obs.treatment_absconded_history,
+        treatment_confirmed_incare_history =
+        obs.treatment_confirmed_incare_history,
+        treatment_suspect_incare_history =
+        obs.treatment_suspect_incare_history,
+        occupancy_break_days = obs.occupancy_break_days,
+        confirmed_break_days = obs.confirmed_break_days,
+        confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+        confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        onset_curve_history = obs.onset_curve_history,
+        breakpoint = breakpoint,
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+
+    ## The ONLY difference between the headline and the control.
+    patch_only = (;
+        n_patches = 3,
+        province_increments = patch_prov.increments,
+        province_days = patch_prov.days,
+        province_death_increments = patch_prov_deaths.increments,
+        province_death_days = patch_prov_deaths.days)
+
     specs = Any[
         ## HEADLINE FIT. The patch (meta-population) model IS the joint: with
         ## `n_patches = 1` it collapses exactly onto the single-population
@@ -327,36 +381,7 @@ function build_fit_specs(obs;
                 bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
-                    confirmed_deaths = obs.confirmed_deaths,
-                    recovered_cases = obs.recovered_cases,
-                    deaths_history = obs.deaths_history,
-                    reported_history = obs.reported_history,
-                    confirmed_history = obs.confirmed_history,
-                    confirmed_deaths_history = obs.confirmed_deaths_history,
-                    lab_history = obs.lab_history,
-                    lab_daily_history = obs.lab_daily_history,
-                    suspected_daily_history = obs.suspected_daily_history,
-                    suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    isolation_history = obs.isolation_history,
-                    bed_capacity_history = obs.bed_capacity_history,
-                    recovered_history = obs.recovered_history,
-                    treatment_admissions_history =
-                    obs.treatment_admissions_history,
-                    treatment_deaths_history = obs.treatment_deaths_history,
-                    treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history =
-                    obs.treatment_absconded_history,
-                    occupancy_break_days = obs.occupancy_break_days,
-                    export_case_days = obs.export_case_days,
-                    export_death_days = obs.export_death_days,
-                    breakpoint = breakpoint,
-                    n_patches = 3,
-                    province_increments = patch_prov.increments,
-                    province_days = patch_prov.days,
-                    province_death_increments = patch_prov_deaths.increments,
-                    province_death_days = patch_prov_deaths.days,
-                    tmrca_days = obs.tmrca_days);
+                    joint_common..., patch_only...);
                 samples = joint_samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         ## SENSITIVITY: the same model with the spatial structure turned OFF
@@ -371,48 +396,10 @@ function build_fit_specs(obs;
         (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(
-                bvd_joint(
-                    obs.n, obs.exported_cases, obs.total_deaths,
-                    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-                    obs.tests_analysed;
-                    confirmed_deaths = obs.confirmed_deaths,
-                    recovered_cases = obs.recovered_cases,
-                    deaths_history = obs.deaths_history,
-                    reported_history = obs.reported_history,
-                    confirmed_history = obs.confirmed_history,
-                    confirmed_deaths_history = obs.confirmed_deaths_history,
-                    lab_history = obs.lab_history,
-                    lab_daily_history = obs.lab_daily_history,
-                    suspected_daily_history = obs.suspected_daily_history,
-                    suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    isolation_history = obs.isolation_history,
-                    bed_capacity_history = obs.bed_capacity_history,
-                    recovered_history = obs.recovered_history,
-                    treatment_admissions_history =
-                    obs.treatment_admissions_history,
-                    treatment_deaths_history = obs.treatment_deaths_history,
-                    treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history =
-                    obs.treatment_absconded_history,
-                    treatment_confirmed_incare_history =
-                    obs.treatment_confirmed_incare_history,
-                    treatment_suspect_incare_history =
-                    obs.treatment_suspect_incare_history,
-                    occupancy_break_days = obs.occupancy_break_days,
-                    confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                    confirmed_break_gross_deaths =
-                    obs.confirmed_break_gross_deaths,
-                    export_case_days = obs.export_case_days,
-                    export_death_days = obs.export_death_days,
-                    onset_curve_history = obs.onset_curve_history,
-                    breakpoint = breakpoint,
-                    background_re = true,
-                    confirmed_positivity_link = :composition,
-                    genetic = genetic_seeding_model,
-                    tmrca_days = obs.tmrca_days);
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    joint_common...);
                 samples = samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("sens_no_patches"))),
         ## The patch (meta-population) fit. Registered so that it is fitted
