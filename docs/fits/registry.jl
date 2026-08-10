@@ -107,15 +107,24 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 
 ## The meta-population "joint" fit is the slowest in the matrix: the posterior
 ## is high-curvature and needs long NUTS trajectories (median tree depth 9, 43%
-## at the max of 10), so a full 1000-draw fit runs ~5.8h and tips over GitHub's
-## 6h job cap. This is NOT a mixing failure -- the chain mixes well (worst
-## lag-1 autocorrelation 0.25, few divergences), and there is no funnel to
-## reparameterise (an Rt-parameterisation experiment found every alternative
+## at the max of 10). This is NOT a mixing failure -- the chain mixes well
+## (worst lag-1 autocorrelation 0.25, few divergences), and there is no funnel
+## to reparameterise (an Rt-parameterisation experiment found every alternative
 ## equivalent, and the worst-mixing params are in the base CFR/treatment model,
-## not the patch structure). So the principled lever is fewer DRAWS, not lower
-## per-draw quality: at 800 draws the fit lands ~4.6h, and with autocorrelation
-## that low the effective sample size stays ample (~950+ for the worst param).
-default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "800"))
+## not the patch structure). So the lever is fewer DRAWS rather than lower
+## per-draw quality, and with autocorrelation that low the effective sample
+## size stays ample.
+##
+## The budget is the `timeout-minutes: 350` on the fit job in
+## `.github/workflows/docs.yml`, NOT GitHub's 6h ceiling. Measured on that
+## runner: 800 draws was cancelled at the 350-minute mark without finishing,
+## and the same model at `n_patches = 1` took 314 minutes at 500 draws. 500 is
+## therefore the setting that matches the rest of the matrix and has headroom
+## at one patch, but it is NOT yet demonstrated to fit at three patches -- the
+## three-patch fit has never completed under the timeout. Treat a cancelled
+## "Fit joint" job as this budget being exceeded, and cut draws again rather
+## than raising the timeout: the ceiling above it is only 360.
+default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "500"))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),

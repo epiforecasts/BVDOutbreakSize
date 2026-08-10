@@ -3783,8 +3783,10 @@ spatial_hyper_table
 # ### Sensitivity: turning the spatial structure off
 #
 # The same model with `n_patches = 1`.
-# The patch model is a different generative story, so the national outbreak size is a genuine check on it.
-# If the spatial structure were distorting the national fit, the two posteriors would part company.
+# Splitting the country into provinces adds no national data, so it should not move the national outbreak size.
+# The two posteriors below are therefore a gate rather than a curiosity.
+# Agreement says the spatial structure buys provincial detail without disturbing the headline.
+# Disagreement says the spatial structure is doing something to the national fit that the provincial data alone cannot justify, and the headline should not be read from the patch model until that is explained.
 
 spatial_sensitivity_table = streams_table(
     "Patch model (headline)" => posterior_C_joint,

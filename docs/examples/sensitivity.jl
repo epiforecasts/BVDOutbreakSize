@@ -1244,25 +1244,29 @@ chamla_rt_fig #hide
 
 # ## Spatial structure sensitivity
 #
-# The headline model is a meta-population: a renewal equation per province,
-# coupled by importation, with every national stream fitted against the summed
-# patches.
-# Setting `n_patches = 1` collapses it exactly onto a single well-mixed
-# population, which is the model the earlier releases used.
-# Because the patch model is a different generative story, the national
-# outbreak size is a genuine check on it rather than a restatement: if the
-# spatial structure were distorting the national fit, the two posteriors would
-# part company.
+# The headline model runs a renewal equation per province, coupled by
+# importation, with every national stream fitted against the summed provinces.
+# Setting `n_patches = 1` collapses it onto a single well-mixed population,
+# which is the model the earlier releases used.
+#
+# Splitting the country into provinces adds no national data.
+# The national outbreak size should therefore be the same either way, and the
+# two posteriors below are a gate rather than a curiosity.
+# Agreement says the spatial structure buys provincial detail without
+# disturbing the headline.
+# Disagreement says the spatial structure is doing something to the national
+# fit that the provincial data alone cannot justify, and the headline should
+# not be read from the patch model until that is explained.
 #
 # The per-province split rests on the confirmed deaths.
 # A province's case count is the product of its incidence and its case-finding
 # and only the product is observed, so the case split alone cannot separate
-# them; the death split can, because the case-fatality ratio and the
+# them.
+# The death split can, because the case-fatality ratio and the
 # death-confirmation probability belong to the virus and to a national
 # laboratory rather than to a province.
-# The sensitivity below is therefore also a check on that identification: with
-# the patches off, the provincial ascertainment cannot be estimated at all, and
-# the national estimate is what remains.
+# With the provinces off, that split is not estimated at all and the national
+# estimate is what remains.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,
