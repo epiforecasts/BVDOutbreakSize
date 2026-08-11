@@ -107,13 +107,13 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 
 ## The meta-population "joint" fit is the slowest in the matrix: the posterior
 ## is high-curvature and needs long NUTS trajectories (median tree depth 9, 43%
-## at the max of 10). This is NOT a mixing failure -- the chain mixes well
+## at the max of 10). This is not a mixing failure -- the chain mixes well
 ## (worst lag-1 autocorrelation 0.25, few divergences), and there is no funnel
 ## to reparameterise (an Rt-parameterisation experiment found every alternative
 ## equivalent, and the worst-mixing params are in the base CFR/treatment model,
-## not the patch structure). So the lever is fewer DRAWS rather than lower
-## per-draw quality, and with autocorrelation that low the effective sample
-## size stays ample.
+## not the patch structure). The two levers are therefore trajectory length,
+## through the adapt delta below, and the draw count; with autocorrelation that
+## low the effective sample size stays ample either way.
 ##
 ## The budget is the `timeout-minutes: 350` on the fit job in
 ## `.github/workflows/docs.yml`, not GitHub's 6h ceiling, and three patches is
@@ -124,12 +124,29 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 ## needs on the order of 700 minutes. Both 800 and 500 draws were duly
 ## cancelled at the 350-minute mark without finishing.
 ##
-## 200 draws is therefore the setting that fits, at roughly 280 minutes, and it
-## is half what every other fit in the matrix uses. That is a real cost to the
-## headline and worth revisiting: the honest alternatives are a runner without
-## a 6h ceiling, or a cheaper patch model. Raising the timeout is not one of
-## them, since the ceiling above it is only 360.
+## 200 draws is therefore the setting that fits, and it is half what every
+## other fit in the matrix uses. That is a real cost to the headline and worth
+## revisiting: raising it again is the first thing to try if the lower adapt
+## delta below buys as much as it should. Raising the timeout is not an option,
+## since the ceiling above it is only 360.
 default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "200"))
+
+## Adapt delta for the headline and its spatial control. The rest of the matrix
+## sits at 0.90; these two sit lower because they are the expensive pair and
+## the cost is in trajectory length, not in the gradient. At 0.90 the joint
+## runs a median NUTS tree depth of 9 with 43% of draws at the cap of 10, so
+## each draw spends 512 to 1024 leapfrog steps. A larger step size shortens
+## those trajectories roughly geometrically, which is the only lever with a
+## factor in it: the model micro-optimisations were measured and are null,
+## because the province convolutions read only 147 of 173 days and are a small
+## part of the density anyway.
+##
+## Both fits must use the same value. They are the two halves of the spatial
+## sensitivity, and while adapt delta changes sampling efficiency rather than
+## the target posterior, letting them drift apart is how the nine-keyword
+## divergence started.
+joint_target_accept() = parse(Float64,
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80"))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
@@ -387,7 +404,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...);
-                samples = joint_samples, chains = chains, target_accept = 0.90,
+                samples = joint_samples, chains = chains,
+                target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
         ## Sensitivity: the same model with the spatial structure turned off
         ## (`n_patches` defaults to 1). Splitting the country into provinces
@@ -404,7 +422,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...);
-                samples = samples, chains = chains, target_accept = 0.90,
+                samples = samples, chains = chains,
+                target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
         ## The patch (meta-population) fit. Registered so that it is fitted
         ## end-to-end in CI like every other stream: the two defects that the
