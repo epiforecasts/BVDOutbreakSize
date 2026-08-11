@@ -96,13 +96,73 @@ is `:chain` for the headline joint and single-stream fits or `:frozen` for the
 frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
 sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
+## Sampler settings, overridable from the environment. A full render refits
+## thirteen models at 1000x2, which is hours -- too slow to use the docs build
+## as a check that the pages still render. `BVD_FIT_SAMPLES=60 task docs-main`
+## exercises the whole render path (every chain key the pages read, every table
+## and plot call) in minutes. The draws are useless for inference and the
+## content hash changes, so a short run never pollutes the real fit cache.
+default_samples() = parse(Int, get(ENV, "BVD_FIT_SAMPLES", "1000"))
+default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
+
+## The meta-population "joint" fit is the slowest in the matrix: the posterior
+## is high-curvature and needs long NUTS trajectories (median tree depth 9, 43%
+## at the max of 10). This is not a mixing failure -- the chain mixes well
+## (worst lag-1 autocorrelation 0.25, few divergences), and there is no funnel
+## to reparameterise (an Rt-parameterisation experiment found every alternative
+## equivalent, and the worst-mixing params are in the base CFR/treatment model,
+## not the patch structure). The two levers are therefore trajectory length,
+## through the adapt delta below, and the draw count; with autocorrelation that
+## low the effective sample size stays ample either way.
+##
+## The budget is the `timeout-minutes: 350` on the fit job in
+## `.github/workflows/docs.yml`, not GitHub's 6h ceiling, and three patches is
+## roughly twice the work per draw. Measured: the gradient costs 26.2 ms at one
+## patch (140 parameters) against 53.0 ms at three (220), a factor of 2.03, and
+## the extra dimensions lengthen NUTS trajectories on top of that. The
+## single-patch fit takes 314 minutes at 500 draws, so three patches at 500
+## needs on the order of 700 minutes. Both 800 and 500 draws were duly
+## cancelled at the 350-minute mark without finishing.
+##
+## 200 draws is therefore the setting that fits, and it is half what every
+## other fit in the matrix uses. That is a real cost to the headline and worth
+## revisiting: raising it again is the first thing to try if the lower adapt
+## delta below buys as much as it should. Raising the timeout is not an option,
+## since the ceiling above it is only 360.
+default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "200"))
+
+## Adapt delta for the headline and its spatial control, kept at the 0.90 the
+## rest of the matrix uses.
+##
+## Lowering it was tried and MEASURED NOT TO WORK. The reasoning was that the
+## cost is trajectory length, so a larger step size should shorten it: at 0.90
+## the joint runs a median tree depth of 9 with 43% of draws at the cap of 10.
+## At 0.80 the fit came back with tree depth pinned at 10 for EVERY draw, 1023
+## leapfrog steps throughout and an adapted step size of 0.003 -- longer
+## trajectories, not shorter. The 178-minute wall clock that run achieved came
+## entirely from cutting draws to 200, not from the adapt delta.
+##
+## So the draw count is the only lever that has actually delivered here. Note
+## that trajectories terminating at the depth cap rather than by the U-turn
+## criterion means exploration is being truncated; the effective sample size at
+## 200 draws is worth checking before this fit is trusted as the headline.
+##
+## Both fits must use the same value. They are the two halves of the spatial
+## sensitivity, and while adapt delta changes sampling efficiency rather than
+## the target posterior, letting them drift apart is how the nine-keyword
+## divergence started.
+joint_target_accept() = parse(Float64,
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
+
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 500, chains::Integer = 2)
+        samples::Integer = 500,
+        joint_samples::Integer = default_joint_samples(),
+        chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     function fit_frozen_joint(cutoff_date)
@@ -134,7 +194,7 @@ function build_fit_specs(obs;
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
                 tmrca_days = o.tmrca_days);
-            samples = samples, chains = chains, target_accept = 0.95,
+            samples = samples, chains = chains, target_accept = 0.90,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
     end
@@ -256,7 +316,7 @@ function build_fit_specs(obs;
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains, target_accept = 0.95,
+            samples = samples, chains = chains, target_accept = 0.90,
             callback = fit_callback("variant"))
     end
 
@@ -273,54 +333,111 @@ function build_fit_specs(obs;
     clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
+    ## Per-province spatial-table data for the patch fit, reshaped ONCE here.
+    ## It must not be built inside the model body: it looks provinces up by
+    ## name in a `Dict{String}`, and a string compare on the AD tape is a
+    ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
+    ## gradient of the whole joint.
+    patch_prov = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES, 3)
+    patch_prov_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES, 3)
+
+    ## The headline fit and its spatial control MUST differ only in the patch
+    ## structure. They are the two halves of the spatial sensitivity: a gap
+    ## between their C_T posteriors is read as evidence about the spatial
+    ## structure, which is only meaningful if nothing else differs.
+    ##
+    ## They previously drifted apart by nine keyword arguments, including
+    ## `genetic`, which defaults to `nothing` -- so the headline silently ran
+    ## with no genetic TMRCA likelihood while the control had one, and the
+    ## comparison was not controlled at all. Splatting one shared NamedTuple
+    ## into both makes that failure structurally impossible rather than a
+    ## thing to remember.
+    joint_common = (;
+        confirmed_deaths = obs.confirmed_deaths,
+        recovered_cases = obs.recovered_cases,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        recovered_history = obs.recovered_history,
+        treatment_admissions_history = obs.treatment_admissions_history,
+        treatment_deaths_history = obs.treatment_deaths_history,
+        treatment_ruleout_history = obs.treatment_ruleout_history,
+        treatment_absconded_history = obs.treatment_absconded_history,
+        treatment_confirmed_incare_history =
+        obs.treatment_confirmed_incare_history,
+        treatment_suspect_incare_history =
+        obs.treatment_suspect_incare_history,
+        occupancy_break_days = obs.occupancy_break_days,
+        confirmed_break_days = obs.confirmed_break_days,
+        confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+        confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        onset_curve_history = obs.onset_curve_history,
+        breakpoint = breakpoint,
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+
+    ## The ONLY difference between the headline and the control.
+    patch_only = (;
+        n_patches = 3,
+        province_increments = patch_prov.increments,
+        province_days = patch_prov.days,
+        province_death_increments = patch_prov_deaths.increments,
+        province_death_days = patch_prov_deaths.days)
+
     specs = Any[
+        ## Headline fit. The patch (meta-population) model IS the joint: with
+        ## `n_patches = 1` it collapses exactly onto the single-population
+        ## model (the sum-to-zero deviations vanish, no importation, no
+        ## composition terms), so there is one model rather than two. The
+        ## headline runs it over the three affected provinces.
         (; id = "joint",
             kind = :chain,
             thunk = () -> nuts_sample(
-                bvd_joint(
-                    obs.n, obs.exported_cases, obs.total_deaths,
-                    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-                    obs.tests_analysed;
-                    confirmed_deaths = obs.confirmed_deaths,
-                    recovered_cases = obs.recovered_cases,
-                    deaths_history = obs.deaths_history,
-                    reported_history = obs.reported_history,
-                    confirmed_history = obs.confirmed_history,
-                    confirmed_deaths_history = obs.confirmed_deaths_history,
-                    lab_history = obs.lab_history,
-                    lab_daily_history = obs.lab_daily_history,
-                    suspected_daily_history = obs.suspected_daily_history,
-                    suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    isolation_history = obs.isolation_history,
-                    bed_capacity_history = obs.bed_capacity_history,
-                    recovered_history = obs.recovered_history,
-                    treatment_admissions_history =
-                    obs.treatment_admissions_history,
-                    treatment_deaths_history = obs.treatment_deaths_history,
-                    treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history =
-                    obs.treatment_absconded_history,
-                    treatment_confirmed_incare_history =
-                    obs.treatment_confirmed_incare_history,
-                    treatment_suspect_incare_history =
-                    obs.treatment_suspect_incare_history,
-                    occupancy_break_days = obs.occupancy_break_days,
-                    confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                    confirmed_break_gross_deaths =
-                    obs.confirmed_break_gross_deaths,
-                    export_case_days = obs.export_case_days,
-                    export_death_days = obs.export_death_days,
-                    onset_curve_history = obs.onset_curve_history,
-                    breakpoint = breakpoint,
-                    background_re = true,
-                    confirmed_positivity_link = :composition,
-                    genetic = genetic_seeding_model,
-                    tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.90,
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    joint_common..., patch_only...);
+                samples = joint_samples, chains = chains,
+                target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
+        ## Sensitivity: the same model with the spatial structure turned off
+        ## (`n_patches` defaults to 1). Splitting the country into provinces
+        ## adds no national data, so the two C_T posteriors should agree; a
+        ## gap is a defect in the spatial structure, not a finding about it.
+        ## The renewal is anchored to the national trend, the seed is
+        ## partitioned across patches and importation conserves infections, so
+        ## the two are comparable by construction, and that is pinned in
+        ## test/test_patch_model.jl.
+        (; id = "sens_no_patches",
+            kind = :chain,
+            thunk = () -> nuts_sample(
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    joint_common...);
+                samples = samples, chains = chains,
+                target_accept = joint_target_accept(),
+                callback = fit_callback("sens_no_patches"))),
+        ## The patch (meta-population) fit. Registered so that it is fitted
+        ## end-to-end in CI like every other stream: the two defects that the
+        ## patch model shipped with (a seed prior that forced the provincial
+        ## Rt to absorb the case-split level, and an AD-breaking Dict lookup
+        ## inside the model body) were invisible to the unit tests and only
+        ## surfaced on a real fit. A standing fit makes the
+        ## posterior-predictive check a gate rather than a manual step.
         (; id = "exports",
             kind = :chain,
             thunk = () -> nuts_sample(

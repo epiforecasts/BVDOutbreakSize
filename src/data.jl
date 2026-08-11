@@ -179,6 +179,32 @@ function load_observations(
     confirmed_break_gross_cases = break_gross("gross_cases")
     confirmed_break_gross_deaths = break_gross("gross_deaths")
 
+    ## Per-province history from a TOML block with one shared `dates` array
+    ## and one array per series. Used for the cumulative confirmed counts
+    ## (`province_confirmed_history`, keyed by province) and for the daily
+    ## laboratory throughput (`province_lab_daily_history`, keyed by
+    ## province-and-measure, e.g. `ituri_analysed` / `ituri_positive`).
+    ## Returns a Dict mapping each series name to the same (; days, counts)
+    ## shape as history(). Empty when the block is absent. The counts are
+    ## cumulative or daily according to the block; the caller knows which.
+
+    function province_history(key)
+        ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        !haskey(raw, key) && return Dict{String, ProvHistory}()
+        block = raw[key]
+        !haskey(block, "dates") && return Dict{String, ProvHistory}()
+        provinces = sort!([k for k in keys(block) if k != "dates" && k != "source"])
+        result = Dict{String, ProvHistory}()
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        ord = sortperm(idx)
+        for prov in provinces
+            vals = Int.(block[prov][keep])
+            result[prov] = (; days = idx[ord], counts = vals[ord])
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -408,8 +434,53 @@ function load_observations(
         tests_received_history = tests_received_history,
         onset_curve_history = onset_curve_history,
         onset_report_history = onset_report_history,
+        province_confirmed_history = province_history("province_confirmed_history"),
+        province_death_history = province_history("province_death_history"),
+        province_lab_daily_history = province_history("province_lab_daily_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
+end
+
+"""
+    province_increment_matrix(province_history, province_names, n_patches)
+
+Reshape the per-province cumulative histories loaded by
+[`load_observations`](@ref) into the `(n_patches × n_vintages)` matrix of
+new-confirmed counts that [`province_composition_model`](@ref) scores,
+together with the shared vintage day indices.
+
+Every province must be reported on the SAME vintage days (the spatial
+tables share one `dates` array), which the patch composition likelihood
+requires: it allocates each vintage's national total across the provinces,
+so a province missing from a vintage would silently shift cases into the
+others. A mismatch is an error, not a silent reshape.
+
+Returns `(; days, increments)`. When no per-province data is supplied,
+`days` is empty and the caller skips the composition term.
+"""
+function province_increment_matrix(province_history,
+        province_names::AbstractVector, n_patches::Integer)
+    empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
+    isempty(province_history) && return empty
+    names = province_names[1:min(n_patches, length(province_names))]
+    any(nm -> !haskey(province_history, nm), names) && return empty
+    hists = [province_history[nm] for nm in names]
+    days = hists[1].days
+    isempty(days) && return empty
+    for (nm, h) in zip(names, hists)
+        h.days == days || error(
+            "province `$(nm)` is reported on different vintage days to " *
+            "`$(first(names))`; the composition likelihood needs every " *
+            "province on the same vintages.")
+    end
+    ## Cumulative -> per-vintage increments. The first increment is the
+    ## cumulative to the first vintage day, matching `bin_increments`,
+    ## which bins the modelled daily series from day 1 to `days[1]`.
+    increments = Matrix{Int}(undef, length(names), length(days))
+    for (p, h) in enumerate(hists)
+        increments[p, :] = diff(vcat(0, collect(h.counts)))
+    end
+    return (; days, increments)
 end
 
 """

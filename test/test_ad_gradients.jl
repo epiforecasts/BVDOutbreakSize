@@ -42,3 +42,57 @@
     ## A non-trivial gradient (not identically zero) confirms AD actually ran.
     @test any(!iszero, grad)
 end
+
+@testitem "AD gradient: patch_infection_model differentiates (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: patch_infection_model, default_adtype
+
+    ## The multi-patch renewal, the per-patch Rt walk and the implied-national
+    ## Rt inversion are all new AD surface. Check the uncoupled default and
+    ## the coupled (importation kernel) path, which brings epsilon and the
+    ## between-patch term onto the tape.
+    for kernel in (zeros(3, 3), [0.0 0.0 0.0; 1e-4 0.0 0.0; 1e-5 0.0 0.0])
+        seed!(20260518)
+        model = patch_infection_model(60, 3; importation_kernel = kernel)
+        vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+        x0 = collect(vi[:])
+        ldf = DynamicPPL.LogDensityFunction(
+            model, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+        logp, grad = logdensity_and_gradient(ldf, x0)
+        @test isfinite(logp)
+        @test length(grad) == length(x0)
+        @test all(isfinite, grad)
+        @test any(!iszero, grad)
+    end
+end
+
+@testitem "AD gradient: province_composition_model differentiates (Mooncake)" tags = [:ad] begin
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity_and_gradient
+    using Random: seed!
+    using BVDOutbreakSize: province_composition_model, default_adtype
+
+    ## The stick-breaking BetaBinomial composition is the likelihood the
+    ## spatial data enter through, so its gradient has to exist.
+    ##
+    ## The reshaping that turns the per-province histories into this matrix
+    ## (`province_increment_matrix`) looks provinces up by name in a
+    ## `Dict{String}`. It must stay OUTSIDE the model body: a string compare
+    ## on the tape is a `memcmp` foreigncall that Mooncake has no rule for,
+    ## and it aborts the gradient of the whole joint.
+    seed!(20260518)
+    obs = [853 21 42; 77 2 5; 3 0 0]
+    modelled = [800.0 20.0 40.0; 70.0 2.5 4.0; 2.0 0.1 0.2]
+    model = province_composition_model(obs, modelled)
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    x0 = collect(vi[:])
+    ldf = DynamicPPL.LogDensityFunction(
+        model, DynamicPPL.getlogjoint, vi; adtype = default_adtype())
+    logp, grad = logdensity_and_gradient(ldf, x0)
+    @test isfinite(logp)
+    @test length(grad) == length(x0)
+    @test all(isfinite, grad)
+    @test any(!iszero, grad)
+end

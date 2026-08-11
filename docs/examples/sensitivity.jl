@@ -1242,6 +1242,53 @@ chamla_rt_fig = plot_rt(chamla_anchor.chn;
 
 chamla_rt_fig #hide
 
+# ## Spatial structure sensitivity
+#
+# The headline model runs a renewal equation per province, coupled by
+# importation, with every national stream fitted against the summed provinces.
+# Reducing it to a single province collapses the model onto one well-mixed
+# population, which is the model the earlier releases used.
+#
+# Splitting the country into provinces adds no national data.
+# The national outbreak size should therefore be the same either way, and the
+# two posteriors below are a gate rather than a curiosity.
+# Agreement says the spatial structure buys provincial detail without
+# disturbing the headline.
+# Disagreement says it is doing something to the national fit the provincial
+# data cannot justify.
+# The headline should then not be read from the patch model until that is
+# explained.
+#
+# The per-province split rests on the confirmed deaths.
+# A province's case count is the product of its incidence and its case-finding
+# and only the product is observed, so the case split alone cannot separate
+# them.
+# The death split can, because the case-fatality ratio and the
+# death-confirmation probability belong to the virus and to a national
+# laboratory rather than to a province.
+# With the provinces off, that split is not estimated at all and the national
+# estimate is what remains.
+
+spatial_sensitivity_table = streams_table(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population (n_patches = 1)" => posterior_C_no_patches);
+spatial_sensitivity_table
+
+#md # ```@raw html
+#md # <details><summary>Spatial-structure density overlay</summary>
+#md # ```
+
+spatial_sensitivity_fig = plot_density_overlay(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population" => posterior_C_no_patches;
+    xlabel = "Cumulative infections");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_sensitivity_fig #hide
+
 # ## Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.

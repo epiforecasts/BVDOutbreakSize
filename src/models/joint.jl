@@ -402,78 +402,154 @@ drop it. See [`exports_model`](@ref) and [`exports_deaths_model`](@ref).
         deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
 end
 
+## --- Patch (multi-population) joint models ------------------------------
+
 """
-Joint composer over all data streams. Runs the generating infection
-process once on a daily grid of length `n` (day `n` is the cut-off),
-stages it to daily onset incidence, then conditions on the DRC suspected
-cases, deaths and the laboratory pipeline (the analysed-specimen volume as
-a per-vintage time series and the confirmed positives as a Binomial of the
-observed analysed denominator), the confirmed deaths, the Uganda exports
-and deaths-among-exports, the digitised symptom-onset reporting triangle
-(the only direct observation of the shared onset series, see
-[`onset_reporting_model`](@ref); not opt-in, degrades to a no-op when
-`onset_curve_history` is empty), and the optional genetic seeding bound on
-the outbreak age. Each stream argument may be `missing` to drop it, so the
-model doubles as a prior- and posterior-predictive generator.
+Patch latent process: run [`patch_infection_model`](@ref) and expose the
+per-patch state alongside the national aggregates (summed onsets and
+infections) that the national observation submodels consume.
+"""
+@model function _patch_latent(n::Integer, n_patches::Integer,
+        breakpoint, patch_infection;
+        rt_start::Integer = 1,
+        rt_walk_start::Integer = rt_start,
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]))
+    patch_state ~ to_submodel(
+        patch_infection(n, n_patches;
+            breakpoint, rt_start, rt_walk_start,
+            importation_kernel), false)
+    onsets_total = vec(sum(patch_state.onsets_matrix; dims = 1))
+    return (; patch_state, onsets_total)
+end
 
-The confirmed-case stream shares its onset-to-report kernel with the
-suspected-case stream. A single analysed-specimen volume is fit through a
-report-to-analysed delay and the tested fraction; the confirmed positives
-are scored as a Binomial of the observed specimens-analysed denominator
-(`lab_history`) with a partially-pooled per-window positivity, so the
-confirmed counts do not pass through the multiplicative ascertainment
-ridge. After the national cumulative analysed series stops, the
-reporting format gives a 24h analysed count on some days
-(`lab_daily_history`); these are fitted as per-day analysed volumes and
-also anchor that day's confirmed positives as a Binomial of the observed
-denominator. The early and unanchored windows (days with no published
-denominator) use the modelled analysed volume as the denominator, with
-the positivity (hence `λ_bg`) carried over from the windows that do have
-data (see [`confirmed_cases_model`](@ref)).
+"""
+Modelled per-province confirmed-DEATH increments, binned to the vintages of
+the Tableau 1 spatial tables. Each patch's onsets are pushed through the
+onset-to-death delay and then the report-to-receipt delay (so `kernel` is
+the convolution of the two), giving the deaths CONFIRMED by each vintage.
 
-The optional `suspected_daily_history` adds the post-26 May daily
-new-suspect inflow ("nouveaux cas suspects du jour"), scored against the
-modelled daily suspected series at each report day where the frozen
-cumulative suspected stream stops, on days disjoint from it. The optional
-`suspected_daily_deaths_history` adds the deaths analogue, the post-26
-May daily new suspected deaths ("cas suspects du jour N (M deces)"),
-scored against the modelled daily suspected-death series where the
-frozen cumulative suspected-death stream stops.
+This is the term that makes the provincial split identifiable. The
+composition of DEATHS across provinces weights each patch by its
+delay-convolved incidence and by nothing else: the case-fatality ratio and
+the death-confirmation probability are properties of the virus and of a
+national laboratory pipeline, not of a province, so they are common factors
+and cancel out of the normalised shares. What remains is the provincial
+INCIDENCE split — free of case-ascertainment.
 
-The confirmed deaths mirror the confirmed-case laboratory pipeline: a
-death "analysed" volume (the suspected deaths carried to laboratory
-receipt and thinned by the death testing fraction `tau_death`) scored
-through a death-pool composition positivity
-`p = s·q_death + (1−spec)(1−q_death)`, with `q_death` the BVD share of
-the suspected deaths (see [`confirmed_deaths_model`](@ref)). The
-suspected deaths carry a death ascertainment `p_death` and a non-BVD
-background tied to the case background by a background CFR `cfr_bg`
-(see [`deaths_model`](@ref)).
+Convolving through the onset-to-death delay (rather than comparing raw
+death-to-case ratios) is what separates ascertainment from epidemic phase. A
+fast-growing province has proportionally fewer deaths *to date* than a flat
+one at the same true CFR, simply because its recent cases have not died yet.
+Ituri grows faster than Nord-Kivu, so a naive CFR comparison would read that
+right-censoring as a difference in case-finding. The delay convolution
+predicts each province's deaths-to-date from its own incidence curve, so the
+censoring is accounted for and only the residual is ascertainment.
+"""
+function _patch_death_increments(onsets_matrix::AbstractMatrix,
+        kernel::AbstractVector,
+        province_days::AbstractVector{<:Integer})
+    np = size(onsets_matrix, 1)
+    nv = length(province_days)
+    first_daily = convolve_delay(vec(@view onsets_matrix[1, :]), kernel)
+    out = Matrix{eltype(first_daily)}(undef, np, nv)
+    @inbounds out[1, :] = bin_increments(first_daily, province_days)
+    @inbounds for p in 2:np
+        daily = convolve_delay(vec(@view onsets_matrix[p, :]), kernel)
+        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
+end
 
-The optional `isolation_history` adds the daily isolation/treatment-bed
-occupancy ("Patients en isolement"), a prevalence stream fitted as the
-suspect inflow (BVD treatment stay plus non-BVD rule-out stay) carried
-through a length-of-stay survival into a daily stock (see
-[`treatment_flow_model`](@ref)). The optional `recovered_history` adds
-the recovered-among-confirmed stream ("cumul guéris"), survivors among
-the modelled daily confirmed cases scaled by the recovery probability
-and lagged by a confirmation-to-recovery delay (see
-[`recovered_model`](@ref)).
+"""
+Modelled per-province confirmed increments, binned to the vintages of the
+per-province spatial tables. Each patch's onsets are pushed through the
+SAME report-to-receipt delay and test sensitivity as the national confirmed
+stream — the laboratory pipeline is national, only the incidence feeding it
+is provincial — and then binned onto the shared vintage days.
 
-`breakpoint` is the intervention day passed to the reproduction-number
-walk (e.g. the first WHO situation report); `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. Tracked deterministics:
-`C_T` (cumulative infections by the cut-off), the established
-reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
-(current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
-(outbreak age), `R_T` (current reproduction number), the per-stream
-expected counts, the testing fraction `tau_test`, the background rate
-`lambda_bg`, the death ascertainment `death_ascertainment`, the
-background CFR `background_cfr`, the death testing fraction `tau_death`,
-the implied per-suspected (`suspected_positivity`) and per-test
-(`test_positivity`) positivities, and the death-pool BVD composition
-(`death_composition`) and death-confirmation positivity
-(`death_confirmation`).
+`province_days` are the (shared) grid-day indices of the spatial-table
+vintages. Returns an `(n_patches × n_vintages)` matrix.
+
+!!! note "Ascertainment and incidence are confounded by province"
+    This matrix reaches [`province_composition_model`](@ref) only through
+    NORMALISED shares, so every factor common to all provinces (`s_test`
+    here; ascertainment, background and positivity in the national confirmed
+    stream) cancels. That is what keeps the composition from re-scoring the
+    national total.
+
+    What it does NOT do is fix the case-finding probability across provinces.
+    The composition weights each patch by `asc_p * lambda_p` — its relative
+    ascertainment times its modelled incidence — and the data identify only
+    that PRODUCT. A province with fewer infections but better case-finding
+    looks exactly like one with more infections and worse case-finding.
+
+    That is a property of the data, not of this code. The per-province
+    laboratory series shows the provinces are testing very
+    differently-selected pools (Ituri 31.8% positivity against Nord-Kivu's
+    5.5%), so assuming equal ascertainment would push the whole difference
+    into the provincial `Rt` and report a case-finding artefact as
+    epidemiology. `asc_p` is therefore sampled and partially pooled toward
+    equality rather than fixed, which widens the per-patch `Rt` contrast and
+    `C_T` split to their honest width.
+
+    Read `log_rt_contrast` and `province_ascertainment` together; neither is
+    interpretable alone. The NATIONAL headline does not depend on the split
+    and is unaffected by the confound.
+"""
+function _patch_confirmed_increments(onsets_matrix::AbstractMatrix,
+        receipt_pmf::AbstractVector, s_test::Real,
+        province_days::AbstractVector{<:Integer})
+    np = size(onsets_matrix, 1)
+    nv = length(province_days)
+    first_daily = s_test .* convolve_delay(
+        vec(@view onsets_matrix[1, :]), receipt_pmf)
+    out = Matrix{eltype(first_daily)}(undef, np, nv)
+    @inbounds out[1, :] = bin_increments(first_daily, province_days)
+    @inbounds for p in 2:np
+        daily = s_test .* convolve_delay(
+            vec(@view onsets_matrix[p, :]), receipt_pmf)
+        out[p, :] = bin_increments(daily, province_days)
+    end
+    return out
+end
+
+"""
+Joint composer over all data streams using the PATCH (meta-population)
+latent process.
+
+Runs [`patch_infection_model`](@ref) over `n_patches` provinces, sums the
+per-patch onsets into a national trajectory, and conditions on exactly the
+national observation submodels that [`bvd_joint`](@ref) uses: DRC suspected
+cases, deaths, confirmed cases and deaths, the laboratory pipeline,
+treatment flows and Uganda exports. The national streams therefore see the
+same latent onset trajectory they would in the single-patch model.
+
+The spatial information enters through one extra term:
+[`province_composition_model`](@ref), which scores how the confirmed cases
+divide between provinces, conditional on the national total. The
+per-province spatial-table counts are an exact partition of the national
+confirmed counts, so scoring them with their own count likelihood would put
+the same data into the joint density twice; the composition term adds only
+the spatial signal that the national series does not carry.
+
+Pass that data as `province_increments` (an `n_patches × n_vintages` matrix
+of new-confirmed counts) and `province_days` (the shared vintage day
+indices), which [`province_increment_matrix`](@ref) builds from the
+per-province histories that [`load_observations`](@ref) returns. Omit them
+and the composition term is skipped, leaving a purely national fit over a
+patch latent process.
+
+Uganda exports are driven by the primary patch (Ituri) alone, since the
+border crossings the export stream describes are Ituri-to-Uganda.
+
+Headline quantities (`C_T`, `R_T`, `r`, `T`, `doubling_time`, `R0`) are
+surfaced under the same names as [`bvd_joint`](@ref), so a patch chain
+summarises through [`summary_table`](@ref) exactly like a single-patch one.
+`R_T` is the incidence-weighted aggregate reproduction number implied by
+the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
+`delta_patch`) are surfaced as vector deterministics for
+[`patch_summary_table`](@ref).
 """
 @model function bvd_joint(
         n::Integer,
@@ -483,6 +559,9 @@ the implied per-suspected (`suspected_positivity`) and per-test
         exports_deaths::Union{Missing, Integer} = missing,
         confirmed_cases::Union{Missing, Integer} = missing,
         tests_analysed::Union{Missing, Integer} = missing;
+        n_patches::Integer = 1,
+        importation_kernel::AbstractMatrix = province_importation_kernel(
+            PROVINCE_POPULATIONS[1:min(n_patches, end)]),
         confirmed_deaths::Union{Missing, Integer} = missing,
         recovered_cases::Union{Missing, Integer} = missing,
         deaths_history = (; days = Int[], counts = Int[]),
@@ -500,21 +579,29 @@ the implied per-suspected (`suspected_positivity`) and per-test
         treatment_deaths_history = (; days = Int[], counts = Int[]),
         treatment_ruleout_history = (; days = Int[], counts = Int[]),
         treatment_absconded_history = (; days = Int[], counts = Int[]),
-        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
-        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         occupancy_break_days::AbstractVector{<:Integer} = Int[],
+        export_case_days::AbstractVector{<:Integer} = Int[],
+        export_death_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_days::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_cases::AbstractVector{<:Integer} = Int[],
         confirmed_break_gross_deaths::AbstractVector{<:Integer} = Int[],
         confirmed_break_sd::Real = 25.0,
-        export_case_days::AbstractVector{<:Integer} = Int[],
-        export_death_days::AbstractVector{<:Integer} = Int[],
         onset_curve_history = (; onset_days = Int[], report_days = Int[],
             prev_report_days = Int[], increments = Int[]),
+        treatment_confirmed_incare_history = (; days = Int[], counts = Int[]),
+        treatment_suspect_incare_history = (; days = Int[], counts = Int[]),
         breakpoint::Union{Missing, Real} = missing,
         source_population::Real = ITURI_POPULATION,
-        infection = infection_model,
-        onset_incidence = onset_incidence_model,
+        patch_infection = patch_infection_model,
+        composition = province_composition_model,
+        province_increments::Union{Missing, AbstractMatrix{<:Integer}} = missing,
+        province_days::AbstractVector{<:Integer} = Int[],
+        province_death_increments::Union{
+            Missing, AbstractMatrix{<:Integer}} = missing,
+        province_death_days::AbstractVector{<:Integer} = Int[],
+        death_composition = province_composition_model,
+        death_ascertainment_sd_prior = truncated(
+            Normal(0, 0.1); lower = 0),
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -526,46 +613,35 @@ the implied per-suspected (`suspected_positivity`) and per-test
         dispersion = pooled_dispersion_model,
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
-        confirmed_positivity_link::Symbol = :composition,
         genetic = nothing,
+        confirmed_positivity_link::Symbol = :composition,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
-        tmrca_days_sd::Real = 16.0,
+        tmrca_days_sd::Real = 15.0,
         renewal_start_lead::Integer = RENEWAL_START_LEAD,
         rt_walk_lead::Integer = RT_WALK_LEAD)
-    ## The renewal start sits `renewal_start_lead` days after the genetic
-    ## TMRCA day (`n - tmrca_days + lead`), past the TMRCA's uncertainty
-    ## where sustained transmission is confident. The lead keeps the
-    ## observed span `τ_obs = n − renewal_start` strictly shorter than
-    ## `tmrca_days`, so the genetic bound on the total age
-    ## `T = m·τ + τ_obs` stays informative (it bounds the cryptic duration
-    ## `m·τ` from below). The renewal seeds and grows from here.
+    ## Guard against the silent failure mode: per-province data supplied but
+    ## `n_patches` left at its default of 1. The compositions would then be
+    ## scored against a single patch that holds the entire national total, the
+    ## spatial structure would quietly vanish, and the fit would look fine.
+    if n_patches == 1 &&
+       (!isempty(province_days) || !isempty(province_death_days))
+        error("per-province data was supplied but n_patches = 1. The spatial " *
+              "structure would be silently dropped. Pass n_patches = " *
+              "$(length(PROVINCE_NAMES)) (or the number of patches the data " *
+              "covers).")
+    end
+    ## Renewal-start and walk-start: same logic as [`bvd_joint`](@ref).
     rt_start = ismissing(tmrca_days) ? 1 :
                clamp(n - round(Int, tmrca_days) + renewal_start_lead, 1, n)
-    ## Start the random walk `rt_walk_lead` days (a month by default) before
-    ## the first situation report (`breakpoint`) rather than exactly at it,
-    ## so R_t is free to move over the weeks of transmission leading up to
-    ## the first report instead of being held flat at R0 right to it (the
-    ## response decline can begin before the outbreak is first reported).
-    ## The start is floored at the renewal start so the walk never precedes
-    ## the seeded trajectory. With no breakpoint the walk falls back to the
-    ## renewal start.
     rt_walk_start = ismissing(breakpoint) ? rt_start :
                     clamp(round(Int, breakpoint) - rt_walk_lead, rt_start, n)
     latent ~ to_submodel(
-        _latent(n, breakpoint, infection, onset_incidence;
-            rt_start, rt_walk_start), false)
-    infection_state = latent.infection_state
-    onsets = latent.onsets
-
-    ## Partially-pooled per-stream dispersions: every count stream draws its
-    ## own negative-binomial dispersion from a shared population rather than
-    ## sharing one global `k`, so a stream's noise is not pulled around by
-    ## whichever stream dominates the likelihood while the sparse streams
-    ## still borrow strength. Order: 1 suspected cases, 2 suspected deaths,
-    ## 3 confirmed cases, 4 confirmed deaths, 5 isolation occupancy,
-    ## 6 recovered. The isolation and recovered dispersions are injected into
-    ## their submodels (which sample their own only when run standalone).
+        _patch_latent(n, n_patches, breakpoint, patch_infection;
+            rt_start, rt_walk_start, importation_kernel), false)
+    patch_state = latent.patch_state
+    onsets = latent.onsets_total
+    ## Partially-pooled per-stream dispersions (same layout as bvd_joint).
     dispersion_state ~ to_submodel(dispersion(6))
     asc_state ~ to_submodel(ascertainment)
     kv = dispersion_state.k
@@ -577,72 +653,34 @@ the implied per-suspected (`suspected_positivity`) and per-test
     k_recovered = kv[6]
     p_drc = asc_state.p_drc
     p_uganda = asc_state.p_uganda
-
-    ## Non-BVD background as a smooth daily lognormal random walk over the
-    ## surveillance window ([`background_walk_model`](@ref)), with the tight
-    ## innovation SD `σ_rw` driving the suspected-case stream. The background
-    ## is gated to zero before the surveillance onset (a report-to-receipt
-    ## lead before the first suspected-case report): it does not exist
-    ## before surveillance began. The tight innovation SD keeps it fairly
-    ## constant, which regularises the background/outbreak-size degeneracy:
-    ## a per-vintage step random effect's multiplicative blow-up can open a
-    ## second posterior mode that breaks convergence. The suspected-death
-    ## background is not a separate random effect: it is tied to the case
-    ## background by a background CFR (`cfr_bg · case_bg_daily`, see
-    ## [`deaths_model`](@ref)), so it inherits the case background's smooth,
-    ## gated, ramped level and time-variation rather than competing as a
-    ## second free, outbreak-size-degenerate rate. With `background_re =
-    ## false` (the renewal default) the case stream keeps its scalar `λ_bg`.
-    ## The pooling SD is sampled only when the random effect is active (the
-    ## tilde must stay gated), but `σ_rw_shared` and `bg_onset` are bound
-    ## unconditionally to plain values so the closure below captures
-    ## non-conditional, write-once variables. Conditionally-scoped captures
-    ## get boxed in a `Base.RefValue`, which Enzyme's reverse mode cannot
-    ## differentiate through (Mooncake tolerates it); binding them in both
-    ## paths keeps the capture type-stable and the closure un-boxed.
-    if background_re
+    ## Background random effect, guarded against an empty reported history.
+    ## The lead is the max lag of the report-to-receipt kernel.
+    case_bg_re = background_re ?
+    begin
         bg_pool ~ to_submodel(background_pooling_model())
         σ_rw_shared = bg_pool.σ_bg
-    else
-        σ_rw_shared = 0.0
-    end
-    ## Onset of the suspected pool's non-BVD background: a report-to-receipt
-    ## lead before the first suspected-case report, not exactly at it. The
-    ## suspects in the first report were already in the pipeline, and the
-    ## background feeds the laboratory analysed volume through the
-    ## report-to-receipt convolution, so it must begin early enough for that
-    ## convolution to be fully formed by the first report. The lead is the
-    ## max lag of the report-to-receipt kernel (its truncation `nmax`, the
-    ## default `lab_delay_model` support), not its mean, so no tail
-    ## contribution is cut off at the onset. Bound unconditionally (unused
-    ## when the effect is off).
-    bg_lead = cdf_nmax(lognormal_meansd(4.5, 4.0))
-    bg_onset = isempty(reported_history.days) ? 1 :
-               clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
-    ## The closure is built unconditionally (one concrete closure type, not
-    ## closure-or-`Nothing`); `background_re` then selects the closure or the
-    ## `nothing` sentinel. Identical behaviour to the gated form: with
-    ## `background_re = false` the closure is never passed, so the unused
-    ## `σ_rw_shared = 0` never enters the log-density.
-    make_case_bg = nn -> background_walk_model(nn, σ_rw_shared;
-        onset = bg_onset)
-    case_bg_re = background_re ? make_case_bg : nothing
-
-    ## Cases first so the suspected-case background `bg_daily` is available to
-    ## the deaths stream (which scales it by `cfr_bg` for the death background)
-    ## and to the laboratory pipeline.
-    cases_state ~ to_submodel(
-        cases(reported_history, reported_cases, onsets, k_cases, p_drc;
+        bg_lead = 7
+        bg_onset = isempty(reported_history.days) ? 1 :
+                   clamp(Int(reported_history.days[1]) - bg_lead, 1, n)
+        nn -> background_walk_model(nn, σ_rw_shared; onset = bg_onset)
+    end : nothing
+    ## --- National observation submodels (identical to bvd_joint) --------
+    ## 1. Reported (suspected) cases.
+    cases_state ~ to_submodel(cases(reported_history, reported_cases,
+        onsets, k_cases, p_drc;
         suspected_daily_history, background_re = case_bg_re))
-    deaths_state ~ to_submodel(
-        deaths(deaths_history, total_deaths, onsets, k_deaths;
+    ## 2. Deaths (suspected).
+    deaths_state ~ to_submodel(deaths(deaths_history, total_deaths, onsets,
+        k_deaths;
         suspected_daily_deaths_history, case_bg_daily = cases_state.bg_daily))
-    confirmed_state ~ to_submodel(
-        confirmed(confirmed_history, confirmed_cases, onsets, k_confirmed,
-        p_drc, cases_state.bg_daily, cases_state.τ_test,
+    ## 3. Confirmed cases (laboratory pipeline). This scores the national
+    ##    confirmed TOTAL; the provincial split is scored separately below.
+    confirmed_state ~ to_submodel(confirmed(confirmed_history,
+        confirmed_cases, onsets, k_confirmed, p_drc,
+        cases_state.bg_daily, cases_state.τ_test,
         cases_state.bvd_reports_daily;
-        lab_history, lab_daily_history,
-        tests_analysed, confirmed_break_days,
+        lab_history, lab_daily_history, tests_analysed,
+        confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
         positivity_link = confirmed_positivity_link))
@@ -658,35 +696,48 @@ the implied per-suspected (`suspected_positivity`) and per-test
     onset_report_state ~ to_submodel(
         onset_report(onset_curve_history, onsets;
         anchor = onset_anchor_daily))
-    ## Confirmed deaths mirror the confirmed-case lab pipeline: the death
-    ## analysed volume scales the modelled case analysed volume
-    ## (`confirmed_state.analysed_daily`) at the per-day suspected
-    ## death-to-case ratio, scored through a death-pool composition positivity
-    ## from the death series' own BVD and background components. The case
-    ## volume carries the laboratory capacity onset, so the death volume
-    ## inherits it and no deaths are confirmed before testing began.
+    ## 4. Confirmed deaths.
     confirmed_deaths_state ~ to_submodel(
         confirmed_deaths_stream(confirmed_deaths, total_deaths,
         deaths_state.deaths_daily, deaths_state.bvd_deaths_daily,
         deaths_state.bg_death_daily, k_confirmed_deaths;
         confirmed_deaths_history, receipt_pmf = confirmed_state.receipt_pmf,
+        case_analysed_daily = confirmed_state.analysed_daily,
+        case_suspected_daily = cases_state.reports_daily,
         confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_deaths,
-        confirmed_break_sd,
-        case_analysed_daily = confirmed_state.analysed_daily,
-        case_suspected_daily = cases_state.reports_daily))
-    ## Treatment-centre patient flow ([`treatment_flow_model`](@ref)):
-    ## occupancy plus the in-care outcome flows, with the in-care fatality
-    ## CFR_iso identified by the in-care death flow. The occupancy split
-    ## borrows the in-care confirmation hazard `τ_test · p_pos` from the
-    ## confirmed pipeline to carve the occupied true-case stock into
-    ## confirmed and suspect sub-stocks, scored against the Tableau 6
-    ## `dont confirmés` / `dont suspects` census. The known DHIS2
-    ## harmonisation days carry the overnight total reporting break.
+        confirmed_break_sd))
+    ## 5. Uganda exports, from the primary patch (Ituri) only: the border
+    ##    crossings this stream describes are Ituri-to-Uganda.
+    exports_state ~ to_submodel(exports(exported_cases,
+        vec(patch_state.infections_matrix[1, :]), p_uganda;
+        export_case_days, incubation_pmf = patch_state.incubation_pmf,
+        source_population))
+    exports_deaths_state ~ to_submodel(exports_deaths_model(
+        exports_deaths, exports_state.travelled_prevalence,
+        deaths_state.CFR, deaths_state.od_pmf,
+        patch_state.incubation_pmf;
+        export_death_days))
+    ## Genetic seeding bound on the total outbreak age, as in the national
+    ## composer: the molecular-clock TMRCA pulls the origin to sit at or before
+    ## the most recent common ancestor.
+    if genetic !== nothing
+        genetic_state ~ to_submodel(
+            genetic(patch_state.T, tmrca_days; tmrca_days_sd), false)
+    end
+
+    ## 6. Treatment flows (isolation, bed capacity, LOS), on the national
+    ##    suspected-case inflow, matching the national-level data.
+    ## In-care confirmation hazard `τ_test · p_pos` on the daily grid. Without
+    ## it `treatment` sets `split_active = false`, so the Tableau 6 confirmed
+    ## and suspect in-care split silently drops out of the likelihood and
+    ## `incare_confirm_modifier` is never sampled. That is invisible to a
+    ## parameter count and to the model tests; it surfaces only when the
+    ## analysis page reads the deterministic and fails.
     conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
-    treatment_state ~ to_submodel(
-        treatment(isolation_history, cases_state.bvd_reports_daily,
-        cases_state.bg_daily, p_drc, deaths_state.CFR;
+    treatment_state ~ to_submodel(treatment(isolation_history,
+        cases_state.bvd_reports_daily, cases_state.bg_daily, p_drc,
+        deaths_state.CFR;
         capacity_history = bed_capacity_history,
         admissions_history = treatment_admissions_history,
         deaths_history = treatment_deaths_history,
@@ -697,50 +748,165 @@ the implied per-suspected (`suspected_positivity`) and per-test
         occupancy_break_days = occupancy_break_days,
         conf_hazard_daily = conf_hazard_daily,
         k_external = k_isolation))
-    ## Recovered among confirmed ("cumul guéris"): survivors among the
-    ## modelled daily confirmed cases (the confirmed-and-discharged subset,
-    ## not all in-care recoveries), with a recovery fraction grounded on the
-    ## CFR and lagged by a confirmation-to-recovery delay (see
-    ## [`recovered_model`](@ref)).
-    recovered_state ~ to_submodel(
-        recovered(recovered_history, recovered_cases,
-        confirmed_state.confirmed_daily, deaths_state.CFR;
-        k_external = k_recovered))
-    exports_state ~ to_submodel(
-        exports(exported_cases, infection_state.infections, p_uganda;
-        export_case_days, incubation_pmf = latent.incubation_pmf,
-        source_population))
-    exports_deaths_state ~ to_submodel(
-        exports_deaths_model(exports_deaths,
-        exports_state.travelled_prevalence, deaths_state.CFR,
-        deaths_state.od_pmf, latent.incubation_pmf; export_death_days))
-
-    if genetic !== nothing
-        genetic_state ~ to_submodel(
-            genetic(infection_state.T, tmrca_days; tmrca_days_sd), false)
+    ## 7. Recovered (among confirmed).
+    recovered_state ~ to_submodel(recovered(recovered_history,
+        recovered_cases, confirmed_state.confirmed_daily,
+        deaths_state.CFR; k_external = k_recovered))
+    ## --- Spatial observation submodel -----------------------------------
+    ## 8. Per-province composition of the confirmed cases. Conditional on the
+    ##    national total (already scored above), so no observation is counted
+    ##    twice. Skipped when no spatial-table data is supplied.
+    ##
+    ##    `province_increments` and `province_days` are the already-reshaped
+    ##    spatial-table data (see [`province_increment_matrix`](@ref)), NOT the
+    ##    raw per-province history dict. The reshaping is pure data handling
+    ##    with no dependence on any parameter, and it looks provinces up by
+    ##    name in a `Dict{String}`; doing that inside the model body puts a
+    ##    string comparison (`memcmp`) on the AD tape, which Mooncake has no
+    ##    rule for and which aborts the gradient. It must stay hoisted out.
+    if !isempty(province_days)
+        modelled_prov = _patch_confirmed_increments(
+            patch_state.onsets_matrix, confirmed_state.receipt_pmf,
+            confirmed_state.s_test, province_days)
+        composition_state ~ to_submodel(
+            composition(province_increments, modelled_prov))
+        province_shares := composition_state.shares
+        province_composition_rho := composition_state.rho
+        ## Relative province CASE ascertainment: the probability an infection
+        ## there becomes a CONFIRMED case, partially pooled and sum-to-zero on
+        ## the log scale. On its own the case composition identifies only the
+        ## PRODUCT of ascertainment and incidence. The DEATH composition below
+        ## is what separates them.
+        province_ascertainment := composition_state.province_ascertainment
+        province_ascertainment_sd := composition_state.ascertainment_sd
     end
-
-    ## Daily cumulative trajectories for the headline 3x2 figure: the
-    ## modelled expected cumulative infections, symptom onsets and deaths
-    ## over the grid. Exposed as vector deterministics so the ribbon panels
-    ## reconstruct from the chain without re-running the renewal. All three
-    ## are BVD-only latent renewal quantities: deaths uses the BVD death
-    ## series (onsets convolved with the onset-to-death delay), not the
-    ## fitted total, so it stays smooth like infections and onsets. The
-    ## additive non-BVD background is a daily random walk and belongs to the
-    ## observation side, not this latent trajectory. `cumulative_infections`,
-    ## `cumulative_onsets` and `C_T` are exposed once by the shared `_latent`
-    ## submodel above.
+    ## 9. Per-province composition of the confirmed DEATHS. This is the term
+    ##    that identifies the provincial split.
+    ##
+    ##    The case composition weights each patch by `asc_p * lambda_p` and can
+    ##    never separate the two: a province with fewer infections but better
+    ##    case-finding is observationally identical to one with more infections
+    ##    and worse case-finding.
+    ##
+    ##    Deaths break the tie. They are far harder to miss than cases, and the
+    ##    case-fatality ratio and the death-confirmation probability belong to
+    ##    the virus and to a national laboratory pipeline, not to a province —
+    ##    so they are common factors and cancel out of the normalised death
+    ##    shares. What is left weights each patch by its delay-convolved
+    ##    INCIDENCE alone, free of case-ascertainment. The deaths therefore pin
+    ##    `lambda_p`, and the case composition then identifies `asc_p` as the
+    ##    residual.
+    ##
+    ##    `death_ascertainment_sd_prior` is deliberately TIGHT: the identifying
+    ##    assumption is that death ascertainment is near-uniform across
+    ##    provinces, which is far weaker and more defensible than assuming case
+    ##    ascertainment is. It is not fixed at zero, so the assumption can bend
+    ##    where the data insist rather than snapping.
+    ##
+    ##    The data say this matters: Nord-Kivu holds a steady 8-9% of confirmed
+    ##    cases but 14-19% of confirmed deaths at every vintage.
+    if !isempty(province_death_days)
+        death_kernel = convolve_pmf(
+            deaths_state.od_pmf, confirmed_state.receipt_pmf)
+        modelled_deaths_prov = _patch_death_increments(
+            patch_state.onsets_matrix, death_kernel, province_death_days)
+        death_composition_state ~ to_submodel(
+            death_composition(province_death_increments, modelled_deaths_prov;
+            ascertainment_sd_prior = death_ascertainment_sd_prior))
+        province_death_shares := death_composition_state.shares
+        province_death_ascertainment := death_composition_state.province_ascertainment
+    end
+    ## --- Deterministics surfaced for reporting --------------------------
+    ## Headline quantities, under the same names as bvd_joint so a patch
+    ## chain drops into the existing summary and forecast machinery.
+    R0 := patch_state.R0
+    r := patch_state.r
+    r0 := patch_state.r0
+    doubling_time := patch_state.doubling_time
+    T := patch_state.T
+    C_T := patch_state.C_T
+    R_T := patch_state.R_T
+    expected_infections_T := @inbounds(patch_state.infections_total[n])
+    ## The national cumulative infection trajectory, summed over patches. The
+    ## single-population composer surfaced this from its `_latent` submodel
+    ## rather than from its own body, so a diff of the two function bodies does
+    ## not show it as missing -- which is exactly how it was dropped. The docs
+    ## read it off the chain for the headline ribbon panels.
+    cumulative_infections := patch_state.cumulative_total
+    cumulative_onsets := cumsum(onsets)
+    Rt_national_implied := patch_state.Rt_national_implied
+    ## Per-patch quantities, as vector deterministics (one entry per patch).
+    C_T_patch := patch_state.C_T_patch
+    R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]
+    infections_T_patch := [@inbounds(patch_state.infections_matrix[p, n])
+                           for p in 1:n_patches]
+    ## The per-patch log-Rt modifier at the cut-off (one entry per patch),
+    ## and its spread at the START of the walk, so a change in the provincial
+    ## Rt gap over the window is visible as the difference between them.
+    delta_patch := [@inbounds(patch_state.δ_patch[p, n]) for p in 1:n_patches]
+    delta_patch_start := [@inbounds(patch_state.δ_patch[p, rt_walk_start])
+                          for p in 1:n_patches]
+    ## The deviation at every weekly KNOT, flattened column-major from the
+    ## `(n_patches × n_knots)` matrix, so the whole provincial Rt trajectory
+    ## can be rebuilt for plotting ([`reconstruct_patch_rt`](@ref)) by
+    ## interpolating these onto the day grid and adding the national walk.
+    ## Carrying the knots rather than the daily grid keeps the chain small
+    ## (three patches by ~17 knots), and flattening keeps it a plain vector
+    ## deterministic like every other per-patch quantity here.
+    delta_knots := vec(patch_state.δ_knots)
+    ## The daily common factor the anchored renewal applies to every patch so
+    ## the implied national reproduction number is the trend exactly. The
+    ## deviation knots alone do not determine it, since it depends on the
+    ## force split across patches, so it is carried here for
+    ## [`reconstruct_patch_rt`](@ref) to rebuild the provincial trajectories.
+    rt_anchor_scale := patch_state.anchor_scale
+    ## THE spatial diagnostic: the per-patch scale of the log-Rt deviation
+    ## walk. A posterior concentrated near zero says the provinces share one
+    ## temporal Rt shape (a fixed ratio between them); pushed away from zero
+    ## it is direct evidence that provincial Rt trajectories are separating.
+    ## See [`patch_rt_model`](@ref).
+    region_sd := patch_state.σ_level
+    region_drift_sd := patch_state.σ_δ
+    ## `seed_fraction` (each secondary patch's seed as a fraction of the
+    ## primary patch's) is sampled inside the latent submodel and already
+    ## reaches the chain under that name, so it is NOT re-surfaced here. Read
+    ## it alongside `log_rt_contrast`: the seed fraction sets the LEVEL of the
+    ## provincial case split, and if it were pinned far below what the data
+    ## need, the Rt contrast would silently absorb the difference and the
+    ## provincial Rt gap would be an artefact of the seed prior.
+    ## Learned cross-patch correlation of the deviation innovations. With
+    ## three patches only the Ituri / Nord-Kivu entry carries real
+    ## information (Sud-Kivu has no signal), so the rest tracks the LKJ prior.
+    ## With a single patch there is no cross-patch correlation to report; the
+    ## 1x1 correlation matrix is trivially 1.
+    region_corr_primary_secondary := n_patches > 1 ?
+                                     @inbounds(patch_state.Ω[1, 2]) :
+                                     one(eltype(patch_state.Ω))
+    ## The provincial log-Rt CONTRASTS at the cut-off: what the per-province
+    ## composition data actually measure. Entry p is log R_p - log R_1, so a
+    ## negative value means province p is transmitting less than the primary
+    ## patch. Sum-to-zero deviations make these the interpretable quantity
+    ## rather than the deviations themselves.
+    log_rt_contrast := [@inbounds(patch_state.δ_patch[p, n] -
+                                  patch_state.δ_patch[1, n])
+                        for p in 1:n_patches]
+    ## --- The full bvd_joint deterministic set --------------------------
+    ## The patch model is the headline joint, so a patch chain must carry
+    ## EVERY quantity a single-patch chain does: `analysis.jl`, the forecast
+    ## machinery (`forecast_reported` reads `expected_reports_T`,
+    ## `cumulative_confirmed`, ...) and the plots all key off these names. The
+    ## observation submodels are identical to bvd_joint's, so the states are
+    ## already here; only the latent-derived quantities differ, and those are
+    ## surfaced above from the patch state.
     cumulative_expected_deaths := cumsum(deaths_state.bvd_deaths_daily)
-    ## Modelled daily laboratory-confirmed cases (from
-    ## `confirmed_cases_model`: the per-window tested-positive probability
-    ## applied to the modelled, testing-onset-gated analysed volume), so the
-    ## cumulative trajectory carries the confirmed-case timing for the
-    ## delay-corrected confirmed-CFR reconstruction. The onset-to-confirmation
-    ## kernel (onset-to-report ⊕ receipt) and the onset-to-death-confirmation
-    ## kernel (onset-to-death ⊕ receipt) are exposed alongside so the residual
-    ## delay between a confirmed case and its confirmed death can be rebuilt
-    ## per draw off the chain.
+    ## Modelled daily laboratory-confirmed cases (from `confirmed_cases_model`:
+    ## the per-window tested-positive probability applied to the modelled,
+    ## testing-onset-gated analysed volume), so the cumulative trajectory carries
+    ## the confirmed-case timing for the delay-corrected confirmed-CFR
+    ## reconstruction. The onset-to-confirmation kernel (onset-to-report ⊕
+    ## receipt) and the onset-to-death-confirmation kernel (onset-to-death ⊕
+    ## receipt) are exposed alongside so the residual delay between a confirmed
+    ## case and its confirmed death can be rebuilt per draw off the chain.
     ## Re-add the testing-onset baseline: the laboratory capacity is gated to
     ## zero before testing began and the first confirmed vintage is treated as
     ## the initial condition (a baseline the early windows do not score), so the
@@ -755,17 +921,14 @@ the implied per-suspected (`suspected_positivity`) and per-test
                 clamp(Int(confirmed_history.days[1]), 1, n)
     _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
-    onset_to_confirmation_pmf := convolve_pmf(
-        cases_state.report_pmf, confirmed_state.receipt_pmf)
-    onset_to_death_confirmation_pmf := convolve_pmf(
-        deaths_state.od_pmf, confirmed_state.receipt_pmf)
+    onset_to_confirmation_pmf := convolve_pmf(cases_state.report_pmf, confirmed_state.receipt_pmf)
+    onset_to_death_confirmation_pmf := convolve_pmf(deaths_state.od_pmf, confirmed_state.receipt_pmf)
     ## External onset-to-sample constraint on the confirmed sampling delay
     ## (grounded on the NEJM DRC 2026 cohort by default, see
-    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt
-    ## legs convolve to the confirmed onset-to-sample delay, so its
-    ## continuous mean is the sum of the two legs' means and its continuous
-    ## SD the root-sum of their variances; both are exposed here. The
-    ## cohort's reported (continuous) mean
+    ## [`nejm_onset_to_sample`](@ref)). The onset→report and report→receipt legs
+    ## convolve to the confirmed onset-to-sample delay, so its continuous mean is
+    ## the sum of the two legs' means and its continuous SD the root-sum of their
+    ## variances; both are exposed here. The cohort's reported (continuous) mean
     ## and median are fitted to these as soft Normal observations
     ## ([`onset_to_sample_logweight`](@ref)), grounding the otherwise-
     ## unidentified receipt (lab-turnaround) leg without touching either prior.
@@ -780,49 +943,24 @@ the implied per-suspected (`suspected_positivity`) and per-test
             cases_state.report_sd, confirmed_state.receipt_mean,
             confirmed_state.receipt_sd, onset_to_sample)
     end
-    R0 := infection_state.R0
-    r := infection_state.r
-    r0 := infection_state.r0
-    doubling_time := infection_state.doubling_time
-    T := infection_state.T
-    R_T := infection_state.Rt[n]
-    expected_infections_T := infection_state.infections[n]
-    CFR := deaths_state.CFR
     ## Population-level dispersion (`k`, the headline scalar) plus the
     ## partially-pooled per-stream dispersions and the pooling SD.
-    k := dispersion_state.k_pop
-    k_cases := kv[1]
-    k_deaths := kv[2]
-    k_confirmed := kv[3]
-    k_confirmed_deaths := kv[4]
-    dispersion_sd := dispersion_state.τ
-    p_drc := asc_state.p_drc
-    p_uganda := asc_state.p_uganda
     expected_deaths_T := deaths_state.expected_deaths_T
     expected_reports_T := cases_state.expected_reports
     expected_confirmed_T := confirmed_state.expected_confirmed
     expected_analysed_T := confirmed_state.expected_analysed
-    _ecd = confirmed_deaths_state.expected_confirmed_deaths
-    expected_confirmed_deaths_T := _ecd
-    expected_exports_T := exports_state.expected_exports
-    expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
-    ## Cut-off expected onset-reported total and the modelled per-onset-date
-    ## ascertainment level, off the same fitted hazard and ascertainment
-    ## walk; see [`onset_reporting_model`](@ref) for what the vintage
-    ## structure does and does not separate here.
     expected_onset_reported_T := onset_report_expected_total(
         onsets, onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n)
     onset_ascertainment := onset_report_state.alpha
+    _ecd = confirmed_deaths_state.expected_confirmed_deaths
+    expected_confirmed_deaths_T := _ecd
+    expected_exports_T := exports_state.expected_exports
+    expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
                                  treatment_state.expected_isolation)
-    ## Cut-off occupancy split: the confirmed-in-care and suspect-in-care
-    ## sub-stock prevalences carved from the occupied true-case stock by the
-    ## confirmation overlay.
-    expected_confirmed_incare_T := treatment_state.expected_confirmed_incare
-    expected_suspect_incare_T := treatment_state.expected_suspect_incare
     ## Cut-off daily treatment flows surfaced for the one-week-ahead forecast.
     expected_admissions_T := treatment_state.expected_admissions
     expected_incare_deaths_T := treatment_state.expected_incare_deaths
@@ -831,9 +969,9 @@ the implied per-suspected (`suspected_positivity`) and per-test
     isolation_admission := treatment_state.p_iso
     isolation_bvd_admission := treatment_state.p_iso_bvd
     isolation_severity := treatment_state.δ_iso
-    ## BVD bed stay outcome mixture: `isolation_bvd_los_mean` is the mixture
-    ## mean (overall length-of-stay), with the death and recovery branch means
-    ## surfaced separately.
+    ## BVD bed stay is now the outcome mixture; `isolation_bvd_los_mean`
+    ## reports the mixture mean (overall length-of-stay), with the death and
+    ## recovery branch means surfaced separately.
     isolation_bvd_los_mean := treatment_state.overall_los
     isolation_death_los_mean := treatment_state.death_los_mean
     isolation_recovery_los_mean := treatment_state.recovery_los_mean
@@ -845,9 +983,6 @@ the implied per-suspected (`suspected_positivity`) and per-test
     incare_cfr := treatment_state.CFR_iso
     incare_cfr_modifier := treatment_state.β_iso
     abscond_fraction := treatment_state.abscond_frac
-    ## In-care confirmation-rate modifier ρ on the borrowed community
-    ## confirmation hazard, identified by the confirmed/suspected-in-care split.
-    incare_confirm_modifier := treatment_state.incare_confirm_modifier
     expected_recovered_T := recovered_state.expected_recovered
     recovery_probability := recovered_state.p_recover
     recovery_delay_mean := recovered_state.recovery_delay_mean
@@ -867,4 +1002,15 @@ the implied per-suspected (`suspected_positivity`) and per-test
     test_positivity := confirmed_state.p_positive
     death_composition := confirmed_deaths_state.q_death
     death_confirmation := confirmed_deaths_state.p_death_conf
+
+    ## Shared observation-model parameters.
+    k := dispersion_state.k_pop
+    k_cases := kv[1]
+    k_deaths := kv[2]
+    k_confirmed := kv[3]
+    k_confirmed_deaths := kv[4]
+    dispersion_sd := dispersion_state.τ
+    p_drc := asc_state.p_drc
+    p_uganda := asc_state.p_uganda
+    CFR := deaths_state.CFR
 end

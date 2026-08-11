@@ -6,6 +6,113 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.14.0
+
+Changes since v1.13.1
+
+### Model
+
+- The headline joint model is now a **meta-population model** over the three
+  affected provinces (Ituri, Nord-Kivu, Sud-Kivu). It is the same `bvd_joint`:
+  `n_patches` defaults to 1, which collapses it exactly onto the previous
+  single-population model (the sum-to-zero deviations vanish, there is nothing
+  to import between, and there is no per-province likelihood), so there is one
+  model rather than two. The single-patch case is fitted as the
+  `sens_no_patches` sensitivity, which is the check on the spatial structure.
+- **Fixed three structural asymmetries that made the national outbreak size
+  depend on how many provinces the country was split into.** Splitting the
+  country adds no national data, so the national total must be invariant to the
+  patch count. It was not, for three reasons, all visible before any data:
+  - The per-province deviations are centred unweighted, so the trend the
+    molecular clock constrains was the geometric mean of the provincial
+    reproduction numbers while the epidemic ran at the force-weighted
+    arithmetic mean. The renewal is now anchored, scaling all provinces by one
+    common factor each day so the implied national reproduction number is the
+    trend exactly. The deviations became pure contrasts between provinces and
+    the national level is left to the trend alone. This was much the largest
+    term, being exponential in the excess growth rate.
+  - Importation manufactured infections instead of moving them: the
+    destination gained while the origin lost nothing. Coupling now debits the
+    origin exactly what the destinations are credited.
+  - The seed fractions added to the national cryptic seed instead of
+    partitioning it, so the initial condition grew with the patch count. They
+    now partition it.
+
+  With the same trend and the same total seed, three provinces now reproduce
+  the single-population national trajectory exactly, day by day. On the test
+  setup the old code inflated the national cumulative total roughly
+  thirtyfold. Pinned in `test/test_patch_model.jl`.
+- The headline fit runs at 200 draws rather than the 500 every other fit in the
+  matrix uses. Three provinces cost about twice as much per draw as one: the
+  gradient is 53.0 ms at three patches (220 parameters) against 26.2 ms at one
+  (140), and the extra dimensions lengthen the sampler's trajectories on top of
+  that. The single-patch fit takes 314 minutes at 500 draws, so three patches
+  at 500 needs on the order of 700, against a 350-minute job budget. This
+  halves the headline's effective sample size and is worth revisiting.
+- Fixed the headline and control fits drifting apart. They are the two halves
+  of the spatial sensitivity, so they must differ only in the patch structure,
+  and they had come to differ in **nine** keyword arguments. `genetic` defaults
+  to `nothing`, so the headline was silently running with no genetic TMRCA
+  likelihood while the control had one; the comparison was not controlled at
+  all. Both now splat one shared configuration, so they cannot diverge again.
+- Per-province reproduction numbers are a common national trend plus deviations
+  that sum to zero, drawn from a multivariate-normal random walk with a learned
+  cross-patch correlation. The deviation scale is sampled, so whether the
+  provinces share one temporal `Rt` shape is *estimated* rather than assumed.
+- **The per-province split is identified by the deaths.** A province's confirmed
+  case count is the product of its incidence and its case-finding, and only the
+  product is observed; the tests-analysed denominator cancels out of the
+  normalised shares, so no amount of case or laboratory data separates them.
+  Deaths are far harder to miss than cases, and the case-fatality ratio and the
+  death-confirmation probability belong to the virus and to a national
+  laboratory rather than to a province, so they cancel out of the normalised
+  death shares. The death split therefore identifies the incidence split, and
+  the case split identifies ascertainment as the residual.
+- Both splits are scored as compositions conditional on the national total, so
+  neither re-scores data the national streams already carry. The death
+  composition convolves each province's own incidence curve through the shared
+  onset-to-death and reporting delays, so the downward bias in observed CFR
+  during fast growth is predicted rather than mistaken for poor case-finding.
+- Provinces are coupled by importation (a gravity kernel weighted by destination
+  population). There is no mobility data, so the kernel is a structural
+  assumption and its intensity is weakly identified against the secondary-patch
+  seeds; that is documented rather than hidden.
+
+### Data
+
+- Added `[province_confirmed_history]` and `[province_death_history]`:
+  per-province cumulative confirmed cases **and deaths** from Tableau 1 of the
+  situation reports (20 vintages, 15 Jun -- 8 Jul), scanned by
+  `scripts/scan_province_tableau1.jl` (`task province-tableau1`). The scan is
+  gated on the per-province figures summing exactly to the national confirmed
+  case and death totals on every date; all 20 reconcile.
+- Added `[province_lab_daily_history]`: per-province laboratory throughput from
+  section 4.3 of the situation reports (18 vintages), scanned by
+  `scripts/scan_province_lab.jl` (`task province-lab-data`), likewise gated on
+  reconciling with the national analysed series.
+- The data show that the provinces are testing very differently-selected pools
+  (Ituri 31.8% test positivity against Nord-Kivu's 5.5%), and that Nord-Kivu
+  holds a steady 8-9% of confirmed cases but 14-19% of confirmed deaths. Both
+  point the same way: Nord-Kivu is finding fewer of its cases, not transmitting
+  less.
+
+### Reporting
+
+- The spatial section now leads with a cross-province overview
+  (`patch_overview_table`), one row per province, and then reports each
+  province in its own table (`patch_summary_table(...; patch = ...)`). It
+  previously stacked every province against every quantity in a single
+  twenty-one-row table, which could not be read as a comparison.
+- Added the reproduction number by province over time (`plot_rt_patches`),
+  faceted one panel per province with the national trajectory behind it. The
+  provincial `Rt` was previously reported only at the cut-off, so the question
+  the meta-population model exists to answer was not shown. The trajectory is
+  rebuilt by `reconstruct_patch_rt` from the deviation knots the chain now
+  carries as `delta_knots`, and a test pins that reconstruction against the
+  model's own `R_T_patch`.
+- Reported the importation intensity alongside the kernel it scales, so the
+  coupling between provinces is stated rather than left implicit.
+
 ## v1.13.1
 
 Changes since v1.13.0
@@ -21,7 +128,6 @@ Changes since v1.13.0
   4 August onset snapshots are now included.
 
 ## v1.13.0
-
 Changes since v1.12.0
 
 ### Data
@@ -121,6 +227,7 @@ Changes since v1.12.0
   open items are filed as issues #544 to #549.
 - Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
   `scripts/README.md`, so a session starts with the rules in context.
+
 
 ## v1.12.0
 

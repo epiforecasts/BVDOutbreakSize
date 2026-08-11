@@ -136,7 +136,13 @@ if !@isdefined(_BVD_SETUP_LOADED)
                                  for s in _fit_specs])
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
+    ## The headline joint IS the patch (meta-population) model, run over the
+    ## three affected provinces. With `n_patches = 1` the same model collapses
+    ## exactly onto the single-population one, so there is one model, not two;
+    ## `sens_no_patches` is that degenerate case, fitted as the sensitivity
+    ## check on the spatial structure.
     chn_joint = _fits["joint"]
+    chn_no_patches = _fits["sens_no_patches"]
     chn_exports = _fits["exports"]
     chn_deaths = _fits["deaths"]
     chn_cases = _fits["cases"]
@@ -176,6 +182,14 @@ if !@isdefined(_BVD_SETUP_LOADED)
         chn_joint_community_delay = _fits["sens_community_delay"]
         chn_joint_exp_growth_clock = _fits["sens_exp_growth_clock"]
     end
+
+    ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
+    ## inside a model body puts a memcmp foreigncall on the AD tape).
+    province_cases = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES, 3)
+    province_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES, 3)
+    posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))
     posterior_C_exports = vec(Array(chn_exports[:C_T]))

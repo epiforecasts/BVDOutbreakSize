@@ -1,8 +1,8 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor
+using Statistics: quantile, mean, median, cor
 using TOML: TOML
-using DataFrames: DataFrame, rename
+using DataFrames: DataFrame, rename, select, Not
 using Chain: @chain
 using Random: MersenneTwister
 using Dates: Date, Day, date2epochdays, epochdays2date
@@ -17,7 +17,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
-                     LogNormal, Beta,
+                     LogNormal, Beta, LKJCholesky,
                      Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
@@ -36,6 +36,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        load_observations, freeze_observations, m_prior_centre,
        load_onset_curve,
        summary_table, posterior_summary, markdown_table,
+       patch_summary_table, patch_overview_table,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
@@ -58,8 +59,8 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        plot_vintage_incidence_ppc, plot_stream_calibration,
-       plot_rt, plot_rt_streams,
-       reconstruct_rt, reconstruct_onset_hazard,
+       plot_rt, plot_rt_streams, plot_rt_patches,
+       reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
        predict_no_onward_deaths, plot_no_onward_deaths,
        forecast_reported, forecast_stream, forecast_table, forecast_archive,
        forecast_onsets, onset_forecast_table,
@@ -117,7 +118,13 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
        exports_deaths_only_model, exports_joint_only_model, bvd_joint,
-       onsets_only_model
+       onsets_only_model,
+       PROVINCE_NAMES, PROVINCE_POPULATIONS, province_importation_kernel,
+       province_increment_matrix,
+       patch_infections, patch_infections_anchored, importation_from_kernel,
+       implied_national_Rt,
+       patch_rt_model, patch_infection_model,
+       province_composition_model
 
 include("docstrings.jl")
 include("constants.jl")
