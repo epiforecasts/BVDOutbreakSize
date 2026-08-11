@@ -728,6 +728,13 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
 
     ## 6. Treatment flows (isolation, bed capacity, LOS), on the national
     ##    suspected-case inflow, matching the national-level data.
+    ## In-care confirmation hazard `τ_test · p_pos` on the daily grid. Without
+    ## it `treatment` sets `split_active = false`, so the Tableau 6 confirmed
+    ## and suspect in-care split silently drops out of the likelihood and
+    ## `incare_confirm_modifier` is never sampled. That is invisible to a
+    ## parameter count and to the model tests; it surfaces only when the
+    ## analysis page reads the deterministic and fails.
+    conf_hazard_daily = confirmed_state.τ_test .* confirmed_state.p_pos_grid
     treatment_state ~ to_submodel(treatment(isolation_history,
         cases_state.bvd_reports_daily, cases_state.bg_daily, p_drc,
         deaths_state.CFR;
@@ -739,6 +746,7 @@ the summed patch infections. Per-patch quantities (`C_T_patch`, `R_T_patch`,
         confirmed_incare_history = treatment_confirmed_incare_history,
         suspect_incare_history = treatment_suspect_incare_history,
         occupancy_break_days = occupancy_break_days,
+        conf_hazard_daily = conf_hazard_daily,
         k_external = k_isolation))
     ## 7. Recovered (among confirmed).
     recovered_state ~ to_submodel(recovered(recovered_history,

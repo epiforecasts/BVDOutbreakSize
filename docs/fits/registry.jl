@@ -131,22 +131,28 @@ default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
 ## since the ceiling above it is only 360.
 default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "200"))
 
-## Adapt delta for the headline and its spatial control. The rest of the matrix
-## sits at 0.90; these two sit lower because they are the expensive pair and
-## the cost is in trajectory length, not in the gradient. At 0.90 the joint
-## runs a median NUTS tree depth of 9 with 43% of draws at the cap of 10, so
-## each draw spends 512 to 1024 leapfrog steps. A larger step size shortens
-## those trajectories roughly geometrically, which is the only lever with a
-## factor in it: the model micro-optimisations were measured and are null,
-## because the province convolutions read only 147 of 173 days and are a small
-## part of the density anyway.
+## Adapt delta for the headline and its spatial control, kept at the 0.90 the
+## rest of the matrix uses.
+##
+## Lowering it was tried and MEASURED NOT TO WORK. The reasoning was that the
+## cost is trajectory length, so a larger step size should shorten it: at 0.90
+## the joint runs a median tree depth of 9 with 43% of draws at the cap of 10.
+## At 0.80 the fit came back with tree depth pinned at 10 for EVERY draw, 1023
+## leapfrog steps throughout and an adapted step size of 0.003 -- longer
+## trajectories, not shorter. The 178-minute wall clock that run achieved came
+## entirely from cutting draws to 200, not from the adapt delta.
+##
+## So the draw count is the only lever that has actually delivered here. Note
+## that trajectories terminating at the depth cap rather than by the U-turn
+## criterion means exploration is being truncated; the effective sample size at
+## 200 draws is worth checking before this fit is trusted as the headline.
 ##
 ## Both fits must use the same value. They are the two halves of the spatial
 ## sensitivity, and while adapt delta changes sampling efficiency rather than
 ## the target posterior, letting them drift apart is how the nine-keyword
 ## divergence started.
 joint_target_accept() = parse(Float64,
-    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80"))
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
