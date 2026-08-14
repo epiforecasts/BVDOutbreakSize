@@ -22,11 +22,11 @@ Changes since v1.13.1
 - From SitRep 084 (6 August) the INSP switched to a shorter "MVEBDB" brief
   format that no longer publishes the daily new-suspected-case stream
   (`suspected_daily_history` freezes at SitRep 083) or the treatment-centre
-  patient-movement streams (frozen at SitRep 080), so the fit now relies on
-  the confirmed, recovered, isolation, laboratory and (intermittently)
-  onset streams plus the Uganda exports and genetic bound rather than the
-  full surveillance suite. The README and report carry a warning to this
-  effect; see the inclusion rules in `data/README.md`.
+  patient-movement streams (frozen at SitRep 080), so the fit now depends
+  on just the confirmed-case, confirmed-death, recovered and isolation
+  streams rather than the full surveillance suite. The README and report
+  carry a warning to this effect; see the inclusion rules in
+  `data/README.md`.
 
 ## v1.13.1
 

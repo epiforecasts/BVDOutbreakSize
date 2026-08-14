@@ -9,12 +9,10 @@ See the [Analysis](analysis.md) page for the methods, assumptions and supporting
 > reports in a shorter "MVEBDB" brief format that no longer reports the
 > daily new-suspected-case stream (frozen at SitRep 083, 5 August 2026)
 > or the treatment-centre patient-movement streams (frozen at SitRep 080,
-> 2 August 2026). The model still fits the confirmed-case and
-> confirmed-death series, recoveries, isolation occupancy, the 24h
-> laboratory-analysed volume and, where published, the symptom-onset
-> curve, alongside the Uganda exports and the genetic bound, but the
-> most recent weeks are now informed by fewer streams than earlier
-> releases. See the inclusion rules in `data/README.md`.
+> 2 August 2026). The model now depends on just four DRC streams — the
+> confirmed-case and confirmed-death series, recoveries and isolation
+> occupancy — so the most recent weeks are informed by fewer streams than
+> earlier releases. See the inclusion rules in `data/README.md`.
 
 ```@eval
 using Markdown, BVDOutbreakSize
