@@ -88,8 +88,27 @@ const CONFIG = [
     ("080", Date(2026, 8, 2), Date(2026, 7, 29)),
     ("081", Date(2026, 8, 3), Date(2026, 7, 29)),
     ("082", Date(2026, 8, 4), Date(2026, 8, 5)),
-    ("083", Date(2026, 8, 5), Date(2026, 8, 5))
+    ("083", Date(2026, 8, 5), Date(2026, 8, 5)),
+    ("087", Date(2026, 8, 9), Date(2026, 8, 5)),
+    ("088", Date(2026, 8, 10), Date(2026, 8, 5)),
+    ("089", Date(2026, 8, 11), Date(2026, 8, 5))
 ]
+
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
+# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
+# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
+# the printed tick labels directly - the pixel geometry is otherwise
+# indistinguishable, so this cannot be self-calibrated any more than
+# `last_tick` can). Applying the old /20 divisor to a 25-count grid
+# undercounts every bar by a scale-dependent amount and was caught only
+# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
+# read 26; the same date misread through the old divisor came out as 8).
+# Override per vintage here; anything absent keeps the historical 20.
+const Y_AXIS_STEP = Dict(
+    "087" => 25,
+    "088" => 25,
+    "089" => 25,
+)
 
 # --- PPM (P6) reader ------------------------------------------------------
 # Returns R, G, B as Int matrices indexed [row, col].
@@ -220,16 +239,17 @@ function y_axis_ticks(dark, base, H, W)
     return best[2]
 end
 
-function digitize(R, G, B, last_tick::Date)
+function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
     blue, red, dark = m.blue, m.red, m.dark
     drow = vec(sum(dark; dims = 2))
     drow[1:floor(Int, H * 0.4)] .= 0
     base = argmax(drow)                   # count-0 baseline row
-    # count scale from the 0/20/40/60 y-axis ticks
+    # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
+    # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = y_axis_ticks(dark, base, H, W)
-    ppc = median(diff(yt)) / 20.0         # pixels per count
+    ppc = median(diff(yt)) / float(y_step) # pixels per count
     ytop, y0 = yt[1], yt[end]
     # x scale from the weekly tick marks below the baseline. The tick marks
     # are only a few pixels tall and shrink with the embedded figure
@@ -383,7 +403,7 @@ function main(pdf_dir = "data/sitrep_pdfs",
                 @warn "skip $sr: no onset curve found"
                 continue
             end
-            rows = digitize(img..., last_tick)
+            rows = digitize(img..., last_tick, get(Y_AXIS_STEP, sr, 20))
             total = sum(a + d for (_, a, d) in rows)
             @printf("SitRep %s (%s): %d onset days, total %d confirmed\n",
                 sr, report_date, length(rows), total)
