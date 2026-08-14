@@ -12,6 +12,18 @@ DRC counts come from the situation reports of the Institut National de Santé Pu
 Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
+> **Reduced data streams.**
+> Since SitRep 084 (6 August 2026) the INSP has published its situation
+> reports in a shorter "MVEBDB" brief format that no longer reports the
+> daily new-suspected-case stream (frozen at SitRep 083, 5 August 2026)
+> or the treatment-centre patient-movement streams (frozen at SitRep 080,
+> 2 August 2026). The model still fits the confirmed-case and
+> confirmed-death series, recoveries, isolation occupancy, the 24h
+> laboratory-analysed volume and, where published, the symptom-onset
+> curve, alongside the Uganda exports and the genetic bound, but the
+> most recent weeks are now informed by fewer streams than earlier
+> releases. See the inclusion rules in `data/README.md`.
+
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
 [one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·

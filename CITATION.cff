@@ -24,5 +24,5 @@ identifiers:
     value: 10.5281/zenodo.20312758
     description: Concept DOI for all versions
 license: MIT
-version: 1.13.1
-date-released: "2026-08-07"
+version: 1.13.2
+date-released: "2026-08-14"
