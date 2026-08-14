@@ -105,6 +105,25 @@ CONFIG = {
     "081": ("2026-08-03", "2026-07-29"),
     "082": ("2026-08-04", "2026-08-05"),
     "083": ("2026-08-05", "2026-08-05"),
+    "087": ("2026-08-09", "2026-08-05"),
+    "088": ("2026-08-10", "2026-08-05"),
+    "089": ("2026-08-11", "2026-08-05"),
+}
+
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
+# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
+# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
+# the printed tick labels directly - the pixel geometry is otherwise
+# indistinguishable, so this cannot be self-calibrated any more than
+# `last_tick` can). Applying the old /20 divisor to a 25-count grid
+# undercounts every bar by a scale-dependent amount and was caught only
+# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
+# read 26; the same date misread through the old divisor came out as 8).
+# Override per vintage here; anything absent keeps the historical 20.
+Y_AXIS_STEP = {
+    "087": 25,
+    "088": 25,
+    "089": 25,
 }
 
 
@@ -251,15 +270,16 @@ def _y_axis_ticks(dark, base, W):
     return best[1]
 
 
-def digitize(im, last_tick_date):
+def digitize(im, last_tick_date, y_step=20):
     H, W, _ = im.shape
     blue, red, _, dark = _masks(im)
     drow = dark.sum(axis=1)
     drow[: int(H * 0.4)] = 0
     base = int(np.argmax(drow))  # count-0 baseline row
-    # count scale from the 0/20/40/60 y-axis ticks
+    # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
+    # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = _y_axis_ticks(dark, base, W)
-    ppc = np.median(np.diff(yt)) / 20.0
+    ppc = np.median(np.diff(yt)) / float(y_step)
     ytop, y0 = yt[0], yt[-1]
     # x scale from the weekly tick marks below the baseline. The tick marks
     # are only a few pixels tall and shrink with the embedded figure
@@ -352,7 +372,7 @@ def main():
         if im is None:
             print(f"skip {sr}: no onset curve found", file=sys.stderr)
             continue
-        rows = digitize(im, last_tick)
+        rows = digitize(im, last_tick, Y_AXIS_STEP.get(sr, 20))
         total = sum(a + d for _, a, d in rows)
         print(f"SitRep {sr} ({report_date}): {len(rows)} onset days, "
               f"total {total} confirmed")

@@ -214,3 +214,39 @@ poe_alertes_notifiees,085,2026-08-07,15,alerts,"section 1.3.1 prose: 'Quinze ale
 eds_investigations_performed,085,2026-08-07,98,investigations,section 1.5.1 prose; Ituri 56 EDS realises sur 74 alertes de deces (76 percent) + Nord-Kivu 42 EDS realises = 98
 eds_corpses_swabbed,085,2026-08-07,88,corpses,section 1.5.1 prose; Ituri 44 corps preleves post-mortem + Nord-Kivu 44 corps preleves et securises = 88
 eds_death_alerts,085,2026-08-07,74,alerts,"section 1.5.1 prose, Ituri only: '74 alertes de deces'; Nord-Kivu gives no alert count this vintage, only an EDS-realises and corpses-swabbed figure"
+contact_tracing_coverage,086,2026-08-08,84.6,percent,"page-1 tile 'Taux de suivi des contacts (Du Jour)' and section 1.2.1 prose agree (14 505 vus sur 17 141 a suivre); per-province: Haut-Uele 76.1 percent, Nord-Kivu 80.2 percent, Ituri 87.7 percent"
+contacts_under_follow_up,086,2026-08-08,17141,persons,section 1.2.1 prose '14 505 vus sur 17 141 a suivre'; no per-province breakdown given
+contacts_seen,086,2026-08-08,14505,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,086,2026-08-08,1282,alerts,"'Situation des alertes notifiees par ZS' table Total General; same methodology caveat as 084/085, see issue #562"
+poe_travellers_screened,086,2026-08-08,135404,persons,"section 1.3.1 prose: '135 404 voyageurs ont ete controles (117 337 en Ituri, 18 067 au Haut-Uele), avec un taux de depistage de 97,4 percent'"
+poe_alertes_notifiees,086,2026-08-08,9,alerts,"section 1.3.1 prose: 'Neuf alertes ont ete detectees aux PoE/PoC (7 en Ituri, 2 au Haut-Uele)'"
+eds_investigations_performed,086,2026-08-08,102,investigations,"section 1.5.1 prose; Ituri 66 EDS realises sur 82 alertes de deces (80,5 percent) + Nord-Kivu 36 EDS realises = 102; Tshopo transmitted no PCI/EDS data"
+eds_corpses_swabbed,086,2026-08-08,87,corpses,section 1.5.1 prose; Ituri 50 corps preleves post-mortem + Nord-Kivu 37 corps preleves et securises = 87
+eds_death_alerts,086,2026-08-08,82,alerts,"section 1.5.1 prose, Ituri only: '82 alertes de deces'; Nord-Kivu gives no alert-count denominator this vintage, only EDS-realises and corpses-swabbed figures"
+contact_tracing_coverage,087,2026-08-09,86.7,percent,"page-1 tile and section 1.2.1 prose agree (14 029 vus sur 16 183 a suivre); per-province: Haut-Uele 57.9 percent (linked to 66.7 percent completude), other provinces not individually stated this vintage"
+contacts_under_follow_up,087,2026-08-09,16183,persons,section 1.2.1 prose '14 029 vus sur 16 183 a suivre'
+contacts_seen,087,2026-08-09,14029,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,087,2026-08-09,1426,alerts,'Situation des alertes notifiees par province' table Total General; same methodology caveat as 084-086
+poe_travellers_screened,087,2026-08-09,106546,persons,"section 1.3.1 prose: '106 546 voyageurs ont ete controles (92 432 en Ituri, 14 114 au Haut-Uele), avec un taux de depistage de 98 percent'"
+poe_alertes_notifiees,087,2026-08-09,20,alerts,"section 1.3.1 prose: 'Vingt alertes ont ete detectees aux differents PoE/PoC (10 au Haut-Uele, 6 en Ituri et 4 au Nord-Kivu)'"
+eds_investigations_performed,087,2026-08-09,128,investigations,"section 1.5.1 prose; Ituri 76 EDS realises sur 85 alertes de deces (89,4 percent) + Nord-Kivu 52 EDS realises = 128; Tshopo transmitted no PCI/EDS data"
+eds_corpses_swabbed,087,2026-08-09,124,corpses,section 1.5.1 prose; Ituri 77 corps preleves post-mortem + Nord-Kivu 47 corps preleves et securises = 124
+eds_death_alerts,087,2026-08-09,85,alerts,"section 1.5.1 prose, Ituri only: '85 alertes de deces'; Nord-Kivu gives no alert-count denominator this vintage"
+contact_tracing_coverage,088,2026-08-10,82.7,percent,"page-1 tile and section 1.2.1 prose agree (13 951 vus sur 16 862 a suivre); per-province: Nord-Kivu 74.7 percent, others not individually stated"
+contacts_under_follow_up,088,2026-08-10,16862,persons,section 1.2.1 prose '13 951 vus sur 16 862 a suivre'
+contacts_seen,088,2026-08-10,13951,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,088,2026-08-10,1605,alerts,"'Situation des alertes notifiees par province' table Total General (1 605 alertes enregistrees, 1 488 verifiees / 92,7 percent, dans les 4 provinces ayant transmis les donnees - Haut-Uele ND this vintage); same methodology caveat as 084-087"
+poe_travellers_screened,088,2026-08-10,216357,persons,"section 1.3.1 prose: '216 357 voyageurs ont ete controles (135 971 en Ituri, 76 218 au Nord-Kivu et 4 168 en Tshopo), avec un taux de depistage de 97 percent'"
+poe_alertes_notifiees,088,2026-08-10,5,alerts,section 1.3.1 prose: 'Cinq alertes ont ete detectees aux differents PoE/PoC (3 en Ituri et 2 au Nord-Kivu)'
+eds_investigations_performed,088,2026-08-10,124,investigations,"section 1.5.1 prose; Ituri 70 EDS realises sur 92 alertes de deces (76,1 percent) + Nord-Kivu 54 EDS realises = 124; Tshopo reports 4 zones with PCI activity but no EDS-realises count, a corpse-preparation-only mention"
+eds_corpses_swabbed,088,2026-08-10,146,corpses,section 1.5.1 prose; Ituri 52 corps preleves post-mortem + Nord-Kivu 94 corps preleves et securises = 146
+eds_death_alerts,088,2026-08-10,92,alerts,"section 1.5.1 prose, Ituri only: '92 alertes de deces'; Nord-Kivu gives no alert-count denominator this vintage"
+contact_tracing_coverage,089,2026-08-11,82.4,percent,"page-1 tile and section 1.2.1 prose agree (17 085 vus sur 20 728 a suivre); per-province: Nord-Kivu 60.7 percent, others not individually stated"
+contacts_under_follow_up,089,2026-08-11,20728,persons,section 1.2.1 prose '17 085 vus sur 20 728 a suivre'
+contacts_seen,089,2026-08-11,17085,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,089,2026-08-11,1542,alerts,"'Situation des alertes notifiees par province' table Total General (1 542 alertes enregistrees, 1 423 verifiees / 92,2 percent, dans les 5 provinces); same methodology caveat as 084-088"
+poe_travellers_screened,089,2026-08-11,209068,persons,"section 1.3.1 prose: '209 068 voyageurs ont ete controles (113 406 en Ituri, 72 963 au Nord-Kivu, 18 531 au Haut-Uele et 4 168 en Tshopo), avec un taux de depistage de 97 percent'"
+poe_alertes_notifiees,089,2026-08-11,6,alerts,section 1.3.1 prose: 'Six (6) alertes ont ete detectees aux differents PoE/PoC (3 en Ituri et 3 au Nord-Kivu)'
+eds_investigations_performed,089,2026-08-11,107,investigations,"section 1.5.1 prose; Ituri 59 EDS realises sur 64 alertes de deces communautaires (92,1 percent, plus a separately-stated 15 EDS/15 en CTE not added here to avoid mixing categories) + Nord-Kivu 31 EDS realises + Haut-Uele 2 EDS realises = 107 (community-alert EDS only, Ituri CTE-EDS excluded, see source note caveat)"
+eds_corpses_swabbed,089,2026-08-11,78,corpses,section 1.5.1 prose; Ituri 42 corps preleves post-mortem (72 percent) + Nord-Kivu 33 corps preleves et securises + Haut-Uele 3 corps preleves par swab = 78
+eds_death_alerts,089,2026-08-11,101,alerts,section 1.5.1 prose; Ituri 64 alertes de deces + Nord-Kivu 34 alertes de deces + Haut-Uele 3 alertes de deces = 101 (first vintage since at least 083 to give a Haut-Uele alertes-de-deces count alongside Ituri and Nord-Kivu)
