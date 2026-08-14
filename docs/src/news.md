@@ -6,6 +6,28 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.13.2
+
+Changes since v1.13.1
+
+### Data
+
+- Advanced the model cut-off from SitRep 082 (4 August) to SitRep 089
+  (11 August): added SitReps 083-089, advancing the confirmed-case and
+  confirmed-death series and the recovered, isolation-occupancy and 24h
+  laboratory-analysed streams, and digitising the symptom-onset curve
+  vintages restored from SitRep 087 (the 084-086 brief-format reports carry
+  a different, notification-week chart and so contribute no onset
+  snapshot).
+- From SitRep 084 (6 August) the INSP switched to a shorter "MVEBDB" brief
+  format that no longer publishes the daily new-suspected-case stream
+  (`suspected_daily_history` freezes at SitRep 083) or the treatment-centre
+  patient-movement streams (frozen at SitRep 080), so the fit now depends
+  on just the confirmed-case, confirmed-death, recovered and isolation
+  streams rather than the full surveillance suite. The README and report
+  carry a warning to this effect; see the inclusion rules in
+  `data/README.md`.
+
 ## v1.13.1
 
 Changes since v1.13.0
