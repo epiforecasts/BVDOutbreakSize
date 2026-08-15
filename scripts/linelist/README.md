@@ -54,6 +54,22 @@ ceiling worth giving it, since the fit registry sets two chains.
 Sampler settings come from this repo's own fit registry rather than being set
 here, so a refit stays comparable with the release it is compared against.
 
+## Disclosure
+
+This repository is public. The line list is individual patient records held in a
+private repository and must not reach this one.
+
+Nothing under `scripts/linelist/` reads the line list. It reads three aggregate
+CSVs and a manifest, produced elsewhere, from a directory outside this repo.
+None of those inputs, and no fit output derived from them at case level, should
+be committed here.
+
+The boundary as it stands: aggregate national counts by date, and by onset date
+and vintage, are what crosses into this repo as inputs. Fitted parameters and
+posterior summaries are publishable. Anything stratified more finely than that
+is not, and moving the boundary outward is a decision to take deliberately
+rather than by adding a file.
+
 ## Scope
 
 The joint refit is partial. Only three of the manifest's streams have a
