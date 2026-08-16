@@ -46,3 +46,8 @@ logs/
 
 # Per-release worktrees created by scripts/backfill_forecasts.jl (--keep)
 /worktrees/
+
+# Outputs of scripts/linelist/, which are derived from the DHIS2 line list and
+# must never reach this repository — it is public. LINELIST_OUT_DIR defaults
+# here, so the directory is ignored rather than relying on it staying untracked.
+/ignore/
