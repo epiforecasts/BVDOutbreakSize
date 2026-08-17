@@ -6,6 +6,36 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.14.0
+
+Changes since v1.13.2
+
+### Data
+
+- `candidate_signals.csv` gains a `province` column and holds one row per
+  signal per vintage per province, replacing the national figure that was
+  a hand-made sum over whichever provinces happened to print a count. A
+  province the report is silent on now gets no row, which distinguishes it
+  from a printed zero. `province = Ensemble` marks a national figure the
+  report prints itself. Coverage changes are now readable from the data
+  rather than only from the prose in `source_note`: SitRep 069, for
+  example, gives Ituri and Nord-Kivu for `eds_death_alerts` but Ituri
+  alone for `eds_investigations_performed`.
+- Corrected SitRep 089's `eds_investigations_performed`, whose national
+  value of 107 included the 15 CTE EDS its own note recorded as excluded.
+  The per-province rows carry community-alert EDS only and sum to 92.
+
+### Documentation
+
+- Rewrote the reduced-data-streams warning in the README and the summary
+  page. The situation reports returned to their full format on 12 August,
+  so the note now covers only what stayed frozen: the daily
+  new-suspected-case count and the treatment-centre patient-movement
+  series.
+- Rewrote the abstract around the situation reports and the data they
+  publish rather than a list of streams, and it now says that each release
+  scores its forecasts against later data and a persistence baseline.
+
 ## v1.13.2
 
 Changes since v1.13.1
