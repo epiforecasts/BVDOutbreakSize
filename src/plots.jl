@@ -1946,7 +1946,7 @@ Two-panel density of the no-onward-transmission counterfactual from
 expected* deaths (`:delta_deaths`, the future deaths in cases already
 infected by `T`, net of the `obs_deaths` already observed). The right
 panel shows the *projected total* (`:total_projected = obs_deaths +
-delta_deaths`) with a dashed black rule at `obs_deaths`. Both are
+delta_deaths`), whose axis starts at `obs_deaths`. Both are
 lower bounds: they assume every onward transmission stops at time `T`.
 """
 function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
@@ -1962,14 +1962,14 @@ function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     _bounded_density!(ax1, df.delta_deaths; lower = 0,
         color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
+    ## The axis starts at the deaths already observed, so the left spine is
+    ## that reference and a rule drawn on it would be invisible.
     ax2 = Axis(fig[1, 2];
-        xlabel = "Projected total deaths (no onward transmission)",
+        xlabel = "Projected total deaths, from the $(obs_deaths) observed",
         ylabel = "Posterior density",
         title = "Projected total")
     _bounded_density!(ax2, df.total_projected; lower = obs_deaths,
         color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
-    vlines!(ax2, [float(obs_deaths)];
-        color = :black, linestyle = :dash, linewidth = 2)
 
     return fig
 end
