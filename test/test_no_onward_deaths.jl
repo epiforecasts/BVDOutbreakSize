@@ -41,7 +41,6 @@ end
 @testitem "plot_no_onward_deaths keeps each density inside its bound" begin
     using DataFrames: DataFrame
     using CairoMakie: Axis
-    import Makie
     using BVDOutbreakSize: plot_no_onward_deaths
 
     ## Draws piled against the zero clamp, which is what produced the tail.
@@ -54,14 +53,14 @@ end
     axes = [c for c in fig.content if c isa Axis]
     @test length(axes) == 2
 
-    ## The estimate is confined to the support, so the curve stops at the
-    ## bound rather than being cropped there by the axis.
-    dens = [p for ax in axes for p in ax.scene.plots if p isa Makie.Density]
-    @test length(dens) == 2
-    @test dens[1].boundary[][1] == 0
-    @test dens[2].boundary[][1] == obs_deaths
-
-    ## The axis agrees, so no tick sits past the bound.
+    ## Each axis starts at its bound, so no impossible value is on show: no
+    ## negative still-expected deaths, and no projected total below the
+    ## deaths already observed.
     @test first(axes[1].limits[])[1] == 0
     @test first(axes[2].limits[])[1] == obs_deaths
+
+    ## The upper limit still clears the draws, so clipping the impossible
+    ## side does not also clip the distribution.
+    @test last(first(axes[1].limits[])) >= maximum(delta)
+    @test last(first(axes[2].limits[])) >= maximum(df.total_projected)
 end

@@ -3,24 +3,25 @@
 # comparison, CFR prior, start-date and no-onward-transmission
 # densities, and the one-week-ahead forecast figures.
 
-## Kernel density for a quantity that cannot fall below `lower`.
+## Kernel density for a quantity that cannot fall below `lower`, clipped to the
+## side of the bound the quantity can actually reach.
 ##
-## A free Gaussian KDE puts mass past the smallest draw, so a bounded
-## quantity picks up a tail on the impossible side of its bound: with draws
-## whose minimum sits within about a bandwidth of the bound, a few percent of
-## the plotted mass lands beyond it. `boundary` confines the estimate to the
-## support and renormalises over it, so the curve stops at the bound instead
-## of implying values the quantity cannot take.
+## A Gaussian KDE puts mass past the smallest draw, so a bounded quantity picks
+## up a tail on the impossible side of its bound whenever the smallest draw sits
+## within about a bandwidth of it. The axis limit is what hides that tail, the
+## same approach the count and CFR panels here already take.
 ##
-## Setting the axis limit here too, rather than at each call site, keeps it from
-## drifting out of step with the bound the density was estimated over. Makie
-## pads the data range when it autoscales, so without this the axis shows ticks
-## past the bound even though the curve stops there.
+## Confining the estimator itself with `boundary` looks tidier and is wrong on
+## exactly the draws that motivate it: the tabulation step drops draws landing
+## on the first grid point while still normalising by the full sample size, so a
+## boundary at the bound discards the mass piled against it, and without padding
+## the FFT convolution wraps the two ends of the grid together. The default grid
+## is padded and normalises correctly, so it is the one to keep.
 function _bounded_density!(ax, x; lower::Real, kwargs...)
     lo = float(lower)
-    ## Guard a degenerate draw set, which gives no interval to estimate over.
+    ## Guard a degenerate draw set, which leaves no range to pad.
     hi = maximum(x) > lo ? float(maximum(x)) : lo + 1
-    h = density!(ax, x; boundary = (lo, hi), kwargs...)
+    h = density!(ax, x; kwargs...)
     CairoMakie.xlims!(ax, lo, hi + 0.02 * (hi - lo))
     return h
 end
@@ -135,7 +136,7 @@ function plot_cumulative_trajectories(chn;
             xlabel = "Cumulative $name at the cut-off",
             ylabel = "Posterior density",
             title = "Current cumulative $name")
-        _bounded_density!(axd, finals; lower = 0, color = (colour, 0.5),
+        density!(axd, finals; color = (colour, 0.5),
             strokecolor = colour, strokewidth = 2)
     end
     return fig
