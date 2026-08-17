@@ -241,7 +241,12 @@ Extend it on every update alongside the fitted streams, and open one issue per s
 Nothing in the model reads this file.
 
 `province` carries the reporting unit the value belongs to, one of `Ituri`, `Nord-Kivu`, `Haut-Uele`, `Tshopo`, `Sud-Kivu`, `Bas-Uele` or `Ensemble`.
-Use `Ensemble` only for a national figure the report prints itself, such as a Tableau 3 Total-column cell or a page-1 national tile, and never for a total summed across provinces by hand.
+Use `Ensemble` only for a national figure the report prints itself, and never for a total summed across provinces by hand.
+The printed sources it comes from in this file are Tableau 5's `Global` column, Tableau 6's `Ensemble` column and the section 1.3.1 prose that gives a national figure with the province split in parentheses.
+Check a candidate against the PDF rather than against the row's own arithmetic: SitRep 080's Tableau 6 drops the `Ensemble` column and puts Sud-Kivu in its place, so a note there that writes out a five-province sum is describing a total the report never printed.
+
+An `Ensemble` row and the province rows it covers can both be present, which they are for 33 keys, so summing a `groupby(:signal, :sitrep)` double counts.
+Take the `Ensemble` row where there is one, and sum the province rows only when there is not.
 A province the report is silent on gets no row at all, which is what distinguishes it from a printed zero: that gets a row with `value = 0`.
 Rates such as `contact_tracing_coverage` and `alert_investigation_rate` are recorded as printed and never summed.
 
