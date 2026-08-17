@@ -3,20 +3,15 @@
 # comparison, CFR prior, start-date and no-onward-transmission
 # densities, and the one-week-ahead forecast figures.
 
-## Kernel density for a quantity that cannot fall below `lower`, clipped to the
-## side of the bound the quantity can actually reach.
+## Kernel density for a quantity that cannot fall below `lower`, with the axis
+## clipped to the side of the bound the quantity can reach. A Gaussian KDE puts
+## mass past the smallest draw, so a bounded quantity otherwise shows a tail on
+## the impossible side. This is how the count and CFR panels here handle it.
 ##
-## A Gaussian KDE puts mass past the smallest draw, so a bounded quantity picks
-## up a tail on the impossible side of its bound whenever the smallest draw sits
-## within about a bandwidth of it. The axis limit is what hides that tail, the
-## same approach the count and CFR panels here already take.
-##
-## Confining the estimator itself with `boundary` looks tidier and is wrong on
-## exactly the draws that motivate it: the tabulation step drops draws landing
-## on the first grid point while still normalising by the full sample size, so a
-## boundary at the bound discards the mass piled against it, and without padding
-## the FFT convolution wraps the two ends of the grid together. The default grid
-## is padded and normalises correctly, so it is the one to keep.
+## Do not narrow the estimator with `boundary` instead: the tabulation drops
+## draws landing on the first grid point while still normalising by the full
+## sample size, so a boundary at the bound discards the mass piled against it,
+## and an unpadded grid wraps under the FFT convolution.
 function _bounded_density!(ax, x; lower::Real, kwargs...)
     lo = float(lower)
     ## Guard a degenerate draw set, which leaves no range to pad.

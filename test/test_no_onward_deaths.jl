@@ -38,7 +38,9 @@ end
 ## A free kernel density spreads mass past the smallest draw, which put a
 ## visible negative tail on the still-expected-deaths panel.
 
-@testitem "plot_no_onward_deaths keeps each density inside its bound" begin
+@testitem "plot_no_onward_deaths keeps each density inside its bound" setup=[
+    HeadlessMakie
+] begin
     using DataFrames: DataFrame
     using CairoMakie: Axis
     using BVDOutbreakSize: plot_no_onward_deaths
