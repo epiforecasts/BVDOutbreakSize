@@ -61,8 +61,8 @@ end
     @test first(axes[1].limits[])[1] == 0
     @test first(axes[2].limits[])[1] == obs_deaths
 
-    ## The upper limit still clears the draws, so clipping the impossible
-    ## side does not also clip the distribution.
-    @test last(first(axes[1].limits[])) >= maximum(delta)
-    @test last(first(axes[2].limits[])) >= maximum(df.total_projected)
+    ## The possible side stays automatic, so clipping the impossible side
+    ## does not also cut the curve off at the largest draw.
+    @test last(first(axes[1].limits[])) === nothing
+    @test last(first(axes[2].limits[])) === nothing
 end

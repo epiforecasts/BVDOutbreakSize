@@ -13,11 +13,11 @@
 ## sample size, so a boundary at the bound discards the mass piled against it,
 ## and an unpadded grid wraps under the FFT convolution.
 function _bounded_density!(ax, x; lower::Real, kwargs...)
-    lo = float(lower)
-    ## Guard a degenerate draw set, which leaves no range to pad.
-    hi = maximum(x) > lo ? float(maximum(x)) : lo + 1
     h = density!(ax, x; kwargs...)
-    CairoMakie.xlims!(ax, lo, hi + 0.02 * (hi - lo))
+    ## Only the impossible side is clipped. Pinning the upper limit as well
+    ## would cut the curve off at the largest draw, while it is still well
+    ## clear of zero, and trade one misleading edge for another.
+    CairoMakie.xlims!(ax, float(lower), nothing)
     return h
 end
 
