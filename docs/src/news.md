@@ -35,6 +35,11 @@ Changes since v1.13.2
 - Rewrote the abstract around the situation reports and the data they
   publish rather than a list of streams, and it now says that each release
   scores its forecasts against later data and a persistence baseline.
+- Gave one display block each to the tested BVD share and the positivity,
+  the cumulative infections and the completed-detection-delay term, and the
+  daily export intensity and its running sum, finishing the
+  one-quantity-per-block pass. The export-death prevalence gets its own
+  block rather than an inline definition.
 
 ## v1.13.2
 

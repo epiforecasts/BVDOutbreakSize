@@ -1324,13 +1324,17 @@ cfr_prior_fig #hide
 #      (\lambda_{\text{bg}} * f_{\text{rec}})_v}.
 # ```
 #
-# The tested BVD share $q_v$ raises $\varphi_v$ by the decaying severity enrichment $\delta_0$.
+# The tested BVD share $q_v$ raises $\varphi_v$ by the decaying severity enrichment $\delta_0$:
+#
+# ```math
+# q_v = \mathrm{logistic}\!\bigl(\mathrm{logit}(\varphi_v) +
+#     \delta_0\, e^{-c_v / \text{decay}}\bigr).
+# ```
+#
 # A truly BVD specimen then tests positive with the sensitivity $s$, and a non-BVD specimen with the false-positive rate $1 - \mathrm{spec}$.
 # The false-positive term therefore carries the non-BVD share, and the laboratory data identify the background:
 #
 # ```math
-# q_v = \mathrm{logistic}\!\bigl(\mathrm{logit}(\varphi_v) +
-#     \delta_0\, e^{-c_v / \text{decay}}\bigr), \qquad
 # p_{\text{pos},v} = s\, q_v + (1 - \mathrm{spec})(1 - q_v),
 # ```
 #
@@ -1490,18 +1494,28 @@ cfr_prior_fig #hide
 # An infected person travels to Uganda at the daily per-capita travel rate $q = N_{\text{travel}} / N_{\text{source}}$ and stays at risk of being exported and detected only until the infection-to-detection delay has elapsed.
 # The daily at-risk export prevalence is the infections still infected and not yet detected, scaled by the Uganda ascertainment and the travel rate.
 # The infection-to-detection delay is the onset-to-hospitalisation delay convolved with the incubation period, so the survival clock runs from infection.
-# Write the cumulative infections and the infections that have completed the detection delay as
+# Write the cumulative infections as
 #
 # ```math
-# C_t = \sum_{u \le t} I_u, \qquad
+# C_t = \sum_{u \le t} I_u.
+# ```
+#
+# The infections that have completed the detection delay are
+#
+# ```math
 # \text{det}_t = \sum_{s \ge 0} I_{t-s}\,
 #     (f_{\text{inc}} * f_{\text{det}})_s.
 # ```
 #
-# Then the daily export intensity and its running sum are
+# Then the daily export intensity is
 #
 # ```math
-# \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t), \qquad
+# \lambda_t = p_{\text{Uganda}}\, q\, (C_t - \text{det}_t).
+# ```
+#
+# Its running sum is the cumulative export intensity:
+#
+# ```math
 # \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{37}
 # ```
 #
@@ -1539,7 +1553,13 @@ cfr_prior_fig #hide
 #
 # The expected deaths among exports weight the travelled at-risk prevalence by the infection-to-death delay (the onset-to-death PMF convolved with the incubation period) and scale by the CFR.
 # The travelled prevalence is the export prevalence before the ascertainment factor $p_{\text{Uganda}}$, because a death among an exported case would be reported whether or not the case itself was ascertained as an import.
-# Writing it $\ell_t = q\,(C_t - \text{det}_t)$, the daily export-death intensity is
+# Write that prevalence as
+#
+# ```math
+# \ell_t = q\,(C_t - \text{det}_t).
+# ```
+#
+# The daily export-death intensity is
 #
 # ```math
 # \mu_t = \mathrm{CFR} \sum_{s \ge 0} \ell_{t-s}\, (f_{\text{inc}} * f_d)_s.
