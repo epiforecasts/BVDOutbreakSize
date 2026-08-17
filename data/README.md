@@ -236,15 +236,24 @@ If a genuinely new indicator appears that is not in this list or the fitted tabl
 Before calling anything new, moved or dropped, grep the adjacent vintages for it (`pdftotext -layout` over `sitrep_pdfs/`), because a two-reader check of one report cannot see what the neighbouring reports do.
 A claim of novelty that skips this check has turned out to describe a change that had actually happened ten or more vintages earlier, or not at all.
 
-Values for these signals accumulate in `candidate_signals.csv` (`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row per signal per vintage, so a series builds from the day a signal first appears rather than from the day someone decides to fit it.
+Values for these signals accumulate in `candidate_signals.csv` (`signal`, `sitrep`, `report_date`, `province`, `value`, `unit`, `source_note`), one row per signal per vintage per province, so a series builds from the day a signal first appears rather than from the day someone decides to fit it.
 Extend it on every update alongside the fitted streams, and open one issue per signal proposing it for fitting (one per signal, not one per vintage).
 Nothing in the model reads this file.
+
+`province` carries the reporting unit the value belongs to, one of `Ituri`, `Nord-Kivu`, `Haut-Uele`, `Tshopo`, `Sud-Kivu`, `Bas-Uele` or `Ensemble`.
+Use `Ensemble` only for a national figure the report prints itself, such as a Tableau 3 Total-column cell or a page-1 national tile, and never for a total summed across provinces by hand.
+A province the report is silent on gets no row at all, which is what distinguishes it from a printed zero: that gets a row with `value = 0`.
+Rates such as `contact_tracing_coverage` and `alert_investigation_rate` are recorded as printed and never summed.
+
+Because coverage attaches to the (signal, vintage, province) triple rather than to a vintage, one report can give both provinces for one signal and a single province for another.
+SitRep 069 does exactly that: `eds_death_alerts` and `eds_corpses_swabbed` carry Ituri and Nord-Kivu, while `eds_investigations_performed` carries Ituri alone.
+Filter to a fixed province before differencing consecutive rows.
+Summing across whichever provinces reported gives a series that steps for coverage reasons and reads as though it stepped for epidemiological ones.
 
 Every value is read twice by independent readers, as for the fitted streams.
 The `eds_*` rows are backfilled to SitRep 059.
 See the EDS row above for why the series stops there and what would have to be settled to extend it.
-These three series are not comparable across vintages, because which provinces print a count changes from report to report: Nord-Kivu appears numerically almost throughout, Ituri only in 061, 062, 065, 069, 070 and 072, Tshopo never, and 071 prints no EDS numbers at all.
-The value is the sum over the provinces that printed the quantity, and the `source_note` names them, so read that before differencing consecutive rows: a step can be pure coverage.
+Coverage across that range is uneven: Nord-Kivu appears numerically almost throughout, Ituri intermittently, Tshopo never, and 071 prints no EDS numbers at all.
 This is a workaround for the schema having no province column, which is issue #492.
 Per-province splitting should come before any of these signals is fitted.
 Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in 060, 066 and 067, which the same vintages' carried-over `reports` explain, and the swab count is usually printed as the combined `corps swabés et sécurisés` rather than swabs alone.
