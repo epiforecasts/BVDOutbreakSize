@@ -25,6 +25,16 @@ Changes since v1.13.2
   value of 107 included the 15 CTE EDS its own note recorded as excluded.
   The per-province rows carry community-alert EDS only and sum to 92.
 
+### Fixes
+
+- The still-expected-deaths density no longer extends below zero. The draws
+  were never negative; the kernel density spread mass past the smallest
+  draw, putting a tail on the impossible side of the bound. Bounded
+  densities are now estimated over their support and the axis stops at the
+  bound. The same fix applies to the projected-total panel, which had been
+  drawn crossing left of the observed-deaths rule, and to the
+  cumulative-at-cut-off densities.
+
 ### Documentation
 
 - Rewrote the reduced-data-streams warning in the README and the summary

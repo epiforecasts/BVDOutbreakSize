@@ -32,3 +32,36 @@
         abs.(df.total_projected .- (obs_deaths .+ df.delta_deaths))
     ) < 1e-8
 end
+
+## Both plotted quantities have a hard floor: `delta_deaths` is clamped at
+## zero, so `total_projected` cannot fall below the deaths already observed.
+## A free kernel density spreads mass past the smallest draw, which put a
+## visible negative tail on the still-expected-deaths panel.
+
+@testitem "plot_no_onward_deaths keeps each density inside its bound" begin
+    using DataFrames: DataFrame
+    using CairoMakie: Axis
+    import Makie
+    using BVDOutbreakSize: plot_no_onward_deaths
+
+    ## Draws piled against the zero clamp, which is what produced the tail.
+    delta = max.(collect(range(-40, 160; length = 500)), 0.0)
+    obs_deaths = 2325
+    df = DataFrame(delta_deaths = delta,
+        total_projected = obs_deaths .+ delta)
+
+    fig = plot_no_onward_deaths(df; obs_deaths = obs_deaths)
+    axes = [c for c in fig.content if c isa Axis]
+    @test length(axes) == 2
+
+    ## The estimate is confined to the support, so the curve stops at the
+    ## bound rather than being cropped there by the axis.
+    dens = [p for ax in axes for p in ax.scene.plots if p isa Makie.Density]
+    @test length(dens) == 2
+    @test dens[1].boundary[][1] == 0
+    @test dens[2].boundary[][1] == obs_deaths
+
+    ## The axis agrees, so no tick sits past the bound.
+    @test first(axes[1].limits[])[1] == 0
+    @test first(axes[2].limits[])[1] == obs_deaths
+end

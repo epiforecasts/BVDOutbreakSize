@@ -3,6 +3,28 @@
 # comparison, CFR prior, start-date and no-onward-transmission
 # densities, and the one-week-ahead forecast figures.
 
+## Kernel density for a quantity that cannot fall below `lower`.
+##
+## A free Gaussian KDE puts mass past the smallest draw, so a bounded
+## quantity picks up a tail on the impossible side of its bound: with draws
+## whose minimum sits within about a bandwidth of the bound, a few percent of
+## the plotted mass lands beyond it. `boundary` confines the estimate to the
+## support and renormalises over it, so the curve stops at the bound instead
+## of implying values the quantity cannot take.
+##
+## Setting the axis limit here too, rather than at each call site, keeps it from
+## drifting out of step with the bound the density was estimated over. Makie
+## pads the data range when it autoscales, so without this the axis shows ticks
+## past the bound even though the curve stops there.
+function _bounded_density!(ax, x; lower::Real, kwargs...)
+    lo = float(lower)
+    ## Guard a degenerate draw set, which gives no interval to estimate over.
+    hi = maximum(x) > lo ? float(maximum(x)) : lo + 1
+    h = density!(ax, x; boundary = (lo, hi), kwargs...)
+    CairoMakie.xlims!(ax, lo, hi + 0.02 * (hi - lo))
+    return h
+end
+
 """
 Overlaid posterior densities of `C_T` from one or more fits, built
 through AlgebraOfGraphics. The 15 published scenario point estimates
@@ -113,7 +135,7 @@ function plot_cumulative_trajectories(chn;
             xlabel = "Cumulative $name at the cut-off",
             ylabel = "Posterior density",
             title = "Current cumulative $name")
-        density!(axd, finals; color = (colour, 0.5),
+        _bounded_density!(axd, finals; lower = 0, color = (colour, 0.5),
             strokecolor = colour, strokewidth = 2)
     end
     return fig
@@ -1934,19 +1956,22 @@ lower bounds: they assume every onward transmission stops at time `T`.
 function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     fig = Figure(; size = (980, 420))
 
+    ## Both quantities have a hard floor: `delta_deaths` is clamped at zero in
+    ## `predict_no_onward_deaths`, so the projected total cannot fall below the
+    ## deaths already observed.
     ax1 = Axis(fig[1, 1];
         xlabel = "Still expected deaths (beyond those already observed)",
         ylabel = "Posterior density",
         title = "Still expected (future)")
-    density!(ax1, df.delta_deaths; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
+    _bounded_density!(ax1, df.delta_deaths; lower = 0,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
     ax2 = Axis(fig[1, 2];
         xlabel = "Projected total deaths (no onward transmission)",
         ylabel = "Posterior density",
         title = "Projected total")
-    density!(ax2, df.total_projected; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
+    _bounded_density!(ax2, df.total_projected; lower = obs_deaths,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
     vlines!(ax2, [float(obs_deaths)];
         color = :black, linestyle = :dash, linewidth = 2)
 
