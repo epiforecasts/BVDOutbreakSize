@@ -254,8 +254,6 @@ Every value is read twice by independent readers, as for the fitted streams.
 The `eds_*` rows are backfilled to SitRep 059.
 See the EDS row above for why the series stops there and what would have to be settled to extend it.
 Coverage across that range is uneven: Nord-Kivu appears numerically almost throughout, Ituri intermittently, Tshopo never, and 071 prints no EDS numbers at all.
-This is a workaround for the schema having no province column, which is issue #492.
-Per-province splitting should come before any of these signals is fitted.
 Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in 060, 066 and 067, which the same vintages' carried-over `reports` explain, and the swab count is usually printed as the combined `corps swabés et sécurisés` rather than swabs alone.
 
 After editing, validate with the loader and its invariants:
