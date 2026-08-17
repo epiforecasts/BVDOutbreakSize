@@ -39,6 +39,12 @@ Download the PDFs first with `download_sitreps.jl`.
 Both also run under `--project=.`.
 CI uses `--project=docs` because that environment is already instantiated at that point in the build.
 
+## Refitting on line-list case counts (`--project=docs`)
+
+`linelist/` refits the model on case counts derived from a DHIS2 case line list rather than the INSP situation reports, so a difference against the released fit of the same id is a difference between data sources rather than between models.
+It needs two input files of national aggregate counts, produced outside this repository and named by `LINELIST_INPUT_DIR`, and it needs `-t 2` for the two chains.
+Read `linelist/README.md` before running anything there: it gives both schemas, the disclosure boundary, and a synthetic fixture to run against instead of the real inputs.
+
 ## Entry points and reproduction
 
 | Script | Project | What it does |

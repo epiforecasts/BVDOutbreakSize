@@ -6,6 +6,18 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+### Added
+
+- `scripts/linelist/`: refits the model on case counts derived from a DHIS2
+  case line list instead of the INSP situation reports, holding the model
+  fixed so a difference against the released fit of the same id is a
+  difference between data sources. Ships a synthetic fixture under
+  `test/fixtures/linelist/` so the path runs without the real inputs, which
+  are derived from individual patient records and stay outside this
+  repository.
+
 ## v1.13.2
 
 Changes since v1.13.1
