@@ -29,11 +29,10 @@ Changes since v1.13.2
 
 - The still-expected-deaths density no longer extends below zero. The draws
   were never negative; the kernel density spread mass past the smallest
-  draw, putting a tail on the impossible side of the bound. Bounded
-  densities are now estimated over their support and the axis stops at the
-  bound. The same fix applies to the projected-total panel, which had been
-  drawn crossing left of the observed-deaths rule, and to the
-  cumulative-at-cut-off densities.
+  draw, putting a tail on the impossible side of the bound. The axis now
+  stops at the bound, as the count and CFR panels already did. The same
+  applies to the projected-total panel, which had been drawn crossing left
+  of the observed-deaths rule.
 
 ### Documentation
 
