@@ -79,8 +79,8 @@ end
     @test abs(row["Lower 30%"]) > abs(row["Lower 90%"])
     @test row["Upper 30%"] > row["Upper 90%"]
 
-    ## The superseded behaviour, quantiling the draws directly, is what put
-    ## a large negative number at the low end of the interval.
+    ## Quantiling doubling_time's own draws puts a large negative number at
+    ## the low end when r spans zero, so the mapped row must differ from it.
     direct = posterior_summary(vec(Array(chn[:doubling_time])))
     @test round(direct.lo90; digits = 2) != row["Lower 90%"]
 end
@@ -102,4 +102,40 @@ end
         chain_type = FlexiChains.VNChain, progress = false)
     df = summary_table(chn, [:doubling_time])
     @test df[1, "Lower 90%"] <= df[1, "Upper 90%"]
+end
+
+## The review flagged that only the zero-spanning case was covered. With a
+## one-signed growth rate the transform is strictly decreasing, so the row is
+## ordered by growth rate and runs from the longest doubling time to the
+## shortest. That ordering is the point of the change, not an accident, so
+## pin it.
+
+@testitem "summary_table orders doubling_time by r when r is one-signed" tags=[
+    :slow
+] begin
+    using Statistics: quantile
+    using Distributions: Normal, truncated
+    using Turing: @model, sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: summary_table
+
+    @model function _positive_growth()
+        r ~ truncated(Normal(0.05, 0.01); lower = 0.005)
+        doubling_time := log(2) / r
+    end
+
+    chn = sample(_positive_growth(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false)
+    df = summary_table(chn, [:r, :doubling_time])
+    row = df[2, :]
+
+    r_draws = vec(Array(chn[:r]))
+    for (col, p) in [("Lower 90%", 0.05), ("Upper 90%", 0.95)]
+        @test row[col] == round(log(2) / quantile(r_draws, p); digits = 2)
+    end
+
+    ## Every value is a positive doubling time, and the slowest growth sits
+    ## in the Lower column because the row is ordered by growth rate.
+    @test row["Lower 90%"] > row["Upper 90%"] > 0
+    @test row["Lower 30%"] > row["Upper 30%"] > 0
 end

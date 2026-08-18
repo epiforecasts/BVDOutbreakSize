@@ -20,23 +20,13 @@ function posterior_summary(xs)
 end
 
 ## Quantities reported as a transform of another parameter rather than from
-## their own draws.
-##
-## `doubling_time = log(2) / r` is monotone in `r` on each side of zero and
-## unbounded at it, so quantiling its draws directly returns endpoints that
-## bound nothing: a posterior for `r` spanning zero puts doubling times of
-## both signs and arbitrarily large magnitude in the same sample, and the
-## resulting interval reads as though a large negative number were the low
-## end of a range. Taking the image of `r`'s own interval instead orders the
-## doubling times the way `r` orders them, so the row runs from the fastest
-## decline through the zero-growth pole to the fastest growth. Endpoints stay
-## non-finite where `r` reaches zero, which is the doubling time at zero
-## growth rather than a missing value.
+## their own draws, because their own quantiles do not bound them.
 const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
     :doubling_time => (:r, doubling_time))
 
-## Interval endpoints for one reported quantity. Exported, so a chain may
-## carry a derived quantity without its source; fall back to its own draws.
+## Interval endpoints for one reported quantity. `summary_table` is exported,
+## so a caller may pass a chain carrying a derived quantity without the
+## parameter it is derived from; fall back to its own draws there.
 function _summary_for(chn, p::Symbol)
     haskey(_DERIVED_FROM, p) || return posterior_summary(_draws(chn, p))
     src, f = _DERIVED_FROM[p]
