@@ -12,6 +12,46 @@
 const SEEDING_LEAD_DAYS = 30
 
 """
+Total retrospective harmonisation correction carried by a confirmed stream
+over the grid days `(from_day, to_day]`.
+
+On a listed harmonisation-break day (`[confirmed_break_dates]`) the reported
+cumulative jumps by more than that day's notifications, because INSP
+reattached previously unlinked records. The excess is `net - gross`: the
+vintage's own step less the printed 24h count. Subtracting it turns a raw
+cumulative difference into the count that was actually notified across the
+window, which is what a forecast of new cases is predicting.
+
+`deaths` selects the confirmed-death stream rather than confirmed cases.
+Returns zero when no listed break day falls in the window, and for a break
+day the history carries no matching vintage for, which is a vintage that has
+not arrived by this `obs`'s cut-off. A break day on the stream's first
+vintage takes the whole cumulative as its step, since nothing precedes it. The correction is floored at zero so a
+snapshot whose own vintage of that day is smaller cannot inflate the truth.
+"""
+function confirmed_break_correction(obs, from_day::Real, to_day::Real;
+        deaths::Bool = false)
+    days = obs.confirmed_break_days
+    isempty(days) && return 0.0
+    hist = deaths ? obs.confirmed_deaths_history : obs.confirmed_history
+    gross = deaths ? obs.confirmed_break_gross_deaths :
+            obs.confirmed_break_gross_cases
+    isempty(hist.counts) && return 0.0
+    hdays = collect(hist.days)
+    counts = collect(hist.counts)
+    total = 0.0
+    for (i, d) in enumerate(days)
+        from_day < d <= to_day || continue
+        pos = findfirst(==(d), hdays)
+        pos === nothing && continue
+        net = counts[pos] - (pos == 1 ? 0 : counts[pos - 1])
+        g = i <= length(gross) ? gross[i] : 0
+        total += max(net - g, 0)
+    end
+    return float(total)
+end
+
+"""
 Load the BVD observation manifest from `path` (a dated TOML file) and
 return a named tuple for the renewal model. Calendar dates are converted
 to 1-based grid day-indices (day 1 is the seeding day, day `n` the

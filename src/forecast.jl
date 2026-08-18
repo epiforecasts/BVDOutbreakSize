@@ -830,7 +830,12 @@ same `observed`/`baseline` NamedTuples it builds for the plot.
 Each scored stream gets two rows, mirroring the plot's two panels and the
 `Quantity` split of [`forecast_table`](@ref): a `cumulative by T+7` row
 scoring the projected cumulative against `observed`, and a `new this week`
-row scoring the projected new count against `max(observed − baseline, 0)`.
+row scoring the projected new count against
+`max(observed − baseline − breaks, 0)`. `breaks` is keyed like `observed`
+and carries each stream's retrospective harmonisation correction over the
+forecast window (see [`confirmed_break_correction`](@ref)), which lands in
+the cumulative without ever having been notified in that week and so is not
+part of what the new-count forecast is predicting. It defaults to zero.
 When `isolation` (the observed bed occupancy at the target date) is supplied
 and the forecast carries the beds, the projected supply-limited occupancy is
 scored against it too as a single level row. Returns a `DataFrame` with the
@@ -845,6 +850,7 @@ interval is wide.
 """
 function forecast_vs_truth(fc::DataFrame;
         observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
+        breaks::NamedTuple = NamedTuple(),
         isolation::Union{Real, Missing} = missing,
         digits::Integer = 0)
     _row(label, quantity, draws, obs) = begin
@@ -870,7 +876,12 @@ function forecast_vs_truth(fc::DataFrame;
         obs_cum = float(observed[cumcol])
         push!(rows, _row(label, "cumulative by T+7", fc[!, cumcol], obs_cum))
         newcol in propertynames(fc) || continue
-        obs_new = max(obs_cum - float(get(baseline, cumcol, 0)), 0.0)
+        ## A retrospective harmonisation lands in the cumulative but was
+        ## never notified across the window, so it is not something the
+        ## new-count forecast was predicting. Take it out of the truth.
+        obs_new = max(
+            obs_cum - float(get(baseline, cumcol, 0)) -
+            float(get(breaks, cumcol, 0)), 0.0)
         push!(rows, _row(label, "new this week", fc[!, newcol], obs_new))
     end
     isolation !== missing && :isolation_level in propertynames(fc) &&

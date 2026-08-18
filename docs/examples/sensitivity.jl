@@ -98,6 +98,18 @@ _obs_beds = isempty(obs.isolation_history.counts) ? missing :
             obs.isolation_history.counts[end]
 ## Same observed/baseline keying as the plot below, so the table covers every
 ## fitted count stream (cumulative and new-count rows) plus the bed level.
+## A harmonisation-break day between the frozen cut-off and the current one
+## puts records into the confirmed cumulative that were never notified in that
+## week, so the new-count truth carries a step the forecast was never
+## predicting. Take it out, the same correction `score_releases.jl` applies.
+## Grid days are relative to a seeding date fixed by the genetic tmrca, so the
+## frozen fit's own `n` and the current `obs.n` index the same grid.
+validation_breaks = (
+    confirmed_cum = confirmed_break_correction(
+        obs, frozen_lastweek.o.n, obs.n),
+    confirmed_deaths_cum = confirmed_break_correction(
+        obs, frozen_lastweek.o.n, obs.n; deaths = true))
+
 validation_table = forecast_vs_truth(validation_forecast;
     observed = (cases_cum = obs.reported_cases,
         deaths_cum = obs.total_deaths,
@@ -109,6 +121,7 @@ validation_table = forecast_vs_truth(validation_forecast;
         confirmed_cum = frozen_lastweek.o.confirmed_cases,
         confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
         recovered_cum = frozen_lastweek.o.recovered_cases),
+    breaks = validation_breaks,
     isolation = _obs_beds);
 
 #md # ```@raw html
@@ -137,7 +150,8 @@ validation_table #hide
 
 ## Observed cumulative at the target date per stream, keyed by the forecast's
 ## cumulative column; `baseline` is each stream's origin cumulative (the frozen
-## cut-off), so the new-count panel is scored against observed minus origin.
+## cut-off), so the new-count panel is scored against observed minus origin,
+## less any harmonisation the window carries (see `validation_breaks`).
 validation_fig = plot_forecast_vs_truth(validation_forecast;
     observed = (cases_cum = obs.reported_cases,
         deaths_cum = obs.total_deaths,
@@ -149,6 +163,7 @@ validation_fig = plot_forecast_vs_truth(validation_forecast;
         confirmed_cum = frozen_lastweek.o.confirmed_cases,
         confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
         recovered_cum = frozen_lastweek.o.recovered_cases),
+    breaks = validation_breaks,
     individual = validation_individual);
 
 #md # ```@raw html
