@@ -38,3 +38,68 @@
         @test r["Lower 30%"] <= r["Upper 30%"]
     end
 end
+
+## `doubling_time = log(2) / r` is unbounded at zero growth, so quantiling
+## its own draws returns endpoints that bound nothing once the posterior for
+## `r` spans zero. The row is built from `r`'s interval instead.
+
+@testitem "summary_table maps doubling_time through r's interval" tags=[
+    :slow
+] begin
+    using DataFrames: DataFrame
+    using Distributions: Normal
+    using Statistics: quantile
+    using Turing: @model, sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: summary_table, posterior_summary
+
+    ## An `r` centred on zero is the case the direct quantiles get wrong.
+    @model function _growth_model()
+        r ~ Normal(0.0, 0.02)
+        doubling_time := log(2) / r
+    end
+
+    chn = sample(_growth_model(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false)
+    df = summary_table(chn, [:r, :doubling_time])
+    row = df[2, :]
+    @test row["Quantity"] == "doubling_time"
+
+    ## Every endpoint is the image of the matching quantile of `r`.
+    r_draws = vec(Array(chn[:r]))
+    for (col, p) in [("Lower 90%", 0.05), ("Lower 60%", 0.20),
+        ("Lower 30%", 0.35), ("Upper 30%", 0.65),
+        ("Upper 60%", 0.80), ("Upper 90%", 0.95)]
+        @test row[col] == round(log(2) / quantile(r_draws, p); digits = 2)
+    end
+
+    ## Ordering is induced by `r`, so the row runs from the fastest decline
+    ## through the zero-growth pole to the fastest growth and is not sorted.
+    @test row["Lower 90%"] < 0 < row["Upper 90%"]
+    @test abs(row["Lower 30%"]) > abs(row["Lower 90%"])
+    @test row["Upper 30%"] > row["Upper 90%"]
+
+    ## The superseded behaviour, quantiling the draws directly, is what put
+    ## a large negative number at the low end of the interval.
+    direct = posterior_summary(vec(Array(chn[:doubling_time])))
+    @test round(direct.lo90; digits = 2) != row["Lower 90%"]
+end
+
+@testitem "summary_table falls back when the source is absent" tags=[
+    :slow
+] begin
+    using Distributions: Normal
+    using Turing: @model, sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: summary_table
+
+    ## A chain carrying the derived quantity but not `r` still summarises.
+    @model function _no_r_model()
+        doubling_time ~ Normal(30.0, 5.0)
+    end
+
+    chn = sample(_no_r_model(), Prior(), 200;
+        chain_type = FlexiChains.VNChain, progress = false)
+    df = summary_table(chn, [:doubling_time])
+    @test df[1, "Lower 90%"] <= df[1, "Upper 90%"]
+end

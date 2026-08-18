@@ -19,6 +19,35 @@ function posterior_summary(xs)
     )
 end
 
+## Quantities reported as a transform of another parameter rather than from
+## their own draws.
+##
+## `doubling_time = log(2) / r` is monotone in `r` on each side of zero and
+## unbounded at it, so quantiling its draws directly returns endpoints that
+## bound nothing: a posterior for `r` spanning zero puts doubling times of
+## both signs and arbitrarily large magnitude in the same sample, and the
+## resulting interval reads as though a large negative number were the low
+## end of a range. Taking the image of `r`'s own interval instead orders the
+## doubling times the way `r` orders them, so the row runs from the fastest
+## decline through the zero-growth pole to the fastest growth. Endpoints stay
+## non-finite where `r` reaches zero, which is the doubling time at zero
+## growth rather than a missing value.
+const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
+    :doubling_time => (:r, doubling_time))
+
+## Interval endpoints for one reported quantity. Exported, so a chain may
+## carry a derived quantity without its source; fall back to its own draws.
+function _summary_for(chn, p::Symbol)
+    haskey(_DERIVED_FROM, p) || return posterior_summary(_draws(chn, p))
+    src, f = _DERIVED_FROM[p]
+    src_draws = try
+        _draws(chn, src)
+    catch
+        return posterior_summary(_draws(chn, p))
+    end
+    return map(f, posterior_summary(src_draws))
+end
+
 ## Human-readable headers for the displayed summary tables. Internal
 ## column keys stay machine-friendly. This maps them to nice labels at
 ## the point each table is returned.
@@ -48,6 +77,11 @@ _prettify(df::DataFrame) = rename(df, [n => get(_PRETTY_COLS, n, n) for n in nam
 Upper 90%` giving the lower and upper endpoints of the equal-tailed
 30%, 60% and 90% credible intervals.
 
+`doubling_time` is reported as the image of `r`'s interval rather than
+from its own draws, because it is unbounded at zero growth; see
+`_DERIVED_FROM`. Its row therefore runs from the fastest decline through
+the zero-growth pole to the fastest growth, and is not sorted by value.
+
 `labels` is an optional map from the raw chain symbol to a clean display
 name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
 `Quantity` column only. The model's variable names are unchanged. Symbols
@@ -64,7 +98,7 @@ function summary_table(chn, params::AbstractVector{Symbol};
     ) begin
         let df = _
             for p in params
-                s = posterior_summary(_draws(chn, p))
+                s = _summary_for(chn, p)
                 push!(df,
                     (get(labels, p, string(p)),
                         round(s.lo90; digits), round(s.lo60; digits),
