@@ -2149,7 +2149,6 @@ summary_ranges = let
     Td = vec(Array(chn_joint[:T]))
     r0d = vec(Array(chn_joint[:r0]))
     rd = vec(Array(chn_joint[:r]))
-    dt0 = log(2) ./ r0d
     dt = vec(Array(chn_joint[:doubling_time]))
     R0d = vec(Array(chn_joint[:R0]))
     RTd = vec(Array(chn_joint[:R_T]))
@@ -2158,8 +2157,11 @@ summary_ranges = let
     sT = posterior_summary(Td)
     sr0 = posterior_summary(r0d)
     sr = posterior_summary(rd)
-    sdt0 = posterior_summary(dt0)
-    sdt = posterior_summary(dt)
+    ## Doubling time is unbounded at zero growth, so its own quantiles do
+    ## not bound it once the growth rate spans zero. Map the growth rate's
+    ## interval instead, as the summary tables do.
+    sdt0 = map(doubling_time, posterior_summary(r0d))
+    sdt = map(doubling_time, posterior_summary(rd))
     sR0 = posterior_summary(R0d)
     sRT = posterior_summary(RTd)
     scfr = posterior_summary(cfrd)
