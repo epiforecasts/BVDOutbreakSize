@@ -19,6 +19,9 @@ jobs:
     name: Julia ${{ matrix.julia-version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
+    # Below GitHub's 6h job ceiling, which a stalled cell otherwise sits on
+    # before being reported as cancelled rather than failed.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -45,7 +48,9 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-runtest@v1
         with:
-          test_args: ${{ (matrix.julia-version != '1' || matrix.os == 'windows-latest') && 'skip_quality' || '' }}
+          # macOS is the portability cell and the slowest runner: give it
+          # the platform-sensitive items only. See test/runtests.jl.
+          test_args: ${{ matrix.os == 'macOS-latest' && 'fast' || (matrix.julia-version != '1' || matrix.os == 'windows-latest') && 'skip_quality' || '' }}
 
   downgrade-compat:
     name: Downgrade compat (Julia 1.11)
