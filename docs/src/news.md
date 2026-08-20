@@ -12,6 +12,27 @@ Changes since v1.13.2
 
 ### Data
 
+- Advanced the model cut-off from SitRep 089 (11 August) to 17 August.
+  SitReps 090-093 (12-15 August) return to the full-length format after
+  five vintages of the shorter "MVEBDB" brief, restoring the laboratory,
+  point-of-entry and continuity-of-care sections, and advance the
+  confirmed-case and confirmed-death series, recoveries, isolation
+  occupancy, bed capacity and the 24h analysed volume. The symptom-onset
+  curve is digitised for all four, with SitRep 092 breaking the longest
+  reprint plateau seen so far.
+- A sixth province, Bas-Uélé, records its first confirmed case at SitRep
+  090 (ZS Buta). No isolation, occupancy or laboratory figures are printed
+  for it in any vintage, so it contributes zero to every per-province
+  stream, following the convention already in place for a non-reporting
+  province.
+- The final point, 17 August (5105 confirmed cases, 2420 deaths), comes
+  from the INRB-UMIE mirror alone. INSP has published no situation report
+  beyond 093, verified against its posts and media endpoints rather than
+  inferred from a failed fetch, so no PDF exists to scan for it. Only the
+  two national cumulative series carry that date; every other stream ends
+  at 15 August. `scripts/check_new_sitreps.jl` now reports how far the
+  mirror leads insp.cd, so a mirror-only point is visible rather than
+  silently absorbed.
 - `candidate_signals.csv` gains a `province` column and holds one row per
   signal per vintage per province, replacing the national figure that was
   a hand-made sum over whichever provinces happened to print a count. A
@@ -57,6 +78,11 @@ Changes since v1.13.2
 - Rewrote the abstract around the situation reports and the data they
   publish rather than a list of streams, and it now says that each release
   scores its forecasts against later data and a persistence baseline.
+- A newly spotted surveillance signal now goes to an issue rather than a
+  row in `data/README.md`'s scan table. The table is a short index, and
+  rows added to it on a data update had to be reverted; the values still
+  accumulate in `candidate_signals.csv` on the same pull request either
+  way.
 - The docs deploy job serialises on the `gh-pages` ref it writes to. The
   workflow's own concurrency group is keyed on the source branch, so two
   pull requests publishing previews at once raced and the loser's push was
