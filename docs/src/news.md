@@ -6,6 +6,67 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.14.0
+
+Changes since v1.13.2
+
+### Data
+
+- `candidate_signals.csv` gains a `province` column and holds one row per
+  signal per vintage per province, replacing the national figure that was
+  a hand-made sum over whichever provinces happened to print a count. A
+  province the report is silent on now gets no row, which distinguishes it
+  from a printed zero. `province = Ensemble` marks a national figure the
+  report prints itself. Coverage changes are now readable from the data
+  rather than only from the prose in `source_note`: SitRep 069, for
+  example, gives Ituri and Nord-Kivu for `eds_death_alerts` but Ituri
+  alone for `eds_investigations_performed`.
+- Corrected SitRep 089's `eds_investigations_performed`, whose national
+  value of 107 included the 15 CTE EDS its own note recorded as excluded.
+  The per-province rows carry community-alert EDS only and sum to 92.
+
+### Fixes
+
+- The still-expected-deaths density no longer extends below zero. The draws
+  were never negative; the kernel density spread mass past the smallest
+  draw, putting a tail on the impossible side of the bound. The axis now
+  stops at the bound, as the count and CFR panels already did. The same
+  applies to the projected-total panel, which had been drawn crossing left
+  of the observed-deaths rule.
+- The doubling-time interval is the image of the growth rate's interval
+  rather than the quantiles of its own draws, which bounded nothing once
+  the posterior for the growth rate spanned zero and reported a range of
+  -306 to 301 days. The row now runs from the fastest decline, through the
+  zero-growth pole, to the fastest growth, and is ordered by growth rate
+  rather than by value. The narrative summary carried the same fault and is
+  fixed with it.
+- The in-report forecast validation subtracts a retrospective harmonisation
+  from its new-count truth, as the release scoring already did. A frozen
+  cut-off sitting before a listed break day and a current cut-off after it
+  put records into the confirmed truth that were never notified that week.
+  The cumulative rows are unchanged, the harmonisation being genuinely part
+  of the reported total.
+
+### Documentation
+
+- Rewrote the reduced-data-streams warning in the README and the summary
+  page. The situation reports returned to their full format on 12 August,
+  so the note now covers only what stayed frozen: the daily
+  new-suspected-case count and the treatment-centre patient-movement
+  series.
+- Rewrote the abstract around the situation reports and the data they
+  publish rather than a list of streams, and it now says that each release
+  scores its forecasts against later data and a persistence baseline.
+- The docs deploy job serialises on the `gh-pages` ref it writes to. The
+  workflow's own concurrency group is keyed on the source branch, so two
+  pull requests publishing previews at once raced and the loser's push was
+  rejected.
+- Gave one display block each to the tested BVD share and the positivity,
+  the cumulative infections and the completed-detection-delay term, and the
+  daily export intensity and its running sum, finishing the
+  one-quantity-per-block pass. The export-death prevalence gets its own
+  block rather than an inline definition.
+
 ## v1.13.2
 
 Changes since v1.13.1

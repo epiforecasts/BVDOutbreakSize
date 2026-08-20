@@ -5,14 +5,10 @@ Every number, table and figure on this page is produced by the same model fit as
 See the [Analysis](analysis.md) page for the methods, assumptions and supporting detail behind each result, and the [Sensitivity](sensitivity.md) page for the forecast validation, the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
 
 > **Reduced data streams.**
-> Since SitRep 084 (6 August 2026) the INSP has published its situation
-> reports in a shorter "MVEBDB" brief format that no longer reports the
-> daily new-suspected-case stream (frozen at SitRep 083, 5 August 2026)
-> or the treatment-centre patient-movement streams (frozen at SitRep 080,
-> 2 August 2026). The model now depends on just four DRC streams — the
-> confirmed-case and confirmed-death series, recoveries and isolation
-> occupancy — so the most recent weeks are informed by fewer streams than
-> earlier releases. See the inclusion rules in `data/README.md`.
+> The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
+> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen pending a decision on whether the two are comparable.
+> Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
+> See the inclusion rules in `data/README.md`.
 
 ```@eval
 using Markdown, BVDOutbreakSize

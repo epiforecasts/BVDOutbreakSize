@@ -3,6 +3,24 @@
 # comparison, CFR prior, start-date and no-onward-transmission
 # densities, and the one-week-ahead forecast figures.
 
+## Kernel density for a quantity that cannot fall below `lower`, with the axis
+## clipped to the side of the bound the quantity can reach. A Gaussian KDE puts
+## mass past the smallest draw, so a bounded quantity otherwise shows a tail on
+## the impossible side. This is how the count and CFR panels here handle it.
+##
+## Do not narrow the estimator with `boundary` instead: the tabulation drops
+## draws landing on the first grid point while still normalising by the full
+## sample size, so a boundary at the bound discards the mass piled against it,
+## and an unpadded grid wraps under the FFT convolution.
+function _bounded_density!(ax, x; lower::Real, kwargs...)
+    h = density!(ax, x; kwargs...)
+    ## Only the impossible side is clipped. Pinning the upper limit as well
+    ## would cut the curve off at the largest draw, while it is still well
+    ## clear of zero, and trade one misleading edge for another.
+    CairoMakie.xlims!(ax, float(lower), nothing)
+    return h
+end
+
 """
 Overlaid posterior densities of `C_T` from one or more fits, built
 through AlgebraOfGraphics. The 15 published scenario point estimates
@@ -1928,27 +1946,30 @@ Two-panel density of the no-onward-transmission counterfactual from
 expected* deaths (`:delta_deaths`, the future deaths in cases already
 infected by `T`, net of the `obs_deaths` already observed). The right
 panel shows the *projected total* (`:total_projected = obs_deaths +
-delta_deaths`) with a dashed black rule at `obs_deaths`. Both are
+delta_deaths`), whose axis starts at `obs_deaths`. Both are
 lower bounds: they assume every onward transmission stops at time `T`.
 """
 function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     fig = Figure(; size = (980, 420))
 
+    ## Both quantities have a hard floor: `delta_deaths` is clamped at zero in
+    ## `predict_no_onward_deaths`, so the projected total cannot fall below the
+    ## deaths already observed.
     ax1 = Axis(fig[1, 1];
         xlabel = "Still expected deaths (beyond those already observed)",
         ylabel = "Posterior density",
         title = "Still expected (future)")
-    density!(ax1, df.delta_deaths; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
+    _bounded_density!(ax1, df.delta_deaths; lower = 0,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
+    ## The axis starts at the deaths already observed, so the left spine is
+    ## that reference and a rule drawn on it would be invisible.
     ax2 = Axis(fig[1, 2];
-        xlabel = "Projected total deaths (no onward transmission)",
+        xlabel = "Projected total deaths, from the $(obs_deaths) observed",
         ylabel = "Posterior density",
         title = "Projected total")
-    density!(ax2, df.total_projected; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
-    vlines!(ax2, [float(obs_deaths)];
-        color = :black, linestyle = :dash, linewidth = 2)
+    _bounded_density!(ax2, df.total_projected; lower = obs_deaths,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
     return fig
 end

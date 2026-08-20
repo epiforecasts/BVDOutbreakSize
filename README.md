@@ -13,14 +13,10 @@ Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
 > **Reduced data streams.**
-> Since SitRep 084 (6 August 2026) the INSP has published its situation
-> reports in a shorter "MVEBDB" brief format that no longer reports the
-> daily new-suspected-case stream (frozen at SitRep 083, 5 August 2026)
-> or the treatment-centre patient-movement streams (frozen at SitRep 080,
-> 2 August 2026). The model now depends on just four DRC streams — the
-> confirmed-case and confirmed-death series, recoveries and isolation
-> occupancy — so the most recent weeks are informed by fewer streams than
-> earlier releases. See the inclusion rules in `data/README.md`.
+> The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
+> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen pending a decision on whether the two are comparable.
+> Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
+> See the inclusion rules in `data/README.md`.
 
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
@@ -35,10 +31,13 @@ The rendered report fills in the build date and the exact data cut-off automatic
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
-The model is a discrete-time renewal process on a daily grid that fits the surveillance streams jointly in a single posterior: the DRC suspected cases, suspected deaths, laboratory-confirmed cases and confirmed deaths, and the cases and deaths exported to Uganda.
-It estimates: the latent infections, symptom onsets and deaths over time; the reported and confirmed cases; the time-varying reproduction number, its growth rate and doubling time; the case-fatality ratio; the ascertainment of each surveillance system; and a short-term forecast of each stream over the coming week.
-The DRC data come from the INSP situation reports, and the Uganda exports come from the WHO situation reports and Disease Outbreak News.
+The model is a discrete-time renewal process on a daily grid.
+It fits in a single posterior the daily counts the INSP situation reports publish, from the suspected and confirmed case and death series through to the laboratory, isolation and treatment-centre records, alongside the cases and deaths exported to Uganda.
+From these it estimates the latent infections and deaths over time, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
+Every release forecasts each fitted stream a week ahead and scores those forecasts against the data that arrive later and against a persistence baseline.
+The Uganda exports come from the WHO situation reports and Disease Outbreak News.
 A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
+The aim is a transparent estimate of how far the outbreak has already grown, and of how much each published stream contributes to it.
 
 **Scope.** This work adds an external view of the current situation, drawing on our understanding of real-time infectious disease dynamics and the infection process behind the observed surveillance counts.
 We are developing it and encourage feedback, so please get in touch.

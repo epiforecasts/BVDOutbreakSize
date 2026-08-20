@@ -233,21 +233,35 @@ Known candidates:
 | Occupation table `Total admissions` (cumulative row, distinct from `Total admissions (24 h)`) | Running CTE/CT/CI admission total; a cumulative check on the fitted 24h admission inflow. |
 | EDS throughput (§7, per province): death alerts, EDS investigations performed, corpses swabbed | The ascertainment funnel behind the community suspect-death count, rather than another count of it. Gives an observed denominator where the frozen stream's likelihood had to infer one, which reframes issue #431. Always §7 prose, never a table, and present from SitRep 059 — but intermittently: some vintages give both provinces, some only one, and 071 gives no numbers at all, so a missing province is not a zero. Only the both-provinces-together layout is new in 072. The 059 boundary is deliberate, not the edge of the data. 059 is where the §7 dashboard layout begins; 058 and earlier print the same quantities in narrative style with spelled-out numbers (058 gives Ituri `Trente-six (36) EDS ont été réalisés`). They are excluded because the earlier era decomposes its denominator differently — 058 reads `Soixante-huit (68) décès étaient à prendre en charge, dont 50 alertes du jour et 18 reports`, so it is unsettled whether `décès à prendre en charge` is the same field as the later `alertes de décès`, or whether `alertes du jour` is. To extend the series earlier, settle that mapping first: assuming equivalence would bury a definitional level shift inside the series, which is the failure mode #431 exists to avoid on the suspect-death stream. Not yet reconciled against Tableau 3's dead-alert total for the same day (98 against 107 on 25 July). |
 
-If a genuinely new indicator appears that is not in this list or the fitted table, add a row here in the same PR so the procedure stays current.
+If a genuinely new indicator appears that is not in this list or the fitted table, open an issue for it rather than adding a row here.
+The issue is where the case for fitting it gets made and where the discussion stays; this table is a short index, and rows added to it on a data update have had to be reverted.
+Record the values in `candidate_signals.csv` in the same PR either way, so the series starts accumulating from the day the signal first appears.
 Before calling anything new, moved or dropped, grep the adjacent vintages for it (`pdftotext -layout` over `sitrep_pdfs/`), because a two-reader check of one report cannot see what the neighbouring reports do.
 A claim of novelty that skips this check has turned out to describe a change that had actually happened ten or more vintages earlier, or not at all.
 
-Values for these signals accumulate in `candidate_signals.csv` (`signal`, `sitrep`, `report_date`, `value`, `unit`, `source_note`), one row per signal per vintage, so a series builds from the day a signal first appears rather than from the day someone decides to fit it.
+Values for these signals accumulate in `candidate_signals.csv` (`signal`, `sitrep`, `report_date`, `province`, `value`, `unit`, `source_note`), one row per signal per vintage per province, so a series builds from the day a signal first appears rather than from the day someone decides to fit it.
 Extend it on every update alongside the fitted streams, and open one issue per signal proposing it for fitting (one per signal, not one per vintage).
 Nothing in the model reads this file.
+
+`province` carries the reporting unit the value belongs to, one of `Ituri`, `Nord-Kivu`, `Haut-Uele`, `Tshopo`, `Sud-Kivu`, `Bas-Uele` or `Ensemble`.
+Use `Ensemble` only for a national figure the report prints itself, and never for a total summed across provinces by hand.
+The printed sources it comes from in this file are Tableau 5's `Global` column, Tableau 6's `Ensemble` column and the section 1.3.1 prose that gives a national figure with the province split in parentheses.
+Check a candidate against the PDF rather than against the row's own arithmetic: SitRep 080's Tableau 6 drops the `Ensemble` column and puts Sud-Kivu in its place, so a note there that writes out a five-province sum is describing a total the report never printed.
+
+An `Ensemble` row and the province rows it covers can both be present, which they are for 33 keys, so summing a `groupby(:signal, :sitrep)` double counts.
+Take the `Ensemble` row where there is one, and sum the province rows only when there is not.
+A province the report is silent on gets no row at all, which is what distinguishes it from a printed zero: that gets a row with `value = 0`.
+Rates such as `contact_tracing_coverage` and `alert_investigation_rate` are recorded as printed and never summed.
+
+Because coverage attaches to the (signal, vintage, province) triple rather than to a vintage, one report can give both provinces for one signal and a single province for another.
+SitRep 069 does exactly that: `eds_death_alerts` and `eds_corpses_swabbed` carry Ituri and Nord-Kivu, while `eds_investigations_performed` carries Ituri alone.
+Filter to a fixed province before differencing consecutive rows.
+Summing across whichever provinces reported gives a series that steps for coverage reasons and reads as though it stepped for epidemiological ones.
 
 Every value is read twice by independent readers, as for the fitted streams.
 The `eds_*` rows are backfilled to SitRep 059.
 See the EDS row above for why the series stops there and what would have to be settled to extend it.
-These three series are not comparable across vintages, because which provinces print a count changes from report to report: Nord-Kivu appears numerically almost throughout, Ituri only in 061, 062, 065, 069, 070 and 072, Tshopo never, and 071 prints no EDS numbers at all.
-The value is the sum over the provinces that printed the quantity, and the `source_note` names them, so read that before differencing consecutive rows: a step can be pure coverage.
-This is a workaround for the schema having no province column, which is issue #492.
-Per-province splitting should come before any of these signals is fitted.
+Coverage across that range is uneven: Nord-Kivu appears numerically almost throughout, Ituri intermittently, Tshopo never, and 071 prints no EDS numbers at all.
 Two further cautions in the notes: `EDS réalisés` exceeds the day's alerts in 060, 066 and 067, which the same vintages' carried-over `reports` explain, and the swab count is usually printed as the combined `corps swabés et sécurisés` rather than swabs alone.
 
 After editing, validate with the loader and its invariants:
