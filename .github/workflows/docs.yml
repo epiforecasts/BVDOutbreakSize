@@ -226,6 +226,15 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Every branch's preview lands on the one gh-pages ref, so two PRs
+    # deploying at once race and the loser's push is rejected as
+    # non-fast-forward. The workflow-level group above is keyed on the source
+    # ref and so cannot see that; key this job on the destination instead.
+    # Queue rather than cancel: a superseded deploy still has a preview to
+    # publish, and the job is short.
+    concurrency:
+      group: docs-deploy-gh-pages
+      cancel-in-progress: false
     permissions:
       contents: write
       statuses: write

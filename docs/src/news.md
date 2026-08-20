@@ -33,6 +33,19 @@ Changes since v1.13.2
   stops at the bound, as the count and CFR panels already did. The same
   applies to the projected-total panel, which had been drawn crossing left
   of the observed-deaths rule.
+- The doubling-time interval is the image of the growth rate's interval
+  rather than the quantiles of its own draws, which bounded nothing once
+  the posterior for the growth rate spanned zero and reported a range of
+  -306 to 301 days. The row now runs from the fastest decline, through the
+  zero-growth pole, to the fastest growth, and is ordered by growth rate
+  rather than by value. The narrative summary carried the same fault and is
+  fixed with it.
+- The in-report forecast validation subtracts a retrospective harmonisation
+  from its new-count truth, as the release scoring already did. A frozen
+  cut-off sitting before a listed break day and a current cut-off after it
+  put records into the confirmed truth that were never notified that week.
+  The cumulative rows are unchanged, the harmonisation being genuinely part
+  of the reported total.
 
 ### Documentation
 
@@ -44,6 +57,10 @@ Changes since v1.13.2
 - Rewrote the abstract around the situation reports and the data they
   publish rather than a list of streams, and it now says that each release
   scores its forecasts against later data and a persistence baseline.
+- The docs deploy job serialises on the `gh-pages` ref it writes to. The
+  workflow's own concurrency group is keyed on the source branch, so two
+  pull requests publishing previews at once raced and the loser's push was
+  rejected.
 - Gave one display block each to the tested BVD share and the positivity,
   the cumulative infections and the completed-detection-delay term, and the
   daily export intensity and its running sum, finishing the
