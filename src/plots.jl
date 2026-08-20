@@ -2184,7 +2184,10 @@ stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
 cumulative count at the target date. A stream absent from `observed` is
 skipped. `baseline` maps the same columns to the cumulative count at the
 forecast origin (default `0`), so the observed new count is
-`max(observed − baseline, 0)`. `individual` is an optional `NamedTuple`
+`max(observed − baseline − breaks, 0)`. `breaks` is keyed the same way and
+carries each stream's retrospective harmonisation correction over the
+forecast window (see [`confirmed_break_correction`](@ref)), defaulting to
+zero. `individual` is an optional `NamedTuple`
 mapping a stream's new-count column (`:confirmed_new`, `:cases_new`, …) to
 that stream's own frozen individual (single-stream) model's forecast draws
 of the new count, from [`forecast_stream`](@ref). A stream present in
@@ -2198,6 +2201,7 @@ scored distribution-versus-distribution by
 """
 function plot_forecast_vs_truth(fc::DataFrame;
         observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
+        breaks::NamedTuple = NamedTuple(),
         individual::NamedTuple = NamedTuple())
     specs = (
         (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
@@ -2208,16 +2212,20 @@ function plot_forecast_vs_truth(fc::DataFrame;
         (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
     )
     streams = Vector{
-        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64,
+        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64, Float64,
         Union{Nothing, Vector{Float64}}}}()
     for (cumcol, newcol, name, colour) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
         obs = float(observed[cumcol])
         base = float(get(baseline, cumcol, 0))
+        ## The new-count rule is what was notified across the week, so a
+        ## retrospective harmonisation sitting in the cumulative comes out.
+        brk = float(get(breaks, cumcol, 0))
         indiv_new = haskey(individual, newcol) ?
                     Float64.(individual[newcol]) : nothing
         push!(streams,
-            (cumcol, newcol, name, colour, obs, obs - base, indiv_new))
+            (cumcol, newcol, name, colour, obs, obs - base - brk, base,
+                indiv_new))
     end
     ncols = length(streams)
     ncols == 0 && return Figure()
@@ -2245,9 +2253,10 @@ function plot_forecast_vs_truth(fc::DataFrame;
         vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
     for (j, stream_entry) in enumerate(streams)
-        ccol, ncol, name, colour, obs_cum, obs_new, indiv_new = stream_entry
-        indiv_cum = isnothing(indiv_new) ? nothing :
-                    indiv_new .+ (obs_cum - obs_new)
+        ccol, ncol, name, colour, obs_cum, obs_new, origin, indiv_new = stream_entry
+        ## The individual fit forecasts new counts from the frozen origin, so
+        ## its cumulative overlay is anchored there.
+        indiv_cum = isnothing(indiv_new) ? nothing : indiv_new .+ origin
         panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour,
             indiv_cum)
         panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour,
