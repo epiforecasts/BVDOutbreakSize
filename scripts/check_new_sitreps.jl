@@ -32,23 +32,21 @@
 #    mirror-lead warning below - a mirror lead never licenses treating a
 #    SitRep as missing when insp.cd itself has published nothing new.
 #
-# Mirror-lead check (added 20 August 2026): insp.cd being "up to date" only
-# means no new SitRep-numbered post/PDF exists yet. It does not mean the
-# outbreak has stopped moving - INSP's own SitRep pipeline can fall behind
-# INRB-UMIE's internal transcription pipeline for days at a time (observed
-# 16-20 August 2026, insp.cd static at SitRep 093/15 August while the
-# mirror's national_cumulative_confirmed_cases series already carried a
-# 17 August point). A silent "up to date" on a day like that reads as
-# nothing happening when the response has in fact continued, just without
-# a public PDF yet. So after the insp.cd comparison, this script also
-# fetches the mirror's national cumulative confirmed-case CSV (one extra
-# request) and compares its latest date against the manifest's
-# `as_of_date`. If the mirror is ahead, it prints a loud warning - it does
-# NOT change the exit code and does NOT license updating
-# data/observations.toml from the mirror alone (see data/README.md's
-# insp.cd-unreachable clause): that still requires either an insp.cd PDF or
-# an explicit decision to record a mirror-only point, as this run's own PR
-# did for 17 August. The point of the check is visibility, not automation.
+# Mirror-lead check: insp.cd being "up to date" only means no new
+# SitRep-numbered post/PDF exists yet. It does not mean the outbreak has
+# stopped moving - INSP's own SitRep pipeline can fall behind INRB-UMIE's
+# internal transcription pipeline for days at a time, and a silent "up to
+# date" on a day like that reads as nothing happening when the response has
+# in fact continued, just without a public PDF yet. So after the insp.cd
+# comparison, this script also fetches the mirror's national cumulative
+# confirmed-case CSV (one extra request) and compares its latest date
+# against the manifest's `as_of_date`. If the mirror is ahead, it prints a
+# loud warning - it does NOT change the exit code and does NOT license
+# updating data/observations.toml from the mirror alone (see
+# data/README.md's insp.cd-unreachable clause): that still requires either
+# an insp.cd PDF or an explicit decision to record a mirror-only point. The
+# point of the check is visibility, not automation. The fetch is best-effort
+# and never allowed to crash the script - see check_mirror_lead().
 
 using Dates
 using Downloads
@@ -60,8 +58,8 @@ const LIST_URL = "https://insp.cd/wp-json/wp/v2/posts?" *
 const SCANNED = joinpath(@__DIR__, "..", "data", "insp_sitrep_scanned.csv")
 const OBSERVATIONS = joinpath(@__DIR__, "..", "data", "observations.toml")
 const MIRROR_CASES_URL = "https://raw.githubusercontent.com/INRB-UMIE/" *
-                          "BDBV2026-Data/main/data/insp_sitrep/processed/" *
-                          "insp_sitrep__national_cumulative_confirmed_cases__daily.csv"
+                         "BDBV2026-Data/main/data/insp_sitrep/processed/" *
+                         "insp_sitrep__national_cumulative_confirmed_cases__daily.csv"
 
 fetch(url) = sprint() do io
     Downloads.download(url, io; headers = ["User-Agent" => UA])
@@ -123,7 +121,13 @@ even though insp.cd itself has nothing new. See the module-level comment
 above for why this exists and what it deliberately does not do."
 function check_mirror_lead()
     as_of = manifest_as_of_date()
-    mirror = mirror_latest_cases()
+    mirror = try
+        mirror_latest_cases()
+    catch e
+        println("\n(Mirror-lead check skipped: could not fetch the ",
+            "INRB-UMIE mirror CSV - ", sprint(showerror, e), ".)")
+        return
+    end
     if mirror === nothing
         println("\n(Mirror-lead check skipped: could not parse the ",
             "INRB-UMIE mirror CSV.)")
