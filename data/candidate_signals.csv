@@ -502,3 +502,67 @@ eds_corpses_swabbed,093,2026-08-15,Haut-Uele,1,corpses,section 1.4.1 prose; Nord
 eds_corpses_swabbed,093,2026-08-15,Nord-Kivu,37,corpses,section 1.4.1 prose; Nord-Kivu 37 corps preleves par swab + Haut-Uele 1 corps preleve par swab = 38 (Ituri not given)
 eds_death_alerts,093,2026-08-15,Haut-Uele,8,alerts,section 1.4.1 prose; Nord-Kivu 39 alertes de deces + Haut-Uele 8 alertes de deces = 47 (Ituri not given)
 eds_death_alerts,093,2026-08-15,Nord-Kivu,39,alerts,section 1.4.1 prose; Nord-Kivu 39 alertes de deces + Haut-Uele 8 alertes de deces = 47 (Ituri not given)
+contact_tracing_coverage,094,2026-08-16,Ensemble,82.2,percent,"page-1 tile and section 1.2.1 prose agree (16 130 vus sur 19 630 a suivre, printed as 'au-dessus du seuil de 85 percent' despite being below it, a source wording error transcribed as printed); per-province: Ituri 82,4 percent, Tshopo 100 percent, Nord-Kivu 80,5 percent, Haut-Uele 83,8 percent, Bas Uele 18,9 percent; Sud-Kivu no active contacts, 11 ZS non-reporting in Ituri DPS"
+contacts_under_follow_up,094,2026-08-16,Ensemble,19630,persons,section 1.2.1 prose '16 130 vus sur 19 630 a suivre'
+contacts_seen,094,2026-08-16,Ensemble,16130,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,094,2026-08-16,Ensemble,1067,alerts,"alert table Total General (949 vivants + 118 decedes = 1 067; 957/89,7 percent verifiees; Tshopo alert data footnoted unavailable this vintage)"
+alerts_validated_alive,094,2026-08-16,Ensemble,156,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,094,2026-08-16,Ensemble,116,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,094,2026-08-16,Ensemble,270,alerts,"alert table Nombre de suspects investigues; prose '270 (99,3 percent) ont ete investiguees'"
+alert_investigation_rate,094,2026-08-16,Ensemble,99.3,percent,"270/(156+116)=270/272=99,3 percent, matches printed prose exactly"
+poe_travellers_screened,094,2026-08-16,Ensemble,208687,persons,"'Suivi des indicateurs aux PoE/PoC' table, Global column; Ituri 128 551 + Nord-Kivu 77 138 + Tshopo 2 998 = 208 687 exactly. Haut-Uele, Sud-Kivu, Bas-Uele absent from this table this vintage."
+poe_travellers_screened,094,2026-08-16,Ituri,128551,persons,see Ensemble row note
+poe_travellers_screened,094,2026-08-16,Nord-Kivu,77138,persons,see Ensemble row note
+poe_travellers_screened,094,2026-08-16,Tshopo,2998,persons,see Ensemble row note
+poe_alertes_notifiees,094,2026-08-16,Ensemble,7,alerts,PoE/PoC table Global column; Ituri 5 + Nord-Kivu 2 + Tshopo 0 = 7
+eds_investigations_performed,094,2026-08-16,Nord-Kivu,41,investigations,"section 1.5.1 prose; Nord-Kivu 41 EDS realises + Haut-Uele 2 EDS realises = 43 (Ituri gives only ring/site-decontamination counts this vintage, no EDS-realises figure)"
+eds_investigations_performed,094,2026-08-16,Haut-Uele,2,investigations,see Nord-Kivu row note
+eds_corpses_swabbed,094,2026-08-16,Nord-Kivu,43,corpses,section 1.5.1 prose; Nord-Kivu 43 corps preleves par swab + Haut-Uele 2 corps preleves par swab = 45
+eds_corpses_swabbed,094,2026-08-16,Haut-Uele,2,corpses,see Nord-Kivu row note
+eds_death_alerts,094,2026-08-16,Nord-Kivu,44,alerts,section 1.5.1 prose; Nord-Kivu 44 alertes de deces + Haut-Uele 1 alerte de deces = 45
+eds_death_alerts,094,2026-08-16,Haut-Uele,1,alerts,see Nord-Kivu row note
+contact_tracing_coverage,095,2026-08-17,Ensemble,84.1,percent,"page-1 tile, section 1.2.1 prose and the MESSAGES CLES restatement all agree on 84,1 percent (verified directly against the PDF), printed wording again internally inconsistent re: the 85 percent threshold, transcribed as printed; recorded as printed despite the cited counts (20 337 vus sur 24 332 a suivre) computing to 83,6 percent, a ~0,5pp printed-source discrepancy not resolved further, same convention as headline-vs-component drift elsewhere in this file; per-province: Ituri 93,0 percent, Tshopo 100 percent, Nord-Kivu 80,1 percent, Haut-Uele 64,3 percent, Bas Uele 18,6 percent"
+contacts_under_follow_up,095,2026-08-17,Ensemble,24332,persons,section 1.2.1 prose '20 337 vus sur 24 332 a suivre'
+contacts_seen,095,2026-08-17,Ensemble,20337,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,095,2026-08-17,Ensemble,1654,alerts,"alert table Total General (1 508 vivants + 146 decedes = 1 654; 1 239/74,9 percent verifiees)"
+alerts_validated_alive,095,2026-08-17,Ensemble,268,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,095,2026-08-17,Ensemble,126,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,095,2026-08-17,Ensemble,291,alerts,"alert table Nombre de suspects investigues; prose '291 (73,9 percent) ont ete investiguees'. A separate printed internal discrepancy (not this field): prose gives 105 transferred to CT/CTE while the table gives 118 for the same day - both quoted as printed in insp_sitrep_scanned.csv, not reconciled, no fitted stream affected."
+alert_investigation_rate,095,2026-08-17,Ensemble,73.9,percent,"291/(268+126)=291/394=73,9 percent, matches printed prose exactly"
+poe_travellers_screened,095,2026-08-17,Ensemble,247670,persons,"'Suivi des indicateurs aux PoE/PoC' table, Global column; Ituri 141 637 + Nord-Kivu 89 357 + Haut-Uele 5 780 + Sud-Kivu 10 896 = 247 670 exactly. Tshopo, Bas-Uele absent from this table this vintage."
+poe_travellers_screened,095,2026-08-17,Ituri,141637,persons,see Ensemble row note
+poe_travellers_screened,095,2026-08-17,Nord-Kivu,89357,persons,see Ensemble row note
+poe_travellers_screened,095,2026-08-17,Haut-Uele,5780,persons,see Ensemble row note
+poe_travellers_screened,095,2026-08-17,Sud-Kivu,10896,persons,see Ensemble row note
+poe_alertes_notifiees,095,2026-08-17,Ensemble,6,alerts,PoE/PoC table Global column; Ituri 3 + Nord-Kivu 2 + Haut-Uele 1 + Sud-Kivu 0 = 6
+eds_investigations_performed,095,2026-08-17,Ituri,73,investigations,section 1.5.1 prose; Ituri 73 EDS realises + Nord-Kivu 44 EDS realises + Haut-Uele 5 EDS realises = 122
+eds_investigations_performed,095,2026-08-17,Nord-Kivu,44,investigations,see Ituri row note
+eds_investigations_performed,095,2026-08-17,Haut-Uele,5,investigations,see Ituri row note
+eds_corpses_swabbed,095,2026-08-17,Ituri,58,corpses,section 1.5.1 prose; Ituri 58 corps preleves par swab + Nord-Kivu 47 corps preleves par swab + Haut-Uele 9 corps preleves par swab = 114
+eds_corpses_swabbed,095,2026-08-17,Nord-Kivu,47,corpses,see Ituri row note
+eds_corpses_swabbed,095,2026-08-17,Haut-Uele,9,corpses,see Ituri row note
+eds_death_alerts,095,2026-08-17,Ituri,85,alerts,"section 1.5.1 prose, 85 alertes de deces; Nord-Kivu and Haut-Uele do not print an explicit alert count this vintage (corps-preleves/EDS-realises counts only), so only Ituri has a row"
+contact_tracing_coverage,096,2026-08-18,Ensemble,84.0,percent,"page-1 tile and section 1.2.1 prose agree (18 517 vus sur 22 043 a suivre, below the 85 percent threshold); per-province: Ituri 87,7 percent, Tshopo 75,5 percent, Nord-Kivu 82,4 percent, Haut-Uele 59,1 percent, Bas Uele 18,7 percent"
+contacts_under_follow_up,096,2026-08-18,Ensemble,22043,persons,section 1.2.1 prose '18 517 vus sur 22 043 a suivre'
+contacts_seen,096,2026-08-18,Ensemble,18517,persons,"section 1.2.1 prose, see contacts_under_follow_up note"
+alerts_total_day,096,2026-08-18,Ensemble,1840,alerts,"alert table Total General (1 681 vivants + 159 decedes = 1 840; 1 636/88,9 percent verifiees)"
+alerts_validated_alive,096,2026-08-18,Ensemble,259,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,096,2026-08-18,Ensemble,130,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,096,2026-08-18,Ensemble,388,alerts,"alert table Nombre de suspects investigues; prose '388 (99,7 percent) ont ete investiguees'"
+alert_investigation_rate,096,2026-08-18,Ensemble,99.7,percent,"388/(259+130)=388/389=99,7 percent, matches printed prose exactly"
+poe_travellers_screened,096,2026-08-18,Ensemble,258445,persons,"'Suivi des indicateurs aux PoE/PoC' table, Global column; Ituri 147 918 + Nord-Kivu 97 087 + Haut-Uele 5 780 + Sud-Kivu 7 660 = 258 445 exactly. Tshopo, Bas-Uele absent from this table this vintage."
+poe_travellers_screened,096,2026-08-18,Ituri,147918,persons,see Ensemble row note
+poe_travellers_screened,096,2026-08-18,Nord-Kivu,97087,persons,see Ensemble row note
+poe_travellers_screened,096,2026-08-18,Haut-Uele,5780,persons,see Ensemble row note
+poe_travellers_screened,096,2026-08-18,Sud-Kivu,7660,persons,see Ensemble row note
+poe_alertes_notifiees,096,2026-08-18,Ensemble,6,alerts,PoE/PoC table Global column; Ituri 4 + Nord-Kivu 1 + Haut-Uele 1 + Sud-Kivu 0 = 6
+eds_investigations_performed,096,2026-08-18,Ituri,79,investigations,"section 1.5.1 prose; Ituri 79 EDS realises + Nord-Kivu 56 EDS realises = 135 (Haut-Uele gives only a positive-swab count this vintage, no EDS-realises figure)"
+eds_investigations_performed,096,2026-08-18,Nord-Kivu,56,investigations,see Ituri row note
+eds_corpses_swabbed,096,2026-08-18,Ituri,56,corpses,section 1.5.1 prose; Ituri 56 corps preleves par swab + Nord-Kivu 53 corps preleves par swab = 109
+eds_corpses_swabbed,096,2026-08-18,Nord-Kivu,53,corpses,see Ituri row note
+eds_death_alerts,096,2026-08-18,Ituri,103,alerts,section 1.5.1 prose; Ituri 103 alertes de deces + Nord-Kivu 54 alertes de deces = 157
+eds_death_alerts,096,2026-08-18,Nord-Kivu,54,alerts,see Ituri row note
+smsps_confirmed_coverage,095,2026-08-17,Ituri,46.3,percent,"section 1.7.1 prose, first appearance of this SMSPS (soutien psychosocial) coverage format - checked directly via pdftotext across the full sitrep_pdfs archive, zero hits before 095 for 'pilier SMSPS a couvert' or 'reinseres en communaute': 'le pilier SMSPS a couvert 19 des 41 nouveaux cas confirmes (46,3 percent) et 27 des 89 nouveaux cas suspects (30,3 percent), et 17 des 27 gueris ont ete reinseres en communaute'. Haut-Uele and Tshopo transmitted no community data this vintage. Ituri-only, no national total given."
+smsps_recovered_reintegrated,095,2026-08-17,Ituri,63.0,percent,"17/27 gueris reinseres en communaute = 63,0 percent (computed; not printed as a percent in the source, the raw counts 17/27 are printed). See smsps_confirmed_coverage note for the full sentence and novelty check."
+smsps_confirmed_coverage,096,2026-08-18,Ituri,51.9,percent,"section 1.7 prose: 'le pilier SMSPS a couvert 14 des 27 nouveaux cas confirmes (51,9 percent) dans 4 des 12 ZS ayant notifie, 29 nouveaux cas suspects et 11 des 22 gueris reinseres en communaute (50 percent)'. Ituri-only, no national total given."
+smsps_recovered_reintegrated,096,2026-08-18,Ituri,50.0,percent,"11/22 gueris reinseres en communaute = 50 percent, printed directly this vintage (unlike 095 where it had to be computed from the raw counts)."
