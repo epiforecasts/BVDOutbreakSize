@@ -126,6 +126,10 @@ function plot_cumulative_trajectories(chn;
         ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                                   for v in vals]
 
+        ## Deliberately unbounded. These cumulative counts sit in the
+        ## thousands, far from zero, so no impossible mass is drawn, and
+        ## anchoring the axis at zero squashes the posterior into a spike
+        ## against the right-hand edge of the panel.
         finals = Float64[t[n] for t in trajs]
         axd = Axis(fig[i, 2];
             xlabel = "Cumulative $name at the cut-off",
@@ -204,11 +208,17 @@ end
 Overlaid posterior densities of an arbitrary scalar quantity from one
 or more fits, built through AlgebraOfGraphics. Pass each fit as
 `"label" => draws`; `xlabel` and `title` set the axis text.
+
+`lower` clips the axis for a quantity that cannot fall below it, such as a
+count or a duration. The kernel density spreads mass past the smallest draw,
+so without it the curve runs onto the impossible side of the bound. The
+estimate itself is left alone; see [`_bounded_density!`](@ref) for why.
 """
 function plot_density_overlay(
         streams::Pair{String, <:AbstractVector}...;
         xlabel::AbstractString = "Value",
-        title::AbstractString = "Posterior density")
+        title::AbstractString = "Posterior density",
+        lower::Union{Nothing, Real} = nothing)
     df = @chain DataFrame(stream = String[], value = Float64[]) begin
         let df = _
             for (label, draws) in streams
@@ -224,10 +234,11 @@ function plot_density_overlay(
            AoG.mapping(:value => xlabel, color = :stream => "Fit") *
            AoG.AlgebraOfGraphics.density() *
            AoG.subvisual(:line, linewidth = 2)
-    return AoG.draw(spec;
-        axis = (; ylabel = "Posterior density", title = title),
-        figure = (; size = (760, 420))
-    )
+    ax = isnothing(lower) ?
+         (; ylabel = "Posterior density", title = title) :
+         (; ylabel = "Posterior density", title = title,
+        limits = ((float(lower), nothing), nothing))
+    return AoG.draw(spec; axis = ax, figure = (; size = (760, 420)))
 end
 
 _panel_pos(pos::Integer) = (1, pos)
