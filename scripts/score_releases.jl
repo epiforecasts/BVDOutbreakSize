@@ -402,33 +402,27 @@ function stream_coverage_start(obs, grid_date, stream)
     return grid_date(minimum(h.days))
 end
 
-## Whether the persistence baseline's own window for one forecast group is
-## covered by `stream`'s reporting in `obs`, which for the baseline is the
-## made_date vintage it is built from (see `vintage_observations`) rather
-## than the current manifest. The window runs from `made_date - horizon` to
-## `made_date` for an incident stream, whose centre is the count observed
-## over it, and is the single day `made_date` for a level stream, whose
-## centre is the last occupancy at or before it.
+## Where a scoring window opens: the horizon back from `made_date` for an
+## incident stream, and `made_date` itself for a level stream, whose value
+## is the occupancy standing there rather than a change over a window. Both
+## the truth and the baseline centre are measured from this day.
+function window_start(kind, made_date, horizon)
+    kind == :level ? made_date : made_date - Day(horizon)
+end
+
+## Whether the persistence baseline's own window is covered by `stream`'s
+## reporting in the made_date vintage it is built from (see
+## `vintage_observations`), using the start boundary `stream_coverage_start`
+## defines and `truth_at` applies to the truth window.
 ##
-## It is uncovered when it opens before the stream's first vintage (see
-## `stream_coverage_start`), the same rule `truth_at` applies to the truth
-## window. `cum_at` reads the missing opening as a zero, so the centre
-## saturates at the whole cumulative total to `made_date` and comes out
-## identical at every horizon rather than measuring a horizon-length
-## window. A stream the vintage manifest carries no history for at all is
-## uncovered by the same rule, its centre a zero standing for an absent
-## series rather than an observed count and its step pool empty, which
-## leaves the baseline a point mass at zero. Both are scored as no baseline
-## at all rather than as a degenerate one, so the group's fits keep their
-## own scores and lose only their relative skill.
-##
-## An assembled stream ("exports") is exempt exactly as it is in
-## `stream_coverage_start`: a date before its first detection carries the
-## true statement that no export had been detected yet, so a zero centre
-## there is an observation rather than an absence.
+## An uncovered window is not scored with a degraded baseline but with none.
+## `cum_at` reads a missing opening as zero, so the centre saturates at the
+## whole cumulative to `made_date` and repeats at every horizon instead of
+## measuring one; a stream with no history at all leaves a point mass at
+## zero. Either would flatter the fits it is compared against.
 function baseline_window_covered(obs, grid_date, stream, made_date, horizon)
     _, kind = stream_history(obs, stream)
-    from = kind == :level ? made_date : made_date - Day(horizon)
+    from = window_start(kind, made_date, horizon)
     return from >= stream_coverage_start(obs, grid_date, stream)
 end
 
@@ -627,7 +621,7 @@ function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
     centre = if kind == :level
         Float64(cum_at(h, made_date, grid_date))
     else
-        prior = made_date - Day(horizon)
+        prior = window_start(kind, made_date, horizon)
         raw = cum_at(h, made_date, grid_date) - cum_at(h, prior, grid_date)
         raw -= break_correction(obs, grid_date, stream, prior, made_date)
         Float64(max(raw, 0))
@@ -770,12 +764,9 @@ end
 ## for the truth every fit (including the baseline) is scored against, which
 ## is correctly the now-observed data regardless.
 ##
-## A group whose baseline window opens before the vintage stream's own
-## first observation carries no baseline row (counted in `.no_baseline`,
-## see `baseline_window_covered`). Its fits are still scored against the
-## truth; only their relative skill is left undefined, since the baseline
-## available there would be a saturated or zero centre rather than a
-## measured persistence.
+## A group whose baseline window is uncovered (see
+## `baseline_window_covered`) gets no baseline row, counted in
+## `.no_baseline`; its fits keep their own scores.
 ##
 ## Groups whose `target_date` is not yet observed are skipped (counted in
 ## `.skipped` for the caller to log), and so are groups whose `target_date`
@@ -850,10 +841,8 @@ function score_release(tag, forecast_path, obs, grid_date;
         ## the widest fit so its resolution never limits the comparison.
         ## Built from the made_date vintage, not the current manifest (see
         ## `vintage_observations`), so it cannot see a revision that landed
-        ## after the forecast was made. A group whose baseline window is not
-        ## covered by the vintage's own reporting gets no baseline row (see
-        ## `baseline_window_covered`), leaving its fits scored on their own
-        ## and their relative skill undefined.
+        ## after the forecast was made, and none at all where its window is
+        ## uncovered (see `baseline_window_covered`).
         n = maximum(length, values(byfit))
         rng = MersenneTwister(hash((tag, stream, horizon, made_date)))
         vobs, vgrid_date = vintage_observations(
