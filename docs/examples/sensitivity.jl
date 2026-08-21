@@ -217,6 +217,8 @@ validation_latent_fig #hide
 # ## Forecast scoring across releases
 #
 # Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
+# The tables in this section are the joint model's, one row per stream.
+# Each stream's individual fit is scored the same way and tabulated in [Individual fits against the baseline](@ref "Individual fits against the baseline") below, so a fit appears in one table rather than two.
 # See [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built.
 # Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
 # Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off.
@@ -226,9 +228,8 @@ validation_latent_fig #hide
 # The table below is therefore not a verdict on the current fit.
 # One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
 # This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
-# The releases that carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet.
-# This is why the comparison against each stream's individual fit is still empty.
-# It will populate once those targets resolve.
+# Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
+# The comparison against each stream's individual fit therefore rests on those releases alone, filling in one horizon at a time as their targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 # A ratio here should therefore be read as an early signal rather than a settled result.
 #
@@ -265,24 +266,35 @@ forecast_overlay_df = _release_data("forecast_overlay.csv",
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
-## The headline table, one row per (stream, fit) pooled over every horizon
-## and release; the by-horizon and by-release detail tables carry the same
-## columns at a finer grain (see src/scoring.jl).
+## One row per (stream, fit) pooled over every horizon and release. The
+## by-horizon and by-release detail tables carry the same columns at a finer
+## grain (see src/scoring.jl). Every fit is kept here, since the
+## relative-skill figure below compares the roles against each other. The
+## tables rendered in this section select the joint role, and the individual
+## fits are tabulated in their own section.
 forecast_score_overview_table = forecast_score_overview(forecast_scores_df)
 forecast_score_by_horizon_table = forecast_score_by_horizon(forecast_scores_df)
 forecast_score_by_release_table = forecast_score_by_release(forecast_scores_df)
+
+joint_score_overview_table = select_fit_role(
+    forecast_score_overview_table, "joint")
+joint_score_by_horizon_table = select_fit_role(
+    forecast_score_by_horizon_table, "joint")
+joint_score_by_release_table = select_fit_role(
+    forecast_score_by_release_table, "joint")
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The headline pools every horizon and release into one row per stream and fit: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline for every fit, on both the natural and the log scale.
-# The joint row also carries relative skill against the stream's own individual fit where one exists.
+# The headline pools every horizon and release into one row per stream for the joint model: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline, on both the natural and the log scale.
+# Each row also carries relative skill against the stream's own individual fit where one exists.
 # Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
-forecast_score_overview_table #hide
+joint_score_overview_table #hide
 
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
+# This is the one place the two roles are drawn against each other, so it carries each stream's individual fit alongside the joint.
 # A fit that beats the baseline on average but not at every cut-off is visible as a series that crosses the line rather than sitting under it throughout.
 
 forecast_relative_skill_fig = plot_forecast_relative_skill(
@@ -290,13 +302,13 @@ forecast_relative_skill_fig = plot_forecast_relative_skill(
 
 forecast_relative_skill_fig #hide
 
-# The same columns as a table, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
+# The same columns as a table for the joint model, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
 
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-forecast_score_by_horizon_table #hide
+joint_score_by_horizon_table #hide
 
 #md # ```@raw html
 #md # </details>
@@ -306,7 +318,7 @@ forecast_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-forecast_score_by_release_table #hide
+joint_score_by_release_table #hide
 
 #md # ```@raw html
 #md # </details>
@@ -445,22 +457,24 @@ frozen_overlay_fig #hide
 
 # ## Individual fits against the baseline
 #
-# This section repeats the cross-release forecast scoring from [Forecast scoring across releases](@ref "Forecast scoring across releases") above, filtered to each stream's own individual fit rather than the joint, against the same persistence baseline.
+# This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
 # Recovered has no individual fit, so it does not appear here.
-# These are the individual-fit rows of the cross-release scores above, not a separate computation.
-# As in [Forecast scoring across releases](@ref "Forecast scoring across releases") above, every table and figure in this section is currently empty for the same reason.
-# It will populate once those targets resolve.
+# These are the individual-fit rows of the same scored forecasts, not a separate computation.
+# Only the newest few releases carry an individual-stream forecast, so these tables cover those releases alone rather than the outbreak's history.
 
 #md # ```@raw html
 #md # <details><summary>Individual-fit rows of the cross-release scores</summary>
 #md # ```
 
-individual_score_overview_table = forecast_score_overview_table[
-    forecast_score_overview_table.fit .!= "joint", :]
-individual_score_by_horizon_table = forecast_score_by_horizon_table[
-    forecast_score_by_horizon_table.fit .!= "joint", :]
-individual_score_by_release_table = forecast_score_by_release_table[
-    forecast_score_by_release_table.fit .!= "joint", :]
+## The relative skill against a stream's individual fit is only ever
+## computed on the joint model's row, so on these rows it is missing by
+## construction and the column is dropped rather than shown empty.
+individual_score_overview_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_overview_table, "individual"))
+individual_score_by_horizon_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_by_horizon_table, "individual"))
+individual_score_by_release_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_by_release_table, "individual"))
 
 #md # ```@raw html
 #md # </details>
@@ -472,9 +486,9 @@ individual_score_overview_table #hide
 
 individual_relative_skill_fig = plot_forecast_relative_skill(
     individual_score_by_horizon_table;
-    empty_message = "Empty: the releases that carry the current model's " *
-                    "own individual-stream forecasts are too recent for their " *
-                    "targets to be observed yet. Not a missing forecast.");
+    empty_message = "Empty: no release old enough for its targets to " *
+                    "have been observed carries an individual-stream " *
+                    "forecast. Not a missing forecast.");
 
 individual_relative_skill_fig #hide
 
