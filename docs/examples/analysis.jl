@@ -1605,7 +1605,7 @@ cfr_prior_fig #hide
 #
 # The digitised onset epidemic curve (the [Data](@ref methods-data) section) is the only direct observation of the shared onset series.
 # Every other stream sees that series after a further convolution to a report, a death or a laboratory confirmation.
-# This stream can therefore identify the split between reporting and laboratory receipt that the laboratory pipeline otherwise pins with an external constraint.
+# This stream can therefore identify things the other streams cannot on their own, plausibly including the split between reporting and laboratory receipt that the laboratory pipeline otherwise pins with an external constraint.
 #
 # The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
 # By then the triangle's between-vintage increments have decayed into digitisation noise.
@@ -1661,12 +1661,14 @@ cfr_prior_fig #hide
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
+# Re-dating is absorbed as observation noise rather than modelled.
 # $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and a $4.0\%$ level error on each scan's own cumulative reading.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
+#
 # Three things stay weak.
 # The ascertainment walk $\omega$ shares the onset axis with the reproduction-number walk, and both are least constrained over the final fortnight.
 # $\alpha$ is confounded with outbreak size in the onsets-only fit below, whose $C_T$ sits close to prior-driven.
@@ -1675,6 +1677,7 @@ cfr_prior_fig #hide
 #
 # The alive and dead split the raw figure carries is not modelled separately, since the confirmed-death stream already carries it from other data.
 # An earlier line-list-independent reanalysis of this triangle put the median onset-to-report delay at around 6 days and the 7-day reporting fraction at 54-62%.
+# That interval is wide because the digitisation noise is close in size to the increments the estimate rests on.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_report_hazard_model</summary>
