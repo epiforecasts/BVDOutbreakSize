@@ -83,8 +83,11 @@ Changes since v1.13.2
   new-suspected-case count and the treatment-centre patient-movement
   series.
 - Rewrote the abstract around the situation reports and the data they
-  publish rather than a list of streams, and it now says that each release
-  scores its forecasts against later data and a persistence baseline.
+  publish rather than a list of streams, in the wording the analysis
+  report itself uses. It now covers the digitised symptom-onset curve and
+  the recoveries, which the earlier text left out, and says that each
+  release projects each DRC stream a week ahead and scores those
+  forecasts against later data and a persistence baseline.
 - A newly spotted surveillance signal now goes to an issue rather than a
   row in `data/README.md`'s scan table. The table is a short index, and
   rows added to it on a data update had to be reverted; the values still
