@@ -1058,7 +1058,7 @@ function plot_forecast_overlay(overlay::DataFrame)
             [o for (_, o) in od]; color = :black, markersize = 7)
         isnothing(obs_handle) && (obs_handle = oh)
         for role in role_order
-            rs = cell[_fit_role.(cell.fit) .== role, :]
+            rs = select_fit_role(cell, role)
             isempty(rs) && continue
             col = role_colour[role]
             off = slot[role] * dodge
@@ -1180,7 +1180,7 @@ function plot_forecast_relative_skill(scores::DataFrame;
         hlines!(ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
             linewidth = 2)
         for role in role_order
-            rs = cell[_fit_role.(cell.fit) .== role, :]
+            rs = select_fit_role(cell, role)
             isempty(rs) && continue
             keep = [!ismissing(v) && isfinite(v) for v in rs[!, value_col]]
             any(keep) || continue
