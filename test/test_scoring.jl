@@ -812,27 +812,50 @@ end
         target_date) == 8.0
 end
 
-@testitem "every scored stream declares an incident or level basis" begin
+@testitem "every scored stream is scored on its declared basis" begin
+    using Dates: Date, Day
+
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     ## The basis each stream is scored on has to match what the archive
-    ## stores for it: the cumulative-count streams are archived as new
-    ## counts over the horizon and the occupancy stocks as levels (see
-    ## `forecast_archive` in `src/forecast.jl`). Pinning the map here means
-    ## a stream added on the wrong basis fails rather than quietly scoring a
-    ## cumulative total against an increment forecast.
-    expected = Dict(
-        "reported cases" => :incident,
-        "suspected deaths" => :incident,
-        "confirmed cases" => :incident,
-        "confirmed deaths" => :incident,
-        "recovered" => :incident,
-        "onset reports" => :incident,
-        "exports" => :incident,
-        "isolation beds" => :level,
-        "treatment beds" => :level,
-        "isolation beds (suspected)" => :level)
+    ## stores for it: the cumulative-count streams are archived as new counts
+    ## over the horizon and the occupancy stocks as levels (see
+    ## `forecast_archive` in `src/forecast.jl`).
+    ##
+    ## Driving this from the stream maps rather than a list means a stream
+    ## added on the wrong basis fails here, and running each one through
+    ## `truth_at` means the declared basis has to be the one it is actually
+    ## scored on. An increment depends on where the window opens; a level
+    ## does not. That separates the two without pinning a value per stream.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = cum, deaths_history = cum,
+        confirmed_history = cum, confirmed_deaths_history = cum,
+        recovered_history = cum, onset_report_history = cum,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40])
+    target_date = grid_date(40)
+    early, late = grid_date(26), grid_date(33)
+
     kinds = merge(Dict(k => v[2] for (k, v) in STREAM_HISTORY),
         Dict(STREAM_ASSEMBLED))
-    @test kinds == expected
+    @test !isempty(kinds)
+
+    for (stream, kind) in kinds
+        from_early = truth_at(obs, grid_date, stream, early, target_date)
+        from_late = truth_at(obs, grid_date, stream, late, target_date)
+        if kind === :incident
+            @test from_early > from_late
+        else
+            @test kind === :level
+            @test from_early == from_late
+        end
+    end
 end
