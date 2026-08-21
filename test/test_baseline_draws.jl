@@ -251,6 +251,19 @@ end
             """)
         return path
     end
+
+    ## The same manifest with no dated history at all, as the earliest
+    ## release snapshots are: cut-off scalars only, no vintages to build a
+    ## baseline from.
+    function _write_bare_manifest(path; as_of_date)
+        write(path, """
+            as_of_date = "$as_of_date"
+
+            [genetic_tmrca]
+            date = "2026-03-01"
+            """)
+        return path
+    end
 end
 
 @testitem "vintage_observations freezes the manifest" setup=[FixtureObs] begin
@@ -531,4 +544,94 @@ end
     ## The truth both are scored against is that later week's increment
     ## (900 - 270), which the baseline itself never sees.
     @test base_of(extended_run.overlay).observed == 630.0
+end
+
+@testitem "baseline_window_covered follows the stream's own coverage" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    n = 60
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    made_date = grid_date(40)
+
+    ## An incident stream first reported on grid day 36: a 7-day lookback
+    ## opens inside its coverage, a 14-day one opens before the series
+    ## began and would read a zero there.
+    obs = (; confirmed_history = (; days = [36, 40], counts = [80.0, 120.0]),
+        isolation_history = (; days = [36, 40], counts = [18.0, 20.0]))
+    @test baseline_window_covered(
+        obs, grid_date, "confirmed cases", made_date, 4)
+    @test !baseline_window_covered(
+        obs, grid_date, "confirmed cases", made_date, 14)
+
+    ## The level stream carries no lookback window: it needs only a vintage
+    ## at or before made_date, whatever the horizon.
+    @test baseline_window_covered(
+        obs, grid_date, "isolation beds", made_date, 28)
+    @test !baseline_window_covered(
+        obs, grid_date, "isolation beds", grid_date(30), 7)
+
+    ## A stream with no history at all is never covered.
+    empty_obs = (; confirmed_history = (; days = Int[], counts = Float64[]))
+    @test !baseline_window_covered(
+        empty_obs, grid_date, "confirmed cases", made_date, 7)
+
+    ## The assembled stream is exempt, as it is in `stream_coverage_start`:
+    ## a date before its first detection says no export had been detected,
+    ## not that the source is absent.
+    export_obs = (; export_case_days = [38, 40])
+    @test baseline_window_covered(
+        export_obs, grid_date, "exports", made_date, 28)
+end
+
+@testitem "score_release drops an uncovered baseline" setup=[FixtureObs] begin
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Two snapshots that cannot support a baseline at this made date: one
+    ## whose confirmed series starts two days before it, so a 7-day lookback
+    ## opens before the first vintage and the centre saturates at the whole
+    ## cumulative; one with no dated history at all, as the earliest release
+    ## snapshots are, whose centre would be a point mass at zero.
+    made_date = Date(2026, 7, 8)
+    dir = mktempdir()
+    late_start = _write_fixture_manifest(joinpath(dir, "late.toml");
+        as_of_date = "2026-07-08",
+        confirmed_dates = ["2026-07-06", "2026-07-07", "2026-07-08"],
+        confirmed_values = [40, 70, 110])
+    bare = _write_bare_manifest(joinpath(dir, "bare.toml");
+        as_of_date = "2026-07-08")
+
+    n = 60
+    cutoff = Date(2026, 7, 29)
+    gday(d) = n - Dates.value(cutoff - Date(d))
+    obs = (; cutoff = cutoff, n = n,
+        confirmed_history = (; days = gday.(["2026-07-06", "2026-07-08",
+                "2026-07-15"]),
+            counts = [40.0, 110.0, 900.0]))
+    grid_date(day) = cutoff - Day(n - day)
+
+    path = joinpath(dir, "forecast.csv")
+    open(path, "w") do io
+        println(io, "made_date,horizon,target_date,stream,draw,value")
+        for d in 1:5
+            println(io, join(
+                (made_date, 7, "2026-07-15", "confirmed cases",
+                    d, 600 + d), ','))
+        end
+    end
+
+    for vintage in (late_start, bare)
+        result = score_release("results-vT.E.S", path, obs, grid_date;
+            vintage_obs_path = vintage)
+        scored = DataFrame(result.rows)
+        ## The fit keeps its own score; only the baseline is withheld, and
+        ## the group is counted so the run log reports it.
+        @test Set(scored.fit) == Set([JOINT_FIT])
+        @test result.no_baseline == 1
+    end
 end
