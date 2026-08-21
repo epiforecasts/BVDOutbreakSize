@@ -321,3 +321,214 @@ end
         2_000, MersenneTwister(21))
     @test isapprox(mean(leaked_draws), 70.0; atol = 3.0)
 end
+
+@testitem "baseline_draws ignores vintages after made_date" begin
+    using Dates: Date, Day
+    using Random: MersenneTwister
+    using Statistics: mean
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The leakage guard: a baseline built from a history that runs past the
+    ## made date must equal the one built from the same history stopped at
+    ## it. Anything reading a later vintage (the centre's window, the step
+    ## pool, the grid mapping) changes the draws and fails here.
+    n = 80
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    made_date = grid_date(45)
+
+    ## One weekly history stopping at made_date, and the same history
+    ## continued past it with steps far larger than any it already carries.
+    stopped = (; days = [10, 17, 24, 31, 38, 45],
+        counts = [100.0, 110.0, 125.0, 145.0, 170.0, 200.0])
+    extended = (; days = [10, 17, 24, 31, 38, 45, 52, 59],
+        counts = [100.0, 110.0, 125.0, 145.0, 170.0, 200.0, 900.0, 1500.0])
+
+    cases_stopped = (; confirmed_history = stopped)
+    cases_extended = (; confirmed_history = extended)
+    beds_stopped = (; isolation_history = stopped)
+    beds_extended = (; isolation_history = extended)
+
+    for horizon in (7, 14, 28)
+        ## An incident stream, whose centre is the count over the
+        ## horizon-length window ending at made_date.
+        @test baseline_draws(cases_stopped, grid_date, "confirmed cases",
+            made_date, horizon, 500, MersenneTwister(5)) ==
+              baseline_draws(cases_extended, grid_date, "confirmed cases",
+            made_date, horizon, 500, MersenneTwister(5))
+        ## The level stream, whose centre is the last occupancy at or
+        ## before made_date.
+        @test baseline_draws(beds_stopped, grid_date, "isolation beds",
+            made_date, horizon, 500, MersenneTwister(5)) ==
+              baseline_draws(beds_extended, grid_date, "isolation beds",
+            made_date, horizon, 500, MersenneTwister(5))
+    end
+
+    ## The centre is anchored as well as matched, so a leak moving both
+    ## ends of the window at once cannot pass by cancelling: the step pool
+    ## is symmetric about zero, so many draws average to the centre. For
+    ## the incident stream that is the count over the week to made_date
+    ## (200 - 170), for the level stream the occupancy at made_date.
+    @test isapprox(
+        mean(baseline_draws(cases_extended, grid_date,
+            "confirmed cases", made_date, 7, 4_000, MersenneTwister(7))),
+        30.0; atol = 3.0)
+    @test isapprox(
+        mean(baseline_draws(beds_extended, grid_date,
+            "isolation beds", made_date, 7, 4_000, MersenneTwister(7))),
+        200.0; atol = 3.0)
+
+    ## The control the equality above needs: the two histories do differ in
+    ## a way baseline_draws is sensitive to, so the test would notice a
+    ## later vintage reaching the baseline. Made a fortnight later, once
+    ## those vintages have arrived, the two disagree.
+    later = grid_date(59)
+    @test baseline_draws(cases_stopped, grid_date, "confirmed cases", later,
+        7, 500, MersenneTwister(5)) !=
+          baseline_draws(cases_extended, grid_date, "confirmed cases", later,
+        7, 500, MersenneTwister(5))
+end
+
+@testitem "vintage_observations hides later vintages" setup=[FixtureObs] begin
+    using Dates: Date
+    using Random: MersenneTwister
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The same leakage guard at the manifest level: a snapshot whose
+    ## history runs past made_date must give the baseline exactly what a
+    ## snapshot stopping at made_date gives it.
+    made_date = Date(2026, 7, 8)
+    dates = ["2026-06-10", "2026-06-17", "2026-06-24", "2026-07-01",
+        "2026-07-08"]
+    counts = [50, 90, 140, 200, 270]
+    dir = mktempdir()
+    stopped = _write_fixture_manifest(joinpath(dir, "stopped.toml");
+        as_of_date = "2026-07-08", confirmed_dates = dates,
+        confirmed_values = counts)
+    extended = _write_fixture_manifest(joinpath(dir, "extended.toml");
+        as_of_date = "2026-07-29",
+        confirmed_dates = vcat(dates,
+            ["2026-07-15", "2026-07-22", "2026-07-29"]),
+        confirmed_values = vcat(counts, [900, 1800, 3000]))
+
+    placeholder_obs = (;)
+    placeholder_grid_date(day) = Date(2026, 1, 1)
+    sobs, sgrid = vintage_observations(
+        stopped, made_date, placeholder_obs, placeholder_grid_date)
+    eobs, egrid = vintage_observations(
+        extended, made_date, placeholder_obs, placeholder_grid_date)
+
+    ## Both freeze to made_date, so both carry the same grid and the same
+    ## five vintages: the three later ones are gone, not re-indexed.
+    @test sobs.cutoff == made_date
+    @test eobs.cutoff == made_date
+    @test sobs.n == eobs.n
+    @test sobs.confirmed_history == eobs.confirmed_history
+    @test [string(sgrid(d)) for d in sobs.confirmed_history.days] == dates
+    @test [string(egrid(d)) for d in eobs.confirmed_history.days] == dates
+
+    for horizon in (7, 14, 28)
+        @test baseline_draws(sobs, sgrid, "confirmed cases", made_date,
+            horizon, 500, MersenneTwister(6)) ==
+              baseline_draws(eobs, egrid, "confirmed cases", made_date,
+            horizon, 500, MersenneTwister(6))
+    end
+end
+
+@testitem "vintage_observations caches per made_date" setup=[FixtureObs] begin
+    using Dates: Date
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The cache is keyed on the made date as well as the path, so a second
+    ## made date off the same snapshot is frozen again rather than served
+    ## the first date's freeze.
+    path = _write_fixture_manifest(joinpath(mktempdir(), "observations.toml");
+        as_of_date = "2026-07-29",
+        confirmed_dates = ["2026-07-01", "2026-07-08", "2026-07-15"],
+        confirmed_values = [50, 80, 100])
+    placeholder_obs = (;)
+    placeholder_grid_date(day) = Date(2026, 1, 1)
+
+    early, _ = vintage_observations(
+        path, Date(2026, 7, 8), placeholder_obs, placeholder_grid_date)
+    late, _ = vintage_observations(
+        path, Date(2026, 7, 15), placeholder_obs, placeholder_grid_date)
+    @test early.cutoff == Date(2026, 7, 8)
+    @test late.cutoff == Date(2026, 7, 15)
+    @test length(early.confirmed_history.days) == 2
+    @test length(late.confirmed_history.days) == 3
+end
+
+@testitem "score_release uses the made_date vintage" setup=[FixtureObs] begin
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The leakage guard on the wiring rather than on `baseline_draws`
+    ## alone: scoring one release twice, once against a snapshot that stops
+    ## at made_date and once against the same snapshot continued past it,
+    ## must give the identical baseline row. A `score_release` that froze on
+    ## the release cut-off, or on the current manifest, would differ here.
+    made_date = Date(2026, 7, 8)
+    dates = ["2026-06-10", "2026-06-17", "2026-06-24", "2026-07-01",
+        "2026-07-08"]
+    counts = [50, 90, 140, 200, 270]
+    later_dates = ["2026-07-15", "2026-07-22", "2026-07-29"]
+    later_counts = [900, 1800, 3000]
+    dir = mktempdir()
+    stopped = _write_fixture_manifest(joinpath(dir, "stopped.toml");
+        as_of_date = "2026-07-08", confirmed_dates = dates,
+        confirmed_values = counts)
+    extended = _write_fixture_manifest(joinpath(dir, "extended.toml");
+        as_of_date = "2026-07-29",
+        confirmed_dates = vcat(dates, later_dates),
+        confirmed_values = vcat(counts, later_counts))
+
+    ## The now-observed manifest every fit is scored against, carrying the
+    ## whole series: the truth is the same in both runs, so any difference
+    ## between them is the baseline reading a later vintage.
+    n = 60
+    cutoff = Date(2026, 7, 29)
+    gday(d) = n - Dates.value(cutoff - Date(d))
+    obs = (; cutoff = cutoff, n = n,
+        confirmed_history = (; days = gday.(vcat(dates, later_dates)),
+            counts = Float64.(vcat(counts, later_counts))))
+    grid_date(day) = cutoff - Day(n - day)
+
+    ## The archive carries enough draws for the baseline to be drawn at the
+    ## same width, so its median is a stable read on the centre below.
+    path = joinpath(dir, "forecast.csv")
+    open(path, "w") do io
+        println(io, "made_date,horizon,target_date,stream,draw,value")
+        for d in 1:400
+            println(io, join((made_date, 7, "2026-07-15", "confirmed cases",
+                    d, 600), ','))
+        end
+    end
+
+    rows(vintage) = score_release("results-vT.E.S", path, obs, grid_date;
+        vintage_obs_path = vintage)
+    base_of(r) = only(filter(row -> row.fit == BASELINE_FIT,
+        collect(eachrow(DataFrame(r)))))
+
+    stopped_run = rows(stopped)
+    extended_run = rows(extended)
+    a = base_of(stopped_run.rows)
+    b = base_of(extended_run.rows)
+    @test a.crps == b.crps
+    @test a.log_crps == b.log_crps
+    @test a.dispersion == b.dispersion
+
+    ## The centre is anchored too, so a leak that moved both ends of the
+    ## baseline's own window at once cannot pass by cancelling: it is the
+    ## count over the week to made_date (270 - 200), not the 630 the week
+    ## after it turned out to be.
+    @test isapprox(base_of(extended_run.overlay).median, 70.0; atol = 20.0)
+    ## The truth both are scored against is that later week's increment
+    ## (900 - 270), which the baseline itself never sees.
+    @test base_of(extended_run.overlay).observed == 630.0
+end
