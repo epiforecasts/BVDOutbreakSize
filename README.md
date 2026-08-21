@@ -32,11 +32,14 @@ The rendered report fills in the build date and the exact data cut-off automatic
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
 The model is a discrete-time renewal process on a daily grid.
-It fits in a single posterior the daily counts the INSP situation reports publish, from the suspected and confirmed case and death series through to the laboratory, isolation and treatment-centre records, alongside the cases and deaths exported to Uganda.
-From these it estimates the latent infections and deaths over time, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
-Every release forecasts each fitted stream a week ahead and scores those forecasts against the data that arrive later and against a persistence baseline.
-The Uganda exports come from the WHO situation reports and Disease Outbreak News.
+It fits in a single posterior the daily counts the INSP situation reports publish, from the suspected and confirmed case and death series through to the laboratory, treatment-centre and recovery records.
+The digitised epidemic curve by symptom-onset date is fitted with them, the only direct observation of onsets.
+So are the cases and deaths exported to Uganda, taken from the WHO situation reports and Disease Outbreak News.
+The same infection process generates all of them, staged to daily symptom onsets and routed into every observation stream.
 A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
+From these it estimates the infections and deaths to date, reported and unreported, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
+Every release projects each DRC stream a week ahead.
+The forecasts are scored with the continuous ranked probability score against the data that arrive later and against a persistence baseline.
 The aim is a transparent estimate of how far the outbreak has already grown, and of how much each published stream contributes to it.
 
 **Scope.** This work adds an external view of the current situation, drawing on our understanding of real-time infectious disease dynamics and the infection process behind the observed surveillance counts.
