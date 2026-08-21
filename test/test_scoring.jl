@@ -747,3 +747,92 @@ end
     @test_throws ErrorException select_fit_role(empty, "individuals")
     @test_throws ErrorException select_fit_role(empty, "Joint")
 end
+
+@testitem "truth_at scores an increment for a cumulative stream" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Every cumulative-count stream is scored on what it added over the
+    ## window, matching what `forecast_archive` stores (`*_new` columns),
+    ## never on the cumulative total standing at the target. The two are far
+    ## apart here: the histories run from 1000 to 1150 while the window adds
+    ## 50, so a level score cannot be mistaken for an increment score.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = cum, deaths_history = cum,
+        confirmed_history = cum, confirmed_deaths_history = cum,
+        recovered_history = cum, onset_report_history = cum,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40])
+    made_date = grid_date(33)
+    target_date = grid_date(40)
+
+    for stream in ("reported cases", "suspected deaths", "confirmed cases",
+        "confirmed deaths", "recovered", "onset reports")
+        @test truth_at(obs, grid_date, stream, made_date, target_date) == 50.0
+    end
+    ## The assembled export stream counts detections the same way: three of
+    ## the four landed inside the window.
+    @test truth_at(obs, grid_date, "exports", made_date, target_date) == 3.0
+end
+
+@testitem "truth_at scores a level for a stock stream" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Bed occupancy is a stock, not a cumulative count, so its truth is the
+    ## occupancy standing at the target rather than a change over the window.
+    ## Each ward sub-stock is read the same way, including the one that fell.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    obs = (; cutoff = cutoff, n = n,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]))
+    made_date = grid_date(33)
+    target_date = grid_date(40)
+
+    @test truth_at(obs, grid_date, "isolation beds", made_date,
+        target_date) == 20.0
+    @test truth_at(obs, grid_date, "treatment beds", made_date,
+        target_date) == 12.0
+    @test truth_at(obs, grid_date, "isolation beds (suspected)", made_date,
+        target_date) == 8.0
+end
+
+@testitem "every scored stream declares an incident or level basis" begin
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The basis each stream is scored on has to match what the archive
+    ## stores for it: the cumulative-count streams are archived as new
+    ## counts over the horizon and the occupancy stocks as levels (see
+    ## `forecast_archive` in `src/forecast.jl`). Pinning the map here means
+    ## a stream added on the wrong basis fails rather than quietly scoring a
+    ## cumulative total against an increment forecast.
+    expected = Dict(
+        "reported cases" => :incident,
+        "suspected deaths" => :incident,
+        "confirmed cases" => :incident,
+        "confirmed deaths" => :incident,
+        "recovered" => :incident,
+        "onset reports" => :incident,
+        "exports" => :incident,
+        "isolation beds" => :level,
+        "treatment beds" => :level,
+        "isolation beds (suspected)" => :level)
+    kinds = merge(Dict(k => v[2] for (k, v) in STREAM_HISTORY),
+        Dict(STREAM_ASSEMBLED))
+    @test kinds == expected
+end

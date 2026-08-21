@@ -12,8 +12,9 @@
 const SEEDING_LEAD_DAYS = 30
 
 """
-Total retrospective harmonisation correction carried by a confirmed stream
-over the grid days `(from_day, to_day]`.
+The `(grid day, correction)` pairs a confirmed stream's listed
+harmonisation-break days carry, one per listed day the stream's own history
+has a matching vintage for.
 
 On a listed harmonisation-break day (`[confirmed_break_dates]`) the reported
 cumulative jumps by more than that day's notifications, because INSP
@@ -22,33 +23,50 @@ vintage's own step less the printed 24h count. Subtracting it turns a raw
 cumulative difference into the count that was actually notified across the
 window, which is what a forecast of new cases is predicting.
 
-`deaths` selects the confirmed-death stream rather than confirmed cases.
-Returns zero when no listed break day falls in the window, and for a break
-day the history carries no matching vintage for, which is a vintage that has
-not arrived by this `obs`'s cut-off. A break day on the stream's first
-vintage takes the whole cumulative as its step, since nothing precedes it. The correction is floored at zero so a
-snapshot whose own vintage of that day is smaller cannot inflate the truth.
+`deaths` selects the confirmed-death stream rather than confirmed cases. A
+break day the history carries no matching vintage for is left out, which is a
+vintage that has not arrived by this `obs`'s cut-off. A break day on the
+stream's first vintage takes the whole cumulative as its step, since nothing
+precedes it. The correction is floored at zero so a snapshot whose own vintage
+of that day is smaller cannot inflate the truth.
 """
-function confirmed_break_correction(obs, from_day::Real, to_day::Real;
-        deaths::Bool = false)
+function confirmed_break_steps(obs; deaths::Bool = false)
+    out = Tuple{Int, Float64}[]
     days = obs.confirmed_break_days
-    isempty(days) && return 0.0
+    isempty(days) && return out
     hist = deaths ? obs.confirmed_deaths_history : obs.confirmed_history
     gross = deaths ? obs.confirmed_break_gross_deaths :
             obs.confirmed_break_gross_cases
-    isempty(hist.counts) && return 0.0
+    isempty(hist.counts) && return out
     hdays = collect(hist.days)
     counts = collect(hist.counts)
-    total = 0.0
     for (i, d) in enumerate(days)
-        from_day < d <= to_day || continue
         pos = findfirst(==(d), hdays)
         pos === nothing && continue
         net = counts[pos] - (pos == 1 ? 0 : counts[pos - 1])
         g = i <= length(gross) ? gross[i] : 0
-        total += max(net - g, 0)
+        push!(out, (d, float(max(net - g, 0))))
     end
-    return float(total)
+    return out
+end
+
+"""
+Total retrospective harmonisation correction carried by a confirmed stream
+over the grid days `(from_day, to_day]`: the sum of
+[`confirmed_break_steps`](@ref) for every listed break day the window holds.
+
+The window is half open on the left, so a break day on the origin belongs to
+the window before it rather than this one. `deaths` selects the
+confirmed-death stream rather than confirmed cases. Returns zero when no
+listed break day falls in the window.
+"""
+function confirmed_break_correction(obs, from_day::Real, to_day::Real;
+        deaths::Bool = false)
+    total = 0.0
+    for (d, c) in confirmed_break_steps(obs; deaths = deaths)
+        from_day < d <= to_day && (total += c)
+    end
+    return total
 end
 
 """

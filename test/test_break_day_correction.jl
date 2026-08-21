@@ -213,3 +213,89 @@ end
         obs, grid_date, "confirmed cases", grid_date(17), grid_date(31)) ==
           282.0  # 379 - 97
 end
+
+@testitem "the scorer and the package helper agree on the manifest" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations, confirmed_break_correction
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The scorer's `break_correction` and the in-report validation's
+    ## `confirmed_break_correction` are one implementation, so they read the
+    ## live manifest's declared break days identically. Checked over the
+    ## whole grid, not just around the declared days, so a window edge that
+    ## drifted apart would show.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    for (stream, deaths) in (("confirmed cases", false),
+        ("confirmed deaths", true))
+        for from_day in 1:7:obs.n
+            for to_day in from_day:7:obs.n
+                @test break_correction(obs, grid_date, stream,
+                    grid_date(from_day), grid_date(to_day)) ==
+                      confirmed_break_correction(obs, from_day, to_day;
+                    deaths = deaths)
+            end
+        end
+    end
+end
+
+@testitem "each manifest break day is net minus gross in both streams" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Each listed day's correction is the vintage's own step less the
+    ## printed 24h count, for confirmed cases and confirmed deaths alike,
+    ## and it lands in the window that holds the day rather than the one
+    ## before it.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    for (i, d) in enumerate(obs.confirmed_break_days)
+        for (stream, hist, gross) in (
+            ("confirmed cases", obs.confirmed_history,
+            obs.confirmed_break_gross_cases),
+            ("confirmed deaths", obs.confirmed_deaths_history,
+            obs.confirmed_break_gross_deaths))
+            pos = findfirst(==(d), hist.days)
+            pos === nothing && continue
+            net = hist.counts[pos] - (pos == 1 ? 0 : hist.counts[pos - 1])
+            want = max(net - gross[i], 0)
+            @test want > 0
+            @test break_correction(obs, grid_date, stream,
+                grid_date(d - 7), grid_date(d)) == want
+            ## Half open on the left: a window opening on the break day does
+            ## not carry it.
+            @test break_correction(obs, grid_date, stream,
+                grid_date(d), grid_date(d + 7)) == 0.0
+        end
+    end
+end
+
+@testitem "a manifest break day comes out of the scored truth" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The end-to-end statement: a forecast window holding a listed break day
+    ## is scored on what was notified across it, so the truth is the raw
+    ## cumulative difference less that day's retrospective step.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    for d in obs.confirmed_break_days
+        made_date = grid_date(d - 7)
+        target_date = grid_date(d)
+        for stream in ("confirmed cases", "confirmed deaths")
+            h, _ = stream_history(obs, stream)
+            raw = cum_at(h, target_date, grid_date) -
+                  cum_at(h, made_date, grid_date)
+            corr = break_correction(
+                obs, grid_date, stream, made_date, target_date)
+            truth = truth_at(obs, grid_date, stream, made_date, target_date)
+            @test truth == max(raw - corr, 0)
+            @test truth < raw
+        end
+    end
+end
