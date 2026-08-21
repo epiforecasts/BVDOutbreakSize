@@ -1403,11 +1403,16 @@ cfr_prior_fig #hide
 #
 # ```math
 # q_{\text{death},t} = \frac{\text{bvd}^{\text{d}}_t}
-#     {\text{bvd}^{\text{d}}_t + \text{bg}^{\text{d}}_t}, \qquad
-# p_t = s\,q_{\text{death},t} + (1-\mathrm{spec})(1-q_{\text{death},t}),
+#     {\text{bvd}^{\text{d}}_t + \text{bg}^{\text{d}}_t},
 # ```
 #
-# with $\text{bvd}^{\text{d}}$ and $\text{bg}^{\text{d}}$ the BVD and non-BVD components of the suspected deaths (both at receipt) and $s$, $\mathrm{spec}$ the same assay sensitivity and specificity as the confirmed cases.
+# with $\text{bvd}^{\text{d}}$ and $\text{bg}^{\text{d}}$ the BVD and non-BVD components of the suspected deaths (both at receipt).
+# The per-day positivity applies the assay sensitivity $s$ and specificity $\mathrm{spec}$ the confirmed cases use:
+#
+# ```math
+# p_t = s\,q_{\text{death},t} + (1-\mathrm{spec})(1-q_{\text{death},t}).
+# ```
+#
 # The false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the confirmed deaths respond to the non-BVD death share, the same structural link the confirmed cases use.
 # The death background (the background CFR applied to the case background, lagged by the onset-to-death delay) keeps the composition below one.
 # The daily confirmed deaths are the positivity times the death analysed volume,
@@ -1598,19 +1603,13 @@ cfr_prior_fig #hide
 
 # ##### Symptom-onset reporting delay
 #
-# Every other observation model sees the shared onset series only after a
-# further convolution: a suspected-case report, a death, or a laboratory
-# confirmation. The digitised onset epidemic curve (the [Data](@ref
-# methods-data) section) is the only direct observation of it, so it can
-# identify things the other streams cannot on their own, plausibly
-# including the split between reporting and laboratory receipt that the
-# laboratory pipeline currently pins with an external constraint.
+# The digitised onset epidemic curve (the [Data](@ref methods-data) section) is the only direct observation of the shared onset series.
+# Every other stream sees that series after a further convolution to a report, a death or a laboratory confirmation.
+# This stream can therefore identify things the other streams cannot on their own, plausibly including the split between reporting and laboratory receipt that the laboratory pipeline otherwise pins with an external constraint.
 #
-# We model the onset-to-report delay as a discrete-time hazard over delay
-# $d = 0,\dots,D-1$ days, $D = 28$: by then the triangle's between-vintage
-# increments have decayed into digitisation noise. The baseline hazard is
-# a non-centred logit random effect over the delay, free to rise and fall
-# rather than forced monotone or parametric:
+# The onset-to-report delay is a discrete-time hazard over delay $d = 0,\dots,D-1$ days, with $D = 28$.
+# By then the triangle's between-vintage increments have decayed into digitisation noise.
+# The baseline hazard is a non-centred logit random effect over the delay, free to rise and fall rather than forced monotone or parametric:
 #
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
@@ -1618,13 +1617,9 @@ cfr_prior_fig #hide
 # \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{41}
 # ```
 #
-# The hazard at delay $d$ for an onset on day $u$ is modified by a
-# calendar-time effect indexed on the report day $u + d$: a weekly-knot
-# non-centred random walk on the logit scale, the same construction as the
-# reproduction-number walk above and concentrated near zero
-# ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$), so a flat reporting
-# profile stays the default the data has to argue away from while the walk
-# can still follow a real drift in reporting speed:
+# A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
+# It is a weekly-knot non-centred random walk on the logit scale, the same construction as the reproduction-number walk above, concentrated near zero ($\sigma_\gamma \sim \mathrm{Normal}^{+}(0,\ 0.3)$).
+# A flat reporting profile stays the default the data has to argue away from, while the walk can still follow a real drift in reporting speed:
 #
 # ```math
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
@@ -1633,10 +1628,8 @@ cfr_prior_fig #hide
 # \tag{42}
 # ```
 #
-# The cumulative reported proportion of onset date $u$'s eventual cases,
-# reported within $\delta$ days, is the survival product of the daily hazards
-# along that onset date's diagonal, normalised to its own limit and multiplied
-# by an explicit ascertainment level $\alpha(u)$:
+# The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
+# It is normalised to its own limit and multiplied by an explicit ascertainment level $\alpha(u)$:
 #
 # ```math
 # \mathrm{cdf}(u, \delta) = \begin{cases} 0 & \delta < 0 \\
@@ -1650,26 +1643,16 @@ cfr_prior_fig #hide
 #     + \beta + \omega_u\bigr). \tag{43}
 # ```
 #
-# $G(u, D-1) = 1$, a proper delay distribution rather than an asymptote that
-# drifts with the hazard level, and $\delta < 0$ is right truncation, unchanged.
-# $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset, $\omega$ a
-# weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$),
-# and $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily
-# ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto
-# the onset axis, tying this triangle's ascertainment to the confirmed
-# pipeline's rather than leaving it free. The onsets-only fit has no confirmed
-# pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$,
-# and $\beta$'s prior lets the two levels differ by about a factor of two.
+# $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
+# $\beta \sim \mathrm{Normal}(0,\ 0.75)$ is a logit-scale offset and $\omega$ a weekly-knot onset-axis walk ($\sigma_a \sim \mathrm{Normal}^{+}(0,\ 0.1)$).
+# $\mathrm{anchor}(u)$ delay-weights the confirmed pipeline's own daily ascertainment ($p_{\text{drc}}\,\tau_{\text{test}}\,p_{\text{pos}, t}$) onto the onset axis, so this triangle's ascertainment is tied to the confirmed pipeline's rather than left free.
+# The onsets-only fit has no confirmed pipeline to borrow from, so there $\mathrm{anchor}(u)$ is a constant $0.15$ and $\beta$'s prior lets the two levels differ by about a factor of two.
 #
-# The expected reported count is the onset series convolved with $F$, $\mathbb
-# E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$. The likelihood scores
-# the difference between consecutive snapshots at each onset date, in a trailing
-# $D$-day window of the newer snapshot's report day, which avoids
-# double-counting a case already reported earlier and drops the older onset
-# dates that carry only noise by then. A count likelihood cannot be used, since
-# a re-dated case can move a bar down in a later scan even though the true
-# running total cannot fall, so the increment is scored with a Student-$t$ at
-# fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
+# The expected reported count is the onset series convolved with $F$, $\mathbb E[N(u, R_s)] = \mathrm{onsets}_u \cdot F(u, R_s - u)$.
+# The likelihood scores the difference between consecutive snapshots at each onset date, in a trailing $D$-day window of the newer snapshot's report day.
+# This avoids double-counting a case already reported earlier, and drops the older onset dates that carry only noise by then.
+# A count likelihood cannot be used, since a re-dated case can move a bar down in a later scan even though the true running total cannot fall.
+# The increment is scored with a Student-$t$ at fixed degrees of freedom ($\nu = 4$, a standard robust-regression choice):
 #
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
@@ -1677,50 +1660,24 @@ cfr_prior_fig #hide
 #     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
 # ```
 #
-# The likelihood admits a negative increment, but the mean above cannot produce
-# one: $F$ is non-decreasing in $\delta$, so the modelled increment is bounded
-# below at zero. Re-dating is absorbed as observation noise rather than
-# modelled.
+# The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
+# Re-dating is absorbed as observation noise rather than modelled.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and a $4.0\%$ level error on each scan's own cumulative reading.
+# Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
+# A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
 #
-# $\sigma_u$ collects three sources: counting variation around the cell's own
-# modelled mean; a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled
-# for a correction since it differences two reads; and a $4.0\%$ level error on
-# each scan's own cumulative reading. Every magnitude entering $\sigma_u$ is the
-# modelled one and never the observed count, so the likelihood's noise cannot
-# feed into its own variance, and a sampled slack multiplier sits on top, which
-# can only inflate the scale, because each term is a lower bound on the truth: a
-# bar cannot be read more precisely than its pixels allow, and a new count
-# carries at least its own counting variation.
+# The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
+# That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
 #
-# The first scored snapshot is differenced against an implicit empty
-# predecessor, so its cells score levels rather than corrections. That is what
-# anchors $\alpha$: corrections only ever pin differences of $F$, so scaling
-# $\alpha$ up while scaling the onset series down leaves every correction cell
-# unchanged, and something has to score a level.
+# Three things stay weak.
+# The ascertainment walk $\omega$ shares the onset axis with the reproduction-number walk, and both are least constrained over the final fortnight.
+# $\alpha$ is confounded with outbreak size in the onsets-only fit below, whose $C_T$ sits close to prior-driven.
+# The hazard below two days' delay is barely observed and rests on pooling across delays.
+# A falling $\alpha$ and a slowing hazard both suppress recent bars, and truncation self-corrects for the delay but not for an ascertainment fall.
 #
-# Four time-varying objects act on the same latent series: the
-# reproduction-number walk and ascertainment walk $\omega$ on the onset axis,
-# the calendar walk $\gamma$ on the report axis, and the baseline hazard
-# $\mathrm{logit}\,h_0$. The onset series moves a column of scored cells,
-# $\gamma$ a row, and $\mathrm{logit}\,h_0$ a diagonal band, distinguishable
-# once there is more than one snapshot. $\omega$ shares its axis with the
-# reproduction-number walk instead, a genuine identifiability tension, both
-# least constrained over the final fortnight.
-#
-# Three things stay weak. $\alpha$ is pinned by the first snapshot's level cells
-# and the onset series the other streams supply, confounded with outbreak size
-# in the onsets-only fit below, whose $C_T$ sits close to prior-driven. The
-# hazard below two days' delay is barely observed (the Data section's axis
-# reason) and rests on pooling across delays. A falling $\alpha$ and a slowing
-# hazard both suppress recent bars, where truncation self-corrects for delay but
-# not an ascertainment fall.
-#
-# The alive and dead split the raw figure carries is not modelled separately,
-# since the confirmed-death stream already carries it from other data. An
-# earlier line-list-independent reanalysis of this triangle put the median
-# onset-to-report delay at around 6 days and the 7-day reporting fraction at
-# 54-62%, an interval that wide because the digitisation noise is close in size
-# to the increments the estimate rests on.
+# The alive and dead split the raw figure carries is not modelled separately, since the confirmed-death stream already carries it from other data.
+# An earlier line-list-independent reanalysis of this triangle put the median onset-to-report delay at around 6 days and the 7-day reporting fraction at 54-62%.
+# That interval is wide because the digitisation noise is close in size to the increments the estimate rests on.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: onset_report_hazard_model</summary>
@@ -2970,14 +2927,12 @@ joint_ppc_fig #hide
 
 # ### Symptom-onset reporting delay and ascertainment
 #
-# The table reports the onset-report hazard's hyperparameters together with two derived quantities: the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
+# The table reports the onset-report hazard's hyperparameters and two derived quantities.
+# These are the share of a representative onset date's eventual reports that arrive within 7 days, and the median modelled ascertainment over the onset dates the ascertainment walk spans.
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
-# The pair plot shows the hyperparameters, with the prior overlaid.
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
-#
-# The scale slack row is a diagnostic rather than a quantity of interest.
-# Its prior is bounded below at one, because each term in the observation scale is a lower bound on the truth.
-# A posterior sitting on that bound says the fit would like a tighter likelihood than the figures can support.
+# The scale slack row is a diagnostic, and a posterior on its lower bound of one says the fit would like a tighter likelihood than the figures can support.
+# The table and pair plot below cover these parameters.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
