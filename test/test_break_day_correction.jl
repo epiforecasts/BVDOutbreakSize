@@ -103,8 +103,8 @@ end
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     grid_date(day) = Date(2026, 1, 1) + Day(day)
-    ## The current manifest declares two break days, at 25 and 60 days
-    ## after the grid origin.
+    ## A declaration of two break days, at 25 and 60 days after the grid
+    ## origin, in the shape `load_observations` returns.
     obs = (; confirmed_break_days = [25, 60],
         confirmed_break_gross_cases = [97, 40],
         confirmed_break_gross_deaths = [62, 20])
