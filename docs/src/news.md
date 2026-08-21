@@ -92,6 +92,13 @@ Changes since v1.13.2
   daily export intensity and its running sum, finishing the
   one-quantity-per-block pass. The export-death prevalence gets its own
   block rather than an inline definition.
+- Split the death-pool BVD share and the assay positivity built on it into
+  a display block each, matching the confirmed-case pipeline.
+- Cut the symptom-onset reporting-delay methods section and its results
+  text to the length and shape the other observation modules carry. The
+  model definition, the priors and the limitations all remain. The
+  identifiability discussion is condensed, and the prose runs one sentence
+  per line like the rest of the document.
 
 ## v1.13.2
 
