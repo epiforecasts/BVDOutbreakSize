@@ -666,3 +666,79 @@ end
     @test d.underprediction >= 0
     @test d.dispersion + d.underprediction ≈ crps_sample(obs, samples)
 end
+
+@testitem "select_fit_role splits a summary into joint and individual" begin
+    using Dates: Date
+    using DataFrames: DataFrame, nrow, names
+    using BVDOutbreakSize: forecast_score_overview, forecast_score_by_horizon,
+                           forecast_score_by_release, select_fit_role
+
+    ## "confirmed cases" carries a joint, an individual ("confirmed") and a
+    ## baseline fit; "reported cases" carries a joint, a differently named
+    ## individual ("cases") and a baseline.
+    scores = DataFrame(
+        release = fill("r1", 6), made_date = fill(Date(2026, 6, 1), 6),
+        horizon = fill(7, 6),
+        stream = vcat(fill("confirmed cases", 3), fill("reported cases", 3)),
+        fit = ["joint", "confirmed", "baseline",
+            "joint", "cases", "baseline"],
+        crps = [2.0, 4.0, 8.0, 3.0, 6.0, 12.0],
+        log_crps = [0.2, 0.4, 0.8, 0.3, 0.6, 1.2],
+        dispersion = fill(0.1, 6), overprediction = fill(0.05, 6),
+        underprediction = fill(0.05, 6),
+        coverage_50 = fill(1.0, 6), coverage_90 = fill(1.0, 6),
+        bias = fill(0.0, 6))
+
+    ## Each builder keeps every non-baseline fit, so the unfiltered table
+    ## carries both roles and the relative-skill figure can compare them.
+    for table in (forecast_score_overview(scores),
+        forecast_score_by_horizon(scores), forecast_score_by_release(scores))
+        @test sort(table.fit) == ["cases", "confirmed", "joint", "joint"]
+
+        ## The joint role is the joint model's rows alone: no individual
+        ## fit appears in a table headed as the joint model's.
+        joint = select_fit_role(table, "joint")
+        @test unique(joint.fit) == ["joint"]
+        @test nrow(joint) == 2
+        ## The individual role is each stream's own fit, whatever its id.
+        indiv = select_fit_role(table, "individual")
+        @test sort(indiv.fit) == ["cases", "confirmed"]
+        ## The two roles partition the table, and the columns are unchanged.
+        @test nrow(joint) + nrow(indiv) == nrow(table)
+        @test names(joint) == names(table)
+        @test names(indiv) == names(table)
+        ## Baseline rows are excluded by the builders, so that role is empty.
+        @test nrow(select_fit_role(table, "baseline")) == 0
+    end
+end
+
+@testitem "select_fit_role reads a frozen fit in the joint role" begin
+    using Dates: Date
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_score_overview, select_fit_role
+
+    ## The frozen evaluation is the joint model re-fit at a past cut-off,
+    ## so its rows belong to the joint role rather than the individual one.
+    scores = DataFrame(
+        release = fill("r1", 2), made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["frozen", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = fill(0.1, 2),
+        overprediction = fill(0.05, 2), underprediction = fill(0.05, 2),
+        coverage_50 = fill(1.0, 2), coverage_90 = fill(1.0, 2),
+        bias = fill(0.0, 2))
+
+    table = forecast_score_overview(scores)
+    @test only(select_fit_role(table, "joint").fit) == "frozen"
+    @test nrow(select_fit_role(table, "individual")) == 0
+end
+
+@testitem "select_fit_role errors on an unknown role" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview, select_fit_role
+
+    empty = forecast_score_overview(DataFrame())
+    ## A misspelt role must not read as a role with nothing scored.
+    @test_throws ErrorException select_fit_role(empty, "individuals")
+    @test_throws ErrorException select_fit_role(empty, "Joint")
+end

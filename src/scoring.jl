@@ -477,3 +477,47 @@ function drop_degenerate_fit_column(table::DataFrame)
     keep = [n for n in names(table) if n != "fit"]
     return table[:, keep]
 end
+
+## Role of a forecast within a stream: the persistence baseline, the joint
+## model or the stream's own individual single-stream fit. Deriving the
+## role from the fit id folds recovered's missing individual into a
+## baseline-versus-joint comparison without a per-stream label, and keeps a
+## figure's colour stable across streams whichever single-stream fit
+## produced the individual row. A frozen row takes the joint role, being
+## the joint model re-fit at a past cut-off. Every other id is a per-stream
+## fit spec, an open-ended set, so it falls through to the individual role.
+function _fit_role(fit)
+    fit == BASELINE_FIT && return "baseline"
+    (fit == JOINT_FIT || fit == FROZEN_FIT) && return "joint"
+    return "individual"
+end
+
+const _FIT_ROLES = ("baseline", "individual", "joint")
+
+"""
+`table` (a table from [`forecast_score_overview`](@ref),
+[`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
+restricted to the rows of one `role`.
+
+`"joint"` selects the joint model, including a frozen row, which is the
+same model re-fit at a past cut-off. `"individual"` selects each stream's
+own single-stream fit, whatever its id. `"baseline"` selects the
+persistence baseline, which the three summaries above exclude, so it is
+only ever non-empty on a table that kept it.
+
+Use this to render one table per role, so a table headed as the joint
+model's carries the joint model's rows alone and each stream's individual
+fit is tabulated in its own section. A figure comparing the roles against
+each other reads the unfiltered table instead. Column names, order and
+types are unchanged, as is the order of the rows that survive.
+
+Errors on an unknown `role` rather than returning a zero-row table, since
+a misspelt role and a role with nothing scored are otherwise
+indistinguishable in the rendered report.
+"""
+function select_fit_role(table::DataFrame, role::AbstractString)
+    role in _FIT_ROLES || error("select_fit_role: unknown role " *
+          "$(repr(role)); expected one of " *
+          join(repr.(_FIT_ROLES), ", "))
+    return table[_fit_role.(table.fit) .== role, :]
+end
