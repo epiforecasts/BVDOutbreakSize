@@ -2023,7 +2023,9 @@ function plot_forecast_latent(fc::DataFrame)
     ax = Axis(fig[r, c];
         xlabel = "Forecast reproduction number (DRC)",
         ylabel = "Posterior density", title = "One week ahead")
-    density!(ax, rt; color = (:purple, 0.5),
+    ## A reproduction number cannot be negative, and the horizon walk leaves
+    ## draws close enough to zero for the kernel to spill past them.
+    _bounded_density!(ax, rt; lower = 0, color = (:purple, 0.5),
         strokecolor = :purple, strokewidth = 2)
     vlines!(ax, [1.0]; color = :black, linestyle = :dash, linewidth = 2)
     return fig

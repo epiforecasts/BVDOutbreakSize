@@ -877,6 +877,37 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_forecast_latent clips the reproduction number at zero" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_latent
+    rng = MersenneTwister(36)
+    n = 400
+    ## A right-skewed forecast reproduction number sitting close to zero, so
+    ## the Gaussian kernel reaches past the smallest draw and the estimator
+    ## itself spans negative values.
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30,
+        rt_forecast = 0.05 .+ abs.(randn(rng, n)) .* 0.3
+    )
+    fig = plot_forecast_latent(fc)
+    axs = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    rt_label = "Forecast reproduction number (DRC)"
+    ax = only(a for a in axs if a.xlabel[] == rt_label)
+    dens = only(p for p in ax.scene.plots if p isa CairoMakie.Makie.Density)
+    ## The estimator keeps its full support, mass below zero included, and
+    ## the axis is what crops it, so the test fails if either half is lost.
+    @test CairoMakie.Makie.data_limits(dens).origin[1] < 0
+    xlims, _ = ax.limits[]
+    @test xlims == (0.0, nothing)
+    CairoMakie.Makie.update_state_before_display!(fig)
+    @test ax.finallimits[].origin[1] == 0.0
+end
+
 @testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[
     HeadlessMakie
 ] begin

@@ -54,6 +54,12 @@ Changes since v1.13.2
   stops at the bound, as the count and CFR panels already did. The same
   applies to the projected-total panel, which had been drawn crossing left
   of the observed-deaths rule.
+- The forecast reproduction-number density stops at zero. It was the one
+  density in the one-week-ahead forecast figures whose axis carried no
+  lower bound, so a posterior sitting close to zero picked up a tail on
+  the impossible side. Every other density panel there already crops at
+  its bound, and the outbreak start date, which is genuinely unbounded,
+  stays free.
 - The doubling-time interval is the image of the growth rate's interval
   rather than the quantiles of its own draws, which bounded nothing once
   the posterior for the growth rate spanned zero and reported a range of
