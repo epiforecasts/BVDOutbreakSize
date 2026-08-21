@@ -32,7 +32,7 @@ The rendered report fills in the build date and the exact data cut-off automatic
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
 The model is a discrete-time renewal process on a daily grid.
-It fits in a single posterior the daily counts the INSP situation reports publish, from the suspected and confirmed case and death series through to the laboratory, treatment-centre and recovery records.
+It fits in a single posterior the daily counts the INSP situation reports publish, from the suspected and confirmed case and death series through to the laboratory, isolation, treatment-centre and recovery records.
 The digitised epidemic curve by symptom-onset date is fitted with them, the only direct observation of onsets.
 So are the cases and deaths exported to Uganda, taken from the WHO situation reports and Disease Outbreak News.
 The same infection process generates all of them, staged to daily symptom onsets and routed into every observation stream.
