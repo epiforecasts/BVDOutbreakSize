@@ -54,6 +54,13 @@ Changes since v1.13.2
   stops at the bound, as the count and CFR panels already did. The same
   applies to the projected-total panel, which had been drawn crossing left
   of the observed-deaths rule.
+- The forecast reproduction-number density stops at zero, the same bound
+  already applied to the still-expected-deaths and projected-total
+  densities. A posterior sitting close to zero picks up a tail on the
+  impossible side from the kernel.
+- The posterior outbreak age on the tree-prior sensitivity figure stops at
+  zero for the same reason. An age in days cannot be negative, and that
+  figure renders in every published build.
 - The doubling-time interval is the image of the growth rate's interval
   rather than the quantiles of its own draws, which bounded nothing once
   the posterior for the growth rate spanned zero and reported a range of

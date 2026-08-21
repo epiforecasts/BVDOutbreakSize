@@ -1395,7 +1395,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
                           plot_density_overlay("Skygrid (baseline)" => T_skygrid,
     "Exponential growth" => T_exp_growth;
     xlabel = "Outbreak age (days before cut-off)",
-    title = "Posterior outbreak age by tree prior") :
+    title = "Posterior outbreak age by tree prior", lower = 0) :
                           Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
 
 #md # ```@raw html

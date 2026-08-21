@@ -3348,7 +3348,7 @@ no_onward_table = streams_table(
 no_onward_table #hide
 
 # The left panel shows the *still expected* deaths $\Delta D$: future deaths in cases already infected by $T$, net of those already observed.
-# The right panel shows the *projected total* $D(T) + \Delta D$, with the observed death count marked as a dashed black rule.
+# The right panel shows the *projected total* $D(T) + \Delta D$, whose axis starts at the observed death count.
 
 #md # ```@raw html
 #md # <details><summary>No-onward projected-deaths plot</summary>
