@@ -58,7 +58,11 @@
 # model fits, "recovered", is scored for the joint and the baseline only. A
 # forecast group whose target runs past the stream's own reporting
 # coverage (`truth_at`, `stream_coverage_end`) is not scored at all, the
-# same way a not-yet-observed target is not.
+# same way a not-yet-observed target is not. A group whose baseline window
+# opens before the vintage stream's own first observation
+# (`baseline_window_covered`) keeps its fits' scores but gets no baseline
+# row, since the centre available there is a saturated or zero cumulative
+# rather than a measured persistence.
 #
 # The two confirmed streams carry retrospective harmonisation-break days
 # (`[confirmed_break_dates]` in `observations.toml`, see `src/data.jl`), on
@@ -396,6 +400,36 @@ function stream_coverage_start(obs, grid_date, stream)
     h, _ = stream_history(obs, stream)
     isempty(h.days) && return typemax(Date)
     return grid_date(minimum(h.days))
+end
+
+## Whether the persistence baseline's own window for one forecast group is
+## covered by `stream`'s reporting in `obs`, which for the baseline is the
+## made_date vintage it is built from (see `vintage_observations`) rather
+## than the current manifest. The window runs from `made_date - horizon` to
+## `made_date` for an incident stream, whose centre is the count observed
+## over it, and is the single day `made_date` for a level stream, whose
+## centre is the last occupancy at or before it.
+##
+## It is uncovered when it opens before the stream's first vintage (see
+## `stream_coverage_start`), the same rule `truth_at` applies to the truth
+## window. `cum_at` reads the missing opening as a zero, so the centre
+## saturates at the whole cumulative total to `made_date` and comes out
+## identical at every horizon rather than measuring a horizon-length
+## window. A stream the vintage manifest carries no history for at all is
+## uncovered by the same rule, its centre a zero standing for an absent
+## series rather than an observed count and its step pool empty, which
+## leaves the baseline a point mass at zero. Both are scored as no baseline
+## at all rather than as a degenerate one, so the group's fits keep their
+## own scores and lose only their relative skill.
+##
+## An assembled stream ("exports") is exempt exactly as it is in
+## `stream_coverage_start`: a date before its first detection carries the
+## true statement that no export had been detected yet, so a zero centre
+## there is an observation rather than an absence.
+function baseline_window_covered(obs, grid_date, stream, made_date, horizon)
+    _, kind = stream_history(obs, stream)
+    from = kind == :level ? made_date : made_date - Day(horizon)
+    return from >= stream_coverage_start(obs, grid_date, stream)
 end
 
 ## The stream's own gross-count vector for `confirmed_break_days` — the
@@ -736,6 +770,13 @@ end
 ## for the truth every fit (including the baseline) is scored against, which
 ## is correctly the now-observed data regardless.
 ##
+## A group whose baseline window opens before the vintage stream's own
+## first observation carries no baseline row (counted in `.no_baseline`,
+## see `baseline_window_covered`). Its fits are still scored against the
+## truth; only their relative skill is left undefined, since the baseline
+## available there would be a saturated or zero centre rather than a
+## measured persistence.
+##
 ## Groups whose `target_date` is not yet observed are skipped (counted in
 ## `.skipped` for the caller to log), and so are groups whose `target_date`
 ## runs past the stream's own reporting coverage (counted in `.stopped`),
@@ -785,6 +826,7 @@ function score_release(tag, forecast_path, obs, grid_date;
     skipped = 0
     stopped = 0
     unstarted = 0
+    no_baseline = 0
     for (key, byfit) in groups
         made_date, horizon, target_date, stream = key
         truth = truth_at(obs, grid_date, stream, made_date, target_date)
@@ -808,16 +850,24 @@ function score_release(tag, forecast_path, obs, grid_date;
         ## the widest fit so its resolution never limits the comparison.
         ## Built from the made_date vintage, not the current manifest (see
         ## `vintage_observations`), so it cannot see a revision that landed
-        ## after the forecast was made.
+        ## after the forecast was made. A group whose baseline window is not
+        ## covered by the vintage's own reporting gets no baseline row (see
+        ## `baseline_window_covered`), leaving its fits scored on their own
+        ## and their relative skill undefined.
         n = maximum(length, values(byfit))
         rng = MersenneTwister(hash((tag, stream, horizon, made_date)))
         vobs, vgrid_date = vintage_observations(
             vintage_obs_path, made_date, obs, grid_date)
-        base = baseline_draws(
-            vobs, vgrid_date, stream, made_date, horizon, n, rng)
-        push_scored!(out, overlay, tag, key, BASELINE_FIT, base, truth)
+        if baseline_window_covered(
+            vobs, vgrid_date, stream, made_date, horizon)
+            base = baseline_draws(
+                vobs, vgrid_date, stream, made_date, horizon, n, rng)
+            push_scored!(out, overlay, tag, key, BASELINE_FIT, base, truth)
+        else
+            no_baseline += 1
+        end
     end
-    return (; rows = out, overlay, skipped, stopped, unstarted)
+    return (; rows = out, overlay, skipped, stopped, unstarted, no_baseline)
 end
 
 # ----------------------------------------------------------------------
@@ -1008,6 +1058,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_frozen_stopped = 0
     n_unstarted = 0
     n_frozen_unstarted = 0
+    n_no_baseline = 0
+    n_frozen_no_baseline = 0
     n_failed_reconstruction = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
@@ -1065,7 +1117,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## declared global to update the bindings above rather than shadow them.
         global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored,
         n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
-        n_failed_reconstruction
+        n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -1146,6 +1198,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 label == tag || (n_backfilled += 1)
                 n_stopped += result.stopped
                 n_unstarted += result.unstarted
+                n_no_baseline += result.no_baseline
                 result.skipped > 0 && @info string(
                     label, ": skipped ", result.skipped,
                     " not-yet-observed group(s)")
@@ -1155,6 +1208,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 result.unstarted > 0 && @info string(
                     label, ": skipped ", result.unstarted,
                     " group(s) before their stream began being reported")
+                result.no_baseline > 0 && @info string(
+                    label, ": drew no baseline for ", result.no_baseline,
+                    " group(s) whose baseline window opens before their ",
+                    "stream's first vintage")
             end
         end
 
@@ -1179,6 +1236,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 n_frozen_scored += 1
                 n_frozen_stopped += fresult.stopped
                 n_frozen_unstarted += fresult.unstarted
+                n_frozen_no_baseline += fresult.no_baseline
                 fresult.skipped > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.skipped,
                     " not-yet-observed group(s)")
@@ -1188,6 +1246,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
                 fresult.unstarted > 0 && @info string(
                     tag, " (frozen): skipped ", fresult.unstarted,
                     " group(s) before their stream began being reported")
+                fresult.no_baseline > 0 && @info string(
+                    tag, " (frozen): drew no baseline for ",
+                    fresult.no_baseline, " group(s) whose baseline window ",
+                    "opens before their stream's first vintage")
             end
         end
 
@@ -1245,6 +1307,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println("Dropped $n_unstarted group(s) whose window opened before their " *
             "stream began being reported ($n_frozen_unstarted in the " *
             "frozen tables).")
+    println("Drew no baseline for $n_no_baseline group(s) whose baseline " *
+            "window opened before their stream's first vintage " *
+            "($n_frozen_no_baseline in the frozen tables).")
     println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
             "($n_no_rt without an R_T posterior).")
 

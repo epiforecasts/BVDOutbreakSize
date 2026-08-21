@@ -2143,8 +2143,10 @@ diagnostics_table( #hide
 # The frozen re-fits below forecast from fixed historical cut-offs reused across later releases, so their snapshot can post-date the day the forecast was made by weeks.
 # A correction landing in between is therefore already in it.
 # Closing that would need a snapshot archived per frozen cut-off, which does not exist.
-# The earliest releases archived their cut-off totals without the dated vintage record, leaving their baseline no history to draw on.
-# Skill against it is therefore not informative there.
+# A baseline is drawn only where the stream's own record covers the window it is centred on, which for a count stream is the horizon-length window ending on the day the forecast was made and for occupancy is that day alone.
+# A window opening before the stream's first recorded vintage would read that absence as a zero and centre the baseline on the whole cumulative total instead, identically at every horizon.
+# The earliest releases archived their cut-off totals without the dated vintage record at all, which is the same case with no history to centre on and no step to draw from.
+# Neither is scored, so those forecasts keep their own scores and carry no relative skill.
 
 # ## Results
 #

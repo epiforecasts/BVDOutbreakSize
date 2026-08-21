@@ -413,10 +413,12 @@ end
 
     ## A synthetic now-observed manifest: a 40-day grid, each incident
     ## history stepping from 100 to 150 over the last week, isolation beds
-    ## at 20, and three dated export detections in the final week.
+    ## at 20, and three dated export detections in the final week. Each
+    ## incident history opens a fortnight earlier so the baseline's own
+    ## lookback window is covered (see `baseline_window_covered`).
     n = 40
     cutoff = Date(2026, 7, 15)
-    inc = (; days = [33, 40], counts = [100, 150])
+    inc = (; days = [19, 33, 40], counts = [60, 100, 150])
     obs = (; cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
@@ -478,7 +480,10 @@ end
     ## forecast.csv but no `fit` column, and is stamped with a past made date.
     n = 40
     cutoff = Date(2026, 7, 15)
-    inc = (; days = [26, 33], counts = [100, 150])
+    ## The confirmed history opens well before the made date so the
+    ## baseline's own lookback window is covered (see
+    ## `baseline_window_covered`).
+    inc = (; days = [15, 26, 33], counts = [60, 100, 150])
     obs = (; cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
