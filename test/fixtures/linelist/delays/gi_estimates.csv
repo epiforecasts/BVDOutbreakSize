@@ -1,0 +1,4 @@
+source,n,gi_mean,gi_sd,shape,scale,invalid_share
+any matched contact,72,20,10,4,5,0
+secondary a case,40,18,9,4,4.5,0
+secondary diagnosed,18,25,12.5,4,6.25,0

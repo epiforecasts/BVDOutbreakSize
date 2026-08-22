@@ -18,7 +18,8 @@
 # fortnight is short by however long cases take to reach the export (median 4
 # days, 90th percentile 12). The model reads that ragged edge as a fall in
 # transmission. A construction that counts each case at the snapshot which first
-# held it has no such edge, and fit_single.jl takes one via `--streams`.
+# held it has no such edge, and fit_single.jl takes one via
+# `--data=linelist_known`.
 #
 # Usage, from the repository root. Five to seven hours, so run it detached with
 # the wrapper rather than calling Julia directly:

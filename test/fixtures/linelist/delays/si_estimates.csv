@@ -1,0 +1,4 @@
+source,n,meanlog,meanlog_lower,meanlog_upper,sdlog,median,mean,p90
+any matched contact,72,3,2.902,3.098,0.5,20,20,30
+secondary a case,40,2.9,2.8,3,0.5,18,18,28
+secondary diagnosed,18,3.2,3,3.4,0.5,25,25,40

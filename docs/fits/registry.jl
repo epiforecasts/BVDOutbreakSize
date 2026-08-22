@@ -88,8 +88,48 @@ function run_sensitivity_env()
 end
 
 """
+    _delay_kwargs(delays) -> NamedTuple
+
+Submodel overrides that put a different generation interval and onset-to-report
+delay into the fits, as keyword arguments to splat into a composer call.
+`nothing` gives an empty tuple, so the call is exactly the one made without it
+and the package defaults stand — the "no override" path is the absence of an
+argument rather than a restatement of the defaults, which cannot drift from
+them.
+
+`delays` is built by `delay_config` in `scripts/linelist/delays.jl`, which reads
+the estimates at run time; nothing here carries a parameter value.
+
+The generation interval is reached through `infection_model`, the
+onset-to-report delay through `reported_cases_model`. Both are keyword arguments
+of the composers already, so no model source changes. A `delays` carrying no
+report-delay override leaves `cases` alone, which is how a
+generation-interval-only configuration is expressed, and one carrying no
+generation interval leaves `infection` alone, which is how `cmmid_rep`
+expresses the report delay on its own.
+"""
+function _delay_kwargs(delays)
+    isnothing(delays) && return (;)
+    gi = isnothing(delays.gi_alpha_prior) ? (;) : (;
+        infection = (n; kwargs...) -> infection_model(n;
+        gi = nmax -> generation_interval_model(nmax;
+            alpha_prior = delays.gi_alpha_prior,
+            theta_prior = delays.gi_theta_prior),
+        gi_nmax = delays.gi_nmax, kwargs...))
+    isnothing(delays.report_mean_prior) && return gi
+    return merge(gi,
+        (;
+            cases = (args...; kwargs...) -> reported_cases_model(args...;
+            onset_to_report = censored_delay_model(delays.report_nmax;
+                mean_prior = delays.report_mean_prior,
+                sd_prior = delays.report_sd_prior),
+            kwargs...)))
+end
+
+"""
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 500, chains = 2)
+                    run_sensitivity, samples = 500, chains = 2,
+                    delays = nothing)
 
 Ordered list of the report's fits as `(; id, kind, thunk)` named tuples. `kind`
 is `:chain` for the headline joint and single-stream fits or `:frozen` for the
@@ -102,7 +142,13 @@ function build_fit_specs(obs;
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 500, chains::Integer = 2)
+        samples::Integer = 500, chains::Integer = 2,
+        delays = nothing)
+
+    ## Delay-submodel overrides, empty unless a configuration is passed. Only
+    ## the fits the line-list comparison runs take them; the frozen and
+    ## sensitivity fits below are the released ones and stay as they are.
+    dkw = _delay_kwargs(delays)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     function fit_frozen_joint(cutoff_date)
@@ -318,7 +364,7 @@ function build_fit_specs(obs;
                     background_re = true,
                     confirmed_positivity_link = :composition,
                     genetic = genetic_seeding_model,
-                    tmrca_days = obs.tmrca_days);
+                    tmrca_days = obs.tmrca_days, dkw...);
                 samples = samples, chains = chains, target_accept = 0.90,
                 callback = fit_callback("joint"))),
         (; id = "exports",
@@ -347,7 +393,7 @@ function build_fit_specs(obs;
                 cases_only_model(obs.n, obs.reported_cases;
                     reported_history = obs.reported_history,
                     suspected_daily_history = obs.suspected_daily_history,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint, dkw...);
                 samples = samples, chains = chains,
                 callback = fit_callback("cases"))),
         (; id = "confirmed",
@@ -360,7 +406,7 @@ function build_fit_specs(obs;
                     confirmed_break_days = obs.confirmed_break_days,
                     confirmed_break_gross_cases =
                     obs.confirmed_break_gross_cases,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint, dkw...);
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed"))),
         (; id = "confirmed_deaths",
@@ -398,9 +444,16 @@ function build_fit_specs(obs;
         (; id = "onsets",
             kind = :chain,
             thunk = () -> nuts_sample(
+                ## `dkw` is splatted whole rather than filtered to the
+                ## generation interval. `onsets_only_model` takes no `cases`
+                ## keyword, so a report-delay override reaches here as a hard
+                ## error instead of being quietly dropped — this fit estimates
+                ## its reporting delay from the triangle, so an override it
+                ## ignored would look like a result. `check_delay_config` in
+                ## scripts/linelist/delays.jl catches it first, with a message.
                 onsets_only_model(obs.n;
                     onset_curve_history = obs.onset_curve_history,
-                    breakpoint = breakpoint);
+                    breakpoint = breakpoint, dkw...);
                 samples = samples, chains = chains,
                 callback = fit_callback("onsets"))),
         (; id = "frozen_validation", kind = :frozen,

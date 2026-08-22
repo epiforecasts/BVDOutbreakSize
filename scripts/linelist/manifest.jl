@@ -25,7 +25,7 @@ const LINELIST_BLOCKS = ("confirmed_case_history", "reported_case_history",
 function linelist_input_dir()
     dir = get(ENV, "LINELIST_INPUT_DIR", "")
     isempty(dir) && error("set LINELIST_INPUT_DIR to a directory holding " *
-          "linelist_streams.csv and onset_curve_scanned.csv. " *
+          "linelist_streams_known.csv and onset_curve_scanned.csv. " *
           "scripts/linelist/README.md gives both schemas, and " *
           "test/fixtures/linelist holds a synthetic pair.")
     isdir(dir) || error("LINELIST_INPUT_DIR is not a directory: $dir")
@@ -94,15 +94,51 @@ end
 ## triangle sit in different directories therefore drops the onset stream and
 ## says nothing, which is why the triangle is copied next to the manifest here
 ## and its absence is fatal.
-function place_onset_curve(input, out)
-    src = joinpath(input, "onset_curve_scanned.csv")
+##
+## `source` decides which triangle. Both are named `onset_curve_scanned.csv`,
+## and they are different constructions of the same quantity:
+##
+##   :linelist   built from recorded onsets in the DHIS2 line list, in
+##               `LINELIST_INPUT_DIR`
+##   :sitrep     this repository's own `data/onset_curve_scanned.csv`,
+##               digitised from the situation-report epidemic-curve figures
+##
+## A situation-report fit handed the line-list triangle would silently be a
+## mixture, and nothing downstream would show it, so the source is named rather
+## than inferred from whichever file happens to be beside the manifest.
+##
+## Returns the vintage count, so the caller can assert the triangle is the one
+## it meant and is not empty.
+function place_onset_curve(input, out; source::Symbol = :linelist,
+        root = dirname(dirname(@__DIR__)))
+    src = if source === :linelist
+        joinpath(input, "onset_curve_scanned.csv")
+    elseif source === :sitrep
+        joinpath(root, "data", "onset_curve_scanned.csv")
+    else
+        error("unknown onset-triangle source `$source`; expected " *
+              ":linelist or :sitrep")
+    end
     isfile(src) || error("missing $src. It is the onset-by-vintage reporting " *
           "triangle; scripts/linelist/README.md gives the " *
           "schema.")
+
+    ## Checked here rather than after `load_observations`, since by then an
+    ## empty triangle is indistinguishable from a fit that never had one.
+    df = CSV.read(src, DataFrame)
+    cols = ("sitrep", "report_date", "onset_date", "confirmed_total")
+    all(c -> c in names(df), cols) ||
+        error("$src needs columns " * join(cols, ", ") * "; found " *
+              join(names(df), ", "))
+    vintages = length(unique(df.sitrep))
+    vintages > 0 ||
+        error("$src holds no vintages, so the onset stream would be dropped " *
+              "silently rather than fitted")
+
     dest = joinpath(out, "onset_curve_scanned.csv")
     cp(src, dest; force = true)
-    @info "onset triangle placed beside the manifest" dest
-    return dest
+    @info "onset triangle placed beside the manifest" source src dest vintages
+    return (; path = dest, source, src, vintages, cells = nrow(df))
 end
 
 ## Read the case streams, failing on a file that is missing or has the wrong
@@ -126,10 +162,18 @@ end
 ## `source` records how the replacement streams were indexed, because that is
 ## the difference between a series with a ragged edge and one without, and it is
 ## not recoverable from the numbers alone.
-function write_manifest(; released, streams, out,
+function write_manifest(; released, streams, out, as_of = nothing,
         source = "DHIS2 case line list, counted by notification date")
     raw = TOML.parsefile(released)
     df = read_streams(streams)
+
+    ## Resolved before the blocks are written, because the cut-off scalar below
+    ## has to be read at the cut-off rather than at the end of the series.
+    last_day = maximum(df.date)
+    cutoff = isnothing(as_of) ? last_day : Date(as_of)
+    cutoff <= last_day ||
+        error("as_of $cutoff is after the last replacement-stream day " *
+              "$last_day, so the fit would run past where the data stop")
 
     for block in LINELIST_BLOCKS
         rows = sort(df[df.stream .== block, :], :date)
@@ -159,13 +203,25 @@ function write_manifest(; released, streams, out,
     ## `confirmed_cases` needs no equivalent: the released manifest carries no
     ## such scalar, so `load_observations` already derives it from whichever
     ## confirmed history it is given.
-    let rows = sort(df[df.stream .== "reported_case_history", :], :date)
+    ##
+    ## Read at the cut-off, not at the end of the replacement series. The two
+    ## are the same day only when the cut-off is the last day the streams
+    ## cover; the known-by construction runs past a pinned cut-off, and taking
+    ## its final value there would tell the model a cut-off total that includes
+    ## cases the history it fits has been truncated before.
+    let rows = sort(
+            df[(df.stream .== "reported_case_history") .& (df.date .<= cutoff), :], :date)
+        isempty(rows) &&
+            error("reported_case_history has no vintage at or before the " *
+                  "cut-off $cutoff, so there is no observed total to " *
+                  "condition on")
         raw["reported_cases"] = Dict{String, Any}(
             "value" => Int(rows.value[end]),
             "source" =>
                 "Last vintage of the replacement " *
-                "reported_case_history above, so the cut-off total and " *
-                "the history it comes from cannot disagree."
+                "reported_case_history above at or before the cut-off, so " *
+                "the cut-off total and the history it comes from cannot " *
+                "disagree."
         )
     end
 
@@ -182,12 +238,44 @@ function write_manifest(; released, streams, out,
     ## The cut-off moves to the last line-list day. `load_observations` drops
     ## vintages after the cut-off, so the situation-report streams are read to
     ## the same date and the two manifests stay comparable.
-    last_day = maximum(df.date)
-    raw["as_of_date"] = string(last_day)
+    ##
+    ## `as_of` overrides it, and every run in a comparison must pass the same
+    ## one. The two stream constructions end on different days (notification
+    ## date trails the snapshot by the trim, snapshot date does not), so left to
+    ## their own last day they sit on different grids and their R_t series are
+    ## not on the same axis. Resolved above, since the cut-off scalar depends on
+    ## it. Vintages after it are left in the blocks: `load_observations` drops
+    ## them, and leaving them makes the manifest a record of what the streams
+    ## held rather than only of what was fitted.
+    raw["as_of_date"] = string(cutoff)
 
     open(out, "w") do io
         TOML.print(io, raw; sorted = true)
     end
-    @info "manifest written" out as_of = string(last_day)
+    @info "manifest written" out as_of=string(cutoff) streams_end=string(last_day)
+    return out
+end
+
+## The comparator: the released manifest with its cut-off moved and nothing else
+## touched, so a fit of it differs from a line-list fit in the data alone.
+##
+## Nothing is substituted, so `confirmed_break_dates` stays: those days mark
+## where INSP retrospectively harmonised its own confirmed series, which is a
+## real feature of the situation-report series this manifest still is.
+## `write_manifest` deletes them precisely because the line list has no such
+## steps.
+function write_baseline_manifest(; released, as_of, out)
+    raw = TOML.parsefile(released)
+    previous = get(raw, "as_of_date", "")
+    cutoff = Date(as_of)
+    isempty(previous) || cutoff <= Date(previous) ||
+        error("as_of $cutoff is after the released manifest's own cut-off " *
+              "$previous, so the fit would run past where the data stop")
+    raw["as_of_date"] = string(cutoff)
+
+    open(out, "w") do io
+        TOML.print(io, raw; sorted = true)
+    end
+    @info "baseline manifest written" out as_of=string(cutoff) released_as_of=previous
     return out
 end
