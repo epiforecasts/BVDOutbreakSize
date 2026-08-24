@@ -575,7 +575,7 @@ contacts_seen,097,2026-08-19,Ituri,9204,persons,see contact_tracing_coverage row
 contact_tracing_coverage,097,2026-08-19,Tshopo,100.0,percent,"section 1.2.1/1.1.3 prose, 473/473"
 contacts_under_follow_up,097,2026-08-19,Tshopo,473,persons,see contact_tracing_coverage row note
 contacts_seen,097,2026-08-19,Tshopo,473,persons,see contact_tracing_coverage row note
-contact_tracing_coverage,097,2026-08-19,Nord-Kivu,80.5,percent,"section 1.2.1/1.1.3 prose, 5830/7540"
+contact_tracing_coverage,097,2026-08-19,Nord-Kivu,80.5,percent,"section 1.2.1/1.1.3 prose, 5830/7540 - PRINTED RATE IS WRONG: 5830/7540 = 77,3%, not the printed 80,5%; recorded as printed"
 contacts_under_follow_up,097,2026-08-19,Nord-Kivu,7540,persons,see contact_tracing_coverage row note
 contacts_seen,097,2026-08-19,Nord-Kivu,5830,persons,see contact_tracing_coverage row note
 contact_tracing_coverage,097,2026-08-19,Haut-Uele,56.6,percent,"section 1.2.1/1.1.3 prose, 848/1498"
