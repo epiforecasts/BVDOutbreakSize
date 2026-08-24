@@ -102,11 +102,10 @@ Changes since v1.13.2
 - The fits keep two chains. The runners report four cores, but they are
   two physical cores with two hyperthreads each, so a third and fourth
   chain share the cores the first two already occupy rather than running
-  beside them. Timed on a runner, the joint model's gradient takes 23.5 ms
-  with one chain, 23.2 ms with two and 35.3 ms with four. The joint fit
-  has taken 272 to 295 of its 350 allowed minutes on recent full builds,
-  against a ceiling of 360, so it has no room for that. The chain count is
-  part of the fit cache key, so raising it would also refit every model.
+  beside them. The joint fit has no room for the extra wall clock and the
+  chain count is part of the fit cache key, so raising it would refit every
+  model. The gradient timings behind this sit beside the fit step in the
+  build workflow, where the setting would be changed.
 
 ### Documentation
 
