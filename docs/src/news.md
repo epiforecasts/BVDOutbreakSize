@@ -107,14 +107,14 @@ Changes since v1.13.2
   used 295 of its 350 allowed minutes on the last full build, against a
   ceiling of 360, so it has no room for that. The chain count is part of
   the fit cache key, so raising it would also refit every model.
+
+### Documentation
+
 - The analysis page describes the sampler settings the fits actually use.
   It reported 1000 post-warmup draws per chain after 1000 adaptation steps
   at a target acceptance probability of 0.85, where the fits run 500 draws
   after 200 adaptation steps, at 0.90 for the joint model and 0.85 for the
   single-stream models.
-
-### Documentation
-
 - Rewrote the reduced-data-streams warning in the README and the summary
   page. The situation reports returned to their full format on 12 August,
   so the note now covers only what stayed frozen: the daily

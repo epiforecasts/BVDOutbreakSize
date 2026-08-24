@@ -76,9 +76,9 @@ jobs:
     name: Fit ${{ matrix.id }}
     needs: list
     runs-on: ubuntu-latest
-    # The current-data joint and the 1-week-back validation joint take ~3h;
-    # give the heaviest fits headroom under GitHub's 360-min per-job cap. The
-    # May-frozen and single-stream fits finish in under an hour.
+    # The current-data joint takes ~5h and the 1-week-back validation joint
+    # ~3h; give the heaviest fits headroom under GitHub's 360-min per-job
+    # cap. The May-frozen and single-stream fits finish in under an hour.
     timeout-minutes: 350
     strategy:
       fail-fast: false
