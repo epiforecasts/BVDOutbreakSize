@@ -1886,7 +1886,8 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# We run two chains of 1000 post-warmup draws each after 1000 warmup adaptation steps, at a target acceptance probability of 0.85.
+# We run two chains of 500 post-warmup draws each after 200 warmup adaptation steps.
+# The joint model samples at a target acceptance probability of 0.90 and each single-stream model at 0.85.
 # Chains initialise from the prior.
 # We fit the joint model and each single-stream model so the per-stream posteriors over the outbreak size can be compared with the joint.
 

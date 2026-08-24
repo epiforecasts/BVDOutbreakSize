@@ -99,6 +99,19 @@ Changes since v1.13.2
   A leftover branch tripped the increment's own already-exists guard on
   every later push, so the first failure was loud and the rest were silent.
 - Turing's compat bound admits 0.46.
+- The fits keep two chains. The runners report four cores, but they are
+  two physical cores with two hyperthreads each, so a third and fourth
+  chain share the cores the first two already occupy rather than running
+  beside them. Timed on a runner, the joint model's gradient takes 23.5 ms
+  with one chain, 23.2 ms with two and 35.3 ms with four. The joint fit
+  used 295 of its 350 allowed minutes on the last full build, against a
+  ceiling of 360, so it has no room for that. The chain count is part of
+  the fit cache key, so raising it would also refit every model.
+- The analysis page describes the sampler settings the fits actually use.
+  It reported 1000 post-warmup draws per chain after 1000 adaptation steps
+  at a target acceptance probability of 0.85, where the fits run 500 draws
+  after 200 adaptation steps, at 0.90 for the joint model and 0.85 for the
+  single-stream models.
 
 ### Documentation
 

@@ -116,6 +116,19 @@ jobs:
         with:
           name: manifest
           path: .
+      # The fits sample two chains (`nuts_sample`), which is the whole of a
+      # runner's parallelism rather than half of it. `ubuntu-latest` reports
+      # four vCPUs, but they are two physical cores with two hyperthreads
+      # each (AMD EPYC 9V74, `Thread(s) per core: 2`, `Core(s) per socket:
+      # 2`, 15 GB). Timing the joint model's Mooncake gradient with k copies
+      # running at once on a runner gives 23.5 ms at k=1, 23.2 ms at k=2,
+      # 34.6 ms at k=3 and 35.3 ms at k=4: the second chain is free and the
+      # third and fourth are not, because they share the two cores already
+      # in use. Four chains would therefore cost about half as much again in
+      # wall clock, which the joint fit has nowhere to put. It took 295 of
+      # the 350 minutes allowed below on the last full build, and GitHub
+      # caps a job at 360. The chain count is also part of the fit cache key
+      # (`fit_content_hash`), so changing it refits everything.
       - name: Fit ${{ matrix.id }}
         if: steps.cache.outputs.cache-hit != 'true'
         env:
