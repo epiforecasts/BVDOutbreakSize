@@ -126,7 +126,7 @@ jobs:
       # third and fourth are not, because they share the two cores already
       # in use. Four chains would therefore cost about half as much again in
       # wall clock, which the joint fit has nowhere to put. It took 295 of
-      # the 350 minutes allowed below on the last full build, and GitHub
+      # the 350 minutes this job allows on the last full build, and GitHub
       # caps a job at 360. The chain count is also part of the fit cache key
       # (`fit_content_hash`), so changing it refits everything.
       - name: Fit ${{ matrix.id }}
