@@ -104,17 +104,18 @@ Changes since v1.13.2
   chain share the cores the first two already occupy rather than running
   beside them. Timed on a runner, the joint model's gradient takes 23.5 ms
   with one chain, 23.2 ms with two and 35.3 ms with four. The joint fit
-  used 295 of its 350 allowed minutes on the last full build, against a
-  ceiling of 360, so it has no room for that. The chain count is part of
-  the fit cache key, so raising it would also refit every model.
+  has taken 272 to 295 of its 350 allowed minutes on recent full builds,
+  against a ceiling of 360, so it has no room for that. The chain count is
+  part of the fit cache key, so raising it would also refit every model.
 
 ### Documentation
 
 - The analysis page describes the sampler settings the fits actually use.
   It reported 1000 post-warmup draws per chain after 1000 adaptation steps
   at a target acceptance probability of 0.85, where the fits run 500 draws
-  after 200 adaptation steps, at 0.90 for the joint model and 0.85 for the
-  single-stream models.
+  after 200 adaptation steps, at 0.90 for the joint model fitted to the
+  current data, 0.85 for the single-stream models and 0.95 for the re-fits
+  to frozen data.
 - Rewrote the reduced-data-streams warning in the README and the summary
   page. The situation reports returned to their full format on 12 August,
   so the note now covers only what stayed frozen: the daily

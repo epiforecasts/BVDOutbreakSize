@@ -76,9 +76,11 @@ jobs:
     name: Fit ${{ matrix.id }}
     needs: list
     runs-on: ubuntu-latest
-    # The current-data joint takes ~5h and the 1-week-back validation joint
-    # ~3h; give the heaviest fits headroom under GitHub's 360-min per-job
-    # cap. The May-frozen and single-stream fits finish in under an hour.
+    # The current-data joint takes 4.5-5h and the 1-week-back validation
+    # joint 3-4.5h; give the heaviest fits headroom under GitHub's 360-min
+    # per-job cap. On a main build the two sensitivity re-fits take 3.5-4.5h
+    # as well. The two treatment fits take one to two hours. The May-frozen
+    # and remaining single-stream fits finish in under an hour.
     timeout-minutes: 350
     strategy:
       fail-fast: false
@@ -125,10 +127,10 @@ jobs:
       # 34.6 ms at k=3 and 35.3 ms at k=4: the second chain is free and the
       # third and fourth are not, because they share the two cores already
       # in use. Four chains would therefore cost about half as much again in
-      # wall clock, which the joint fit has nowhere to put. It took 295 of
-      # the 350 minutes this job allows on the last full build, and GitHub
-      # caps a job at 360. The chain count is also part of the fit cache key
-      # (`fit_content_hash`), so changing it refits everything.
+      # wall clock, which the joint fit has nowhere to put. It has taken 272
+      # to 295 of the 350 minutes this job allows on recent full builds, and
+      # GitHub caps a job at 360. The chain count is also part of the fit
+      # cache key (`fit_content_hash`), so changing it refits everything.
       - name: Fit ${{ matrix.id }}
         if: steps.cache.outputs.cache-hit != 'true'
         env:
