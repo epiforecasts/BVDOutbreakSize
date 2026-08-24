@@ -78,9 +78,9 @@ jobs:
     runs-on: ubuntu-latest
     # The current-data joint takes 4.5-5h and the 1-week-back validation
     # joint 3-4.5h; give the heaviest fits headroom under GitHub's 360-min
-    # per-job cap. On a main build the two sensitivity re-fits take 3.5-4.5h
-    # as well. The two treatment fits take one to two hours. The May-frozen
-    # and remaining single-stream fits finish in under an hour.
+    # per-job cap. On a main build the two sensitivity re-fits take 3.5-4.6h
+    # as well. The two treatment fits take one to two hours. The frozen
+    # vintages and remaining single-stream fits finish in under an hour.
     timeout-minutes: 350
     strategy:
       fail-fast: false

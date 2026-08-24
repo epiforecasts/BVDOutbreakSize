@@ -113,9 +113,9 @@ Changes since v1.13.2
 - The analysis page describes the sampler settings the fits actually use.
   It reported 1000 post-warmup draws per chain after 1000 adaptation steps
   at a target acceptance probability of 0.85, where the fits run 500 draws
-  after 200 adaptation steps, at 0.90 for the joint model fitted to the
-  current data, 0.85 for the single-stream models and 0.95 for the re-fits
-  to frozen data.
+  after 200 adaptation steps. The headline joint model samples at 0.90, its
+  frozen and sensitivity re-fits at 0.95, and every single-stream model at
+  0.85.
 - Rewrote the reduced-data-streams warning in the README and the summary
   page. The situation reports returned to their full format on 12 August,
   so the note now covers only what stayed frozen: the daily
