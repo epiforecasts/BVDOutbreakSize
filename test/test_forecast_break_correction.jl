@@ -3,9 +3,9 @@
 ## by more than that day's notifications, so a raw cumulative difference is
 ## not the count that was notified across the week.
 ##
-## `test_break_day_correction.jl` covers the same quantity as computed inside
-## `scripts/score_releases.jl` for the release scoring, which still carries
-## its own copy of this arithmetic.
+## `test_break_day_correction.jl` covers the same quantity as the release
+## scoring reads it, through `scripts/score_releases.jl`'s stream dispatch
+## onto `confirmed_break_steps`.
 
 @testitem "confirmed_break_correction sums net minus gross in the window" begin
     using BVDOutbreakSize: confirmed_break_correction

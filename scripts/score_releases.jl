@@ -103,6 +103,9 @@ using Statistics: median
 using TOML
 
 using BVDOutbreakSize: is_results_release, select_daily_releases
+## The single implementation of the harmonisation-break `net - gross`
+## arithmetic, shared with the in-report validation (see `src/data.jl`).
+using BVDOutbreakSize: confirmed_break_steps
 
 ## Values of the `fit` column, which names the model a row's forecast or
 ## estimate came from: a per-stream spec id, or one of these three, which
@@ -426,60 +429,45 @@ function baseline_window_covered(obs, grid_date, stream, made_date, horizon)
     return from >= stream_coverage_start(obs, grid_date, stream)
 end
 
-## The stream's own gross-count vector for `confirmed_break_days` — the
-## printed 24h count on each listed harmonisation-break day — or `nothing`
-## for every stream but the two confirmed streams, the only ones `data.jl`
-## lists break days for (see `[confirmed_break_dates]` in
-## `observations.toml`).
-function break_gross_vector(obs, stream)
+## Which confirmed stream `stream` reads its harmonisation-break days from,
+## `:cases` or `:deaths`, or `nothing` for a stream that carries none. The two
+## confirmed streams are the only ones `data.jl` lists break days for (see
+## `[confirmed_break_dates]` in `observations.toml`), so every other stream is
+## `nothing`. So is an `obs` that carries no declaration, or a synthetic one
+## with no printed 24h counts to split a step by.
+function break_stream_kind(obs, stream)
+    (hasproperty(obs, :confirmed_break_days) &&
+     !isempty(obs.confirmed_break_days)) || return nothing
     stream == "confirmed cases" &&
-        return hasproperty(obs, :confirmed_break_gross_cases) ?
-               obs.confirmed_break_gross_cases : nothing
+        return hasproperty(obs, :confirmed_break_gross_cases) ? :cases :
+               nothing
     stream == "confirmed deaths" &&
-        return hasproperty(obs, :confirmed_break_gross_deaths) ?
-               obs.confirmed_break_gross_deaths : nothing
+        return hasproperty(obs, :confirmed_break_gross_deaths) ? :deaths :
+               nothing
     return nothing
 end
 
 ## `(date, correction)` pairs for a stream's harmonisation break days, one
-## per listed day the stream's own history carries a matching vintage for.
-## `correction` is `net - gross`: the vintage's net step (the change between
-## consecutive vintages of the stream's own history) less the printed 24h
-## count, i.e. the part of that day's step which is retrospective backfill
-## rather than same-day notifications (see `[confirmed_break_dates]` in
-## `observations.toml`). Empty for every stream but the two confirmed
-## streams. A break day absent from the (possibly frozen) history
-## — because the vintage it names has not arrived by this `obs`'s cut-off —
-## contributes nothing, matching `truth_at`/`baseline_draws` never seeing a
-## vintage that has not happened yet.
+## per listed day the stream's own history carries a matching vintage for,
+## from `confirmed_break_steps` in `src/data.jl` (the single implementation of
+## the `net - gross` arithmetic, shared with the in-report validation) with
+## its grid days mapped onto calendar dates. Empty for every stream but the
+## two confirmed streams. A break day absent from the (possibly frozen)
+## history — because the vintage it names has not arrived by this `obs`'s
+## cut-off — contributes nothing, matching `truth_at`/`baseline_draws` never
+## seeing a vintage that has not happened yet.
 ##
-## A break day on the stream's first vintage takes the whole cumulative as
-## its step, the same first-vintage-from-zero reading `data.jl`'s own
-## validation uses and the one `cum_at` gives, since before the first
-## vintage it returns zero.
-##
-## The correction is floored at zero. `data.jl` refuses a gross at or above
-## its vintage's net step when the manifest loads, so on the current
-## manifest the floor never binds; it binds only on a snapshot the
-## declaration was carried onto (see `carry_break_days`), whose own vintage
-## of that day may be smaller, and there a negative correction would inflate
-## the baseline rather than correct it.
+## `confirmed_break_steps` floors each correction at zero. `data.jl` refuses a
+## gross at or above its vintage's net step when the manifest loads, so on the
+## current manifest the floor never binds; it binds only on a snapshot the
+## declaration was carried onto (see `carry_break_days`), whose own vintage of
+## that day may be smaller, and there a negative correction would inflate the
+## baseline rather than correct it.
 function break_day_corrections(obs, grid_date, stream)
-    gross = break_gross_vector(obs, stream)
-    gross === nothing && return Tuple{Date, Float64}[]
-    (!hasproperty(obs, :confirmed_break_days) ||
-     isempty(obs.confirmed_break_days)) && return Tuple{Date, Float64}[]
-    h, _ = stream_history(obs, stream)
-    hdays = collect(h.days)
-    out = Tuple{Date, Float64}[]
-    for (i, d) in enumerate(obs.confirmed_break_days)
-        pos = findfirst(==(d), hdays)
-        pos === nothing && continue
-        net = h.counts[pos] - (pos == 1 ? 0 : h.counts[pos - 1])
-        g = i <= length(gross) ? gross[i] : 0
-        push!(out, (grid_date(d), Float64(max(net - g, 0))))
-    end
-    return out
+    kind = break_stream_kind(obs, stream)
+    kind === nothing && return Tuple{Date, Float64}[]
+    steps = confirmed_break_steps(obs; deaths = kind === :deaths)
+    return [(grid_date(d), c) for (d, c) in steps]
 end
 
 ## The total harmonisation correction to subtract from a stream's raw
