@@ -3,15 +3,17 @@
 # comparison, CFR prior, start-date and no-onward-transmission
 # densities, and the one-week-ahead forecast figures.
 
-## Kernel density for a quantity that cannot fall below `lower`, with the axis
-## clipped to the side of the bound the quantity can reach. A Gaussian KDE puts
-## mass past the smallest draw, so a bounded quantity otherwise shows a tail on
-## the impossible side. This is how the count and CFR panels here handle it.
-##
-## Do not narrow the estimator with `boundary` instead: the tabulation drops
-## draws landing on the first grid point while still normalising by the full
-## sample size, so a boundary at the bound discards the mass piled against it,
-## and an unpadded grid wraps under the FFT convolution.
+"""
+Kernel density for a quantity that cannot fall below `lower`, with the axis
+clipped to the side of the bound the quantity can reach. A Gaussian KDE puts
+mass past the smallest draw, so a bounded quantity otherwise shows a tail on
+the impossible side. This is how the count and CFR panels here handle it.
+
+Do not narrow the estimator with `boundary` instead: the tabulation drops
+draws landing on the first grid point while still normalising by the full
+sample size, so a boundary at the bound discards the mass piled against it,
+and an unpadded grid wraps under the FFT convolution.
+"""
 function _bounded_density!(ax, x; lower::Real, kwargs...)
     h = density!(ax, x; kwargs...)
     ## Only the impossible side is clipped. Pinning the upper limit as well
