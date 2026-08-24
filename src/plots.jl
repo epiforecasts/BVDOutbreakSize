@@ -214,7 +214,8 @@ or more fits, built through AlgebraOfGraphics. Pass each fit as
 `lower` clips the axis for a quantity that cannot fall below it, such as a
 count or a duration. The kernel density spreads mass past the smallest draw,
 so without it the curve runs onto the impossible side of the bound. The
-estimate itself is left alone; see [`_bounded_density!`](@ref) for why.
+estimate itself is left alone, for the reason given on
+`_bounded_density!`.
 """
 function plot_density_overlay(
         streams::Pair{String, <:AbstractVector}...;
