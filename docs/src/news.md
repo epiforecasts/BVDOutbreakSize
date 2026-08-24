@@ -12,27 +12,26 @@ Changes since v1.13.2
 
 ### Data
 
-- Advanced the model cut-off from SitRep 089 (11 August) to 17 August.
-  SitReps 090-093 (12-15 August) return to the full-length format after
-  five vintages of the shorter "MVEBDB" brief, restoring the laboratory,
-  point-of-entry and continuity-of-care sections, and advance the
+- Advanced the model cut-off from SitRep 089 (11 August) to SitRep 100
+  (22 August). The reports returned to their full-length format at SitRep
+  090 after five vintages of the shorter "MVEBDB" brief, restoring the
+  laboratory, point-of-entry and continuity-of-care sections. The
   confirmed-case and confirmed-death series, recoveries, isolation
-  occupancy, bed capacity and the 24h analysed volume. The symptom-onset
-  curve is digitised for all four, with SitRep 092 breaking the longest
-  reprint plateau seen so far.
+  occupancy, bed capacity and the 24h analysed volume all advance with
+  them, and the symptom-onset curve is digitised for each new vintage that
+  carries a fresh figure. The daily new-suspected-case count stays frozen
+  at 5 August and the treatment-centre patient-movement series at 2 August.
 - A sixth province, Bas-Uélé, records its first confirmed case at SitRep
   090 (ZS Buta). No isolation, occupancy or laboratory figures are printed
   for it in any vintage, so it contributes zero to every per-province
   stream, following the convention already in place for a non-reporting
   province.
-- The final point, 17 August (5105 confirmed cases, 2420 deaths), comes
-  from the INRB-UMIE mirror alone. INSP has published no situation report
-  beyond 093, verified against its posts and media endpoints rather than
-  inferred from a failed fetch, so no PDF exists to scan for it. Only the
-  two national cumulative series carry that date; every other stream ends
-  at 15 August. `scripts/check_new_sitreps.jl` now reports how far the
-  mirror leads insp.cd, so a mirror-only point is visible rather than
-  silently absorbed.
+- The 17 August point was recorded from the INRB-UMIE mirror alone while
+  INSP had published nothing beyond SitRep 093, verified against its posts
+  and media endpoints rather than inferred from a failed fetch. Publication
+  has since resumed and every stream is scanned from the reports again.
+  `scripts/check_new_sitreps.jl` reports how far the mirror leads insp.cd,
+  so a mirror-only point stays visible rather than silently absorbed.
 - `candidate_signals.csv` gains a `province` column and holds one row per
   signal per vintage per province, replacing the national figure that was
   a hand-made sum over whichever provinces happened to print a count. A
@@ -68,12 +67,38 @@ Changes since v1.13.2
   zero-growth pole, to the fastest growth, and is ordered by growth rate
   rather than by value. The narrative summary carried the same fault and is
   fixed with it.
+- The joint model's score tables show the joint model alone. Every fit was
+  rendered as a row, so each stream's individual fit appeared twice, once
+  in the headline table and again in the section built for it. A frozen
+  fit, which is the joint model refit at an earlier cut-off, was also read
+  as an individual fit rather than a joint one.
+- The persistence baseline is withheld where its own window is not covered
+  by the vintage's reporting, rather than scored from a degenerate centre.
+  An uncovered window let the centre saturate at the whole cumulative to
+  the made date, or collapse to a point mass at zero, and either flattered
+  the fits it was compared against. A test now pins that the baseline sees
+  nothing after the date it is made on, and fails under three deliberate
+  leaks.
 - The in-report forecast validation subtracts a retrospective harmonisation
   from its new-count truth, as the release scoring already did. A frozen
   cut-off sitting before a listed break day and a current cut-off after it
   put records into the confirmed truth that were never notified that week.
   The cumulative rows are unchanged, the harmonisation being genuinely part
   of the reported total.
+
+### Infrastructure
+
+- The macOS test cell runs the platform-sensitive items only. It was the
+  one cell skipping nothing, so it re-ran the sampling fits and the quality
+  checks on the slowest runner, never finished, and was cancelled at
+  GitHub's six-hour ceiling on every run. It now completes in about twelve
+  minutes. The job also carries a timeout below that ceiling, so a stall
+  reports as a failure rather than as a cancellation hours later.
+- The automatic version increment deletes its branch and warns when GitHub
+  refuses the pull request it opens, rather than leaving the branch behind.
+  A leftover branch tripped the increment's own already-exists guard on
+  every later push, so the first failure was loud and the rest were silent.
+- Turing's compat bound admits 0.46.
 
 ### Documentation
 
