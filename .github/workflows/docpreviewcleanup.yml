@@ -4,30 +4,10 @@ on:
   pull_request:
     types: [closed]
 
-concurrency:
-  group: gh-pages-cleanup
-  cancel-in-progress: false
+permissions:
+  contents: write
 
 jobs:
   doc-preview-cleanup:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout gh-pages branch
-        uses: actions/checkout@v7
-        with:
-          ref: gh-pages
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Delete preview and push changes
-        run: |
-            if [ -d "previews/PR$PRNUM" ]; then
-              git config user.name "BVDOutbreakSize"
-              git config user.email "action@github.com"
-              git rm -rf "previews/PR$PRNUM"
-              git commit -m "delete preview for PR$PRNUM"
-              git push origin gh-pages
-            fi
-        env:
-            PRNUM: ${{ github.event.number }}
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: EpiAware/.github/.github/workflows/docs-preview-cleanup.yml@8c1e09003b9cf0d2eb3cbec7aa726855bb365ac5
+    secrets: inherit  # pragma: allowlist secret
