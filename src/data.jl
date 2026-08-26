@@ -616,6 +616,18 @@ function _stream_entry(id::Symbol)
 end
 
 """
+Forecast column names for `stream` as `(; cum, new)`, or `nothing` for a
+stream the forecast does not carry. Built from the registry's
+`forecast_prefix`, so the column names are derived rather than repeated.
+"""
+function stream_forecast_columns(stream)
+    e = _stream_entry(stream_id(stream))
+    isnothing(e.forecast_prefix) && return nothing
+    return (; cum = Symbol(e.forecast_prefix, "_cum"),
+        new = Symbol(e.forecast_prefix, "_new"))
+end
+
+"""
 Date `stream` was last reported in `obs`, or `missing` when `obs` does
 not carry the stream or the stream has no vintages. This is the date of
 the stream's last vintage, since past it the series is only ever repeated

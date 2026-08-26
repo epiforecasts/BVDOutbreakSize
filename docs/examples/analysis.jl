@@ -3501,7 +3501,8 @@ confirmed_cfr_fig #hide
 #
 # The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
 # The summary table reports the confirmed case and death streams, the recovered total and the isolation-bed levels and daily flows.
-# The observed-forecast plot below additionally shows the reported cases and suspected deaths, so every projected stream appears.
+# The observed-forecast plot below additionally shows the suspected case and death streams, so every projected stream appears.
+# The situation reports no longer update those two, so their projection cannot be checked against a later observation and the forecast validation leaves them out.
 
 #md # ```@raw html
 #md # <details><summary>Generate the one-week-ahead forecast</summary>
@@ -3545,7 +3546,7 @@ forecast_latent_fig = plot_forecast_latent(forecast);
 
 forecast_latent_fig #hide
 
-# The observed figure shows the new count each reported stream adds over the horizon: reported cases, suspected deaths, laboratory-confirmed cases, confirmed deaths and recovered, one panel per stream the forecast carries.
+# The observed figure shows the new count each observed stream adds over the horizon: suspected cases, suspected deaths, laboratory-confirmed cases, confirmed deaths and recovered, one panel per stream the forecast carries.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead observed forecast plot</summary>

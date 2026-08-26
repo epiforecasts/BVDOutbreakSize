@@ -1087,6 +1087,56 @@ end
     @test naxes(fig7) == 2
 end
 
+@testitem "forecast validation splits off the streams that stopped" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast, plot_forecast_vs_truth,
+                           stream_reporting, stream_forecast_columns
+    rng = MersenneTwister(35)
+    n = 300
+    naxes(fig) = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
+    fc = DataFrame(
+        cases_cum = rand(rng, 50:150, n), cases_new = rand(rng, 0:30, n),
+        deaths_cum = rand(rng, 40:100, n), deaths_new = rand(rng, 0:20, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        confirmed_deaths_new = rand(rng, 0:5, n))
+    ## The suspected streams stopped being reported 60 days before the
+    ## cut-off; the confirmed streams run to it.
+    grid = 90
+    cutoff = Date(2026, 8, 22)
+    obs = (; cutoff = cutoff, n = grid,
+        reported_history = (; days = [10, grid - 60], counts = [50.0, 90.0]),
+        deaths_history = (; days = [10, grid - 60], counts = [5.0, 9.0]),
+        confirmed_history = (; days = [10, grid], counts = [20.0, 80.0]),
+        confirmed_deaths_history = (; days = [10, grid],
+            counts = [1.0, 18.0]))
+    observed = (cases_cum = 1077, deaths_cum = 246, confirmed_cum = 70,
+        confirmed_deaths_cum = 18)
+    cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum)
+    reporting = Tuple(c for c in cum_cols if stream_reporting(obs, c))
+    stopped = Tuple(c for c in cum_cols if !stream_reporting(obs, c))
+    @test reporting == (:confirmed_cum, :confirmed_deaths_cum)
+    @test stopped == (:cases_cum, :deaths_cum)
+    ## The validation figure draws only the streams still reported, so the
+    ## two stale streams contribute no dashed truth rule: two columns of a
+    ## cumulative and a new panel each.
+    kept = NamedTuple(k => v for (k, v) in pairs(observed) if k in reporting)
+    fig = plot_forecast_vs_truth(fc; observed = kept)
+    @test naxes(fig) == 4
+    ## Their projection is kept as its own figure instead, one panel per
+    ## stopped stream and no observation drawn.
+    stopped_new = [stream_forecast_columns(c).new for c in stopped]
+    fig_stopped = plot_forecast(fc[!, stopped_new])
+    @test fig_stopped isa CairoMakie.Makie.Figure
+    @test naxes(fig_stopped) == 2
+end
+
 @testitem "plot_projection_comparison returns a Makie figure" setup=[
     HeadlessMakie
 ] begin
