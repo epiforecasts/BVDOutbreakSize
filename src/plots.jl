@@ -2333,6 +2333,31 @@ function plot_forecast_vs_truth_latent(fc::DataFrame; now::NamedTuple)
     return fig
 end
 
+## Date ticks for a vintage-indexed axis, at about one label a week.
+## `dates` are the panel's vintage labels, one per x position, so the
+## returned positions index into them. Labels are picked by calendar date
+## rather than by index stride, because the vintages are irregular and a
+## stride drifts off a weekly cadence. Selection walks back from the
+## latest vintage, so the last vintage is always labelled. Once a weekly
+## cadence would need more than `max_ticks` labels the step widens in
+## whole weeks, so the axis stays readable as the series grows. A series
+## too short to carry three ticks keeps every vintage labelled.
+function _vintage_ticks(dates::AbstractVector; step_days::Integer = 7,
+        max_ticks::Integer = 18)
+    n = length(dates)
+    n == 0 && return (Int[], String[])
+    ds = [d isa Date ? d : Date(String(d)) for d in dates]
+    weeks = (ds[end] - ds[begin]).value ÷ step_days + 1
+    step = step_days * max(1, cld(weeks, max_ticks))
+    keep = [n]
+    for i in (n - 1):-1:1
+        (ds[last(keep)] - ds[i]).value >= step && push!(keep, i)
+    end
+    reverse!(keep)
+    length(keep) < 3 && (keep = collect(1:n))
+    return (keep, [string(ds[i]) for i in keep])
+end
+
 """
 Per-vintage conditional one-step-ahead posterior-predictive for the DRC
 streams. For each `panel` the predicted cumulative count at vintage `v`
@@ -2365,12 +2390,18 @@ streams freeze earlier) are cut back to the shared last date. Without
 this the confirmed panel runs further along the date axis than the
 suspected panel and reads as though it overtakes it, when the two are
 simply shown to different end dates.
+
+The date axis carries about one label a week and always labels the last
+vintage, so a long series does not collapse into a wall of labels.
 """
 function plot_vintage_conditional_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
         max_date::Union{Nothing, Date, AbstractString} = nothing)
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
+    ## An empty panel set (a stream group with no members) has no grid to
+    ## lay out, so return a blank figure rather than dividing by zero.
+    isempty(panels) && return Figure()
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
@@ -2425,8 +2456,8 @@ function plot_vintage_conditional_ppc(
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = cumulative ? (col == 1 ? "Cumulative count" : "") :
                      "Daily count",
-            xticks = (x, string.(dates)),
-            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            xticks = _vintage_ticks(dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
         ## 30/60/90% credible ribbons over the situation-report dates.
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
@@ -2448,14 +2479,17 @@ its own baseline). For a non-cumulative panel (a standalone per-day count
 such as the 24h analysed volume or the daily new-suspect inflow) it is the
 count itself. The replicates are already per-vintage increments, so they are
 the modelled incidence directly and are summarised as 30/60/90% credible
-ribbons with the observed incidence overlaid. `panels` and `max_date` match
-[`plot_vintage_conditional_ppc`](@ref).
+ribbons with the observed incidence overlaid. `panels`, `max_date` and the
+weekly date axis match [`plot_vintage_conditional_ppc`](@ref).
 """
 function plot_vintage_incidence_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
         max_date::Union{Nothing, Date, AbstractString} = nothing)
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
+    ## An empty panel set (a stream group with no members) has no grid to
+    ## lay out, so return a blank figure rather than dividing by zero.
+    isempty(panels) && return Figure()
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
@@ -2495,8 +2529,8 @@ function plot_vintage_incidence_ppc(
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
             ylabel = col == 1 ? "New per vintage" : "",
-            xticks = (x, string.(dates)),
-            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            xticks = _vintage_ticks(dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))

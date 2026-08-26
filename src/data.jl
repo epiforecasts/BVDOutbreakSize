@@ -497,6 +497,198 @@ function freeze_observations(
 end
 
 """
+One entry per observation stream the manifest loader carries, in the order
+the report presents them. Each entry is a `NamedTuple`:
+
+- `id`: the canonical short identifier used across the package.
+- `field`: the field of a loaded observation set holding the stream's
+  dated history.
+- `label`: the display title the report uses for the stream.
+- `score_label`: the string label the forecast archive and the release
+  scoring table use, or `nothing` for a stream that is not scored.
+- `forecast_prefix`: the stem of the stream's forecast columns (`:cases`
+  for `cases_cum` and `cases_new`), or `nothing` for a stream that is not
+  forecast.
+
+This is the single list of streams, so a stream is named once rather than
+once per consumer. [`stream_id`](@ref) resolves any of the four
+vocabularies back to `id`.
+"""
+const OBSERVATION_STREAMS = (
+    (; id = :suspected_cases, field = :reported_history,
+        label = "Suspected cases", score_label = "reported cases",
+        forecast_prefix = :cases),
+    (; id = :suspected_deaths, field = :deaths_history,
+        label = "Suspected deaths", score_label = "suspected deaths",
+        forecast_prefix = :deaths),
+    (; id = :suspected_daily, field = :suspected_daily_history,
+        label = "New suspects/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :suspected_daily_deaths, field = :suspected_daily_deaths_history,
+        label = "New suspected deaths/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :confirmed_cases, field = :confirmed_history,
+        label = "Confirmed cases", score_label = "confirmed cases",
+        forecast_prefix = :confirmed),
+    (; id = :confirmed_deaths, field = :confirmed_deaths_history,
+        label = "Confirmed deaths", score_label = "confirmed deaths",
+        forecast_prefix = :confirmed_deaths),
+    (; id = :recovered, field = :recovered_history,
+        label = "Recovered (confirmed)", score_label = "recovered",
+        forecast_prefix = :recovered),
+    (; id = :tests_analysed, field = :lab_history,
+        label = "Specimens analysed (cumulative)", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :tests_analysed_daily, field = :lab_daily_history,
+        label = "Specimens analysed (24h)", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :tests_received, field = :tests_received_history,
+        label = "Specimens received", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :isolation_beds, field = :isolation_history,
+        label = "Patients in isolation", score_label = "isolation beds",
+        forecast_prefix = nothing),
+    (; id = :bed_capacity, field = :bed_capacity_history,
+        label = "Bed capacity", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_admissions, field = :treatment_admissions_history,
+        label = "Admissions/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_deaths, field = :treatment_deaths_history,
+        label = "In-care deaths/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_ruleouts, field = :treatment_ruleout_history,
+        label = "Rule-outs/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_absconded, field = :treatment_absconded_history,
+        label = "Absconded/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_beds, field = :treatment_confirmed_incare_history,
+        label = "Confirmed in care", score_label = "treatment beds",
+        forecast_prefix = nothing),
+    (; id = :suspect_beds, field = :treatment_suspect_incare_history,
+        label = "Suspects in care",
+        score_label = "isolation beds (suspected)",
+        forecast_prefix = nothing),
+    (; id = :onset_reports, field = :onset_report_history,
+        label = "Onset reports", score_label = "onset reports",
+        forecast_prefix = nothing),
+    (; id = :exports, field = :export_case_days,
+        label = "Uganda exports", score_label = "exports",
+        forecast_prefix = nothing))
+
+"""
+$(TYPEDSIGNATURES)
+
+Calendar date of a grid day-index, where day `obs.n` is the cut-off and
+day 1 is the seeding day. Every dated history stores day-indices on this
+grid, so this is how a vintage is read back as a date.
+"""
+grid_date(obs, day::Integer)::Date = obs.cutoff - Day(obs.n - day)
+
+"""
+$(TYPEDSIGNATURES)
+
+Resolve `stream` to its canonical identifier in [`OBSERVATION_STREAMS`](@ref).
+Accepts a canonical identifier, an observation-set history field name, a
+scoring label, or a forecast column name (`:cases_cum` and `:cases_new`
+both resolve to `:suspected_cases`). The four vocabularies are disjoint,
+so the mapping is unambiguous. Errors on an unknown stream, naming the
+identifiers it knows.
+"""
+function stream_id(stream)::Symbol
+    for e in OBSERVATION_STREAMS
+        stream === e.id && return e.id
+        stream === e.field && return e.id
+        !isnothing(e.score_label) && stream == e.score_label && return e.id
+        if !isnothing(e.forecast_prefix)
+            for suffix in ("_cum", "_new")
+                stream === Symbol(e.forecast_prefix, suffix) && return e.id
+            end
+        end
+    end
+    known = join(string.(getfield.(OBSERVATION_STREAMS, :id)), ", ")
+    return error("unknown stream '$stream'. Known streams: $known.")
+end
+
+function _stream_entry(id::Symbol)
+    OBSERVATION_STREAMS[findfirst(
+        e -> e.id === id, OBSERVATION_STREAMS)]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Date `stream` was last reported in `obs`, or `missing` when `obs` does
+not carry the stream or the stream has no vintages. This is the date of
+the stream's last vintage, since past it the series is only ever repeated
+at its last reported value rather than genuinely observed.
+
+The Uganda exports are a dated list of detections rather than a series of
+vintages, so their last reported date is the later of the last detected
+import and the last detected import death.
+"""
+function stream_last_date(obs, stream)::Union{Date, Missing}
+    id = stream_id(stream)
+    if id === :exports
+        days = Int[]
+        for f in (:export_case_days, :export_death_days)
+            hasproperty(obs, f) && append!(days, Int.(getproperty(obs, f)))
+        end
+        isempty(days) && return missing
+        return grid_date(obs, maximum(days))
+    end
+    field = _stream_entry(id).field
+    hasproperty(obs, field) || return missing
+    h = getproperty(obs, field)
+    isempty(h.days) && return missing
+    return grid_date(obs, maximum(h.days))
+end
+
+"""
+Days a stream's last vintage may lag the cut-off and still count as
+reporting. One reporting week, which is also the forecast horizon, so a
+stream that skips a single situation report is not read as stopped.
+"""
+const STREAM_REPORTING_GRACE_DAYS = 7
+
+"""
+$(TYPEDSIGNATURES)
+
+Whether `stream` was still being reported at the cut-off of `obs`, that
+is whether its last vintage falls within `grace` days of the cut-off. A
+stream `obs` does not carry, or one with no vintages, is not reporting.
+"""
+function stream_reporting(obs, stream;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS)::Bool
+    d = stream_last_date(obs, stream)
+    return !ismissing(d) && (obs.cutoff - d) <= Day(grace)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Reporting status of every stream `obs` carries, one row per entry of
+[`OBSERVATION_STREAMS`](@ref) and in that order. Columns: the canonical
+`stream` identifier, its display `label`, the `last_date` it reported,
+whether it is still `reporting` at the cut-off, and `days_since` that
+last report.
+"""
+function stream_report_status(obs;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS)
+    rows = NamedTuple[]
+    for e in OBSERVATION_STREAMS
+        hasproperty(obs, e.field) || continue
+        d = stream_last_date(obs, e.id)
+        push!(rows,
+            (stream = e.id, label = e.label, last_date = d,
+                reporting = stream_reporting(obs, e.id; grace),
+                days_since = ismissing(d) ? missing : (obs.cutoff - d).value))
+    end
+    return DataFrame(rows)
+end
+
+"""
     m_prior_centre(as_of_date; base_date, m_base, doubling_days)
 
 Centre for the doubling-count prior `m`, based on `m_base` doublings at
