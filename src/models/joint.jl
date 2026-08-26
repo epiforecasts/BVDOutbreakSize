@@ -755,6 +755,18 @@ the implied per-suspected (`suspected_positivity`) and per-test
                 clamp(Int(confirmed_history.days[1]), 1, n)
     _conf_base_vec = [t >= _conf_cap ? _conf_base : 0 for t in 1:n]
     cumulative_confirmed := _conf_inc_cum .+ _conf_base_vec
+    ## Cumulative trajectories for the remaining observed count streams, so
+    ## the forecast reads each stream's own cut-off daily rate off the chain
+    ## rather than inverting its cumulative total under exponential growth.
+    ## That inversion collapses towards zero once the fitted growth rate is
+    ## at or below zero, which is not what a stream still reporting daily is
+    ## doing. Each of these sums to the stream's cut-off expected total, so
+    ## none needs the baseline re-add the confirmed-case path above takes.
+    cumulative_reports := cumsum(cases_state.reports_daily)
+    cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
+    cumulative_confirmed_deaths := cumsum(
+        confirmed_deaths_state.confirmed_death_daily)
+    cumulative_recovered := cumsum(recovered_state.recovered_daily)
     onset_to_confirmation_pmf := convolve_pmf(
         cases_state.report_pmf, confirmed_state.receipt_pmf)
     onset_to_death_confirmation_pmf := convolve_pmf(

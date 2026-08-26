@@ -688,3 +688,210 @@ end
     @test maximum(abs.(cut21 .- cut14)) > 1e-6
     @test got != cut14
 end
+
+@testitem "confirmed deaths survive a stalled suspected stream" tags=[
+    :slow
+] setup=[ForecastFixtures] begin
+    using Statistics: median
+    using BVDOutbreakSize: forecast_reported
+
+    chn=_forecast_chain(200)
+    ## The published suspected-death total has stalled below the confirmed
+    ## death total, which is what the DRC series does once confirmation
+    ## overtakes the frozen suspected headline. Capping the confirmed-death
+    ## replicate at the forecast suspected cumulative would clamp it below
+    ## its own origin and force every new count to zero.
+    fc=forecast_reported(chn; horizon = 7,
+        obs_cases = 905, obs_deaths = 246,
+        obs_confirmed = 4000, obs_confirmed_deaths = 2642)
+    @test median(fc.confirmed_deaths_new) > 0
+    @test all(fc.confirmed_deaths_cum .>= 2642)
+
+    ## While the suspected total still leads, the thinning cap holds.
+    capped=forecast_reported(chn; horizon = 7,
+        obs_cases = 905, obs_deaths = 300,
+        obs_confirmed = 4000, obs_confirmed_deaths = 100)
+    @test all(capped.confirmed_deaths_cum .<= capped.deaths_cum)
+end
+
+@testitem "confirmed deaths project from their own trajectory" tags=[
+    :slow
+] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    import FlexiChains
+    using Statistics: median
+    using BVDOutbreakSize: forecast_reported
+
+    ## A declining chain over a long-running outbreak. Inverting the
+    ## confirmed-death cumulative under exponential growth at a negative
+    ## rate collapses the implied daily rate towards zero, so a stream still
+    ## reporting deaths every day is projected at almost nothing. The
+    ## cumulative trajectory carries the real daily rate.
+    @model function _cd_traj_test(with_trajectory::Bool)
+        r ~ truncated(Normal(-0.02, 0.001); upper = -1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.3, 0.01); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        T := 150.0
+        expected_reports_T ~ truncated(Normal(4000.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(100.0, 5.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(9000.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(0.9, 0.01); lower = 1e-3)
+        expected_confirmed_T ~ truncated(Normal(3000.0, 50.0); lower = 1.0)
+        expected_confirmed_deaths_T ~
+        truncated(Normal(280.0, 5.0); lower = 1.0)
+        cd_daily ~ truncated(Normal(20.0, 0.5); lower = 1.0)
+        if with_trajectory
+            cumulative_confirmed_deaths := cumsum(fill(cd_daily, 10))
+        end
+        return nothing
+    end
+    _chain(flag) = sample(_cd_traj_test(flag), Prior(), 300;
+        chain_type = FlexiChains.VNChain, progress = false)
+    _fc(flag) = forecast_reported(_chain(flag); horizon = 7,
+        obs_cases = 8000, obs_deaths = 4000,
+        obs_confirmed = 3000, obs_confirmed_deaths = 280)
+
+    with_traj = median(_fc(true).confirmed_deaths_new)
+    without = median(_fc(false).confirmed_deaths_new)
+    ## Roughly 20 deaths a day over a shrinking week, against the handful the
+    ## exponential-age inversion implies.
+    @test with_traj > 100
+    @test without < 20
+end
+
+@testitem "each count stream is replicated through its own dispersion" tags=[
+    :slow
+] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    import FlexiChains
+    using Statistics: mean, std
+    using BVDOutbreakSize: forecast_reported, forecast_stream
+
+    ## The population-mean dispersion is near-Poisson while the confirmed
+    ## stream's own is heavily overdispersed, so replicating the confirmed
+    ## column through the population value would understate its spread.
+    @model function _per_stream_k_test()
+        r ~ truncated(Normal(0.03, 0.0005); lower = 1e-3)
+        T := 100.0
+        k ~ truncated(Normal(500.0, 1.0); lower = 1.0)
+        k_confirmed ~ truncated(Normal(2.0, 0.02); lower = 0.1)
+        expected_reports_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(20.0, 1.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 5.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.2, 0.01); lower = 1e-3)
+        expected_confirmed_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
+        return nothing
+    end
+    chn = sample(_per_stream_k_test(), Prior(), 800;
+        chain_type = FlexiChains.VNChain, progress = false)
+    fc = forecast_reported(chn; horizon = 7,
+        obs_cases = 3000, obs_deaths = 200, obs_confirmed = 3000)
+
+    rel(v) = std(v) / mean(v)
+    ## Same projected mean, so the spread difference is the dispersion.
+    @test rel(fc.confirmed_new) > 2 * rel(fc.cases_new)
+
+    ## The two forecasters agree for the same chain, stream and horizon.
+    st = forecast_stream(chn, :confirmed_cases; horizon = 7,
+        obs_value = 3000)
+    @test abs(mean(st) - mean(fc.confirmed_new)) < 0.1 * mean(fc.confirmed_new)
+    @test abs(std(st) - std(fc.confirmed_new)) < 0.25 * std(fc.confirmed_new)
+end
+
+@testitem "the reproduction-number continuation widens as sqrt(horizon)" tags=[
+    :slow
+] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated, product_distribution
+    import FlexiChains
+    using Statistics: std
+    using BVDOutbreakSize: forecast_reported
+
+    ## The fitted walk sits on weekly knots of step SD `sigma_rw`, so
+    ## continuing it forward spreads log-Rt as the square root of the
+    ## horizon. Carrying the last innovation forward as a fixed daily slope
+    ## instead spreads it linearly, four times as wide at four weeks.
+    @model function _rt_continuation_test()
+        r ~ truncated(Normal(0.02, 0.0005); lower = 1e-3)
+        k ~ truncated(Normal(50.0, 1.0); lower = 1.0)
+        T := 100.0
+        expected_reports_T ~ truncated(Normal(300.0, 1.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(20.0, 1.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 5.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.2, 1e-4); lower = 1e-3)
+        var"rt_state.sigma_rw" ~ truncated(Normal(0.15, 1e-4); lower = 1e-3)
+        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), 8))
+        var"gi_state.α" ~ truncated(Normal(2.71, 0.01); lower = 0.1)
+        var"gi_state.θ" ~ truncated(Normal(5.65, 0.02); lower = 0.1)
+        return nothing
+    end
+    chn = sample(_rt_continuation_test(), Prior(), 2000;
+        chain_type = FlexiChains.VNChain, progress = false)
+    _rt(h) = forecast_reported(chn; horizon = h,
+        obs_cases = 3000, obs_deaths = 200).rt_forecast
+
+    s7 = std(log.(_rt(7)))
+    s28 = std(log.(_rt(28)))
+    @test 0.12 < s7 < 0.19
+    @test 1.5 < s28 / s7 < 2.8
+end
+
+@testitem "bvd_joint exposes every forecast cumulative trajectory" tags=[
+    :slow
+] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: load_observations, bvd_joint,
+                           genetic_seeding_model, _daily_at_cutoff,
+                           _daily_at_cutoff_any, _draws, _STREAM_SPEC
+
+    ## `_STREAM_SPEC` and `forecast_reported` name a cumulative trajectory
+    ## per observed count stream. A name the model never exposes falls back
+    ## silently to inverting the cut-off cumulative under exponential
+    ## growth, which collapses towards zero at a non-positive growth rate.
+    obs = load_observations()
+    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        recovered_history = obs.recovered_history,
+        recovered_cases = obs.recovered_cases,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        breakpoint = obs.n - obs.who_first_sitrep_days,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+    chn = sample(m, Prior(), 10;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    ## Each stream's cut-off daily rate is recoverable, and its trajectory
+    ## ends on the stream's own cut-off expected total, so none of them needs
+    ## a baseline re-add on top.
+    pairs = ((:cumulative_reports, :expected_reports_T),
+        (:cumulative_deaths_total, :expected_deaths_T),
+        (:cumulative_confirmed_deaths, :expected_confirmed_deaths_T),
+        (:cumulative_recovered, :expected_recovered_T))
+    for (traj, total) in pairs
+        daily = _daily_at_cutoff(chn, traj)
+        @test !isnothing(daily)
+        @test length(daily) == 10
+        ends = [collect(v)[end] for v in vec(collect(chn[traj]))]
+        @test all(isapprox.(ends, _draws(chn, total); rtol = 1e-6))
+    end
+
+    ## The confirmed-death stream resolves through `_STREAM_SPEC` too, so
+    ## the per-stream forecaster takes the same route.
+    @test !isnothing(
+        _daily_at_cutoff_any(chn, _STREAM_SPEC[:confirmed_deaths].trajectory))
+end

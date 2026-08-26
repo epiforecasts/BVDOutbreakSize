@@ -1804,7 +1804,7 @@ positivity and the expected confirmed-death count.
     p_death_conf := p_pos_daily[n]
 
     return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
-        expected_confirmed_deaths)
+        confirmed_death_daily, expected_confirmed_deaths)
 end
 
 """

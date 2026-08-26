@@ -23,8 +23,10 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # The bed validation is weak at a one-week-back freeze.
 # The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
 # This widens the projected bed interval.
-# Unlike the scores further down, the confirmed new-count rows here keep any retrospective harmonisation step the week contained.
-# This means a week holding one reads high against a forecast that never predicted it.
+# Like the scores further down, the confirmed new-count rows here take out any retrospective harmonisation step the week contained.
+# Such a step reattaches records notified earlier, so it is not something the forecast was predicting.
+# A validation week containing no harmonisation day carries no correction, and the rows then read as the raw window counts.
+# The cumulative rows are scored against the published total, harmonisation included.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
