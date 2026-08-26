@@ -26,6 +26,12 @@
     @test confirmed_break_correction(obs, 5, 9) == 0.0
     @test confirmed_break_correction(obs, 1, 4) == 0.0
     @test confirmed_break_correction(obs, 1, 5) == 70.0
+
+    ## A break day that fell before the validation window contributes
+    ## nothing to it, for cases and for deaths alike, so a week holding no
+    ## harmonisation is scored on its raw counts.
+    @test confirmed_break_correction(obs, 6, 9) == 0.0
+    @test confirmed_break_correction(obs, 6, 9; deaths = true) == 0.0
 end
 
 @testitem "confirmed_break_correction is zero without a listed break" begin

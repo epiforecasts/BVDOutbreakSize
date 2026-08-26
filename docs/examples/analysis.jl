@@ -1954,8 +1954,10 @@ diagnostics_table( #hide
 # #### One-week-ahead forecast
 #
 # We project each DRC stream seven days beyond the cut-off.
-# The reproduction number keeps evolving over the horizon by continuing the recent trend of its trajectory rather than holding it fixed, with no further interventions and no saturation imposed.
+# The reproduction number keeps evolving over the horizon by continuing its weekly walk past the cut-off rather than holding it fixed, with no further interventions and no saturation imposed.
+# The walk carries fresh innovations at its fitted step scale, so the spread of the projected reproduction number widens with the square root of the horizon, as the fitted walk's does.
 # The projection carries both parameter and observation uncertainty.
+# Each count stream is replicated day by day through its own fitted dispersion and the daily replicates summed, so the observation noise enters at the resolution the dispersion was fitted at.
 # We forecast the DRC observation streams as forecast targets: the reported cases and suspected deaths, the laboratory-confirmed cases and confirmed deaths, the isolation/treatment beds and the recovered total.
 # For the beds we project the bed demand, the need a week ahead under unconstrained supply (the cut-off demand grown by the horizon factor like the case inflow).
 # We also project the supply-limited occupancy that this demand produces against the bed capacity.

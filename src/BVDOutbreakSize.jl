@@ -4,7 +4,7 @@ using Statistics: quantile, mean, cor
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain
-using Random: MersenneTwister
+using Random: AbstractRNG, MersenneTwister
 using Dates: Date, Day, date2epochdays, epochdays2date
 using ADTypes: AutoMooncake
 using Mooncake: Mooncake
