@@ -2501,12 +2501,17 @@ surveillance_pair_fig #hide
 # The checks cover two groups: the dated DRC surveillance streams and the Uganda exports.
 # The latent infection process is not checked here, as it carries no direct observation, and is shown instead as the estimated cumulative trajectories in the [joint model estimates](@ref "Joint model estimates") figure.
 #
-# The surveillance group is checked first.
-# Each panel is shown over its own reporting dates with the observed series overlaid.
-# The cumulative streams appear as replicated cumulative trajectories; the daily new-suspect inflow and isolation-bed occupancy appear day by day, each day's replicated count against the observed count.
-# The cumulative suspected case and death streams stop at their last stable vintage on 26 May.
-# The daily new-suspect inflow then runs 4-11 June, the window in which the cumulative suspected series freezes.
-# The isolation occupancy runs 1-11 June, and the laboratory-confirmed streams keep reporting to the cut-off.
+# The surveillance group is checked first, split by whether a stream was still being reported at the cut-off.
+# A stream counts as still reporting when its last situation-report vintage falls within a week of the cut-off.
+# Each group is shown twice, as cumulative trajectories and then as per-vintage incidence.
+# Every panel runs over its own reporting dates with the observed series overlaid, and its date axis is labelled about once a week.
+
+# #### Streams still reporting
+#
+# ##### Cumulative
+#
+# A cumulative panel is drawn as replicated cumulative trajectories.
+# A daily panel (the isolation-bed occupancy, the 24h analysed volume) is drawn day by day, each day's replicated count against the observed count.
 
 #md # ```@raw html
 #md # <details><summary>Joint posterior predictive plot</summary>
@@ -2607,6 +2612,7 @@ _vintage_replicates(pp, vn) = collect(pp[_Prefixed(vn)]);
 _vintage_dates(days) = string.(obs.seeding .+ Day.(days .- 1));
 
 reported_panel = (;
+    id = :suspected_cases,
     title = "Suspected cases",
     dates = _vintage_dates(obs.reported_history.days),
     replicates = _vintage_replicates(
@@ -2615,9 +2621,9 @@ reported_panel = (;
 ## Daily new-suspect inflow: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily
 ## count against the observed daily count rather than a running total. Its
-## days (4-7 June) pick up where the cumulative suspected panel freezes on
-## 26 May.
+## days pick up where the cumulative suspected panel freezes.
 suspected_daily_panel = (;
+    id = :suspected_daily,
     title = "New suspects/day",
     dates = _vintage_dates(obs.suspected_daily_history.days),
     replicates = _vintage_replicates(
@@ -2639,6 +2645,7 @@ suspected_daily_panel = (;
 _iso_split_days = Set(Int.(obs.treatment_confirmed_incare_history.days))
 _iso_keep = [!(Int(d) in _iso_split_days) for d in obs.isolation_history.days]
 isolation_panel = (;
+    id = :isolation_beds,
     title = "Patients in isolation",
     dates = _vintage_dates(obs.isolation_history.days[_iso_keep]),
     replicates = _vintage_replicates(
@@ -2646,6 +2653,7 @@ isolation_panel = (;
     observed = obs.isolation_history.counts[_iso_keep],
     colour = :darkorange, cumulative = false);
 deaths_panel = (;
+    id = :suspected_deaths,
     title = "Suspected deaths",
     dates = _vintage_dates(obs.deaths_history.days),
     replicates = _vintage_replicates(
@@ -2654,9 +2662,10 @@ deaths_panel = (;
 ## Daily new suspected deaths: a per-day count (not cumulative), so the panel
 ## is drawn with `cumulative = false` — each replicate is its own daily count
 ## against the observed daily count rather than a running total. Its days
-## (7-14 June) pick up where the cumulative suspected-death panel freezes on
-## 26 May, the deaths analogue of the new-suspects-per-day panel.
+## pick up where the cumulative suspected-death panel freezes, the deaths
+## analogue of the new-suspects-per-day panel.
 suspected_daily_deaths_panel = (;
+    id = :suspected_daily_deaths,
     title = "New suspected deaths/day",
     dates = _vintage_dates(obs.suspected_daily_deaths_history.days),
     replicates = _vintage_replicates(
@@ -2669,6 +2678,7 @@ suspected_daily_deaths_panel = (;
 ## check as the suspected streams. This is the testing volume the
 ## confirmed-positivity denominator is built from.
 tests_analysed_panel = (;
+    id = :tests_analysed,
     title = "Specimens analysed (cumulative)",
     dates = _vintage_dates(obs.lab_history.days),
     replicates = _vintage_replicates(
@@ -2680,6 +2690,7 @@ tests_analysed_panel = (;
 ## (`cumulative = false`): the modelled daily analysed volume against the
 ## observed 24h count on each reported day.
 tests_analysed_daily_panel = (;
+    id = :tests_analysed_daily,
     title = "Specimens analysed (24h)",
     dates = _vintage_dates(obs.lab_daily_history.days),
     replicates = _vintage_replicates(
@@ -2715,6 +2726,7 @@ if occursin("confirmed_state.confirmed_positives.positives", string(k))));
 _conf_late = _vintage_replicates(
     pp_joint, @varname(late_increments.increments));
 confirmed_panel = (;
+    id = :confirmed_cases,
     title = "Confirmed cases",
     dates = _vintage_dates(_conf_window_days),
     replicates = [vcat(collect(e), collect(p), collect(l))
@@ -2726,6 +2738,7 @@ confirmed_panel = (;
 ## modelled confirmed-death trajectory up to the cut-off, so they get the
 ## same cumulative conditional check.
 confirmed_deaths_panel = (;
+    id = :confirmed_deaths,
     title = "Confirmed deaths",
     dates = _vintage_dates(obs.confirmed_deaths_history.days),
     replicates = _vintage_replicates(
@@ -2737,6 +2750,7 @@ confirmed_deaths_panel = (;
 ## (the confirmation-to-recovery convolution of the daily confirmed cases) up
 ## to the cut-off, so it gets the same cumulative conditional check.
 recovered_panel = (;
+    id = :recovered,
     title = "Recovered (confirmed)",
     dates = _vintage_dates(obs.recovered_history.days),
     replicates = _vintage_replicates(
@@ -2749,6 +2763,7 @@ recovered_panel = (;
 ## replicate is the modelled daily flow on a report day against the observed
 ## Tableau 6 count.
 admissions_panel = (;
+    id = :treatment_admissions,
     title = "Admissions/day",
     dates = _vintage_dates(obs.treatment_admissions_history.days),
     replicates = _vintage_replicates(
@@ -2756,6 +2771,7 @@ admissions_panel = (;
     observed = obs.treatment_admissions_history.counts,
     colour = :teal, cumulative = false);
 incare_deaths_panel = (;
+    id = :treatment_deaths,
     title = "In-care deaths/day",
     dates = _vintage_dates(obs.treatment_deaths_history.days),
     replicates = _vintage_replicates(
@@ -2763,6 +2779,7 @@ incare_deaths_panel = (;
     observed = obs.treatment_deaths_history.counts,
     colour = :darkred, cumulative = false);
 ruleouts_panel = (;
+    id = :treatment_ruleouts,
     title = "Rule-outs/day",
     dates = _vintage_dates(obs.treatment_ruleout_history.days),
     replicates = _vintage_replicates(
@@ -2770,6 +2787,7 @@ ruleouts_panel = (;
     observed = obs.treatment_ruleout_history.counts,
     colour = :goldenrod, cumulative = false);
 absconded_panel = (;
+    id = :treatment_absconded,
     title = "Absconded/day",
     dates = _vintage_dates(obs.treatment_absconded_history.days),
     replicates = _vintage_replicates(
@@ -2782,8 +2800,9 @@ absconded_panel = (;
 ## `cumulative = false` — each replicate is the modelled confirmed-in-care or
 ## suspect-in-care bed count on a report day against the observed sub-stock.
 ## On these split days the total-occupancy panel is not scored, so the two
-## sub-stock panels carry the 13-23 June window.
+## sub-stock panels carry the window instead.
 confirmed_incare_panel = (;
+    id = :treatment_beds,
     title = "Confirmed in care",
     dates = _vintage_dates(obs.treatment_confirmed_incare_history.days),
     replicates = _vintage_replicates(
@@ -2791,6 +2810,7 @@ confirmed_incare_panel = (;
     observed = obs.treatment_confirmed_incare_history.counts,
     colour = :darkgoldenrod, cumulative = false);
 suspect_incare_panel = (;
+    id = :suspect_beds,
     title = "Suspects in care",
     dates = _vintage_dates(obs.treatment_suspect_incare_history.days),
     replicates = _vintage_replicates(
@@ -2812,6 +2832,7 @@ _onset_ppc_groups = [findall(==(r), obs.onset_curve_history.report_days)
 _onset_ppc_replicates_raw = _vintage_replicates(
     pp_joint, @varname(onset_report_state.increments))
 onset_panel = (;
+    id = :onset_reports,
     title = "Onset reports (net correction/snapshot)",
     dates = _vintage_dates(_onset_ppc_report_days),
     replicates = [[sum(collect(rep)[g]) for g in _onset_ppc_groups]
@@ -2820,18 +2841,35 @@ onset_panel = (;
                 for g in _onset_ppc_groups],
     colour = :mediumpurple, cumulative = false);
 
-## Each panel runs to its own last vintage: the suspected case and death
-## streams freeze at 26 May (their last stable vintage) while the
-## laboratory-confirmed streams keep reporting to the cut-off, so the
-## confirmed panels show the full series the model is fitting, not just the
-## window the suspected streams cover.
+## Each panel runs to its own last vintage, so a stream that keeps
+## reporting shows the full series the model is fitting rather than the
+## window the streams that stopped earlier cover. The per-stream
+## calibration table reads this ordered list too, so it stays whole and
+## the two stream groups are filtered out of it.
 vintage_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
     recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
     admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel,
     confirmed_incare_panel, suspect_incare_panel, onset_panel];
-joint_vintage_ppc_fig = plot_vintage_conditional_ppc(vintage_panels);
+## The incidence view drops the treatment-centre flow and occupancy-split
+## panels, whose per-day counts are already their own incidence.
+vintage_incidence_panels = [
+    reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
+    deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
+    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
+    onset_panel];
+## Whether a panel's stream was still being reported at the cut-off, from
+## the shared registry rule (last vintage within a week of the cut-off)
+## rather than a per-page list of dates that goes stale.
+_still_reporting(p) = stream_reporting(obs, p.id);
+reporting_panels = filter(_still_reporting, vintage_panels);
+stopped_panels = filter(!_still_reporting, vintage_panels);
+reporting_incidence_panels = filter(
+    _still_reporting, vintage_incidence_panels);
+stopped_incidence_panels = filter(
+    !_still_reporting, vintage_incidence_panels);
+joint_vintage_ppc_fig = plot_vintage_conditional_ppc(reporting_panels);
 
 #md # ```@raw html
 #md # </details>
@@ -2839,6 +2877,8 @@ joint_vintage_ppc_fig = plot_vintage_conditional_ppc(vintage_panels);
 
 joint_vintage_ppc_fig #hide
 
+# ##### Per-vintage incidence
+#
 # This is the same check applied to per-vintage incidence: the count reported between consecutive situation reports, rather than the running cumulative.
 # Plotting the increment lets a rise or a slowdown in each stream read directly off the height of each step, where the near-straight cumulative line would hide it.
 # The replicates are the modelled per-vintage increments, shown as 30/60/90% credible ribbons with the observed increment overlaid.
@@ -2848,10 +2888,7 @@ joint_vintage_ppc_fig #hide
 #md # ```
 
 joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
-    [reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
-    deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
-    recovered_panel, tests_analysed_panel, tests_analysed_daily_panel,
-    onset_panel]);
+    reporting_incidence_panels);
 
 #md # ```@raw html
 #md # </details>
@@ -2859,6 +2896,41 @@ joint_vintage_incidence_fig = plot_vintage_incidence_ppc(
 
 joint_vintage_incidence_fig #hide
 
+# #### Streams no longer reporting
+#
+# These streams stopped reporting before the cut-off, so their panels end earlier than the ones above.
+#
+# ##### Cumulative
+
+#md # ```@raw html
+#md # <details><summary>Joint posterior predictive plot</summary>
+#md # ```
+
+joint_vintage_ppc_stopped_fig = plot_vintage_conditional_ppc(stopped_panels);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_vintage_ppc_stopped_fig #hide
+
+# ##### Per-vintage incidence
+
+#md # ```@raw html
+#md # <details><summary>Per-vintage incidence posterior predictive plot</summary>
+#md # ```
+
+joint_vintage_incidence_stopped_fig = plot_vintage_incidence_ppc(
+    stopped_incidence_panels);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+joint_vintage_incidence_stopped_fig #hide
+
+# #### Stream calibration
+#
 # We score each stream's per-vintage conditional predictions against the observed counts.
 # `bias` is the mean forecast bias over the vintages (negative under-predicted, positive over-predicted, zero when the observed counts sit at the predictive median).
 # `50%/90% coverage` are the fractions of vintages whose observed count falls inside the central 50% and 90% predictive intervals; a well-calibrated stream keeps these near the nominal levels.
@@ -2892,7 +2964,8 @@ stream_calibration_table #hide
 #md # </details>
 #md # ```
 
-# The exports group is checked next.
+# #### Exports
+#
 # The Uganda export and export-death streams are dated per-day series, each import or death scored as a Poisson at its detection day.
 # The scalar posterior predictive sums each replicate's per-day count vector across the dated days, giving the cumulative export and death total to compare with the observed count.
 
@@ -3923,8 +3996,11 @@ mkpath(dashboard_dir)
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
+## The report splits the surveillance panels by whether the stream was
+## still reporting at the cut-off. The dashboard shows one grid, so it is
+## drawn here over the full ordered panel set.
 CairoMakie.save(joinpath(dashboard_dir, "reported_cases.png"),
-    joint_vintage_ppc_fig)
+    plot_vintage_conditional_ppc(vintage_panels))
 
 ## Headline prose: the same bullet summary shown at the top of the Results
 ## section, serialised to markdown so the dashboard renders it verbatim.

@@ -749,6 +749,79 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "_vintage_ticks labels about one vintage a week" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## A long, irregular vintage grid: daily from 14 May with a handful of
+    ## days missing, as the situation reports skip days.
+    all_dates = [Date("2026-05-14") + Day(i) for i in 0:100]
+    skipped = Set(Date.(["2026-05-24", "2026-05-25", "2026-06-30",
+        "2026-07-01", "2026-08-11"]))
+    dates = string.(filter(!in(skipped), all_dates))
+    pos, labels = _vintage_ticks(dates)
+    @test length(pos) == length(labels)
+    @test issorted(pos)
+    @test allunique(pos)
+    @test all(1 .<= pos .<= length(dates))
+    @test labels == [dates[i] for i in pos]
+    ## The last vintage is always labelled, and consecutive labels are at
+    ## least a week apart.
+    @test last(pos) == length(dates)
+    gaps = diff(Date.(labels))
+    @test all(g -> g >= Day(7), gaps)
+    ## A weekly cadence over a 100-day span is around 15 labels, far below
+    ## the ~93 vintages the axis would otherwise carry.
+    @test 10 <= length(pos) <= 18
+end
+
+@testitem "_vintage_ticks widens the step on a long series" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## Three years of weekly vintages. A strict weekly rule would put ~157
+    ## labels on the axis, so the step widens in whole weeks instead.
+    dates = string.([Date("2026-05-14") + Day(7i) for i in 0:156])
+    pos, labels = _vintage_ticks(dates)
+    @test length(pos) <= 18
+    @test last(pos) == length(dates)
+    gaps = diff(Date.(labels))
+    @test all(g -> g >= Day(7), gaps)
+    @test all(g -> g.value % 7 == 0, gaps)
+end
+
+@testitem "_vintage_ticks keeps every label on a short series" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## Six consecutive daily vintages span under two weeks, so a weekly
+    ## rule would leave two labels. Every vintage is kept instead.
+    dates = string.([Date("2026-05-18") + Day(i) for i in 0:5])
+    pos, labels = _vintage_ticks(dates)
+    @test pos == collect(1:6)
+    @test labels == dates
+    @test _vintage_ticks(String[]) == (Int[], String[])
+end
+
+@testitem "vintage PPC plots take a long series and an empty group" setup=[
+    HeadlessMakie
+] begin
+    using Dates: Date, Day
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_conditional_ppc,
+                           plot_vintage_incidence_ppc
+    rng = MersenneTwister(24)
+    dates = string.([Date("2026-05-14") + Day(i) for i in 0:100])
+    reps = [rand(rng, 1:30, length(dates)) for _ in 1:60]
+    observed = cumsum(rand(rng, 1:30, length(dates)))
+    panel = (; title = "Confirmed", dates = dates,
+        replicates = reps, observed = observed)
+    @test plot_vintage_conditional_ppc([panel]) isa CairoMakie.Makie.Figure
+    @test plot_vintage_incidence_ppc([panel]) isa CairoMakie.Makie.Figure
+    ## A stream group with no members (an early cut-off where nothing has
+    ## stopped reporting yet) renders as a blank figure.
+    @test plot_vintage_conditional_ppc(NamedTuple[]) isa
+          CairoMakie.Makie.Figure
+    @test plot_vintage_incidence_ppc(NamedTuple[]) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
     using Distributions: Beta
     using BVDOutbreakSize: plot_cfr_prior
