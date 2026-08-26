@@ -29,7 +29,10 @@ The dispersion is fitted against single-day counts and short vintage increments,
 - The reproduction number continues its fitted walk past the cut-off.
 The forecast repeated the last sampled innovation as a fixed daily slope for the whole horizon, so the spread in log-`R_t` grew with the horizon rather than with its square root, putting the four-week reproduction number between 0.245 and 14.9.
 It now draws fresh weekly innovations at the fitted step scale and interpolates between them, as the walk is built in the first place.
-- The forecast validation subtracts a retrospective harmonisation from the cumulative truth as well as the new-count truth.
+
+The forecast validation is corrected with them.
+
+- A retrospective harmonisation now comes out of the cumulative truth as well as the new-count truth.
 A projection cannot contain an administrative reattachment, so leaving it in the truth scored the forecast against something it could not produce.
 This is a no-op at the current cut-off and bites whenever a break day falls inside a validation week.
 
