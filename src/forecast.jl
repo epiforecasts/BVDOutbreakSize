@@ -21,34 +21,13 @@ function _nb_rand(rng, k, μ)
     return rand(rng, NegativeBinomial(k, p))
 end
 
-## New latent count over the horizon, continuing the cut-off daily value
-## `daily_T` at the constant daily growth `r`: the geometric sum
-## `daily_T Σ_{d=1}^{h} e^{r d}`, which tends to `daily_T · h` as `r → 0`.
-function _geometric_new(daily_T, r, horizon)
-    er = exp(r)
-    h = float(horizon)
-    return abs(er - 1) < 1e-8 ? daily_T * h :
-           daily_T * er * (exp(r * h) - 1) / (er - 1)
-end
-
-## New latent count over the horizon under a per-day evolving growth rate
-## `rs[d]` (one entry per horizon day): the cut-off daily value `daily_T`
-## carried forward as `Σ_{d=1}^{h} daily_T · Π_{j≤d} e^{rs[j]}`. With a
-## constant rate this reduces to `_geometric_new`.
-function _evolving_new(daily_T, rs)
-    total = zero(float(daily_T))
-    fac = one(float(daily_T))
-    @inbounds for r in rs
-        fac *= exp(r)
-        total += daily_T * fac
-    end
-    return total
-end
-
 ## Per-day projected latent means over the horizon: the cut-off daily value
-## `daily_T` carried forward under the per-day rate path `rs` (one entry per
-## horizon day), or at the constant rate `r` when the chain does not carry
-## the walk. Summing the result gives `_evolving_new` / `_geometric_new`.
+## `daily_T` carried forward as `daily_T · Π_{j≤d} e^{rs[j]}`, one entry per
+## horizon day, under the per-day rate path `rs`. A chain that does not
+## carry the walk holds the cut-off rate `r` constant, which reduces the
+## product to the geometric `daily_T · e^{r d}`. Summing gives the new count
+## the stream adds over the horizon, and the per-day entries are what the
+## observation replicate is drawn against.
 function _daily_means(daily_T, rs, r, horizon::Integer)
     means = Vector{Float64}(undef, horizon)
     fac = 1.0
