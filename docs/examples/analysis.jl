@@ -2506,7 +2506,7 @@ surveillance_pair_fig #hide
 # Each group is shown twice, as cumulative trajectories and then as per-vintage incidence.
 # Every panel runs over its own reporting dates with the observed series overlaid, and its date axis is labelled about once a week.
 
-# #### Currently reporting streams
+# #### Streams still reporting
 #
 # ##### Cumulative
 #
@@ -2899,7 +2899,7 @@ joint_vintage_incidence_fig #hide
 
 # #### Streams no longer reporting
 #
-# These streams stopped before the cut-off, so each panel ends at its own last vintage and the model is checked against them over the window they cover.
+# These streams stopped reporting before the cut-off, so their panels end earlier than the ones above.
 #
 # ##### Cumulative
 

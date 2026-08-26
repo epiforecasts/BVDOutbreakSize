@@ -676,16 +676,21 @@ last report.
 """
 function stream_report_status(obs;
         grace::Integer = STREAM_REPORTING_GRACE_DAYS)
-    rows = NamedTuple[]
-    for e in OBSERVATION_STREAMS
-        hasproperty(obs, e.field) || continue
-        d = stream_last_date(obs, e.id)
-        push!(rows,
-            (stream = e.id, label = e.label, last_date = d,
-                reporting = stream_reporting(obs, e.id; grace),
-                days_since = ismissing(d) ? missing : (obs.cutoff - d).value))
-    end
-    return DataFrame(rows)
+    entries = [e for e in OBSERVATION_STREAMS if hasproperty(obs, e.field)]
+    last_dates = Union{Date, Missing}[stream_last_date(obs, e.id)
+                                      for e in entries]
+    ## Columns are built typed rather than from a row vector, so a stream
+    ## with no vintages (a `missing` date) cannot widen the whole table to
+    ## `Any` and leave the reporting flag unusable as an index.
+    return DataFrame(
+        stream = Symbol[e.id for e in entries],
+        label = String[e.label for e in entries],
+        last_date = last_dates,
+        reporting = Bool[stream_reporting(obs, e.id; grace)
+                         for e in entries],
+        days_since = Union{Int, Missing}[ismissing(d) ? missing :
+                                         (obs.cutoff - d).value
+                                         for d in last_dates])
 end
 
 """
