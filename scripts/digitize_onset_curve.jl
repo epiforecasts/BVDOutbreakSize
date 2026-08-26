@@ -113,7 +113,9 @@ const CONFIG = [
     # floor. Re-including it needs a calibration fix verified to reproduce
     # 059-100 unchanged; see the issue linked in data/README.md.
     ("099", Date(2026, 8, 21), Date(2026, 8, 17)),
-    ("100", Date(2026, 8, 22), Date(2026, 8, 17))
+    ("100", Date(2026, 8, 22), Date(2026, 8, 17)),
+    ("101", Date(2026, 8, 23), Date(2026, 8, 24)),
+    ("102", Date(2026, 8, 24), Date(2026, 8, 24))
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -139,7 +141,9 @@ const Y_AXIS_STEP = Dict(
     "096" => 25,
     "097" => 25,
     "099" => 25,
-    "100" => 25
+    "100" => 25,
+    "101" => 25,
+    "102" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
