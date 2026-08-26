@@ -2843,10 +2843,9 @@ onset_panel = (;
 
 ## Each panel runs to its own last vintage, so a stream that keeps
 ## reporting shows the full series the model is fitting rather than the
-## window the streams that stopped earlier cover. Both figures below are
-## drawn from this ordered list, which the per-stream calibration table
-## also reads, so it stays whole and the two stream groups are filtered
-## from it.
+## window the streams that stopped earlier cover. The per-stream
+## calibration table reads this ordered list too, so it stays whole and
+## the two stream groups are filtered out of it.
 vintage_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,
@@ -2854,7 +2853,7 @@ vintage_panels = [
     admissions_panel, incare_deaths_panel, ruleouts_panel, absconded_panel,
     confirmed_incare_panel, suspect_incare_panel, onset_panel];
 ## The incidence view drops the treatment-centre flow and occupancy-split
-## panels, whose per-day counts already are their own incidence.
+## panels, whose per-day counts are already their own incidence.
 vintage_incidence_panels = [
     reported_panel, suspected_daily_panel, isolation_panel, confirmed_panel,
     deaths_panel, suspected_daily_deaths_panel, confirmed_deaths_panel,

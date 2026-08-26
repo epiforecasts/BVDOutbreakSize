@@ -611,9 +611,12 @@ function stream_id(stream)::Symbol
     return error("unknown stream '$stream'. Known streams: $known.")
 end
 
+## Registry entry for a canonical id, already resolved by `stream_id`.
 function _stream_entry(id::Symbol)
-    OBSERVATION_STREAMS[findfirst(
-        e -> e.id === id, OBSERVATION_STREAMS)]
+    for e in OBSERVATION_STREAMS
+        e.id === id && return e
+    end
+    return error("no registry entry for stream id '$id'.")
 end
 
 """
