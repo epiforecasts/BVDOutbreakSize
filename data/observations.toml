@@ -72,10 +72,7 @@
 # 17 August 2026 is mirror-only (no INSP SitRep PDF published for 16 or
 # 17 August as of this update, 20 August 2026): only confirmed_case_history
 # and confirmed_death_history carry a 17 August point, sourced from the
-# INRB-UMIE mirror per the note in each stream's source string. Every
-# other stream still ends at its 15 August (SitRep 093) value; the loader
-# tolerates this the same way it already tolerates treatment_* being
-# frozen well before the cut-off.
+# INRB-UMIE mirror per the note in each stream's source string.
 as_of_date = "2026-08-24"
 
 [exported_cases]
