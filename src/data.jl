@@ -578,8 +578,6 @@ const OBSERVATION_STREAMS = (
         forecast_prefix = nothing))
 
 """
-$(TYPEDSIGNATURES)
-
 Calendar date of a grid day-index, where day `obs.n` is the cut-off and
 day 1 is the seeding day. Every dated history stores day-indices on this
 grid, so this is how a vintage is read back as a date.
@@ -587,8 +585,6 @@ grid, so this is how a vintage is read back as a date.
 grid_date(obs, day::Integer)::Date = obs.cutoff - Day(obs.n - day)
 
 """
-$(TYPEDSIGNATURES)
-
 Resolve `stream` to its canonical identifier in [`OBSERVATION_STREAMS`](@ref).
 Accepts a canonical identifier, an observation-set history field name, a
 scoring label, or a forecast column name (`:cases_cum` and `:cases_new`
@@ -620,8 +616,6 @@ function _stream_entry(id::Symbol)
 end
 
 """
-$(TYPEDSIGNATURES)
-
 Date `stream` was last reported in `obs`, or `missing` when `obs` does
 not carry the stream or the stream has no vintages. This is the date of
 the stream's last vintage, since past it the series is only ever repeated
@@ -656,8 +650,6 @@ stream that skips a single situation report is not read as stopped.
 const STREAM_REPORTING_GRACE_DAYS = 7
 
 """
-$(TYPEDSIGNATURES)
-
 Whether `stream` was still being reported at the cut-off of `obs`, that
 is whether its last vintage falls within `grace` days of the cut-off. A
 stream `obs` does not carry, or one with no vintages, is not reporting.
@@ -669,8 +661,6 @@ function stream_reporting(obs, stream;
 end
 
 """
-$(TYPEDSIGNATURES)
-
 Reporting status of every stream `obs` carries, one row per entry of
 [`OBSERVATION_STREAMS`](@ref) and in that order. Columns: the canonical
 `stream` identifier, its display `label`, the `last_date` it reported,
