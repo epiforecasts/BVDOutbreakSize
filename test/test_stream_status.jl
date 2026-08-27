@@ -24,6 +24,20 @@
     @test occursin("confirmed_cases", err.msg)
 end
 
+@testitem "stream_forecast_columns names the forecast columns" begin
+    using BVDOutbreakSize: stream_forecast_columns
+    ## Derived from the registry's forecast_prefix, so the column names are
+    ## not repeated per consumer, and resolvable from any vocabulary.
+    @test stream_forecast_columns(:confirmed_cases) ==
+          (cum = :confirmed_cum, new = :confirmed_new)
+    @test stream_forecast_columns(:confirmed_cum) ==
+          (cum = :confirmed_cum, new = :confirmed_new)
+    @test stream_forecast_columns("suspected deaths") ==
+          (cum = :deaths_cum, new = :deaths_new)
+    ## A stream the forecast does not carry has no columns.
+    @test isnothing(stream_forecast_columns(:tests_analysed))
+end
+
 @testitem "stream_last_date is the stream's last vintage" begin
     using Dates: Date, Day
     using BVDOutbreakSize: stream_last_date

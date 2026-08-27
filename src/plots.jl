@@ -2037,9 +2037,10 @@ One-week-ahead forecast of the observed count streams from
 Panels cover reported cases, suspected deaths, laboratory-confirmed cases,
 confirmed deaths and recovered, each drawn only when the forecast carries that
 stream's `*_new` column, so a fit that observes fewer streams shows fewer
-panels. Each panel histograms the projected new count with its 90% predictive
-interval shaded. The latent counterparts are shown by
-[`plot_forecast_latent`](@ref).
+panels. Passing a column subset restricts the panels further, which is how the
+report draws the stopped streams on their own. Each panel histograms the
+projected new count with its 90% predictive interval shaded. The latent
+counterparts are shown by [`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
@@ -2205,8 +2206,10 @@ when the forecast carries that stream's `*_cum`/`*_new` columns and an observed
 cumulative count is supplied for it. `observed` is a `NamedTuple` mapping a
 stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
 cumulative count at the target date. A stream absent from `observed` is
-skipped. `baseline` maps the same columns to the cumulative count at the
-forecast origin (default `0`), so the observed new count is
+skipped, which is how the caller withholds a stream whose reporting does not
+cover the target date (see [`stream_reporting`](@ref)). `baseline` maps the
+same columns to the cumulative count at the forecast origin (default `0`), so
+the observed new count is
 `max(observed − baseline − breaks, 0)`. `breaks` is keyed the same way and
 carries each stream's retrospective harmonisation correction over the
 forecast window (see [`confirmed_break_correction`](@ref)), defaulting to
@@ -2275,8 +2278,9 @@ function plot_forecast_vs_truth(fc::DataFrame;
         end
         vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
-    for (j, stream_entry) in enumerate(streams)
-        ccol, ncol, name, colour, obs_cum, obs_new, origin, indiv_new = stream_entry
+    for (j, entry) in enumerate(streams)
+        ccol, ncol, name, colour, obs_cum, obs_new, origin,
+        indiv_new = entry
         ## The individual fit forecasts new counts from the frozen origin, so
         ## its cumulative overlay is anchored there.
         indiv_cum = isnothing(indiv_new) ? nothing : indiv_new .+ origin

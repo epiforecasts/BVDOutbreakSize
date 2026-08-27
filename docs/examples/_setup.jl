@@ -44,6 +44,31 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## run to it, or the freeze date for streams that stop earlier).
     hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
 
+    ## The forecast's count streams, split by whether the situation reports
+    ## still update each one (`stream_reporting`). A stream that has stopped
+    ## carries a cumulative total that only repeats its last reported value,
+    ## so it can be projected but not validated against an observation.
+    ## `scripts/score_releases.jl` withholds the same streams, though by its
+    ## own per-target rule rather than this one. Both pages read the split
+    ## from here so they agree.
+    forecast_cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum, :recovered_cum)
+    reporting_cum_cols = Tuple(c for c in forecast_cum_cols
+    if stream_reporting(obs, c))
+    stopped_cum_cols = Tuple(c for c in forecast_cum_cols
+    if !stream_reporting(obs, c))
+    ## The matching new-count columns, for a figure that takes the forecast
+    ## frame column by column rather than a keyed NamedTuple.
+    new_cols(cols) = [stream_forecast_columns(c).new for c in cols]
+    ## Keep the entries of a stream-keyed NamedTuple (`observed`, `baseline`,
+    ## `individual`) belonging to `cols`, whichever of a stream's cumulative
+    ## or new-count column each side is keyed by.
+    function keep_streams(nt, cols)
+        ids = [stream_id(c) for c in cols]
+        return NamedTuple(k => v
+        for (k, v) in pairs(nt) if stream_id(k) in ids)
+    end
+
     ## The fits are defined once in `docs/fits/registry.jl` as a registry, so
     ## each can be run and cached independently — one per CI matrix job, or
     ## an HPC task — and loaded here through the content-addressed cache

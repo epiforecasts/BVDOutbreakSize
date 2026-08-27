@@ -19,6 +19,10 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # ## Forecast validation
 #
 # How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
+# Only the streams the situation reports are still updating are validated here.
+# A stream that has stopped being reported carries a cumulative total that repeats its last reported value, so there is no observation for the past week to score against.
+# The scoring tables further down withhold such a window for the same reason.
+# The projections for those streams are shown separately below.
 # The frozen fit also conditions on the isolation beds, so the projected bed occupancy is scored against the beds held a week later.
 # The bed validation is weak at a one-week-back freeze.
 # The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
@@ -96,8 +100,10 @@ validation_individual_isolation = _validation_individual_new(
 
 ## The observed beds at the current cut-off (the forecast target), so the
 ## frozen-fit bed forecast is scored against what the beds actually held.
-_obs_beds = isempty(obs.isolation_history.counts) ? missing :
-            obs.isolation_history.counts[end]
+## Held back once the beds stop being reported, since the last count would
+## then be carried forward rather than observed at the target date.
+_obs_beds = stream_reporting(obs, :isolation_beds) ?
+            obs.isolation_history.counts[end] : missing
 ## Same observed/baseline keying as the plot below, so the table covers every
 ## fitted count stream (cumulative and new-count rows) plus the bed level.
 ## A harmonisation-break day between the frozen cut-off and the current one
@@ -112,17 +118,29 @@ validation_breaks = (
     confirmed_deaths_cum = confirmed_break_correction(
         obs, frozen_lastweek.o.n, obs.n; deaths = true))
 
+## Observed cumulative at the target date per stream, keyed by the forecast's
+## cumulative column; `baseline` is each stream's origin cumulative (the
+## frozen cut-off), so the new count is scored against observed minus origin,
+## less any harmonisation the window carries (see `validation_breaks`). Both
+## the table and the plot below take the still-reported streams
+## (`reporting_cum_cols`, from the setup block): a stream the situation
+## reports have stopped updating has an origin and a target reading the same
+## repeated total, so its cumulative truth is stale and its new-count truth is
+## a guaranteed zero.
+validation_observed = (cases_cum = obs.reported_cases,
+    deaths_cum = obs.total_deaths,
+    confirmed_cum = obs.confirmed_cases,
+    confirmed_deaths_cum = obs.confirmed_deaths,
+    recovered_cum = obs.recovered_cases)
+validation_baseline = (cases_cum = frozen_lastweek.o.reported_cases,
+    deaths_cum = frozen_lastweek.o.total_deaths,
+    confirmed_cum = frozen_lastweek.o.confirmed_cases,
+    confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
+    recovered_cum = frozen_lastweek.o.recovered_cases)
+
 validation_table = forecast_vs_truth(validation_forecast;
-    observed = (cases_cum = obs.reported_cases,
-        deaths_cum = obs.total_deaths,
-        confirmed_cum = obs.confirmed_cases,
-        confirmed_deaths_cum = obs.confirmed_deaths,
-        recovered_cum = obs.recovered_cases),
-    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
-        deaths_cum = frozen_lastweek.o.total_deaths,
-        confirmed_cum = frozen_lastweek.o.confirmed_cases,
-        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
-        recovered_cum = frozen_lastweek.o.recovered_cases),
+    observed = keep_streams(validation_observed, reporting_cum_cols),
+    baseline = keep_streams(validation_baseline, reporting_cum_cols),
     breaks = validation_breaks,
     isolation = _obs_beds);
 
@@ -140,9 +158,9 @@ validation_table #hide
 #md # </details>
 #md # ```
 
-# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each fitted count stream the forecast carries (reported cases, suspected deaths, confirmed cases, confirmed deaths and recovered).
+# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each still-reported count stream the forecast carries.
 # The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
-# Each stream draws only when the forecast carries its column, so a fit observing fewer streams shows fewer panels.
+# Each stream draws only when the forecast carries its column and the observation covers the target date, so a fit observing fewer streams shows fewer panels.
 # Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted density alongside the joint's histogram.
 # Recovered has no individual fit and draws the joint alone.
 
@@ -150,23 +168,11 @@ validation_table #hide
 #md # <details><summary>Forecast-versus-observed plot</summary>
 #md # ```
 
-## Observed cumulative at the target date per stream, keyed by the forecast's
-## cumulative column; `baseline` is each stream's origin cumulative (the frozen
-## cut-off), so the new-count panel is scored against observed minus origin,
-## less any harmonisation the window carries (see `validation_breaks`).
 validation_fig = plot_forecast_vs_truth(validation_forecast;
-    observed = (cases_cum = obs.reported_cases,
-        deaths_cum = obs.total_deaths,
-        confirmed_cum = obs.confirmed_cases,
-        confirmed_deaths_cum = obs.confirmed_deaths,
-        recovered_cum = obs.recovered_cases),
-    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
-        deaths_cum = frozen_lastweek.o.total_deaths,
-        confirmed_cum = frozen_lastweek.o.confirmed_cases,
-        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
-        recovered_cum = frozen_lastweek.o.recovered_cases),
+    observed = keep_streams(validation_observed, reporting_cum_cols),
+    baseline = keep_streams(validation_baseline, reporting_cum_cols),
     breaks = validation_breaks,
-    individual = validation_individual);
+    individual = keep_streams(validation_individual, reporting_cum_cols));
 
 #md # ```@raw html
 #md # </details>
@@ -215,6 +221,42 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 #md # ```
 
 validation_latent_fig #hide
+
+# ### Streams no longer reported
+#
+# The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
+# The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
+# These are the model's projections rather than a validation of them.
+
+#md # ```@raw html
+#md # <details><summary>Forecast for the streams no longer reported</summary>
+#md # ```
+
+## The last-reported date per stopped stream, and the frozen fit's own
+## projection for them. `plot_forecast` draws a panel per new-count column
+## the frame carries, so passing the stopped streams' columns alone gives the
+## projection without the fabricated truth rule the validation figure would
+## otherwise draw against a repeated total.
+validation_stopped_streams = let s = stream_report_status(obs),
+    ids = [stream_id(c) for c in stopped_cum_cols]
+
+    keep = [r.stream in ids for r in eachrow(s)]
+    DataFrame("Stream" => s[keep, :label],
+        "Last reported" => s[keep, :last_date])
+end
+_stopped_new_cols = [c
+                     for c in new_cols(stopped_cum_cols)
+                     if c in propertynames(validation_forecast)]
+validation_stopped_fig = plot_forecast(
+    validation_forecast[!, _stopped_new_cols]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+validation_stopped_streams #hide
+
+validation_stopped_fig #hide
 
 # ## Forecast scoring across releases
 #
