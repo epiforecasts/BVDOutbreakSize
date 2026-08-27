@@ -6,6 +6,64 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.15.0
+
+Changes since v1.14.0
+
+### Fixes
+
+Five defects in the one-week-ahead forecast are corrected here.
+All five affected the headline forecast in the published report, not only the evaluation, so skill numbers from earlier releases were measured against a forecaster carrying them.
+That is why 90% coverage sat at 1.00 at nearly every stream and horizon against a nominal 0.90.
+
+- Each observed count stream now projects from its own cumulative trajectory.
+`cumulative_reports` and `cumulative_deaths_total` were named by the forecast and by the stream registry but defined in no model, so reported cases, suspected deaths and confirmed deaths all fell back to inverting the cumulative total under exponential growth.
+That inversion collapses towards zero once the fitted growth rate is at or below zero, and on one cached fit gave a median 0.55 confirmed deaths per day against an observed 17.
+- The confirmed-death forecast is no longer capped at the cumulative suspected deaths.
+The model does impose a thinning, but per day and on the latent pool, before positivity scales it down.
+The forecast capped a different quantity against a reported headline that froze at 246 on 26 May while confirmed deaths passed 246 on 19 June, clamping the forecast below its own origin and flooring the new count at zero in most draws.
+- Each stream is replicated through its own dispersion rather than the population mean.
+The per-stream forecaster already used the right one, so the two disagreed for the same model on the same stream.
+- The observation replicate accumulates day by day rather than in one draw on the horizon total.
+The dispersion is fitted against single-day counts and short vintage increments, so carrying it on the summed mean inflated the overdispersion term by roughly the length of the horizon.
+- The reproduction number continues its fitted walk past the cut-off.
+The forecast repeated the last sampled innovation as a fixed daily slope for the whole horizon, so the spread in log-`R_t` grew with the horizon rather than with its square root, putting the four-week reproduction number between 0.245 and 14.9.
+It now draws fresh weekly innovations at the fitted step scale and interpolates between them, as the walk is built in the first place.
+
+The forecast validation is corrected with them.
+
+- A retrospective harmonisation now comes out of the cumulative truth as well as the new-count truth.
+A projection cannot contain an administrative reattachment, so leaving it in the truth scored the forecast against something it could not produce.
+This is a no-op at the current cut-off and bites whenever a break day falls inside a validation week.
+
+### Report
+
+- The joint posterior predictive checks are split by whether a stream is still reported, cumulative then per-vintage within each group, and the vintage axes tick weekly rather than crowding as the outbreak runs on.
+- The forecast is validated only against streams the situation reports still update.
+Reported cases and suspected deaths stopped on 26 May, so their new-count truth was a guaranteed zero and the figure was scoring a forecast against an unmoving series, which the release scoring already withheld.
+They are still drawn, in their own figure, as a projection rather than a validation.
+- The sensitivity page said the confirmed new-count rows keep any retrospective harmonisation step.
+The code has subtracted it since the break-day correction was consolidated.
+
+### Data
+
+- Advanced the model cut-off from SitRep 100 (22 August) to SitRep 102 (24 August).
+Both are clean days, with the cumulative case and death increments equal to the printed 24h gross.
+Bas-Uélé prints its first traveller count at SitRep 102.
+
+### Infrastructure
+
+- The docs-preview cleanup collects previews that land after the pull request closes.
+The close-triggered job assumed the preview existed by then, but the docs build is fanned across runners and publishes hours later, so it found nothing and exited green every time, leaving two hundred preview directories against three open pull requests.
+A nightly sweep now drops every preview directory with no open pull request behind it, and refuses to run when the pull-request listing fails.
+
+### Known issues
+
+- The release comparison mixes two forecast constructions.
+Every row in it is reconstructed by running each release tag's own code, so the historical rows keep the defects corrected above and cannot be regenerated without rewriting what those tags would have produced.
+Read a change in forecast width across this release as a change in the code rather than in the outbreak.
+- The automatic version increment is wedged by a stale branch and skips silently on every push, so `Project.toml` does not advance on its own (#607).
+
 ## v1.14.0
 
 Changes since v1.13.2
