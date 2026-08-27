@@ -62,7 +62,7 @@ end
     @test confirmed_break_correction(empty_hist, 0, 99) == 0.0
 end
 
-@testitem "forecast_vs_truth subtracts the break from the new-count truth" begin
+@testitem "forecast_vs_truth subtracts the break from both truths" begin
     using DataFrames: DataFrame
     using BVDOutbreakSize: forecast_vs_truth
 
@@ -80,27 +80,40 @@ end
 
     @test newrow(plain) == 200.0
     @test newrow(corrected) == 130.0
-    ## The cumulative row scores the reported total, which the harmonisation
-    ## is genuinely part of, so it is untouched.
-    @test cumrow(plain) == cumrow(corrected) == 500.0
+    ## The projected cumulative is the origin plus the projected new count,
+    ## so it cannot contain a reattachment either. Both truths drop it, and
+    ## the new count stays the difference between them and the origin.
+    @test cumrow(plain) == 500.0
+    @test cumrow(corrected) == 430.0
+    @test cumrow(corrected) - 300.0 == newrow(corrected)
 end
 
-@testitem "plot_forecast_vs_truth anchors the overlay at the origin" begin
+@testitem "plot_forecast_vs_truth takes the break out of both truths" begin
     using DataFrames: DataFrame
     using CairoMakie: Axis
     using BVDOutbreakSize: plot_forecast_vs_truth
 
     fc = DataFrame(confirmed_cum = collect(400.0:1.0:499.0),
         confirmed_new = collect(100.0:1.0:199.0))
-    kw = (observed = (confirmed_cum = 500.0,),
-        baseline = (confirmed_cum = 300.0,),
-        individual = (confirmed_new = collect(90.0:1.0:189.0),))
+    indiv = (confirmed_new = collect(90.0:1.0:189.0),)
+    origin = (confirmed_cum = 300.0,)
 
-    ## The overlay starts from the frozen origin, so a harmonisation in the
-    ## window moves the new-count truth without moving that anchor.
-    plain = plot_forecast_vs_truth(fc; kw...)
-    corrected = plot_forecast_vs_truth(fc; kw...,
-        breaks = (confirmed_cum = 70.0,))
+    plain = plot_forecast_vs_truth(fc; observed = (confirmed_cum = 500.0,),
+        baseline = origin, individual = indiv)
+    corrected = plot_forecast_vs_truth(fc;
+        observed = (confirmed_cum = 500.0,), baseline = origin,
+        individual = indiv, breaks = (confirmed_cum = 70.0,))
+    ## A break is exactly a reduction of the reported cumulative, so passing
+    ## it matches passing a total already net of it. The overlay's origin is
+    ## the frozen baseline either way and does not move with it.
+    presubtracted = plot_forecast_vs_truth(fc;
+        observed = (confirmed_cum = 430.0,), baseline = origin,
+        individual = indiv)
+
     cum_limits(fig) = [c for c in fig.content if c isa Axis][1].limits[]
-    @test cum_limits(plain) == cum_limits(corrected)
+    @test cum_limits(corrected) == cum_limits(presubtracted)
+    ## The cumulative panel does move, which is the change: it used to score
+    ## the reported total against a projection that could not contain the
+    ## harmonisation.
+    @test cum_limits(plain) != cum_limits(corrected)
 end

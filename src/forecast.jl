@@ -182,7 +182,11 @@ row per draw and columns:
   growth.
 - `:confirmed_cum`, `:confirmed_deaths_cum`: laboratory-confirmed case
   and confirmed-death counterparts, present when `obs_confirmed` and
-  `obs_confirmed_deaths` are supplied.
+  `obs_confirmed_deaths` are supplied. `:confirmed_deaths_cum` is not
+  bounded by `:deaths_cum`. Confirmed deaths are a thinning of suspected
+  deaths, but the model imposes that per day on the latent pool
+  ([`confirmed_deaths_model`](@ref)) rather than between these two reported
+  cumulatives, either of which can stall while the other accrues.
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
@@ -351,15 +355,6 @@ function forecast_reported(chn;
                 something(_daily_at_cutoff(chn, :cumulative_recovered),
         _approx(rec_T)) : nothing
 
-    ## Confirmed deaths are a thinning of suspected deaths, so the forecast
-    ## caps them at the forecast cumulative suspected deaths. The cap holds
-    ## only while the suspected total the forecast starts from is at least
-    ## the confirmed one. When the suspected series has stalled below the
-    ## confirmed one the cap would clamp the forecast below its own origin
-    ## and force the new count to zero, so it is dropped.
-    cap_confirmed_deaths = has_conf_deaths &&
-                           obs_deaths >= obs_confirmed_deaths
-
     n = length(r)
     cases_cum = Vector{Int}(undef, n)
     deaths_cum = Vector{Int}(undef, n)
@@ -408,11 +403,19 @@ function forecast_reported(chn;
         deaths_latent_new[i] = _new_h(deaths_daily_T[i])
         has_conf && (confirmed_cum[i] = round(Int, obs_confirmed) +
                             _nb_new(rng, k_conf[i], _means(conf_daily[i])))
+        ## Confirmed deaths carry no cap against the suspected-death
+        ## cumulative. The subset relationship is imposed inside the model,
+        ## per day and on the latent pool, by capping the tested death volume
+        ## at `susp_death[t]` before positivity scales it
+        ## ([`confirmed_deaths_model`](@ref)). A forecast projected from that
+        ## trajectory carries the constraint with it. Capping again against
+        ## the observed suspected-death cumulative constrains a different
+        ## quantity, and that series is a reported headline that can stall
+        ## while confirmed deaths keep accruing.
         if has_conf_deaths
-            cd = round(Int, obs_confirmed_deaths) +
-                 _nb_new(rng, k_conf_deaths[i], _means(conf_deaths_daily[i]))
-            confirmed_deaths_cum[i] = cap_confirmed_deaths ?
-                                      min(deaths_cum[i], cd) : cd
+            confirmed_deaths_cum[i] = round(Int, obs_confirmed_deaths) +
+                                      _nb_new(rng, k_conf_deaths[i],
+                _means(conf_deaths_daily[i]))
         end
         ## Projected bed demand (need under unconstrained supply) and the
         ## supply-limited occupancy it produces against the bed capacity, plus
@@ -878,11 +881,12 @@ Each scored stream gets two rows, mirroring the plot's two panels and the
 `Quantity` split of [`forecast_table`](@ref): a `cumulative by T+7` row
 scoring the projected cumulative against `observed`, and a `new this week`
 row scoring the projected new count against
-`max(observed − baseline − breaks, 0)`. `breaks` is keyed like `observed`
+`max(observed − breaks − baseline, 0)`. `breaks` is keyed like `observed`
 and carries each stream's retrospective harmonisation correction over the
-forecast window (see [`confirmed_break_correction`](@ref)), which lands in
-the cumulative without ever having been notified in that week and so is not
-part of what the new-count forecast is predicting. It defaults to zero.
+forecast window (see [`confirmed_break_correction`](@ref)). It comes out of
+both truths, because it lands in the reported cumulative without having been
+notified in that week and a projection cannot contain it. It defaults to
+zero.
 When `isolation` (the observed bed occupancy at the target date) is supplied
 and the forecast carries the beds, the projected supply-limited occupancy is
 scored against it too as a single level row. Returns a `DataFrame` with the
@@ -920,15 +924,16 @@ function forecast_vs_truth(fc::DataFrame;
     rows = NamedTuple[]
     for (cumcol, newcol, label) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
-        obs_cum = float(observed[cumcol])
+        ## A retrospective harmonisation lands in the reported cumulative
+        ## without having been notified across the window. The projected
+        ## cumulative is the cut-off cumulative plus the projected new count,
+        ## and a projection cannot contain a reattachment, so it comes out of
+        ## both truths or the two sides are not comparable.
+        brk = float(get(breaks, cumcol, 0))
+        obs_cum = float(observed[cumcol]) - brk
         push!(rows, _row(label, "cumulative by T+7", fc[!, cumcol], obs_cum))
         newcol in propertynames(fc) || continue
-        ## A retrospective harmonisation lands in the cumulative but was
-        ## never notified across the window, so it is not something the
-        ## new-count forecast was predicting. Take it out of the truth.
-        obs_new = max(
-            obs_cum - float(get(baseline, cumcol, 0)) -
-            float(get(breaks, cumcol, 0)), 0.0)
+        obs_new = max(obs_cum - float(get(baseline, cumcol, 0)), 0.0)
         push!(rows, _row(label, "new this week", fc[!, newcol], obs_new))
     end
     isolation !== missing && :isolation_level in propertynames(fc) &&

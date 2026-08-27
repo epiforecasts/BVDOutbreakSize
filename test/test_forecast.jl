@@ -66,9 +66,37 @@ end
     @test all(fc.cases_new .<= fc.cases_cum)
     @test all(fc.deaths_new .<= fc.deaths_cum)
     @test all(fc.confirmed_new .<= fc.confirmed_cum)
-    ## Confirmed deaths are a thinning of suspected deaths, so cannot exceed
-    ## the forecast cumulative suspected deaths.
-    @test all(fc.confirmed_deaths_cum .<= fc.deaths_cum)
+    ## Every cumulative replicate starts at its own observed origin and only
+    ## grows from there.
+    @test all(fc.confirmed_deaths_cum .>= 17)
+end
+
+@testitem "forecast_reported does not cap confirmed deaths at suspected" tags=[
+    :slow
+] setup=[ForecastFixtures] begin
+    using DataFrames: DataFrame
+    using Statistics: mean, median
+    using BVDOutbreakSize: forecast_reported
+
+    ## The suspected-death headline stalls while confirmed deaths keep
+    ## accruing, which is the state the reported data has been in since
+    ## 2026-06-19: `total_deaths` froze at 246 on 2026-05-26 and the
+    ## confirmed-death cumulative passed it three weeks later. Capping the
+    ## confirmed-death replicate at the forecast suspected-death cumulative
+    ## clamps it below its own origin and floors the new count at zero.
+    chn=_forecast_chain(400)
+    fc=forecast_reported(chn;
+        horizon = 7,
+        obs_cases = 905,
+        obs_deaths = 246,
+        obs_confirmed = 210,
+        obs_confirmed_deaths = 2642)
+
+    ## No replicate falls below the cut-off cumulative it starts from.
+    @test all(fc.confirmed_deaths_cum .>= 2642)
+    ## The forecast is a genuine projection rather than a floor artefact.
+    @test mean(fc.confirmed_deaths_new .== 0) < 0.1
+    @test median(fc.confirmed_deaths_new) > 0
 end
 
 @testitem "forecast_reported projects isolation beds and recovered" tags=[

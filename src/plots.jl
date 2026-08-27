@@ -2242,15 +2242,16 @@ function plot_forecast_vs_truth(fc::DataFrame;
         Union{Nothing, Vector{Float64}}}}()
     for (cumcol, newcol, name, colour) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
-        obs = float(observed[cumcol])
-        base = float(get(baseline, cumcol, 0))
-        ## The new-count rule is what was notified across the week, so a
-        ## retrospective harmonisation sitting in the cumulative comes out.
+        ## Both truths are what was notified across the week, so a
+        ## retrospective harmonisation sitting in the reported cumulative
+        ## comes out of each. The projected cumulative cannot contain one.
         brk = float(get(breaks, cumcol, 0))
+        obs = float(observed[cumcol]) - brk
+        base = float(get(baseline, cumcol, 0))
         indiv_new = haskey(individual, newcol) ?
                     Float64.(individual[newcol]) : nothing
         push!(streams,
-            (cumcol, newcol, name, colour, obs, obs - base - brk, base,
+            (cumcol, newcol, name, colour, obs, obs - base, base,
                 indiv_new))
     end
     ncols = length(streams)
