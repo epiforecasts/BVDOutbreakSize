@@ -13,6 +13,6 @@ ADTypes = "1.22.0"
 Enzyme = "0.13"
 Mooncake = "0.5.33"
 LogDensityProblems = "2.2.0"
-Turing = "0.45.0, 0.46"
+Turing = "0.45.0, 0.46, 0.47"
 [sources]
 BVDOutbreakSize = {path = "../.."}
