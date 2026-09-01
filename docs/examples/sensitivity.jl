@@ -152,7 +152,17 @@ validation_table = forecast_vs_truth(validation_forecast;
 #md # <details><summary>Forecast-versus-observed validation table</summary>
 #md # ```
 
-validation_table #hide
+## `show(..., MIME("text/plain"), ...)` rather than a bare table expression:
+## DataFrames is `text/html`-showable, and Literate's `DocumenterFlavor`
+## execution prefers that mime, embedding the table as a `@raw html` block.
+## Documenter's raw-block line-relocation logic compiles a regex from the
+## block's own text, which fails once the block passes PCRE's ~64KB
+## compiled-pattern limit. Printing the plain-text rendering instead keeps
+## the table in an ordinary fenced code block, sidestepping that limit
+## entirely -- several of the tables below grow with every new release and
+## would otherwise cross it over time. The same treatment is applied to
+## every bare DataFrame display in this file and in `analysis.jl`.
+show(stdout, MIME("text/plain"), validation_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -254,7 +264,9 @@ validation_stopped_fig = plot_forecast(
 #md # </details>
 #md # ```
 
-validation_stopped_streams #hide
+## See the comment above `validation_table`'s display for why this uses
+## `show(..., MIME("text/plain"), ...)` instead of a bare table expression.
+show(stdout, MIME("text/plain"), validation_stopped_streams) #hide
 
 validation_stopped_fig #hide
 
@@ -335,7 +347,7 @@ joint_score_by_release_table = select_fit_role(
 # Each row also carries relative skill against the stream's own individual fit where one exists.
 # Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
-joint_score_overview_table #hide
+show(stdout, MIME("text/plain"), joint_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
 # This is the one place the two roles are drawn against each other, so it carries each stream's individual fit alongside the joint.
@@ -352,7 +364,7 @@ forecast_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-joint_score_by_horizon_table #hide
+show(stdout, MIME("text/plain"), joint_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -362,7 +374,7 @@ joint_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-joint_score_by_release_table #hide
+show(stdout, MIME("text/plain"), joint_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -439,7 +451,7 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 # The headline frozen table pools one row per stream across cut-offs and horizons, scored against the persistence baseline on both scales, with the CRPS decomposition, coverage and bias columns described above.
 # There is no model column, since only one model is scored.
 
-frozen_score_overview_display #hide
+show(stdout, MIME("text/plain"), frozen_score_overview_display) #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
 
@@ -454,7 +466,7 @@ frozen_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-frozen_score_by_horizon_display #hide
+show(stdout, MIME("text/plain"), frozen_score_by_horizon_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -464,7 +476,7 @@ frozen_score_by_horizon_display #hide
 #md # <details><summary>Scores by frozen cut-off</summary>
 #md # ```
 
-frozen_score_by_release_display #hide
+show(stdout, MIME("text/plain"), frozen_score_by_release_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -524,7 +536,7 @@ individual_score_by_release_table = drop_individual_fit_columns(
 #md # </details>
 #md # ```
 
-individual_score_overview_table #hide
+show(stdout, MIME("text/plain"), individual_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon, one panel per stream (dataset), for each stream's own individual fit.
 
@@ -542,7 +554,7 @@ individual_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-individual_score_by_horizon_table #hide
+show(stdout, MIME("text/plain"), individual_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -552,7 +564,7 @@ individual_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-individual_score_by_release_table #hide
+show(stdout, MIME("text/plain"), individual_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -580,7 +592,7 @@ streams_C_table = streams_table(
 #md # </details>
 #md # ```
 
-streams_C_table #hide
+show(stdout, MIME("text/plain"), streams_C_table) #hide
 
 # The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
 
@@ -1274,7 +1286,7 @@ chamla_comparison_table = let
             string(obs.confirmed_cases) * " (23 June)"])
 end;
 
-chamla_comparison_table #hide
+show(stdout, MIME("text/plain"), chamla_comparison_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -1353,7 +1365,7 @@ delay_sensitivity_table = RUN_SENSITIVITY ?
 #md # </details>
 #md # ```
 
-delay_sensitivity_table #hide
+show(stdout, MIME("text/plain"), delay_sensitivity_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Delay-sensitivity infection-count density plot</summary>
@@ -1411,7 +1423,7 @@ clock_sensitivity_C_table = RUN_SENSITIVITY ?
 #md # </details>
 #md # ```
 
-clock_sensitivity_C_table #hide
+show(stdout, MIME("text/plain"), clock_sensitivity_C_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count density plot</summary>
@@ -1443,7 +1455,7 @@ clock_sensitivity_T_table = RUN_SENSITIVITY ?
 #md # </details>
 #md # ```
 
-clock_sensitivity_T_table #hide
+show(stdout, MIME("text/plain"), clock_sensitivity_T_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior outbreak-age density plot</summary>

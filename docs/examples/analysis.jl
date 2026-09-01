@@ -249,7 +249,15 @@ observations_table = DataFrame(
 #md # </details>
 #md # ```
 
-observations_table #hide
+## `show(..., MIME("text/plain"), ...)` rather than a bare `observations_table`
+## expression: DataFrames is `text/html`-showable, and Literate's
+## `DocumenterFlavor` execution prefers that mime, embedding the table as a
+## `@raw html` block. Documenter's raw-block line-relocation logic compiles a
+## regex from the block's own text, which fails once the block passes
+## PCRE's ~64KB compiled-pattern limit. Printing the plain-text rendering
+## instead keeps the table in an ordinary fenced code block, sidestepping
+## that limit entirely (and keeps working as this table grows).
+show(stdout, MIME("text/plain"), observations_table) #hide
 
 # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
 # The model fits the between-report increments of these series, so a single date reduces to the cut-off total.
@@ -303,7 +311,12 @@ end;
 #md # <details><summary>Per-date situation-report data table</summary>
 #md # ```
 
-vintage_table #hide
+## See the comment above `observations_table`'s display: printing the
+## plain-text rendering instead of showing the DataFrame directly avoids the
+## `@raw html` block that Literate would otherwise emit, which for this
+## table (growing by one row per situation report) will keep exceeding
+## Documenter's raw-block line-relocation regex limit as SitReps accumulate.
+show(stdout, MIME("text/plain"), vintage_table) #hide
 
 #md # ```@raw html
 #md # </details>
