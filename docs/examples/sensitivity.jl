@@ -336,8 +336,14 @@ joint_score_overview_table = select_fit_role(
     forecast_score_overview_table, "joint")
 joint_score_by_horizon_table = select_fit_role(
     forecast_score_by_horizon_table, "joint")
+## The trailing `;` on this last assignment matters: without it, this whole
+## setup chunk's last statement (the DataFrame it assigns) is Literate's
+## implicitly displayed "result" for the chunk, on top of the explicit
+## `show(...)` display further down -- and being html-showable, it goes out
+## as a second, undisplayed-in-source `@raw html` block that (for a table
+## this size) can itself hit the PCRE limit described above.
 joint_score_by_release_table = select_fit_role(
-    forecast_score_by_release_table, "joint")
+    forecast_score_by_release_table, "joint");
 
 #md # ```@raw html
 #md # </details>
@@ -441,8 +447,10 @@ frozen_score_overview_display = drop_degenerate_fit_column(
     frozen_score_overview_table)
 frozen_score_by_horizon_display = drop_degenerate_fit_column(
     frozen_score_by_horizon_table)
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
 frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table)
+    frozen_score_by_release_table);
 
 #md # ```@raw html
 #md # </details>
@@ -529,8 +537,10 @@ individual_score_overview_table = drop_individual_fit_columns(
     select_fit_role(forecast_score_overview_table, "individual"))
 individual_score_by_horizon_table = drop_individual_fit_columns(
     select_fit_role(forecast_score_by_horizon_table, "individual"))
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
 individual_score_by_release_table = drop_individual_fit_columns(
-    select_fit_role(forecast_score_by_release_table, "individual"))
+    select_fit_role(forecast_score_by_release_table, "individual"));
 
 #md # ```@raw html
 #md # </details>
@@ -1346,7 +1356,7 @@ chamla_rt_fig #hide
 ## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
-                              vec(Array(chn_joint_community_delay[:C_T])) : nothing
+                              vec(Array(chn_joint_community_delay[:C_T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1359,7 +1369,7 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                          Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1375,7 +1385,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                        Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1401,7 +1411,7 @@ delay_sensitivity_fig #hide
 posterior_C_exp_growth = RUN_SENSITIVITY ?
                          vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
 T_skygrid = vec(Array(chn_joint[:T]))
-T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing
+T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1417,7 +1427,7 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1432,7 +1442,7 @@ show(stdout, MIME("text/plain"), clock_sensitivity_C_table) #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth; scenarios = []) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1449,7 +1459,7 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => T_skygrid,
     "Exponential growth" => T_exp_growth; digits = 0) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1466,7 +1476,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "Exponential growth" => T_exp_growth;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by tree prior", lower = 0) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
