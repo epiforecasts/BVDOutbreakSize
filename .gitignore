@@ -9,6 +9,7 @@ Manifest.toml
 /docs/build/
 /docs/src/analysis.md
 /docs/src/index.md
+/docs/src/sensitivity.md
 /docs/src/references.md
 /docs/src/summary_assets/
 /docs/node_modules/

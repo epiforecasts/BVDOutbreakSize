@@ -6,6 +6,46 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.16.0
+
+Changes since v1.15.0
+
+### Report
+
+- The cross-release forecast scores, the forecast-versus-observed validation tables and the situation-report data tables stay tables on the page.
+A `DataFrame` is html-showable, so each one went into the page as a raw HTML block, and Documenter compiles a regex from every raw block's own text, which fails once a block passes PCRE's compiled-pattern limit.
+The scoring tables grow with every release and crossed it after v1.15.0, taking the docs build down with them.
+The stop-gap printed each table as a fixed-width block of text instead, which built but is not a table.
+They now go out as markdown tables, which carry no such limit.
+Float columns are rounded rather than printed to their full binary expansion, and numeric columns are right-aligned.
+
+### Data
+
+- Advanced the model cut-off from SitRep 102 (24 August) to SitRep 108 (30 August), six vintages.
+Confirmed cases reach 6100 and confirmed deaths 2950.
+Two health zones enter the case table at SitRep 104, Biena and Manguredjipa in Nord-Kivu, taking the affected count from 58 to 60 of 151.
+Bas-Uélé prints its first bed-capacity figure at SitRep 106.
+The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+- SitRep 107's isolation occupancy is excluded rather than recorded.
+Its page-1 tile reconciles exactly to the province prose, but only because Nord-Kivu is absent from that section altogether, having carried 236 the day before and 282 the day after.
+Bed capacity for the same date is kept, on the split already established at SitRep 085.
+- The onset-curve digitiser reads SitRep 108.
+That vintage embeds its chart at a size no neighbour uses, which anti-aliased the axis border and the weekly ticks too light for the mask the digitiser reads dark pixels with.
+A looser mask now runs only where the strict one finds nothing, so every earlier vintage still digitises to the committed values.
+
+### Dependencies
+
+- Turing 0.47 is allowed alongside 0.45 and 0.46, in the package and in the Enzyme test environment.
+
+### Known issues
+
+- The onset digitiser's Julia and Python twins disagree by more each vintage, 4124 against 4218 at SitRep 108 (#594).
+The Julia output is the one committed, as it reproduces the whole committed history.
+- The 25 August confirmed-death total disagrees with the INRB-UMIE mirror, 2744 here against 2755 there.
+Nothing in the SitRep 103 PDF explains the gap, so it is recorded rather than reconciled towards either source.
+- The release comparison still mixes two forecast constructions, for the reason given in the v1.15.0 notes below.
+- The automatic version increment is still wedged by a stale branch and skips silently on every push, so `Project.toml` does not advance on its own (#607).
+
 ## v1.15.0
 
 Changes since v1.14.0
