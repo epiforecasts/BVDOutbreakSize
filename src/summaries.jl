@@ -103,27 +103,84 @@ end
 
 ## --- Markdown rendering --------------------------------------------------
 
+# A float carrying its full Float64 expansion stretches a column to
+# eighteen digits for no gain. Values at or above one keep their magnitude
+# and lose the tail; values below one keep their leading digits, so a small
+# score does not round away to zero.
+_md_round(x::AbstractFloat) = abs(x) < 1 ? round(x; sigdigits = 3) :
+                              round(x; digits = 3)
+
 # Format one cell for a markdown table: integer-valued floats print without
-# a trailing `.0` so count columns read as whole numbers, everything else
-# prints with its default string form.
+# a trailing `.0` so count columns read as whole numbers, other floats are
+# rounded to a readable width, and a literal `|` in a string is escaped so
+# it cannot split the row.
 _md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
-_md_cell(x) = string(x)
+_md_cell(x::AbstractFloat) = isinteger(x) ? string(Integer(x)) :
+                             string(_md_round(x))
+_md_cell(x) = replace(string(x), "|" => "\\|")
+
+# Right-align numeric columns so the digits line up under each other, and
+# left-align everything else. `Bool` is a `Real` but reads as a label
+# rather than a quantity, so it stays left.
+function _md_align(col)
+    eltype(col) <: Union{Missing, Bool} ? "---" :
+    eltype(col) <: Union{Missing, Real} ? "---:" : "---"
+end
 
 """
 GitHub-flavoured markdown table for a `DataFrame`, one header row from the
 column names and one body row per data row. Used to persist a rendered
 summary table to disk so a static documentation page can embed it without
-re-running the fit.
+re-running the fit, and by [`MarkdownTable`](@ref) to put a table on a
+Literate page.
 """
 function markdown_table(df::DataFrame)
     cols = names(df)
     header = "| " * join(cols, " | ") * " |"
-    sep = "| " * join(fill("---", length(cols)), " | ") * " |"
+    sep = "| " * join((_md_align(df[!, c]) for c in cols), " | ") * " |"
     rows = map(eachrow(df)) do row
         "| " * join((_md_cell(row[c]) for c in cols), " | ") * " |"
     end
     return join(vcat(header, sep, rows), "\n") * "\n"
 end
+
+"""
+A table for a Literate page to render as a table rather than as a block of
+printed output. Display it as the last expression of a chunk.
+
+Literate chooses a chunk result's output format by what the value is
+showable as, taking `text/html` before `text/markdown`. A `DataFrame` is
+html-showable, so a bare one goes out as a `@raw html` block, and
+Documenter compiles a regex from each raw block's own text to relocate its
+lines, which fails once the block passes PCRE's ~64KB compiled-pattern
+limit. Several of the scoring tables grow with every release and cross it.
+This wrapper is showable as markdown and not as html, so the table goes
+out as an ordinary markdown table: no raw block, no size limit, and a
+table on the page rather than the fixed-width block of printed output a
+plain-text rendering leaves behind.
+
+A `DataFrame` is rendered by [`markdown_table`](@ref). Anything else is
+taken through its own markdown rendering, or its plain-text one where it
+has none, so a page can pass either a table or a placeholder message.
+"""
+struct MarkdownTable
+    text::String
+    ## Inner constructor so Julia generates no outer one: its automatic
+    ## `MarkdownTable(::Any)` converting constructor would collide with the
+    ## fallback method below.
+    MarkdownTable(text::AbstractString) = new(text)
+end
+
+MarkdownTable(df::DataFrame) = MarkdownTable(markdown_table(df))
+function MarkdownTable(x)
+    MarkdownTable(
+        showable(MIME("text/markdown"), x) ?
+        sprint(show, MIME("text/markdown"), x) :
+        sprint(show, MIME("text/plain"), x))
+end
+
+Base.show(io::IO, t::MarkdownTable) = print(io, t.text)
+Base.show(io::IO, ::MIME"text/markdown", t::MarkdownTable) = print(io, t.text)
 
 ## --- Fit diagnostics ----------------------------------------------------
 
