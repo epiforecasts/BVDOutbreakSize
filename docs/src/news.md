@@ -37,15 +37,6 @@ A looser mask now runs only where the strict one finds nothing, so every earlier
 
 - Turing 0.47 is allowed alongside 0.45 and 0.46, in the package and in the Enzyme test environment.
 
-### Known issues
-
-- The onset digitiser's Julia and Python twins disagree by more each vintage, 4124 against 4218 at SitRep 108 (#594).
-The Julia output is the one committed, as it reproduces the whole committed history.
-- The 25 August confirmed-death total disagrees with the INRB-UMIE mirror, 2744 here against 2755 there.
-Nothing in the SitRep 103 PDF explains the gap, so it is recorded rather than reconciled towards either source.
-- The release comparison still mixes two forecast constructions, for the reason given in the v1.15.0 notes below.
-- The automatic version increment is still wedged by a stale branch and skips silently on every push, so `Project.toml` does not advance on its own (#607).
-
 ## v1.15.0
 
 Changes since v1.14.0
