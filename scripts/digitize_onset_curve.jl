@@ -270,16 +270,10 @@ end
 # every count.
 function baseline_row(R, G, B, H)
     # The count-0 baseline is the plot's bottom border: a solid line running
-    # almost the full chart width. Score rows by their longest contiguous
-    # run under a looser near-gray threshold (<180, not the <120 `dark`
-    # mask), because SitRep 108's larger 802x479 rendering anti-aliases
-    # that border into the 120-180 range - lighter than every earlier
-    # vintage's border but still far darker, and far more contiguous, than
-    # any text or tick-mark row, which stays fragmented at any threshold.
-    # A run-length ranking (not a per-row pixel sum, which SitRep 108's
-    # dense date-label text row can exceed) also correctly finds the
-    # existing <120 border in every earlier vintage tested (059-107), so
-    # this is strictly a generalisation, not a vintage-specific special case.
+    # almost the full chart width. Score rows by their longest contiguous run
+    # under a near-gray threshold (<180); a run-length ranking under that
+    # threshold correctly finds the border in every vintage, including
+    # tighter-anti-aliased renders, unlike a per-row pixel sum.
     line = (R .< 180) .& (G .< 180) .& (B .< 180)
     lo = floor(Int, H * 0.4) + 1
     best_row, best_run = lo, 0
@@ -351,14 +345,9 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     end
     best = weekly_ticks(dark)
     if isempty(best)
-        # SitRep 108's larger 802x479 rendering anti-aliases the tick marks
-        # to the same lighter gray as its baseline border (see
-        # `baseline_row`) - too light for the <120 `dark` mask at any row in
-        # the window. Falling back to the same <180 near-gray mask only when
-        # the strict mask finds nothing keeps every earlier vintage
-        # (059-107, all resolved under the strict mask) byte-identical;
-        # widening the mask unconditionally shifted several of their tick
-        # counts and was reverted.
+        # Only fall back to the <180 near-gray mask when the strict mask
+        # finds nothing, so every already-committed vintage (059-107) keeps
+        # digitising under the original threshold.
         line = (R .< 180) .& (G .< 180) .& (B .< 180)
         best = weekly_ticks(line)
     end

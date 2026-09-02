@@ -26,22 +26,10 @@ using TensorBoardLogger
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
-## `activate!(type = "png")` only disables the vector mimes ("svg", "pdf"),
-## leaving Figures still showable as `MIME"text/html"` (Makie's interactive
-## display wrapper). Literate's `DocumenterFlavor` execution prefers that
-## mime over `image/png` (Literate.jl `execute_markdown!` checks
-## `showable(MIME("text/html"), r)` before its image-format loop), so every
-## bare-Figure cell gets embedded as a `@raw html` block containing a
-## base64-encoded PNG data URI instead of being saved as an external file
-## and linked with `![]()`. As the fitted history grows, these inline
-## blocks grow with it; once a single one passes roughly 64KB Documenter's
-## `find_block_in_file` (which builds a `Regex` from the raw block's own
-## text to relocate it in the source file for line-number diagnostics)
-## fails to compile it, since PCRE's default link size caps a compiled
-## pattern at 65535 bytes. Explicitly disabling the html-family mimes here
-## forces every implicitly-displayed Figure back onto the `image/png` path,
-## so it becomes a normal saved-file image reference no matter how large
-## the plot gets.
+## `activate!(type = "png")` leaves Figures still showable as `MIME"text/html"`,
+## which Literate prefers over `image/png`, and Documenter's raw-block regex
+## hits PCRE's ~64KB limit once a block grows past it. Disabling the
+## html-family mimes forces every Figure display onto the image/png path.
 CairoMakie.disable_mime!(
     "text/html", "application/vnd.webio.application+html",
     "application/prs.juno.plotpane+html", "juliavscode/html",
