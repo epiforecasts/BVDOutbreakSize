@@ -136,6 +136,8 @@ CONFIG = {
     "104": ("2026-08-26", "2026-08-24"),
     "105": ("2026-08-27", "2026-08-24"),
     "106": ("2026-08-28", "2026-08-24"),
+    "107": ("2026-08-29", "2026-08-24"),
+    "108": ("2026-08-30", "2026-08-31"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -168,6 +170,8 @@ Y_AXIS_STEP = {
     "104": 25,
     "105": 25,
     "106": 25,
+    "107": 25,
+    "108": 25,
 }
 
 
@@ -289,6 +293,25 @@ def _cluster(idx, gap=3):
     return out
 
 
+def _baseline_row(im, H):
+    # The count-0 baseline is the plot's bottom border: a solid line running
+    # almost the full chart width. Score rows by their longest contiguous run
+    # under a near-gray threshold (<180); a run-length ranking under that
+    # threshold correctly finds the border in every vintage, including
+    # tighter-anti-aliased renders, unlike a per-row pixel sum.
+    R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    line = (R < 180) & (G < 180) & (B < 180)
+    line[: int(H * 0.4)] = False
+    best_row, best_run = 0, 0
+    for r in range(H):
+        run = _longest_run(line[r])
+        if run > best_run:
+            best_run, best_row = run, r
+    if best_run < 100:
+        raise ValueError("no baseline row found")
+    return best_row
+
+
 def _y_axis_ticks(dark, base, W):
     # The 0/20/40/60 y-axis tick rows, read from the label strip just left
     # of the vertical axis line. Candidate strips are scored by the longest
@@ -317,9 +340,7 @@ def _y_axis_ticks(dark, base, W):
 def digitize(im, last_tick_date, y_step=20):
     H, W, _ = im.shape
     blue, red, _, dark = _masks(im)
-    drow = dark.sum(axis=1)
-    drow[: int(H * 0.4)] = 0
-    base = int(np.argmax(drow))  # count-0 baseline row
+    base = _baseline_row(im, H)  # count-0 baseline row
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = _y_axis_ticks(dark, base, W)
@@ -331,21 +352,31 @@ def digitize(im, last_tick_date, y_step=20):
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
     # it at 4 and losing the axis entirely on the smaller figures.
-    band = dark[base + 2:base + 7, :].sum(axis=0)
-    # The tick marks sit just below the baseline (a few px) and, on the faint
+    # They sit just below the baseline (a few px) and, on the faint
     # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
     # come all the way down to 1 to resolve them; the window stops at base+7
     # so a wide low-cut scan cannot pick up the x-axis date labels further
     # down. Step down through the cuts and keep the most complete weekly tick
     # row (the true axis has a fixed number of weekly ticks, so a too-strict
     # cut silently drops every other tick rather than failing).
-    best_n = 0
-    best = np.array([])
-    for cut in (4, 3, 2, 1):
-        cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
-        if len(cand) >= 8 and len(cand) > best_n:
-            best_n = len(cand)
-            best = cand
+    def _weekly_ticks(mask):
+        band = mask[base + 2:base + 7, :].sum(axis=0)
+        best_n, best = 0, np.array([])
+        for cut in (4, 3, 2, 1):
+            cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
+            if len(cand) >= 8 and len(cand) > best_n:
+                best_n = len(cand)
+                best = cand
+        return best
+
+    best = _weekly_ticks(dark)
+    if len(best) == 0:
+        # Only fall back to the <180 near-gray mask when the strict mask
+        # finds nothing, so every already-committed vintage (059-107) keeps
+        # digitising under the original threshold.
+        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+        line = (R < 180) & (G < 180) & (B < 180)
+        best = _weekly_ticks(line)
     if len(best) == 0:
         raise ValueError("no x-axis weekly tick row found")
     xt = best

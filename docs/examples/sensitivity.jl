@@ -152,7 +152,17 @@ validation_table = forecast_vs_truth(validation_forecast;
 #md # <details><summary>Forecast-versus-observed validation table</summary>
 #md # ```
 
-validation_table #hide
+## `show(..., MIME("text/plain"), ...)` rather than a bare table expression:
+## DataFrames is `text/html`-showable, and Literate's `DocumenterFlavor`
+## execution prefers that mime, embedding the table as a `@raw html` block.
+## Documenter's raw-block line-relocation logic compiles a regex from the
+## block's own text, which fails once the block passes PCRE's ~64KB
+## compiled-pattern limit. Printing the plain-text rendering instead keeps
+## the table in an ordinary fenced code block, sidestepping that limit
+## entirely -- several of the tables below grow with every new release and
+## would otherwise cross it over time. The same treatment is applied to
+## every bare DataFrame display in this file and in `analysis.jl`.
+show(stdout, MIME("text/plain"), validation_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -254,7 +264,9 @@ validation_stopped_fig = plot_forecast(
 #md # </details>
 #md # ```
 
-validation_stopped_streams #hide
+## See the comment above `validation_table`'s display for why this uses
+## `show(..., MIME("text/plain"), ...)` instead of a bare table expression.
+show(stdout, MIME("text/plain"), validation_stopped_streams) #hide
 
 validation_stopped_fig #hide
 
@@ -324,8 +336,14 @@ joint_score_overview_table = select_fit_role(
     forecast_score_overview_table, "joint")
 joint_score_by_horizon_table = select_fit_role(
     forecast_score_by_horizon_table, "joint")
+## The trailing `;` on this last assignment matters: without it, this whole
+## setup chunk's last statement (the DataFrame it assigns) is Literate's
+## implicitly displayed "result" for the chunk, on top of the explicit
+## `show(...)` display further down -- and being html-showable, it goes out
+## as a second, undisplayed-in-source `@raw html` block that (for a table
+## this size) can itself hit the PCRE limit described above.
 joint_score_by_release_table = select_fit_role(
-    forecast_score_by_release_table, "joint")
+    forecast_score_by_release_table, "joint");
 
 #md # ```@raw html
 #md # </details>
@@ -335,7 +353,7 @@ joint_score_by_release_table = select_fit_role(
 # Each row also carries relative skill against the stream's own individual fit where one exists.
 # Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
-joint_score_overview_table #hide
+show(stdout, MIME("text/plain"), joint_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
 # This is the one place the two roles are drawn against each other, so it carries each stream's individual fit alongside the joint.
@@ -352,7 +370,7 @@ forecast_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-joint_score_by_horizon_table #hide
+show(stdout, MIME("text/plain"), joint_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -362,7 +380,7 @@ joint_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-joint_score_by_release_table #hide
+show(stdout, MIME("text/plain"), joint_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -429,8 +447,10 @@ frozen_score_overview_display = drop_degenerate_fit_column(
     frozen_score_overview_table)
 frozen_score_by_horizon_display = drop_degenerate_fit_column(
     frozen_score_by_horizon_table)
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
 frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table)
+    frozen_score_by_release_table);
 
 #md # ```@raw html
 #md # </details>
@@ -439,7 +459,7 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 # The headline frozen table pools one row per stream across cut-offs and horizons, scored against the persistence baseline on both scales, with the CRPS decomposition, coverage and bias columns described above.
 # There is no model column, since only one model is scored.
 
-frozen_score_overview_display #hide
+show(stdout, MIME("text/plain"), frozen_score_overview_display) #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
 
@@ -454,7 +474,7 @@ frozen_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-frozen_score_by_horizon_display #hide
+show(stdout, MIME("text/plain"), frozen_score_by_horizon_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -464,7 +484,7 @@ frozen_score_by_horizon_display #hide
 #md # <details><summary>Scores by frozen cut-off</summary>
 #md # ```
 
-frozen_score_by_release_display #hide
+show(stdout, MIME("text/plain"), frozen_score_by_release_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -517,14 +537,16 @@ individual_score_overview_table = drop_individual_fit_columns(
     select_fit_role(forecast_score_overview_table, "individual"))
 individual_score_by_horizon_table = drop_individual_fit_columns(
     select_fit_role(forecast_score_by_horizon_table, "individual"))
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
 individual_score_by_release_table = drop_individual_fit_columns(
-    select_fit_role(forecast_score_by_release_table, "individual"))
+    select_fit_role(forecast_score_by_release_table, "individual"));
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-individual_score_overview_table #hide
+show(stdout, MIME("text/plain"), individual_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon, one panel per stream (dataset), for each stream's own individual fit.
 
@@ -542,7 +564,7 @@ individual_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-individual_score_by_horizon_table #hide
+show(stdout, MIME("text/plain"), individual_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -552,7 +574,7 @@ individual_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-individual_score_by_release_table #hide
+show(stdout, MIME("text/plain"), individual_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -580,7 +602,7 @@ streams_C_table = streams_table(
 #md # </details>
 #md # ```
 
-streams_C_table #hide
+show(stdout, MIME("text/plain"), streams_C_table) #hide
 
 # The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
 
@@ -1274,7 +1296,7 @@ chamla_comparison_table = let
             string(obs.confirmed_cases) * " (23 June)"])
 end;
 
-chamla_comparison_table #hide
+show(stdout, MIME("text/plain"), chamla_comparison_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -1334,7 +1356,7 @@ chamla_rt_fig #hide
 ## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
-                              vec(Array(chn_joint_community_delay[:C_T])) : nothing
+                              vec(Array(chn_joint_community_delay[:C_T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1347,13 +1369,13 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                          Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-delay_sensitivity_table #hide
+show(stdout, MIME("text/plain"), delay_sensitivity_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Delay-sensitivity infection-count density plot</summary>
@@ -1363,7 +1385,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                        Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1389,7 +1411,7 @@ delay_sensitivity_fig #hide
 posterior_C_exp_growth = RUN_SENSITIVITY ?
                          vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
 T_skygrid = vec(Array(chn_joint[:T]))
-T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing
+T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1405,13 +1427,13 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-clock_sensitivity_C_table #hide
+show(stdout, MIME("text/plain"), clock_sensitivity_C_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count density plot</summary>
@@ -1420,7 +1442,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth; scenarios = []) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1437,13 +1459,13 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => T_skygrid,
     "Exponential growth" => T_exp_growth; digits = 0) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-clock_sensitivity_T_table #hide
+show(stdout, MIME("text/plain"), clock_sensitivity_T_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior outbreak-age density plot</summary>
@@ -1454,7 +1476,7 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
     "Exponential growth" => T_exp_growth;
     xlabel = "Outbreak age (days before cut-off)",
     title = "Posterior outbreak age by tree prior", lower = 0) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>

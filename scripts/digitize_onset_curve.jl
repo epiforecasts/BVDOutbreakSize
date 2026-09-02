@@ -119,7 +119,9 @@ const CONFIG = [
     ("103", Date(2026, 8, 25), Date(2026, 8, 24)),
     ("104", Date(2026, 8, 26), Date(2026, 8, 24)),
     ("105", Date(2026, 8, 27), Date(2026, 8, 24)),
-    ("106", Date(2026, 8, 28), Date(2026, 8, 24))
+    ("106", Date(2026, 8, 28), Date(2026, 8, 24)),
+    ("107", Date(2026, 8, 29), Date(2026, 8, 24)),
+    ("108", Date(2026, 8, 30), Date(2026, 8, 31))
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -151,7 +153,9 @@ const Y_AXIS_STEP = Dict(
     "103" => 25,
     "104" => 25,
     "105" => 25,
-    "106" => 25
+    "106" => 25,
+    "107" => 25,
+    "108" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -264,6 +268,25 @@ end
 # the baseline. Taking the longest run alone is not enough - in SitRep 067 a
 # glyph stroke outruns the real axis line and yields a scale that halves
 # every count.
+function baseline_row(R, G, B, H)
+    # The count-0 baseline is the plot's bottom border: a solid line running
+    # almost the full chart width. Score rows by their longest contiguous run
+    # under a near-gray threshold (<180); a run-length ranking under that
+    # threshold correctly finds the border in every vintage, including
+    # tighter-anti-aliased renders, unlike a per-row pixel sum.
+    line = (R .< 180) .& (G .< 180) .& (B .< 180)
+    lo = floor(Int, H * 0.4) + 1
+    best_row, best_run = lo, 0
+    for r in lo:H
+        run = longest_run(@view line[r, :])
+        if run > best_run
+            best_run, best_row = run, r
+        end
+    end
+    best_run < 100 && error("no baseline row found")
+    return best_row
+end
+
 function y_axis_ticks(dark, base, H, W)
     best = nothing
     for x in 30:floor(Int, W * 0.13)
@@ -287,9 +310,7 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
     blue, red, dark = m.blue, m.red, m.dark
-    drow = vec(sum(dark; dims = 2))
-    drow[1:floor(Int, H * 0.4)] .= 0
-    base = argmax(drow)                   # count-0 baseline row
+    base = baseline_row(R, G, B, H)       # count-0 baseline row
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = y_axis_ticks(dark, base, H, W)
@@ -300,24 +321,35 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
-    # it at 4 and losing the axis entirely on the smaller figures.
-    band = vec(sum(dark[(base + 2):min(base + 6, H), :]; dims = 1))
-    # The tick marks sit just below the baseline (2-6 rows) and, on the faint
-    # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
-    # come all the way down to 1 to resolve them; the window stops at base+6
-    # so a wide low-cut scan cannot pick up the x-axis date labels further
-    # down. Step down through the cuts and keep the most complete regular
-    # weekly tick row (the true axis has a fixed number of weekly ticks, so a
-    # too-strict cut silently drops every other tick rather than failing).
-    best_n = 0
-    best = Int[]
-    for cut in (4, 3, 2, 1)
-        cand = cluster([x for x in 1:W if band[x] >= cut])
-        length(cand) >= 8 || continue
-        if length(cand) > best_n
-            best_n = length(cand)
-            best = cand
+    # it at 4 and losing the axis entirely on the smaller figures. They sit
+    # just below the baseline (2-6 rows) and, on the faint JPEG-compressed
+    # figures (SitRep 081), can be only 1px tall, so cut must come all the
+    # way down to 1 to resolve them; the window stops at base+6 so a wide
+    # low-cut scan cannot pick up the x-axis date labels further down. Step
+    # down through the cuts and keep the most complete regular weekly tick
+    # row (the true axis has a fixed number of weekly ticks, so a too-strict
+    # cut silently drops every other tick rather than failing).
+    function weekly_ticks(mask)
+        band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
+        best_n = 0
+        found = Int[]
+        for cut in (4, 3, 2, 1)
+            cand = cluster([x for x in 1:W if band[x] >= cut])
+            length(cand) >= 8 || continue
+            if length(cand) > best_n
+                best_n = length(cand)
+                found = cand
+            end
         end
+        return found
+    end
+    best = weekly_ticks(dark)
+    if isempty(best)
+        # Only fall back to the <180 near-gray mask when the strict mask
+        # finds nothing, so every already-committed vintage (059-107) keeps
+        # digitising under the original threshold.
+        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        best = weekly_ticks(line)
     end
     isempty(best) && error("no x-axis weekly tick row found")
     xt = best

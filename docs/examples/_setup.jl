@@ -26,6 +26,15 @@ using TensorBoardLogger
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
+## `activate!(type = "png")` leaves Figures still showable as `MIME"text/html"`,
+## which Literate prefers over `image/png`, and Documenter's raw-block regex
+## hits PCRE's ~64KB limit once a block grows past it. Disabling the
+## html-family mimes forces every Figure display onto the image/png path.
+CairoMakie.disable_mime!(
+    "text/html", "application/vnd.webio.application+html",
+    "application/prs.juno.plotpane+html", "juliavscode/html",
+    "svg", "pdf")
+
 Random.seed!(20260518)
 
 ## Guard the stateful setup against running twice in one module: the Literate

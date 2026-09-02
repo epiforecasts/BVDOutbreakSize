@@ -1280,3 +1280,143 @@ smsps_recovered_reintegrated,104,2026-08-26,Nord-Kivu,100.0,percent,section 1.7.
 smsps_recovered_reintegrated,105,2026-08-27,Ituri,77.0,percent,section 1.7.1 prose: '17 gueris sur 22 (77 %) ont ete reinseres'
 smsps_recovered_reintegrated,105,2026-08-27,Nord-Kivu,100.0,percent,section 1.7.1 prose: '1 gueri reinsere (100 %)' - denominator not printed as an explicit fraction
 smsps_recovered_reintegrated,106,2026-08-28,Nord-Kivu,50.0,percent,"section 1.7.1 prose: '2 gueris reinseres sur 4 (50 %)'; Ituri gives no reinsertion figure this vintage (different phrasing: SMSPS beneficiaries around recent confirmed cases only, no recovered-reintegration count)"
+alerts_total_day,107,2026-08-29,Ensemble,1830,alerts,'Situation des alertes notifiees par province' table (Total General)
+alerts_validated_alive,107,2026-08-29,Ensemble,232,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Ensemble,88,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Ensemble,320,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,107,2026-08-29,Ituri,720,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,107,2026-08-29,Ituri,106,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Ituri,33,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Ituri,139,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,107,2026-08-29,Nord-Kivu,951,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,107,2026-08-29,Nord-Kivu,105,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Nord-Kivu,52,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Nord-Kivu,157,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,107,2026-08-29,Tshopo,126,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,107,2026-08-29,Tshopo,8,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Tshopo,0,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Tshopo,8,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,107,2026-08-29,Haut-Uele,19,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,107,2026-08-29,Haut-Uele,12,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Haut-Uele,2,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Haut-Uele,14,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,107,2026-08-29,Bas-Uele,14,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,107,2026-08-29,Bas-Uele,1,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,107,2026-08-29,Bas-Uele,1,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,107,2026-08-29,Bas-Uele,2,alerts,alert table 'Nombre de suspects investigues'
+alert_investigation_rate,107,2026-08-29,Ensemble,100.0,percent,section 1.1.3 prose ('Les 320 cas suspects valides ont tous ete investigues (100 %)')
+contact_tracing_coverage,107,2026-08-29,Ensemble,82.4,percent,"section 1.1.3 prose, 18520/22463"
+contacts_seen,107,2026-08-29,Ensemble,18520,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Ensemble,22463,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,107,2026-08-29,Ituri,86.8,percent,"section 1.1.3 prose, 9770/11270"
+contacts_seen,107,2026-08-29,Ituri,9770,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Ituri,11270,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,107,2026-08-29,Tshopo,44.0,percent,"section 1.1.3 prose, 200/455"
+contacts_seen,107,2026-08-29,Tshopo,200,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Tshopo,455,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,107,2026-08-29,Nord-Kivu,83.6,percent,"section 1.1.3 prose, 7525/8996"
+contacts_seen,107,2026-08-29,Nord-Kivu,7525,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Nord-Kivu,8996,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,107,2026-08-29,Haut-Uele,57.4,percent,"section 1.1.3 prose, 830/1445"
+contacts_seen,107,2026-08-29,Haut-Uele,830,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Haut-Uele,1445,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,107,2026-08-29,Bas-Uele,62.6,percent,"section 1.1.3 prose, 186/297"
+contacts_seen,107,2026-08-29,Bas-Uele,186,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,107,2026-08-29,Bas-Uele,297,persons,see contact_tracing_coverage row note
+poe_travellers_screened,107,2026-08-29,Ensemble,264693,persons,'Suivi des indicateurs aux PoE/PoC' table (Global column)
+poe_alertes_notifiees,107,2026-08-29,Ensemble,8,alerts,PoE/PoC table 'Nombre d'alertes notifiees' (Global column)
+poe_corpses_swabbed,107,2026-08-29,Ensemble,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour' (Global column)
+poe_travellers_screened,107,2026-08-29,Ituri,146033,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Ituri,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Ituri,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,107,2026-08-29,Nord-Kivu,85571,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Nord-Kivu,5,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Nord-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,107,2026-08-29,Sud-Kivu,8267,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Sud-Kivu,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Sud-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,107,2026-08-29,Tshopo,6691,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Tshopo,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Tshopo,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,107,2026-08-29,Haut-Uele,13719,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Haut-Uele,1,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Haut-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,107,2026-08-29,Bas-Uele,4412,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,107,2026-08-29,Bas-Uele,2,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,107,2026-08-29,Bas-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+smsps_recovered_reintegrated,107,2026-08-29,Nord-Kivu,50.0,percent,section 1.7.1 prose: '2 gueris reinseres sur 4 (50 %)'; Ituri and Haut-Uele give no reinsertion figure this vintage
+alerts_total_day,108,2026-08-30,Ensemble,1628,alerts,'Situation des alertes notifiees par province' table (Total General)
+alerts_validated_alive,108,2026-08-30,Ensemble,184,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Ensemble,74,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Ensemble,258,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,108,2026-08-30,Ituri,701,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,108,2026-08-30,Ituri,125,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Ituri,43,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Ituri,168,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,108,2026-08-30,Nord-Kivu,784,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,108,2026-08-30,Nord-Kivu,47,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Nord-Kivu,28,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Nord-Kivu,75,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,108,2026-08-30,Tshopo,108,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,108,2026-08-30,Tshopo,2,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Tshopo,0,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Tshopo,2,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,108,2026-08-30,Haut-Uele,17,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,108,2026-08-30,Haut-Uele,9,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Haut-Uele,0,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Haut-Uele,9,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,108,2026-08-30,Bas-Uele,18,alerts,'Situation des alertes notifiees par province' table
+alerts_validated_alive,108,2026-08-30,Bas-Uele,1,alerts,"alert table, validated-suspect vivants"
+alerts_validated_dead_community,108,2026-08-30,Bas-Uele,3,alerts,"alert table, validated-suspect decedes"
+alerts_investigated,108,2026-08-30,Bas-Uele,4,alerts,alert table 'Nombre de suspects investigues'
+alert_investigation_rate,108,2026-08-30,Ensemble,100.0,percent,section 1.1.3 prose ('Les 258 cas suspects valides ont tous ete investigues (100 %)')
+contact_tracing_coverage,108,2026-08-30,Ensemble,86.3,percent,"section 1.1.3 prose, 21002/24330"
+contacts_seen,108,2026-08-30,Ensemble,21002,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Ensemble,24330,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,108,2026-08-30,Ituri,89.4,percent,"section 1.1.3 prose, 11829/13235"
+contacts_seen,108,2026-08-30,Ituri,11829,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Ituri,13235,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,108,2026-08-30,Tshopo,100.0,percent,"section 1.1.3 prose, 455/455"
+contacts_seen,108,2026-08-30,Tshopo,455,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Tshopo,455,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,108,2026-08-30,Nord-Kivu,84.8,percent,"section 1.1.3 prose, 7529/8882"
+contacts_seen,108,2026-08-30,Nord-Kivu,7529,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Nord-Kivu,8882,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,108,2026-08-30,Haut-Uele,68.5,percent,"section 1.1.3 prose, 1001/1461"
+contacts_seen,108,2026-08-30,Haut-Uele,1001,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Haut-Uele,1461,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,108,2026-08-30,Bas-Uele,63.3,percent,"section 1.1.3 prose, 188/297"
+contacts_seen,108,2026-08-30,Bas-Uele,188,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,108,2026-08-30,Bas-Uele,297,persons,see contact_tracing_coverage row note
+poe_travellers_screened,108,2026-08-30,Ensemble,254483,persons,'Suivi des indicateurs aux PoE/PoC' table (Global column)
+poe_alertes_notifiees,108,2026-08-30,Ensemble,10,alerts,PoE/PoC table 'Nombre d'alertes notifiees' (Global column)
+poe_corpses_swabbed,108,2026-08-30,Ensemble,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour' (Global column)
+poe_travellers_screened,108,2026-08-30,Ituri,124031,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Ituri,1,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Ituri,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,108,2026-08-30,Nord-Kivu,82924,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Nord-Kivu,6,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Nord-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,108,2026-08-30,Sud-Kivu,6609,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Sud-Kivu,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Sud-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,108,2026-08-30,Tshopo,22359,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Tshopo,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Tshopo,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,108,2026-08-30,Haut-Uele,11880,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Haut-Uele,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Haut-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,108,2026-08-30,Bas-Uele,6680,persons,'Suivi des indicateurs aux PoE/PoC' table
+poe_alertes_notifiees,108,2026-08-30,Bas-Uele,3,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,108,2026-08-30,Bas-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+eds_death_alerts,108,2026-08-30,Ituri,83,alerts,section 1.4.1 prose: '62 EDS realisees sur 83 alertes et 48 corps swabes (9 echecs)'
+eds_corpses_swabbed,108,2026-08-30,Ituri,48,corpses,section 1.4.1 prose: '62 EDS realisees sur 83 alertes et 48 corps swabes (9 echecs)'
+eds_investigations_performed,108,2026-08-30,Ituri,62,investigations,section 1.4.1 prose: '62 EDS realisees sur 83 alertes et 48 corps swabes (9 echecs)'
+eds_corpses_swabbed,108,2026-08-30,Nord-Kivu,56,corpses,section 1.4.1 prose: '56 corps swabes et 53 EDS realises' (no alertes count printed)
+eds_investigations_performed,108,2026-08-30,Nord-Kivu,53,investigations,section 1.4.1 prose: '56 corps swabes et 53 EDS realises' (no alertes count printed)
+eds_corpses_swabbed,108,2026-08-30,Tshopo,9,corpses,section 1.4.1 prose: '9 corps swabes et 9 EDS realises' (no alertes count printed)
+eds_investigations_performed,108,2026-08-30,Tshopo,9,investigations,section 1.4.1 prose: '9 corps swabes et 9 EDS realises' (no alertes count printed)
+eds_death_alerts,108,2026-08-30,Haut-Uele,4,alerts,"section 1.4.1 prose: '4 alertes EDS recues, 4 corps swabes et 4 EDS realises (Isiro 2, Pawa 2)'"
+eds_corpses_swabbed,108,2026-08-30,Haut-Uele,4,corpses,"section 1.4.1 prose: '4 alertes EDS recues, 4 corps swabes et 4 EDS realises (Isiro 2, Pawa 2)'"
+eds_investigations_performed,108,2026-08-30,Haut-Uele,4,investigations,"section 1.4.1 prose: '4 alertes EDS recues, 4 corps swabes et 4 EDS realises (Isiro 2, Pawa 2)'"
+eds_corpses_swabbed,108,2026-08-30,Bas-Uele,3,corpses,section 1.4.1 prose: '3 corps swabes' only (no alertes or EDS-realises count printed)
