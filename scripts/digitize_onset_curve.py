@@ -322,16 +322,20 @@ def _y_axis_ticks(dark, base, W):
     # with the last one (the 0 tick) on the baseline. Taking the longest run
     # alone is not enough - in SitRep 067 a glyph stroke outruns the real
     # axis line and yields a scale that halves every count.
+    # Slice bounds are the 0-based images of the reference's 1-based ranges:
+    # candidate columns 30..floor(W*0.13), the label strip being the ten
+    # columns immediately left of the candidate, and rows running down to
+    # three past the baseline.
     best = None
-    for x in range(30, int(W * 0.13)):
-        seg = dark[: base + 3, max(0, x - 10):x - 1].sum(axis=1)
+    for x in range(29, int(W * 0.13)):
+        seg = dark[: base + 4, max(0, x - 10):x].sum(axis=1)
         yt = _cluster([y for y in range(len(seg)) if seg[y] >= 3])
         if len(yt) < 3 or abs(yt[-1] - base) > 3:
             continue
         d = np.diff(yt)
         if d.min() <= 5 or d.max() > 1.15 * d.min():
             continue
-        rank = (_longest_run(dark[:base, x]), -x)  # tie-break leftmost
+        rank = (_longest_run(dark[: base + 1, x]), -x)  # tie-break leftmost
         if best is None or rank > best[0]:
             best = (rank, yt)
     if best is None:
@@ -383,7 +387,16 @@ def digitize(im, last_tick_date, y_step=20):
         raise ValueError("no x-axis weekly tick row found")
     xt = best
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
-    lastx = xt[-1]                       # rightmost tick is always real
+    # The daily bar windows are laid out in the 1-based pixel frame the Julia
+    # reference uses, and converted back to 0-based only at the point of
+    # indexing. Rounding half to even is what both languages do, but it is
+    # not translation-invariant: a window edge landing exactly on .5 rounds
+    # down in one frame and up in the other, so the two ports would read
+    # windows one column apart. That is not a rounding wobble of a count or
+    # two - on SitRep 106 it moved fourteen cells, one of them by eleven
+    # deaths, because a dropped column changes which bar the 75th percentile
+    # lands on. See issue #594.
+    lastx = xt[-1] + 1                   # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)
     # per-column stacked bar height, flooded up from the baseline
     bc = np.zeros(W)
@@ -404,14 +417,15 @@ def digitize(im, last_tick_date, y_step=20):
             r -= 1
         bc[x], rc[x] = b, rr
     tot = bc + rc
-    barmin, barmax = np.where(tot > 2)[0].min(), np.where(tot > 2)[0].max()
+    nz = np.where(tot > 2)[0] + 1        # 1-based, matching lastx
+    barmin, barmax = nz.min(), nz.max()
     rows = []
     for off in range(-105, 4):
         cx = lastx + off * ppd
         if cx < barmin - ppd or cx > barmax + ppd:
             continue
         lo, hi = int(round(cx - ppd * 0.45)), int(round(cx + ppd * 0.45))
-        cols = range(max(0, lo), min(W, hi + 1))
+        cols = range(max(1, lo) - 1, min(W, hi))
         bvals = [bc[c] for c in cols]
         rvals = [rc[c] for c in cols]
         if max(b + r for b, r in zip(bvals, rvals)) < 1:
