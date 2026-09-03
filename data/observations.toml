@@ -8,10 +8,13 @@
 # 17th Ebola epidemic (https://insp.cd/ebola-17eme-epidemie/),
 # transcribed by INRB-UMIE (https://github.com/INRB-UMIE/BDBV2026-Data).
 # Two sources feed this manifest:
-#  - The cumulative confirmed-case and confirmed-death series come from
-#    the INRB-UMIE `national_*` daily CSVs (data/insp_sitrep/processed),
-#    their clean national headline series. These are regenerated and
-#    spot-confirmed against our own scan by scripts/confirm_insp_data.jl.
+#  - The cumulative confirmed-case and confirmed-death series are scanned
+#    from the situation reports like every other stream, and cross-checked
+#    against the INRB-UMIE `national_*` daily CSVs
+#    (data/insp_sitrep/processed) by scripts/confirm_insp_data.jl. The
+#    mirror is a second reading of the same PDFs, not an authority over
+#    them: it carries 86 of the 102 report dates below, and four of its
+#    values are transcription errors the PDFs settle (see issue #624).
 #  - Every other stream (the suspected totals, the laboratory cumulatives,
 #    the post-cut-off 24h analysed volume, the daily new-suspect inflow,
 #    isolation occupancy, bed capacity and recoveries) is read directly

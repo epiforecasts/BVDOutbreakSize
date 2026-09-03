@@ -1,27 +1,27 @@
 #!/usr/bin/env julia
 #
-# Regenerate the cumulative confirmed-case and confirmed-death series for
-# data/observations.toml from the INRB-UMIE national cumulative CSVs (the
-# clean national transcription of the INSP situation reports,
-# https://github.com/INRB-UMIE/BDBV2026-Data, data/insp_sitrep/processed),
-# and confirm them against our own directly scanned headline figures in
-# data/insp_sitrep_scanned.csv.
+# Cross-check the cumulative confirmed-case and confirmed-death series in
+# data/observations.toml against the INRB-UMIE national cumulative CSVs
+# (a national transcription of the INSP situation reports,
+# https://github.com/INRB-UMIE/BDBV2026-Data, data/insp_sitrep/processed).
 #
-# These two streams are upstream-primary: the upstream national_* series
-# are the source of truth and this script prints the ready-to-paste TOML
-# blocks. The scan is the cross-check. Every other stream in the manifest
-# (suspected, laboratory cumulatives, 24h analysed volume, daily new
-# suspects, isolation, beds, recoveries) is scanned directly and is not
-# handled here.
+# insp.cd is the source of truth for both streams, as it is for every other
+# stream in the manifest (data/README.md section 2, and the header of
+# scripts/download_sitreps.jl). The fitted values are our own directly
+# scanned headline and province-table figures in
+# data/insp_sitrep_scanned.csv; the mirror is a second pair of eyes on the
+# same PDFs, not an authority over them. It is also incomplete, carrying 86
+# of the 102 report dates the manifest holds, so its series is never pasted
+# into the manifest wholesale.
 #
 # Usage:
 #
 #   julia --project=scripts scripts/confirm_insp_data.jl
 #
-# Prints the regenerated [confirmed_case_history] and
-# [confirmed_death_history] blocks, a per-date scan-vs-upstream
-# reconciliation, and the report dates each source carries that the other
-# does not. Exits non-zero if any overlapping date disagrees.
+# Prints a per-date scan-vs-mirror reconciliation and the report dates each
+# source carries that the other does not. Exits non-zero if an overlapping
+# date disagrees, unless the disagreement is one of the documented mirror
+# transcription errors in KNOWN_MIRROR_ERRORS below.
 
 using CSV
 using Chain
@@ -33,6 +33,32 @@ using Downloads
 const BASE_URL = "https://raw.githubusercontent.com/INRB-UMIE/" *
                  "BDBV2026-Data/main/data/insp_sitrep/processed"
 const SCANNED = joinpath(@__DIR__, "..", "data", "insp_sitrep_scanned.csv")
+
+# Mirror transcription errors the primary PDFs have already settled, keyed
+# by (report date, series label). Each entry records both values so a
+# silently changed mirror is caught rather than waved through, and states
+# what the SitRep's own pages say. A listed date is reported and does not
+# fail the run; an unlisted disagreement still does, and so does an entry
+# that no longer reproduces, so the table cannot quietly go stale. The
+# reasoning behind each is written up in data/README.md; see issue #624.
+const KNOWN_MIRROR_ERRORS = Dict(
+    (Date("2026-08-08"), "confirmed cases") => (4294, 4209,
+        "the mirror filed SitRep 085 (reporting date 07 August) under its " *
+        "08 August publication date; SitRep 086's own page-1 headline and " *
+        "province table both give 4294 for 08 August"),
+    (Date("2026-08-08"), "confirmed deaths") => (1960, 1916,
+        "same misdated SitRep 085 row; SitRep 086's headline and province " *
+        "sum both give 1960"),
+    (Date("2026-08-11"), "confirmed cases") => (4567, 4566,
+        "SitRep 089 prints a Total of 4566 but its own province rows sum " *
+        "to 4567 (3912+528+115+9+3), and SitRep 088's 4449 plus the " *
+        "printed 118 new confirmed also gives 4567; the auditable table " *
+        "sum wins, as for SitReps 009, 061 and 083"),
+    (Date("2026-08-25"), "confirmed deaths") => (2744, 2755,
+        "SitRep 103 gives 2744 in its headline, its Total row and its " *
+        "province sum (2133+512+89+8+1+1); 2755 appears nowhere in " *
+        "SitReps 101-104")
+)
 
 # (upstream file stem, scanned column, TOML key, human label) per series.
 const SERIES = [
@@ -69,65 +95,70 @@ function upstream_series(file)
     end
 end
 
-# Print a TOML array wrapped to the observations.toml house style, with
-# the continuation lines indented to align under the first item.
-function print_wrapped(label, items, per_line)
-    prefix = rpad(label, 6) * " = ["
-    pad = " "^length(prefix)
-    print(prefix)
-    for (i, item) in enumerate(items)
-        i > 1 && print(i % per_line == 1 ? ",\n$pad" : ", ")
-        print(item)
-    end
-    println("]")
-end
-
-function print_block(key, df)
-    println("[$key]")
-    print_wrapped("dates", ("\"$(d)\"" for d in df.date), 4)
-    print_wrapped("values", df.upstream, 14)
-    println()
-end
-
 scan = CSV.read(SCANNED, DataFrame; missingstring = [""])
 
-println("# Regenerated from the INRB-UMIE national cumulative CSVs.")
-println("# Paste into data/observations.toml (keep the surrounding ",
-    "comments).\n")
-
 any_mismatch = false
-for (file, col, key, label) in SERIES
-    upstream = upstream_series(file)
-    print_block(key, upstream)
-end
+# Entries confirmed against this run's mirror, so a table that has outlived
+# the disagreement it documents can be reported at the end.
+seen_known = Set{Tuple{Date, String}}()
 
 for (file, col, key, label) in SERIES
-    println("=== $label: scan vs upstream ===")
+    println("=== $label: scan vs mirror ===")
     scanned = scanned_series(scan, col)
     upstream = upstream_series(file)
 
     shared = @chain innerjoin(scanned, upstream; on = :date) @orderby :date
     mismatched = @rsubset(shared, :scanned != :upstream)
+    unexplained = 0
     for row in eachrow(mismatched)
-        println("  MISMATCH $(row.date): scanned $(row.scanned) vs " *
-                "upstream $(row.upstream)")
+        known = get(KNOWN_MIRROR_ERRORS, (row.date, label), nothing)
+        if known !== nothing && known[1] == row.scanned &&
+           known[2] == row.upstream
+            push!(seen_known, (row.date, label))
+            println("  known mirror error $(row.date): scan " *
+                    "$(row.scanned) vs mirror $(row.upstream) - $(known[3])")
+        else
+            unexplained += 1
+            println("  MISMATCH $(row.date): scanned $(row.scanned) vs " *
+                    "mirror $(row.upstream)")
+        end
     end
-    nrow(mismatched) > 0 && (global any_mismatch = true)
+    unexplained > 0 && (global any_mismatch = true)
     println("  $(nrow(shared)) dates compared, $(nrow(mismatched)) " *
-            "mismatch(es)")
+            "mismatch(es), $unexplained unexplained")
 
     new_dates = @chain antijoin(upstream, scanned; on = :date) @orderby :date
     if nrow(new_dates) > 0
-        println("  upstream dates not scanned: " *
+        println("  mirror dates not scanned: " *
                 join(("$(r.date)=$(r.upstream)" for r in eachrow(new_dates)),
             ", "))
+    end
+    missing_dates = @chain antijoin(scanned, upstream; on = :date) @orderby :date
+    if nrow(missing_dates) > 0
+        println("  $(nrow(missing_dates)) scanned date(s) the mirror does " *
+                "not carry, so its series is not a substitute for the scan")
     end
     println()
 end
 
+# An entry whose disagreement has gone (the mirror was corrected upstream,
+# or the scan changed) is stale and must be removed rather than left to
+# suppress a future real mismatch on the same date.
+stale = setdiff(keys(KNOWN_MIRROR_ERRORS), seen_known)
+if !isempty(stale)
+    println("=== stale KNOWN_MIRROR_ERRORS entries ===")
+    for (date, label) in sort(collect(stale))
+        println("  $date $label no longer disagrees as recorded; remove it")
+    end
+    println()
+    any_mismatch = true
+end
+
 if any_mismatch
-    println("Reconciliation FAILED: a scanned value disagrees with upstream.")
+    println("Reconciliation FAILED: an undocumented disagreement, or a " *
+            "stale entry.")
     exit(1)
 else
-    println("Reconciliation OK: all overlapping dates agree.")
+    println("Reconciliation OK: every disagreement is a documented " *
+            "mirror error.")
 end

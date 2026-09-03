@@ -13,7 +13,7 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | --- | --- |
 | `check_new_sitreps.jl` | Lists INSP SitReps not yet in `data/insp_sitrep_scanned.csv`. Exits non-zero if any are missing. |
 | `download_sitreps.jl` | Downloads the INSP SitRep PDFs into `data/sitrep_pdfs/` (git-ignored). Also `task download-sitreps`. |
-| `confirm_insp_data.jl` | Regenerates the confirmed-case and confirmed-death TOML blocks for `data/observations.toml` from the INRB-UMIE mirror, and cross-checks them against the scanned totals. Also `task confirm-data`. |
+| `confirm_insp_data.jl` | Cross-checks the scanned confirmed-case and confirmed-death totals against the INRB-UMIE mirror, and reports the dates each source carries alone. Also `task confirm-data`. |
 | `refresh_releases.jl` | Pulls each tagged results release's headline estimate into `data/released_estimates.csv`. Also `task refresh-releases`. |
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
