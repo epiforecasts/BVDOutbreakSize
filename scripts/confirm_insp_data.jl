@@ -60,12 +60,13 @@ const KNOWN_MIRROR_ERRORS = Dict(
         "SitReps 101-104")
 )
 
-# (upstream file stem, scanned column, TOML key, human label) per series.
+# (upstream file stem, scanned column, human label) per series. The label
+# is what KNOWN_MIRROR_ERRORS is keyed on, so it is part of the contract.
 const SERIES = [
     ("insp_sitrep__national_cumulative_confirmed_cases__daily.csv",
-        :confirmed_cases, "confirmed_case_history", "confirmed cases"),
+        :confirmed_cases, "confirmed cases"),
     ("insp_sitrep__national_cumulative_confirmed_deaths__daily.csv",
-        :confirmed_deaths, "confirmed_death_history", "confirmed deaths")
+        :confirmed_deaths, "confirmed deaths")
 ]
 
 # Latest non-missing scanned value per report date. The scanned file can
@@ -102,7 +103,7 @@ any_mismatch = false
 # the disagreement it documents can be reported at the end.
 seen_known = Set{Tuple{Date, String}}()
 
-for (file, col, key, label) in SERIES
+for (file, col, label) in SERIES
     println("=== $label: scan vs mirror ===")
     scanned = scanned_series(scan, col)
     upstream = upstream_series(file)
@@ -133,9 +134,9 @@ for (file, col, key, label) in SERIES
                 join(("$(r.date)=$(r.upstream)" for r in eachrow(new_dates)),
             ", "))
     end
-    missing_dates = @chain antijoin(scanned, upstream; on = :date) @orderby :date
-    if nrow(missing_dates) > 0
-        println("  $(nrow(missing_dates)) scanned date(s) the mirror does " *
+    only_scanned = nrow(antijoin(scanned, upstream; on = :date))
+    if only_scanned > 0
+        println("  $only_scanned scanned date(s) the mirror does " *
                 "not carry, so its series is not a substitute for the scan")
     end
     println()
