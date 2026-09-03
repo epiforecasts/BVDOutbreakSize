@@ -21,7 +21,8 @@ A bar's height is read in pixels and converted with the axis scale that scan cal
 Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
 The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
 On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
-The outbreak size and the recent reproduction number are unchanged by the term. [PLACEHOLDER: confirm or amend from the before and after joint fits]
+Whether the outbreak size and the recent reproduction number move with the term is being checked against before and after joint fits, and this entry will be updated with the result.
+<!-- placeholder: pending #642 fit comparison -->
 The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
 - Bed forecasts are now scored against the occupancy the situation reports print.
 The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
