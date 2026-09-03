@@ -1142,7 +1142,7 @@ end
     ## An out-of-range index (the empty-predecessor sentinel) contributes a
     ## multiplier of one rather than indexing out of bounds.
     c = onset_scan_adjust([10.0], [5.0], [1.2], [0], [0])
-    @test c.means ≈ 5.0
+    @test only(c.means) ≈ 5.0
 end
 
 @testitem "onset_scan_independent splits the measured scan error" begin
@@ -1174,12 +1174,13 @@ end
     ## snapshot, which is what the report's onset panel plots and what
     ## `stream_calibration` scores. Independent per-cell errors average out
     ## across a snapshot's cells, so the per-cell view predicts that sum far
-    ## too tightly even though its per-cell spread is right.
+    ## too tightly even though its per-cell spread is right, and central
+    ## coverage collapses further than the 90% coverage does.
     using BVDOutbreakSize: onset_report_moments, onset_report_scales,
                            onset_scan_adjust, onset_scan_independent,
                            onset_vintage_indices, safe_studentt,
                            ONSET_REPORT_MAX_DELAY
-    using Random: MersenneTwister
+    using Random: MersenneTwister, randn
     using Statistics: quantile
     using Distributions: rand
 
@@ -1190,18 +1191,22 @@ end
     σ_scan_true = 0.03
     σ_ind_true = onset_scan_independent(σ_scan_true, scan_frac)
 
-    ## Latent truth: a slowly growing onset curve, a constant reporting
-    ## hazard and a constant ascertainment level, so every deviation below
-    ## comes from the observation model rather than from epidemic dynamics.
-    n = 240
-    onsets = [40.0 * exp(0.02 * (t - n)) for t in 1:n]
+    ## Latent truth: an epidemic bump, a constant reporting hazard and a
+    ## constant ascertainment level, so every deviation below comes from the
+    ## observation model rather than from epidemic dynamics. The cumulative
+    ## level a cell differences runs to a couple of hundred cases, the
+    ## regime the digitised triangle is in and the one where the scan error
+    ## dominates the pixel and counting terms.
+    nvint = 150
+    n = 150 + 2 * nvint + 20
+    onsets = [400.0 * exp(-((t - (n - 60))^2) / (2 * 70.0^2)) for t in 1:n]
     logit_h0 = fill(log(0.15 / 0.85), D)
-    report_days = collect(150:2:(150 + 2 * 59))
+    report_days = collect(150:2:(150 + 2 * (nvint - 1)))
     horizon = D
     grid_start = max(minimum(report_days) - horizon + 1, 1)
     grid_end = maximum(report_days)
     γ = zeros(grid_end - grid_start + 1)
-    alpha = fill(0.5, grid_end - grid_start + 1)
+    alpha = fill(0.6, grid_end - grid_start + 1)
 
     ## Cells: the same trailing-window construction `load_onset_curve`
     ## builds, with the first vintage differenced against an empty
@@ -1222,9 +1227,9 @@ end
     m = onset_report_moments(onsets, logit_h0, γ, grid_start, alpha,
         onset_idx, cur_idx, prev_idx)
 
-    ## Generate one triangle from the shared-scan truth: each scan gets one
-    ## level error, then each cell gets its own independent noise under the
-    ## same Student-t the likelihood uses.
+    ## One triangle from the shared-scan truth: each scan gets one level
+    ## error, then each cell gets its own independent noise under the same
+    ## Student-t the likelihood uses.
     scan_true = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
     truth = onset_scan_adjust(m.level_cur, m.level_prev, scan_true,
         v.vintage_idx, v.prev_vintage_idx)
@@ -1236,41 +1241,47 @@ end
 
     ## Predictive for a snapshot's net correction under each structure.
     ndraw = 1500
+    sd_percell = onset_report_scales(m.means, m.level_cur, m.level_prev,
+        prev_idx; scan_ind = scan_frac)
     function coverage(shared::Bool)
-        inside = 0
-        sd_old = onset_report_scales(m.means, m.level_cur, m.level_prev,
-            prev_idx; scan_ind = scan_frac)
         totals = [Vector{Float64}(undef, ndraw) for _ in 1:v.n_vintages]
         for d in 1:ndraw
-            if shared
-                c = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
-                a = onset_scan_adjust(m.level_cur, m.level_prev, c,
+            rep = if shared
+                cs = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
+                adj = onset_scan_adjust(m.level_cur, m.level_prev, cs,
                     v.vintage_idx, v.prev_vintage_idx)
-                sd = onset_report_scales(a.means, a.level_cur, a.level_prev,
-                    prev_idx; scan_ind = σ_ind_true)
-                rep = [rand(rng, safe_studentt(a.means[i], sd[i], ν))
-                       for i in eachindex(a.means)]
+                sds = onset_report_scales(adj.means, adj.level_cur,
+                    adj.level_prev, prev_idx; scan_ind = σ_ind_true)
+                [rand(rng, safe_studentt(adj.means[i], sds[i], ν))
+                 for i in eachindex(adj.means)]
             else
-                rep = [rand(rng, safe_studentt(m.means[i], sd_old[i], ν))
-                       for i in eachindex(m.means)]
+                [rand(rng, safe_studentt(m.means[i], sd_percell[i], ν))
+                 for i in eachindex(m.means)]
             end
             for s in 1:v.n_vintages
                 totals[s][d] = sum(rep[groups[s]])
             end
         end
+        in50 = 0
+        in90 = 0
         for s in 1:v.n_vintages
-            q = quantile(totals[s], [0.25, 0.75])
-            inside += q[1] <= obs_totals[s] <= q[2]
+            q = quantile(totals[s], [0.05, 0.25, 0.75, 0.95])
+            in50 += q[2] <= obs_totals[s] <= q[3]
+            in90 += q[1] <= obs_totals[s] <= q[4]
         end
-        return inside / v.n_vintages
+        return (in50 / v.n_vintages, in90 / v.n_vintages)
     end
 
-    cov_percell = coverage(false)
-    cov_shared = coverage(true)
-    ## Per-cell-only scoring collapses central coverage on the snapshot
-    ## aggregate, the 1-in-11 symptom the issue measured on the real data.
-    @test cov_percell < 0.3
-    ## Splitting the same measured error restores it to about nominal.
-    @test 0.35 <= cov_shared <= 0.65
-    @test cov_shared > cov_percell
+    percell = coverage(false)
+    shared = coverage(true)
+    ## Per-cell-only scoring under-covers, and central coverage falls
+    ## further than the 90% coverage: the aggregate spread is roughly right
+    ## and its shape is wrong.
+    @test percell[1] <= 0.40
+    @test percell[2] <= 0.80
+    @test percell[1] / 0.5 < percell[2] / 0.9
+    ## Splitting the same measured error restores both to about nominal.
+    @test 0.42 <= shared[1] <= 0.58
+    @test 0.82 <= shared[2] <= 0.96
+    @test shared[1] > percell[1]
 end
