@@ -67,36 +67,47 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
 ## `stream_forecasts.csv` uses), so the validation plots below can show the
 ## individual fit alongside the joint rather than the joint alone. Recovered
 ## has no individual fit and is absent here, as it is throughout this report.
-function _validation_individual_new(sid, stream::Symbol, obs_value)
+## Only the still-reported streams are fitted at the validation cut-off, so
+## a stream the situation reports have stopped updating is absent from
+## `frozen_lastweek_streams` and carries no individual series here.
+function _validation_individual_new(sid, stream::Symbol, obs_field)
+    haskey(frozen_lastweek_streams, sid) || return nothing
     f = frozen_lastweek_streams[sid]
     bp = f.o.n - f.o.who_first_sitrep_days
     return Float64.(forecast_stream(f.chn, stream; horizon = 7,
-        obs_value = obs_value, n = f.o.n, breakpoint = bp,
+        obs_value = getproperty(f.o, obs_field), n = f.o.n, breakpoint = bp,
         rt_start = 1, rt_walk_start = 1))
 end
-validation_individual = (;
-    cases_new = _validation_individual_new(
-        "cases", :reported_cases,
-        frozen_lastweek_streams["cases"].o.reported_cases),
-    deaths_new = _validation_individual_new(
-        "deaths", :suspected_deaths,
-        frozen_lastweek_streams["deaths"].o.total_deaths),
-    confirmed_new = _validation_individual_new(
-        "confirmed", :confirmed_cases,
-        frozen_lastweek_streams["confirmed"].o.confirmed_cases),
-    confirmed_deaths_new = _validation_individual_new(
-        "confirmed_deaths", :confirmed_deaths,
-        frozen_lastweek_streams["confirmed_deaths"].o.confirmed_deaths))
+validation_individual = NamedTuple(
+    k => v
+for (k, v) in pairs((;
+        cases_new = _validation_individual_new(
+            "cases", :reported_cases, :reported_cases),
+        deaths_new = _validation_individual_new(
+            "deaths", :suspected_deaths, :total_deaths),
+        confirmed_new = _validation_individual_new(
+            "confirmed", :confirmed_cases, :confirmed_cases),
+        confirmed_deaths_new = _validation_individual_new(
+            "confirmed_deaths", :confirmed_deaths, :confirmed_deaths)))
+if !isnothing(v))
 ## The frozen individual (treatment-only) fit's own bed-occupancy forecast,
 ## anchored on the beds occupied at ITS OWN cut-off (the frozen fit's own
 ## `o`, not the current `obs`), matching how the joint frozen forecast is
 ## itself anchored.
-_validation_iso_obs = let f = frozen_lastweek_streams["treatment"]
-    isempty(f.o.isolation_history.counts) ? 0.0 :
-    Float64(f.o.isolation_history.counts[end])
+## `nothing` when the beds have stopped being reported, so the treatment fit
+## is absent; the bed panel then draws the joint alone.
+validation_individual_isolation = if haskey(
+    frozen_lastweek_streams, "treatment")
+    f = frozen_lastweek_streams["treatment"]
+    bp = f.o.n - f.o.who_first_sitrep_days
+    _obs = isempty(f.o.isolation_history.counts) ? 0.0 :
+           Float64(f.o.isolation_history.counts[end])
+    Float64.(forecast_stream(f.chn, :isolation_beds; horizon = 7,
+        obs_value = _obs, n = f.o.n, breakpoint = bp,
+        rt_start = 1, rt_walk_start = 1))
+else
+    nothing
 end
-validation_individual_isolation = _validation_individual_new(
-    "treatment", :isolation_beds, _validation_iso_obs)
 
 ## The observed beds at the current cut-off (the forecast target), so the
 ## frozen-fit bed forecast is scored against what the beds actually held.

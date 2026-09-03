@@ -75,13 +75,34 @@ default_frozen_cutoffs() = ["2026-05-20", "2026-05-23", "2026-05-27"]
 ## fit separately from the McCabe frozen set so the confirmed-case projection
 ## rides a vintage with testing data rather than the near-empty 27 May stream.
 default_chamla_cutoff() = "2026-06-08"
-## The individual single-stream models frozen at `validation_cutoff` for
-## the "last week versus now" forecast validation (see `fit_frozen_stream`
-## and `docs/examples/sensitivity.jl`'s "Forecast validation" section).
-## "exports" is excluded (not forecast at all) and there is no
-## individual model for "recovered".
-const VALIDATION_STREAM_IDS = ("cases", "deaths", "confirmed",
-    "confirmed_deaths", "treatment")
+## The individual single-stream models that could be frozen at
+## `validation_cutoff` for the "last week versus now" forecast validation
+## (see `fit_frozen_stream` and `docs/examples/sensitivity.jl`'s "Forecast
+## validation" section), paired with the observation stream each fits.
+## "exports" is excluded (not forecast at all) and there is no individual
+## model for "recovered".
+const VALIDATION_STREAM_FITS = (
+    ("cases", :suspected_cases),
+    ("deaths", :suspected_deaths),
+    ("confirmed", :confirmed_cases),
+    ("confirmed_deaths", :confirmed_deaths),
+    ("treatment", :isolation_beds))
+
+"""
+Fit ids of the single-stream models the forecast validation draws, for the
+data in `obs`: the streams the situation reports are still updating.
+
+The validation panels take the still-reported streams, so a fit of a stream
+that has stopped feeds nothing drawn and is two NUTS fits a docs build does
+not need. Deriving the list from the reporting status rather than holding a
+second hand-maintained one means a stream that starts being reported again
+comes back into validation on its own.
+"""
+function validation_stream_ids(obs)
+    return Tuple(id
+    for (id, stream) in VALIDATION_STREAM_FITS
+    if stream_reporting(obs, stream))
+end
 function run_sensitivity_env()
     lowercase(strip(get(ENV, "BVD_RUN_SENSITIVITY", "false"))) in
     ("true", "1", "yes", "on")
@@ -406,14 +427,14 @@ function build_fit_specs(obs;
         (; id = "frozen_validation", kind = :frozen,
             thunk = () -> fit_frozen_joint(validation_cutoff))
     ]
-    ## One frozen individual fit per stream at the validation cut-off, so
-    ## the "last week versus now" forecast validation can show each
-    ## stream's own model alongside the frozen joint above, not the joint
-    ## alone. `VALIDATION_STREAM_IDS` names which single-stream models get
-    ## one; "exports" is excluded (not forecast at all, see
+    ## One frozen individual fit per still-reported stream at the validation
+    ## cut-off, so the "last week versus now" forecast validation can show
+    ## each stream's own model alongside the frozen joint above, not the
+    ## joint alone. `validation_stream_ids` names which single-stream models
+    ## get one; "exports" is excluded (not forecast at all, see
     ## `forecast_reported`) and there is no individual model for
     ## "recovered".
-    for sid in VALIDATION_STREAM_IDS
+    for sid in validation_stream_ids(obs)
         push!(specs,
             (; id = "frozen_validation_$sid", kind = :frozen,
                 thunk = () -> fit_frozen_stream(sid, validation_cutoff)))
