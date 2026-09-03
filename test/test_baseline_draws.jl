@@ -673,7 +673,7 @@ end
     ## total, which is flat at 100, so the persistence walk has no steps to
     ## take. Differencing the cumulative instead puts the 100 itself into the
     ## pool, so the walk's scale would track the size of the epidemic rather
-    ## than how fast it is changing (issue #612).
+    ## than how fast it is changing.
     n = 60
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
@@ -735,7 +735,7 @@ end
     ## directory, so the digitised onset triangle is not beside it. The loader
     ## must still be pointed at the package's own copy, or the onset stream
     ## degrades to an empty history and the group gets no persistence
-    ## baseline at all (issue #623).
+    ## baseline at all.
     obs = load_observations()
     grid_date(day) = obs.cutoff - Day(obs.n - day)
     dir = mktempdir()

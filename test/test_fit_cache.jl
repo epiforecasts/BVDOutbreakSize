@@ -133,7 +133,7 @@ end
     ## The validation panels take the still-reported streams, so a stream the
     ## situation reports have stopped updating must not be fitted at all: its
     ## fit feeds an overlay that is filtered out, and each one is a NUTS fit
-    ## a docs build runs serially (issue #611).
+    ## a docs build runs serially.
     cutoff = Date(2026, 7, 15)
     n = 60
     day(d) = n - Dates.value(cutoff - d)

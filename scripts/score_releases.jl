@@ -81,8 +81,8 @@
 # spanning one, so a change of reporting basis does not enter the walk it
 # simulates (`spans_occupancy_break`). The forecast side carries the same
 # knowledge as the fitted offset the occupancy likelihood absorbs the step
-# with, which `forecast_reported` now adds to the projected level so the
-# projection and the reported truth are on one scale (issue #623).
+# with, which `forecast_reported` adds to the projected level so the
+# projection and the reported truth are on one scale.
 #
 # Each release's `stream_estimates.csv`, when present, also feeds the
 # per-fit `data/rt_by_release_by_stream.csv`,
@@ -502,11 +502,13 @@ function break_correction(obs, grid_date, stream, from_date, to_date)
     return total
 end
 
-## The level streams whose reported series carries the isolation occupancy's
-## own reclassification-break days (`[occupancy_break_dates]` in
-## `observations.toml`, see `src/data.jl`). The two ward sub-stocks sum to the
-## total occupancy each day, so a reclassification of the total moves them
-## too.
+## The streams whose reported series carries the isolation occupancy's own
+## reclassification-break days (`[occupancy_break_dates]` in
+## `observations.toml`, see `src/data.jl`): every level stream, since each is
+## an occupancy sub-stock of the total and the sub-stocks sum to it each day,
+## so a reclassification of the total moves them too. Derived from
+## `STREAM_HISTORY` rather than named again, so a level stream added there is
+## covered without a second list to keep in step.
 ##
 ## These breaks are not the same object as the confirmed streams'
 ## harmonisation days: the report publishes no 24h count to split the step
@@ -515,12 +517,11 @@ end
 ## fitted offset rather than as demand (`cumulative_occupancy_offset`). The
 ## persistence baseline can use the same knowledge only negatively, by not
 ## reading a basis change as a day of the walk it is simulating.
-const OCCUPANCY_BREAK_STREAMS = Set([
-    "isolation beds", "treatment beds", "isolation beds (suspected)"])
+const OCCUPANCY_BREAK_STREAMS = Set(
+    k for (k, (_, kind)) in STREAM_HISTORY if kind == :level)
 
 ## Dates of `stream`'s occupancy reclassification breaks, empty for every
-## stream but the three occupancy levels and for an `obs` carrying no
-## declaration.
+## stream but the occupancy levels and for an `obs` carrying no declaration.
 function occupancy_break_dates(obs, grid_date, stream)
     stream in OCCUPANCY_BREAK_STREAMS || return Date[]
     hasproperty(obs, :occupancy_break_days) || return Date[]
@@ -635,8 +636,8 @@ end
 ## The target a forecast of an incident stream is scored on is the count over
 ## the window ending at the target date, so that is the quantity the
 ## persistence walk has to step on. Differencing the cumulative series
-## instead (issue #612, #520 item 3) puts the window's own incidence into the
-## pool rather than the change in it: a monotone cumulative gives a pool of
+## instead puts the window's own incidence into the pool rather than the
+## change in it: a monotone cumulative gives a pool of
 ## strictly positive counts whose scale is the epidemic's level, which is
 ## then symmetrised about zero and summed over the horizon, so the spread
 ## tracks how large the outbreak is rather than how fast it is moving.
@@ -695,8 +696,7 @@ end
 ## For an incident stream the target is the count over a `horizon`-length
 ## window, so the pool is the change between consecutive vintages in that
 ## window total (`_window_total_steps`), not the change in the cumulative
-## series, which is the window's incidence rather than a change in it
-## (issue #612).
+## series, which is the window's incidence rather than a change in it.
 ##
 ## Either way a `window`-day change is converted to a one-day step by
 ## dividing by `sqrt(window)` rather than `window`. Under a zero-drift
@@ -843,10 +843,10 @@ const _VINTAGE_CACHE = Dict{Tuple{String, Date}, Any}()
 ## The digitised symptom-onset triangle is a sibling CSV of the manifest
 ## rather than a block inside it, and a release snapshot is fetched on its
 ## own into a temporary directory with no such sibling, so the loader would
-## read an absent file and degrade the onset stream to a no-op. That left
+## read an absent file and degrade the onset stream to a no-op, leaving
 ## every onset group with an empty history, an uncovered baseline window and
-## so no persistence baseline at all (issue #623). The package's own triangle
-## is named explicitly instead and truncated to `made_date` by the same
+## so no persistence baseline at all. The package's own triangle is named
+## explicitly instead and truncated to `made_date` by the same
 ## `cutoff_date` freeze as every other history, so the baseline sees the
 ## vintages published by the made date and no later one.
 function vintage_observations(obs_path, made_date, obs, grid_date)
