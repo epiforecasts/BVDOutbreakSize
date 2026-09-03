@@ -1486,7 +1486,8 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} \text{recovered}_t,\ k_{\text{rec}}\Bigr).
 # ```
 #
-# The convolution right-censors recoveries that have not yet resolved by the cut-off, so the small observed totals (12 to 40 over 6-13 June) are consistent with a high eventual survival fraction and a multi-week recovery delay.
+# The convolution right-censors recoveries that have not yet resolved by the cut-off, so an observed total below the eventual survivor count is consistent with a high survival fraction and a multi-week recovery delay.
+# The series runs from 12 on 6 June to 1409 on 31 August over 81 vintages, so it is no longer the handful of small counts it began as, and the fit is now scored against a stream comparable in size to the confirmed-case series.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: recovered_model</summary>
@@ -1673,9 +1674,16 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and a $4.0\%$ level error on each scan's own cumulative reading.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and the part of the $4.0\%$ per-scan level error that is independent between bars of one figure.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
+#
+# The rest of the scan error is not noise on a cell but a level on a figure.
+# One scan is read at one level, so its $\approx 28$ bars move together, and the modelled level each cell differences carries its own scan's multiplier $1 + \sigma_{\text{scan}} z_s$ with $z_s \sim \mathrm{Normal}(0, 1)$.
+# The digitisation study measured the total per-bar error and not how much of it is common to a figure, so the split is estimated: $\sigma_{\text{scan}}$ is sampled over $[0,\ 4.0\%]$ and the per-cell remainder is whatever conserves the measured total in quadrature.
+# Scoring the whole scan error as independent per-cell noise instead gets the spread right and the shape wrong.
+# Independent errors average out across a snapshot's cells, so the net correction the snapshot panel plots was predicted far too tightly: 1 of 11 snapshots fell inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
+# The shared level also gives a snapshot that reprints nothing new somewhere to go other than a reporting hazard driven to zero.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
@@ -3071,7 +3079,8 @@ _onset_labels = merge(display_names,
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.σ_mult") => "onset-report scale slack"));
+        Symbol("onset_report_state.σ_mult") => "onset-report scale slack",
+        Symbol("onset_report_state.σ_scan") => "shared per-scan level error"));
 
 #md # ```@raw html
 #md # </details>
@@ -3104,7 +3113,8 @@ onset_summary = vcat(
     summary_table(chn_joint,
         [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.σ_mult")];
+            Symbol("onset_report_state.σ_mult"),
+            Symbol("onset_report_state.σ_scan")];
         digits = 3, labels = _onset_labels),
     onset_derived_table);
 
@@ -3130,7 +3140,8 @@ onset_pair_fig = plot_pair(chn_joint,
     [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
-        Symbol("onset_report_state.σ_mult")];
+        Symbol("onset_report_state.σ_mult"),
+        Symbol("onset_report_state.σ_scan")];
     prior = prior_chn, labels = _onset_labels);
 
 #md # ```@raw html
