@@ -580,8 +580,10 @@ model rather than a negative binomial: the increment is scored under
 [`onset_report_scale`](@ref)'s three-term scale (counting variation,
 pixel-reading noise, per-scan level error), inflated by the fitted
 `σ_mult`, and perturbed by a Student-t with the same `ν` the likelihood
-uses. At a total of a couple of thousand cases the per-scan level term
-dominates by an order of magnitude, so the interval on a weekly increment
+uses. The scale is applied once to the whole projected total, so its
+scan-level term takes the fitted shared per-scan coefficient `σ_scan`
+rather than the whole measured per-bar error. At a total of a couple of
+thousand cases the per-scan level term dominates by an order of magnitude, so the interval on a weekly increment
 is mostly digitisation error rather than epidemic uncertainty. That is a
 property of the data, not a modelling choice, and it is the reason this
 forecast is worth less as a case-count prediction than as a check that
@@ -619,6 +621,17 @@ function forecast_onsets(chn;
     ## fit's own likelihood rather than a guess at a value it never had.
     k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
               _draws(chn, Symbol("onset_report_state.k_onset")) : nothing
+    ## Aggregate scan-level coefficient for a whole projected snapshot. The
+    ## scale below is applied once to the reported total rather than bar by
+    ## bar, and it is the shared per-scan component that survives that
+    ## aggregation: the independent per-bar remainder averages down as the
+    ## root of the bar count and is an order of magnitude smaller by the
+    ## time the level is a couple of thousand cases (see
+    ## `onset_scan_independent`). A chain fitted before the scan error was
+    ## split carries no `σ_scan`, so it falls back to the whole measured
+    ## `scan_frac`, which is that fit's own treatment rather than a guess.
+    σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
+             _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
 
     R_T = _cutoff_rt(chn; n = n, breakpoint = breakpoint,
         rt_start = rt_start, rt_walk_start = rt_walk_start)
@@ -688,7 +701,7 @@ function forecast_onsets(chn;
         ## being the reported totals at the two ends of the horizon.
         μ = backfill[i] + future[i]
         base = onset_report_scale(μ, past_then, past_now, 2;
-            pixel_sd, scan_frac)
+            pixel_sd, scan_ind = isnothing(σ_scan) ? scan_frac : σ_scan[i])
         σ = σ_mult[i] * (isnothing(k_onset) ? base :
              sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64))))
         reports_new[i] = max(round(Int, μ + σ * rand(rng, TDist(ν))), 0)
