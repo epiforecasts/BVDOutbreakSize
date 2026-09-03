@@ -96,17 +96,20 @@ if !isnothing(v))
 ## itself anchored.
 ## `nothing` when the beds have stopped being reported, so the treatment fit
 ## is absent; the bed panel then draws the joint alone.
-validation_individual_isolation = if haskey(
-    frozen_lastweek_streams, "treatment")
-    f = frozen_lastweek_streams["treatment"]
-    bp = f.o.n - f.o.who_first_sitrep_days
-    _obs = isempty(f.o.isolation_history.counts) ? 0.0 :
-           Float64(f.o.isolation_history.counts[end])
-    Float64.(forecast_stream(f.chn, :isolation_beds; horizon = 7,
-        obs_value = _obs, n = f.o.n, breakpoint = bp,
-        rt_start = 1, rt_walk_start = 1))
-else
-    nothing
+## A `let` block, not a bare `if`: a top-level `if` shares the script's
+## global scope, so its working names would leak into the rest of the page.
+validation_individual_isolation = let
+    if haskey(frozen_lastweek_streams, "treatment")
+        tf = frozen_lastweek_streams["treatment"]
+        beds = isempty(tf.o.isolation_history.counts) ? 0.0 :
+               Float64(tf.o.isolation_history.counts[end])
+        Float64.(forecast_stream(tf.chn, :isolation_beds; horizon = 7,
+            obs_value = beds, n = tf.o.n,
+            breakpoint = tf.o.n - tf.o.who_first_sitrep_days,
+            rt_start = 1, rt_walk_start = 1))
+    else
+        nothing
+    end
 end
 
 ## The observed beds at the current cut-off (the forecast target), so the
