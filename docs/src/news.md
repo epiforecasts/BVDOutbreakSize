@@ -16,12 +16,21 @@ Changes since v1.16.0
 Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
 Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
 Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
+- The symptom-onset reporting triangle now carries a per-scan level error (#507).
+A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute part of the digitisation error belongs to the bar and the multiplicative part is one number for the whole figure.
+Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
+The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
+On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
+The outbreak size and the recent reproduction number are unchanged by the term. [PLACEHOLDER: confirm or amend from the before and after joint fits]
+The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
 
 ### Report
 
 - The bed-occupancy panels read as occupancy rather than as counts of new events (#628).
 All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
 A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
+- The symptom-onset methods section now derives the digitisation error from how a bar is read rather than quoting a single per-scan percentage, and the reporting-delay summary table and pair plot carry the sampled per-scan level (#507).
+The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
 
 ### Data
 
