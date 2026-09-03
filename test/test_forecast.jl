@@ -959,6 +959,15 @@ end
 
     plain = _fc(0.0)
     shifted = _fc(-200.0)
+    ## A basis revised up puts the reported occupancy above the demand, which
+    ## is why the shortfall is taken against the capacity rather than as the
+    ## gap between the two bed columns. Demand (~800) sits far below the
+    ## capacity (~4000) here, so there is no unmet need either way.
+    raised = _fc(200.0)
+    @test any(raised.isolation_level .> raised.bed_demand)
+    @test all(iszero, raised.bed_shortfall)
+    @test all(iszero, plain.bed_shortfall)
+    @test all(iszero, shifted.bed_shortfall)
     ## The demand is the latent need and is untouched by the offset; only the
     ## reported occupancy moves, and by the offset.
     @test median(plain.bed_demand) ≈ median(shifted.bed_demand) atol=25

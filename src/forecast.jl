@@ -190,18 +190,20 @@ row per draw and columns:
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
-- `:bed_demand`, `:isolation_level`: the projected isolation/treatment-bed
-  demand (need under unconstrained supply) and the occupancy that demand
-  produces as it is reported, both at the horizon, present when the
-  chain carries `expected_bed_demand_T` and `bed_capacity`. The demand grows
-  by the horizon factor like the inflow. The occupancy is that demand shifted
-  by the fitted reclassification offset Δ standing at the cut-off and capped
-  at the capacity, `min(demand + Δ, C)`, which is the quantity the occupancy
-  likelihood scores against the reported series
-  (see [`cumulative_occupancy_offset`](@ref)); Δ is zero for a chain that
-  fitted no occupancy break, and the projected shortfall is then
-  `bed_demand − isolation_level`. Replicated with the isolation stream's own
-  dispersion.
+- `:bed_demand`, `:isolation_level`, `:bed_shortfall`: the projected
+  isolation/treatment-bed demand (need under unconstrained supply), the
+  occupancy that demand produces as it is reported, and the unmet demand,
+  all at the horizon, present when the chain carries `expected_bed_demand_T`
+  and `bed_capacity`. The demand grows by the horizon factor like the inflow.
+  The occupancy is that demand shifted by the fitted reclassification offset
+  Δ standing at the cut-off and capped at the capacity, `min(demand + Δ, C)`,
+  which is the quantity the occupancy likelihood scores against the reported
+  series (see [`cumulative_occupancy_offset`](@ref)). The shortfall is
+  `max(demand − C, 0)`, the need above the beds available, which is what the
+  model's own `bed_shortfall` measures. It is taken against the capacity
+  rather than as `bed_demand − isolation_level`, since Δ is a change of
+  reporting basis and not a bed: the two agree only where no occupancy break
+  has been fitted. Replicated with the isolation stream's own dispersion.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the projected
   one-week-ahead daily isolation/treatment flows (new admissions, in-care
   deaths and rule-outs), present when the chain carries
@@ -370,6 +372,7 @@ function forecast_reported(chn;
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
     bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
     isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
+    bed_shortfall = has_iso ? Vector{Int}(undef, n) : nothing
     recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
     admissions_fc = has_flows ? Vector{Int}(undef, n) : nothing
     incare_deaths_fc = has_flows ? Vector{Int}(undef, n) : nothing
@@ -428,11 +431,14 @@ function forecast_reported(chn;
         ## The occupancy is that same replicate shifted by the fitted
         ## reclassification offset and capped at the capacity,
         ## `min(demand + Δ, C)`, which is what the censored occupancy
-        ## likelihood scores against the reported series.
+        ## likelihood scores against the reported series. The shortfall is
+        ## the need above the beds available, taken against the capacity so a
+        ## change of reporting basis is not counted as unmet demand.
         if has_iso
             d = _nb_rand(rng, k_iso[i], demand_T[i] * grow)
             bed_demand[i] = d
             isolation_level[i] = _reported_occupancy(d, occ_offset[i], cap[i])
+            bed_shortfall[i] = max(d - round(Int, cap[i]), 0)
         end
         if has_rec
             base_rec = obs_recovered === missing ? round(Int, rec_T[i]) :
@@ -474,6 +480,7 @@ function forecast_reported(chn;
     if has_iso
         df.bed_demand = bed_demand
         df.isolation_level = isolation_level
+        df.bed_shortfall = bed_shortfall
     end
     if has_flows
         df.admissions_fc = admissions_fc
