@@ -2441,19 +2441,15 @@ function plot_vintage_conditional_ppc(
         obs_cum = float.(observed)
         obs_prev = cumulative ?
                    [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
+        ## `ylabel` lets a panel that is neither a running total nor a
+        ## per-day flow name its own axis; see the docstring.
+        ylabel = get(p, :ylabel,
+            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count")
         ## `replicates` is already flattened to one vector of per-draw
         ## increment vectors and truncated to the kept vintages above.
         ## Each draw's conditional cumulative at vintage `v` is the
         ## observed previous cumulative plus the drawn increment `Δ_v` (the
         ## baseline is zero for a non-cumulative panel).
-        ## `cumulative = false` covers two different kinds of series: a
-        ## per-day flow (the daily new-suspect inflow, the 24h analysed
-        ## volume) and an occupancy census (a bed count at the end of the
-        ## day, a level rather than a count of new events). Both are drawn
-        ## the same way, but "Daily count" is only true of the flows, so a
-        ## census panel names its own axis through `ylabel`.
-        ylabel = get(p, :ylabel,
-            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count")
         cond = [obs_prev .+ r for r in replicates]
         q(i, pr) = quantile([c[i] for c in cond], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
@@ -2532,10 +2528,7 @@ function plot_vintage_incidence_ppc(
         obs_inc = cumulative ?
                   [v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
                    for v in 1:n] : obs_cum
-        ## An occupancy census is a level, not a count of new events, so
-        ## "New per vintage" would misdescribe it. Such a panel names its
-        ## own axis through `ylabel`, so a bed count sitting in a grid of
-        ## incidence panels is not read as an accumulating total.
+        ## As in the conditional view, `ylabel` overrides the default.
         ylabel = get(p, :ylabel, col == 1 ? "New per vintage" : "")
         ## The replicates are already per-vintage increments (per-day counts
         ## for a non-cumulative panel), so they are the modelled incidence.
