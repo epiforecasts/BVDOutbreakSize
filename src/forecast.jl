@@ -621,15 +621,13 @@ function forecast_onsets(chn;
     ## fit's own likelihood rather than a guess at a value it never had.
     k_onset = _has_key(chn, Symbol("onset_report_state.k_onset")) ?
               _draws(chn, Symbol("onset_report_state.k_onset")) : nothing
-    ## Aggregate scan-level coefficient for a whole projected snapshot. The
-    ## scale below is applied once to the reported total rather than bar by
-    ## bar, and it is the shared per-scan component that survives that
-    ## aggregation: the independent per-bar remainder averages down as the
-    ## root of the bar count and is an order of magnitude smaller by the
-    ## time the level is a couple of thousand cases (see
-    ## `onset_scan_independent`). A chain fitted before the scan error was
-    ## split carries no `σ_scan`, so it falls back to the whole measured
-    ## `scan_frac`, which is that fit's own treatment rather than a guess.
+    ## Per-scan level error for the projected snapshot. The likelihood
+    ## carries this on the modelled level rather than in the per-cell scale
+    ## (see `onset_reporting_model`), but a projected total is scored
+    ## against a scan that has not happened yet, so its own level error has
+    ## to enter the scale here. A chain fitted before the scan level was
+    ## sampled carries no `σ_scan` and falls back to `scan_frac`, which is
+    ## that fit's own treatment rather than a guess.
     σ_scan = _has_key(chn, Symbol("onset_report_state.σ_scan")) ?
              _draws(chn, Symbol("onset_report_state.σ_scan")) : nothing
 
@@ -701,7 +699,7 @@ function forecast_onsets(chn;
         ## being the reported totals at the two ends of the horizon.
         μ = backfill[i] + future[i]
         base = onset_report_scale(μ, past_then, past_now, 2;
-            pixel_sd, scan_ind = isnothing(σ_scan) ? scan_frac : σ_scan[i])
+            pixel_sd, scan_sd = isnothing(σ_scan) ? scan_frac : σ_scan[i])
         σ = σ_mult[i] * (isnothing(k_onset) ? base :
              sqrt(base^2 + μ^2 / max(k_onset[i], eps(Float64))))
         reports_new[i] = max(round(Int, μ + σ * rand(rng, TDist(ν))), 0)

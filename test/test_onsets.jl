@@ -601,7 +601,7 @@ end
     ## level; cell 2 is a correction between two real snapshots.
     prev_idx = [0, 5, 0]
     s = onset_report_scales(means, level_cur, level_prev, prev_idx;
-        pixel_sd = 2.1, scan_ind = 0.04)
+        pixel_sd = 2.1, scan_sd = 0.04)
     @test s[1] ≈ sqrt(2.1^2 * 1)
     @test s[2] ≈ sqrt(20.0 + 2.1^2 * 2 + 0.04^2 * (100.0^2 + 80.0^2))
     ## A level cell carries the counting variation of the cases it reports,
@@ -1145,26 +1145,6 @@ end
     @test only(c.means) ≈ 5.0
 end
 
-@testitem "onset_scan_independent splits the measured scan error" begin
-    using BVDOutbreakSize: onset_scan_independent
-
-    scan_frac = 0.04
-    ## The two components add in quadrature to the measured per-bar total,
-    ## so a cell keeps the same scan variance whatever the split.
-    for σ in (0.0, 0.01, 0.02, 0.03)
-        rem = onset_scan_independent(σ, scan_frac)
-        @test isapprox(σ^2 + rem^2, scan_frac^2; atol = 1e-6)
-    end
-    ## No shared component leaves the whole measured error per cell.
-    @test onset_scan_independent(0.0, scan_frac) ≈ scan_frac
-    ## The remainder shrinks as the shared component grows, and stays
-    ## finite and differentiable on the prior's upper bound.
-    @test onset_scan_independent(0.03, scan_frac) <
-          onset_scan_independent(0.01, scan_frac)
-    @test isfinite(onset_scan_independent(scan_frac, scan_frac))
-    @test onset_scan_independent(scan_frac, scan_frac) > 0
-end
-
 @testitem "per-snapshot coverage: shared scan error against per-cell only" begin
     ## Issue #507. A simulated reporting triangle whose scans each carry one
     ## shared level error, scored two ways: with the whole measured scan
@@ -1177,9 +1157,8 @@ end
     ## too tightly even though its per-cell spread is right, and central
     ## coverage collapses further than the 90% coverage does.
     using BVDOutbreakSize: onset_report_moments, onset_report_scales,
-                           onset_scan_adjust, onset_scan_independent,
-                           onset_vintage_indices, safe_studentt,
-                           ONSET_REPORT_MAX_DELAY
+                           onset_scan_adjust, onset_vintage_indices,
+                           safe_studentt, ONSET_REPORT_MAX_DELAY
     using Random: MersenneTwister, randn
     using Statistics: quantile
     using Distributions: rand
@@ -1189,7 +1168,6 @@ end
     ν = 4.0
     scan_frac = 0.04
     σ_scan_true = 0.03
-    σ_ind_true = onset_scan_independent(σ_scan_true, scan_frac)
 
     ## Latent truth: an epidemic bump, a constant reporting hazard and a
     ## constant ascertainment level, so every deviation below comes from the
@@ -1234,7 +1212,7 @@ end
     truth = onset_scan_adjust(m.level_cur, m.level_prev, scan_true,
         v.vintage_idx, v.prev_vintage_idx)
     truth_sd = onset_report_scales(truth.means, truth.level_cur,
-        truth.level_prev, prev_idx; scan_ind = σ_ind_true)
+        truth.level_prev, prev_idx)
     observed = [rand(rng, safe_studentt(truth.means[i], truth_sd[i], ν))
                 for i in eachindex(truth.means)]
     obs_totals = [sum(observed[g]) for g in groups]
@@ -1242,7 +1220,7 @@ end
     ## Predictive for a snapshot's net correction under each structure.
     ndraw = 1500
     sd_percell = onset_report_scales(m.means, m.level_cur, m.level_prev,
-        prev_idx; scan_ind = scan_frac)
+        prev_idx; scan_sd = scan_frac)
     function coverage(shared::Bool)
         totals = [Vector{Float64}(undef, ndraw) for _ in 1:v.n_vintages]
         for d in 1:ndraw
@@ -1251,7 +1229,7 @@ end
                 adj = onset_scan_adjust(m.level_cur, m.level_prev, cs,
                     v.vintage_idx, v.prev_vintage_idx)
                 sds = onset_report_scales(adj.means, adj.level_cur,
-                    adj.level_prev, prev_idx; scan_ind = σ_ind_true)
+                    adj.level_prev, prev_idx)
                 [rand(rng, safe_studentt(adj.means[i], sds[i], ν))
                  for i in eachindex(adj.means)]
             else

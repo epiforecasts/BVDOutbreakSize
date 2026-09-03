@@ -2948,38 +2948,8 @@ function onset_scan_adjust(level_cur::AbstractVector,
 end
 
 """
-    onset_scan_independent(σ_scan, scan_frac)
-
-The per-cell scan-error coefficient left once the shared per-scan
-component `σ_scan` is taken out of the measured per-bar scan error
-`scan_frac`, `sqrt(scan_frac² - σ_scan²)`.
-
-The ≈4% figure was measured per bar, over reads that share a scan, so it
-is the total of a component common to a whole figure and a component
-independent between bars of the same figure. Splitting it in quadrature
-conserves that measurement: whatever `σ_scan` the fit chooses, a single
-cell keeps exactly the scan variance the digitisation study found, and
-only the correlation between cells of one scan changes. That is what
-stops the split inflating the per-snapshot spread instead of reshaping
-it, which is the failure mode of moving the whole 4% to a shared term
-(it over-corrects the aggregate variance by about 2x).
-
-`σ_scan` is bounded above by `scan_frac` in the model's own prior, so the
-remainder is positive over the whole prior interior. A `1e-6` floor on the
-coefficient covers the bound itself, where the exact remainder is zero and
-the square root's derivative would otherwise be infinite. The floor is
-applied inside the `max`, not added to the argument, so it leaves the
-quadrature exact everywhere else. Pure, top-level, allocation-free.
-"""
-function onset_scan_independent(σ_scan::Real, scan_frac::Real)
-    T = promote_type(typeof(float(σ_scan)), typeof(float(scan_frac)))
-    floor2 = convert(T, 1e-12)
-    return sqrt(max(scan_frac^2 - σ_scan^2, floor2))
-end
-
-"""
     onset_report_scales(means, level_cur, level_prev, prev_report_idx;
-        pixel_sd = 2.1, scan_ind = 0.04)
+        pixel_sd = 2.1, scan_sd = 0.0)
 
 Per-cell observation scale for the reporting-triangle increment likelihood,
 the square root of a variance built from three sources.
@@ -2997,17 +2967,19 @@ the square root of a variance built from three sources.
     cases). An increment differences two independent reads, so its variance
     doubles. The first snapshot's level cells read only one bar, so theirs
     does not.
-  - The part of the per-scan multiplicative level error that is independent
-    between bars of the same figure (`scan_ind`), applied to each read's own
-    cumulative level at that onset date. The part common to a whole figure
-    is not here: it moves the modelled level itself
-    ([`onset_scan_adjust`](@ref)), and
-    [`onset_scan_independent`](@ref) is what splits the measured total
-    between the two.
+  - An optional multiplicative level error `scan_sd` on each read's own
+    cumulative level, off by default. A bar's height is read in pixels and
+    converted with the figure's own axis scale, so the multiplicative part
+    of the digitisation error belongs to the whole scan and not to the bar:
+    the likelihood carries it on the modelled level instead
+    ([`onset_scan_adjust`](@ref)) and leaves this at zero. Callers that
+    score a quantity the scan level has not already been applied to (a
+    single digitised bar, or a whole projected snapshot total) pass the
+    fitted per-scan level SD here.
 
 ```math
 \\sigma_i = \\sqrt{\\max(\\mu_i, 0) + \\text{pixel\\_sd}^2 \\cdot r_i +
-    \\text{scan\\_ind}^2 \\cdot
+    \\text{scan\\_sd}^2 \\cdot
     (\\ell_{\\text{cur},i}^2 + \\ell_{\\text{prev},i}^2)},
 \\qquad r_i = \\begin{cases} 1 & \\text{prev\\_report\\_idx}_i = 0
     \\ \\text{(virtual first pair)} \\\\ 2 & \\text{otherwise} \\end{cases},
@@ -3059,22 +3031,22 @@ function onset_report_scales(means::AbstractVector,
         level_cur::AbstractVector,
         level_prev::AbstractVector,
         prev_report_idx::AbstractVector{<:Integer};
-        pixel_sd::Real = 2.1, scan_ind::Real = 0.04)
+        pixel_sd::Real = 2.1, scan_sd::Real = 0.0)
     m = length(level_cur)
     T = promote_type(eltype(means), eltype(level_cur), eltype(level_prev),
-        typeof(float(pixel_sd)), typeof(float(scan_ind)))
+        typeof(float(pixel_sd)), typeof(float(scan_sd)))
     out = Vector{T}(undef, m)
     @inbounds for i in 1:m
         r = prev_report_idx[i] > 0 ? 2 : 1
         out[i] = onset_report_scale(means[i], level_cur[i], level_prev[i], r;
-            pixel_sd, scan_ind)
+            pixel_sd, scan_sd)
     end
     return out
 end
 
 """
     onset_report_scale(μ, level_cur, level_prev, reads;
-        pixel_sd = 2.1, scan_ind = 0.04)
+        pixel_sd = 2.1, scan_sd = 0.0)
 
 Scalar form of [`onset_report_scales`](@ref)'s per-cell formula, for one
 increment mean `μ` between two modelled cumulative levels `level_cur`
@@ -3087,12 +3059,12 @@ gives a scored cell. See [`onset_report_scales`](@ref) for what each term
 means and which of them a fit can correct.
 """
 function onset_report_scale(μ::Real, level_cur::Real, level_prev::Real,
-        reads::Integer; pixel_sd::Real = 2.1, scan_ind::Real = 0.04)
+        reads::Integer; pixel_sd::Real = 2.1, scan_sd::Real = 0.0)
     T = promote_type(typeof(float(μ)), typeof(float(level_cur)),
         typeof(float(level_prev)), typeof(float(pixel_sd)),
-        typeof(float(scan_ind)))
+        typeof(float(scan_sd)))
     return sqrt(max(μ, zero(T)) + pixel_sd^2 * reads +
-                scan_ind^2 * (level_cur^2 + level_prev^2))
+                scan_sd^2 * (level_cur^2 + level_prev^2))
 end
 
 """
@@ -3418,31 +3390,40 @@ for a missing input file. `increments` may be `missing` to sample instead
 of condition (the predictive-generator path).
 
 The observation scale ([`onset_report_scales`](@ref)) is built from
-counting variation, measured digitisation error (`pixel_sd` ≈2.1
-cases/bar, `scan_frac` ≈4.0% per scan), and a sampled multiplicative slack
+counting variation, the measured per-bar pixel noise (`pixel_sd` ≈2.1
+cases/bar), and a sampled multiplicative slack
 `σ_mult ~ slack_prior` bounded below at 1 (each scale term is a lower bound
 on the truth, so a fitted scale below them would let a couple of hundred
 cells outvote every other stream). A short onsets-only run pulling the
 slack to the bound is expected there. In the joint fit a `σ_mult` posterior
 well above 1 says the scale is missing a term.
 
-**The scan error is shared within a figure, not independent per bar.** The
-≈4% scan-level error is a property of one published figure, so the ~28
-bars digitised off it move together. Scoring it as independent per-cell
-noise reproduces the right total spread per snapshot and puts it in the
-wrong place: a snapshot's cells can only miss in uncorrelated directions,
-so the net correction the panel plots is far too tightly predicted, and
-per-snapshot central coverage collapses while the 90% interval stays
-nominal (1 of 11 snapshots inside a nominal 50% interval, against an
-aggregate variance ratio of 1.07). The measured 4% is therefore split in
-quadrature ([`onset_scan_independent`](@ref)) into a shared per-vintage
-level `1 + σ_scan · z_scan[s]` on the modelled level itself
-([`onset_scan_adjust`](@ref)) and an independent per-cell remainder left
-in the scale. `σ_scan ~ scan_shared_prior` is sampled rather than fixed at
-the measured per-bar figure, since the digitisation study measured the
-total and not the split; the prior is a half-normal over `[0, scan_frac]`
-wide enough across that range to be close to agnostic, so the fit decides
-the split and the per-cell scan variance is conserved either way.
+**The scan error belongs to the figure, not to the bar.** A bar's height
+is read in pixels and converted with the axis scale that scan calibrated,
+so the digitisation error splits by construction: an absolute per-bar
+term (the ≈2.1-case pixel noise) and a multiplicative term that is one
+number for the whole figure. `data/README.md` measures the second
+directly, as each vintage's digitised total against the total the figure
+prints: -5.0% to +1.6% over the audited vintages, one value per scan.
+
+Scoring that multiplicative term as independent per-cell noise, which is
+what this stream first did, reproduces the right total spread per
+snapshot and puts it in the wrong place. A snapshot's cells can then only
+miss in uncorrelated directions, so the net correction the report's panel
+plots is far too tightly predicted: 1 of 11 snapshots inside a nominal
+50% interval, against an aggregate variance ratio of 1.07 and 90%
+coverage at nominal. It also made a single cell's scale about twice as
+wide as its residuals wanted.
+
+The per-scan level is therefore a sampled level `1 + σ_scan · z_scan[s]`
+on the modelled cumulative levels each cell differences
+([`onset_scan_adjust`](@ref)), and the per-cell scale keeps counting and
+pixel noise alone. `σ_scan ~ scan_sd_prior` is estimated rather than
+fixed at the audited spread, which rests on a handful of vintages, but
+its prior is a half-normal centred to put that spread (an SD of about
+2.5%) in its bulk. The upper bound is the audit's own reach: no vintage
+has ever read more than 5% away from its printed total, so a level error
+past 8% is excluded by a data check rather than by taste.
 
 The shared level also gives the fit somewhere to put a snapshot that
 reprints nothing new. A vintage whose figure reads at the same level as
@@ -3474,9 +3455,9 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         ascertainment = onset_ascertainment_model,
         anchor::AbstractVector = [0.15],
         D::Integer = ONSET_REPORT_MAX_DELAY,
-        pixel_sd::Real = 2.1, scan_frac::Real = 0.04,
-        scan_shared_prior = truncated(Normal(0.0, 0.03);
-            lower = 0.0, upper = scan_frac),
+        pixel_sd::Real = 2.1,
+        scan_sd_prior = truncated(Normal(0.0, 0.03);
+            lower = 0.0, upper = 0.08),
         slack_prior = truncated(Normal(1.0, 0.5); lower = 1.0),
         ν::Real = 4.0)
     onset_days = onset_curve_history.onset_days
@@ -3510,14 +3491,13 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     alpha = asc_state.alpha
     σ_mult ~ slack_prior
 
-    ## Shared per-scan level error: one non-centred multiplier per surviving
-    ## vintage, the level that scan's whole figure was read at. The measured
-    ## per-bar scan error splits in quadrature between this and the
-    ## independent per-cell remainder (`onset_scan_independent`), so the fit
-    ## chooses how much of it is common to a figure without changing how
-    ## much scan variance a single cell carries.
+    ## Per-scan level error: one non-centred multiplier per surviving
+    ## vintage, the level that scan's whole figure was read at. It sits on
+    ## the modelled level rather than in the per-cell scale because a
+    ## figure's axis calibration is one number for the whole figure, so the
+    ## scale below carries counting and pixel noise alone.
     vintages = onset_vintage_indices(report_days, prev_report_days)
-    σ_scan ~ scan_shared_prior
+    σ_scan ~ scan_sd_prior
     z_scan ~ product_distribution(fill(Normal(0, 1),
         max(vintages.n_vintages, 1)))
     scan_level = one(σ_scan) .+ σ_scan .* z_scan
@@ -3528,8 +3508,7 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     scanned = onset_scan_adjust(moments.level_cur, moments.level_prev,
         scan_level, vintages.vintage_idx, vintages.prev_vintage_idx)
     scales = onset_report_scales(scanned.means, scanned.level_cur,
-        scanned.level_prev, prev_report_days; pixel_sd,
-        scan_ind = onset_scan_independent(σ_scan, scan_frac))
+        scanned.level_prev, prev_report_days; pixel_sd)
 
     ## Scored in a dedicated submodel so `increments` is a model argument
     ## on the left of `~`: DynamicPPL decides observe-versus-assume from

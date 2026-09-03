@@ -1674,16 +1674,17 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and the part of the $4.0\%$ per-scan level error that is independent between bars of one figure.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean and a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled for a correction since that differences two reads.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
 #
-# The rest of the scan error is not noise on a cell but a level on a figure.
-# One scan is read at one level, so its $\approx 28$ bars move together, and the modelled level each cell differences carries its own scan's multiplier $1 + \sigma_{\text{scan}} z_s$ with $z_s \sim \mathrm{Normal}(0, 1)$.
-# The digitisation study measured the total per-bar error and not how much of it is common to a figure, so the split is estimated: $\sigma_{\text{scan}}$ is sampled over $[0,\ 4.0\%]$ and the per-cell remainder is whatever conserves the measured total in quadrature.
-# Scoring the whole scan error as independent per-cell noise instead gets the spread right and the shape wrong.
+# The multiplicative part of the digitisation error is not noise on a cell but a level on a figure.
+# A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute error is per bar and the multiplicative error is one number for the whole figure.
+# The data README measures the second directly as each vintage's digitised total against the total the figure prints, ranging from $-5.0\%$ to $+1.6\%$ over the audited vintages.
+# The modelled level each cell differences therefore carries its own scan's multiplier $1 + \sigma_{\text{scan}} z_s$ with $z_s \sim \mathrm{Normal}(0, 1)$, and $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ truncated at $8\%$, past anything that audit has ever seen.
+# Scoring that term as independent per-cell noise instead gets the spread right and the shape wrong.
 # Independent errors average out across a snapshot's cells, so the net correction the snapshot panel plots was predicted far too tightly: 1 of 11 snapshots fell inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
-# The shared level also gives a snapshot that reprints nothing new somewhere to go other than a reporting hazard driven to zero.
+# The per-scan level also gives a snapshot that reprints nothing new somewhere to go other than a reporting hazard driven to zero.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
@@ -3216,6 +3217,11 @@ end
 ## own cells carry. Without this the band is the modelled count alone and
 ## covers 42% of the observed bars at a nominal 90%.
 _onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
+## A single bar is one read off one scan, so its own scan level error has
+## not been differenced away and enters its scale directly (see
+## `onset_report_scales`, whose likelihood path leaves that term at zero
+## because the level carries it there).
+_onset_σ_scan = vec(collect(chn_joint[Symbol("onset_report_state.σ_scan")]))
 _onset_ppc_rng = Random.MersenneTwister(20260729)
 ## Four replicates per draw rather than one: the band is a 90% interval of
 ## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
@@ -3223,7 +3229,9 @@ _onset_ppc_rng = Random.MersenneTwister(20260729)
 function _onset_replicated(draws::AbstractVector)
     return [begin
                 μ = draws[i]
-                σ = _onset_σ_mult[i] * onset_report_scale(μ, μ, 0.0, 1)
+                σ = _onset_σ_mult[i] *
+                    onset_report_scale(μ, μ, 0.0, 1;
+                    scan_sd = _onset_σ_scan[i])
                 μ + σ * rand(_onset_ppc_rng, TDist(4.0))
             end
             for _ in 1:4 for i in eachindex(draws)]
