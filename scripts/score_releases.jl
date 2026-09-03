@@ -538,6 +538,24 @@ function spans_occupancy_break(obs, grid_date, stream, from_date, to_date)
     return false
 end
 
+## The count an incident stream notified over the `horizon`-length window
+## ending at `date`, with any harmonisation-break day inside that window
+## taken out and floored at zero. The truth, the baseline's centre and the
+## baseline's step pool are all this same quantity at different dates, so all
+## three read it here rather than restating the subtraction.
+##
+## A window opening before the stream's own first vintage is measured from a
+## non-observation `cum_at` reads as zero, so the total saturates at the whole
+## cumulative to `date`. Callers hold that off themselves: `truth_at` and
+## `score_release`'s `baseline_window_covered` for the truth and the centre,
+## `_window_total_steps` per vintage for the pool.
+function window_total_at(obs, grid_date, stream, hist, date, horizon)
+    from = date - Day(horizon)
+    raw = cum_at(hist, date, grid_date) - cum_at(hist, from, grid_date)
+    raw -= break_correction(obs, grid_date, stream, from, date)
+    return max(Float64(raw), 0.0)
+end
+
 ## Observed truth for one (stream, made_date, target_date) forecast group
 ## against the current `obs`, or a `Symbol` naming why the group is not
 ## scorable: `:not_yet_observed` when `target_date` is beyond the current
@@ -564,9 +582,8 @@ function truth_at(obs, grid_date, stream, made_date, target_date)
         return :not_yet_reporting
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
-    new = cum_at(h, target_date, grid_date) - cum_at(h, made_date, grid_date)
-    new -= break_correction(obs, grid_date, stream, made_date, target_date)
-    return Float64(max(new, 0))
+    return window_total_at(obs, grid_date, stream, h, target_date,
+        Dates.value(target_date - made_date))
 end
 
 # ----------------------------------------------------------------------
@@ -610,25 +627,6 @@ function _history_diffs(obs, grid_date, stream, hist, made_date)
     return out
 end
 
-## The incident target the baseline forecasts, measured at `date`: the count
-## the stream notified over the `horizon`-length window ending there, with any
-## harmonisation-break day inside that window taken out and floored at zero,
-## exactly as `truth_at` measures the truth it is compared against. Both the
-## baseline's centre and its step pool read the window through here, so the
-## two cannot drift apart.
-##
-## A window opening before the stream's own first vintage is measured from a
-## non-observation `cum_at` reads as zero, so the total saturates at the whole
-## cumulative to `date`. Callers hold that off themselves: `score_release`
-## through `baseline_window_covered` for the centre, `_window_total_steps` per
-## vintage for the pool.
-function window_total_at(obs, grid_date, stream, hist, date, horizon)
-    from = date - Day(horizon)
-    raw = cum_at(hist, date, grid_date) - cum_at(hist, from, grid_date)
-    raw -= break_correction(obs, grid_date, stream, from, date)
-    return max(Float64(raw), 0.0)
-end
-
 ## The one-day steps of the incident baseline's own target: the changes
 ## between consecutive vintages in the `horizon`-length window total, each
 ## divided by `sqrt` of the days between those vintages.
@@ -644,7 +642,8 @@ end
 ##
 ## Vintages whose window opens before the stream began reporting are skipped,
 ## since their total saturates at the whole cumulative rather than measuring a
-## window, as is any pair spanning an occupancy reclassification break.
+## window. The occupancy reclassification days need no handling here: they
+## belong to the level streams, which take the `_history_diffs` pool instead.
 function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
     out = Float64[]
     covered = stream_coverage_start(obs, grid_date, stream)
@@ -655,13 +654,8 @@ function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
         date > made_date && break
         date - Day(horizon) < covered && continue
         total = window_total_at(obs, grid_date, stream, hist, date, horizon)
-        if !isnothing(prev_total)
-            gap = Dates.value(date - prev_date)
-            if gap > 0 && !spans_occupancy_break(
-                obs, grid_date, stream, prev_date, date)
-                push!(out, (total - prev_total) / sqrt(gap))
-            end
-        end
+        gap = isnothing(prev_date) ? 0 : Dates.value(date - prev_date)
+        gap > 0 && push!(out, (total - prev_total) / sqrt(gap))
         prev_date = date
         prev_total = total
     end
@@ -781,32 +775,51 @@ function push_scored!(out, overlay, tag, key, fit, samples, truth)
             lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
 end
 
-## `ov` (a snapshot manifest) carrying `obs`'s harmonisation-break
-## declaration, translated onto the snapshot's own grid and truncated at its
-## cut-off. A break day is annotated a report or two after the report that
-## announced it, so a snapshot taken in between holds the step but not the
-## label, and its baseline would then read a base integration as incidence
-## while `truth_at` corrects the same day out of the truth. The declaration
-## is an analyst annotation of which reported steps are base integrations
-## rather than a data vintage, and the printed 24h counts it pairs with are
-## published in the report itself, so carrying it back gives the baseline no
-## information the forecast lacked. `obs` without a declaration to carry
-## leaves `ov` unchanged; a declaration without printed counts to pair with
-## carries zeros, the same default `load_observations` applies, which
-## attributes each listed day's whole step to the artefact.
-function carry_break_days(ov, obs, grid_date)
-    hasproperty(obs, :confirmed_break_days) || return ov
-    dates = [grid_date(d) for d in obs.confirmed_break_days]
+## Which of `obs`'s break days `ov` (a snapshot manifest) can hold, as
+## indices into `obs`'s own list, and those days on the snapshot's grid.
+## A day after the snapshot's cut-off has not happened yet for it.
+function _carried_break_days(ov, obs, grid_date, field)
+    hasproperty(obs, field) || return (Int[], Int[])
+    dates = [grid_date(d) for d in getproperty(obs, field)]
     keep = [i for i in eachindex(dates) if dates[i] <= ov.cutoff]
-    days = [ov.n - Dates.value(ov.cutoff - dates[i]) for i in keep]
+    return (keep, [ov.n - Dates.value(ov.cutoff - dates[i]) for i in keep])
+end
+
+## `ov` (a snapshot manifest) carrying `obs`'s break declarations, both the
+## confirmed streams' harmonisation days and the occupancy levels'
+## reclassification days, translated onto the snapshot's own grid and
+## truncated at its cut-off. A break day is annotated a report or two after
+## the report that announced it, so a snapshot taken in between holds the
+## step but not the label, and its baseline would then read a reporting
+## artefact as a day of the walk while the truth has it corrected out. Each
+## declaration is an analyst annotation of which reported steps are
+## artefacts rather than a data vintage, and the printed 24h counts the
+## confirmed one pairs with are published in the report itself, so carrying
+## them back gives the baseline no information the forecast lacked. `obs`
+## without a declaration to carry leaves that part of `ov` unchanged; a
+## confirmed declaration without printed counts to pair with carries zeros,
+## the same default `load_observations` applies, which attributes each listed
+## day's whole step to the artefact.
+function carry_break_days(ov, obs, grid_date)
+    keep, days = _carried_break_days(
+        ov, obs, grid_date, :confirmed_break_days)
     gross(name) = hasproperty(obs, name) ?
                   [getproperty(obs, name)[i] for i in keep] :
                   zeros(Int, length(keep))
-    return merge(ov,
-        (; confirmed_break_days = days,
-            confirmed_break_gross_cases = gross(:confirmed_break_gross_cases),
-            confirmed_break_gross_deaths = gross(
-                :confirmed_break_gross_deaths)))
+    if hasproperty(obs, :confirmed_break_days)
+        ov = merge(ov,
+            (; confirmed_break_days = days,
+                confirmed_break_gross_cases = gross(
+                    :confirmed_break_gross_cases),
+                confirmed_break_gross_deaths = gross(
+                    :confirmed_break_gross_deaths)))
+    end
+    if hasproperty(obs, :occupancy_break_days)
+        _, occ_days = _carried_break_days(
+            ov, obs, grid_date, :occupancy_break_days)
+        ov = merge(ov, (; occupancy_break_days = occ_days))
+    end
+    return ov
 end
 
 ## In-process cache of vintage manifest loads, keyed by `(path, made_date)`:

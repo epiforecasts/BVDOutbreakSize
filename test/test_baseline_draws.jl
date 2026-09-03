@@ -754,3 +754,51 @@ end
         vobs, vgrid, "onset reports", made_date, 7)
     empty!(_VINTAGE_CACHE)
 end
+
+@testitem "vintage_observations carries the occupancy break declaration" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## An occupancy reclassification is annotated a report or two after the
+    ## report that announced it, so a release snapshot taken in between holds
+    ## the step but not the label. Carried back, its baseline reads the change
+    ## of reporting basis as a day of the walk; carried, it does not.
+    dir = mktempdir()
+    snapshot = joinpath(dir, "observations.toml")
+    write(snapshot, """
+        as_of_date = "2026-07-20"
+
+        [genetic_tmrca]
+        date = "2026-03-01"
+
+        [isolation_history]
+        dates = ["2026-07-16", "2026-07-17", "2026-07-18", "2026-07-19",
+                 "2026-07-20"]
+        values = [200, 210, 220, 160, 170]
+        """)
+
+    made_date = Date(2026, 7, 20)
+    ## The current manifest declares the 19 July reclassification; the
+    ## snapshot, written before it was annotated, does not.
+    n = 40
+    cutoff = Date(2026, 7, 27)
+    obs = (; cutoff = cutoff, n = n,
+        occupancy_break_days = [n - Dates.value(cutoff - Date(2026, 7, 19))])
+    grid_date(day) = cutoff - Day(n - day)
+
+    empty!(_VINTAGE_CACHE)
+    plain, pgrid = vintage_observations(snapshot, made_date, (;), grid_date)
+    @test isempty(plain.occupancy_break_days)
+    @test (-60.0, 1) in _history_diffs(
+        plain, pgrid, "isolation beds", plain.isolation_history, made_date)
+
+    empty!(_VINTAGE_CACHE)
+    vobs, vgrid = vintage_observations(snapshot, made_date, obs, grid_date)
+    ## The declared day lands on the snapshot's own grid, not the current one.
+    @test vgrid.(vobs.occupancy_break_days) == [Date(2026, 7, 19)]
+    diffs = _history_diffs(
+        vobs, vgrid, "isolation beds", vobs.isolation_history, made_date)
+    @test all(d -> d[1] > 0, diffs)
+    empty!(_VINTAGE_CACHE)
+end
