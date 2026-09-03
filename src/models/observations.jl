@@ -3405,6 +3405,13 @@ term (the ≈2.1-case pixel noise) and a multiplicative term that is one
 number for the whole figure. `data/README.md` measures the second
 directly, as each vintage's digitised total against the total the figure
 prints: -5.0% to +1.6% over the audited vintages, one value per scan.
+Two mechanisms feed it. The axis calibration is read per figure, and the
+digitiser's colour masks are fixed thresholds against a render blur that
+varies with the embedded image's size, so a blurrier scan loses more of
+every bar's edge. Neither explains SitRep 088, whose digitised total falls
+184 below SitRep 087 on the same render size, the same edge softness and
+the same plotted window, so the level moves for reasons the observable
+covariates do not cover and is sampled free rather than regressed on them.
 
 Scoring that multiplicative term as independent per-cell noise, which is
 what this stream first did, reproduces the right total spread per
