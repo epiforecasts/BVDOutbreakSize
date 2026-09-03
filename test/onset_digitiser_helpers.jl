@@ -50,6 +50,22 @@ function _l1_shift(a, b, s; cut = nothing)
 end
 
 """
+Command that runs a PEP 723 Python script with its declared dependencies,
+or `nothing` when neither `uv` nor a Python carrying Pillow and numpy is on
+`PATH`. `uv` is preferred because it fetches the dependencies itself.
+"""
+function _python_runner()
+    if Sys.which("uv") !== nothing
+        return `uv run --no-project`
+    end
+    py = Sys.which("python3")
+    py === nothing && return nothing
+    ok = success(pipeline(`$py -c "import numpy, PIL"`;
+        stdout = devnull, stderr = devnull))
+    return ok ? `$py` : nothing
+end
+
+"""
 Build a synthetic stacked bar chart as `(R, G, B)` matrices in the form
 `digitize` expects: a plot border on the count-zero baseline, a y-axis
 label strip on an evenly spaced tick grid, weekly x-axis tick marks, and

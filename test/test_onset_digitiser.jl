@@ -78,7 +78,8 @@ end
     ## same underlying data. The stream is consumed as between-vintage
     ## increments, so splicing in one vintage measured on a different bias
     ## scale would post a 284-case fall on onset dates that cannot fall.
-    ## See data/README.md and issue #594.
+    ## The evidence is in data/README.md. Issue #636 tracks the same blur
+    ## costing every JPEG vintage a smaller, unmeasured slice of every bar.
     path = joinpath(pkgdir(BVDOutbreakSize), "data",
         "onset_curve_scanned.csv")
     rows = filter(!isempty, strip.(readlines(path)[2:end]))
@@ -120,7 +121,7 @@ end
     ## and a verified direct read outweighs this heuristic when the two
     ## conflict. They disagree in alternating directions rather than showing
     ## a systematic offset, and each is bracketed by pairs that do land on
-    ## 0, so none of them can be a misread tick. See issue #617.
+    ## 0, so none of them can be a misread tick.
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
         "102" => "103")
 
@@ -217,8 +218,7 @@ end
         end
         ## Three vintages, one per detection path the digitiser has had to
         ## grow: 094 exercises the y-axis label strip, 106 the daily bar
-        ## windows whose rounding frame the Python port had wrong (issue
-        ## #594), and 108 the near-grey fallback its larger render needed.
+        ## windows, and 108 the near-grey fallback its larger render needs.
         wanted = (("094", Date(2026, 8, 17)), ("106", Date(2026, 8, 24)),
             ("108", Date(2026, 8, 31)))
         available = [(sr, tick, joinpath(pdf_dir,
@@ -235,5 +235,35 @@ end
             @test digitize(img..., last_tick, get(Y_AXIS_STEP, sr, 20)) ==
                   want[sr]
         end
+    end
+end
+
+@testitem "the Python port reproduces the committed onset CSV" begin
+    include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
+
+    ## The port is the script the automated data-updater runs, so a drift in
+    ## it rewrites committed rows without anyone reading Julia output. The
+    ## check has to go through the real figures. A synthetic chart cannot
+    ## substitute: the daily bar height is a 75th percentile over a window
+    ## of four or five columns, which is deliberately robust to losing one
+    ## column at the edge, so on flat drawn bars the two implementations
+    ## agree even when their windows differ. Only the partial-height
+    ## columns that JPEG anti-aliasing leaves on a real bar edge make the
+    ## percentile move, which is why the divergence showed up on SitRep 106
+    ## and not on any drawn figure.
+    root = pkgdir(BVDOutbreakSize)
+    pdf_dir = joinpath(root, "data", "sitrep_pdfs")
+    runner = _python_runner()
+
+    if !isdir(pdf_dir) || runner === nothing
+        @info "Python parity check skipped" pdfs = isdir(pdf_dir) runner
+        @test true
+    else
+        out = joinpath(mktempdir(), "onset.csv")
+        script = joinpath(root, "scripts", "digitize_onset_curve.py")
+        run(pipeline(`$runner $script $pdf_dir $out`;
+            stdout = devnull, stderr = devnull))
+        committed = joinpath(root, "data", "onset_curve_scanned.csv")
+        @test read(out, String) == read(committed, String)
     end
 end

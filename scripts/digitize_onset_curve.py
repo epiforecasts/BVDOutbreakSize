@@ -116,25 +116,14 @@ CONFIG = {
     "095": ("2026-08-17", "2026-08-17"),
     "096": ("2026-08-18", "2026-08-17"),
     "097": ("2026-08-19", "2026-08-17"),
-    # "098" is deliberately absent. It is the only vintage whose figure
-    # INSP embedded losslessly rather than as JPEG (1267x789, against
-    # ~830x510 for every neighbour). The colour masks below are fixed
-    # thresholds, and JPEG blur pushes a fringe of every bar's edge pixels
-    # outside them, so every other vintage loses a slice of every bar and
-    # 098 keeps it. It digitises to 4280 against a printed n of 4 140
-    # (+3.4%, above the +1.6% ceiling measured over 059-083), and on onset
-    # dates more than four weeks old - where late reporting can only add a
-    # case or two - it sits ~280 cases above BOTH neighbours (stable-region
-    # totals: 097 2875, 098 3145, 099 2867), so 098 -> 099 would post a
-    # 284-case fall the underlying data cannot have. The neighbour scatter
-    # is ~25 cases, an order of magnitude smaller.
-    #
-    # The render size is not the cause: resampling the neighbours up to
-    # 1267x789 without softening an edge moves them by 1-3%, and resampling
-    # 098 down to a neighbour's size leaves it at 4287. A fix would have to
-    # make the masks encoding-insensitive, which reclassifies pixels on
-    # every vintage and so cannot leave 059-100 unchanged. See
-    # data/README.md.
+    # "098" is deliberately absent. It is the only vintage INSP embedded
+    # losslessly rather than as JPEG, so the fixed colour thresholds below
+    # keep a fringe of each bar that JPEG blur costs every other vintage,
+    # and it reads about 7% high on the same underlying data. Excluding it
+    # keeps a vintage on a different bias scale out of the between-vintage
+    # increments this file feeds. The evidence, and the controls that rule
+    # out the render size, are in data/README.md. Read them before adding
+    # it back.
     "099": ("2026-08-21", "2026-08-17"),
     "100": ("2026-08-22", "2026-08-17"),
     "101": ("2026-08-23", "2026-08-24"),
@@ -394,15 +383,14 @@ def digitize(im, last_tick_date, y_step=20):
         raise ValueError("no x-axis weekly tick row found")
     xt = best
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
-    # The daily bar windows are laid out in the 1-based pixel frame the Julia
-    # reference uses, and converted back to 0-based only at the point of
-    # indexing. Rounding half to even is what both languages do, but it is
-    # not translation-invariant: a window edge landing exactly on .5 rounds
-    # down in one frame and up in the other, so the two ports would read
-    # windows one column apart. That is not a rounding wobble of a count or
-    # two - on SitRep 106 it moved fourteen cells, one of them by eleven
-    # deaths, because a dropped column changes which bar the 75th percentile
-    # lands on. See issue #594.
+    # The daily bar windows are laid out in the 1-based pixel frame the
+    # Julia reference uses, and converted back to 0-based only at the point
+    # of indexing. Both languages round half to even, but that rule is not
+    # translation-invariant: a window edge landing exactly on .5 rounds down
+    # in one frame and up in the other, so a 0-based layout reads windows
+    # one column apart from the reference. A dropped column changes which
+    # bar the 75th percentile lands on, so the error is a whole segment, not
+    # a count or two.
     lastx = xt[-1] + 1                   # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)
     # per-column stacked bar height, flooded up from the baseline
