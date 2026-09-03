@@ -23,6 +23,10 @@ The modelled level each cell differences now carries its own scan's multiplier, 
 On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
 The outbreak size and the recent reproduction number are unchanged by the term. [PLACEHOLDER: confirm or amend from the before and after joint fits]
 The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
+- Bed forecasts are now scored against the occupancy the situation reports print.
+The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
+The persistence baseline drops a window spanning one of those basis changes, and the symptom-onset stream has a baseline for the first time.
+For an incident stream the baseline's step pool holds changes in the window total rather than the window's own count (#623, #612).
 
 ### Report
 
@@ -31,6 +35,9 @@ All three are census stocks but shared a flag with the per-day flows, so the vin
 A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
 - The symptom-onset methods section now derives the digitisation error from how a bar is read rather than quoting a single per-scan percentage, and the reporting-delay summary table and pair plot carry the sampled per-scan level (#507).
 The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
+- The frozen validation fits no longer include the streams the situation reports have stopped updating (#611).
+Suspected cases and suspected deaths stopped reporting early, so their frozen fits scored a validation panel that had already gone quiet, 16 fits a build down from 18.
+The release-fit registry is hashed into every fit's cache key, so the next docs build refits the whole set once.
 
 ### Data
 
@@ -60,6 +67,9 @@ The shift does not cancel in the between-vintage increments the reporting-delay 
 ### Infrastructure
 
 - The onset-curve digitiser and the file it writes now have tests, including the date-alignment sweep and a parity check holding the Python port to the committed file (#629).
+- The release rescore's hard failure is now permanent rather than a stopgap (#588).
+It used to fall back to the committed scoring tables when the rescore step failed, but that fallback would publish skill scores and validation figures against whatever truth series those tables were last written from, with nothing on the rendered page saying so.
+A failed rescore now fails the build outright, which a re-run of the job recovers from; a silent substitution was not detectable from the page at all.
 
 ## v1.16.0
 
