@@ -6,6 +6,52 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.17.0
+
+Changes since v1.16.0
+
+### Fixes
+
+- The Python onset-curve digitiser no longer disagrees with the Julia reference (#594).
+Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
+Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
+Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
+
+### Report
+
+- The bed-occupancy panels read as occupancy rather than as counts of new events (#628).
+All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
+A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
+
+### Data
+
+- Advanced the model cut-off from SitRep 108 (30 August) to SitRep 109 (31 August).
+Confirmed cases reach 6186 and confirmed deaths 3007.
+Sud-Kivu prints its first bed-capacity figure, 25 beds.
+The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+- Three scan-versus-mirror disagreements in the confirmed case and death history are settled against the situation-report PDFs (#624).
+The committed values are right in all three, so no fitted number changes.
+2026-08-08 is the mirror filing SitRep 085 under its publication date rather than its reporting date.
+2026-08-11 is SitRep 089's printed total of 4566 against its own province rows summing to 4567.
+2026-08-25 is a mirror transcription error, 2755 for a figure that reads 2744 in the headline, the total row and the province sum alike.
+The cross-check script now records each with both values, and fails on any disagreement it does not document or on an entry that stops reproducing.
+It no longer prints TOML regenerated from the mirror, which covers 86 of the 102 report dates the manifest holds.
+- SitRep 090's mixed-direction harmonisation gets no break-date entry (#569).
+The gap is 2 cases and 3 deaths, smaller than the SitRep 065 precedent already left off that list.
+- SitRep 098 stays out of the digitised onset curve, and the reason is now the measured one (#594).
+The render size is not what makes it read high.
+It is the only vintage embedded losslessly, and the fixed colour masks lose a bar-edge fringe to JPEG blur on every other one.
+- The SitRep 102 to 103 date-alignment failure is not a misread axis tick on either vintage (#617).
+Both neighbouring pairs land cleanly on shift 0.
+- The per-scan digitisation error on the onset curve is a per-vintage level, not a stationary error (#636).
+The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller render blurs more.
+Edge softness roughly doubles between SitRep 105 and 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
+The shift does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
+
+### Infrastructure
+
+- The onset-curve digitiser and the file it writes now have tests, including the date-alignment sweep and a parity check holding the Python port to the committed file (#629).
+
 ## v1.16.0
 
 Changes since v1.15.0
