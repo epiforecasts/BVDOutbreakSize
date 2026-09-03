@@ -80,9 +80,11 @@ end
     obs = (; confirmed_history = hist)
     made_date = grid_date(38)
 
-    ## The past differences (their own window) do not depend on horizon, so
-    ## comparing spreads at two horizons isolates the sqrt(horizon/window)
-    ## scaling: a 28-day horizon is scaled twice as far as a 7-day one.
+    ## The walk takes one step a day out to the horizon, so a longer horizon
+    ## is a longer walk and a wider baseline. The step pool itself is the
+    ## history of changes in the horizon-length window total, so it moves
+    ## with the horizon too and the ratio is not a fixed sqrt(28 / 7); the
+    ## per-pool scaling is pinned exactly in the iterated-walk test below.
     short = baseline_draws(
         obs, grid_date, "confirmed cases", made_date, 7, 4_000,
         MersenneTwister(2))
@@ -90,7 +92,6 @@ end
         obs, grid_date, "confirmed cases", made_date, 28, 4_000,
         MersenneTwister(2))
     @test std(long) > std(short)
-    @test isapprox(std(long) / std(short), sqrt(28 / 7); atol = 0.15)
 end
 
 @testitem "baseline_draws truncates at zero" begin
@@ -168,21 +169,22 @@ end
 @testitem "baseline_draws' spread is an iterated daily random walk" begin
     using Dates: Date, Day
     using Random: MersenneTwister
-    using Statistics: std
+    using Statistics: mean, std
 
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
-    ## A single 7-day-apart vintage pair gives one past difference of 70
-    ## over a 7-day window; three copies clear the three-difference floor
-    ## without changing the step pool. The one-day step this history
-    ## produces is 70 / sqrt(7), not 70 / 7: a `window`-day change has
-    ## variance `window * sigma^2` under a zero-drift walk, so dividing by
-    ## `sqrt(window)` is what recovers the one-day step size `sigma`.
+    ## Weekly vintages whose own weekly total alternates between 70 and 140,
+    ## so the quantity a one-week-ahead forecast is scored on takes a ±70
+    ## step from one vintage to the next. Over the seven days between
+    ## vintages that is a one-day step of 70 / sqrt(7), not 70 / 7: a
+    ## `window`-day change has variance `window * sigma^2` under a zero-drift
+    ## walk, so dividing by `sqrt(window)` is what recovers the one-day step
+    ## size `sigma`.
     n = 60
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
     hist = (; days = [3, 10, 17, 24, 31, 38],
-        counts = [30.0, 100.0, 170.0, 240.0, 310.0, 380.0])
+        counts = [30.0, 100.0, 240.0, 310.0, 450.0, 520.0])
     obs = (; confirmed_history = hist)
     made_date = grid_date(38)
 
@@ -191,7 +193,7 @@ end
     ## (±70/sqrt(7), the only step this history produces): every draw lands
     ## on centre - 70/sqrt(7) or centre + 70/sqrt(7) (or is floored at
     ## zero).
-    centre = 70.0  # 380 - 310, the observed increment over the last 7 days
+    centre = 70.0  # 520 - 450, the observed increment over the last window
     step = 70.0 / sqrt(7.0)
     draws1 = baseline_draws(
         obs, grid_date, "confirmed cases", made_date, 1, 4_000,
@@ -200,18 +202,17 @@ end
         draws1)
 
     ## Summing `horizon` iid steps gives a variance proportional to the step
-    ## count: the population variance of a ±70/sqrt(7) Rademacher-like step
-    ## is `step^2`, so `horizon` steps have variance `step^2 * horizon`,
-    ## i.e. std growing with sqrt(horizon) — the same magnitude a single
-    ## draw rescaled by `70 * sqrt(horizon / 7)` would give (the
-    ## historically-correct target, since a `window`-day history diff
-    ## rescaled to a `horizon`-day one is `d * sqrt(horizon / window)`).
-    horizon = 16
-    draws16 = baseline_draws(
+    ## count, so the spread is `sqrt(horizon)` times the pool's own scale.
+    ## The pool is read back from the same helper `baseline_draws` uses, so
+    ## this pins the walk rather than restating the history's arithmetic.
+    horizon = 9
+    pool = _window_total_steps(
+        obs, grid_date, "confirmed cases", hist, made_date, horizon)
+    draws9 = baseline_draws(
         obs, grid_date, "confirmed cases", made_date, horizon, 20_000,
         MersenneTwister(12))
-    expected_sd = 70.0 * sqrt(horizon / 7.0)
-    @test isapprox(std(draws16), expected_sd; rtol = 0.1)
+    expected_sd = sqrt(horizon * mean(abs2, pool))
+    @test isapprox(std(draws9), expected_sd; rtol = 0.1)
 end
 
 @testitem "vintage_observations falls back to the given obs with no path" begin
@@ -248,19 +249,6 @@ end
             [confirmed_case_history]
             dates = [$dates_toml]
             values = [$values_toml]
-            """)
-        return path
-    end
-
-    ## The same manifest with no dated history at all, as the earliest
-    ## release snapshots are: cut-off scalars only, no vintages to build a
-    ## baseline from.
-    function _write_bare_manifest(path; as_of_date)
-        write(path, """
-            as_of_date = "$as_of_date"
-
-            [genetic_tmrca]
-            date = "2026-03-01"
             """)
         return path
     end
@@ -603,8 +591,17 @@ end
         as_of_date = "2026-07-08",
         confirmed_dates = ["2026-07-06", "2026-07-07", "2026-07-08"],
         confirmed_values = [40, 70, 110])
-    bare = _write_bare_manifest(joinpath(dir, "bare.toml");
-        as_of_date = "2026-07-08")
+    ## A manifest with no dated history at all, as the earliest release
+    ## snapshots are: cut-off scalars only, no vintages to build a baseline
+    ## from. Written here rather than in the shared fixture, since this is
+    ## the only test that needs it.
+    bare = joinpath(dir, "bare.toml")
+    write(bare, """
+        as_of_date = "2026-07-08"
+
+        [genetic_tmrca]
+        date = "2026-03-01"
+        """)
 
     n = 60
     cutoff = Date(2026, 7, 29)
@@ -634,4 +631,121 @@ end
         @test Set(scored.fit) == Set([JOINT_FIT])
         @test result.no_baseline == 1
     end
+end
+
+@testitem "_history_diffs drops windows spanning an occupancy break" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Five daily occupancy vintages with a reclassification on grid day 13:
+    ## the reported stock steps down by 60 beds because the basis changed,
+    ## not because 60 patients left. That change is not a day of the walk the
+    ## baseline simulates, so the window carrying it is dropped.
+    hist = (; days = [10, 11, 12, 13, 14],
+        counts = [200.0, 210.0, 220.0, 160.0, 170.0])
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    made_date = grid_date(14)
+    obs = (; isolation_history = hist, occupancy_break_days = [13])
+
+    diffs = _history_diffs(obs, grid_date, "isolation beds", hist, made_date)
+    @test diffs == [(10.0, 1), (10.0, 1), (10.0, 1)]
+
+    ## Without the declaration the reclassification enters the pool as a
+    ## 60-bed day, which is what inflated the spread.
+    plain = (; isolation_history = hist)
+    @test (-60.0, 1) in
+          _history_diffs(plain, grid_date, "isolation beds", hist, made_date)
+
+    ## Every other stream is unaffected by an occupancy declaration.
+    conf = (; confirmed_history = hist, occupancy_break_days = [13])
+    @test length(_history_diffs(
+        conf, grid_date, "confirmed cases", hist, made_date)) == 4
+end
+
+@testitem "the incident step pool holds changes in the window total" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## A cumulative confirmed series rising by a steady 100 a week. The
+    ## quantity a 7-day-ahead forecast is scored on is the 7-day window
+    ## total, which is flat at 100, so the persistence walk has no steps to
+    ## take. Differencing the cumulative instead puts the 100 itself into the
+    ## pool, so the walk's scale would track the size of the epidemic rather
+    ## than how fast it is changing (issue #612).
+    n = 60
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    hist = (; days = [10, 17, 24, 31, 38],
+        counts = [100.0, 200.0, 300.0, 400.0, 500.0])
+    obs = (; confirmed_history = hist)
+    made_date = grid_date(38)
+
+    steps = _window_total_steps(
+        obs, grid_date, "confirmed cases", hist, made_date, 7)
+    @test !isempty(steps)
+    @test all(isapprox(0.0; atol = 1e-9), steps)
+
+    ## The cumulative first differences it replaces are the 100s themselves.
+    @test all(d -> d[1] == 100.0,
+        _history_diffs(obs, grid_date, "confirmed cases", hist, made_date))
+
+    ## An accelerating series does give the walk steps to take.
+    fast = (; days = [10, 17, 24, 31, 38],
+        counts = [100.0, 200.0, 350.0, 550.0, 800.0])
+    fobs = (; confirmed_history = fast)
+    fsteps = _window_total_steps(
+        fobs, grid_date, "confirmed cases", fast, made_date, 7)
+    @test any(!=(0.0), fsteps)
+end
+
+@testitem "window_total_at withholds a window before the stream started" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    n = 60
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    hist = (; days = [30, 37, 44], counts = [100.0, 220.0, 360.0])
+    obs = (; confirmed_history = hist)
+
+    ## The first vintage's own 7-day window opens before the stream began, so
+    ## `cum_at` would read a non-observation as zero and the total would
+    ## saturate at the whole cumulative.
+    @test isnothing(window_total_at(
+        obs, grid_date, "confirmed cases", hist, grid_date(30), 7))
+    @test window_total_at(
+        obs, grid_date, "confirmed cases", hist, grid_date(37), 7) == 120.0
+end
+
+@testitem "vintage_observations keeps the onset triangle" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## A release's `observations.toml` is fetched on its own into a temporary
+    ## directory, so the digitised onset triangle is not beside it. The loader
+    ## must still be pointed at the package's own copy, or the onset stream
+    ## degrades to an empty history and the group gets no persistence
+    ## baseline at all (issue #623).
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    dir = mktempdir()
+    snapshot = joinpath(dir, "observations.toml")
+    cp(joinpath(pkgdir(BVDOutbreakSize), "data", "observations.toml"),
+        snapshot)
+    made_date = obs.cutoff - Day(14)
+
+    empty!(_VINTAGE_CACHE)
+    vobs, vgrid = vintage_observations(snapshot, made_date, obs, grid_date)
+    @test !isempty(vobs.onset_report_history.days)
+    ## Frozen at the made date like every other history: no vintage the
+    ## forecast could not have seen.
+    @test maximum(vgrid.(vobs.onset_report_history.days)) <= made_date
+    @test baseline_window_covered(
+        vobs, vgrid, "onset reports", made_date, 7)
+    empty!(_VINTAGE_CACHE)
 end
