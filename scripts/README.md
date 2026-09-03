@@ -25,6 +25,8 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 The figure is a raster bar chart with no data table.
 It needs no Julia packages beyond stdlib, so run it as `julia scripts/digitize_onset_curve.jl [pdf_dir] [out_csv]`.
 `digitize_onset_curve.py` is a byte-identical Python port for the automated data-updater, which has Python but not Julia access.
+The Julia script is the reference: `data/onset_curve_scanned.csv` is its output, and a disagreement between the two is a bug in the port (issue #594).
+Run both and diff before accepting a new vintage.
 Run it with `uv run scripts/digitize_onset_curve.py`, which fetches Pillow and numpy from its PEP 723 inline metadata.
 Both need poppler's `pdfimages`, `pdftotext` and `pdfinfo` on `PATH` (`apt install poppler-utils`, or `brew install poppler`).
 Download the PDFs first with `download_sitreps.jl`.
