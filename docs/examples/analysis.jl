@@ -2643,9 +2643,12 @@ suspected_daily_panel = (;
         pp_joint, @varname(suspected_daily.increments)),
     observed = obs.suspected_daily_history.counts,
     colour = :slateblue, cumulative = false);
-## Isolation/treatment-bed occupancy: a daily count, so the panel is drawn
+## Isolation/treatment-bed occupancy: a census stock, so the panel is drawn
 ## with `cumulative = false` — each replicate is the modelled bed count on a
-## report day against the observed "Patients en isolement" count. The count
+## report day against the observed "Patients en isolement" count. It is a
+## level, not a count of new events, so it carries its own `ylabel` rather
+## than the "Daily count" and "New per vintage" defaults, which would read as
+## an accumulating total on a series that rises through the outbreak. The count
 ## is the suspect inflow carried through a length-of-stay survival, so its
 ## level and lag reflect the admission proportion and the stays. The censored-
 ## occupancy likelihood stores its per-day predictive draws under the submodel
@@ -2664,7 +2667,8 @@ isolation_panel = (;
     replicates = _vintage_replicates(
         pp_joint, @varname(isolation.obs)),
     observed = obs.isolation_history.counts[_iso_keep],
-    colour = :darkorange, cumulative = false);
+    colour = :darkorange, cumulative = false,
+    ylabel = "Beds occupied");
 deaths_panel = (;
     id = :suspected_deaths,
     title = "Suspected deaths",
@@ -2821,7 +2825,8 @@ confirmed_incare_panel = (;
     replicates = _vintage_replicates(
         pp_joint, @varname(confirmed_incare_obs.increments)),
     observed = obs.treatment_confirmed_incare_history.counts,
-    colour = :darkgoldenrod, cumulative = false);
+    colour = :darkgoldenrod, cumulative = false,
+    ylabel = "Beds occupied");
 suspect_incare_panel = (;
     id = :suspect_beds,
     title = "Suspects in care",
@@ -2829,7 +2834,8 @@ suspect_incare_panel = (;
     replicates = _vintage_replicates(
         pp_joint, @varname(suspect_incare_obs.increments)),
     observed = obs.treatment_suspect_incare_history.counts,
-    colour = :chocolate, cumulative = false);
+    colour = :chocolate, cumulative = false,
+    ylabel = "Beds occupied");
 
 ## Symptom-onset reporting triangle: one cell per (onset day, report day)
 ## pair, several onset dates per snapshot, unlike every panel above (one

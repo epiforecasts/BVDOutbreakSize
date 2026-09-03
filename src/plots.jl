@@ -2386,7 +2386,10 @@ conditioning baselines. `colour` is optional per panel. A panel may set
 cumulative series (e.g. the post-26 May daily new-suspect inflow, or the 24h
 analysed volume): there is no previous-vintage baseline, so each replicate is
 plotted as its own daily count against the observed daily count, and the
-y-axis reads "Daily count".
+y-axis reads "Daily count". A panel may also set `ylabel` to name its own
+y-axis. An occupancy census (a bed count at the end of the day) is a level
+rather than a count of new events, so it sets `ylabel` and neither of the
+default labels is applied to it.
 
 `max_date` (an ISO date string or `Date`) truncates every panel to the
 vintages on or before that date, so streams that keep reporting past the
@@ -2443,6 +2446,14 @@ function plot_vintage_conditional_ppc(
         ## Each draw's conditional cumulative at vintage `v` is the
         ## observed previous cumulative plus the drawn increment `Δ_v` (the
         ## baseline is zero for a non-cumulative panel).
+        ## `cumulative = false` covers two different kinds of series: a
+        ## per-day flow (the daily new-suspect inflow, the 24h analysed
+        ## volume) and an occupancy census (a bed count at the end of the
+        ## day, a level rather than a count of new events). Both are drawn
+        ## the same way, but "Daily count" is only true of the flows, so a
+        ## census panel names its own axis through `ylabel`.
+        ylabel = get(p, :ylabel,
+            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count")
         cond = [obs_prev .+ r for r in replicates]
         q(i, pr) = quantile([c[i] for c in cond], pr)
         lo90 = [q(i, 0.05) for i in 1:n]
@@ -2459,8 +2470,7 @@ function plot_vintage_conditional_ppc(
         yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
-            ylabel = cumulative ? (col == 1 ? "Cumulative count" : "") :
-                     "Daily count",
+            ylabel = ylabel,
             xticks = _vintage_ticks(dates),
             xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
@@ -2485,7 +2495,9 @@ such as the 24h analysed volume or the daily new-suspect inflow) it is the
 count itself. The replicates are already per-vintage increments, so they are
 the modelled incidence directly and are summarised as 30/60/90% credible
 ribbons with the observed incidence overlaid. `panels`, `max_date` and the
-weekly date axis match [`plot_vintage_conditional_ppc`](@ref).
+weekly date axis match [`plot_vintage_conditional_ppc`](@ref), including the
+optional per-panel `ylabel`. An occupancy census sets it so that a bed count
+sharing this grid is not read as an accumulating total.
 """
 function plot_vintage_incidence_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
@@ -2520,6 +2532,11 @@ function plot_vintage_incidence_ppc(
         obs_inc = cumulative ?
                   [v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
                    for v in 1:n] : obs_cum
+        ## An occupancy census is a level, not a count of new events, so
+        ## "New per vintage" would misdescribe it. Such a panel names its
+        ## own axis through `ylabel`, so a bed count sitting in a grid of
+        ## incidence panels is not read as an accumulating total.
+        ylabel = get(p, :ylabel, col == 1 ? "New per vintage" : "")
         ## The replicates are already per-vintage increments (per-day counts
         ## for a non-cumulative panel), so they are the modelled incidence.
         q(i, pr) = quantile([r[i] for r in replicates], pr)
@@ -2533,7 +2550,7 @@ function plot_vintage_incidence_ppc(
         yupper = 1.6 * max(isempty(obs_inc) ? 1.0 : maximum(obs_inc),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
-            ylabel = col == 1 ? "New per vintage" : "",
+            ylabel = ylabel,
             xticks = _vintage_ticks(dates),
             xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
