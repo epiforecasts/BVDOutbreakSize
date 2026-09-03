@@ -700,7 +700,7 @@ end
     @test any(!=(0.0), fsteps)
 end
 
-@testitem "window_total_at withholds a window before the stream started" begin
+@testitem "the step pool skips a window before the stream started" begin
     using Dates: Date, Day
 
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
@@ -708,16 +708,21 @@ end
     n = 60
     cutoff = Date(2026, 7, 15)
     grid_date(day) = cutoff - Day(n - day)
-    hist = (; days = [30, 37, 44], counts = [100.0, 220.0, 360.0])
+    hist = (; days = [30, 37, 44, 51], counts = [100.0, 220.0, 360.0, 520.0])
     obs = (; confirmed_history = hist)
 
     ## The first vintage's own 7-day window opens before the stream began, so
-    ## `cum_at` would read a non-observation as zero and the total would
-    ## saturate at the whole cumulative.
-    @test isnothing(window_total_at(
-        obs, grid_date, "confirmed cases", hist, grid_date(30), 7))
+    ## `cum_at` reads a non-observation as zero and the total saturates at the
+    ## whole cumulative to that date rather than measuring a window.
+    @test window_total_at(
+        obs, grid_date, "confirmed cases", hist, grid_date(30), 7) == 100.0
     @test window_total_at(
         obs, grid_date, "confirmed cases", hist, grid_date(37), 7) == 120.0
+
+    ## The pool leaves that saturated total out, so the three covered
+    ## vintages give two steps rather than three.
+    @test length(_window_total_steps(
+        obs, grid_date, "confirmed cases", hist, grid_date(51), 7)) == 2
 end
 
 @testitem "vintage_observations keeps the onset triangle" begin

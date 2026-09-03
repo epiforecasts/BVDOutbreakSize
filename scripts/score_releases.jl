@@ -611,13 +611,18 @@ end
 
 ## The incident target the baseline forecasts, measured at `date`: the count
 ## the stream notified over the `horizon`-length window ending there, with any
-## harmonisation-break day inside that window taken out, exactly as `truth_at`
-## and the baseline centre measure it. `nothing` when the window opens before
-## the stream's own first vintage, where `cum_at` would read a non-observation
-## as zero and the total would saturate at the whole cumulative.
+## harmonisation-break day inside that window taken out and floored at zero,
+## exactly as `truth_at` measures the truth it is compared against. Both the
+## baseline's centre and its step pool read the window through here, so the
+## two cannot drift apart.
+##
+## A window opening before the stream's own first vintage is measured from a
+## non-observation `cum_at` reads as zero, so the total saturates at the whole
+## cumulative to `date`. Callers hold that off themselves: `score_release`
+## through `baseline_window_covered` for the centre, `_window_total_steps` per
+## vintage for the pool.
 function window_total_at(obs, grid_date, stream, hist, date, horizon)
     from = date - Day(horizon)
-    from < stream_coverage_start(obs, grid_date, stream) && return nothing
     raw = cum_at(hist, date, grid_date) - cum_at(hist, from, grid_date)
     raw -= break_correction(obs, grid_date, stream, from, date)
     return max(Float64(raw), 0.0)
@@ -636,18 +641,19 @@ end
 ## then symmetrised about zero and summed over the horizon, so the spread
 ## tracks how large the outbreak is rather than how fast it is moving.
 ##
-## Vintages whose window opens before the stream began reporting are skipped
-## (see `window_total_at`), as is any pair spanning an occupancy
-## reclassification break.
+## Vintages whose window opens before the stream began reporting are skipped,
+## since their total saturates at the whole cumulative rather than measuring a
+## window, as is any pair spanning an occupancy reclassification break.
 function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
     out = Float64[]
+    covered = stream_coverage_start(obs, grid_date, stream)
     prev_date = nothing
     prev_total = nothing
     for d in hist.days
         date = grid_date(d)
         date > made_date && break
+        date - Day(horizon) < covered && continue
         total = window_total_at(obs, grid_date, stream, hist, date, horizon)
-        isnothing(total) && continue
         if !isnothing(prev_total)
             gap = Dates.value(date - prev_date)
             if gap > 0 && !spans_occupancy_break(
@@ -722,14 +728,8 @@ end
 ## differences are available, so an early made-date still scores.
 function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
     h, kind = stream_history(obs, stream)
-    centre = if kind == :level
-        Float64(cum_at(h, made_date, grid_date))
-    else
-        prior = window_start(kind, made_date, horizon)
-        raw = cum_at(h, made_date, grid_date) - cum_at(h, prior, grid_date)
-        raw -= break_correction(obs, grid_date, stream, prior, made_date)
-        Float64(max(raw, 0))
-    end
+    centre = kind == :level ? Float64(cum_at(h, made_date, grid_date)) :
+             window_total_at(obs, grid_date, stream, h, made_date, horizon)
 
     steps = if kind == :level
         [d / sqrt(window)
