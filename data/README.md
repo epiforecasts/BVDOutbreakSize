@@ -112,6 +112,14 @@ Those cells are dropped rather than read as zeros.
 The axis gap is about five days for most vintages, close to the reporting delay itself.
 Reading it as "nothing reported yet" would force the fitted hazard to near zero over the first five days and pile the missing mass onto the delay at which the axis first covers the date.
 
+A second, larger source of between-vintage movement is the render INSP happens to lay the figure out at.
+The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller JPEG render blurs more.
+Measuring edge softness as the share of blue-ish pixels missing the strict blue mask: 0.117 at SitRep 103 (823x501), 0.113 at 104/105 (1118x710), 0.210 at 106/107 (778x440) and 0.225 at 108/109 (802x479).
+Softness roughly doubles from 105 to 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
+So the digitisation bias is a per-vintage level that moves with an observable, not a stationary error, and it does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
+It is not the whole story either: SitRep 087 to 088 falls 184 at the same render, the same softness and the same last plotted onset date.
+Issue #636 tracks the mechanism and what removing it would cost.
+
 This stream is fitted.
 `load_onset_curve` (`src/onset_curve.jl`) reads the file, collapses reprints, drops vintages reported after the manifest cut-off and builds the between-vintage increment cells.
 `onset_reporting_model` (`src/models/observations.jl`) fits them through a discrete reporting-delay hazard whose asymptote carries ascertainment.
