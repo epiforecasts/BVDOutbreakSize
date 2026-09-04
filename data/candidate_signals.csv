@@ -1482,3 +1482,74 @@ eds_corpses_swabbed,109,2026-08-31,Bas-Uele,1,corpses,section 1.4.1 prose: '1 co
 eds_investigations_performed,109,2026-08-31,Bas-Uele,0,investigations,"section 1.4.1 prose: '1 corps swabe et aucun EDS realise' - a printed zero, not silence"
 smsps_confirmed_coverage,109,2026-08-31,Ituri,25.0,percent,section 1.7.1 prose: '11 parmi les nouveaux cas confirmes (25 %) ... ont beneficie d'interventions SMSPS'
 smsps_recovered_reintegrated,109,2026-08-31,Ituri,84.6,percent,"section 1.7.1 prose: '11 gueris sur 13 suivis en communaute (84,6 %)'"
+alerts_total_day,110,2026-09-01,Haut-Uele,14,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Haut-Uele,12,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Haut-Uele,1,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Haut-Uele,13,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Bas-Uele,25,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Bas-Uele,4,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Bas-Uele,0,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Bas-Uele,4,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Ituri,877,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Ituri,142,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Ituri,74,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Ituri,216,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Nord-Kivu,650,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Nord-Kivu,70,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Nord-Kivu,38,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Nord-Kivu,108,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Tshopo,139,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Tshopo,6,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Tshopo,1,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Tshopo,7,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Ensemble,1705,alerts,'Situation des alertes notifiees par province' table (Tableau 3)
+alerts_validated_alive,110,2026-09-01,Ensemble,234,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,110,2026-09-01,Ensemble,114,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,110,2026-09-01,Ensemble,348,alerts,alert table 'Nombre de suspects investigues'
+alerts_total_day,110,2026-09-01,Sud-Kivu,0,alerts,"Tableau 3: entire row is 'ND' except Total alertes, printed as 0 - a printed zero, not silence"
+alert_investigation_rate,110,2026-09-01,Ensemble,100.0,percent,section 1.1.2 prose ('Ces derniers ont tous ete investigues (100 %)')
+contact_tracing_coverage,110,2026-09-01,Ensemble,89.0,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Ensemble,16719,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Ensemble,18784,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,110,2026-09-01,Tshopo,100.0,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Tshopo,350,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Tshopo,350,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,110,2026-09-01,Nord-Kivu,90.1,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Nord-Kivu,7468,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Nord-Kivu,8293,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,110,2026-09-01,Ituri,89.7,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Ituri,7115,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Ituri,7932,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,110,2026-09-01,Haut-Uele,84.6,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Haut-Uele,1562,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Haut-Uele,1846,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,110,2026-09-01,Bas-Uele,61.7,percent,"section 1.1.2 prose: '89,0 % (16 719 vus sur 18 784 a suivre)' with per-province breakdown printed this vintage (unlike 109's national-only figure): 100% Tshopo (350/350), 90,1% Nord-Kivu (7468/8293), 89,7% Ituri (7115/7932), 84,6% Haut-Uele (1562/1846), 61,7% Bas-Uele (224/363); Sud-Kivu not mentioned"
+contacts_seen,110,2026-09-01,Bas-Uele,224,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,110,2026-09-01,Bas-Uele,363,persons,see contact_tracing_coverage row note
+poe_travellers_screened,110,2026-09-01,Ituri,145990,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Ituri,2,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Ituri,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Nord-Kivu,88249,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Nord-Kivu,4,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Nord-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Sud-Kivu,6609,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Sud-Kivu,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Sud-Kivu,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Tshopo,3981,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Tshopo,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Tshopo,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Haut-Uele,15539,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Haut-Uele,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Haut-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Bas-Uele,6091,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Bas-Uele,0,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Bas-Uele,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,110,2026-09-01,Ensemble,266459,persons,'Suivi des indicateurs aux PoE/PoC' table (Tableau 4)
+poe_alertes_notifiees,110,2026-09-01,Ensemble,6,alerts,PoE/PoC table 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,110,2026-09-01,Ensemble,0,corpses,PoE/PoC table 'Nombre de corps sans vie interceptes ce jour'
+eds_death_alerts,110,2026-09-01,Ituri,126,alerts,section 1.4.1 prose: '77 EDS realisees sur 126 alertes et 65 corps swabes (42 echecs)'
+eds_investigations_performed,110,2026-09-01,Ituri,77,investigations,section 1.4.1 prose: '77 EDS realisees sur 126 alertes et 65 corps swabes (42 echecs)'
+eds_corpses_swabbed,110,2026-09-01,Ituri,65,corpses,"section 1.4.1 prose: '77 EDS realisees sur 126 alertes et 65 corps swabes (42 echecs)'; 42 further attempts failed ('echecs'), not counted as swabbed"
+eds_corpses_swabbed,110,2026-09-01,Nord-Kivu,51,corpses,section 1.4.1 prose: '51 corps swabes et 59 EDS realises' (no alertes count printed)
+eds_investigations_performed,110,2026-09-01,Nord-Kivu,59,investigations,section 1.4.1 prose: '51 corps swabes et 59 EDS realises' (no alertes count printed)
+smsps_recovered_reintegrated,110,2026-09-01,Ituri,87.5,percent,"section 1.7.1 prose: '14 gueris sur 16 suivis en communaute (87,5 %)'; the new-confirmed-coverage figures this vintage ('17 personnes parmi les nouveaux cas confirmes', Ituri; '28 nouveaux cas confirmes', Nord-Kivu) are raw counts with no printed ratio/percent, so smsps_confirmed_coverage is not recorded this vintage per the standing convention of not inventing an unprinted percentage (SitRep 103 precedent)"
