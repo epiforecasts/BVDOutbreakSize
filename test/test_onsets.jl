@@ -601,7 +601,7 @@ end
     ## level; cell 2 is a correction between two real snapshots.
     prev_idx = [0, 5, 0]
     s = onset_report_scales(means, level_cur, level_prev, prev_idx;
-        pixel_sd = 2.1, scan_frac = 0.04)
+        pixel_sd = 2.1, scan_sd = 0.04)
     @test s[1] ≈ sqrt(2.1^2 * 1)
     @test s[2] ≈ sqrt(20.0 + 2.1^2 * 2 + 0.04^2 * (100.0^2 + 80.0^2))
     ## A level cell carries the counting variation of the cases it reports,
@@ -1101,4 +1101,165 @@ end
     @test spec.kind === :onset
     @test !isnothing(_resolve_draws(chn, spec.expected))
     @test !isnothing(_daily_at_cutoff_any(chn, spec.trajectory))
+end
+
+## --- Shared per-scan level error ------------------------------------------
+
+@testitem "onset_vintage_indices maps cells onto their two scans" begin
+    using BVDOutbreakSize: onset_vintage_indices
+
+    ## Three vintages at report days 10, 14, 15, with the first differenced
+    ## against the virtual empty predecessor (`prev_report_idx = 0`).
+    report = [10, 10, 14, 14, 15]
+    prev = [0, 0, 10, 10, 14]
+    v = onset_vintage_indices(report, prev)
+    @test v.n_vintages == 3
+    @test v.vintage_idx == [1, 1, 2, 2, 3]
+    @test v.prev_vintage_idx == [0, 0, 1, 1, 2]
+    ## An empty history is a no-op rather than an error.
+    e = onset_vintage_indices(Int[], Int[])
+    @test e.n_vintages == 0
+    @test isempty(e.vintage_idx)
+end
+
+@testitem "onset_scan_adjust dilates each read by its own scan" begin
+    using BVDOutbreakSize: onset_scan_adjust
+
+    level_cur = [100.0, 40.0, 200.0]
+    level_prev = [0.0, 0.0, 180.0]
+    scan = [1.05, 0.95]
+    ## Cells 1-2 are level cells off scan 1; cell 3 corrects scan 2 against
+    ## scan 1.
+    a = onset_scan_adjust(level_cur, level_prev, scan, [1, 1, 2], [0, 0, 1])
+    @test a.level_cur ≈ [105.0, 42.0, 190.0]
+    @test a.level_prev ≈ [0.0, 0.0, 189.0]
+    @test a.means ≈ a.level_cur .- a.level_prev
+    ## A scan level of exactly one leaves the levels alone, so the adjusted
+    ## means agree with the unadjusted difference.
+    b = onset_scan_adjust(level_cur, level_prev, [1.0, 1.0],
+        [1, 1, 2], [0, 0, 1])
+    @test b.means ≈ level_cur .- level_prev
+    ## An out-of-range index (the empty-predecessor sentinel) contributes a
+    ## multiplier of one rather than indexing out of bounds.
+    c = onset_scan_adjust([10.0], [5.0], [1.2], [0], [0])
+    @test only(c.means) ≈ 5.0
+end
+
+@testitem "per-snapshot coverage: shared scan error against per-cell only" begin
+    ## Issue #507. A simulated reporting triangle whose scans each carry one
+    ## shared level error, scored two ways: with the whole measured scan
+    ## error as independent per-cell noise (what the stream did), and with
+    ## it split into a shared per-vintage level and an independent per-cell
+    ## remainder (what it does). The check is on the net correction per
+    ## snapshot, which is what the report's onset panel plots and what
+    ## `stream_calibration` scores. Independent per-cell errors average out
+    ## across a snapshot's cells, so the per-cell view predicts that sum far
+    ## too tightly even though its per-cell spread is right, and central
+    ## coverage collapses further than the 90% coverage does.
+    using BVDOutbreakSize: onset_report_moments, onset_report_scales,
+                           onset_scan_adjust, onset_vintage_indices,
+                           safe_studentt, ONSET_REPORT_MAX_DELAY
+    using Random: MersenneTwister, randn
+    using Statistics: quantile
+    using Distributions: rand
+
+    rng = MersenneTwister(20260903)
+    D = ONSET_REPORT_MAX_DELAY
+    ν = 4.0
+    scan_frac = 0.04
+    σ_scan_true = 0.03
+
+    ## Latent truth: an epidemic bump, a constant reporting hazard and a
+    ## constant ascertainment level, so every deviation below comes from the
+    ## observation model rather than from epidemic dynamics. The cumulative
+    ## level a cell differences runs to a couple of hundred cases, the
+    ## regime the digitised triangle is in and the one where the scan error
+    ## dominates the pixel and counting terms.
+    nvint = 150
+    n = 150 + 2 * nvint + 20
+    onsets = [400.0 * exp(-((t - (n - 60))^2) / (2 * 70.0^2)) for t in 1:n]
+    logit_h0 = fill(log(0.15 / 0.85), D)
+    report_days = collect(150:2:(150 + 2 * (nvint - 1)))
+    horizon = D
+    grid_start = max(minimum(report_days) - horizon + 1, 1)
+    grid_end = maximum(report_days)
+    γ = zeros(grid_end - grid_start + 1)
+    alpha = fill(0.6, grid_end - grid_start + 1)
+
+    ## Cells: the same trailing-window construction `load_onset_curve`
+    ## builds, with the first vintage differenced against an empty
+    ## predecessor.
+    onset_idx = Int[]
+    cur_idx = Int[]
+    prev_idx = Int[]
+    for (s, R) in enumerate(report_days)
+        for u in max(R - horizon + 1, 1):R
+            push!(onset_idx, u)
+            push!(cur_idx, R)
+            push!(prev_idx, s == 1 ? 0 : report_days[s - 1])
+        end
+    end
+    v = onset_vintage_indices(cur_idx, prev_idx)
+    groups = [findall(==(s), v.vintage_idx) for s in 1:v.n_vintages]
+
+    m = onset_report_moments(onsets, logit_h0, γ, grid_start, alpha,
+        onset_idx, cur_idx, prev_idx)
+
+    ## One triangle from the shared-scan truth: each scan gets one level
+    ## error, then each cell gets its own independent noise under the same
+    ## Student-t the likelihood uses.
+    scan_true = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
+    truth = onset_scan_adjust(m.level_cur, m.level_prev, scan_true,
+        v.vintage_idx, v.prev_vintage_idx)
+    truth_sd = onset_report_scales(truth.means, truth.level_cur,
+        truth.level_prev, prev_idx)
+    observed = [rand(rng, safe_studentt(truth.means[i], truth_sd[i], ν))
+                for i in eachindex(truth.means)]
+    obs_totals = [sum(observed[g]) for g in groups]
+
+    ## Predictive for a snapshot's net correction under each structure.
+    ndraw = 1500
+    sd_percell = onset_report_scales(m.means, m.level_cur, m.level_prev,
+        prev_idx; scan_sd = scan_frac)
+    function coverage(shared::Bool)
+        totals = [Vector{Float64}(undef, ndraw) for _ in 1:v.n_vintages]
+        for d in 1:ndraw
+            rep = if shared
+                cs = 1.0 .+ σ_scan_true .* randn(rng, v.n_vintages)
+                adj = onset_scan_adjust(m.level_cur, m.level_prev, cs,
+                    v.vintage_idx, v.prev_vintage_idx)
+                sds = onset_report_scales(adj.means, adj.level_cur,
+                    adj.level_prev, prev_idx)
+                [rand(rng, safe_studentt(adj.means[i], sds[i], ν))
+                 for i in eachindex(adj.means)]
+            else
+                [rand(rng, safe_studentt(m.means[i], sd_percell[i], ν))
+                 for i in eachindex(m.means)]
+            end
+            for s in 1:v.n_vintages
+                totals[s][d] = sum(rep[groups[s]])
+            end
+        end
+        in50 = 0
+        in90 = 0
+        for s in 1:v.n_vintages
+            q = quantile(totals[s], [0.05, 0.25, 0.75, 0.95])
+            in50 += q[2] <= obs_totals[s] <= q[3]
+            in90 += q[1] <= obs_totals[s] <= q[4]
+        end
+        return (in50 / v.n_vintages, in90 / v.n_vintages)
+    end
+
+    percell = coverage(false)
+    shared = coverage(true)
+    ## Per-cell-only scoring under-covers, and central coverage falls
+    ## further than the 90% coverage: the aggregate spread is roughly right
+    ## and its shape is wrong.
+    @test percell[1] <= 0.40
+    @test percell[2] <= 0.80
+    @test percell[1] / 0.5 < percell[2] / 0.9
+    ## Splitting the same measured error restores both to about nominal.
+    @test 0.42 <= shared[1] <= 0.58
+    @test 0.82 <= shared[2] <= 0.96
+    @test shared[1] > percell[1]
 end

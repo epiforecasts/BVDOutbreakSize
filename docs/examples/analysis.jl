@@ -1486,7 +1486,7 @@ cfr_prior_fig #hide
 #     \sum_{t = d_{i-1}+1}^{d_i} \text{recovered}_t,\ k_{\text{rec}}\Bigr).
 # ```
 #
-# The convolution right-censors recoveries that have not yet resolved by the cut-off, so the small observed totals (12 to 40 over 6-13 June) are consistent with a high eventual survival fraction and a multi-week recovery delay.
+# The convolution right-censors recoveries that have not yet resolved by the cut-off, so an observed total below the eventual survivor count is consistent with a high survival fraction and a multi-week recovery delay.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: recovered_model</summary>
@@ -1673,9 +1673,12 @@ cfr_prior_fig #hide
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
 # Re-dating is absorbed as observation noise rather than modelled.
-# $\sigma_u$ collects counting variation around the cell's own modelled mean, a $\pm 2.1$-case pixel-noise SD on the digitised bar (doubled for a correction, since that differences two reads), and a $4.0\%$ level error on each scan's own cumulative reading.
+# $\sigma_u$ collects counting variation around the cell's own modelled mean and a $\pm 2.1$-case pixel-noise SD on the digitised bar, doubled for a correction since that differences two reads.
 # Every magnitude entering $\sigma_u$ is the modelled one and never the observed count, so the likelihood's noise cannot feed into its own variance.
 # A sampled slack multiplier sits on top and can only inflate the scale, because each term is a lower bound on the truth.
+#
+# A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute error is per bar and the multiplicative error is one number for the whole figure.
+# The modelled level each cell differences therefore carries its own scan's multiplier $1 + \sigma_{\text{scan}} z_s$ with $z_s \sim \mathrm{Normal}(0, 1)$, and $\sigma_{\text{scan}} \sim \mathrm{Normal}^{+}(0,\ 0.03)$ truncated at $8\%$.
 #
 # The first scored snapshot is differenced against an implicit empty predecessor, so its cells score levels rather than corrections.
 # That is what anchors $\alpha$, since corrections only ever pin differences of $F$.
@@ -3077,7 +3080,8 @@ _onset_labels = merge(display_names,
         Symbol("onset_report_state.σ_γ") => "onset-report calendar-walk step size",
         Symbol("onset_report_state.β") => "onset ascertainment offset (logit)",
         Symbol("onset_report_state.σ_a") => "onset ascertainment walk step size",
-        Symbol("onset_report_state.σ_mult") => "onset-report scale slack"));
+        Symbol("onset_report_state.σ_mult") => "onset-report scale slack",
+        Symbol("onset_report_state.σ_scan") => "shared per-scan level error"));
 
 #md # ```@raw html
 #md # </details>
@@ -3110,7 +3114,8 @@ onset_summary = vcat(
     summary_table(chn_joint,
         [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
             Symbol("onset_report_state.σ_γ"),
-            Symbol("onset_report_state.σ_mult")];
+            Symbol("onset_report_state.σ_mult"),
+            Symbol("onset_report_state.σ_scan")];
         digits = 3, labels = _onset_labels),
     onset_derived_table);
 
@@ -3136,7 +3141,8 @@ onset_pair_fig = plot_pair(chn_joint,
     [Symbol("onset_report_state.η0"), Symbol("onset_report_state.σ_h0"),
         Symbol("onset_report_state.σ_γ"),
         Symbol("onset_report_state.β"), Symbol("onset_report_state.σ_a"),
-        Symbol("onset_report_state.σ_mult")];
+        Symbol("onset_report_state.σ_mult"),
+        Symbol("onset_report_state.σ_scan")];
     prior = prior_chn, labels = _onset_labels);
 
 #md # ```@raw html
@@ -3211,6 +3217,7 @@ end
 ## own cells carry. Without this the band is the modelled count alone and
 ## covers 42% of the observed bars at a nominal 90%.
 _onset_σ_mult = vec(collect(chn_joint[Symbol("onset_report_state.σ_mult")]))
+_onset_σ_scan = vec(collect(chn_joint[Symbol("onset_report_state.σ_scan")]))
 _onset_ppc_rng = Random.MersenneTwister(20260729)
 ## Four replicates per draw rather than one: the band is a 90% interval of
 ## a heavy-tailed replicate, and at one per draw its edge is visibly ragged
@@ -3218,7 +3225,9 @@ _onset_ppc_rng = Random.MersenneTwister(20260729)
 function _onset_replicated(draws::AbstractVector)
     return [begin
                 μ = draws[i]
-                σ = _onset_σ_mult[i] * onset_report_scale(μ, μ, 0.0, 1)
+                σ = _onset_σ_mult[i] *
+                    onset_report_scale(μ, μ, 0.0, 1;
+                    scan_sd = _onset_σ_scan[i])
                 μ + σ * rand(_onset_ppc_rng, TDist(4.0))
             end
             for _ in 1:4 for i in eachindex(draws)]

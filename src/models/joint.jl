@@ -260,7 +260,8 @@ Exposes the cut-off expected onset-reported count as
 `expected_onset_reported_T`, the same un-prefixed name [`bvd_joint`](@ref)
 uses, so the two carry one key and can be compared directly (see
 `expected_confirmed_T` on [`confirmed_only_model`](@ref) for the
-precedent), and the modelled ascertainment as `onset_ascertainment`. With
+precedent), the modelled ascertainment as `onset_ascertainment` and the
+fitted per-vintage scan levels as `onset_scan_level`. With
 the shared `cumulative_onsets` trajectory from `_latent` that is everything
 [`forecast_onsets`](@ref) needs, so this fit nowcasts and forecasts the
 onset stream like any other, scored on the reported increment rather than
@@ -281,6 +282,7 @@ on the digitised level (see [`forecast_stream`](@ref)).
         latent.onsets, onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n)
     onset_ascertainment := onset_report_state.alpha
+    onset_scan_level := onset_report_state.scan_level
 end
 
 """
@@ -818,14 +820,16 @@ the implied per-suspected (`suspected_positivity`) and per-test
     expected_confirmed_deaths_T := _ecd
     expected_exports_T := exports_state.expected_exports
     expected_exports_deaths_T := exports_deaths_state.expected_exports_deaths_T
-    ## Cut-off expected onset-reported total and the modelled per-onset-date
-    ## ascertainment level, off the same fitted hazard and ascertainment
-    ## walk; see [`onset_reporting_model`](@ref) for what the vintage
-    ## structure does and does not separate here.
+    ## Cut-off expected onset-reported total, the modelled per-onset-date
+    ## ascertainment level and the fitted per-vintage scan level, off the
+    ## same fitted hazard and ascertainment walk; see
+    ## [`onset_reporting_model`](@ref) for what the vintage structure does
+    ## and does not separate here.
     expected_onset_reported_T := onset_report_expected_total(
         onsets, onset_report_state.logit_h0, onset_report_state.γ,
         onset_report_state.grid_start, onset_report_state.alpha, n)
     onset_ascertainment := onset_report_state.alpha
+    onset_scan_level := onset_report_state.scan_level
     expected_isolation_T := treatment_state.expected_isolation
     expected_bed_demand_T := treatment_state.expected_bed_demand
     bed_shortfall_T := safe_rate(treatment_state.expected_bed_demand -
