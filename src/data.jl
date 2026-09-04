@@ -105,7 +105,10 @@ sum to the total occupancy), and `tests_received_history`.
 
 The digitised symptom-onset reporting triangle is returned as
 `onset_curve_history`, the per-vintage increments read from
-`data/onset_curve_scanned.csv` alongside `path`.
+`onset_curve_path`, by default `onset_curve_scanned.csv` alongside `path`.
+A manifest read from somewhere else (a release snapshot in a temporary
+directory, say) has no such sibling, so the caller names the triangle
+explicitly to keep the stream rather than degrade it to a no-op.
 See [`load_onset_curve`](@ref) for the dedup, cut-off filtering and
 increment construction.
 The same triangle's per-vintage cumulative confirmed-by-onset total is
@@ -123,7 +126,9 @@ function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
             "observations.toml");
         seeding_lead::Integer = SEEDING_LEAD_DAYS,
-        cutoff_date::Union{Nothing, Date, AbstractString} = nothing)
+        cutoff_date::Union{Nothing, Date, AbstractString} = nothing,
+        onset_curve_path::AbstractString = joinpath(dirname(path),
+            "onset_curve_scanned.csv"))
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
     ## The cut-off is the manifest `as_of_date` unless an earlier
@@ -396,7 +401,7 @@ function load_observations(
     ## as every history above, so a freeze also freezes this stream; see
     ## `load_onset_curve` for the dedup and increment construction.
     onset_curve_history = load_onset_curve(
-        joinpath(dirname(path), "onset_curve_scanned.csv"); cutoff, seeding)
+        onset_curve_path; cutoff, seeding)
     ## The same triangle's per-vintage cumulative confirmed-by-onset total,
     ## restated in the `(; days, counts)` shape every other stream's history
     ## uses so the reported-onset total is scored by the same machinery. The

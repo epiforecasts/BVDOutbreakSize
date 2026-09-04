@@ -184,8 +184,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## stream's own model alongside the frozen joint. Keyed by the same
     ## `fit` ids the current-data individual fits use (`chn_cases`, …), so
     ## the two dicts read the same way.
+    ## Only the still-reported streams are fitted, so a stream that has
+    ## stopped is simply absent here rather than present and filtered out
+    ## later (see `validation_stream_ids`).
     frozen_lastweek_streams = Dict(
-        sid => _fits["frozen_validation_$sid"] for sid in VALIDATION_STREAM_IDS)
+        sid => _fits["frozen_validation_$sid"]
+    for sid in validation_stream_ids(obs))
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]

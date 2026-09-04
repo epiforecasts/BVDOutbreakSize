@@ -191,14 +191,14 @@ jobs:
           # Rescore every release's saved forecasts against the now-observed
           # data and refresh the per-release R_T overlay.
           #
-          # Normally best-effort, falling back to the committed
-          # forecast_scores.csv / rt_by_release.csv (see #588). That
-          # fallback is unsafe while the forecast construction is changing:
-          # the committed tables were produced under the old construction,
-          # so taking them silently would publish them against fits built
-          # under the new one. Fail loudly instead until the first release
-          # after the change has published, then restore the fallback or
-          # close #588 properly.
+          # Not best-effort, deliberately. Falling back to the committed
+          # forecast_scores.csv / forecast_overlay.csv would publish skill
+          # scores and forecast-versus-observed figures against whatever
+          # truth series those files were last written from, with nothing on
+          # the rendered page saying so. This step writes them, so they are
+          # stale by construction. A hard failure is recoverable by
+          # re-running the job; a silent substitution is not detectable from
+          # the page at all.
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           julia --project=docs scripts/score_releases.jl
       - name: Render ${{ matrix.page }}

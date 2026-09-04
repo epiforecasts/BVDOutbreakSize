@@ -74,6 +74,16 @@
 # a base integration, and the two sides of the comparison read the same
 # corrected series (issue #511).
 #
+# The occupancy levels carry their own reclassification-break days
+# (`[occupancy_break_dates]`), where the reported in-bed stock changes basis
+# between reports. No 24h count is published to split those steps by, so
+# there is nothing to subtract: the baseline instead drops any window
+# spanning one, so a change of reporting basis does not enter the walk it
+# simulates (`spans_occupancy_break`). The forecast side carries the same
+# knowledge as the fitted offset the occupancy likelihood absorbs the step
+# with, which `forecast_reported` adds to the projected level so the
+# projection and the reported truth are on one scale.
+#
 # Each release's `stream_estimates.csv`, when present, also feeds the
 # per-fit `data/rt_by_release_by_stream.csv`,
 # `data/size_by_release_by_stream.csv` and `data/r0_by_release_by_stream.csv`
@@ -123,6 +133,13 @@ const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
 const BACKFILL_TAG = "forecasts-backfill"
+
+## The package's own digitised symptom-onset triangle. A release's
+## `observations.toml` is fetched alone, so the sibling CSV
+## `load_observations` looks for by default is not beside it (see
+## `vintage_observations`).
+const ONSET_CURVE_PATH = joinpath(
+    pkgdir(BVDOutbreakSize), "data", "onset_curve_scanned.csv")
 
 ## Release tags whose forecast is excluded from scoring because the
 ## reconstruction failed, not because the model performed badly: a chain
@@ -485,6 +502,60 @@ function break_correction(obs, grid_date, stream, from_date, to_date)
     return total
 end
 
+## The streams whose reported series carries the isolation occupancy's own
+## reclassification-break days (`[occupancy_break_dates]` in
+## `observations.toml`, see `src/data.jl`): every level stream, since each is
+## an occupancy sub-stock of the total and the sub-stocks sum to it each day,
+## so a reclassification of the total moves them too. Derived from
+## `STREAM_HISTORY` rather than named again, so a level stream added there is
+## covered without a second list to keep in step.
+##
+## These breaks are not the same object as the confirmed streams'
+## harmonisation days: the report publishes no 24h count to split the step
+## by, so there is no `net - gross` correction to subtract. What is known is
+## which days the reported basis changed, and the model absorbs the step as a
+## fitted offset rather than as demand (`cumulative_occupancy_offset`). The
+## persistence baseline can use the same knowledge only negatively, by not
+## reading a basis change as a day of the walk it is simulating.
+const OCCUPANCY_BREAK_STREAMS = Set(
+    k for (k, (_, kind)) in STREAM_HISTORY if kind == :level)
+
+## Dates of `stream`'s occupancy reclassification breaks, empty for every
+## stream but the occupancy levels and for an `obs` carrying no declaration.
+function occupancy_break_dates(obs, grid_date, stream)
+    stream in OCCUPANCY_BREAK_STREAMS || return Date[]
+    hasproperty(obs, :occupancy_break_days) || return Date[]
+    return Date[grid_date(d) for d in obs.occupancy_break_days]
+end
+
+## Whether `(from_date, to_date]` spans one of `stream`'s occupancy
+## reclassification breaks, so the change across it is a change of reporting
+## basis rather than a day of the occupancy walk.
+function spans_occupancy_break(obs, grid_date, stream, from_date, to_date)
+    for d in occupancy_break_dates(obs, grid_date, stream)
+        from_date < d <= to_date && return true
+    end
+    return false
+end
+
+## The count an incident stream notified over the `horizon`-length window
+## ending at `date`, with any harmonisation-break day inside that window
+## taken out and floored at zero. The truth, the baseline's centre and the
+## baseline's step pool are all this same quantity at different dates, so all
+## three read it here rather than restating the subtraction.
+##
+## A window opening before the stream's own first vintage is measured from a
+## non-observation `cum_at` reads as zero, so the total saturates at the whole
+## cumulative to `date`. Callers hold that off themselves: `truth_at` and
+## `score_release`'s `baseline_window_covered` for the truth and the centre,
+## `_window_total_steps` per vintage for the pool.
+function window_total_at(obs, grid_date, stream, hist, date, horizon)
+    from = date - Day(horizon)
+    raw = cum_at(hist, date, grid_date) - cum_at(hist, from, grid_date)
+    raw -= break_correction(obs, grid_date, stream, from, date)
+    return max(Float64(raw), 0.0)
+end
+
 ## Observed truth for one (stream, made_date, target_date) forecast group
 ## against the current `obs`, or a `Symbol` naming why the group is not
 ## scorable: `:not_yet_observed` when `target_date` is beyond the current
@@ -511,9 +582,8 @@ function truth_at(obs, grid_date, stream, made_date, target_date)
         return :not_yet_reporting
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
-    new = cum_at(h, target_date, grid_date) - cum_at(h, made_date, grid_date)
-    new -= break_correction(obs, grid_date, stream, made_date, target_date)
-    return Float64(max(new, 0))
+    return window_total_at(obs, grid_date, stream, h, target_date,
+        Dates.value(target_date - made_date))
 end
 
 # ----------------------------------------------------------------------
@@ -532,6 +602,12 @@ end
 ## from `value` first, so a base integration does not enter the random
 ## walk's step pool as one implausibly large day and inflate every later
 ## baseline's spread. Zero for every stream but the two confirmed streams.
+##
+## A window spanning one of the occupancy levels' reclassification breaks is
+## dropped rather than corrected: the report publishes no count to split that
+## step by, so the only honest reading is that the change across it is a
+## change of reporting basis and not a day of the walk (see
+## `spans_occupancy_break`).
 function _history_diffs(obs, grid_date, stream, hist, made_date)
     out = Tuple{Float64, Int}[]
     n = length(hist.days)
@@ -542,9 +618,46 @@ function _history_diffs(obs, grid_date, stream, hist, made_date)
         d_this > made_date && break
         window = Dates.value(d_this - d_prev)
         window <= 0 && continue
+        spans_occupancy_break(obs, grid_date, stream, d_prev, d_this) &&
+            continue
         value = Float64(hist.counts[i] - hist.counts[i - 1])
         value -= break_correction(obs, grid_date, stream, d_prev, d_this)
         push!(out, (value, window))
+    end
+    return out
+end
+
+## The one-day steps of the incident baseline's own target: the changes
+## between consecutive vintages in the `horizon`-length window total, each
+## divided by `sqrt` of the days between those vintages.
+##
+## The target a forecast of an incident stream is scored on is the count over
+## the window ending at the target date, so that is the quantity the
+## persistence walk has to step on. Differencing the cumulative series
+## instead puts the window's own incidence into the pool rather than the
+## change in it: a monotone cumulative gives a pool of
+## strictly positive counts whose scale is the epidemic's level, which is
+## then symmetrised about zero and summed over the horizon, so the spread
+## tracks how large the outbreak is rather than how fast it is moving.
+##
+## Vintages whose window opens before the stream began reporting are skipped,
+## since their total saturates at the whole cumulative rather than measuring a
+## window. The occupancy reclassification days need no handling here: they
+## belong to the level streams, which take the `_history_diffs` pool instead.
+function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
+    out = Float64[]
+    covered = stream_coverage_start(obs, grid_date, stream)
+    prev_date = nothing
+    prev_total = nothing
+    for d in hist.days
+        date = grid_date(d)
+        date > made_date && break
+        date - Day(horizon) < covered && continue
+        total = window_total_at(obs, grid_date, stream, hist, date, horizon)
+        gap = isnothing(prev_date) ? 0 : Dates.value(date - prev_date)
+        gap > 0 && push!(out, (total - prev_total) / sqrt(gap))
+        prev_date = date
+        prev_total = total
     end
     return out
 end
@@ -571,25 +684,28 @@ end
 ## compared against read the same corrected series (issue #511); zero for
 ## every other stream.
 ##
-## The spread simulates the walk explicitly: each of the stream's past
-## first differences (see `_history_diffs`), a `window`-day change, is
-## converted to a one-day step by `value / sqrt(window)` rather than
-## `value / window`. Under a zero-drift random walk a `window`-day change
-## has variance `window * sigma^2` for the walk's own one-day variance
-## `sigma^2`, so dividing by `sqrt(window)` (not `window`) is what recovers
-## an estimate of `sigma` itself; dividing by `window` instead would still
-## shrink with history length but by the wrong power, understating the
-## spread by a further factor of `window`. The per-day steps are
-## symmetrised about zero, so a run of only-rising or only-falling history
-## does not bias the walk one way; one predictive draw then sums `horizon`
-## independent daily steps sampled with replacement from that step pool,
-## the same "iterate day by day to the horizon" construction the Hub
-## baseline uses. Summing `horizon` iid steps of variance `sigma^2` gives a
-## total variance `horizon * sigma^2`, so the spread grows with the square
-## root of the horizon, matching a single draw rescaled by
-## `sqrt(horizon / window)` (the construction this replaced) in expectation
-## while genuinely iterating day by day as the comment above describes,
-## rather than only matching its first two moments.
+## The spread simulates the walk explicitly, on the same quantity the
+## centre measures. For the level stream that is the occupancy itself, so
+## the pool is the stream's own past first differences (`_history_diffs`).
+## For an incident stream the target is the count over a `horizon`-length
+## window, so the pool is the change between consecutive vintages in that
+## window total (`_window_total_steps`), not the change in the cumulative
+## series, which is the window's incidence rather than a change in it.
+##
+## Either way a `window`-day change is converted to a one-day step by
+## dividing by `sqrt(window)` rather than `window`. Under a zero-drift
+## random walk a `window`-day change has variance `window * sigma^2` for the
+## walk's own one-day variance `sigma^2`, so dividing by `sqrt(window)` (not
+## `window`) is what recovers an estimate of `sigma` itself; dividing by
+## `window` instead would still shrink with history length but by the wrong
+## power, understating the spread by a further factor of `window`. The
+## per-day steps are symmetrised about zero, so a run of only-rising or
+## only-falling history does not bias the walk one way; one predictive draw
+## then sums `horizon` independent daily steps sampled with replacement from
+## that step pool, the same "iterate day by day to the horizon" construction
+## the Hub baseline uses. Summing `horizon` iid steps of variance `sigma^2`
+## gives a total variance `horizon * sigma^2`, so the spread grows with the
+## square root of the horizon.
 ##
 ## Centre-versus-Hub check: `COVIDhub-baseline` centres each target on the
 ## single most recent observation; this baseline instead centres an
@@ -606,19 +722,18 @@ end
 ## differences are available, so an early made-date still scores.
 function baseline_draws(obs, grid_date, stream, made_date, horizon, n, rng)
     h, kind = stream_history(obs, stream)
-    centre = if kind == :level
-        Float64(cum_at(h, made_date, grid_date))
+    centre = kind == :level ? Float64(cum_at(h, made_date, grid_date)) :
+             window_total_at(obs, grid_date, stream, h, made_date, horizon)
+
+    steps = if kind == :level
+        [d / sqrt(window)
+         for (d, window) in _history_diffs(
+            obs, grid_date, stream, h, made_date)]
     else
-        prior = window_start(kind, made_date, horizon)
-        raw = cum_at(h, made_date, grid_date) - cum_at(h, prior, grid_date)
-        raw -= break_correction(obs, grid_date, stream, prior, made_date)
-        Float64(max(raw, 0))
+        _window_total_steps(obs, grid_date, stream, h, made_date, horizon)
     end
+    length(steps) < 3 && return Float64.(rand(rng, Poisson(centre), n))
 
-    diffs = _history_diffs(obs, grid_date, stream, h, made_date)
-    length(diffs) < 3 && return Float64.(rand(rng, Poisson(centre), n))
-
-    steps = [d / sqrt(window) for (d, window) in diffs]
     pool = vcat(steps, -steps)
     draws = Vector{Float64}(undef, n)
     for i in 1:n
@@ -660,32 +775,51 @@ function push_scored!(out, overlay, tag, key, fit, samples, truth)
             lo90 = r2(q.lo90), hi90 = r2(q.hi90)))
 end
 
-## `ov` (a snapshot manifest) carrying `obs`'s harmonisation-break
-## declaration, translated onto the snapshot's own grid and truncated at its
-## cut-off. A break day is annotated a report or two after the report that
-## announced it, so a snapshot taken in between holds the step but not the
-## label, and its baseline would then read a base integration as incidence
-## while `truth_at` corrects the same day out of the truth. The declaration
-## is an analyst annotation of which reported steps are base integrations
-## rather than a data vintage, and the printed 24h counts it pairs with are
-## published in the report itself, so carrying it back gives the baseline no
-## information the forecast lacked. `obs` without a declaration to carry
-## leaves `ov` unchanged; a declaration without printed counts to pair with
-## carries zeros, the same default `load_observations` applies, which
-## attributes each listed day's whole step to the artefact.
-function carry_break_days(ov, obs, grid_date)
-    hasproperty(obs, :confirmed_break_days) || return ov
-    dates = [grid_date(d) for d in obs.confirmed_break_days]
+## Which of `obs`'s break days `ov` (a snapshot manifest) can hold, as
+## indices into `obs`'s own list, and those days on the snapshot's grid.
+## A day after the snapshot's cut-off has not happened yet for it.
+function _carried_break_days(ov, obs, grid_date, field)
+    hasproperty(obs, field) || return (Int[], Int[])
+    dates = [grid_date(d) for d in getproperty(obs, field)]
     keep = [i for i in eachindex(dates) if dates[i] <= ov.cutoff]
-    days = [ov.n - Dates.value(ov.cutoff - dates[i]) for i in keep]
+    return (keep, [ov.n - Dates.value(ov.cutoff - dates[i]) for i in keep])
+end
+
+## `ov` (a snapshot manifest) carrying `obs`'s break declarations, both the
+## confirmed streams' harmonisation days and the occupancy levels'
+## reclassification days, translated onto the snapshot's own grid and
+## truncated at its cut-off. A break day is annotated a report or two after
+## the report that announced it, so a snapshot taken in between holds the
+## step but not the label, and its baseline would then read a reporting
+## artefact as a day of the walk while the truth has it corrected out. Each
+## declaration is an analyst annotation of which reported steps are
+## artefacts rather than a data vintage, and the printed 24h counts the
+## confirmed one pairs with are published in the report itself, so carrying
+## them back gives the baseline no information the forecast lacked. `obs`
+## without a declaration to carry leaves that part of `ov` unchanged; a
+## confirmed declaration without printed counts to pair with carries zeros,
+## the same default `load_observations` applies, which attributes each listed
+## day's whole step to the artefact.
+function carry_break_days(ov, obs, grid_date)
+    keep, days = _carried_break_days(
+        ov, obs, grid_date, :confirmed_break_days)
     gross(name) = hasproperty(obs, name) ?
                   [getproperty(obs, name)[i] for i in keep] :
                   zeros(Int, length(keep))
-    return merge(ov,
-        (; confirmed_break_days = days,
-            confirmed_break_gross_cases = gross(:confirmed_break_gross_cases),
-            confirmed_break_gross_deaths = gross(
-                :confirmed_break_gross_deaths)))
+    if hasproperty(obs, :confirmed_break_days)
+        ov = merge(ov,
+            (; confirmed_break_days = days,
+                confirmed_break_gross_cases = gross(
+                    :confirmed_break_gross_cases),
+                confirmed_break_gross_deaths = gross(
+                    :confirmed_break_gross_deaths)))
+    end
+    if hasproperty(obs, :occupancy_break_days)
+        _, occ_days = _carried_break_days(
+            ov, obs, grid_date, :occupancy_break_days)
+        ov = merge(ov, (; occupancy_break_days = occ_days))
+    end
+    return ov
 end
 
 ## In-process cache of vintage manifest loads, keyed by `(path, made_date)`:
@@ -718,12 +852,23 @@ const _VINTAGE_CACHE = Dict{Tuple{String, Date}, Any}()
 ## The one thing taken from the current manifest rather than the snapshot is
 ## the harmonisation-break declaration, which is an annotation rather than a
 ## vintage (see `carry_break_days`).
+##
+## The digitised symptom-onset triangle is a sibling CSV of the manifest
+## rather than a block inside it, and a release snapshot is fetched on its
+## own into a temporary directory with no such sibling, so the loader would
+## read an absent file and degrade the onset stream to a no-op, leaving
+## every onset group with an empty history, an uncovered baseline window and
+## so no persistence baseline at all. The package's own triangle is named
+## explicitly instead and truncated to `made_date` by the same
+## `cutoff_date` freeze as every other history, so the baseline sees the
+## vintages published by the made date and no later one.
 function vintage_observations(obs_path, made_date, obs, grid_date)
     isnothing(obs_path) && return obs, grid_date
     key = (obs_path, made_date)
     ov = get!(_VINTAGE_CACHE, key) do
         carry_break_days(
-            load_observations(obs_path; cutoff_date = made_date),
+            load_observations(obs_path; cutoff_date = made_date,
+                onset_curve_path = ONSET_CURVE_PATH),
             obs, grid_date)
     end
     vintage_grid_date(day) = ov.cutoff - Day(ov.n - day)

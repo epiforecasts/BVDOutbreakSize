@@ -2098,11 +2098,12 @@ end
 """
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed demand (the need a week ahead,
-under unconstrained supply) against the supply-limited occupancy (the beds
-actually filled), and the shortfall between them. The left panel overlays the
-two predictive distributions, so the gap between the need and the
-supply-limited occupancy is the unmet demand. The right panel histograms the
-shortfall directly. Drawn only when the forecast carries the bed streams
+under unconstrained supply) against the occupancy the situation reports would
+print, and the demand above the beds available. The left panel overlays the
+two predictive distributions. The right panel histograms the shortfall, which
+is the need above the capacity rather than the gap between the two panels'
+densities: the occupancy carries the fitted reporting-basis offset and the
+shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
 Because the model carries a single national bed capacity it cannot represent
@@ -2115,7 +2116,12 @@ function plot_forecast_beds(fc::DataFrame)
      :isolation_level in propertynames(fc)) || return Figure()
     demand = float.(fc[!, :bed_demand])
     occ = float.(fc[!, :isolation_level])
-    shortfall = max.(demand .- occ, 0.0)
+    ## The shortfall is the need above the beds available, which the forecast
+    ## carries against the capacity. A frame without that column predates it,
+    ## and there the occupancy is the demand capped at the capacity, so their
+    ## difference is the same quantity.
+    shortfall = :bed_shortfall in propertynames(fc) ?
+                float.(fc[!, :bed_shortfall]) : max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
     ## Cap the x-axis at the 98th percentile of demand: the unconstrained
     ## bed-demand projection is heavy-tailed (it grows with the reproduction
@@ -2140,7 +2146,7 @@ end
 
 """
 Validate a [`forecast_reported`](@ref) bed projection against the beds
-actually occupied a week later. Histograms the projected supply-limited
+actually occupied a week later. Histograms the projected reported
 isolation-bed occupancy with the 90% predictive interval shaded and the
 `isolation` count observed at the target date drawn as a dashed black rule,
 so last week's bed forecast is scored against what the beds held. Drawn only

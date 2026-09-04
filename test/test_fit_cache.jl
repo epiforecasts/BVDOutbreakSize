@@ -55,10 +55,15 @@ end
     ## changes, and the render misses the whole cache (a 2h refit / strict-mode
     ## failure). Auto-derive the written files from the script so a new overlay
     ## that forgets the exclusion fails here instead of in CI.
+    ## Matched on the script's own write path (`@__DIR__/../data/...`), not
+    ## on any mention of the data directory: the script also reads a fit
+    ## input from there (the digitised onset triangle), which must stay in
+    ## the hash rather than be excluded from it.
     src = read(
         joinpath(@__DIR__, "..", "scripts", "score_releases.jl"), String)
     written = Set(m.captures[1]
-    for m in eachmatch(r"\"data\",\s*\"([\w.]+\.csv)\"", src))
+    for m in eachmatch(
+        r"@__DIR__,\s*\"\.\.\",\s*\"data\",\s*\"([\w.]+\.csv)\"", src))
     @test length(written) >= 4  # guards against a silent regex miss
     for f in written
         @test f in FIT_DATA_EXCLUDE
@@ -117,4 +122,39 @@ end
     @test content_hash(src; data_dir = d, data_exclude = excl) == h
     write(joinpath(d, "observations.csv"), "3")
     @test content_hash(src; data_dir = d, data_exclude = excl) != h
+end
+
+@testitem "validation fits follow the reporting status" tags=[:quality] begin
+    using Dates
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    ## The validation panels take the still-reported streams, so a stream the
+    ## situation reports have stopped updating must not be fitted at all: its
+    ## fit feeds an overlay that is filtered out, and each one is a NUTS fit
+    ## a docs build runs serially.
+    cutoff = Date(2026, 7, 15)
+    n = 60
+    day(d) = n - Dates.value(cutoff - d)
+    live = (; days = [day(cutoff - Day(1))], counts = [10.0])
+    stale = (; days = [day(cutoff - Day(60))], counts = [10.0])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = stale, deaths_history = stale,
+        confirmed_history = live, confirmed_deaths_history = live,
+        isolation_history = live)
+
+    @test validation_stream_ids(obs) ==
+          ("confirmed", "confirmed_deaths", "treatment")
+
+    ## A stream that starts being reported again comes back on its own.
+    revived = merge(obs, (; reported_history = live))
+    @test "cases" in validation_stream_ids(revived)
+
+    ## Every id names a single-stream fit the registry can build.
+    ids = fit_ids(load_observations(); run_sensitivity = false)
+    for sid in validation_stream_ids(load_observations())
+        @test "frozen_validation_$sid" in ids
+        @test sid in ids
+    end
 end

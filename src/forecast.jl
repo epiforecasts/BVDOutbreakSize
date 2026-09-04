@@ -190,14 +190,20 @@ row per draw and columns:
 - `:cases_new`, … `:confirmed_deaths_new`: new counts over the coming
   week (`*_cum` minus the corresponding observed count at the cut-off,
   floored at zero).
-- `:bed_demand`, `:isolation_level`: the projected isolation/treatment-bed
-  demand (need under unconstrained supply) and the supply-limited occupancy
-  it produces against the bed capacity, both at the horizon, present when the
-  chain carries `expected_bed_demand_T` and `bed_capacity`. The demand grows
-  by the horizon factor like the inflow; the occupancy is that demand capped
-  at the capacity, `min(demand, C)` (matching the fitted occupancy), so
-  `bed_demand − isolation_level` is the projected bed shortfall. Replicated
-  with the isolation stream's own dispersion.
+- `:bed_demand`, `:isolation_level`, `:bed_shortfall`: the projected
+  isolation/treatment-bed demand (need under unconstrained supply), the
+  occupancy that demand produces as it is reported, and the unmet demand,
+  all at the horizon, present when the chain carries `expected_bed_demand_T`
+  and `bed_capacity`. The demand grows by the horizon factor like the inflow.
+  The occupancy is that demand shifted by the fitted reclassification offset
+  Δ standing at the cut-off and capped at the capacity, `min(demand + Δ, C)`,
+  which is the quantity the occupancy likelihood scores against the reported
+  series (see [`cumulative_occupancy_offset`](@ref)). The shortfall is
+  `max(demand − C, 0)`, the need above the beds available, which is what the
+  model's own `bed_shortfall` measures. It is taken against the capacity
+  rather than as `bed_demand − isolation_level`, since Δ is a change of
+  reporting basis and not a bed: the two agree only where no occupancy break
+  has been fitted. Replicated with the isolation stream's own dispersion.
 - `:admissions_fc`, `:incare_deaths_fc`, `:ruleouts_fc`: the projected
   one-week-ahead daily isolation/treatment flows (new admissions, in-care
   deaths and rule-outs), present when the chain carries
@@ -321,6 +327,7 @@ function forecast_reported(chn;
                 _has(:expected_ruleouts_T) && _has(:isolation_dispersion)
     demand_T = has_iso ? _draws(chn, :expected_bed_demand_T) : nothing
     cap = has_iso ? _draws(chn, :bed_capacity) : nothing
+    occ_offset = has_iso ? _occupancy_offset(chn, length(r)) : nothing
     k_iso = has_iso ? _draws(chn, :isolation_dispersion) : nothing
     rec_T = has_rec ? _draws(chn, :expected_recovered_T) : nothing
     k_rec = has_rec ? _draws(chn, :recovered_dispersion) : nothing
@@ -365,6 +372,7 @@ function forecast_reported(chn;
     confirmed_deaths_cum = has_conf_deaths ? Vector{Int}(undef, n) : nothing
     bed_demand = has_iso ? Vector{Int}(undef, n) : nothing
     isolation_level = has_iso ? Vector{Int}(undef, n) : nothing
+    bed_shortfall = has_iso ? Vector{Int}(undef, n) : nothing
     recovered_cum = has_rec ? Vector{Int}(undef, n) : nothing
     admissions_fc = has_flows ? Vector{Int}(undef, n) : nothing
     incare_deaths_fc = has_flows ? Vector{Int}(undef, n) : nothing
@@ -418,16 +426,19 @@ function forecast_reported(chn;
                 _means(conf_deaths_daily[i]))
         end
         ## Projected bed demand (need under unconstrained supply) and the
-        ## supply-limited occupancy it produces against the bed capacity, plus
+        ## occupancy it produces as the situation reports state it, plus
         ## cumulative recovered. The demand replicate carries the dispersion.
-        ## The occupancy is that same replicate capped at the capacity,
-        ## `min(demand, C)`, matching the fitted occupancy and the censored
-        ## likelihood, so per draw the occupancy never exceeds the demand or
-        ## the capacity.
+        ## The occupancy is that same replicate shifted by the fitted
+        ## reclassification offset and capped at the capacity,
+        ## `min(demand + Δ, C)`, which is what the censored occupancy
+        ## likelihood scores against the reported series. The shortfall is
+        ## the need above the beds available, taken against the capacity so a
+        ## change of reporting basis is not counted as unmet demand.
         if has_iso
             d = _nb_rand(rng, k_iso[i], demand_T[i] * grow)
             bed_demand[i] = d
-            isolation_level[i] = min(d, round(Int, cap[i]))
+            isolation_level[i] = _reported_occupancy(d, occ_offset[i], cap[i])
+            bed_shortfall[i] = max(d - round(Int, cap[i]), 0)
         end
         if has_rec
             base_rec = obs_recovered === missing ? round(Int, rec_T[i]) :
@@ -469,6 +480,7 @@ function forecast_reported(chn;
     if has_iso
         df.bed_demand = bed_demand
         df.isolation_level = isolation_level
+        df.bed_shortfall = bed_shortfall
     end
     if has_flows
         df.admissions_fc = admissions_fc
@@ -1143,6 +1155,34 @@ function _bed_capacity(chn)
     return cap
 end
 
+## Chain keys carrying the cumulative occupancy reclassification offset
+## standing at the cut-off, `Δ(n)` in [`cumulative_occupancy_offset`](@ref).
+## `treatment_flow_model` exposes it as the `occupancy_break` deterministic,
+## which both the joint and a standalone treatment fit carry under the
+## submodel prefix.
+const _OCCUPANCY_OFFSET_KEYS = [Symbol("treatment_state.occupancy_break"),
+    :occupancy_break]
+
+## Per-draw cut-off occupancy reclassification offset, or a zero vector for a
+## chain that carries none. A fit with no declared occupancy break day pins
+## the offset at zero, and a chain predating the deterministic carries no key
+## at all; both mean "no reclassification to carry", so both project the
+## occupancy on the demand scale as before.
+function _occupancy_offset(chn, nd::Integer)
+    d = _resolve_draws(chn, _OCCUPANCY_OFFSET_KEYS)
+    (isnothing(d) || length(d) != nd) && return zeros(Float64, nd)
+    return d
+end
+
+## The reported occupancy a demand replicate implies: the demand shifted by
+## the cut-off reclassification offset and capped at the bed capacity, the
+## same `min(demand + Δ, C)` the censored occupancy likelihood scores against
+## the reported series. Floored at zero, since a reclassification that
+## revises the reported basis down cannot take the reported stock below it.
+function _reported_occupancy(demand::Integer, offset::Real, capacity::Real)
+    return clamp(demand + round(Int, offset), 0, round(Int, capacity))
+end
+
 ## Cut-off reproduction-number draws. The joint exposes `R_T :=
 ## infection_state.Rt[n]`. Single-stream composers do not (the alias lives
 ## in `bvd_joint`, not in the shared `_latent` submodel), so `R_T` is
@@ -1218,9 +1258,11 @@ dataset against the joint and against a baseline.
 `:onset_reports`.
 The incident streams (everything but `:isolation_beds`) return the new count
 accrued over the horizon, matching [`forecast_archive`](@ref)'s convention.
-`:isolation_beds` returns the supply-limited occupancy level at the horizon
-(the projected demand replicate capped at the bed capacity, `min(demand, C)`,
-as the fitted occupancy is).
+`:isolation_beds` returns the reported occupancy level at the horizon: the
+projected demand replicate shifted by the fitted reclassification offset
+standing at the cut-off and capped at the bed capacity, `min(demand + Δ, C)`,
+which is the quantity the occupancy likelihood scores against the reported
+series (see [`cumulative_occupancy_offset`](@ref)).
 
 `:onset_reports` is incident like the rest but is projected differently:
 it is the new reported count the digitised triangle should add over the
@@ -1346,18 +1388,21 @@ function forecast_stream(chn, stream::Symbol;
 
     if spec.kind === :level
         ## Prevalence: the cut-off bed demand grown by the horizon factor,
-        ## replicated, then capped at the bed capacity (held at its cut-off
-        ## value, as `forecast_reported` holds it).
+        ## replicated, shifted by the cut-off reclassification offset and
+        ## capped at the bed capacity (held at its cut-off value, as
+        ## `forecast_reported` holds it), so the projected level is on the
+        ## reported scale the truth is read on.
         cap = _bed_capacity(chn)
         isnothing(cap) && throw(ArgumentError(
             "forecast_stream: chain carries no bed capacity (tried " *
             "`bed_capacity` and `treatment_state.expected_isolation` / " *
             "`treatment_state.bed_utilisation`)."))
+        occ_offset = _occupancy_offset(chn, nd)
         @inbounds for i in 1:nd
             rs = isnothing(evolving) ? nothing : evolving.paths[i]
             grow = isnothing(rs) ? exp(r[i] * horizon) : prod(exp, rs)
             demand = _replicate(i, expected_T[i] * grow)
-            out[i] = min(demand, round(Int, cap[i]))
+            out[i] = _reported_occupancy(demand, occ_offset[i], cap[i])
         end
         return out
     end

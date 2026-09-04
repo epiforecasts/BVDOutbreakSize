@@ -923,3 +923,93 @@ end
     @test !isnothing(
         _daily_at_cutoff_any(chn, _STREAM_SPEC[:confirmed_deaths].trajectory))
 end
+
+@testitem "forecast_reported carries the occupancy reclassification offset" tags=[
+    :slow
+] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated
+    using Statistics: median
+    import FlexiChains
+    using BVDOutbreakSize: forecast_reported
+
+    ## The occupancy likelihood scores `demand + Δ` against the reported
+    ## in-bed stock, where Δ is the fitted reclassification offset standing
+    ## at the cut-off. A forecast of the reported level therefore has to
+    ## carry Δ; without it the projection sits |Δ| beds above the series it
+    ## is scored against.
+    @model function _forecast_offset_test(offset)
+        r ~ truncated(Normal(0.01, 0.005); lower = 1e-3)
+        inv_sqrt_k ~ truncated(Normal(0.5, 0.2); lower = 1e-3)
+        k := 1.0 / (inv_sqrt_k^2 + eps(typeof(inv_sqrt_k)))
+        expected_reports_T ~ truncated(Normal(300.0, 50.0); lower = 1.0)
+        expected_deaths_T ~ truncated(Normal(15.0, 3.0); lower = 1.0)
+        expected_infections_T ~ truncated(Normal(800.0, 100.0); lower = 1.0)
+        R_T ~ truncated(Normal(1.1, 0.05); lower = 1e-3)
+        expected_bed_demand_T ~ truncated(Normal(800.0, 20.0); lower = 1.0)
+        bed_capacity ~ truncated(Normal(4000.0, 50.0); lower = 1.0)
+        isolation_dispersion ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"treatment_state.occupancy_break" := offset
+        return nothing
+    end
+    _fc(offset) = forecast_reported(
+        sample(_forecast_offset_test(offset), Prior(), 400;
+            chain_type = FlexiChains.VNChain, progress = false);
+        horizon = 7, obs_cases = 905, obs_deaths = 18)
+
+    plain = _fc(0.0)
+    shifted = _fc(-200.0)
+    ## A basis revised up puts the reported occupancy above the demand, which
+    ## is why the shortfall is taken against the capacity rather than as the
+    ## gap between the two bed columns. Demand (~800) sits far below the
+    ## capacity (~4000) here, so there is no unmet need either way.
+    raised = _fc(200.0)
+    @test any(raised.isolation_level .> raised.bed_demand)
+    @test all(iszero, raised.bed_shortfall)
+    @test all(iszero, plain.bed_shortfall)
+    @test all(iszero, shifted.bed_shortfall)
+    ## The demand is the latent need and is untouched by the offset; only the
+    ## reported occupancy moves, and by the offset.
+    @test median(plain.bed_demand) ≈ median(shifted.bed_demand) atol=25
+    @test median(plain.isolation_level) - median(shifted.isolation_level) ≈
+          200 atol=25
+    ## A reclassification cannot push the reported stock below zero, and the
+    ## capacity still binds from above.
+    @test all(shifted.isolation_level .>= 0)
+    @test all(_fc(-5000.0).isolation_level .== 0)
+end
+
+@testitem "forecast_stream beds carry the occupancy offset too" tags=[:slow] begin
+    using Turing: @model, sample, Prior
+    using Distributions: Normal, truncated, product_distribution
+    using Statistics: median
+    import FlexiChains
+    using BVDOutbreakSize: forecast_stream, knot_days
+
+    ## The per-stream forecaster reads the same offset as `forecast_reported`,
+    ## so a standalone treatment fit is scored on the reported scale as well.
+    nz = length(knot_days(60; week = 7, start = 1)) - 1
+    @model function _stream_offset_test(offset)
+        var"growth_state.T" ~ truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"rt_state.log_R0" ~ Normal(log(1.1), 0.05)
+        var"rt_state.sigma_rw" ~ truncated(Normal(0.1, 0.02); lower = 1e-3)
+        var"rt_state.intervention_effect" ~ Normal(-0.2, 0.05)
+        var"rt_state.z" ~ product_distribution(fill(Normal(0, 1), nz))
+        var"gi_state.α" ~ truncated(Normal(2.71, 0.1); lower = 0.1)
+        var"gi_state.θ" ~ truncated(Normal(5.65, 0.2); lower = 0.1)
+        var"treatment_state.disp_state.k" ~
+        truncated(Normal(40.0, 5.0); lower = 1.0)
+        var"treatment_state.expected_bed_demand" ~
+        truncated(Normal(800.0, 20.0); lower = 1.0)
+        var"treatment_state.expected_isolation" := 800.0
+        var"treatment_state.bed_utilisation" := 800.0 / 4000.0
+        var"treatment_state.occupancy_break" := offset
+        return nothing
+    end
+    _beds(offset) = forecast_stream(
+        sample(_stream_offset_test(offset), Prior(), 400;
+            chain_type = FlexiChains.VNChain, progress = false),
+        :isolation_beds; horizon = 7, obs_value = 800, n = 60,
+        breakpoint = 30.0)
+    @test median(_beds(0.0)) - median(_beds(-200.0)) ≈ 200 atol=25
+end
