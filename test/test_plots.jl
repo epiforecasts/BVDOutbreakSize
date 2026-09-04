@@ -1171,3 +1171,45 @@ end
     @test plot_scenario_comparison(REPORT_SCENARIOS_CI) isa
           CairoMakie.Makie.Figure
 end
+
+@testitem "vintage PPC plots label an occupancy census as a level" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_conditional_ppc,
+                           plot_vintage_incidence_ppc
+    rng = MersenneTwister(24)
+    ## Bed occupancy is a census stock: a level at the end of each report
+    ## day, not a count of new events. It shares `cumulative = false` with
+    ## the genuine per-day flows, so without its own `ylabel` it would be
+    ## labelled "Daily count" here and "New per vintage" in the incidence
+    ## view, both of which read as an accumulating total.
+    dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+    reps = [rand(rng, 200:300, length(dates)) for _ in 1:80]
+    occupancy = [258, 267, 283, 260]
+    flow = [153, 119, 117, 94]
+    stock = (; title = "Patients in isolation", dates = dates,
+        replicates = reps, observed = occupancy, cumulative = false,
+        ylabel = "Beds occupied")
+    daily = (; title = "New suspects/day", dates = dates,
+        replicates = reps, observed = flow, cumulative = false)
+    ylabels(fig) = [ax.ylabel[] for ax in fig.content
+                    if ax isa CairoMakie.Makie.Axis]
+
+    ## The census panel keeps its own label in both views; the per-day flow
+    ## beside it keeps each view's default.
+    cond = plot_vintage_conditional_ppc([stock, daily])
+    @test ylabels(cond) == ["Beds occupied", "Daily count"]
+
+    inc = plot_vintage_incidence_ppc([stock, daily])
+    @test ylabels(inc) == ["Beds occupied", ""]
+
+    ## A cumulative panel is untouched by the override: it still names the
+    ## running total in the first column only.
+    cumulative = (; title = "Confirmed", dates = dates,
+        replicates = reps, observed = cumsum(flow))
+    @test ylabels(plot_vintage_conditional_ppc([cumulative])) ==
+          ["Cumulative count"]
+    @test ylabels(plot_vintage_incidence_ppc([cumulative])) ==
+          ["New per vintage"]
+end

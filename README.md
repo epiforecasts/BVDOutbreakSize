@@ -114,10 +114,10 @@ The observations live in `data/observations.toml`.
 The literate picks up new numbers automatically.
 The figures come from the INSP situation reports, transcribed by [INRB-UMIE/BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data), and are refreshed for each new sitrep with the `scripts/` tooling (`task download-sitreps`, `task confirm-data`):
 
-- The cumulative confirmed-case and confirmed-death series come from the upstream `national_*` daily CSVs, regenerated and spot-confirmed against our own scan by `scripts/confirm_insp_data.jl`.
+- The cumulative confirmed-case and confirmed-death series are read from the situation-report PDFs like every other stream, and cross-checked against the upstream `national_*` daily CSVs by `scripts/confirm_insp_data.jl`.
 - Every other stream (suspected totals, laboratory cumulatives, the 24h analysed volume, daily new suspects, isolation occupancy, bed capacity and recoveries) is read directly from the situation-report PDFs (fetched by `scripts/download_sitreps.jl` into `data/sitrep_pdfs/`) and recorded in `data/insp_sitrep_scanned.csv`.
 
-`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream national series and exits non-zero on any disagreement.
+`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream national series and exits non-zero on any disagreement it does not already document.
 
 ## Outputs and releases
 
