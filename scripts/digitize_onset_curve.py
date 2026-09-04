@@ -116,18 +116,14 @@ CONFIG = {
     "095": ("2026-08-17", "2026-08-17"),
     "096": ("2026-08-18", "2026-08-17"),
     "097": ("2026-08-19", "2026-08-17"),
-    # "098" is deliberately absent: its figure is embedded at 1267x789
-    # against ~830x510 for every neighbour (and losslessly, not JPEG), and
-    # at that render the bar flood over-counts by roughly 10%. It digitises
-    # to 4280 against a printed n of 4 140 (+3.4%, above the +1.6% ceiling
-    # measured over 059-083), and on onset dates more than four weeks old -
-    # where late reporting can only add a case or two - it sits ~280 cases
-    # above BOTH neighbours (stable-region totals: 097 2875, 098 3145, 099
-    # 2867), so 098 -> 099 would post a 284-case fall that the underlying
-    # data cannot have. The neighbour scatter is ~25 cases, an order of
-    # magnitude smaller, so this is a detection drift and not the noise
-    # floor. Re-including it needs a calibration fix verified to reproduce
-    # 059-100 unchanged; see the issue linked in data/README.md.
+    # "098" is deliberately absent. It is the only vintage INSP embedded
+    # losslessly rather than as JPEG, so the fixed colour thresholds below
+    # keep a fringe of each bar that JPEG blur costs every other vintage,
+    # and it reads about 7% high on the same underlying data. Excluding it
+    # keeps a vintage on a different bias scale out of the between-vintage
+    # increments this file feeds. The evidence, and the controls that rule
+    # out the render size, are in data/README.md. Read them before adding
+    # it back.
     "099": ("2026-08-21", "2026-08-17"),
     "100": ("2026-08-22", "2026-08-17"),
     "101": ("2026-08-23", "2026-08-24"),
@@ -322,16 +318,20 @@ def _y_axis_ticks(dark, base, W):
     # with the last one (the 0 tick) on the baseline. Taking the longest run
     # alone is not enough - in SitRep 067 a glyph stroke outruns the real
     # axis line and yields a scale that halves every count.
+    # Slice bounds are the 0-based images of the reference's 1-based ranges:
+    # candidate columns 30..floor(W*0.13), the label strip being the ten
+    # columns immediately left of the candidate, and rows running down to
+    # three past the baseline.
     best = None
-    for x in range(30, int(W * 0.13)):
-        seg = dark[: base + 3, max(0, x - 10):x - 1].sum(axis=1)
+    for x in range(29, int(W * 0.13)):
+        seg = dark[: base + 4, max(0, x - 10):x].sum(axis=1)
         yt = _cluster([y for y in range(len(seg)) if seg[y] >= 3])
         if len(yt) < 3 or abs(yt[-1] - base) > 3:
             continue
         d = np.diff(yt)
         if d.min() <= 5 or d.max() > 1.15 * d.min():
             continue
-        rank = (_longest_run(dark[:base, x]), -x)  # tie-break leftmost
+        rank = (_longest_run(dark[: base + 1, x]), -x)  # tie-break leftmost
         if best is None or rank > best[0]:
             best = (rank, yt)
     if best is None:
@@ -383,7 +383,15 @@ def digitize(im, last_tick_date, y_step=20):
         raise ValueError("no x-axis weekly tick row found")
     xt = best
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
-    lastx = xt[-1]                       # rightmost tick is always real
+    # The daily bar windows are laid out in the 1-based pixel frame the
+    # Julia reference uses, and converted back to 0-based only at the point
+    # of indexing. Both languages round half to even, but that rule is not
+    # translation-invariant: a window edge landing exactly on .5 rounds down
+    # in one frame and up in the other, so a 0-based layout reads windows
+    # one column apart from the reference. A dropped column changes which
+    # bar the 75th percentile lands on, so the error is a whole segment, not
+    # a count or two.
+    lastx = xt[-1] + 1                   # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)
     # per-column stacked bar height, flooded up from the baseline
     bc = np.zeros(W)
@@ -404,14 +412,15 @@ def digitize(im, last_tick_date, y_step=20):
             r -= 1
         bc[x], rc[x] = b, rr
     tot = bc + rc
-    barmin, barmax = np.where(tot > 2)[0].min(), np.where(tot > 2)[0].max()
+    nz = np.where(tot > 2)[0] + 1        # 1-based, matching lastx
+    barmin, barmax = nz.min(), nz.max()
     rows = []
     for off in range(-105, 4):
         cx = lastx + off * ppd
         if cx < barmin - ppd or cx > barmax + ppd:
             continue
         lo, hi = int(round(cx - ppd * 0.45)), int(round(cx + ppd * 0.45))
-        cols = range(max(0, lo), min(W, hi + 1))
+        cols = range(max(1, lo) - 1, min(W, hi))
         bvals = [bc[c] for c in cols]
         rvals = [rc[c] for c in cols]
         if max(b + r for b, r in zip(bvals, rvals)) < 1:

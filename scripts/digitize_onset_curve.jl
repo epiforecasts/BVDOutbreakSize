@@ -100,18 +100,14 @@ const CONFIG = [
     ("095", Date(2026, 8, 17), Date(2026, 8, 17)),
     ("096", Date(2026, 8, 18), Date(2026, 8, 17)),
     ("097", Date(2026, 8, 19), Date(2026, 8, 17)),
-    # "098" is deliberately absent: its figure is embedded at 1267x789
-    # against ~830x510 for every neighbour (and losslessly, not JPEG), and
-    # at that render the bar flood over-counts by roughly 10%. It digitises
-    # to 4280 against a printed n of 4 140 (+3.4%, above the +1.6% ceiling
-    # measured over 059-083), and on onset dates more than four weeks old -
-    # where late reporting can only add a case or two - it sits ~280 cases
-    # above BOTH neighbours (stable-region totals: 097 2875, 098 3145, 099
-    # 2867), so 098 -> 099 would post a 284-case fall that the underlying
-    # data cannot have. The neighbour scatter is ~25 cases, an order of
-    # magnitude smaller, so this is a detection drift and not the noise
-    # floor. Re-including it needs a calibration fix verified to reproduce
-    # 059-100 unchanged; see the issue linked in data/README.md.
+    # "098" is deliberately absent. It is the only vintage INSP embedded
+    # losslessly rather than as JPEG, so the fixed colour thresholds below
+    # keep a fringe of each bar that JPEG blur costs every other vintage,
+    # and it reads about 7% high on the same underlying data. Excluding it
+    # keeps a vintage on a different bias scale out of the between-vintage
+    # increments this file feeds. The evidence, and the controls that rule
+    # out the render size, are in data/README.md. Read them before adding
+    # it back.
     ("099", Date(2026, 8, 21), Date(2026, 8, 17)),
     ("100", Date(2026, 8, 22), Date(2026, 8, 17)),
     ("101", Date(2026, 8, 23), Date(2026, 8, 24)),
