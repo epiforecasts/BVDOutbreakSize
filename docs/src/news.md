@@ -6,6 +6,72 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## v1.17.0
+
+Changes since v1.16.0
+
+### Fixes
+
+- The Python onset-curve digitiser no longer disagrees with the Julia reference (#594).
+Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
+Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
+Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
+- The symptom-onset reporting triangle now carries a per-scan level error (#507).
+A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute part of the digitisation error belongs to the bar and the multiplicative part is one number for the whole figure.
+Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
+The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
+On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
+Whether the outbreak size and the recent reproduction number move with the term is being checked against before and after joint fits, and this entry will be updated with the result.
+<!-- placeholder: pending #642 fit comparison -->
+The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
+- Bed forecasts are now scored against the occupancy the situation reports print.
+The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
+The persistence baseline drops a window spanning one of those basis changes, and the symptom-onset stream has a baseline for the first time.
+For an incident stream the baseline's step pool holds changes in the window total rather than the window's own count (#623, #612).
+
+### Report
+
+- The bed-occupancy panels read as occupancy rather than as counts of new events (#628).
+All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
+A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
+- The symptom-onset methods section now derives the digitisation error from how a bar is read rather than quoting a single per-scan percentage, and the reporting-delay summary table and pair plot carry the sampled per-scan level (#507).
+The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
+- The frozen validation fits no longer include the streams the situation reports have stopped updating (#611).
+Suspected cases and suspected deaths stopped reporting early, so their frozen fits scored a validation panel that had already gone quiet, 16 fits a build down from 18.
+The release-fit registry is hashed into every fit's cache key, so the next docs build refits the whole set once.
+
+### Data
+
+- Advanced the model cut-off from SitRep 108 (30 August) to SitRep 109 (31 August).
+Confirmed cases reach 6186 and confirmed deaths 3007.
+Sud-Kivu prints its first bed-capacity figure, 25 beds.
+The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+- Three scan-versus-mirror disagreements in the confirmed case and death history are settled against the situation-report PDFs (#624).
+The committed values are right in all three, so no fitted number changes.
+2026-08-08 is the mirror filing SitRep 085 under its publication date rather than its reporting date.
+2026-08-11 is SitRep 089's printed total of 4566 against its own province rows summing to 4567.
+2026-08-25 is a mirror transcription error, 2755 for a figure that reads 2744 in the headline, the total row and the province sum alike.
+The cross-check script now records each with both values, and fails on any disagreement it does not document or on an entry that stops reproducing.
+It no longer prints TOML regenerated from the mirror, which covers 86 of the 102 report dates the manifest holds.
+- SitRep 090's mixed-direction harmonisation gets no break-date entry (#569).
+The gap is 2 cases and 3 deaths, smaller than the SitRep 065 precedent already left off that list.
+- SitRep 098 stays out of the digitised onset curve, and the reason is now the measured one (#594).
+The render size is not what makes it read high.
+It is the only vintage embedded losslessly, and the fixed colour masks lose a bar-edge fringe to JPEG blur on every other one.
+- The SitRep 102 to 103 date-alignment failure is not a misread axis tick on either vintage (#617).
+Both neighbouring pairs land cleanly on shift 0.
+- The per-scan digitisation error on the onset curve is a per-vintage level, not a stationary error (#636).
+The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller render blurs more.
+Edge softness roughly doubles between SitRep 105 and 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
+The shift does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
+
+### Infrastructure
+
+- The onset-curve digitiser and the file it writes now have tests, including the date-alignment sweep and a parity check holding the Python port to the committed file (#629).
+- The release rescore's hard failure is now permanent rather than a stopgap (#588).
+It used to fall back to the committed scoring tables when the rescore step failed, but that fallback would publish skill scores and validation figures against whatever truth series those tables were last written from, with nothing on the rendered page saying so.
+A failed rescore now fails the build outright, which a re-run of the job recovers from; a silent substitution was not detectable from the page at all.
+
 ## v1.16.0
 
 Changes since v1.15.0
