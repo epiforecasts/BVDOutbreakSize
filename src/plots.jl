@@ -1782,7 +1782,9 @@ axis, and the gaps between them are what the figure is for.
     band around them squashes the bars and ribbons the figure is read on.
 
 `dates` labels the onset dates, one per position, on a weekly tick axis
-([`_vintage_ticks`](@ref)). An empty `dates` returns a blank figure.
+([`_vintage_ticks`](@ref)). The other three arguments carry one entry per
+date and a mismatch raises rather than silently drawing a shorter series.
+An empty `dates` returns a blank figure.
 
 Contrast the unconditional expectation of the printed bar, which this
 replaced: it is a smooth curve through noisy bars whose interval is set by
@@ -1798,6 +1800,11 @@ function plot_onset_nowcast(dates::AbstractVector,
         title = "Symptom onsets by date of onset: nowcast vs digitised")
     isempty(dates) && return Figure()
     n = length(dates)
+    if length(observed) != n || length(nowcast) != n || length(onsets) != n
+        error("plot_onset_nowcast: `observed`, `nowcast` and `onsets` must " *
+              "each carry one entry per date, got $(length(observed)), " *
+              "$(length(nowcast)) and $(length(onsets)) for $n dates.")
+    end
     x = collect(1:n)
     q(ds, pr) = [quantile(d, pr) for d in ds]
     fig = Figure(; size = (900, 420))
