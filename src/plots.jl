@@ -1792,10 +1792,10 @@ axis, and the gaps between them are what the figure is for.
     band, because the onsets run several times the reported counts and a
     band around them squashes the bars and ribbons the figure is read on.
 
-`dates` labels the onset dates, one per position, on a weekly tick axis
-([`_vintage_ticks`](@ref)). The other three arguments carry one entry per
-date and a mismatch raises rather than silently drawing a shorter series.
-An empty `dates` returns a blank figure.
+`dates` labels the onset dates, one per position, on the same weekly tick
+axis the per-vintage panels use. The other three arguments carry one entry
+per date and a mismatch raises rather than silently drawing a shorter
+series. An empty `dates` returns a blank figure.
 
 Contrast the unconditional expectation of the printed bar, which this
 replaced: it is a smooth curve through noisy bars whose interval is set by
