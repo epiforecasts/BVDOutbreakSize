@@ -1776,9 +1776,10 @@ axis, and the gaps between them are what the figure is for.
     closes to nothing on the older onset dates, where the bars are complete
     and the ribbons collapse onto them, and opens towards the nowcast date.
   - `onsets`, per-draw modelled symptom onsets, drawn as a dashed median
-    line with a faint 90% band. The gap between this and the nowcast is
-    ascertainment: onsets the surveillance figures never print at any
-    delay.
+    line. The gap between this and the nowcast is ascertainment: onsets the
+    surveillance figures never print at any delay. A line rather than a
+    band, because the onsets run several times the reported counts and a
+    band around them squashes the bars and ribbons the figure is read on.
 
 `dates` labels the onset dates, one per position, on a weekly tick axis
 ([`_vintage_ticks`](@ref)). An empty `dates` returns a blank figure.
@@ -1804,10 +1805,8 @@ function plot_onset_nowcast(dates::AbstractVector,
         ylabel = "cases", xticks = _vintage_ticks(dates),
         xticklabelrotation = pi / 4, xticklabelsize = 11)
     ## The latent onsets sit well above the reported quantities, so they go
-    ## down first and stay faint: the figure is read on the bars and the
+    ## down first and as a line: the figure is read on the bars and the
     ## nowcast, with ascertainment as context rather than as the subject.
-    band!(ax, x, q(onsets, 0.05), q(onsets, 0.95);
-        color = (latent_colour, 0.12))
     lines!(ax, x, q(onsets, 0.5); color = latent_colour, linewidth = 2,
         linestyle = :dash)
     CairoMakie.barplot!(ax, x, float.(observed);
