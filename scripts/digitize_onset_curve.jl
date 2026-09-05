@@ -118,7 +118,13 @@ const CONFIG = [
     ("106", Date(2026, 8, 28), Date(2026, 8, 24)),
     ("107", Date(2026, 8, 29), Date(2026, 8, 24)),
     ("108", Date(2026, 8, 30), Date(2026, 8, 31)),
-    ("109", Date(2026, 8, 31), Date(2026, 8, 31))
+    ("109", Date(2026, 8, 31), Date(2026, 8, 31)),
+    # "110" is deliberately absent: its page-4 figure is embedded with the
+    # same caption text but is internally titled/axis-labelled "par date de
+    # notification" (n = 5 710), not "par date de debut des symptomes" -
+    # a genuine basis change, confirmed by extracting and viewing the raw
+    # embedded image. See data/README.md.
+    ("111", Date(2026, 9, 2), Date(2026, 8, 31))
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -153,7 +159,8 @@ const Y_AXIS_STEP = Dict(
     "106" => 25,
     "107" => 25,
     "108" => 25,
-    "109" => 25
+    "109" => 25,
+    "111" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
