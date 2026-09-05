@@ -1267,4 +1267,6 @@ end
     ## rather than an axis with nothing on it.
     @test plot_onset_nowcast(Date[], Float64[], Vector{Float64}[],
         Vector{Float64}[]) isa CairoMakie.Makie.Figure
+    @test_throws ErrorException plot_onset_nowcast(dates, observed[1:5],
+        nowcast, onsets)
 end
