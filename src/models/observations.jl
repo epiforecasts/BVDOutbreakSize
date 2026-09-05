@@ -2769,7 +2769,18 @@ going back from them, which the unconditional expectation does neither.
 
 `F(u, δ) ≤ α` for every `δ` ([`onset_report_G`](@ref) is a normalised CDF),
 so the correction is never negative and the nowcast never falls below the
-count already reported. Pure, top-level, allocation-free.
+count already reported.
+
+Two things the returned quantity is not. It is the posterior of the
+expected eventual count, not a posterior predictive of the realised one:
+the correction is a mean, so the spread is parameter uncertainty about the
+onsets and the delay curve with no observation noise on the arrivals still
+to come. And `observed` enters as a known constant, so the interval closes
+to zero width once the delay has run out rather than to the digitisation
+error on the bar. Both are properties of the target, which is what the
+published figures will eventually print for this onset date: the part
+already printed is read off the figure rather than inferred, and only the
+part still to come is estimated. Pure, top-level, allocation-free.
 """
 function onset_nowcast(observed::Real, onsets_u::Real, δ::Integer,
         logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
