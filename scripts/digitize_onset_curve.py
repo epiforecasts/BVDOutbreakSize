@@ -139,7 +139,7 @@ CONFIG = {
     # same caption text but is internally titled/axis-labelled "par date de
     # notification" (n = 5 710), not "par date de debut des symptomes" -
     # a genuine basis change, confirmed by extracting and viewing the raw
-    # embedded image. See data/README.md and issue #644.
+    # embedded image. See data/README.md.
     "111": ("2026-09-02", "2026-08-31"),
 }
 
