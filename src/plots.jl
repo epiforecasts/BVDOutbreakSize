@@ -1729,7 +1729,9 @@ credit the model with reporting that figure never showed.
 `diff` of the chain's `cumulative_onsets`), and `hazard` is
 [`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`. `alpha` is
 indexed from `grid_start` and held flat outside the fitted grid, matching
-how the model extrapolates it.
+how the model extrapolates it. The two are paired draw by draw, so a
+`hazard` carrying a different number of draws than `onsets` raises rather
+than pairing draws from two fits.
 
 Each entry is [`onset_nowcast`](@ref) at that day, so the returned draws
 close on the observed count at long delays and open out towards the
@@ -1745,6 +1747,15 @@ function onset_nowcast_draws(days::AbstractVector{<:Integer},
         error("onset_nowcast_draws: `days`, `observed` and `delays` must " *
               "have the same length, got $n, $(length(observed)) and " *
               "$(length(delays)).")
+    end
+    nd = length(onsets)
+    if length(hazard.alpha) != nd || length(hazard.logit_h0) != nd ||
+       length(hazard.γ) != nd
+        error("onset_nowcast_draws: `onsets` and `hazard` must come from " *
+              "the same fit, got $nd onset draws against " *
+              "$(length(hazard.alpha)) ascertainment, " *
+              "$(length(hazard.logit_h0)) baseline-hazard and " *
+              "$(length(hazard.γ)) calendar-walk draws.")
     end
     out = Vector{Vector{Float64}}(undef, n)
     for k in 1:n

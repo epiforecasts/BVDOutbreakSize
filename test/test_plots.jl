@@ -1249,6 +1249,9 @@ end
     @test all(isapprox.(draws[end], 50.0; atol = 1e-6))
     @test_throws ErrorException onset_nowcast_draws(days, observed[1:2],
         delays, onsets, hazard; grid_start = gs)
+    ## Onsets and hazard must be the same fit's draws, paired one to one.
+    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
+        onsets[1:(ndraws - 1)], hazard; grid_start = gs)
 end
 
 @testitem "plot_onset_nowcast returns a Makie figure" setup=[HeadlessMakie] begin
