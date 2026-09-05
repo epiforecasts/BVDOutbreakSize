@@ -135,6 +135,12 @@ CONFIG = {
     "107": ("2026-08-29", "2026-08-24"),
     "108": ("2026-08-30", "2026-08-31"),
     "109": ("2026-08-31", "2026-08-31"),
+    # "110" is deliberately absent: its page-4 figure is embedded with the
+    # same caption text but is internally titled/axis-labelled "par date de
+    # notification" (n = 5 710), not "par date de debut des symptomes" -
+    # a genuine basis change, confirmed by extracting and viewing the raw
+    # embedded image. See data/README.md and issue #644.
+    "111": ("2026-09-02", "2026-08-31"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -170,6 +176,7 @@ Y_AXIS_STEP = {
     "107": 25,
     "108": 25,
     "109": 25,
+    "111": 25,
 }
 
 
