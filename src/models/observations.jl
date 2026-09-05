@@ -2743,6 +2743,53 @@ function onset_report_F(δ::Integer, logit_h0::AbstractVector,
 end
 
 """
+    onset_nowcast(observed, onsets_u, δ, logit_h0, γ, u, grid_start, α)
+
+Eventual reported count for onset date `u`, given the count `observed`
+already printed for it at reporting delay `δ`:
+
+```math
+N(u) = y(u, \\delta) + n_u \\, \\bigl(\\alpha - F(u, \\delta)\\bigr),
+```
+
+with `n_u` the modelled symptom onsets on that date, `α` its ascertainment
+level and `F` the cumulative reported proportion ([`onset_report_F`](@ref)).
+The first term is what the latest figure carries and the second is what the
+model expects still to arrive, so the estimate is anchored on the data
+rather than on the fitted curve alone.
+
+This is the nowcast the report plots, and it behaves differently from the
+unconditional expectation `n_u α` at the two ends of the delay axis. At a
+long delay `F(u, δ)` has reached `α`, the correction term is zero and the
+nowcast is the observed count exactly, with no posterior spread left. At a
+short delay most of `α` is still outstanding, so the correction carries the
+posterior's full uncertainty about `n_u` and the delay curve. The interval
+therefore widens towards the most recent onset dates and closes on the data
+going back from them, which the unconditional expectation does neither.
+
+`F(u, δ) ≤ α` for every `δ` ([`onset_report_G`](@ref) is a normalised CDF),
+so the correction is never negative and the nowcast never falls below the
+count already reported.
+
+Two things the returned quantity is not. It is the posterior of the
+expected eventual count, not a posterior predictive of the realised one:
+the correction is a mean, so the spread is parameter uncertainty about the
+onsets and the delay curve with no observation noise on the arrivals still
+to come. And `observed` enters as a known constant, so the interval closes
+to zero width once the delay has run out rather than to the digitisation
+error on the bar. Both are properties of the target, which is what the
+published figures will eventually print for this onset date: the part
+already printed is read off the figure rather than inferred, and only the
+part still to come is estimated. Pure, top-level, allocation-free.
+"""
+function onset_nowcast(observed::Real, onsets_u::Real, δ::Integer,
+        logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
+        grid_start::Integer, α::Real)
+    outstanding = α - onset_report_F(δ, logit_h0, γ, u, grid_start, α)
+    return observed + onsets_u * outstanding
+end
+
+"""
     onset_report_anchor(logit_h0, γ, u, grid_start, a)
 
 Delay-weighted average of the calendar-indexed daily ascertainment series

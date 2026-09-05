@@ -3282,9 +3282,12 @@ onset_fit_fig #hide
 #md # </details>
 #md # ```
 #
-# The posterior predictive below reads the same reporting triangle along the onset date instead of the report date.
-# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
-# The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
+# The figure below reads the same reporting triangle along the onset date instead of the report date, and nowcasts each onset date rather than refitting it.
+# The bars are what the latest digitised figure prints for each onset date.
+# The nowcast adds to each bar the part of that date's ascertained total the fitted delay curve says has still to arrive, so it is anchored on the count already reported.
+# On the older onset dates the delay has run out, the correction is zero and the ribbons close onto the bars.
+# They open towards the most recent onset dates, which is the right-truncation the model is there to undo.
+# The dashed line is the modelled onsets themselves, so the gap above the nowcast is ascertainment: onsets the figures never print at any delay.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
@@ -3297,69 +3300,41 @@ onset_fit_fig #hide
 ## not covered by that figure at all and is skipped (the same rule the
 ## loader applies, see the [Data](@ref methods-data) section).
 _onset_last_printed = Dict{Int, Float64}()
+## The report day that reading came off, which is not `_onset_grid_end` for
+## every onset date: the figures do not all print the same range of onset
+## dates, so a date the latest figure stops short of keeps its reading, and
+## its shorter delay, from an earlier one.
+_onset_last_report_day = Dict{Int, Int}()
 for snap in _onset_snaps
     lo, hi = extrema(keys(snap.onsets))
+    R = obs.n - value(obs.cutoff - snap.report_date)
     for d in lo:Day(1):hi
         u = obs.n - value(obs.cutoff - d)
         (1 <= u <= obs.n) || continue
         _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
+        _onset_last_report_day[u] = R
     end
 end
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
-## Modelled onsets on each of those days, and the count the latest figure
-## should print for them: the same onsets times the cumulative reported
-## proportion at that figure's own delay, `_onset_grid_end - u`, so the
-## band is a predictive for the bar actually plotted rather than for the
-## eventual total. `onset_report_F` holds the calendar walk flat past its
-## fitted support, which the most recent onset dates run into.
+## Modelled onsets on each of those days, and the nowcast of what each date
+## will eventually have reported: the bar already printed plus the part of
+## that date's ascertained total the delay curve leaves outstanding at the
+## delay the bar itself carries. `onset_nowcast_draws` holds the
+## ascertainment walk flat past its fitted support, which the most recent
+## onset dates run into.
 _onset_by_date_onsets = [[_onset_daily_draws[i][u]
                           for i in eachindex(_onset_daily_draws)]
                          for u in _onset_by_date_days]
-_onset_by_date_printed = [[_onset_daily_draws[i][u] *
-                           onset_report_F(_onset_grid_end - u,
-                               _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
-                               u, _onset_grid_start, _onset_alpha(i, u))
-                           for i in eachindex(_onset_daily_draws)]
-                          for u in _onset_by_date_days]
-## That count put through the same measurement error a single digitised
-## bar carries (`onset_report_scale`'s level case, as above the snapshot
-## grid), replicated four times per draw for the same reason.
-_onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
+_onset_by_date_nowcast = onset_nowcast_draws(_onset_by_date_days,
+    [_onset_last_printed[u] for u in _onset_by_date_days],
+    [_onset_last_report_day[u] - u for u in _onset_by_date_days],
+    _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start)
 
-onset_ppc_by_date_fig = let
-    fig = CairoMakie.Figure(; size = (900, 380))
-    ax = CairoMakie.Axis(fig[1, 1];
-        title = "Symptom onsets by date of onset: modelled vs digitised",
-        xlabel = "onset date", ylabel = "cases")
-    xs = Float64.(_onset_by_date_days)
-    q(ds, p) = [quantile(d, p) for d in ds]
-    CairoMakie.band!(ax, xs, q(_onset_by_date_onsets, 0.05),
-        q(_onset_by_date_onsets, 0.95); color = (:seagreen, 0.20))
-    CairoMakie.lines!(ax, xs, q(_onset_by_date_onsets, 0.5);
-        color = :seagreen, linewidth = 2)
-    CairoMakie.band!(ax, xs, q(_onset_by_date_reps, 0.05),
-        q(_onset_by_date_reps, 0.95); color = (:mediumpurple, 0.20))
-    CairoMakie.lines!(ax, xs, q(_onset_by_date_reps, 0.5);
-        color = :mediumpurple, linewidth = 2)
-    CairoMakie.scatter!(ax, xs,
-        [_onset_last_printed[u] for u in _onset_by_date_days];
-        color = :black, marker = :cross, markersize = 9)
-    ## Calendar labels on a grid-day axis, at weekly ticks so they do not
-    ## collide at this width.
-    _ticks = _onset_by_date_days[1:7:end]
-    ax.xticks = (Float64.(_ticks), string.(grid_date.(_ticks)))
-    ax.xticklabelrotation = pi / 4
-    CairoMakie.Legend(fig[2, 1],
-        [
-            CairoMakie.MarkerElement(color = :black, marker = :cross),
-            CairoMakie.PolyElement(color = (:mediumpurple, 0.30)),
-            CairoMakie.PolyElement(color = (:seagreen, 0.30))],
-        ["digitised (latest)", "modelled posterior predictive",
-            "modelled onsets"];
-        orientation = :horizontal, tellwidth = false, tellheight = true)
-    fig
-end;
+onset_ppc_by_date_fig = plot_onset_nowcast(
+    grid_date.(_onset_by_date_days),
+    [_onset_last_printed[u] for u in _onset_by_date_days],
+    _onset_by_date_nowcast, _onset_by_date_onsets);
 
 #md # ```@raw html
 #md # </details>

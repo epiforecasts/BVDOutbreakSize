@@ -1213,3 +1213,63 @@ end
     @test ylabels(plot_vintage_incidence_ppc([cumulative])) ==
           ["New per vintage"]
 end
+
+@testitem "onset_nowcast_draws narrows as the reporting delay grows" begin
+    using Random: MersenneTwister
+    using Statistics: quantile
+    using BVDOutbreakSize: onset_nowcast_draws
+    rng = MersenneTwister(4242)
+    D, gs, ge = 21, 1, 60
+    ndraws = 200
+    ## A fitted hazard with posterior spread in every component, so the
+    ## nowcast interval has something to be wide about at a short delay.
+    hazard = (;
+        logit_h0 = [fill(-1.4 + 0.2 * randn(rng), D) for _ in 1:ndraws],
+        γ = [zeros(ge) for _ in 1:ndraws],
+        alpha = [fill(0.4 + 0.05 * randn(rng), ge - gs + 1)
+                 for _ in 1:ndraws])
+    onsets = [fill(150.0 + 30 * randn(rng), ge) for _ in 1:ndraws]
+    ## One onset day per delay, all carrying the same observed count so the
+    ## only thing separating them is how much reporting has happened.
+    delays = [0, 5, 10, D - 1]
+    days = [40, 39, 38, 37]
+    observed = fill(50.0, length(days))
+    draws = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs)
+    @test length(draws) == length(days)
+    @test all(length(d) == ndraws for d in draws)
+    ## Never below what is already reported.
+    @test all(all(d .>= 50.0 - 1e-9) for d in draws)
+    ## The interval collapses onto the observed count once the delay has
+    ## run out, and widens monotonically as the delay shortens.
+    width(d) = quantile(d, 0.95) - quantile(d, 0.05)
+    ws = width.(draws)
+    @test ws[end] < 1e-6
+    @test all(diff(ws) .< 0)
+    @test all(isapprox.(draws[end], 50.0; atol = 1e-6))
+    @test_throws ErrorException onset_nowcast_draws(days, observed[1:2],
+        delays, onsets, hazard; grid_start = gs)
+    ## Onsets and hazard must be the same fit's draws, paired one to one.
+    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
+        onsets[1:(ndraws - 1)], hazard; grid_start = gs)
+end
+
+@testitem "plot_onset_nowcast returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date, Day
+    using BVDOutbreakSize: plot_onset_nowcast
+    rng = MersenneTwister(4243)
+    dates = [Date("2026-07-01") + Day(i) for i in 0:29]
+    observed = [40.0 + 10 * randn(rng) for _ in dates]
+    nowcast = [observed[k] .+ abs.(randn(rng, 120)) .* k
+               for k in eachindex(dates)]
+    onsets = [120.0 .+ 20 .* randn(rng, 120) for _ in dates]
+    fig = plot_onset_nowcast(dates, observed, nowcast, onsets)
+    @test fig isa CairoMakie.Makie.Figure
+    ## No onset dates covered by the digitised figures: a blank figure
+    ## rather than an axis with nothing on it.
+    @test plot_onset_nowcast(Date[], Float64[], Vector{Float64}[],
+        Vector{Float64}[]) isa CairoMakie.Makie.Figure
+    @test_throws ErrorException plot_onset_nowcast(dates, observed[1:5],
+        nowcast, onsets)
+end

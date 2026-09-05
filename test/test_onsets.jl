@@ -1263,3 +1263,31 @@ end
     @test 0.82 <= shared[2] <= 0.96
     @test shared[1] > percell[1]
 end
+
+@testitem "onset_nowcast closes on the data as the delay runs out" begin
+    using BVDOutbreakSize: onset_nowcast, onset_report_F, ONSET_REPORT_MAX_DELAY
+    D = 21
+    logit_h0 = fill(-1.5, D)
+    γ = zeros(60)
+    u, gs, α = 10, 1, 0.4
+    onsets_u = 200.0
+    y = 62.0
+    ## At the longest delay the hazard covers, every case that will ever be
+    ## reported has been, so the nowcast is the observed count exactly.
+    @test onset_nowcast(y, onsets_u, D - 1, logit_h0, γ, u, gs, α) ≈ y
+    ## At delay zero only the first day's hazard has fired, so almost the
+    ## whole ascertained total is still outstanding.
+    n0 = onset_nowcast(y, onsets_u, 0, logit_h0, γ, u, gs, α)
+    @test n0 > y + 0.8 * onsets_u * α
+    ## The correction shrinks monotonically as the delay grows, and never
+    ## takes the nowcast below what is already reported.
+    ns = [onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
+          for δ in 0:(D - 1)]
+    @test all(diff(ns) .<= 1e-9)
+    @test all(ns .>= y - 1e-9)
+    ## The whole correction is the unreported part of `α`, so the nowcast
+    ## agrees with the closed form it is built from.
+    δ = 5
+    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α) ≈
+          y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
+end
