@@ -118,7 +118,13 @@ const CONFIG = [
     ("106", Date(2026, 8, 28), Date(2026, 8, 24)),
     ("107", Date(2026, 8, 29), Date(2026, 8, 24)),
     ("108", Date(2026, 8, 30), Date(2026, 8, 31)),
-    ("109", Date(2026, 8, 31), Date(2026, 8, 31))
+    ("109", Date(2026, 8, 31), Date(2026, 8, 31)),
+    # "110" is deliberately absent: its epidemic-curve figure is plotted by
+    # notification date, not symptom-onset date (see data/README.md and
+    # issue #644), so it is not a snapshot of this stream at all.
+    ("111", Date(2026, 9, 2), Date(2026, 8, 31)),
+    ("112", Date(2026, 9, 3), Date(2026, 8, 31)),
+    ("113", Date(2026, 9, 4), Date(2026, 8, 31))
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -153,7 +159,10 @@ const Y_AXIS_STEP = Dict(
     "106" => 25,
     "107" => 25,
     "108" => 25,
-    "109" => 25
+    "109" => 25,
+    "111" => 25,
+    "112" => 25,
+    "113" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -300,8 +309,7 @@ function y_axis_ticks(dark, base, H, W)
             best = (rank, yt)
         end
     end
-    best === nothing && error("no y-axis tick strip found")
-    return best[2]
+    return best === nothing ? nothing : best[2]
 end
 
 function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
@@ -312,6 +320,18 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = y_axis_ticks(dark, base, H, W)
+    if yt === nothing
+        # Only fall back to the <180 near-gray mask when the strict <120
+        # mask finds nothing, so every already-committed vintage (059-111)
+        # keeps digitising under the original threshold. SitRep 112 shrinks
+        # the embedded render's height (771x433 against 775-802x475-479 for
+        # its neighbours), anti-aliasing the tick-label strip past the
+        # strict mask; the weekly x-axis ticks already carry this same
+        # scoped fallback (added for SitRep 108's larger render).
+        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        yt = y_axis_ticks(line, base, H, W)
+    end
+    yt === nothing && error("no y-axis tick strip found")
     ppc = median(diff(yt)) / float(y_step) # pixels per count
     ytop, y0 = yt[1], yt[end]
     # x scale from the weekly tick marks below the baseline. The tick marks

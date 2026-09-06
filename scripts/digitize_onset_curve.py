@@ -135,6 +135,12 @@ CONFIG = {
     "107": ("2026-08-29", "2026-08-24"),
     "108": ("2026-08-30", "2026-08-31"),
     "109": ("2026-08-31", "2026-08-31"),
+    # "110" is deliberately absent: its epidemic-curve figure is plotted by
+    # notification date, not symptom-onset date (see data/README.md and
+    # issue #644), so it is not a snapshot of this stream at all.
+    "111": ("2026-09-02", "2026-08-31"),
+    "112": ("2026-09-03", "2026-08-31"),
+    "113": ("2026-09-04", "2026-08-31"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -170,6 +176,9 @@ Y_AXIS_STEP = {
     "107": 25,
     "108": 25,
     "109": 25,
+    "111": 25,
+    "112": 25,
+    "113": 25,
 }
 
 
@@ -334,9 +343,7 @@ def _y_axis_ticks(dark, base, W):
         rank = (_longest_run(dark[: base + 1, x]), -x)  # tie-break leftmost
         if best is None or rank > best[0]:
             best = (rank, yt)
-    if best is None:
-        raise ValueError("no y-axis tick strip found")
-    return best[1]
+    return None if best is None else best[1]
 
 
 def digitize(im, last_tick_date, y_step=20):
@@ -346,6 +353,19 @@ def digitize(im, last_tick_date, y_step=20):
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
     yt = _y_axis_ticks(dark, base, W)
+    if yt is None:
+        # Only fall back to the <180 near-gray mask when the strict <120
+        # mask finds nothing, so every already-committed vintage (059-111)
+        # keeps digitising under the original threshold. SitRep 112 shrinks
+        # the embedded render's height (771x433 against 775-802x475-479 for
+        # its neighbours), anti-aliasing the tick-label strip past the
+        # strict mask; the weekly x-axis ticks already carry this same
+        # scoped fallback (added for SitRep 108's larger render).
+        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+        line = (R < 180) & (G < 180) & (B < 180)
+        yt = _y_axis_ticks(line, base, W)
+    if yt is None:
+        raise ValueError("no y-axis tick strip found")
     ppc = np.median(np.diff(yt)) / float(y_step)
     ytop, y0 = yt[0], yt[-1]
     # x scale from the weekly tick marks below the baseline. The tick marks
