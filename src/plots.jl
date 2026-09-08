@@ -1713,29 +1713,17 @@ end
 """
     onset_nowcast_draws(days, observed, delays, onsets, hazard; grid_start)
 
-Per-draw nowcast of the eventual reported symptom-onset count on each
-onset day in `days`, one `ndraws`-long vector per day.
+[`onset_nowcast`](@ref) per posterior draw, one `ndraws`-long vector per
+onset day in `days`. `observed[k]` is the count a digitised figure prints
+for `days[k]` and `delays[k]` is that figure's own reporting delay, so a
+snapshot's cells are nowcast at the delay that snapshot had run to.
 
-`observed[k]` is the count the latest digitised figure covering day
-`days[k]` prints for it, and `delays[k]` is that figure's own reporting
-delay, `its report day - days[k]`. The delay belongs to the snapshot the
-observed count was read off rather than to the newest snapshot in the
-triangle: the digitised figures do not all print the same range of onset
-dates, so an onset date's latest reading can come from an earlier figure
-than the latest one, and scoring it at the latest figure's delay would
-credit the model with reporting that figure never showed.
-
-`onsets` holds each draw's daily symptom onsets indexed by grid day (the
-`diff` of the chain's `cumulative_onsets`), and `hazard` is
-[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`. `alpha` is
-indexed from `grid_start` and held flat outside the fitted grid, matching
-how the model extrapolates it. The two are paired draw by draw, so a
-`hazard` carrying a different number of draws than `onsets` raises rather
-than pairing draws from two fits.
-
-Each entry is [`onset_nowcast`](@ref) at that day, so the returned draws
-close on the observed count at long delays and open out towards the
-nowcast date. Summarised as ribbons by [`plot_onset_nowcast`](@ref).
+`onsets` holds each draw's daily onsets indexed by grid day (the `diff` of
+the chain's `cumulative_onsets`), and `hazard` is
+[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`, with `alpha`
+indexed from `grid_start` and held flat outside the fitted grid. The two are
+paired draw by draw and must come from one fit. Summarised by
+[`plot_onset_nowcast_grid`](@ref).
 """
 function onset_nowcast_draws(days::AbstractVector{<:Integer},
         observed::AbstractVector{<:Real},
@@ -1774,74 +1762,77 @@ function onset_nowcast_draws(days::AbstractVector{<:Integer},
 end
 
 """
-    plot_onset_nowcast(dates, observed, nowcast, onsets; kwargs...)
+    plot_onset_nowcast_grid(panels; kwargs...)
 
-Nowcast of symptom onsets by date of onset. Three quantities share one
-axis, and the gaps between them are what the figure is for.
+Nowcast of the symptom-onset reporting triangle, one panel per digitised
+snapshot: what that snapshot's own figure implied for the onset dates it
+printed, against what the figures have printed since.
 
-  - `observed`, the count the latest digitised figure prints for each
-    onset date, drawn as bars. This is what is known now.
-  - `nowcast`, per-draw eventual reported counts from
-    [`onset_nowcast_draws`](@ref), drawn as 30/60/90% credible ribbons with
-    a median line. The gap above the bars is reporting still to come, so it
-    closes to nothing on the older onset dates, where the bars are complete
-    and the ribbons collapse onto them, and opens towards the nowcast date.
-  - `onsets`, per-draw modelled symptom onsets, drawn as a dashed median
-    line. The gap between this and the nowcast is ascertainment: onsets the
-    surveillance figures never print at any delay. A line rather than a
-    band, because the onsets run several times the reported counts and a
-    band around them squashes the bars and ribbons the figure is read on.
+Each `panel` is a `NamedTuple` of `title` (the snapshot's report date),
+`dates` (the onset dates, one per x position), `observed` (that snapshot's
+own counts, grey crosses), `nowcast` ([`onset_nowcast_draws`](@ref) at that
+snapshot's delays, drawn as 30/60/90% ribbons with a median line) and
+`latest` (the count the latest figure prints for the same dates, black
+points).
 
-`dates` labels the onset dates, one per position, on the same weekly tick
-axis the per-vintage panels use. The other three arguments carry one entry
-per date and a mismatch raises rather than silently drawing a shorter
-series. An empty `dates` returns a blank figure.
+The panel is read on whether the ribbon covers the black points. The two
+point series coincide where the snapshot was already complete and separate
+towards its right-hand edge, which is the gap the nowcast has to make up.
+`latest` is itself incomplete for the newest onset dates of the last panel,
+which have no later figure to catch them up.
 
-Contrast the unconditional expectation of the printed bar, which this
-replaced: it is a smooth curve through noisy bars whose interval is set by
-posterior uncertainty in the onsets rather than by how much of the delay
-distribution has elapsed, so it neither narrows going back from the nowcast
-date nor meets the data where reporting is complete.
+A panel whose series disagree in length raises, and an empty `panels`
+returns a blank figure.
 """
-function plot_onset_nowcast(dates::AbstractVector,
-        observed::AbstractVector{<:Real},
-        nowcast::AbstractVector{<:AbstractVector{<:Real}},
-        onsets::AbstractVector{<:AbstractVector{<:Real}};
-        colour = :mediumpurple, latent_colour = :seagreen,
-        title = "Symptom onsets by date of onset: nowcast vs digitised")
-    isempty(dates) && return Figure()
-    n = length(dates)
-    if length(observed) != n || length(nowcast) != n || length(onsets) != n
-        error("plot_onset_nowcast: `observed`, `nowcast` and `onsets` must " *
-              "each carry one entry per date, got $(length(observed)), " *
-              "$(length(nowcast)) and $(length(onsets)) for $n dates.")
+function plot_onset_nowcast_grid(panels::AbstractVector;
+        ncol::Integer = 3, colour = :steelblue,
+        title = "Symptom-onset reporting triangle: nowcast vs digitised")
+    isempty(panels) && return Figure()
+    ncols = min(length(panels), Int(ncol))
+    nrows = cld(length(panels), ncols)
+    fig = Figure(; size = (360 * ncols, 280 * nrows + 60))
+    for (j, p) in enumerate(panels)
+        n = length(p.dates)
+        if length(p.observed) != n || length(p.nowcast) != n ||
+           length(p.latest) != n
+            error("plot_onset_nowcast_grid: panel $(p.title) must carry " *
+                  "one `observed`, `nowcast` and `latest` entry per onset " *
+                  "date, got $(length(p.observed)), $(length(p.nowcast)) " *
+                  "and $(length(p.latest)) for $n dates.")
+        end
+        row, col = fldmod1(j, ncols)
+        x = collect(1:n)
+        q(pr) = [quantile(d, pr) for d in p.nowcast]
+        hi60 = q(0.80)
+        ## The 90% tail on the newest onset dates runs well past the counts
+        ## the panel is read on, so the axis is set by the 60% ribbon.
+        yupper = 1.6 * max(1.0,
+            isempty(p.latest) ? 1.0 : maximum(float.(p.latest)),
+            isempty(hi60) ? 1.0 : maximum(hi60))
+        ax = Axis(fig[row, col]; title = string(p.title),
+            xlabel = row == nrows ? "onset date" : "",
+            ylabel = col == 1 ? "cases at this onset date" : "",
+            xticks = _vintage_ticks(p.dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
+            limits = (nothing, (0, yupper)))
+        band!(ax, x, q(0.05), q(0.95); color = (colour, 0.15))
+        band!(ax, x, q(0.20), hi60; color = (colour, 0.28))
+        band!(ax, x, q(0.35), q(0.65); color = (colour, 0.42))
+        lines!(ax, x, q(0.5); color = colour, linewidth = 2)
+        scatter!(ax, x, float.(p.observed); color = (:grey40, 0.9),
+            marker = :cross, markersize = 8)
+        scatter!(ax, x, float.(p.latest); color = :black, markersize = 6)
     end
-    x = collect(1:n)
-    q(ds, pr) = [quantile(d, pr) for d in ds]
-    fig = Figure(; size = (900, 420))
-    ax = Axis(fig[1, 1]; title = title, xlabel = "onset date",
-        ylabel = "cases", xticks = _vintage_ticks(dates),
-        xticklabelrotation = pi / 4, xticklabelsize = 11)
-    ## The latent onsets sit well above the reported quantities, so they go
-    ## down first and as a line: the figure is read on the bars and the
-    ## nowcast, with ascertainment as context rather than as the subject.
-    lines!(ax, x, q(onsets, 0.5); color = latent_colour, linewidth = 2,
-        linestyle = :dash)
-    CairoMakie.barplot!(ax, x, float.(observed);
-        color = (:grey30, 0.45), gap = 0.1)
-    band!(ax, x, q(nowcast, 0.05), q(nowcast, 0.95); color = (colour, 0.15))
-    band!(ax, x, q(nowcast, 0.20), q(nowcast, 0.80); color = (colour, 0.28))
-    band!(ax, x, q(nowcast, 0.35), q(nowcast, 0.65); color = (colour, 0.42))
-    lines!(ax, x, q(nowcast, 0.5); color = colour, linewidth = 2)
-    CairoMakie.Legend(fig[2, 1],
-        [CairoMakie.PolyElement(color = (:grey30, 0.45)),
+    CairoMakie.Label(fig[0, 1:ncols], title; font = :bold,
+        tellwidth = false)
+    CairoMakie.Legend(fig[nrows + 1, 1:ncols],
+        [CairoMakie.MarkerElement(color = (:grey40, 0.9), marker = :cross),
             CairoMakie.LineElement(color = colour),
             CairoMakie.PolyElement(color = (colour, 0.28)),
-            CairoMakie.LineElement(color = latent_colour,
-                linestyle = :dash)],
-        ["digitised, latest figure", "nowcast median",
-            "nowcast 30/60/90%", "modelled onsets"];
-        orientation = :horizontal, tellwidth = false, tellheight = true)
+            CairoMakie.MarkerElement(color = :black, marker = :circle)],
+        ["digitised at this snapshot", "nowcast median",
+            "nowcast 30/60/90%", "digitised to date"];
+        orientation = :horizontal, tellwidth = false)
     return fig
 end
 

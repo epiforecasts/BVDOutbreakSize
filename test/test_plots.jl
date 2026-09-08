@@ -1254,22 +1254,24 @@ end
         onsets[1:(ndraws - 1)], hazard; grid_start = gs)
 end
 
-@testitem "plot_onset_nowcast returns a Makie figure" setup=[HeadlessMakie] begin
+@testitem "plot_onset_nowcast_grid returns a Makie figure" setup=[HeadlessMakie] begin
     using Random: MersenneTwister
     using Dates: Date, Day
-    using BVDOutbreakSize: plot_onset_nowcast
+    using BVDOutbreakSize: plot_onset_nowcast_grid
     rng = MersenneTwister(4243)
-    dates = [Date("2026-07-01") + Day(i) for i in 0:29]
-    observed = [40.0 + 10 * randn(rng) for _ in dates]
-    nowcast = [observed[k] .+ abs.(randn(rng, 120)) .* k
-               for k in eachindex(dates)]
-    onsets = [120.0 .+ 20 .* randn(rng, 120) for _ in dates]
-    fig = plot_onset_nowcast(dates, observed, nowcast, onsets)
+    function panel(title, n)
+        dates = [Date("2026-07-01") + Day(i) for i in 0:(n - 1)]
+        observed = [40.0 + 10 * randn(rng) for _ in dates]
+        nowcast = [observed[k] .+ abs.(randn(rng, 120)) .* k
+                   for k in eachindex(dates)]
+        return (; title, dates, observed, nowcast, latest = observed .+ 5)
+    end
+    fig = plot_onset_nowcast_grid([panel("2026-08-01", 30),
+        panel("2026-08-08", 34)])
     @test fig isa CairoMakie.Makie.Figure
-    ## No onset dates covered by the digitised figures: a blank figure
-    ## rather than an axis with nothing on it.
-    @test plot_onset_nowcast(Date[], Float64[], Vector{Float64}[],
-        Vector{Float64}[]) isa CairoMakie.Makie.Figure
-    @test_throws ErrorException plot_onset_nowcast(dates, observed[1:5],
-        nowcast, onsets)
+    ## No digitised snapshots: a blank figure rather than an empty grid.
+    @test plot_onset_nowcast_grid([]) isa CairoMakie.Makie.Figure
+    p = panel("2026-08-15", 12)
+    @test_throws ErrorException plot_onset_nowcast_grid([(; p.title, p.dates,
+        observed = p.observed[1:5], p.nowcast, p.latest)])
 end

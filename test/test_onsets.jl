@@ -1265,7 +1265,7 @@ end
 end
 
 @testitem "onset_nowcast closes on the data as the delay runs out" begin
-    using BVDOutbreakSize: onset_nowcast, onset_report_F, ONSET_REPORT_MAX_DELAY
+    using BVDOutbreakSize: onset_nowcast, onset_report_F
     D = 21
     logit_h0 = fill(-1.5, D)
     γ = zeros(60)

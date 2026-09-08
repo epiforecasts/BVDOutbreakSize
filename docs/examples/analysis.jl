@@ -3151,15 +3151,15 @@ onset_pair_fig = plot_pair(chn_joint,
 
 onset_pair_fig #hide
 
-# Each panel below is one digitised snapshot.
-# Each point is one onset date's bar as that snapshot printed it, against the model's count for the same onset date and reporting delay.
-# The dark band is the modelled count itself; the pale band adds the measurement error the likelihood gives a digitised bar.
-# The points should fall inside the pale band, and do for 95% of cells, against 42% for the dark band alone.
-# A recent onset date sits below its eventual value in its own snapshot's panel and catches up in a later panel.
-# This is the right-truncation behaviour the model relies on (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# Each panel below is one digitised snapshot, nowcast rather than fitted.
+# The grey crosses are the counts that snapshot's own figure printed by onset date.
+# The band adds to each of them the reporting the fitted delay curve leaves outstanding at the delay that snapshot had run to, so it is what the model expected that date to end up reporting.
+# The black points are what the figures print for the same onset dates now, and the band should cover them.
+# It closes onto the crosses on the older onset dates, where reporting had already finished by the time the figure went out, and opens over a panel's most recent dates.
+# That gap is the right-truncation the model has to undo (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 
 #md # ```@raw html
-#md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
+#md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
 #md # ```
 
 ## The digitised, deduplicated, cut-off-filtered snapshot blocks
@@ -3198,17 +3198,6 @@ function _onset_alpha(i::Integer, u::Integer)
     return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
 end
 
-## Modelled count at onset day `u` as of report day `R`, per posterior
-## draw: `onsets[u] * F(u, R - u)`, the same expected value
-## `onset_report_expected_total` sums, evaluated at a single onset day.
-function _onset_modelled_cumulative(u::Integer, R::Integer)
-    return [_onset_daily_draws[i][u] *
-            onset_report_F(R - u, _onset_hazard.logit_h0[i],
-                _onset_hazard.γ[i], u, _onset_grid_start,
-                _onset_alpha(i, u))
-            for i in eachindex(_onset_daily_draws)]
-end
-
 ## The same counts put through the stream's own observation model, so the
 ## band is a posterior predictive of a digitised bar rather than of the
 ## latent count behind it. A bar is one read off one scan with no previous
@@ -3233,48 +3222,35 @@ function _onset_replicated(draws::AbstractVector)
             for _ in 1:4 for i in eachindex(draws)]
 end
 
-onset_fit_fig = let
-    ncol = 3
-    nrow = cld(length(_onset_report_grid_days), ncol)
-    fig = CairoMakie.Figure(; size = (330 * ncol, 260 * nrow + 60))
-    for (k, R) in enumerate(_onset_report_grid_days)
-        r, c = fldmod1(k, ncol)
-        snap = _onset_snap_by_day[R]
-        idx = sort(_onset_cells_by_report[R];
-            by = i -> obs.onset_curve_history.onset_days[i])
-        us = obs.onset_curve_history.onset_days[idx]
-        observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-        draws = [_onset_modelled_cumulative(u, R) for u in us]
-        reps = [_onset_replicated(d) for d in draws]
-        med = [quantile(d, 0.5) for d in draws]
-        lo90 = [quantile(d, 0.05) for d in draws]
-        hi90 = [quantile(d, 0.95) for d in draws]
-        plo90 = [quantile(d, 0.05) for d in reps]
-        phi90 = [quantile(d, 0.95) for d in reps]
-        xs = Float64.(1:length(us))
-        ax = CairoMakie.Axis(fig[r, c]; title = string(snap.report_date),
-            xlabel = r == nrow ? "onset day (oldest to newest)" : "",
-            ylabel = c == 1 ? "cases at this onset date" : "")
-        CairoMakie.band!(ax, xs, plo90, phi90; color = (:steelblue, 0.12))
-        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.30))
-        CairoMakie.lines!(ax, xs, med; color = :steelblue, linewidth = 2,
-            label = "modelled")
-        CairoMakie.scatter!(ax, xs, observed; color = :black,
-            markersize = 6, label = "digitised")
+## Latest printed value for each onset date the digitised figures cover:
+## what each panel's nowcast is read against. Ordered by report date, so
+## the last block carrying a date gives the current reading. A date inside
+## a block's printed extent but with no row is a zero-height bar and does
+## count; a date outside that extent is not covered by that figure at all
+## and is skipped (the same rule the loader applies, see the [Data](@ref
+## methods-data) section).
+_onset_last_printed = Dict{Int, Float64}()
+for snap in _onset_snaps
+    lo, hi = extrema(keys(snap.onsets))
+    for d in lo:Day(1):hi
+        u = obs.n - value(obs.cutoff - d)
+        (1 <= u <= obs.n) || continue
+        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
     end
-    CairoMakie.Label(fig[0, 1:ncol],
-        "Symptom-onset reporting triangle: fitted vs digitised";
-        font = :bold, tellwidth = false)
-    CairoMakie.Legend(fig[nrow + 1, 1:ncol],
-        [CairoMakie.LineElement(color = :steelblue),
-            CairoMakie.PolyElement(color = (:steelblue, 0.30)),
-            CairoMakie.PolyElement(color = (:steelblue, 0.12)),
-            CairoMakie.MarkerElement(color = :black, marker = :circle)],
-        ["modelled median", "modelled count, 90%",
-            "with measurement error, 90%", "digitised"];
-        orientation = :horizontal, tellwidth = false)
-    fig
-end;
+end
+
+## One panel per snapshot, nowcast at that snapshot's own reporting delays.
+_onset_panels = map(_onset_report_grid_days) do R
+    snap = _onset_snap_by_day[R]
+    us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
+    observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
+    nowcast = onset_nowcast_draws(us, observed, [R - u for u in us],
+        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start)
+    (; title = string(snap.report_date), dates = grid_date.(us), observed,
+        nowcast, latest = [_onset_last_printed[u] for u in us])
+end
+
+onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
 
 onset_fit_fig #hide
 
@@ -3282,59 +3258,69 @@ onset_fit_fig #hide
 #md # </details>
 #md # ```
 #
-# The figure below reads the same reporting triangle along the onset date instead of the report date, and nowcasts each onset date rather than refitting it.
-# The bars are what the latest digitised figure prints for each onset date.
-# The nowcast adds to each bar the part of that date's ascertained total the fitted delay curve says has still to arrive, so it is anchored on the count already reported.
-# On the older onset dates the delay has run out, the correction is zero and the ribbons close onto the bars.
-# They open towards the most recent onset dates, which is the right-truncation the model is there to undo.
-# The dashed line is the modelled onsets themselves, so the gap above the nowcast is ascertainment: onsets the figures never print at any delay.
+# The posterior predictive below reads the same reporting triangle along the onset date instead of the report date.
+# It compares the latest digitised bar for each onset date against the model's posterior predictive for that bar, and against the modelled onsets themselves.
+# The gap between the two bands is the part of the epidemic the latest figure does not carry, whether because it is never ascertained or because it has not been reported yet.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
 #md # ```
 
-## Latest printed value for each onset date the digitised figures cover.
-## Ordered by report date already, so the last block carrying a date gives
-## the current reading. A date inside a block's own printed extent but with
-## no row is a zero-height bar and does count; a date outside that extent is
-## not covered by that figure at all and is skipped (the same rule the
-## loader applies, see the [Data](@ref methods-data) section).
-_onset_last_printed = Dict{Int, Float64}()
-## The report day that reading came off, which is not `_onset_grid_end` for
-## every onset date: the figures do not all print the same range of onset
-## dates, so a date the latest figure stops short of keeps its reading, and
-## its shorter delay, from an earlier one.
-_onset_last_report_day = Dict{Int, Int}()
-for snap in _onset_snaps
-    lo, hi = extrema(keys(snap.onsets))
-    R = obs.n - value(obs.cutoff - snap.report_date)
-    for d in lo:Day(1):hi
-        u = obs.n - value(obs.cutoff - d)
-        (1 <= u <= obs.n) || continue
-        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
-        _onset_last_report_day[u] = R
-    end
-end
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
-## Modelled onsets on each of those days, and the nowcast of what each date
-## will eventually have reported: the bar already printed plus the part of
-## that date's ascertained total the delay curve leaves outstanding at the
-## delay the bar itself carries. `onset_nowcast_draws` holds the
-## ascertainment walk flat past its fitted support, which the most recent
-## onset dates run into.
+## Modelled onsets on each of those days, and the count the latest figure
+## should print for them: the same onsets times the cumulative reported
+## proportion at that figure's own delay, `_onset_grid_end - u`, so the
+## band is a predictive for the bar actually plotted rather than for the
+## eventual total. `onset_report_F` holds the calendar walk flat past its
+## fitted support, which the most recent onset dates run into.
 _onset_by_date_onsets = [[_onset_daily_draws[i][u]
                           for i in eachindex(_onset_daily_draws)]
                          for u in _onset_by_date_days]
-_onset_by_date_nowcast = onset_nowcast_draws(_onset_by_date_days,
-    [_onset_last_printed[u] for u in _onset_by_date_days],
-    [_onset_last_report_day[u] - u for u in _onset_by_date_days],
-    _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start)
+_onset_by_date_printed = [[_onset_daily_draws[i][u] *
+                           onset_report_F(_onset_grid_end - u,
+                               _onset_hazard.logit_h0[i], _onset_hazard.γ[i],
+                               u, _onset_grid_start, _onset_alpha(i, u))
+                           for i in eachindex(_onset_daily_draws)]
+                          for u in _onset_by_date_days]
+## That count put through the same measurement error a single digitised
+## bar carries (`onset_report_scale`'s level case, as above the snapshot
+## grid), replicated four times per draw for the same reason.
+_onset_by_date_reps = [_onset_replicated(d) for d in _onset_by_date_printed]
 
-onset_ppc_by_date_fig = plot_onset_nowcast(
-    grid_date.(_onset_by_date_days),
-    [_onset_last_printed[u] for u in _onset_by_date_days],
-    _onset_by_date_nowcast, _onset_by_date_onsets);
+onset_ppc_by_date_fig = let
+    fig = CairoMakie.Figure(; size = (900, 380))
+    ax = CairoMakie.Axis(fig[1, 1];
+        title = "Symptom onsets by date of onset: modelled vs digitised",
+        xlabel = "onset date", ylabel = "cases")
+    xs = Float64.(_onset_by_date_days)
+    q(ds, p) = [quantile(d, p) for d in ds]
+    CairoMakie.band!(ax, xs, q(_onset_by_date_onsets, 0.05),
+        q(_onset_by_date_onsets, 0.95); color = (:seagreen, 0.20))
+    CairoMakie.lines!(ax, xs, q(_onset_by_date_onsets, 0.5);
+        color = :seagreen, linewidth = 2)
+    CairoMakie.band!(ax, xs, q(_onset_by_date_reps, 0.05),
+        q(_onset_by_date_reps, 0.95); color = (:mediumpurple, 0.20))
+    CairoMakie.lines!(ax, xs, q(_onset_by_date_reps, 0.5);
+        color = :mediumpurple, linewidth = 2)
+    CairoMakie.scatter!(ax, xs,
+        [_onset_last_printed[u] for u in _onset_by_date_days];
+        color = :black, marker = :cross, markersize = 9)
+    ## Calendar labels on a grid-day axis, at weekly ticks so they do not
+    ## collide at this width.
+    _ticks = _onset_by_date_days[1:7:end]
+    ax.xticks = (Float64.(_ticks), string.(grid_date.(_ticks)))
+    ax.xticklabelrotation = pi / 4
+    CairoMakie.Legend(fig[2, 1],
+        [
+            CairoMakie.MarkerElement(color = :black, marker = :cross),
+            CairoMakie.PolyElement(color = (:mediumpurple, 0.30)),
+            CairoMakie.PolyElement(color = (:seagreen, 0.30))],
+        ["digitised (latest)", "modelled posterior predictive",
+            "modelled onsets"];
+        orientation = :horizontal, tellwidth = false, tellheight = true)
+    fig
+end;
 
 #md # ```@raw html
 #md # </details>
