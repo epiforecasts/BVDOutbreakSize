@@ -1711,12 +1711,17 @@ function reconstruct_onset_hazard(chn; grid_start::Integer,
 end
 
 """
-    onset_nowcast_draws(days, observed, delays, onsets, hazard; grid_start)
+    onset_nowcast_draws(days, observed, delays, onsets, hazard;
+                        grid_start, target_delays)
 
 [`onset_nowcast`](@ref) per posterior draw, one `ndraws`-long vector per
 onset day in `days`. `observed[k]` is the count a digitised figure prints
 for `days[k]` and `delays[k]` is that figure's own reporting delay, so a
-snapshot's cells are nowcast at the delay that snapshot had run to.
+snapshot's cells are nowcast from the delay that snapshot had run to.
+
+`target_delays` is the delay to nowcast to, one per day; the default
+`nothing` targets each day's eventual total. Pass the delay of the figure
+the prediction will be compared against to keep the two like for like.
 
 `onsets` holds each draw's daily onsets indexed by grid day (the `diff` of
 the chain's `cumulative_onsets`), and `hazard` is
@@ -1729,12 +1734,15 @@ function onset_nowcast_draws(days::AbstractVector{<:Integer},
         observed::AbstractVector{<:Real},
         delays::AbstractVector{<:Integer},
         onsets::AbstractVector{<:AbstractVector{<:Real}},
-        hazard::NamedTuple; grid_start::Integer)
+        hazard::NamedTuple; grid_start::Integer,
+        target_delays::Union{Nothing, AbstractVector{<:Integer}} = nothing)
     n = length(days)
-    if length(observed) != n || length(delays) != n
-        error("onset_nowcast_draws: `days`, `observed` and `delays` must " *
-              "have the same length, got $n, $(length(observed)) and " *
-              "$(length(delays)).")
+    if length(observed) != n || length(delays) != n ||
+       (!isnothing(target_delays) && length(target_delays) != n)
+        error("onset_nowcast_draws: `days`, `observed`, `delays` and any " *
+              "`target_delays` must have the same length, got $n, " *
+              "$(length(observed)), $(length(delays)) and " *
+              "$(isnothing(target_delays) ? "none" : length(target_delays)).")
     end
     nd = length(onsets)
     if length(hazard.alpha) != nd || length(hazard.logit_h0) != nd ||
@@ -1745,16 +1753,26 @@ function onset_nowcast_draws(days::AbstractVector{<:Integer},
               "$(length(hazard.logit_h0)) baseline-hazard and " *
               "$(length(hazard.γ)) calendar-walk draws.")
     end
+    ## The onset series is indexed by grid day, so an out-of-range day is a
+    ## caller error worth naming rather than a bare `BoundsError` from deep
+    ## inside the draw loop.
+    ndays = nd == 0 ? 0 : length(first(onsets))
+    for d in days
+        (1 <= d <= ndays) ||
+            error("onset_nowcast_draws: day $d is outside the onset " *
+                  "series, which runs 1:$ndays.")
+    end
     out = Vector{Vector{Float64}}(undef, n)
     for k in 1:n
         u = Int(days[k])
         δ = Int(delays[k])
         y = float(observed[k])
+        until = isnothing(target_delays) ? nothing : Int(target_delays[k])
         out[k] = [begin
                       a = hazard.alpha[i]
                       α = a[clamp(u - Int(grid_start) + 1, 1, length(a))]
                       onset_nowcast(y, onsets[i][u], δ, hazard.logit_h0[i],
-                          hazard.γ[i], u, grid_start, α)
+                          hazard.γ[i], u, grid_start, α; until)
                   end
                   for i in eachindex(onsets)]
     end
@@ -1766,20 +1784,21 @@ end
 
 Nowcast of the symptom-onset reporting triangle, one panel per digitised
 snapshot: what that snapshot's own figure implied for the onset dates it
-printed, against what the figures have printed since.
+printed, against what the figures print for them now.
 
 Each `panel` is a `NamedTuple` of `title` (the snapshot's report date),
 `dates` (the onset dates, one per x position), `observed` (that snapshot's
-own counts, grey crosses), `nowcast` ([`onset_nowcast_draws`](@ref) at that
-snapshot's delays, drawn as 30/60/90% ribbons with a median line) and
-`latest` (the count the latest figure prints for the same dates, black
-points).
+own counts, grey crosses), `nowcast` (per-draw predictions of the count the
+latest figure prints, drawn as 30/60/90% ribbons with a median line) and
+`latest` (that count, black points).
 
-The panel is read on whether the ribbon covers the black points. The two
-point series coincide where the snapshot was already complete and separate
-towards its right-hand edge, which is the gap the nowcast has to make up.
-`latest` is itself incomplete for the newest onset dates of the last panel,
-which have no later figure to catch them up.
+The panel is read on whether the ribbon covers the black points. Pass
+`nowcast` as a predictive rather than the latent count: two scans of one bar
+disagree by the scan error the stream estimates, so on the onset dates where
+reporting had already finished the latent quantity is the grey cross exactly
+and would be scored against a reading it cannot match. Build it from
+[`onset_nowcast_draws`](@ref) at the latest figure's own delay, then through
+the stream's bar measurement error.
 
 A panel whose series disagree in length raises, and an empty `panels`
 returns a blank figure.
@@ -1802,7 +1821,10 @@ function plot_onset_nowcast_grid(panels::AbstractVector;
         end
         row, col = fldmod1(j, ncols)
         x = collect(1:n)
-        q(pr) = [quantile(d, pr) for d in p.nowcast]
+        ## Sorted once per cell: the seven ribbon and median quantiles below
+        ## would otherwise sort every draw vector seven times.
+        sorted = [sort(float.(d)) for d in p.nowcast]
+        q(pr) = [quantile(d, pr; sorted = true) for d in sorted]
         hi60 = q(0.80)
         ## The 90% tail on the newest onset dates runs well past the counts
         ## the panel is read on, so the axis is set by the 60% ribbon.

@@ -1290,4 +1290,16 @@ end
     δ = 5
     @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α) ≈
           y + onsets_u * (α - onset_report_F(δ, logit_h0, γ, u, gs, α))
+    ## `until` targets a delay rather than the eventual total: nothing
+    ## outstanding when it is the delay already reached, the reporting
+    ## between the two delays when it is later, and never less than that.
+    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ) ≈ y
+    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = δ - 2) ≈
+          y
+    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = 12) ≈
+          y +
+          onsets_u * (onset_report_F(12, logit_h0, γ, u, gs, α) -
+           onset_report_F(δ, logit_h0, γ, u, gs, α))
+    @test onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α; until = D - 1) ≈
+          onset_nowcast(y, onsets_u, δ, logit_h0, γ, u, gs, α)
 end

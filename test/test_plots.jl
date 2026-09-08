@@ -1252,6 +1252,21 @@ end
     ## Onsets and hazard must be the same fit's draws, paired one to one.
     @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
         onsets[1:(ndraws - 1)], hazard; grid_start = gs)
+    ## A day off the end of the onset series is named rather than left to a
+    ## `BoundsError` from inside the draw loop.
+    @test_throws ErrorException onset_nowcast_draws([ge + 1], [1.0], [0],
+        onsets, hazard; grid_start = gs)
+    ## `target_delays` stops the prediction at a given delay: nothing
+    ## outstanding when it is the delay already reached, and no more than
+    ## the eventual total when it is the end of the delay axis.
+    same = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = delays)
+    @test all(all(isapprox.(d, 50.0; atol = 1e-9)) for d in same)
+    full = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = fill(D - 1, length(days)))
+    @test all(all(full[k] .<= draws[k] .+ 1e-9) for k in eachindex(days))
+    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
+        onsets, hazard; grid_start = gs, target_delays = delays[1:2])
 end
 
 @testitem "plot_onset_nowcast_grid returns a Makie figure" setup=[HeadlessMakie] begin

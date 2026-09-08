@@ -3153,9 +3153,9 @@ onset_pair_fig #hide
 
 # Each panel below is one digitised snapshot, nowcast rather than fitted.
 # The grey crosses are the counts that snapshot's own figure printed by onset date.
-# The band adds to each of them the reporting the fitted delay curve leaves outstanding at the delay that snapshot had run to, so it is what the model expected that date to end up reporting.
-# The black points are what the figures print for the same onset dates now, and the band should cover them.
-# It closes onto the crosses on the older onset dates, where reporting had already finished by the time the figure went out, and opens over a panel's most recent dates.
+# The band predicts what the latest figure covering each of those dates prints: the snapshot's own count plus the reporting the fitted delay curve puts between the two figures' delays, through the measurement error one digitised bar carries.
+# The black points are that latest reading, so the band and the point it is read against are the same quantity, and the band should cover it.
+# The band narrows to a bar's own scan error on the onset dates where reporting had already finished when the snapshot went out, and opens where the snapshot was still missing cases.
 # That gap is the right-truncation the model has to undo (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 
 #md # ```@raw html
@@ -3222,32 +3222,47 @@ function _onset_replicated(draws::AbstractVector)
             for _ in 1:4 for i in eachindex(draws)]
 end
 
-## Latest printed value for each onset date the digitised figures cover:
-## what each panel's nowcast is read against. Ordered by report date, so
-## the last block carrying a date gives the current reading. A date inside
-## a block's printed extent but with no row is a zero-height bar and does
+## Latest printed value for each onset date the digitised figures cover,
+## and the report day that reading came off. Ordered by report date, so the
+## last block carrying a date gives the current reading. That is not the
+## newest snapshot for every date: the figures do not all print the same
+## range of onset dates, so a date a later figure stops short of keeps its
+## reading, and its shorter delay, from an earlier one. A date inside a
+## block's printed extent but with no row is a zero-height bar and does
 ## count; a date outside that extent is not covered by that figure at all
 ## and is skipped (the same rule the loader applies, see the [Data](@ref
 ## methods-data) section).
 _onset_last_printed = Dict{Int, Float64}()
+_onset_last_report_day = Dict{Int, Int}()
 for snap in _onset_snaps
     lo, hi = extrema(keys(snap.onsets))
+    R = obs.n - value(obs.cutoff - snap.report_date)
     for d in lo:Day(1):hi
         u = obs.n - value(obs.cutoff - d)
         (1 <= u <= obs.n) || continue
         _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
+        _onset_last_report_day[u] = R
     end
 end
 
-## One panel per snapshot, nowcast at that snapshot's own reporting delays.
+## One panel per snapshot, nowcast from the delay that snapshot had run to
+## up to the delay of the figure each of its onset dates was last printed
+## on, then through the same bar measurement error the summary figure uses.
+## Both are needed for the band and the reading it is read against to be
+## the same quantity: nowcasting to the eventual total would ride above a
+## reading that is itself still truncated, and the latent count carries no
+## scan error where the delay has run out, so it could not cover a second
+## scan of the same bar.
 _onset_panels = map(_onset_report_grid_days) do R
     snap = _onset_snap_by_day[R]
     us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
     observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
     nowcast = onset_nowcast_draws(us, observed, [R - u for u in us],
-        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start)
+        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
+        target_delays = [_onset_last_report_day[u] - u for u in us])
     (; title = string(snap.report_date), dates = grid_date.(us), observed,
-        nowcast, latest = [_onset_last_printed[u] for u in us])
+        nowcast = [_onset_replicated(d) for d in nowcast],
+        latest = [_onset_last_printed[u] for u in us])
 end
 
 onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
