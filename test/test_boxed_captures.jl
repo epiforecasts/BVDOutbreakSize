@@ -21,15 +21,38 @@
 ## fails, look for a variable that is assigned inside an `if` (or rebound in a
 ## loop) and also read by a comprehension, `map`, or `do` block nearby; the fix
 ## is to compute into a separate binding and assign the final name once.
-@testitem "no boxed captures in the observation models on the AD path" begin
-    using BVDOutbreakSize: confirmed_cases_model, confirmed_deaths_model,
-                           treatment_flow_model
+@testitem "no boxed captures in the model bodies" begin
+    using BVDOutbreakSize
 
-    for f in (confirmed_cases_model, confirmed_deaths_model,
-        treatment_flow_model)
-        boxes = sum(Base.code_lowered(f); init = 0) do ci
-            count(x -> occursin("Core.Box", string(x)), ci.code)
+    M = BVDOutbreakSize
+    models_dir = joinpath(pkgdir(M), "src", "models")
+
+    ## `@model` rewrites each model into a gensym-named evaluator method
+    ## (`#confirmed_deaths_model#687`), and that generated method — not the
+    ## user-facing constructor — is what carries the model body and what AD
+    ## differentiates. `methods(confirmed_deaths_model)` never reaches it, so
+    ## the scan walks every binding in the module, gensym'd ones included, and
+    ## keeps the methods whose source file sits under `src/models/`.
+    offenders = Tuple{String, Int}[]
+    for nm in names(M; all = true, imported = false)
+        isdefined(M, nm) || continue
+        f = getfield(M, nm)
+        f isa Function || continue
+        for m in methods(f)
+            parentmodule(m) === M || continue
+            startswith(string(m.file), models_dir) || continue
+            ci = try
+                Base.uncompressed_ast(m)
+            catch
+                nothing
+            end
+            ci === nothing && continue
+            boxes = count(x -> occursin("Core.Box", string(x)), ci.code)
+            boxes > 0 && push!(offenders, (string(nm), boxes))
         end
-        @test boxes == 0
     end
+
+    @test isempty(offenders)
+    isempty(offenders) ||
+        @info "boxed captures" offenders
 end

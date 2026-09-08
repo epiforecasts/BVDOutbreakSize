@@ -596,17 +596,17 @@ the implied per-suspected (`suspected_positivity`) and per-test
     ## second free, outbreak-size-degenerate rate. With `background_re =
     ## false` (the renewal default) the case stream keeps its scalar `λ_bg`.
     ## The pooling SD is sampled only when the random effect is active (the
-    ## tilde must stay gated), but `σ_rw_shared` and `bg_onset` are bound
-    ## unconditionally to plain values so the closure below captures
-    ## non-conditional, write-once variables. Conditionally-scoped captures
-    ## get boxed in a `Base.RefValue`, which Enzyme's reverse mode cannot
-    ## differentiate through (Mooncake tolerates it); binding them in both
-    ## paths keeps the capture type-stable and the closure un-boxed.
-    if background_re
+    ## tilde must stay gated), so the branch is an expression whose value is
+    ## assigned once. A variable written on both arms of an `if`/`else` and
+    ## then captured by a closure is boxed in a `Core.Box`, which Enzyme's
+    ## reverse mode cannot differentiate through and which costs Mooncake a
+    ## dictionary lookup per gradient call; a single write keeps the capture
+    ## un-boxed.
+    σ_rw_shared = if background_re
         bg_pool ~ to_submodel(background_pooling_model())
-        σ_rw_shared = bg_pool.σ_bg
+        bg_pool.σ_bg
     else
-        σ_rw_shared = 0.0
+        0.0
     end
     ## Onset of the suspected pool's non-BVD background: a report-to-receipt
     ## lead before the first suspected-case report, not exactly at it. The

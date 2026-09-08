@@ -1755,18 +1755,22 @@ positivity and the expected confirmed-death count.
     ## a death testing fraction of the suspected deaths, gated at the onset.
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
-        sc = scale_state.scaling
+        ## `sc_c` is written once so the `map` closure below captures it
+        ## unboxed; `sc` itself takes a value on both branches and so would be
+        ## boxed, costing a dictionary lookup per gradient call.
+        sc_c = scale_state.scaling
         susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
         death_volume = map(eachindex(susp_death)) do t
             den = susp_case[t]
-            v = den > lo ? sc * case_analysed_daily[t] * susp_death[t] / den :
-                zero(sc)
+            v = den > lo ? sc_c * case_analysed_daily[t] * susp_death[t] / den :
+                zero(sc_c)
             ## Cap the volume at the suspected-death pool so confirmed deaths
             ## stay a subset of suspected and the realised τ_death ≤ 1.
             min(v, susp_death[t])
         end
         τ_death = susp_death[n] > lo ?
-                  death_volume[n] / susp_death[n] : zero(sc)
+                  death_volume[n] / susp_death[n] : zero(sc_c)
+        sc = sc_c
     else
         test_state ~ to_submodel(testing)
         τ_death = test_state.τ_death
