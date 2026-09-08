@@ -17,7 +17,7 @@ Four model bodies assigned a variable inside a branch or a loop and then capture
 A boxed local is type-unstable at every use, and Mooncake answers type instability with a dictionary lookup per call site on every gradient evaluation.
 Assigning each name once leaves the log-density bit-identical and roughly halves the gradient on the joint fit, from about 21 ms to about 10 ms.
 `test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
-Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern and are tracked by #657.
+Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern, and are left alone because nothing there runs on the gradient path.
 
 ### Report
 
@@ -36,6 +36,16 @@ The treatment-centre flows and the daily suspected case and death series stay fr
 - The ERVEBO ring and front-line-worker vaccination campaign is now tracked as a candidate signal (#651, #650).
 Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
 The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
+
+### Report
+
+- Six references the text quoted by hand are now citations, so they reach the References page (#627).
+The onset-to-sample cohort, the `epidist` model behind it, the Wilson-Hilferty median, the RealStar assay and the three GeneXpert sources were all named in prose or given as a bare DOI, which left the assay sensitivities and the delay prior unsourced on the page.
+
+### Infrastructure
+
+- Removed `forecast_vs_truth_trajectory`, which no code called.
+It scored a cumulative trajectory from the exponential-growth model's `r`, `expected_reports_T` and `k`, none of which the renewal model carries.
 
 ### Dependencies
 

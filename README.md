@@ -14,7 +14,7 @@ The rendered report fills in the build date and the exact data cut-off automatic
 
 > **Reduced data streams.**
 > The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
-> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen pending a decision on whether the two are comparable.
+> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen, since the prose does not carry the table's own counts (issue #562).
 > Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
 > See the inclusion rules in `data/README.md`.
 

@@ -965,45 +965,6 @@ function forecast_vs_truth(fc::DataFrame;
     return _prettify(DataFrame(rows))
 end
 
-"""
-Roll the one-week-ahead forecast across an observed cumulative
-trajectory. `targets` is a vector of `(label, horizon_days,
-observed_cumulative)` triples: for each, the fitted current growth rate
-`r` is projected `horizon_days` past the cut-off and the predicted
-cumulative reported cases compared against `observed_cumulative`. Returns
-a `DataFrame` with one row per target giving the horizon, the observed
-count, the equal-tailed 30/60/90% predictive intervals, and whether the
-observed count falls inside the 90% interval. Unlike
-[`forecast_vs_truth`](@ref), which scores only the endpoint, this scores
-the whole observed trajectory across the horizon. Reads `:r`,
-`:expected_reports_T` and `:k` from `chn`.
-"""
-function forecast_vs_truth_trajectory(
-        chn; targets::AbstractVector,
-        seed::Integer = 20260520)
-    r = _draws(chn, :r)
-    cases_T = _draws(chn, :expected_reports_T)
-    k = _draws(chn, :k)
-    rng = MersenneTwister(seed)
-    rows = NamedTuple[]
-    for (label, horizon, obs) in targets
-        grow = exp.(r .* horizon)
-        cases_cum = [_nb_rand(rng, k[i], cases_T[i] * grow[i])
-                     for i in eachindex(r)]
-        s = posterior_summary(cases_cum)
-        lo = round(s.lo90)
-        hi = round(s.hi90)
-        push!(rows,
-            (label = label, horizon_days = horizon,
-                observed = round(obs),
-                lower_90 = lo, lower_60 = round(s.lo60),
-                lower_30 = round(s.lo30), upper_30 = round(s.hi30),
-                upper_60 = round(s.hi60), upper_90 = hi,
-                within_90 = lo <= obs <= hi ? "yes" : "no"))
-    end
-    return _prettify(DataFrame(rows))
-end
-
 ## Does the chain carry `key`? `FlexiChains` throws rather than returning
 ## `nothing` for an absent key, so the lookup is probed.
 function _has_key(chn, key)
