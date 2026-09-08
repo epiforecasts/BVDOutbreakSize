@@ -1163,18 +1163,26 @@ quantities.
     ## background.
     receipt_state ~ to_submodel(receipt)
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
-    analysed_daily = τ_test .* convolve_delay(suspected_daily,
+    analysed_daily_raw = τ_test .* convolve_delay(suspected_daily,
         receipt_state.pmf)
-    ## In predict mode (no AD) the daily series can infer as `Vector{Any}`
-    ## on some Julia versions, which then makes `reduce_empty` / `zero(Any)`
-    ## fail on the empty derived window vectors below. Concretise to the
-    ## working scalar type. This runs only when the element type has widened,
-    ## so the AD/fit path (concrete eltype) is left untouched.
-    if eltype(analysed_daily) === Any
-        analysed_daily = convert(Vector{typeof(τ_test)}, analysed_daily)
-    end
-    ## Gate the capacity to the testing window: zero before `cap_start`.
-    analysed_daily = gate_before(analysed_daily, cap_start)
+    ## In predict mode (no AD) the daily series can infer as `Vector{Any}` on
+    ## some Julia versions, which then makes `reduce_empty` / `zero(Any)` fail
+    ## on the empty derived window vectors below, so it is concretised to the
+    ## working scalar type.
+    ##
+    ## `analysed_daily` is assigned exactly ONCE and never rebound. Julia boxes
+    ## any local that a closure captures and something later reassigns, and the
+    ## comprehensions below capture this one -- so reassigning it inside the
+    ## `Any` branch and again when gating put it in a `Core.Box`. A boxed local
+    ## is type-unstable at every use, and Mooncake answers type instability
+    ## with `DynamicDerivedRule`: a dictionary lookup per call site on every
+    ## gradient. The primal barely notices, which is why this never looked like
+    ## a slow model. The branch was NOT free on the AD path.
+    analysed_daily = gate_before(
+        eltype(analysed_daily_raw) === Any ?
+        convert(Vector{typeof(τ_test)}, analysed_daily_raw) :
+        analysed_daily_raw,
+        cap_start)
     rvobs = vintage_obs(lab_history, tests_analysed, n)
     analysed_inc = bin_increments(analysed_daily, rvobs.days)
     ## Generator mode leaves the volume increments missing so `predict`
@@ -1710,15 +1718,19 @@ positivity and the expected confirmed-death count.
 
     ## Suspected deaths carried to laboratory receipt by the same
     ## report-to-receipt delay the confirmed cases use, with the BVD component.
-    susp_death = convolve_delay(deaths_daily, receipt_pmf)
-    bvd_death = convolve_delay(bvd_deaths_daily, receipt_pmf)
+    susp_death_raw = convolve_delay(deaths_daily, receipt_pmf)
+    bvd_death_raw = convolve_delay(bvd_deaths_daily, receipt_pmf)
     ## In predict or check-model mode the series can widen to `Vector{Any}`,
-    ## which trips `zero(Any)` downstream. Pin to the sampled scalar type,
-    ## leaving the fit path (concrete dual eltype) untouched.
-    if eltype(susp_death) === Any
-        susp_death = convert(Vector{typeof(s)}, susp_death)
-        bvd_death = convert(Vector{typeof(s)}, bvd_death)
-    end
+    ## which trips `zero(Any)` downstream, so both are pinned to the sampled
+    ## scalar type. Assigned exactly ONCE each: reassigning them inside the
+    ## branch, while the closure below captures them, boxes them and makes
+    ## every use type-unstable (see the note in `confirmed_cases_model`). The
+    ## fit path was NOT left untouched by the branch.
+    _widened = eltype(susp_death_raw) === Any
+    susp_death = _widened ?
+                 convert(Vector{typeof(s)}, susp_death_raw) : susp_death_raw
+    bvd_death = _widened ?
+                convert(Vector{typeof(s)}, bvd_death_raw) : bvd_death_raw
 
     ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
     ## tested-positive probability p = s·q + (1 − spec)(1 − q). The false-
@@ -2311,7 +2323,7 @@ series for forecasting and replication.
     ## suspect stock.
     acc = accumulate_occupancy(A_bvd, A_bg, deaths_daily, recover_daily,
         ruleout_daily, κ, conf_hazard)
-    demand = acc.demand
+    demand_raw = acc.demand
     O_bvd = acc.O_bvd
 
     ## Two-clock confirmed-in-care sub-stock: cohort-tracked
@@ -2324,18 +2336,25 @@ series for forecasting and replication.
     ## `O_conf ≤ O_bvd` holds by construction. Clamp into `[0, O_bvd]` as a
     ## guard under any prior draw. The suspect sub-stock is the demand
     ## remainder.
-    O_conf = map((c, b) -> clamp(c, zero(eltype(demand)), b), O_conf_raw, O_bvd)
-    O_susp = map((d, c) -> max(d - c, zero(eltype(demand))), demand, O_conf)
+    O_conf_c = map((c, b) -> clamp(c, zero(eltype(demand_raw)), b),
+        O_conf_raw, O_bvd)
+    O_susp_raw = map((d, c) -> max(d - c, zero(eltype(demand_raw))),
+        demand_raw, O_conf_c)
     ## Abscond outflow off the two-clock suspect stock, `κ · O_susp(t-1)`.
     ## Day 1 has no prior stock.
-    abscond_daily = [t == 1 ? zero(eltype(demand)) : κ * O_susp[t - 1]
-                     for t in 1:n]
-    if eltype(demand) === Any
-        demand = convert(Vector{eltype(C)}, demand)
-        O_conf = convert(Vector{eltype(C)}, O_conf)
-        O_susp = convert(Vector{eltype(C)}, O_susp)
-        abscond_daily = convert(Vector{eltype(C)}, abscond_daily)
-    end
+    abscond_daily_raw = [t == 1 ? zero(eltype(demand_raw)) :
+                         κ * O_susp_raw[t - 1]
+                         for t in 1:n]
+    ## Assigned ONCE each, for the reason given in `confirmed_cases_model`:
+    ## these four are captured by the comprehension and the `map`s above, so
+    ## reassigning them inside the branch put every one in a `Core.Box`.
+    _widened = eltype(demand_raw) === Any
+    demand = _widened ? convert(Vector{eltype(C)}, demand_raw) : demand_raw
+    O_conf = _widened ? convert(Vector{eltype(C)}, O_conf_c) : O_conf_c
+    O_susp = _widened ? convert(Vector{eltype(C)}, O_susp_raw) : O_susp_raw
+    abscond_daily = _widened ?
+                    convert(Vector{eltype(C)}, abscond_daily_raw) :
+                    abscond_daily_raw
 
     ## Add the reclassification offset Δ(t) to the modelled total only.
     ## Demand (the diagnostic) stays the un-offset latent stock.
