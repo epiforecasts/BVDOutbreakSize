@@ -193,3 +193,50 @@ end
     @test isapprox(mean(λ) * sqrt(pi / 2), 0.25; atol = 0.02)
     @test all(>=(0), λ)
 end
+
+@testitem "bvd_joint runs the pooled background branch" tags=[:slow] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
+
+    ## `background_re = true` is what every registry fit uses, and it is the
+    ## only path that samples the pooling SD and feeds it to the daily
+    ## background walk. Nothing else in the suite passes the switch, so
+    ## without this item the branch is exercised only by the fit jobs.
+    obs = load_observations()
+    breakpoint = obs.n - obs.who_first_sitrep_days
+    m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+        obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
+        obs.tests_analysed;
+        confirmed_deaths = obs.confirmed_deaths,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        breakpoint = breakpoint,
+        background_re = true,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+    chn = sample(m, Prior(), 20;
+        chain_type = FlexiChains.VNChain, progress = false)
+
+    ## The pooling SD reaches the chain, so the gated tilde ran and the value
+    ## the background walk closes over came from it.
+    ks = collect(keys(chn))
+    σ_key = only(filter(k -> occursin("σ_bg", string(k)), ks))
+    σ = vec(Array(chn[σ_key]))
+    @test length(σ) == 20
+    @test all(isfinite, σ)
+    @test all(>=(0), σ)
+
+    ## The latent trajectory still comes out finite and positive with the
+    ## random effect on.
+    C_T = vec(Array(chn[:C_T]))
+    @test all(isfinite, C_T)
+    @test all(C_T .> 0)
+end
