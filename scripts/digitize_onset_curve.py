@@ -490,6 +490,16 @@ def main():
             print(f"skip {sr}: no onset curve found", file=sys.stderr)
             continue
         rows = digitize(im, last_tick, Y_AXIS_STEP.get(sr, 20))
+        # An onset date can never sit later than the axis of the report
+        # that draws it, and that axis runs at most a day past the
+        # rapportage date (the date-de-publication lag). The window above
+        # self-calibrates from pixel content and can read a few stray days
+        # past the last labelled tick when the figure's own "donnees
+        # potentiellement incompletes" band extends that far (SitRep 115);
+        # drop those here rather than loosen the invariant
+        # test/test_onset_digitiser.jl checks.
+        cutoff = dt.date.fromisoformat(report_date) + dt.timedelta(days=1)
+        rows = [r for r in rows if dt.date.fromisoformat(r[0]) <= cutoff]
         total = sum(a + d for _, a, d in rows)
         print(f"SitRep {sr} ({report_date}): {len(rows)} onset days, "
               f"total {total} confirmed")

@@ -510,6 +510,15 @@ function main(pdf_dir = "data/sitrep_pdfs",
                 continue
             end
             rows = digitize(img..., last_tick, get(Y_AXIS_STEP, sr, 20))
+            ## An onset date can never sit later than the axis of the
+            ## report that draws it, and that axis runs at most a day past
+            ## the rapportage date (the date-de-publication lag). The
+            ## window above self-calibrates from pixel content and can
+            ## read a few stray days past the last labelled tick when the
+            ## figure's own "donnees potentiellement incompletes" band
+            ## extends that far (SitRep 115); drop those here rather than
+            ## loosen the invariant test/test_onset_digitiser.jl checks.
+            filter!(r -> r[1] <= report_date + Day(1), rows)
             total = sum(a + d for (_, a, d) in rows)
             @printf("SitRep %s (%s): %d onset days, total %d confirmed\n",
                 sr, report_date, length(rows), total)
