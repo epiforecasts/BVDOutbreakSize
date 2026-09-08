@@ -3151,15 +3151,15 @@ onset_pair_fig = plot_pair(chn_joint,
 
 onset_pair_fig #hide
 
-# Each panel below is one digitised snapshot.
-# Each point is one onset date's bar as that snapshot printed it, against the model's count for the same onset date and reporting delay.
-# The dark band is the modelled count itself; the pale band adds the measurement error the likelihood gives a digitised bar.
-# The points should fall inside the pale band, and do for 95% of cells, against 42% for the dark band alone.
-# A recent onset date sits below its eventual value in its own snapshot's panel and catches up in a later panel.
-# This is the right-truncation behaviour the model relies on (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
+# Each panel below is one digitised snapshot, nowcast rather than fitted.
+# The grey crosses are the counts that snapshot's own figure printed by onset date.
+# The band predicts what the latest figure covering each of those dates prints: the snapshot's own count plus the reporting the fitted delay curve puts between the two figures' delays, through the measurement error one digitised bar carries.
+# The black points are that latest reading, so the band and the point it is read against are the same quantity, and the band should cover it.
+# The band narrows to a bar's own scan error on the onset dates where reporting had already finished when the snapshot went out, and opens where the snapshot was still missing cases.
+# That gap is the right-truncation the model has to undo (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 
 #md # ```@raw html
-#md # <details><summary>Fits to the digitised reporting-triangle snapshots</summary>
+#md # <details><summary>Nowcasts of the digitised reporting-triangle snapshots</summary>
 #md # ```
 
 ## The digitised, deduplicated, cut-off-filtered snapshot blocks
@@ -3198,17 +3198,6 @@ function _onset_alpha(i::Integer, u::Integer)
     return a[clamp(u - _onset_grid_start + 1, 1, length(a))]
 end
 
-## Modelled count at onset day `u` as of report day `R`, per posterior
-## draw: `onsets[u] * F(u, R - u)`, the same expected value
-## `onset_report_expected_total` sums, evaluated at a single onset day.
-function _onset_modelled_cumulative(u::Integer, R::Integer)
-    return [_onset_daily_draws[i][u] *
-            onset_report_F(R - u, _onset_hazard.logit_h0[i],
-                _onset_hazard.γ[i], u, _onset_grid_start,
-                _onset_alpha(i, u))
-            for i in eachindex(_onset_daily_draws)]
-end
-
 ## The same counts put through the stream's own observation model, so the
 ## band is a posterior predictive of a digitised bar rather than of the
 ## latent count behind it. A bar is one read off one scan with no previous
@@ -3233,48 +3222,50 @@ function _onset_replicated(draws::AbstractVector)
             for _ in 1:4 for i in eachindex(draws)]
 end
 
-onset_fit_fig = let
-    ncol = 3
-    nrow = cld(length(_onset_report_grid_days), ncol)
-    fig = CairoMakie.Figure(; size = (330 * ncol, 260 * nrow + 60))
-    for (k, R) in enumerate(_onset_report_grid_days)
-        r, c = fldmod1(k, ncol)
-        snap = _onset_snap_by_day[R]
-        idx = sort(_onset_cells_by_report[R];
-            by = i -> obs.onset_curve_history.onset_days[i])
-        us = obs.onset_curve_history.onset_days[idx]
-        observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
-        draws = [_onset_modelled_cumulative(u, R) for u in us]
-        reps = [_onset_replicated(d) for d in draws]
-        med = [quantile(d, 0.5) for d in draws]
-        lo90 = [quantile(d, 0.05) for d in draws]
-        hi90 = [quantile(d, 0.95) for d in draws]
-        plo90 = [quantile(d, 0.05) for d in reps]
-        phi90 = [quantile(d, 0.95) for d in reps]
-        xs = Float64.(1:length(us))
-        ax = CairoMakie.Axis(fig[r, c]; title = string(snap.report_date),
-            xlabel = r == nrow ? "onset day (oldest to newest)" : "",
-            ylabel = c == 1 ? "cases at this onset date" : "")
-        CairoMakie.band!(ax, xs, plo90, phi90; color = (:steelblue, 0.12))
-        CairoMakie.band!(ax, xs, lo90, hi90; color = (:steelblue, 0.30))
-        CairoMakie.lines!(ax, xs, med; color = :steelblue, linewidth = 2,
-            label = "modelled")
-        CairoMakie.scatter!(ax, xs, observed; color = :black,
-            markersize = 6, label = "digitised")
+## Latest printed value for each onset date the digitised figures cover,
+## and the report day that reading came off. Ordered by report date, so the
+## last block carrying a date gives the current reading. That is not the
+## newest snapshot for every date: the figures do not all print the same
+## range of onset dates, so a date a later figure stops short of keeps its
+## reading, and its shorter delay, from an earlier one. A date inside a
+## block's printed extent but with no row is a zero-height bar and does
+## count; a date outside that extent is not covered by that figure at all
+## and is skipped (the same rule the loader applies, see the [Data](@ref
+## methods-data) section).
+_onset_last_printed = Dict{Int, Float64}()
+_onset_last_report_day = Dict{Int, Int}()
+for snap in _onset_snaps
+    lo, hi = extrema(keys(snap.onsets))
+    R = obs.n - value(obs.cutoff - snap.report_date)
+    for d in lo:Day(1):hi
+        u = obs.n - value(obs.cutoff - d)
+        (1 <= u <= obs.n) || continue
+        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
+        _onset_last_report_day[u] = R
     end
-    CairoMakie.Label(fig[0, 1:ncol],
-        "Symptom-onset reporting triangle: fitted vs digitised";
-        font = :bold, tellwidth = false)
-    CairoMakie.Legend(fig[nrow + 1, 1:ncol],
-        [CairoMakie.LineElement(color = :steelblue),
-            CairoMakie.PolyElement(color = (:steelblue, 0.30)),
-            CairoMakie.PolyElement(color = (:steelblue, 0.12)),
-            CairoMakie.MarkerElement(color = :black, marker = :circle)],
-        ["modelled median", "modelled count, 90%",
-            "with measurement error, 90%", "digitised"];
-        orientation = :horizontal, tellwidth = false)
-    fig
-end;
+end
+
+## One panel per snapshot, nowcast from the delay that snapshot had run to
+## up to the delay of the figure each of its onset dates was last printed
+## on, then through the same bar measurement error the summary figure uses.
+## Both are needed for the band and the reading it is read against to be
+## the same quantity: nowcasting to the eventual total would ride above a
+## reading that is itself still truncated, and the latent count carries no
+## scan error where the delay has run out, so it could not cover a second
+## scan of the same bar.
+_onset_panels = map(_onset_report_grid_days) do R
+    snap = _onset_snap_by_day[R]
+    us = sort(obs.onset_curve_history.onset_days[_onset_cells_by_report[R]])
+    observed = Float64[get(snap.onsets, grid_date(u), 0) for u in us]
+    nowcast = onset_nowcast_draws(us, observed, [R - u for u in us],
+        _onset_daily_draws, _onset_hazard; grid_start = _onset_grid_start,
+        target_delays = [_onset_last_report_day[u] - u for u in us])
+    (; title = string(snap.report_date), dates = grid_date.(us), observed,
+        nowcast = [_onset_replicated(d) for d in nowcast],
+        latest = [_onset_last_printed[u] for u in us])
+end
+
+onset_fit_fig = plot_onset_nowcast_grid(_onset_panels);
 
 onset_fit_fig #hide
 
@@ -3290,21 +3281,6 @@ onset_fit_fig #hide
 #md # <details><summary>Reconstruct symptom onsets by date of onset</summary>
 #md # ```
 
-## Latest printed value for each onset date the digitised figures cover.
-## Ordered by report date already, so the last block carrying a date gives
-## the current reading. A date inside a block's own printed extent but with
-## no row is a zero-height bar and does count; a date outside that extent is
-## not covered by that figure at all and is skipped (the same rule the
-## loader applies, see the [Data](@ref methods-data) section).
-_onset_last_printed = Dict{Int, Float64}()
-for snap in _onset_snaps
-    lo, hi = extrema(keys(snap.onsets))
-    for d in lo:Day(1):hi
-        u = obs.n - value(obs.cutoff - d)
-        (1 <= u <= obs.n) || continue
-        _onset_last_printed[u] = Float64(get(snap.onsets, d, 0))
-    end
-end
 _onset_by_date_days = sort(collect(keys(_onset_last_printed)))
 
 ## Modelled onsets on each of those days, and the count the latest figure

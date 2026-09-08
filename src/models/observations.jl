@@ -2759,6 +2759,39 @@ function onset_report_F(δ::Integer, logit_h0::AbstractVector,
 end
 
 """
+    onset_nowcast(observed, onsets_u, δ, logit_h0, γ, u, grid_start, α; until)
+
+Reported count for onset date `u` at a later delay than the `observed`
+count already printed for it at delay `δ`:
+
+```math
+N(u) = y(u, \\delta) + n_u \\, \\bigl(F(u, \\delta^{*}) - F(u, \\delta)\\bigr),
+```
+
+with `n_u` the modelled symptom onsets, `α` the ascertainment level and `F`
+the cumulative reported proportion ([`onset_report_F`](@ref)). `until` is
+the target delay `δ*`; the default `nothing` targets the eventual total,
+`F(u, δ*) = α`. Only the reporting between the two delays is modelled, so
+the estimate stays anchored on the count already printed, closes on it when
+the two delays leave nothing outstanding, and carries the posterior's
+uncertainty when they leave a lot.
+
+Its spread is parameter uncertainty in the onsets and the delay curve. The
+count it targets is a latent one: put it through the stream's own bar
+measurement error before comparing it with a digitised reading. Pure,
+top-level, allocation-free.
+"""
+function onset_nowcast(observed::Real, onsets_u::Real, δ::Integer,
+        logit_h0::AbstractVector, γ::AbstractVector, u::Integer,
+        grid_start::Integer, α::Real;
+        until::Union{Nothing, Integer} = nothing)
+    reached = onset_report_F(δ, logit_h0, γ, u, grid_start, α)
+    target = isnothing(until) ? α :
+             onset_report_F(until, logit_h0, γ, u, grid_start, α)
+    return observed + onsets_u * max(target - reached, zero(reached))
+end
+
+"""
     onset_report_anchor(logit_h0, γ, u, grid_start, a)
 
 Delay-weighted average of the calendar-indexed daily ascertainment series
