@@ -118,7 +118,20 @@ const CONFIG = [
     ("106", Date(2026, 8, 28), Date(2026, 8, 24)),
     ("107", Date(2026, 8, 29), Date(2026, 8, 24)),
     ("108", Date(2026, 8, 30), Date(2026, 8, 31)),
-    ("109", Date(2026, 8, 31), Date(2026, 8, 31))
+    ("109", Date(2026, 8, 31), Date(2026, 8, 31)),
+    # "110" is deliberately absent. Its page-4 figure carries the same
+    # outer caption as every other vintage ("par date de début des
+    # symptômes") but the embedded chart's own internal title and x-axis
+    # read "par date de NOTIFICATION" (n = 5 710) - a genuine basis change,
+    # confirmed by extracting and viewing the raw embedded image rather
+    # than trusting the caption. Digitising it would silently inject a
+    # different-basis series into the reporting-triangle stream. See
+    # data/README.md and issue #644.
+    ("111", Date(2026, 9, 2), Date(2026, 8, 31)),
+    ("112", Date(2026, 9, 3), Date(2026, 8, 31)),
+    ("113", Date(2026, 9, 4), Date(2026, 8, 31)),
+    ("114", Date(2026, 9, 5), Date(2026, 8, 31)),
+    ("115", Date(2026, 9, 6), Date(2026, 9, 7))
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -153,7 +166,12 @@ const Y_AXIS_STEP = Dict(
     "106" => 25,
     "107" => 25,
     "108" => 25,
-    "109" => 25
+    "109" => 25,
+    "111" => 25,
+    "112" => 25,
+    "113" => 25,
+    "114" => 25,
+    "115" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
@@ -311,7 +329,21 @@ function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     base = baseline_row(R, G, B, H)       # count-0 baseline row
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
-    yt = y_axis_ticks(dark, base, H, W)
+    yt = try
+        y_axis_ticks(dark, base, H, W)
+    catch e
+        e isa ErrorException || rethrow()
+        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
+        # and the axis line into the 120-180 near-gray range, below every
+        # earlier vintage's border but still far darker than surrounding
+        # text, so the strict <120 mask finds three of the four ticks but
+        # not the one sitting on the baseline itself. Same class of fix as
+        # the baseline/weekly-tick <180 fallback below, scoped the same
+        # way: only tried when the strict mask finds nothing, so every
+        # already-committed vintage (059-111) keeps digitising unchanged.
+        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        y_axis_ticks(line, base, H, W)
+    end
     ppc = median(diff(yt)) / float(y_step) # pixels per count
     ytop, y0 = yt[1], yt[end]
     # x scale from the weekly tick marks below the baseline. The tick marks
