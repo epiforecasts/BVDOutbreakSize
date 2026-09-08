@@ -123,7 +123,7 @@ end
     ## a systematic offset, and each is bracketed by pairs that do land on
     ## 0, so none of them can be a misread tick.
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
-        "102" => "103")
+        "102" => "103", "112" => "113")
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]

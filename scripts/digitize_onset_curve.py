@@ -135,6 +135,19 @@ CONFIG = {
     "107": ("2026-08-29", "2026-08-24"),
     "108": ("2026-08-30", "2026-08-31"),
     "109": ("2026-08-31", "2026-08-31"),
+    # "110" is deliberately absent. Its page-4 figure carries the same
+    # outer caption as every other vintage ("par date de début des
+    # symptômes") but the embedded chart's own internal title and x-axis
+    # read "par date de NOTIFICATION" (n = 5 710) - a genuine basis change,
+    # confirmed by extracting and viewing the raw embedded image rather
+    # than trusting the caption. Digitising it would silently inject a
+    # different-basis series into the reporting-triangle stream. See
+    # data/README.md and issue #644.
+    "111": ("2026-09-02", "2026-08-31"),
+    "112": ("2026-09-03", "2026-08-31"),
+    "113": ("2026-09-04", "2026-08-31"),
+    "114": ("2026-09-05", "2026-08-31"),
+    "115": ("2026-09-06", "2026-09-07"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -170,6 +183,11 @@ Y_AXIS_STEP = {
     "107": 25,
     "108": 25,
     "109": 25,
+    "111": 25,
+    "112": 25,
+    "113": 25,
+    "114": 25,
+    "115": 25,
 }
 
 
@@ -345,7 +363,20 @@ def digitize(im, last_tick_date, y_step=20):
     base = _baseline_row(im, H)  # count-0 baseline row
     # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
     # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
-    yt = _y_axis_ticks(dark, base, W)
+    try:
+        yt = _y_axis_ticks(dark, base, W)
+    except ValueError:
+        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
+        # and the axis line into the 120-180 near-gray range, below every
+        # earlier vintage's border but still far darker than surrounding
+        # text, so the strict <120 mask finds three of the four ticks but
+        # not the one sitting on the baseline itself. Same class of fix as
+        # the baseline/weekly-tick <180 fallback above, scoped the same
+        # way: only tried when the strict mask finds nothing, so every
+        # already-committed vintage (059-111) keeps digitising unchanged.
+        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+        line = (R < 180) & (G < 180) & (B < 180)
+        yt = _y_axis_ticks(line, base, W)
     ppc = np.median(np.diff(yt)) / float(y_step)
     ytop, y0 = yt[0], yt[-1]
     # x scale from the weekly tick marks below the baseline. The tick marks
@@ -459,6 +490,16 @@ def main():
             print(f"skip {sr}: no onset curve found", file=sys.stderr)
             continue
         rows = digitize(im, last_tick, Y_AXIS_STEP.get(sr, 20))
+        # An onset date can never sit later than the axis of the report
+        # that draws it, and that axis runs at most a day past the
+        # rapportage date (the date-de-publication lag). The window above
+        # self-calibrates from pixel content and can read a few stray days
+        # past the last labelled tick when the figure's own "donnees
+        # potentiellement incompletes" band extends that far (SitRep 115);
+        # drop those here rather than loosen the invariant
+        # test/test_onset_digitiser.jl checks.
+        cutoff = dt.date.fromisoformat(report_date) + dt.timedelta(days=1)
+        rows = [r for r in rows if dt.date.fromisoformat(r[0]) <= cutoff]
         total = sum(a + d for _, a, d in rows)
         print(f"SitRep {sr} ({report_date}): {len(rows)} onset days, "
               f"total {total} confirmed")
