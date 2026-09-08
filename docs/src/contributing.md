@@ -123,6 +123,47 @@ Pass a stream as `missing` to drop its likelihood.
 - NaN and Inf safe clamps (`safe_nbinomial`, `eps`-flooring of expected counts) guard against extreme NUTS warmup proposals.
   Keep them when editing the likelihoods.
 
+### Closures in model code
+
+A closure in a model body must not box its captures.
+
+Julia boxes a local variable when a closure captures it and something later reassigns it.
+The variable becomes a `Core.Box` and is type-unstable at every use.
+Mooncake answers type instability with a `DynamicDerivedRule`, a dictionary lookup per call site on every gradient evaluation, and Enzyme's reverse mode cannot differentiate through a box at all.
+Removing the boxes from the observation models roughly halved the gradient with the log-density bit-identical.
+
+A box has no failure mode, which is why one can sit in the code for a long time.
+Gradients, the log-density and the parameter count are all correct, so the only symptom is an unexplained ratio of gradient time to primal time.
+A profiler does not localise it either, because the cost is charged to the frame that captures the variable rather than to the loop that pays it.
+
+Three idioms produce a box.
+
+- A widening guard that writes back in place, `if eltype(x) === Any; x = convert(...); end`, where a comprehension or `map` nearby reads `x`.
+- An accumulator rebound inside a loop whose comprehensions capture it.
+- A variable written on both arms of an `if`/`else` and then captured.
+
+The mere possibility of reassignment creates the box, whether or not the branch ever runs.
+A guard that almost never fires is therefore not free on the AD path.
+The branch itself costs nothing.
+The box it creates costs on every gradient.
+
+The fix in every case is to compute into a separate binding and assign the captured name exactly once.
+Write a branch as an expression whose value is assigned, `x = if cond ... else ... end`, or as a ternary, rather than assigning `x` inside it.
+
+`test/test_boxed_captures.jl` enforces this for every method defined under `src/models/`.
+It walks the module's bindings rather than calling `methods` on the model constructors, because `@model` puts the model body in a gensym-named evaluator method and that generated method, not the user-facing constructor, is what AD differentiates.
+To check one method by hand:
+
+```bash
+julia --project=. -e '
+using BVDOutbreakSize
+m = first(methods(BVDOutbreakSize.gate_before))
+println(any(x -> occursin("Core.Box", string(x)),
+    Base.uncompressed_ast(m).code))'
+```
+
+`@code_warntype` reports the same thing, as a `Core.Box` in the variable list.
+
 ### Analysis report prose
 
 These apply to the narrative prose in `docs/examples/analysis.jl`, and to write-up prose generally.

@@ -199,10 +199,8 @@ end
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint, genetic_seeding_model
 
-    ## `background_re = true` is what every registry fit uses, and it is the
-    ## only path that samples the pooling SD and feeds it to the daily
-    ## background walk. Nothing else in the suite passes the switch, so
-    ## without this item the branch is exercised only by the fit jobs.
+    ## `background_re = true` is what every registry fit uses and the only
+    ## path that samples the pooling SD, but nothing else in the suite sets it.
     obs = load_observations()
     breakpoint = obs.n - obs.who_first_sitrep_days
     m = bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
@@ -225,8 +223,7 @@ end
     chn = sample(m, Prior(), 20;
         chain_type = FlexiChains.VNChain, progress = false)
 
-    ## The pooling SD reaches the chain, so the gated tilde ran and the value
-    ## the background walk closes over came from it.
+    ## The pooling SD reaches the chain, so the gated tilde ran.
     ks = collect(keys(chn))
     σ_key = only(filter(k -> occursin("σ_bg", string(k)), ks))
     σ = vec(Array(chn[σ_key]))
@@ -234,8 +231,6 @@ end
     @test all(isfinite, σ)
     @test all(>=(0), σ)
 
-    ## The latent trajectory still comes out finite and positive with the
-    ## random effect on.
     C_T = vec(Array(chn[:C_T]))
     @test all(isfinite, C_T)
     @test all(C_T .> 0)

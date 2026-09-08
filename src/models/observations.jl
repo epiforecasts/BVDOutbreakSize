@@ -1170,14 +1170,10 @@ quantities.
     ## on the empty derived window vectors below, so it is concretised to the
     ## working scalar type.
     ##
-    ## `analysed_daily` is assigned exactly ONCE and never rebound. Julia boxes
-    ## any local that a closure captures and something later reassigns, and the
-    ## comprehensions below capture this one -- so reassigning it inside the
-    ## `Any` branch and again when gating put it in a `Core.Box`. A boxed local
-    ## is type-unstable at every use, and Mooncake answers type instability
-    ## with `DynamicDerivedRule`: a dictionary lookup per call site on every
-    ## gradient. The primal barely notices, which is why this never looked like
-    ## a slow model. The branch was NOT free on the AD path.
+    ## `analysed_daily` is assigned once. Julia boxes any local a closure
+    ## captures and something later reassigns, and the comprehensions below
+    ## capture this one; a boxed local is type-unstable at every use and costs
+    ## Mooncake a dictionary lookup per call site on every gradient.
     analysed_daily = gate_before(
         eltype(analysed_daily_raw) === Any ?
         convert(Vector{typeof(τ_test)}, analysed_daily_raw) :
@@ -1722,10 +1718,8 @@ positivity and the expected confirmed-death count.
     bvd_death_raw = convolve_delay(bvd_deaths_daily, receipt_pmf)
     ## In predict or check-model mode the series can widen to `Vector{Any}`,
     ## which trips `zero(Any)` downstream, so both are pinned to the sampled
-    ## scalar type. Assigned exactly ONCE each: reassigning them inside the
-    ## branch, while the closure below captures them, boxes them and makes
-    ## every use type-unstable (see the note in `confirmed_cases_model`). The
-    ## fit path was NOT left untouched by the branch.
+    ## scalar type. Assigned once each: the closure below captures them, so a
+    ## reassignment would box them (see `confirmed_cases_model`).
     _widened = eltype(susp_death_raw) === Any
     susp_death = _widened ?
                  convert(Vector{typeof(s)}, susp_death_raw) : susp_death_raw
@@ -1755,9 +1749,8 @@ positivity and the expected confirmed-death count.
     ## a death testing fraction of the suspected deaths, gated at the onset.
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
-        ## `sc_c` is written once so the `map` closure below captures it
-        ## unboxed; `sc` itself takes a value on both branches and so would be
-        ## boxed, costing a dictionary lookup per gradient call.
+        ## The `map` below captures `sc_c`, not `sc`: `sc` takes a value on
+        ## both branches, so capturing it would box it.
         sc_c = scale_state.scaling
         susp_case = convolve_delay(case_suspected_daily, receipt_pmf)
         death_volume = map(eachindex(susp_death)) do t
@@ -2349,9 +2342,9 @@ series for forecasting and replication.
     abscond_daily_raw = [t == 1 ? zero(eltype(demand_raw)) :
                          κ * O_susp_raw[t - 1]
                          for t in 1:n]
-    ## Assigned ONCE each, for the reason given in `confirmed_cases_model`:
-    ## these four are captured by the comprehension and the `map`s above, so
-    ## reassigning them inside the branch put every one in a `Core.Box`.
+    ## Assigned once each: the `map`s and the comprehension above capture
+    ## them, so reassigning them in a branch would box them (see
+    ## `confirmed_cases_model`).
     _widened = eltype(demand_raw) === Any
     demand = _widened ? convert(Vector{eltype(C)}, demand_raw) : demand_raw
     O_conf = _widened ? convert(Vector{eltype(C)}, O_conf_c) : O_conf_c

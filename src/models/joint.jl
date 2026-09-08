@@ -596,12 +596,10 @@ the implied per-suspected (`suspected_positivity`) and per-test
     ## second free, outbreak-size-degenerate rate. With `background_re =
     ## false` (the renewal default) the case stream keeps its scalar `λ_bg`.
     ## The pooling SD is sampled only when the random effect is active (the
-    ## tilde must stay gated), so the branch is an expression whose value is
-    ## assigned once. A variable written on both arms of an `if`/`else` and
-    ## then captured by a closure is boxed in a `Core.Box`, which Enzyme's
-    ## reverse mode cannot differentiate through and which costs Mooncake a
-    ## dictionary lookup per gradient call; a single write keeps the capture
-    ## un-boxed.
+    ## tilde must stay gated), so the branch is an expression assigned once.
+    ## A variable written on both arms and then captured by a closure is put
+    ## in a `Core.Box`, which Enzyme cannot differentiate through and which
+    ## costs Mooncake a dictionary lookup per gradient call.
     σ_rw_shared = if background_re
         bg_pool ~ to_submodel(background_pooling_model())
         bg_pool.σ_bg
