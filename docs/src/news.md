@@ -6,7 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v1.18.0
+
+Changes since v1.17.0
 
 ### Performance
 
@@ -24,6 +26,20 @@ Each panel drew the expected count for the bar it was compared against, which do
 Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
 It is read against that latest reading, so the band and the point it is scored on are the same quantity.
 The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
+
+### Data
+
+- Advanced the model cut-off from SitRep 110 (1 September) to SitRep 115 (6 September) (#655).
+Confirmed cases reach 6686 and confirmed deaths 3226, with 1563 recovered and 819 in isolation.
+Every day's net confirmed-case and confirmed-death change matches that report's own printed 24h figure, with no harmonisation anywhere in the run.
+The treatment-centre flows and the daily suspected case and death series stay frozen, as they have since the reports dropped the tables that carried them.
+- The ERVEBO ring and front-line-worker vaccination campaign is now tracked as a candidate signal (#651, #650).
+Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
+The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
+
+### Dependencies
+
+- Turing 0.48 is allowed alongside 0.45, 0.46 and 0.47, in the package and in the Enzyme test environment (#652, #653).
 
 ## v1.17.0
 
