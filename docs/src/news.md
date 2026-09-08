@@ -17,6 +17,14 @@ Assigning each name once leaves the log-density bit-identical and roughly halves
 `test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
 Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern and are tracked by #657.
 
+### Report
+
+- The symptom-onset reporting-triangle panels are nowcasts rather than fits (#648).
+Each panel drew the expected count for the bar it was compared against, which does not condition on what that snapshot had already printed, so its interval was set by uncertainty in the onsets rather than by how much of the reporting delay had elapsed.
+Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
+It is read against that latest reading, so the band and the point it is scored on are the same quantity.
+The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
+
 ## v1.17.0
 
 Changes since v1.16.0
