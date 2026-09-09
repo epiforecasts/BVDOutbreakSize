@@ -63,11 +63,19 @@ jobs:
       # The docs env is part of the root [workspace] (see Project.toml), so its
       # resolved manifest is the repo-root Manifest.toml, not docs/Manifest.toml.
       # Manifest.toml is git-ignored, hence the artifact.
+      # Every artifact this workflow uploads is a handoff inside the run:
+      # `fit` feeds `render`, `render` feeds `combine`, and nothing reads any
+      # of them afterwards (no step passes a `run-id`). The durable fit cache
+      # is `actions/cache` above, keyed on the model sources and data. Left at
+      # the 90-day default these built up to 6800 artifacts and 36 GB, which
+      # exhausted the storage quota and failed uploads with a 403 on
+      # finalisation. Three days keeps a window for debugging a failed run.
       - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: Manifest.toml
           if-no-files-found: error
+          retention-days: 3
 
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
@@ -131,6 +139,7 @@ jobs:
           name: fit-${{ matrix.id }}
           path: logs/fit_cache/*.jls
           if-no-files-found: error
+          retention-days: 3
 
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
@@ -223,6 +232,7 @@ jobs:
             docs/src
             output
           if-no-files-found: warn
+          retention-days: 3
 
   # Assemble the Vitepress site from both pre-rendered pages (a single
   # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
