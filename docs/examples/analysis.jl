@@ -857,8 +857,8 @@ cfr_prior_fig #hide
 # The confirmed deaths mirror this laboratory pipeline rather than enriching the case composition.
 # A fraction $\tau_{\text{death}}$ of suspected deaths reach the laboratory, and they confirm at the assay positivity $p = s\,q_{\text{death}} + (1-\mathrm{spec})(1-q_{\text{death}})$.
 # This positivity is built from the same assay sensitivity and specificity as the confirmed cases, but uses the death-pool BVD share $q_{\text{death}}$.
-# Confirmation runs on the altona RealStar Filovirus Screen RT-PCR rather than the Zaire-specific GeneXpert Ebola assay.
-# The GeneXpert assay does not reliably detect Bundibugyo virus.
+# Confirmation runs on the altona RealStar Filovirus Screen RT-PCR [rieger2016](@cite) rather than the Zaire-specific GeneXpert Ebola assay.
+# The GeneXpert assay does not reliably detect Bundibugyo virus [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite).
 # A single assay draw is sensitive to about 85%, but a suspect is confirmed or ruled out through repeat control tests rather than one draw.
 # The effective process sensitivity is therefore higher, about 98% with two controls, so we centre the sensitivity prior there and give it a tight spread.
 # The specificity is high but imperfect.

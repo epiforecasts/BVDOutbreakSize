@@ -101,8 +101,9 @@ renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 end
 
 """
-Wilson–Hilferty approximation to the continuous median of a `Gamma` as a
-function of its `mean` and `sd`: `median ≈ mean·(1 − sd²/(9·mean²))³`.
+Wilson–Hilferty [wilson1931](@cite) approximation to the continuous
+median of a `Gamma` as a function of its `mean` and `sd`:
+`median ≈ mean·(1 − sd²/(9·mean²))³`.
 Smooth in the mean and SD with no quantile inversion, so it enters a
 gradient-based likelihood cleanly, and accurate to a few percent for the
 shapes here. Used to match the confirmed onset-to-sample convolution's
@@ -112,9 +113,9 @@ gamma_median_wh(mean::Real, sd::Real) = mean * (1 - sd^2 / (9 * mean^2))^3
 
 """
 Onset-to-sample prior configuration from the NEJM DRC 2026 BVD cohort
-(Akilimali et al. 2026, doi:10.1056/NEJMc2608070). The confirmed-positive
-onset-to-sample interval (N = 129) was estimated as a continuous Gamma through
-the `epidist` marginal model correcting for double interval censoring and right
+[akilimali2026](@cite). The confirmed-positive onset-to-sample interval
+(N = 129) was estimated as a continuous Gamma through the `epidist` marginal
+model [epidist](@cite), correcting for double interval censoring and right
 truncation, chosen over lognormal and Weibull by LOOIC. The cohort reports a
 continuous mean of 7.4 d (95% CrI 5.3–13.5) and median of 4.8 d (95% CrI
 3.46–7.84).
@@ -912,13 +913,14 @@ end
 """
 Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean
 of 0.95 with a tight spread. Confirmation runs on the altona RealStar
-Filovirus Screen RT-PCR, which detects Bundibugyo virus at 11–67 RNA
-copies per reaction. The Zaire-specific GeneXpert Ebola assay does not
-reliably detect Bundibugyo. A single assay draw is sensitive to about
-0.85, but a suspect is confirmed or ruled out through repeat control
-tests rather than one PCR, so the effective process sensitivity is
-higher (two controls give about 0.98) and `Beta(38, 2)` credits that
-process. Under the severe-first backlog the
+Filovirus Screen RT-PCR [rieger2016](@cite), which detects Bundibugyo
+virus at 11–67 RNA copies per reaction. The Zaire-specific GeneXpert
+Ebola assay does not reliably detect Bundibugyo
+[cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite). A single assay
+draw is sensitive to about 0.85, but a suspect is confirmed or ruled out
+through repeat control tests rather than one PCR, so the effective
+process sensitivity is higher (two controls give about 0.98) and
+`Beta(38, 2)` credits that process. Under the severe-first backlog the
 first vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1
 positivity ≈ `s` identifies the sensitivity from the early data. Returns
 `(; s_test)`.

@@ -6,7 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v1.18.0
+
+Changes since v1.17.0
 
 ### Performance
 
@@ -15,7 +17,7 @@ Four model bodies assigned a variable inside a branch or a loop and then capture
 A boxed local is type-unstable at every use, and Mooncake answers type instability with a dictionary lookup per call site on every gradient evaluation.
 Assigning each name once leaves the log-density bit-identical and roughly halves the gradient on the joint fit, from about 21 ms to about 10 ms.
 `test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
-Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern and are tracked by #657.
+Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern, and are left alone because nothing there runs on the gradient path.
 
 ### Report
 
@@ -24,6 +26,27 @@ Each panel drew the expected count for the bar it was compared against, which do
 Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
 It is read against that latest reading, so the band and the point it is scored on are the same quantity.
 The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
+- Seven references the text quoted by hand are now citations, so they reach the References page (#627).
+The onset-to-sample cohort, the `epidist` model behind it, the Wilson-Hilferty median, the RealStar assay and the three GeneXpert sources were all named in prose or given as a bare DOI, which left the assay sensitivities and the delay prior unsourced on the page.
+
+### Data
+
+- Advanced the model cut-off from SitRep 110 (1 September) to SitRep 115 (6 September) (#655).
+Confirmed cases reach 6686 and confirmed deaths 3226, with 1563 recovered and 819 in isolation.
+Every day's net confirmed-case and confirmed-death change matches that report's own printed 24h figure, with no harmonisation anywhere in the run.
+The treatment-centre flows and the daily suspected case and death series stay frozen, as they have since the reports dropped the tables that carried them.
+- The ERVEBO ring and front-line-worker vaccination campaign is now tracked as a candidate signal (#651, #650).
+Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
+The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
+
+### Infrastructure
+
+- Removed `forecast_vs_truth_trajectory`, which no code called.
+It scored a cumulative trajectory from the exponential-growth model's `r`, `expected_reports_T` and `k`, none of which the renewal model carries.
+
+### Dependencies
+
+- Turing 0.48 is allowed alongside 0.45, 0.46 and 0.47, in the package and in the Enzyme test environment (#652, #653).
 
 ## v1.17.0
 
