@@ -132,8 +132,15 @@ const CONFIG = [
     ("113", Date(2026, 9, 4), Date(2026, 8, 31)),
     ("114", Date(2026, 9, 5), Date(2026, 8, 31)),
     ("115", Date(2026, 9, 6), Date(2026, 9, 7)),
-    ("116", Date(2026, 9, 7), Date(2026, 9, 7)),
-    ("117", Date(2026, 9, 8), Date(2026, 9, 7))
+    ("116", Date(2026, 9, 7), Date(2026, 9, 7))
+    # "117" is deliberately absent. Its onset-date figure plots only up to
+    # 2026-09-03, five days short of its own 2026-09-08 report date - the
+    # first time in this whole series the plotted window has retreated
+    # relative to the immediately preceding vintage (116 plotted all the
+    # way to 2026-09-08). Digitising it correlates with a joint-fit
+    # convergence failure (Rhat 2.6+); held back pending investigation
+    # rather than folded into an unstable fit. See data/README.md and
+    # issue #662.
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -174,8 +181,7 @@ const Y_AXIS_STEP = Dict(
     "113" => 25,
     "114" => 25,
     "115" => 25,
-    "116" => 25,
-    "117" => 25
+    "116" => 25
 )
 
 # --- PPM (P6) reader ------------------------------------------------------
