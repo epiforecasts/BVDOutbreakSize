@@ -413,10 +413,12 @@ end
 
     ## A synthetic now-observed manifest: a 40-day grid, each incident
     ## history stepping from 100 to 150 over the last week, isolation beds
-    ## at 20, and three dated export detections in the final week.
+    ## at 20, and three dated export detections in the final week. Each
+    ## incident history opens a fortnight earlier so the baseline's own
+    ## lookback window is covered (see `baseline_window_covered`).
     n = 40
     cutoff = Date(2026, 7, 15)
-    inc = (; days = [33, 40], counts = [100, 150])
+    inc = (; days = [19, 33, 40], counts = [60, 100, 150])
     obs = (; cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
@@ -478,7 +480,10 @@ end
     ## forecast.csv but no `fit` column, and is stamped with a past made date.
     n = 40
     cutoff = Date(2026, 7, 15)
-    inc = (; days = [26, 33], counts = [100, 150])
+    ## The confirmed history opens well before the made date so the
+    ## baseline's own lookback window is covered (see
+    ## `baseline_window_covered`).
+    inc = (; days = [15, 26, 33], counts = [60, 100, 150])
     obs = (; cutoff = cutoff, n = n,
         reported_history = inc, deaths_history = inc,
         confirmed_history = inc, confirmed_deaths_history = inc,
@@ -665,4 +670,192 @@ end
     @test d.dispersion >= 0
     @test d.underprediction >= 0
     @test d.dispersion + d.underprediction ≈ crps_sample(obs, samples)
+end
+
+@testitem "select_fit_role splits a summary into joint and individual" begin
+    using Dates: Date
+    using DataFrames: DataFrame, nrow, names
+    using BVDOutbreakSize: forecast_score_overview, forecast_score_by_horizon,
+                           forecast_score_by_release, select_fit_role
+
+    ## "confirmed cases" carries a joint, an individual ("confirmed") and a
+    ## baseline fit; "reported cases" carries a joint, a differently named
+    ## individual ("cases") and a baseline.
+    scores = DataFrame(
+        release = fill("r1", 6), made_date = fill(Date(2026, 6, 1), 6),
+        horizon = fill(7, 6),
+        stream = vcat(fill("confirmed cases", 3), fill("reported cases", 3)),
+        fit = ["joint", "confirmed", "baseline",
+            "joint", "cases", "baseline"],
+        crps = [2.0, 4.0, 8.0, 3.0, 6.0, 12.0],
+        log_crps = [0.2, 0.4, 0.8, 0.3, 0.6, 1.2],
+        dispersion = fill(0.1, 6), overprediction = fill(0.05, 6),
+        underprediction = fill(0.05, 6),
+        coverage_50 = fill(1.0, 6), coverage_90 = fill(1.0, 6),
+        bias = fill(0.0, 6))
+
+    ## Each builder keeps every non-baseline fit, so the unfiltered table
+    ## carries both roles and the relative-skill figure can compare them.
+    for table in (forecast_score_overview(scores),
+        forecast_score_by_horizon(scores), forecast_score_by_release(scores))
+        @test sort(table.fit) == ["cases", "confirmed", "joint", "joint"]
+
+        ## The joint role is the joint model's rows alone: no individual
+        ## fit appears in a table headed as the joint model's.
+        joint = select_fit_role(table, "joint")
+        @test unique(joint.fit) == ["joint"]
+        @test nrow(joint) == 2
+        ## The individual role is each stream's own fit, whatever its id.
+        indiv = select_fit_role(table, "individual")
+        @test sort(indiv.fit) == ["cases", "confirmed"]
+        ## The two roles partition the table, and the columns are unchanged.
+        @test nrow(joint) + nrow(indiv) == nrow(table)
+        @test names(joint) == names(table)
+        @test names(indiv) == names(table)
+        ## Baseline rows are excluded by the builders, so that role is empty.
+        @test nrow(select_fit_role(table, "baseline")) == 0
+    end
+end
+
+@testitem "select_fit_role reads a frozen fit in the joint role" begin
+    using Dates: Date
+    using DataFrames: DataFrame, nrow
+    using BVDOutbreakSize: forecast_score_overview, select_fit_role
+
+    ## The frozen evaluation is the joint model re-fit at a past cut-off,
+    ## so its rows belong to the joint role rather than the individual one.
+    scores = DataFrame(
+        release = fill("r1", 2), made_date = fill(Date(2026, 6, 1), 2),
+        horizon = [7, 7], stream = fill("confirmed cases", 2),
+        fit = ["frozen", "baseline"], crps = [2.0, 8.0],
+        log_crps = [0.2, 0.8], dispersion = fill(0.1, 2),
+        overprediction = fill(0.05, 2), underprediction = fill(0.05, 2),
+        coverage_50 = fill(1.0, 2), coverage_90 = fill(1.0, 2),
+        bias = fill(0.0, 2))
+
+    table = forecast_score_overview(scores)
+    @test only(select_fit_role(table, "joint").fit) == "frozen"
+    @test nrow(select_fit_role(table, "individual")) == 0
+end
+
+@testitem "select_fit_role errors on an unknown role" begin
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: forecast_score_overview, select_fit_role
+
+    empty = forecast_score_overview(DataFrame())
+    ## A misspelt role must not read as a role with nothing scored.
+    @test_throws ErrorException select_fit_role(empty, "individuals")
+    @test_throws ErrorException select_fit_role(empty, "Joint")
+end
+
+@testitem "truth_at scores an increment for a cumulative stream" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Every cumulative-count stream is scored on what it added over the
+    ## window, matching what `forecast_archive` stores (`*_new` columns),
+    ## never on the cumulative total standing at the target. The two are far
+    ## apart here: the histories run from 1000 to 1150 while the window adds
+    ## 50, so a level score cannot be mistaken for an increment score.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = cum, deaths_history = cum,
+        confirmed_history = cum, confirmed_deaths_history = cum,
+        recovered_history = cum, onset_report_history = cum,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40])
+    made_date = grid_date(33)
+    target_date = grid_date(40)
+
+    for stream in ("reported cases", "suspected deaths", "confirmed cases",
+        "confirmed deaths", "recovered", "onset reports")
+        @test truth_at(obs, grid_date, stream, made_date, target_date) == 50.0
+    end
+    ## The assembled export stream counts detections the same way: three of
+    ## the four landed inside the window.
+    @test truth_at(obs, grid_date, "exports", made_date, target_date) == 3.0
+end
+
+@testitem "truth_at scores a level for a stock stream" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## Bed occupancy is a stock, not a cumulative count, so its truth is the
+    ## occupancy standing at the target rather than a change over the window.
+    ## Each ward sub-stock is read the same way, including the one that fell.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    obs = (; cutoff = cutoff, n = n,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]))
+    made_date = grid_date(33)
+    target_date = grid_date(40)
+
+    @test truth_at(obs, grid_date, "isolation beds", made_date,
+        target_date) == 20.0
+    @test truth_at(obs, grid_date, "treatment beds", made_date,
+        target_date) == 12.0
+    @test truth_at(obs, grid_date, "isolation beds (suspected)", made_date,
+        target_date) == 8.0
+end
+
+@testitem "every scored stream is scored on its declared basis" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The basis each stream is scored on has to match what the archive
+    ## stores for it: the cumulative-count streams are archived as new counts
+    ## over the horizon and the occupancy stocks as levels (see
+    ## `forecast_archive` in `src/forecast.jl`).
+    ##
+    ## Driving this from the stream maps rather than a list means a stream
+    ## added on the wrong basis fails here, and running each one through
+    ## `truth_at` means the declared basis has to be the one it is actually
+    ## scored on. An increment depends on where the window opens; a level
+    ## does not. That separates the two without pinning a value per stream.
+    n = 40
+    cutoff = Date(2026, 7, 15)
+    grid_date(day) = cutoff - Day(n - day)
+    cum = (; days = [26, 33, 40], counts = [1000, 1100, 1150])
+    obs = (; cutoff = cutoff, n = n,
+        reported_history = cum, deaths_history = cum,
+        confirmed_history = cum, confirmed_deaths_history = cum,
+        recovered_history = cum, onset_report_history = cum,
+        isolation_history = (; days = [26, 33, 40], counts = [18, 19, 20]),
+        treatment_confirmed_incare_history =
+        (; days = [26, 33, 40], counts = [8, 9, 12]),
+        treatment_suspect_incare_history =
+        (; days = [26, 33, 40], counts = [10, 10, 8]),
+        export_case_days = [27, 35, 38, 40])
+    target_date = grid_date(40)
+    early, late = grid_date(26), grid_date(33)
+
+    kinds = merge(Dict(k => v[2] for (k, v) in STREAM_HISTORY),
+        Dict(STREAM_ASSEMBLED))
+    @test !isempty(kinds)
+
+    for (stream, kind) in kinds
+        from_early = truth_at(obs, grid_date, stream, early, target_date)
+        from_late = truth_at(obs, grid_date, stream, late, target_date)
+        if kind === :incident
+            @test from_early > from_late
+        else
+            @test kind === :level
+            @test from_early == from_late
+        end
+    end
 end

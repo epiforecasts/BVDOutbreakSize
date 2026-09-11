@@ -19,6 +19,40 @@ function posterior_summary(xs)
     )
 end
 
+## Quantities reported as a transform of another parameter rather than from
+## their own draws, because their own quantiles do not bound them.
+const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
+    :doubling_time => (:r, doubling_time))
+
+## Interval endpoints for one reported quantity. `summary_table` is exported,
+## so a caller may pass a chain carrying a derived quantity without the
+## parameter it is derived from; fall back to its own draws there.
+function _summary_for(chn, p::Symbol)
+    haskey(_DERIVED_FROM, p) ||
+        return posterior_summary(_scalar_draws(chn, p))
+    src, f = _DERIVED_FROM[p]
+    src_draws = try
+        _draws(chn, src)
+    catch
+        return posterior_summary(_scalar_draws(chn, p))
+    end
+    return map(f, posterior_summary(src_draws))
+end
+
+## Draws of a scalar quantity. A vector-valued deterministic (one entry per
+## patch, or a daily trajectory) reaches here as a vector of vectors, and
+## `quantile` then fails deep inside with a cryptic `isfinite(::Vector)`
+## MethodError at render time. Say what is actually wrong: the summary table
+## is for scalars, and a per-patch quantity belongs in `patch_summary_table`.
+function _scalar_draws(chn, p::Symbol)
+    d = _draws(chn, p)
+    eltype(d) <: Number || error(
+        "summary_table: `$(p)` is vector-valued, not a scalar. " *
+        "Per-patch quantities go in `patch_summary_table`; daily " *
+        "trajectories are read with `_draw_vectors`.")
+    return d
+end
+
 ## Human-readable headers for the displayed summary tables. Internal
 ## column keys stay machine-friendly. This maps them to nice labels at
 ## the point each table is returned.
@@ -48,6 +82,11 @@ _prettify(df::DataFrame) = rename(df, [n => get(_PRETTY_COLS, n, n) for n in nam
 Upper 90%` giving the lower and upper endpoints of the equal-tailed
 30%, 60% and 90% credible intervals.
 
+`doubling_time` is reported as the image of `r`'s interval rather than
+from its own draws, because it is unbounded at zero growth; see
+`_DERIVED_FROM`. Its row therefore runs from the fastest decline through
+the zero-growth pole to the fastest growth, and is not sorted by value.
+
 `labels` is an optional map from the raw chain symbol to a clean display
 name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
 `Quantity` column only. The model's variable names are unchanged. Symbols
@@ -64,18 +103,7 @@ function summary_table(chn, params::AbstractVector{Symbol};
     ) begin
         let df = _
             for p in params
-                d = _draws(chn, p)
-                ## A VECTOR-valued deterministic (one entry per patch, or a
-                ## daily trajectory) reaches here as a vector of vectors, and
-                ## `quantile` then fails deep inside with a cryptic
-                ## `isfinite(::Vector)` MethodError at render time. Say what is
-                ## actually wrong: this table is for scalars, and a per-patch
-                ## quantity belongs in `patch_summary_table`.
-                eltype(d) <: Number || error(
-                    "summary_table: `$(p)` is vector-valued, not a scalar. " *
-                    "Per-patch quantities go in `patch_summary_table`; daily " *
-                    "trajectories are read with `_draw_vectors`.")
-                s = posterior_summary(d)
+                s = _summary_for(chn, p)
                 push!(df,
                     (get(labels, p, string(p)),
                         round(s.lo90; digits), round(s.lo60; digits),
@@ -90,27 +118,84 @@ end
 
 ## --- Markdown rendering --------------------------------------------------
 
+# A float carrying its full Float64 expansion stretches a column to
+# eighteen digits for no gain. Values at or above one keep their magnitude
+# and lose the tail; values below one keep their leading digits, so a small
+# score does not round away to zero.
+_md_round(x::AbstractFloat) = abs(x) < 1 ? round(x; sigdigits = 3) :
+                              round(x; digits = 3)
+
 # Format one cell for a markdown table: integer-valued floats print without
-# a trailing `.0` so count columns read as whole numbers, everything else
-# prints with its default string form.
+# a trailing `.0` so count columns read as whole numbers, other floats are
+# rounded to a readable width, and a literal `|` in a string is escaped so
+# it cannot split the row.
 _md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
-_md_cell(x) = string(x)
+_md_cell(x::AbstractFloat) = isinteger(x) ? string(Integer(x)) :
+                             string(_md_round(x))
+_md_cell(x) = replace(string(x), "|" => "\\|")
+
+# Right-align numeric columns so the digits line up under each other, and
+# left-align everything else. `Bool` is a `Real` but reads as a label
+# rather than a quantity, so it stays left.
+function _md_align(col)
+    eltype(col) <: Union{Missing, Bool} ? "---" :
+    eltype(col) <: Union{Missing, Real} ? "---:" : "---"
+end
 
 """
 GitHub-flavoured markdown table for a `DataFrame`, one header row from the
 column names and one body row per data row. Used to persist a rendered
 summary table to disk so a static documentation page can embed it without
-re-running the fit.
+re-running the fit, and by [`MarkdownTable`](@ref) to put a table on a
+Literate page.
 """
 function markdown_table(df::DataFrame)
     cols = names(df)
     header = "| " * join(cols, " | ") * " |"
-    sep = "| " * join(fill("---", length(cols)), " | ") * " |"
+    sep = "| " * join((_md_align(df[!, c]) for c in cols), " | ") * " |"
     rows = map(eachrow(df)) do row
         "| " * join((_md_cell(row[c]) for c in cols), " | ") * " |"
     end
     return join(vcat(header, sep, rows), "\n") * "\n"
 end
+
+"""
+A table for a Literate page to render as a table rather than as a block of
+printed output. Display it as the last expression of a chunk.
+
+Literate chooses a chunk result's output format by what the value is
+showable as, taking `text/html` before `text/markdown`. A `DataFrame` is
+html-showable, so a bare one goes out as a `@raw html` block, and
+Documenter compiles a regex from each raw block's own text to relocate its
+lines, which fails once the block passes PCRE's ~64KB compiled-pattern
+limit. Several of the scoring tables grow with every release and cross it.
+This wrapper is showable as markdown and not as html, so the table goes
+out as an ordinary markdown table: no raw block, no size limit, and a
+table on the page rather than the fixed-width block of printed output a
+plain-text rendering leaves behind.
+
+A `DataFrame` is rendered by [`markdown_table`](@ref). Anything else is
+taken through its own markdown rendering, or its plain-text one where it
+has none, so a page can pass either a table or a placeholder message.
+"""
+struct MarkdownTable
+    text::String
+    ## Inner constructor so Julia generates no outer one: its automatic
+    ## `MarkdownTable(::Any)` converting constructor would collide with the
+    ## fallback method below.
+    MarkdownTable(text::AbstractString) = new(text)
+end
+
+MarkdownTable(df::DataFrame) = MarkdownTable(markdown_table(df))
+function MarkdownTable(x)
+    MarkdownTable(
+        showable(MIME("text/markdown"), x) ?
+        sprint(show, MIME("text/markdown"), x) :
+        sprint(show, MIME("text/plain"), x))
+end
+
+Base.show(io::IO, t::MarkdownTable) = print(io, t.text)
+Base.show(io::IO, ::MIME"text/markdown", t::MarkdownTable) = print(io, t.text)
 
 ## --- Fit diagnostics ----------------------------------------------------
 

@@ -12,6 +12,64 @@
 const SEEDING_LEAD_DAYS = 30
 
 """
+The `(grid day, correction)` pairs a confirmed stream's listed
+harmonisation-break days carry, one per listed day the stream's own history
+has a matching vintage for.
+
+On a listed harmonisation-break day (`[confirmed_break_dates]`) the reported
+cumulative jumps by more than that day's notifications, because INSP
+reattached previously unlinked records. The excess is `net - gross`: the
+vintage's own step less the printed 24h count. Subtracting it turns a raw
+cumulative difference into the count that was actually notified across the
+window, which is what a forecast of new cases is predicting.
+
+`deaths` selects the confirmed-death stream rather than confirmed cases. A
+break day the history carries no matching vintage for is left out, which is a
+vintage that has not arrived by this `obs`'s cut-off. A break day on the
+stream's first vintage takes the whole cumulative as its step, since nothing
+precedes it. The correction is floored at zero so a snapshot whose own vintage
+of that day is smaller cannot inflate the truth.
+"""
+function confirmed_break_steps(obs; deaths::Bool = false)
+    out = Tuple{Int, Float64}[]
+    days = obs.confirmed_break_days
+    isempty(days) && return out
+    hist = deaths ? obs.confirmed_deaths_history : obs.confirmed_history
+    gross = deaths ? obs.confirmed_break_gross_deaths :
+            obs.confirmed_break_gross_cases
+    isempty(hist.counts) && return out
+    hdays = collect(hist.days)
+    counts = collect(hist.counts)
+    for (i, d) in enumerate(days)
+        pos = findfirst(==(d), hdays)
+        pos === nothing && continue
+        net = counts[pos] - (pos == 1 ? 0 : counts[pos - 1])
+        g = i <= length(gross) ? gross[i] : 0
+        push!(out, (d, float(max(net - g, 0))))
+    end
+    return out
+end
+
+"""
+Total retrospective harmonisation correction carried by a confirmed stream
+over the grid days `(from_day, to_day]`: the sum of
+[`confirmed_break_steps`](@ref) for every listed break day the window holds.
+
+The window is half open on the left, so a break day on the origin belongs to
+the window before it rather than this one. `deaths` selects the
+confirmed-death stream rather than confirmed cases. Returns zero when no
+listed break day falls in the window.
+"""
+function confirmed_break_correction(obs, from_day::Real, to_day::Real;
+        deaths::Bool = false)
+    total = 0.0
+    for (d, c) in confirmed_break_steps(obs; deaths = deaths)
+        from_day < d <= to_day && (total += c)
+    end
+    return total
+end
+
+"""
 Load the BVD observation manifest from `path` (a dated TOML file) and
 return a named tuple for the renewal model. Calendar dates are converted
 to 1-based grid day-indices (day 1 is the seeding day, day `n` the
@@ -47,7 +105,10 @@ sum to the total occupancy), and `tests_received_history`.
 
 The digitised symptom-onset reporting triangle is returned as
 `onset_curve_history`, the per-vintage increments read from
-`data/onset_curve_scanned.csv` alongside `path`.
+`onset_curve_path`, by default `onset_curve_scanned.csv` alongside `path`.
+A manifest read from somewhere else (a release snapshot in a temporary
+directory, say) has no such sibling, so the caller names the triangle
+explicitly to keep the stream rather than degrade it to a no-op.
 See [`load_onset_curve`](@ref) for the dedup, cut-off filtering and
 increment construction.
 The same triangle's per-vintage cumulative confirmed-by-onset total is
@@ -65,7 +126,9 @@ function load_observations(
         path::AbstractString = joinpath(@__DIR__, "..", "data",
             "observations.toml");
         seeding_lead::Integer = SEEDING_LEAD_DAYS,
-        cutoff_date::Union{Nothing, Date, AbstractString} = nothing)
+        cutoff_date::Union{Nothing, Date, AbstractString} = nothing,
+        onset_curve_path::AbstractString = joinpath(dirname(path),
+            "onset_curve_scanned.csv"))
     raw = TOML.parsefile(path)
     _val(k) = raw[k]["value"]
     ## The cut-off is the manifest `as_of_date` unless an earlier
@@ -364,7 +427,7 @@ function load_observations(
     ## as every history above, so a freeze also freezes this stream; see
     ## `load_onset_curve` for the dedup and increment construction.
     onset_curve_history = load_onset_curve(
-        joinpath(dirname(path), "onset_curve_scanned.csv"); cutoff, seeding)
+        onset_curve_path; cutoff, seeding)
     ## The same triangle's per-vintage cumulative confirmed-by-onset total,
     ## restated in the `(; days, counts)` shape every other stream's history
     ## uses so the reported-onset total is scored by the same machinery. The
@@ -507,6 +570,208 @@ function freeze_observations(
             "observations.toml"),
         seeding_lead::Integer = SEEDING_LEAD_DAYS)
     return load_observations(path; seeding_lead, cutoff_date)
+end
+
+"""
+One entry per observation stream the manifest loader carries, in the order
+the report presents them. Each entry is a `NamedTuple`:
+
+- `id`: the canonical short identifier used across the package.
+- `field`: the field of a loaded observation set holding the stream's
+  dated history.
+- `label`: the display title the report uses for the stream.
+- `score_label`: the string label the forecast archive and the release
+  scoring table use, or `nothing` for a stream that is not scored.
+- `forecast_prefix`: the stem of the stream's forecast columns (`:cases`
+  for `cases_cum` and `cases_new`), or `nothing` for a stream that is not
+  forecast.
+
+This is the single list of streams, so a stream is named once rather than
+once per consumer. [`stream_id`](@ref) resolves any of the four
+vocabularies back to `id`.
+"""
+const OBSERVATION_STREAMS = (
+    (; id = :suspected_cases, field = :reported_history,
+        label = "Suspected cases", score_label = "reported cases",
+        forecast_prefix = :cases),
+    (; id = :suspected_deaths, field = :deaths_history,
+        label = "Suspected deaths", score_label = "suspected deaths",
+        forecast_prefix = :deaths),
+    (; id = :suspected_daily, field = :suspected_daily_history,
+        label = "New suspects/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :suspected_daily_deaths, field = :suspected_daily_deaths_history,
+        label = "New suspected deaths/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :confirmed_cases, field = :confirmed_history,
+        label = "Confirmed cases", score_label = "confirmed cases",
+        forecast_prefix = :confirmed),
+    (; id = :confirmed_deaths, field = :confirmed_deaths_history,
+        label = "Confirmed deaths", score_label = "confirmed deaths",
+        forecast_prefix = :confirmed_deaths),
+    (; id = :recovered, field = :recovered_history,
+        label = "Recovered (confirmed)", score_label = "recovered",
+        forecast_prefix = :recovered),
+    (; id = :tests_analysed, field = :lab_history,
+        label = "Specimens analysed (cumulative)", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :tests_analysed_daily, field = :lab_daily_history,
+        label = "Specimens analysed (24h)", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :tests_received, field = :tests_received_history,
+        label = "Specimens received", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :isolation_beds, field = :isolation_history,
+        label = "Patients in isolation", score_label = "isolation beds",
+        forecast_prefix = nothing),
+    (; id = :bed_capacity, field = :bed_capacity_history,
+        label = "Bed capacity", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_admissions, field = :treatment_admissions_history,
+        label = "Admissions/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_deaths, field = :treatment_deaths_history,
+        label = "In-care deaths/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_ruleouts, field = :treatment_ruleout_history,
+        label = "Rule-outs/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_absconded, field = :treatment_absconded_history,
+        label = "Absconded/day", score_label = nothing,
+        forecast_prefix = nothing),
+    (; id = :treatment_beds, field = :treatment_confirmed_incare_history,
+        label = "Confirmed in care", score_label = "treatment beds",
+        forecast_prefix = nothing),
+    (; id = :suspect_beds, field = :treatment_suspect_incare_history,
+        label = "Suspects in care",
+        score_label = "isolation beds (suspected)",
+        forecast_prefix = nothing),
+    (; id = :onset_reports, field = :onset_report_history,
+        label = "Onset reports", score_label = "onset reports",
+        forecast_prefix = nothing),
+    (; id = :exports, field = :export_case_days,
+        label = "Uganda exports", score_label = "exports",
+        forecast_prefix = nothing))
+
+"""
+Calendar date of a grid day-index, where day `obs.n` is the cut-off and
+day 1 is the seeding day. Every dated history stores day-indices on this
+grid, so this is how a vintage is read back as a date.
+"""
+grid_date(obs, day::Integer)::Date = obs.cutoff - Day(obs.n - day)
+
+"""
+Resolve `stream` to its canonical identifier in [`OBSERVATION_STREAMS`](@ref).
+Accepts a canonical identifier, an observation-set history field name, a
+scoring label, or a forecast column name (`:cases_cum` and `:cases_new`
+both resolve to `:suspected_cases`). The four vocabularies are disjoint,
+so the mapping is unambiguous. Errors on an unknown stream, naming the
+identifiers it knows.
+"""
+function stream_id(stream)::Symbol
+    for e in OBSERVATION_STREAMS
+        stream === e.id && return e.id
+        stream === e.field && return e.id
+        !isnothing(e.score_label) && stream == e.score_label && return e.id
+        if !isnothing(e.forecast_prefix)
+            for suffix in ("_cum", "_new")
+                stream === Symbol(e.forecast_prefix, suffix) && return e.id
+            end
+        end
+    end
+    known = join(string.(getfield.(OBSERVATION_STREAMS, :id)), ", ")
+    return error("unknown stream '$stream'. Known streams: $known.")
+end
+
+## Registry entry for a canonical id, already resolved by `stream_id`.
+function _stream_entry(id::Symbol)
+    for e in OBSERVATION_STREAMS
+        e.id === id && return e
+    end
+    return error("no registry entry for stream id '$id'.")
+end
+
+"""
+Forecast column names for `stream` as `(; cum, new)`, or `nothing` for a
+stream the forecast does not carry. Built from the registry's
+`forecast_prefix`, so the column names are derived rather than repeated.
+"""
+function stream_forecast_columns(stream)
+    e = _stream_entry(stream_id(stream))
+    isnothing(e.forecast_prefix) && return nothing
+    return (; cum = Symbol(e.forecast_prefix, "_cum"),
+        new = Symbol(e.forecast_prefix, "_new"))
+end
+
+"""
+Date `stream` was last reported in `obs`, or `missing` when `obs` does
+not carry the stream or the stream has no vintages. This is the date of
+the stream's last vintage, since past it the series is only ever repeated
+at its last reported value rather than genuinely observed.
+
+The Uganda exports are a dated list of detections rather than a series of
+vintages, so their last reported date is the later of the last detected
+import and the last detected import death.
+"""
+function stream_last_date(obs, stream)::Union{Date, Missing}
+    id = stream_id(stream)
+    if id === :exports
+        days = Int[]
+        for f in (:export_case_days, :export_death_days)
+            hasproperty(obs, f) && append!(days, Int.(getproperty(obs, f)))
+        end
+        isempty(days) && return missing
+        return grid_date(obs, maximum(days))
+    end
+    field = _stream_entry(id).field
+    hasproperty(obs, field) || return missing
+    h = getproperty(obs, field)
+    isempty(h.days) && return missing
+    return grid_date(obs, maximum(h.days))
+end
+
+"""
+Days a stream's last vintage may lag the cut-off and still count as
+reporting. One reporting week, which is also the forecast horizon, so a
+stream that skips a single situation report is not read as stopped.
+"""
+const STREAM_REPORTING_GRACE_DAYS = 7
+
+"""
+Whether `stream` was still being reported at the cut-off of `obs`, that
+is whether its last vintage falls within `grace` days of the cut-off. A
+stream `obs` does not carry, or one with no vintages, is not reporting.
+"""
+function stream_reporting(obs, stream;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS)::Bool
+    d = stream_last_date(obs, stream)
+    return !ismissing(d) && (obs.cutoff - d) <= Day(grace)
+end
+
+"""
+Reporting status of every stream `obs` carries, one row per entry of
+[`OBSERVATION_STREAMS`](@ref) and in that order. Columns: the canonical
+`stream` identifier, its display `label`, the `last_date` it reported,
+whether it is still `reporting` at the cut-off, and `days_since` that
+last report.
+"""
+function stream_report_status(obs;
+        grace::Integer = STREAM_REPORTING_GRACE_DAYS)
+    entries = [e for e in OBSERVATION_STREAMS if hasproperty(obs, e.field)]
+    last_dates = Union{Date, Missing}[stream_last_date(obs, e.id)
+                                      for e in entries]
+    ## Columns are built typed rather than from a row vector, so a stream
+    ## with no vintages (a `missing` date) cannot widen the whole table to
+    ## `Any` and leave the reporting flag unusable as an index.
+    return DataFrame(
+        stream = Symbol[e.id for e in entries],
+        label = String[e.label for e in entries],
+        last_date = last_dates,
+        reporting = Bool[stream_reporting(obs, e.id; grace)
+                         for e in entries],
+        days_since = Union{Int, Missing}[ismissing(d) ? missing :
+                                         (obs.cutoff - d).value
+                                         for d in last_dates])
 end
 
 """

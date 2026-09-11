@@ -104,6 +104,90 @@ CONFIG = {
     "080": ("2026-08-02", "2026-07-29"),
     "081": ("2026-08-03", "2026-07-29"),
     "082": ("2026-08-04", "2026-08-05"),
+    "083": ("2026-08-05", "2026-08-05"),
+    "087": ("2026-08-09", "2026-08-05"),
+    "088": ("2026-08-10", "2026-08-05"),
+    "089": ("2026-08-11", "2026-08-05"),
+    "090": ("2026-08-12", "2026-08-05"),
+    "091": ("2026-08-13", "2026-08-05"),
+    "092": ("2026-08-14", "2026-08-10"),
+    "093": ("2026-08-15", "2026-08-10"),
+    "094": ("2026-08-16", "2026-08-17"),
+    "095": ("2026-08-17", "2026-08-17"),
+    "096": ("2026-08-18", "2026-08-17"),
+    "097": ("2026-08-19", "2026-08-17"),
+    # "098" is deliberately absent. It is the only vintage INSP embedded
+    # losslessly rather than as JPEG, so the fixed colour thresholds below
+    # keep a fringe of each bar that JPEG blur costs every other vintage,
+    # and it reads about 7% high on the same underlying data. Excluding it
+    # keeps a vintage on a different bias scale out of the between-vintage
+    # increments this file feeds. The evidence, and the controls that rule
+    # out the render size, are in data/README.md. Read them before adding
+    # it back.
+    "099": ("2026-08-21", "2026-08-17"),
+    "100": ("2026-08-22", "2026-08-17"),
+    "101": ("2026-08-23", "2026-08-24"),
+    "102": ("2026-08-24", "2026-08-24"),
+    "103": ("2026-08-25", "2026-08-24"),
+    "104": ("2026-08-26", "2026-08-24"),
+    "105": ("2026-08-27", "2026-08-24"),
+    "106": ("2026-08-28", "2026-08-24"),
+    "107": ("2026-08-29", "2026-08-24"),
+    "108": ("2026-08-30", "2026-08-31"),
+    "109": ("2026-08-31", "2026-08-31"),
+    # "110" is deliberately absent. Its page-4 figure carries the same
+    # outer caption as every other vintage ("par date de début des
+    # symptômes") but the embedded chart's own internal title and x-axis
+    # read "par date de NOTIFICATION" (n = 5 710) - a genuine basis change,
+    # confirmed by extracting and viewing the raw embedded image rather
+    # than trusting the caption. Digitising it would silently inject a
+    # different-basis series into the reporting-triangle stream. See
+    # data/README.md and issue #644.
+    "111": ("2026-09-02", "2026-08-31"),
+    "112": ("2026-09-03", "2026-08-31"),
+    "113": ("2026-09-04", "2026-08-31"),
+    "114": ("2026-09-05", "2026-08-31"),
+    "115": ("2026-09-06", "2026-09-07"),
+}
+
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
+# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
+# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
+# the printed tick labels directly - the pixel geometry is otherwise
+# indistinguishable, so this cannot be self-calibrated any more than
+# `last_tick` can). Applying the old /20 divisor to a 25-count grid
+# undercounts every bar by a scale-dependent amount and was caught only
+# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
+# read 26; the same date misread through the old divisor came out as 8).
+# Override per vintage here; anything absent keeps the historical 20.
+Y_AXIS_STEP = {
+    "087": 25,
+    "088": 25,
+    "089": 25,
+    "090": 25,
+    "091": 25,
+    "092": 25,
+    "093": 25,
+    "094": 25,
+    "095": 25,
+    "096": 25,
+    "097": 25,
+    "099": 25,
+    "100": 25,
+    "101": 25,
+    "102": 25,
+    "103": 25,
+    "104": 25,
+    "105": 25,
+    "106": 25,
+    "107": 25,
+    "108": 25,
+    "109": 25,
+    "111": 25,
+    "112": 25,
+    "113": 25,
+    "114": 25,
+    "115": 25,
 }
 
 
@@ -225,6 +309,25 @@ def _cluster(idx, gap=3):
     return out
 
 
+def _baseline_row(im, H):
+    # The count-0 baseline is the plot's bottom border: a solid line running
+    # almost the full chart width. Score rows by their longest contiguous run
+    # under a near-gray threshold (<180); a run-length ranking under that
+    # threshold correctly finds the border in every vintage, including
+    # tighter-anti-aliased renders, unlike a per-row pixel sum.
+    R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+    line = (R < 180) & (G < 180) & (B < 180)
+    line[: int(H * 0.4)] = False
+    best_row, best_run = 0, 0
+    for r in range(H):
+        run = _longest_run(line[r])
+        if run > best_run:
+            best_run, best_row = run, r
+    if best_run < 100:
+        raise ValueError("no baseline row found")
+    return best_row
+
+
 def _y_axis_ticks(dark, base, W):
     # The 0/20/40/60 y-axis tick rows, read from the label strip just left
     # of the vertical axis line. Candidate strips are scored by the longest
@@ -233,16 +336,20 @@ def _y_axis_ticks(dark, base, W):
     # with the last one (the 0 tick) on the baseline. Taking the longest run
     # alone is not enough - in SitRep 067 a glyph stroke outruns the real
     # axis line and yields a scale that halves every count.
+    # Slice bounds are the 0-based images of the reference's 1-based ranges:
+    # candidate columns 30..floor(W*0.13), the label strip being the ten
+    # columns immediately left of the candidate, and rows running down to
+    # three past the baseline.
     best = None
-    for x in range(30, int(W * 0.13)):
-        seg = dark[: base + 3, max(0, x - 10):x - 1].sum(axis=1)
+    for x in range(29, int(W * 0.13)):
+        seg = dark[: base + 4, max(0, x - 10):x].sum(axis=1)
         yt = _cluster([y for y in range(len(seg)) if seg[y] >= 3])
         if len(yt) < 3 or abs(yt[-1] - base) > 3:
             continue
         d = np.diff(yt)
         if d.min() <= 5 or d.max() > 1.15 * d.min():
             continue
-        rank = (_longest_run(dark[:base, x]), -x)  # tie-break leftmost
+        rank = (_longest_run(dark[: base + 1, x]), -x)  # tie-break leftmost
         if best is None or rank > best[0]:
             best = (rank, yt)
     if best is None:
@@ -250,15 +357,27 @@ def _y_axis_ticks(dark, base, W):
     return best[1]
 
 
-def digitize(im, last_tick_date):
+def digitize(im, last_tick_date, y_step=20):
     H, W, _ = im.shape
     blue, red, _, dark = _masks(im)
-    drow = dark.sum(axis=1)
-    drow[: int(H * 0.4)] = 0
-    base = int(np.argmax(drow))  # count-0 baseline row
-    # count scale from the 0/20/40/60 y-axis ticks
-    yt = _y_axis_ticks(dark, base, W)
-    ppc = np.median(np.diff(yt)) / 20.0
+    base = _baseline_row(im, H)  # count-0 baseline row
+    # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
+    # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
+    try:
+        yt = _y_axis_ticks(dark, base, W)
+    except ValueError:
+        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
+        # and the axis line into the 120-180 near-gray range, below every
+        # earlier vintage's border but still far darker than surrounding
+        # text, so the strict <120 mask finds three of the four ticks but
+        # not the one sitting on the baseline itself. Same class of fix as
+        # the baseline/weekly-tick <180 fallback above, scoped the same
+        # way: only tried when the strict mask finds nothing, so every
+        # already-committed vintage (059-111) keeps digitising unchanged.
+        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+        line = (R < 180) & (G < 180) & (B < 180)
+        yt = _y_axis_ticks(line, base, W)
+    ppc = np.median(np.diff(yt)) / float(y_step)
     ytop, y0 = yt[0], yt[-1]
     # x scale from the weekly tick marks below the baseline. The tick marks
     # are only a few pixels tall and shrink with the embedded figure
@@ -266,26 +385,44 @@ def digitize(im, last_tick_date):
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
     # it at 4 and losing the axis entirely on the smaller figures.
-    band = dark[base + 2:base + 7, :].sum(axis=0)
-    # The tick marks sit just below the baseline (a few px) and, on the faint
+    # They sit just below the baseline (a few px) and, on the faint
     # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
     # come all the way down to 1 to resolve them; the window stops at base+7
     # so a wide low-cut scan cannot pick up the x-axis date labels further
     # down. Step down through the cuts and keep the most complete weekly tick
     # row (the true axis has a fixed number of weekly ticks, so a too-strict
     # cut silently drops every other tick rather than failing).
-    best_n = 0
-    best = np.array([])
-    for cut in (4, 3, 2, 1):
-        cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
-        if len(cand) >= 8 and len(cand) > best_n:
-            best_n = len(cand)
-            best = cand
+    def _weekly_ticks(mask):
+        band = mask[base + 2:base + 7, :].sum(axis=0)
+        best_n, best = 0, np.array([])
+        for cut in (4, 3, 2, 1):
+            cand = np.array(_cluster([x for x in range(W) if band[x] >= cut]))
+            if len(cand) >= 8 and len(cand) > best_n:
+                best_n = len(cand)
+                best = cand
+        return best
+
+    best = _weekly_ticks(dark)
+    if len(best) == 0:
+        # Only fall back to the <180 near-gray mask when the strict mask
+        # finds nothing, so every already-committed vintage (059-107) keeps
+        # digitising under the original threshold.
+        R, G, B = im[:, :, 0], im[:, :, 1], im[:, :, 2]
+        line = (R < 180) & (G < 180) & (B < 180)
+        best = _weekly_ticks(line)
     if len(best) == 0:
         raise ValueError("no x-axis weekly tick row found")
     xt = best
     ppd = np.median(np.diff(xt)) / 7.0  # pixels per day
-    lastx = xt[-1]                       # rightmost tick is always real
+    # The daily bar windows are laid out in the 1-based pixel frame the
+    # Julia reference uses, and converted back to 0-based only at the point
+    # of indexing. Both languages round half to even, but that rule is not
+    # translation-invariant: a window edge landing exactly on .5 rounds down
+    # in one frame and up in the other, so a 0-based layout reads windows
+    # one column apart from the reference. A dropped column changes which
+    # bar the 75th percentile lands on, so the error is a whole segment, not
+    # a count or two.
+    lastx = xt[-1] + 1                   # rightmost tick is always real
     lastdate = dt.date.fromisoformat(last_tick_date)
     # per-column stacked bar height, flooded up from the baseline
     bc = np.zeros(W)
@@ -306,14 +443,15 @@ def digitize(im, last_tick_date):
             r -= 1
         bc[x], rc[x] = b, rr
     tot = bc + rc
-    barmin, barmax = np.where(tot > 2)[0].min(), np.where(tot > 2)[0].max()
+    nz = np.where(tot > 2)[0] + 1        # 1-based, matching lastx
+    barmin, barmax = nz.min(), nz.max()
     rows = []
     for off in range(-105, 4):
         cx = lastx + off * ppd
         if cx < barmin - ppd or cx > barmax + ppd:
             continue
         lo, hi = int(round(cx - ppd * 0.45)), int(round(cx + ppd * 0.45))
-        cols = range(max(0, lo), min(W, hi + 1))
+        cols = range(max(1, lo) - 1, min(W, hi))
         bvals = [bc[c] for c in cols]
         rvals = [rc[c] for c in cols]
         if max(b + r for b, r in zip(bvals, rvals)) < 1:
@@ -351,7 +489,17 @@ def main():
         if im is None:
             print(f"skip {sr}: no onset curve found", file=sys.stderr)
             continue
-        rows = digitize(im, last_tick)
+        rows = digitize(im, last_tick, Y_AXIS_STEP.get(sr, 20))
+        # An onset date can never sit later than the axis of the report
+        # that draws it, and that axis runs at most a day past the
+        # rapportage date (the date-de-publication lag). The window above
+        # self-calibrates from pixel content and can read a few stray days
+        # past the last labelled tick when the figure's own "donnees
+        # potentiellement incompletes" band extends that far (SitRep 115);
+        # drop those here rather than loosen the invariant
+        # test/test_onset_digitiser.jl checks.
+        cutoff = dt.date.fromisoformat(report_date) + dt.timedelta(days=1)
+        rows = [r for r in rows if dt.date.fromisoformat(r[0]) <= cutoff]
         total = sum(a + d for _, a, d in rows)
         print(f"SitRep {sr} ({report_date}): {len(rows)} onset days, "
               f"total {total} confirmed")

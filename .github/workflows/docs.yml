@@ -63,11 +63,19 @@ jobs:
       # The docs env is part of the root [workspace] (see Project.toml), so its
       # resolved manifest is the repo-root Manifest.toml, not docs/Manifest.toml.
       # Manifest.toml is git-ignored, hence the artifact.
+      # Every artifact this workflow uploads is a handoff inside the run:
+      # `fit` feeds `render`, `render` feeds `combine`, and nothing reads any
+      # of them afterwards (no step passes a `run-id`). The durable fit cache
+      # is `actions/cache` above, keyed on the model sources and data. Left at
+      # the 90-day default these built up to 6800 artifacts and 36 GB, which
+      # exhausted the storage quota and failed uploads with a 403 on
+      # finalisation. Three days keeps a window for debugging a failed run.
       - uses: actions/upload-artifact@v7
         with:
           name: manifest
           path: Manifest.toml
           if-no-files-found: error
+          retention-days: 3
 
   # One fit per matrix job. Each fit is content-addressed and cached, so a
   # re-run with unchanged model source and data refits nothing; the frozen
@@ -131,6 +139,7 @@ jobs:
           name: fit-${{ matrix.id }}
           path: logs/fit_cache/*.jls
           if-no-files-found: error
+          retention-days: 3
 
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
@@ -189,12 +198,18 @@ jobs:
            julia --project=scripts scripts/refresh_releases.jl) ||
             echo "release refresh failed; using committed released_estimates.csv"
           # Rescore every release's saved forecasts against the now-observed
-          # data and refresh the per-release R_T overlay. Best-effort: on any
-          # failure the committed forecast_scores.csv / rt_by_release.csv are
-          # used instead.
-          (julia --project=docs -e 'using Pkg; Pkg.instantiate()' &&
-           julia --project=docs scripts/score_releases.jl) ||
-            echo "score refresh failed; using committed scoring overlays"
+          # data and refresh the per-release R_T overlay.
+          #
+          # Not best-effort, deliberately. Falling back to the committed
+          # forecast_scores.csv / forecast_overlay.csv would publish skill
+          # scores and forecast-versus-observed figures against whatever
+          # truth series those files were last written from, with nothing on
+          # the rendered page saying so. This step writes them, so they are
+          # stale by construction. A hard failure is recoverable by
+          # re-running the job; a silent substitution is not detectable from
+          # the page at all.
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          julia --project=docs scripts/score_releases.jl
       - name: Render ${{ matrix.page }}
         env:
           BVD_DOC_PAGE: ${{ matrix.page }}
@@ -217,6 +232,7 @@ jobs:
             docs/src
             output
           if-no-files-found: warn
+          retention-days: 3
 
   # Assemble the Vitepress site from both pre-rendered pages (a single
   # makedocs, so cross-page @ref/@cite resolve) and deploy; then publish the
@@ -226,6 +242,15 @@ jobs:
     needs: render
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # Every branch's preview lands on the one gh-pages ref, so two PRs
+    # deploying at once race and the loser's push is rejected as
+    # non-fast-forward. The workflow-level group above is keyed on the source
+    # ref and so cannot see that; key this job on the destination instead.
+    # Queue rather than cancel: a superseded deploy still has a preview to
+    # publish, and the job is short.
+    concurrency:
+      group: docs-deploy-gh-pages
+      cancel-in-progress: false
     permissions:
       contents: write
       statuses: write

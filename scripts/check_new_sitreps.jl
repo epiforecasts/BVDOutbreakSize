@@ -28,8 +28,27 @@
 #    blob (a base64 of {"url": ...}); data/README.md documents the one-line
 #    decode to get a direct, fetchable PDF link.
 #  - Exit code is 0 when up to date, 1 when one or more reports are missing
-#    (so a caller / cron can branch on it).
+#    (so a caller / cron can branch on it). Exit code is unaffected by the
+#    mirror-lead warning below - a mirror lead never licenses treating a
+#    SitRep as missing when insp.cd itself has published nothing new.
+#
+# Mirror-lead check: insp.cd being "up to date" only means no new
+# SitRep-numbered post/PDF exists yet. It does not mean the outbreak has
+# stopped moving - INSP's own SitRep pipeline can fall behind INRB-UMIE's
+# internal transcription pipeline for days at a time, and a silent "up to
+# date" on a day like that reads as nothing happening when the response has
+# in fact continued, just without a public PDF yet. So after the insp.cd
+# comparison, this script also fetches the mirror's national cumulative
+# confirmed-case CSV (one extra request) and compares its latest date
+# against the manifest's `as_of_date`. If the mirror is ahead, it prints a
+# loud warning - it does NOT change the exit code and does NOT license
+# updating data/observations.toml from the mirror alone (see
+# data/README.md's insp.cd-unreachable clause): that still requires either
+# an insp.cd PDF or an explicit decision to record a mirror-only point. The
+# point of the check is visibility, not automation. The fetch is best-effort
+# and never allowed to crash the script - see check_mirror_lead().
 
+using Dates
 using Downloads
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " *
@@ -37,6 +56,10 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " *
 const LIST_URL = "https://insp.cd/wp-json/wp/v2/posts?" *
                  "search=sitrep&per_page=100&_fields=id,slug,date"
 const SCANNED = joinpath(@__DIR__, "..", "data", "insp_sitrep_scanned.csv")
+const OBSERVATIONS = joinpath(@__DIR__, "..", "data", "observations.toml")
+const MIRROR_CASES_URL = "https://raw.githubusercontent.com/INRB-UMIE/" *
+                         "BDBV2026-Data/main/data/insp_sitrep/processed/" *
+                         "insp_sitrep__national_cumulative_confirmed_cases__daily.csv"
 
 fetch(url) = sprint() do io
     Downloads.download(url, io; headers = ["User-Agent" => UA])
@@ -68,6 +91,70 @@ function published_sitreps()
     return sort!(unique(out); by = first, rev = true)
 end
 
+"Manifest `as_of_date` as a Date, read without a TOML dependency."
+function manifest_as_of_date()
+    for line in eachline(OBSERVATIONS)
+        m = match(r"^as_of_date\s*=\s*\"(\d{4}-\d{2}-\d{2})\"", line)
+        m === nothing || return Date(m.captures[1])
+    end
+    error("as_of_date not found in $OBSERVATIONS")
+end
+
+"Latest (date, value) row of the mirror's national cumulative confirmed-case CSV."
+function mirror_latest_cases()
+    body = fetch(MIRROR_CASES_URL)
+    latest = nothing
+    for line in Iterators.drop(eachline(IOBuffer(body)), 1)
+        cols = split(line, ',')
+        length(cols) < 3 && continue
+        cols[3] == "ND" && continue
+        d = tryparse(Date, cols[2])
+        v = tryparse(Int, cols[3])
+        (d === nothing || v === nothing) && continue
+        (latest === nothing || d > latest[1]) && (latest = (d, v))
+    end
+    return latest
+end
+
+"Print a loud but non-fatal warning if the mirror is ahead of the manifest
+even though insp.cd itself has nothing new. See the module-level comment
+above for why this exists and what it deliberately does not do."
+function check_mirror_lead()
+    as_of = manifest_as_of_date()
+    mirror = try
+        mirror_latest_cases()
+    catch e
+        println("\n(Mirror-lead check skipped: could not fetch the ",
+            "INRB-UMIE mirror CSV - ", sprint(showerror, e), ".)")
+        return
+    end
+    if mirror === nothing
+        println("\n(Mirror-lead check skipped: could not parse the ",
+            "INRB-UMIE mirror CSV.)")
+        return
+    end
+    mirror_date, mirror_value = mirror
+    if mirror_date > as_of
+        println("\n", "!"^70)
+        println("WARNING: the INRB-UMIE mirror is AHEAD of the manifest ",
+            "even though insp.cd has no new SitRep.")
+        println("  Manifest as_of_date:       ", as_of)
+        println("  Mirror latest cumulative:  ", mirror_date, " = ",
+            mirror_value, " confirmed cases")
+        println("This does NOT mean a SitRep was missed - insp.cd was ",
+            "checked directly above and has nothing newer. It means the ",
+            "response may be continuing without a public PDF yet (INRB-UMIE ",
+            "is INSP's own modelling unit and may have line-list access ",
+            "ahead of publication). Investigate before treating today as ",
+            "fully quiet; do not update data/observations.toml from this ",
+            "value alone without recording it as mirror-only provenance.")
+        println("!"^70)
+    else
+        println("\nMirror check: no lead (mirror latest ", mirror_date,
+            " <= manifest as_of_date ", as_of, ").")
+    end
+end
+
 function main()
     recorded = latest_recorded()
     pubs = published_sitreps()
@@ -84,6 +171,7 @@ function main()
 
     if isempty(missing_reports)
         println("\nUp to date - no new SitReps to record.")
+        check_mirror_lead()
         return 0
     end
 

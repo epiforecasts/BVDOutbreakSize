@@ -19,12 +19,18 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # ## Forecast validation
 #
 # How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
+# Only the streams the situation reports are still updating are validated here.
+# A stream that has stopped being reported carries a cumulative total that repeats its last reported value, so there is no observation for the past week to score against.
+# The scoring tables further down withhold such a window for the same reason.
+# The projections for those streams are shown separately below.
 # The frozen fit also conditions on the isolation beds, so the projected bed occupancy is scored against the beds held a week later.
 # The bed validation is weak at a one-week-back freeze.
 # The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
 # This widens the projected bed interval.
-# Unlike the scores further down, the confirmed new-count rows here keep any retrospective harmonisation step the week contained.
-# This means a week holding one reads high against a forecast that never predicted it.
+# Like the scores further down, the confirmed new-count rows here take out any retrospective harmonisation step the week contained.
+# Such a step reattaches records notified earlier, so it is not something the forecast was predicting.
+# A validation week containing no harmonisation day carries no correction, and the rows then read as the raw window counts.
+# The cumulative rows are scored against the published total, harmonisation included.
 
 #md # ```@raw html
 #md # <details><summary>Fit one week back and validate the one-week-ahead forecast</summary>
@@ -61,54 +67,95 @@ validation_forecast = forecast_reported(frozen_lastweek.chn;
 ## `stream_forecasts.csv` uses), so the validation plots below can show the
 ## individual fit alongside the joint rather than the joint alone. Recovered
 ## has no individual fit and is absent here, as it is throughout this report.
-function _validation_individual_new(sid, stream::Symbol, obs_value)
+## Only the still-reported streams are fitted at the validation cut-off, so
+## a stream the situation reports have stopped updating is absent from
+## `frozen_lastweek_streams` and carries no individual series here.
+function _validation_individual_new(sid, stream::Symbol, obs_field)
+    haskey(frozen_lastweek_streams, sid) || return nothing
     f = frozen_lastweek_streams[sid]
     bp = f.o.n - f.o.who_first_sitrep_days
     return Float64.(forecast_stream(f.chn, stream; horizon = 7,
-        obs_value = obs_value, n = f.o.n, breakpoint = bp,
+        obs_value = getproperty(f.o, obs_field), n = f.o.n, breakpoint = bp,
         rt_start = 1, rt_walk_start = 1))
 end
-validation_individual = (;
-    cases_new = _validation_individual_new(
-        "cases", :reported_cases,
-        frozen_lastweek_streams["cases"].o.reported_cases),
-    deaths_new = _validation_individual_new(
-        "deaths", :suspected_deaths,
-        frozen_lastweek_streams["deaths"].o.total_deaths),
-    confirmed_new = _validation_individual_new(
-        "confirmed", :confirmed_cases,
-        frozen_lastweek_streams["confirmed"].o.confirmed_cases),
-    confirmed_deaths_new = _validation_individual_new(
-        "confirmed_deaths", :confirmed_deaths,
-        frozen_lastweek_streams["confirmed_deaths"].o.confirmed_deaths))
+validation_individual = NamedTuple(
+    k => v
+for (k, v) in pairs((;
+        cases_new = _validation_individual_new(
+            "cases", :reported_cases, :reported_cases),
+        deaths_new = _validation_individual_new(
+            "deaths", :suspected_deaths, :total_deaths),
+        confirmed_new = _validation_individual_new(
+            "confirmed", :confirmed_cases, :confirmed_cases),
+        confirmed_deaths_new = _validation_individual_new(
+            "confirmed_deaths", :confirmed_deaths, :confirmed_deaths)))
+if !isnothing(v))
 ## The frozen individual (treatment-only) fit's own bed-occupancy forecast,
 ## anchored on the beds occupied at ITS OWN cut-off (the frozen fit's own
 ## `o`, not the current `obs`), matching how the joint frozen forecast is
 ## itself anchored.
-_validation_iso_obs = let f = frozen_lastweek_streams["treatment"]
-    isempty(f.o.isolation_history.counts) ? 0.0 :
-    Float64(f.o.isolation_history.counts[end])
+## `nothing` when the beds have stopped being reported, so the treatment fit
+## is absent; the bed panel then draws the joint alone.
+## A `let` block, not a bare `if`: a top-level `if` shares the script's
+## global scope, so its working names would leak into the rest of the page.
+validation_individual_isolation = let
+    if haskey(frozen_lastweek_streams, "treatment")
+        tf = frozen_lastweek_streams["treatment"]
+        beds = isempty(tf.o.isolation_history.counts) ? 0.0 :
+               Float64(tf.o.isolation_history.counts[end])
+        Float64.(forecast_stream(tf.chn, :isolation_beds; horizon = 7,
+            obs_value = beds, n = tf.o.n,
+            breakpoint = tf.o.n - tf.o.who_first_sitrep_days,
+            rt_start = 1, rt_walk_start = 1))
+    else
+        nothing
+    end
 end
-validation_individual_isolation = _validation_individual_new(
-    "treatment", :isolation_beds, _validation_iso_obs)
 
 ## The observed beds at the current cut-off (the forecast target), so the
 ## frozen-fit bed forecast is scored against what the beds actually held.
-_obs_beds = isempty(obs.isolation_history.counts) ? missing :
-            obs.isolation_history.counts[end]
+## Held back once the beds stop being reported, since the last count would
+## then be carried forward rather than observed at the target date.
+_obs_beds = stream_reporting(obs, :isolation_beds) ?
+            obs.isolation_history.counts[end] : missing
 ## Same observed/baseline keying as the plot below, so the table covers every
 ## fitted count stream (cumulative and new-count rows) plus the bed level.
+## A harmonisation-break day between the frozen cut-off and the current one
+## puts records into the confirmed cumulative that were never notified in that
+## week, so the new-count truth carries a step the forecast was never
+## predicting. Take it out, the same correction `score_releases.jl` applies.
+## Grid days are relative to a seeding date fixed by the genetic tmrca, so the
+## frozen fit's own `n` and the current `obs.n` index the same grid.
+validation_breaks = (
+    confirmed_cum = confirmed_break_correction(
+        obs, frozen_lastweek.o.n, obs.n),
+    confirmed_deaths_cum = confirmed_break_correction(
+        obs, frozen_lastweek.o.n, obs.n; deaths = true))
+
+## Observed cumulative at the target date per stream, keyed by the forecast's
+## cumulative column; `baseline` is each stream's origin cumulative (the
+## frozen cut-off), so the new count is scored against observed minus origin,
+## less any harmonisation the window carries (see `validation_breaks`). Both
+## the table and the plot below take the still-reported streams
+## (`reporting_cum_cols`, from the setup block): a stream the situation
+## reports have stopped updating has an origin and a target reading the same
+## repeated total, so its cumulative truth is stale and its new-count truth is
+## a guaranteed zero.
+validation_observed = (cases_cum = obs.reported_cases,
+    deaths_cum = obs.total_deaths,
+    confirmed_cum = obs.confirmed_cases,
+    confirmed_deaths_cum = obs.confirmed_deaths,
+    recovered_cum = obs.recovered_cases)
+validation_baseline = (cases_cum = frozen_lastweek.o.reported_cases,
+    deaths_cum = frozen_lastweek.o.total_deaths,
+    confirmed_cum = frozen_lastweek.o.confirmed_cases,
+    confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
+    recovered_cum = frozen_lastweek.o.recovered_cases)
+
 validation_table = forecast_vs_truth(validation_forecast;
-    observed = (cases_cum = obs.reported_cases,
-        deaths_cum = obs.total_deaths,
-        confirmed_cum = obs.confirmed_cases,
-        confirmed_deaths_cum = obs.confirmed_deaths,
-        recovered_cum = obs.recovered_cases),
-    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
-        deaths_cum = frozen_lastweek.o.total_deaths,
-        confirmed_cum = frozen_lastweek.o.confirmed_cases,
-        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
-        recovered_cum = frozen_lastweek.o.recovered_cases),
+    observed = keep_streams(validation_observed, reporting_cum_cols),
+    baseline = keep_streams(validation_baseline, reporting_cum_cols),
+    breaks = validation_breaks,
     isolation = _obs_beds);
 
 #md # ```@raw html
@@ -119,15 +166,23 @@ validation_table = forecast_vs_truth(validation_forecast;
 #md # <details><summary>Forecast-versus-observed validation table</summary>
 #md # ```
 
-validation_table #hide
+## `MarkdownTable` rather than a bare table expression: a DataFrame is
+## `text/html`-showable, Literate prefers that mime, and the `@raw html`
+## block it writes crosses Documenter's raw-block regex limit once the
+## table grows. `MarkdownTable` is markdown-showable and not
+## html-showable, so the table goes out as an ordinary markdown table
+## rather than a fixed-width block of printed output. See its docstring
+## for the mechanism. The same treatment is applied to every DataFrame
+## display in this file and in `analysis.jl`.
+MarkdownTable(validation_table) #hide
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each fitted count stream the forecast carries (reported cases, suspected deaths, confirmed cases, confirmed deaths and recovered).
+# The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each still-reported count stream the forecast carries.
 # The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
-# Each stream draws only when the forecast carries its column, so a fit observing fewer streams shows fewer panels.
+# Each stream draws only when the forecast carries its column and the observation covers the target date, so a fit observing fewer streams shows fewer panels.
 # Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted density alongside the joint's histogram.
 # Recovered has no individual fit and draws the joint alone.
 
@@ -135,21 +190,11 @@ validation_table #hide
 #md # <details><summary>Forecast-versus-observed plot</summary>
 #md # ```
 
-## Observed cumulative at the target date per stream, keyed by the forecast's
-## cumulative column; `baseline` is each stream's origin cumulative (the frozen
-## cut-off), so the new-count panel is scored against observed minus origin.
 validation_fig = plot_forecast_vs_truth(validation_forecast;
-    observed = (cases_cum = obs.reported_cases,
-        deaths_cum = obs.total_deaths,
-        confirmed_cum = obs.confirmed_cases,
-        confirmed_deaths_cum = obs.confirmed_deaths,
-        recovered_cum = obs.recovered_cases),
-    baseline = (cases_cum = frozen_lastweek.o.reported_cases,
-        deaths_cum = frozen_lastweek.o.total_deaths,
-        confirmed_cum = frozen_lastweek.o.confirmed_cases,
-        confirmed_deaths_cum = frozen_lastweek.o.confirmed_deaths,
-        recovered_cum = frozen_lastweek.o.recovered_cases),
-    individual = validation_individual);
+    observed = keep_streams(validation_observed, reporting_cum_cols),
+    baseline = keep_streams(validation_baseline, reporting_cum_cols),
+    breaks = validation_breaks,
+    individual = keep_streams(validation_individual, reporting_cum_cols));
 
 #md # ```@raw html
 #md # </details>
@@ -199,9 +244,49 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
+# ### Streams no longer reported
+#
+# The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
+# The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
+# These are the model's projections rather than a validation of them.
+
+#md # ```@raw html
+#md # <details><summary>Forecast for the streams no longer reported</summary>
+#md # ```
+
+## The last-reported date per stopped stream, and the frozen fit's own
+## projection for them. `plot_forecast` draws a panel per new-count column
+## the frame carries, so passing the stopped streams' columns alone gives the
+## projection without the fabricated truth rule the validation figure would
+## otherwise draw against a repeated total.
+validation_stopped_streams = let s = stream_report_status(obs),
+    ids = [stream_id(c) for c in stopped_cum_cols]
+
+    keep = [r.stream in ids for r in eachrow(s)]
+    DataFrame("Stream" => s[keep, :label],
+        "Last reported" => s[keep, :last_date])
+end
+_stopped_new_cols = [c
+                     for c in new_cols(stopped_cum_cols)
+                     if c in propertynames(validation_forecast)]
+validation_stopped_fig = plot_forecast(
+    validation_forecast[!, _stopped_new_cols]);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+## See the comment above `validation_table`'s display for why this wraps
+## the table in `MarkdownTable` instead of showing it directly.
+MarkdownTable(validation_stopped_streams) #hide
+
+validation_stopped_fig #hide
+
 # ## Forecast scoring across releases
 #
 # Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
+# The tables in this section are the joint model's, one row per stream.
+# Each stream's individual fit is scored the same way and tabulated in [Individual fits against the baseline](@ref "Individual fits against the baseline") below, so a fit appears in one table rather than two.
 # See [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built.
 # Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
 # Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off.
@@ -211,9 +296,8 @@ validation_latent_fig #hide
 # The table below is therefore not a verdict on the current fit.
 # One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
 # This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
-# The releases that carry the current model's own individual-stream forecasts are too recent for their targets to be observed yet.
-# This is why the comparison against each stream's individual fit is still empty.
-# It will populate once those targets resolve.
+# Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
+# The comparison against each stream's individual fit therefore rests on those releases alone, filling in one horizon at a time as their targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
 # A ratio here should therefore be read as an early signal rather than a settled result.
 #
@@ -250,24 +334,41 @@ forecast_overlay_df = _release_data("forecast_overlay.csv",
         target_date = Date, fit = String, observed = Float64,
         median = Float64, lo30 = Float64, hi30 = Float64, lo60 = Float64,
         hi60 = Float64, lo90 = Float64, hi90 = Float64))
-## The headline table, one row per (stream, fit) pooled over every horizon
-## and release; the by-horizon and by-release detail tables carry the same
-## columns at a finer grain (see src/scoring.jl).
+## One row per (stream, fit) pooled over every horizon and release. The
+## by-horizon and by-release detail tables carry the same columns at a finer
+## grain (see src/scoring.jl). Every fit is kept here, since the
+## relative-skill figure below compares the roles against each other. The
+## tables rendered in this section select the joint role, and the individual
+## fits are tabulated in their own section.
 forecast_score_overview_table = forecast_score_overview(forecast_scores_df)
 forecast_score_by_horizon_table = forecast_score_by_horizon(forecast_scores_df)
 forecast_score_by_release_table = forecast_score_by_release(forecast_scores_df)
+
+joint_score_overview_table = select_fit_role(
+    forecast_score_overview_table, "joint")
+joint_score_by_horizon_table = select_fit_role(
+    forecast_score_by_horizon_table, "joint")
+## The trailing `;` on this last assignment matters: without it, this whole
+## setup chunk's last statement (the DataFrame it assigns) is Literate's
+## implicitly displayed "result" for the chunk, on top of the deliberate
+## display further down -- and a bare DataFrame is html-showable, so it
+## goes out as a second, undisplayed-in-source `@raw html` block that (for
+## a table this size) can itself hit the PCRE limit described above.
+joint_score_by_release_table = select_fit_role(
+    forecast_score_by_release_table, "joint");
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-# The headline pools every horizon and release into one row per stream and fit: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline for every fit, on both the natural and the log scale.
-# The joint row also carries relative skill against the stream's own individual fit where one exists.
+# The headline pools every horizon and release into one row per stream for the joint model: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline, on both the natural and the log scale.
+# Each row also carries relative skill against the stream's own individual fit where one exists.
 # Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
-forecast_score_overview_table #hide
+MarkdownTable(joint_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
+# This is the one place the two roles are drawn against each other, so it carries each stream's individual fit alongside the joint.
 # A fit that beats the baseline on average but not at every cut-off is visible as a series that crosses the line rather than sitting under it throughout.
 
 forecast_relative_skill_fig = plot_forecast_relative_skill(
@@ -275,13 +376,13 @@ forecast_relative_skill_fig = plot_forecast_relative_skill(
 
 forecast_relative_skill_fig #hide
 
-# The same columns as a table, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
+# The same columns as a table for the joint model, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
 
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-forecast_score_by_horizon_table #hide
+MarkdownTable(joint_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -291,7 +392,7 @@ forecast_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-forecast_score_by_release_table #hide
+MarkdownTable(joint_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -358,8 +459,10 @@ frozen_score_overview_display = drop_degenerate_fit_column(
     frozen_score_overview_table)
 frozen_score_by_horizon_display = drop_degenerate_fit_column(
     frozen_score_by_horizon_table)
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
 frozen_score_by_release_display = drop_degenerate_fit_column(
-    frozen_score_by_release_table)
+    frozen_score_by_release_table);
 
 #md # ```@raw html
 #md # </details>
@@ -368,7 +471,7 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 # The headline frozen table pools one row per stream across cut-offs and horizons, scored against the persistence baseline on both scales, with the CRPS decomposition, coverage and bias columns described above.
 # There is no model column, since only one model is scored.
 
-frozen_score_overview_display #hide
+MarkdownTable(frozen_score_overview_display) #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
 
@@ -383,7 +486,7 @@ frozen_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-frozen_score_by_horizon_display #hide
+MarkdownTable(frozen_score_by_horizon_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -393,7 +496,7 @@ frozen_score_by_horizon_display #hide
 #md # <details><summary>Scores by frozen cut-off</summary>
 #md # ```
 
-frozen_score_by_release_display #hide
+MarkdownTable(frozen_score_by_release_display) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -430,36 +533,40 @@ frozen_overlay_fig #hide
 
 # ## Individual fits against the baseline
 #
-# This section repeats the cross-release forecast scoring from [Forecast scoring across releases](@ref "Forecast scoring across releases") above, filtered to each stream's own individual fit rather than the joint, against the same persistence baseline.
+# This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
 # Recovered has no individual fit, so it does not appear here.
-# These are the individual-fit rows of the cross-release scores above, not a separate computation.
-# As in [Forecast scoring across releases](@ref "Forecast scoring across releases") above, every table and figure in this section is currently empty for the same reason.
-# It will populate once those targets resolve.
+# These are the individual-fit rows of the same scored forecasts, not a separate computation.
+# Only the newest few releases carry an individual-stream forecast, so these tables cover those releases alone rather than the outbreak's history.
 
 #md # ```@raw html
 #md # <details><summary>Individual-fit rows of the cross-release scores</summary>
 #md # ```
 
-individual_score_overview_table = forecast_score_overview_table[
-    forecast_score_overview_table.fit .!= "joint", :]
-individual_score_by_horizon_table = forecast_score_by_horizon_table[
-    forecast_score_by_horizon_table.fit .!= "joint", :]
-individual_score_by_release_table = forecast_score_by_release_table[
-    forecast_score_by_release_table.fit .!= "joint", :]
+## The relative skill against a stream's individual fit is only ever
+## computed on the joint model's row, so on these rows it is missing by
+## construction and the column is dropped rather than shown empty.
+individual_score_overview_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_overview_table, "individual"))
+individual_score_by_horizon_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_by_horizon_table, "individual"))
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
+individual_score_by_release_table = drop_individual_fit_columns(
+    select_fit_role(forecast_score_by_release_table, "individual"));
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-individual_score_overview_table #hide
+MarkdownTable(individual_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon, one panel per stream (dataset), for each stream's own individual fit.
 
 individual_relative_skill_fig = plot_forecast_relative_skill(
     individual_score_by_horizon_table;
-    empty_message = "Empty: the releases that carry the current model's " *
-                    "own individual-stream forecasts are too recent for their " *
-                    "targets to be observed yet. Not a missing forecast.");
+    empty_message = "Empty: no release old enough for its targets to " *
+                    "have been observed carries an individual-stream " *
+                    "forecast. Not a missing forecast.");
 
 individual_relative_skill_fig #hide
 
@@ -469,7 +576,7 @@ individual_relative_skill_fig #hide
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
 
-individual_score_by_horizon_table #hide
+MarkdownTable(individual_score_by_horizon_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -479,7 +586,7 @@ individual_score_by_horizon_table #hide
 #md # <details><summary>Scores by release</summary>
 #md # ```
 
-individual_score_by_release_table #hide
+MarkdownTable(individual_score_by_release_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -507,7 +614,7 @@ streams_C_table = streams_table(
 #md # </details>
 #md # ```
 
-streams_C_table #hide
+MarkdownTable(streams_C_table) #hide
 
 # The first figure shows each single-stream fit's cumulative-infection trajectory projected to the cut-off, with a dotted rule in each stream's colour marking where its data stops and the ribbon beyond it becomes a forward projection.
 
@@ -1201,7 +1308,7 @@ chamla_comparison_table = let
             string(obs.confirmed_cases) * " (23 June)"])
 end;
 
-chamla_comparison_table #hide
+MarkdownTable(chamla_comparison_table) #hide
 
 #md # ```@raw html
 #md # </details>
@@ -1308,7 +1415,7 @@ spatial_sensitivity_fig #hide
 ## defined in the fit registry (`docs/fits/registry.jl`) and loaded through the cache
 ## (when enabled) in the setup block above.
 posterior_C_community_delay = RUN_SENSITIVITY ?
-                              vec(Array(chn_joint_community_delay[:C_T])) : nothing
+                              vec(Array(chn_joint_community_delay[:C_T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1321,13 +1428,13 @@ posterior_C_community_delay = RUN_SENSITIVITY ?
 delay_sensitivity_table = RUN_SENSITIVITY ?
                           streams_table("baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay) :
-                          Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                          Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-delay_sensitivity_table #hide
+MarkdownTable(delay_sensitivity_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Delay-sensitivity infection-count density plot</summary>
@@ -1337,7 +1444,7 @@ delay_sensitivity_fig = RUN_SENSITIVITY ?
                         plot_cumulative_cases(
     "baseline (hospital pathway)" => posterior_C_joint,
     "community pathway" => posterior_C_community_delay; scenarios = []) :
-                        Markdown.md"_Delay sensitivity analysis not shown in this build._"
+                        Markdown.md"_Delay sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1363,7 +1470,7 @@ delay_sensitivity_fig #hide
 posterior_C_exp_growth = RUN_SENSITIVITY ?
                          vec(Array(chn_joint_exp_growth_clock[:C_T])) : nothing
 T_skygrid = vec(Array(chn_joint[:T]))
-T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing
+T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : nothing;
 
 #md # ```@raw html
 #md # </details>
@@ -1379,13 +1486,13 @@ T_exp_growth = RUN_SENSITIVITY ? vec(Array(chn_joint_exp_growth_clock[:T])) : no
 clock_sensitivity_C_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-clock_sensitivity_C_table #hide
+MarkdownTable(clock_sensitivity_C_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior infection-count density plot</summary>
@@ -1394,7 +1501,7 @@ clock_sensitivity_C_table #hide
 clock_sensitivity_C_fig = RUN_SENSITIVITY ?
                           plot_cumulative_cases("Skygrid (baseline)" => posterior_C_joint,
     "Exponential growth" => posterior_C_exp_growth; scenarios = []) :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
@@ -1411,13 +1518,13 @@ clock_sensitivity_C_fig #hide
 clock_sensitivity_T_table = RUN_SENSITIVITY ?
                             streams_table("Skygrid (baseline)" => T_skygrid,
     "Exponential growth" => T_exp_growth; digits = 0) :
-                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+                            Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
-clock_sensitivity_T_table #hide
+MarkdownTable(clock_sensitivity_T_table) #hide
 
 #md # ```@raw html
 #md # <details><summary>Tree-prior outbreak-age density plot</summary>
@@ -1427,8 +1534,8 @@ clock_sensitivity_T_fig = RUN_SENSITIVITY ?
                           plot_density_overlay("Skygrid (baseline)" => T_skygrid,
     "Exponential growth" => T_exp_growth;
     xlabel = "Outbreak age (days before cut-off)",
-    title = "Posterior outbreak age by tree prior") :
-                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._"
+    title = "Posterior outbreak age by tree prior", lower = 0) :
+                          Markdown.md"_Tree-prior sensitivity analysis not shown in this build._";
 
 #md # ```@raw html
 #md # </details>

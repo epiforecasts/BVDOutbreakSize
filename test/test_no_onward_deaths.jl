@@ -32,3 +32,37 @@
         abs.(df.total_projected .- (obs_deaths .+ df.delta_deaths))
     ) < 1e-8
 end
+
+## Both plotted quantities have a hard floor: `delta_deaths` is clamped at
+## zero, so `total_projected` cannot fall below the deaths already observed.
+## A free kernel density spreads mass past the smallest draw, which put a
+## visible negative tail on the still-expected-deaths panel.
+
+@testitem "plot_no_onward_deaths keeps each density inside its bound" setup=[
+    HeadlessMakie
+] begin
+    using DataFrames: DataFrame
+    using CairoMakie: Axis
+    using BVDOutbreakSize: plot_no_onward_deaths
+
+    ## Draws piled against the zero clamp, which is what produced the tail.
+    delta = max.(collect(range(-40, 160; length = 500)), 0.0)
+    obs_deaths = 2325
+    df = DataFrame(delta_deaths = delta,
+        total_projected = obs_deaths .+ delta)
+
+    fig = plot_no_onward_deaths(df; obs_deaths = obs_deaths)
+    axes = [c for c in fig.content if c isa Axis]
+    @test length(axes) == 2
+
+    ## Each axis starts at its bound, so no impossible value is on show: no
+    ## negative still-expected deaths, and no projected total below the
+    ## deaths already observed.
+    @test first(axes[1].limits[])[1] == 0
+    @test first(axes[2].limits[])[1] == obs_deaths
+
+    ## The possible side stays automatic, so clipping the impossible side
+    ## does not also cut the curve off at the largest draw.
+    @test last(first(axes[1].limits[])) === nothing
+    @test last(first(axes[2].limits[])) === nothing
+end

@@ -87,8 +87,92 @@ const CONFIG = [
     ("079", Date(2026, 8, 1), Date(2026, 7, 29)),
     ("080", Date(2026, 8, 2), Date(2026, 7, 29)),
     ("081", Date(2026, 8, 3), Date(2026, 7, 29)),
-    ("082", Date(2026, 8, 4), Date(2026, 8, 5))
+    ("082", Date(2026, 8, 4), Date(2026, 8, 5)),
+    ("083", Date(2026, 8, 5), Date(2026, 8, 5)),
+    ("087", Date(2026, 8, 9), Date(2026, 8, 5)),
+    ("088", Date(2026, 8, 10), Date(2026, 8, 5)),
+    ("089", Date(2026, 8, 11), Date(2026, 8, 5)),
+    ("090", Date(2026, 8, 12), Date(2026, 8, 5)),
+    ("091", Date(2026, 8, 13), Date(2026, 8, 5)),
+    ("092", Date(2026, 8, 14), Date(2026, 8, 10)),
+    ("093", Date(2026, 8, 15), Date(2026, 8, 10)),
+    ("094", Date(2026, 8, 16), Date(2026, 8, 17)),
+    ("095", Date(2026, 8, 17), Date(2026, 8, 17)),
+    ("096", Date(2026, 8, 18), Date(2026, 8, 17)),
+    ("097", Date(2026, 8, 19), Date(2026, 8, 17)),
+    # "098" is deliberately absent. It is the only vintage INSP embedded
+    # losslessly rather than as JPEG, so the fixed colour thresholds below
+    # keep a fringe of each bar that JPEG blur costs every other vintage,
+    # and it reads about 7% high on the same underlying data. Excluding it
+    # keeps a vintage on a different bias scale out of the between-vintage
+    # increments this file feeds. The evidence, and the controls that rule
+    # out the render size, are in data/README.md. Read them before adding
+    # it back.
+    ("099", Date(2026, 8, 21), Date(2026, 8, 17)),
+    ("100", Date(2026, 8, 22), Date(2026, 8, 17)),
+    ("101", Date(2026, 8, 23), Date(2026, 8, 24)),
+    ("102", Date(2026, 8, 24), Date(2026, 8, 24)),
+    ("103", Date(2026, 8, 25), Date(2026, 8, 24)),
+    ("104", Date(2026, 8, 26), Date(2026, 8, 24)),
+    ("105", Date(2026, 8, 27), Date(2026, 8, 24)),
+    ("106", Date(2026, 8, 28), Date(2026, 8, 24)),
+    ("107", Date(2026, 8, 29), Date(2026, 8, 24)),
+    ("108", Date(2026, 8, 30), Date(2026, 8, 31)),
+    ("109", Date(2026, 8, 31), Date(2026, 8, 31)),
+    # "110" is deliberately absent. Its page-4 figure carries the same
+    # outer caption as every other vintage ("par date de début des
+    # symptômes") but the embedded chart's own internal title and x-axis
+    # read "par date de NOTIFICATION" (n = 5 710) - a genuine basis change,
+    # confirmed by extracting and viewing the raw embedded image rather
+    # than trusting the caption. Digitising it would silently inject a
+    # different-basis series into the reporting-triangle stream. See
+    # data/README.md and issue #644.
+    ("111", Date(2026, 9, 2), Date(2026, 8, 31)),
+    ("112", Date(2026, 9, 3), Date(2026, 8, 31)),
+    ("113", Date(2026, 9, 4), Date(2026, 8, 31)),
+    ("114", Date(2026, 9, 5), Date(2026, 8, 31)),
+    ("115", Date(2026, 9, 6), Date(2026, 9, 7))
 ]
+
+# Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
+# which `digitize` assumed as a hard-coded divisor. From SitRep 087 the
+# brief-format figure switched to a 0/25/50/75 grid (confirmed by reading
+# the printed tick labels directly - the pixel geometry is otherwise
+# indistinguishable, so this cannot be self-calibrated any more than
+# `last_tick` can). Applying the old /20 divisor to a 25-count grid
+# undercounts every bar by a scale-dependent amount and was caught only
+# because it made stable, weeks-old onset dates fall (SitRep 083's 15 May
+# read 26; the same date misread through the old divisor came out as 8).
+# Override per vintage here; anything absent keeps the historical 20.
+const Y_AXIS_STEP = Dict(
+    "087" => 25,
+    "088" => 25,
+    "089" => 25,
+    "090" => 25,
+    "091" => 25,
+    "092" => 25,
+    "093" => 25,
+    "094" => 25,
+    "095" => 25,
+    "096" => 25,
+    "097" => 25,
+    "099" => 25,
+    "100" => 25,
+    "101" => 25,
+    "102" => 25,
+    "103" => 25,
+    "104" => 25,
+    "105" => 25,
+    "106" => 25,
+    "107" => 25,
+    "108" => 25,
+    "109" => 25,
+    "111" => 25,
+    "112" => 25,
+    "113" => 25,
+    "114" => 25,
+    "115" => 25
+)
 
 # --- PPM (P6) reader ------------------------------------------------------
 # Returns R, G, B as Int matrices indexed [row, col].
@@ -200,6 +284,25 @@ end
 # the baseline. Taking the longest run alone is not enough - in SitRep 067 a
 # glyph stroke outruns the real axis line and yields a scale that halves
 # every count.
+function baseline_row(R, G, B, H)
+    # The count-0 baseline is the plot's bottom border: a solid line running
+    # almost the full chart width. Score rows by their longest contiguous run
+    # under a near-gray threshold (<180); a run-length ranking under that
+    # threshold correctly finds the border in every vintage, including
+    # tighter-anti-aliased renders, unlike a per-row pixel sum.
+    line = (R .< 180) .& (G .< 180) .& (B .< 180)
+    lo = floor(Int, H * 0.4) + 1
+    best_row, best_run = lo, 0
+    for r in lo:H
+        run = longest_run(@view line[r, :])
+        if run > best_run
+            best_run, best_row = run, r
+        end
+    end
+    best_run < 100 && error("no baseline row found")
+    return best_row
+end
+
 function y_axis_ticks(dark, base, H, W)
     best = nothing
     for x in 30:floor(Int, W * 0.13)
@@ -219,40 +322,64 @@ function y_axis_ticks(dark, base, H, W)
     return best[2]
 end
 
-function digitize(R, G, B, last_tick::Date)
+function digitize(R, G, B, last_tick::Date, y_step::Int = 20)
     H, W = size(R)
     m = masks(R, G, B)
     blue, red, dark = m.blue, m.red, m.dark
-    drow = vec(sum(dark; dims = 2))
-    drow[1:floor(Int, H * 0.4)] .= 0
-    base = argmax(drow)                   # count-0 baseline row
-    # count scale from the 0/20/40/60 y-axis ticks
-    yt = y_axis_ticks(dark, base, H, W)
-    ppc = median(diff(yt)) / 20.0         # pixels per count
+    base = baseline_row(R, G, B, H)       # count-0 baseline row
+    # count scale from the y-axis ticks (0/20/40/60 through SitRep 083;
+    # 0/25/50/75 from SitRep 087 - see Y_AXIS_STEP)
+    yt = try
+        y_axis_ticks(dark, base, H, W)
+    catch e
+        e isa ErrorException || rethrow()
+        # SitRep 112's smaller render (771x433) anti-aliases the tick marks
+        # and the axis line into the 120-180 near-gray range, below every
+        # earlier vintage's border but still far darker than surrounding
+        # text, so the strict <120 mask finds three of the four ticks but
+        # not the one sitting on the baseline itself. Same class of fix as
+        # the baseline/weekly-tick <180 fallback below, scoped the same
+        # way: only tried when the strict mask finds nothing, so every
+        # already-committed vintage (059-111) keeps digitising unchanged.
+        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        y_axis_ticks(line, base, H, W)
+    end
+    ppc = median(diff(yt)) / float(y_step) # pixels per count
     ytop, y0 = yt[1], yt[end]
     # x scale from the weekly tick marks below the baseline. The tick marks
     # are only a few pixels tall and shrink with the embedded figure
     # resolution (5-6 dark rows in the 1257x698 SitRep 064 rendering, 4 in
     # SitRep 066's 1275x623, 3 in SitRep 069/070's 1009x583), so step the
     # cut down until a full weekly row of ticks resolves instead of fixing
-    # it at 4 and losing the axis entirely on the smaller figures.
-    band = vec(sum(dark[(base + 2):min(base + 6, H), :]; dims = 1))
-    # The tick marks sit just below the baseline (2-6 rows) and, on the faint
-    # JPEG-compressed figures (SitRep 081), can be only 1px tall, so cut must
-    # come all the way down to 1 to resolve them; the window stops at base+6
-    # so a wide low-cut scan cannot pick up the x-axis date labels further
-    # down. Step down through the cuts and keep the most complete regular
-    # weekly tick row (the true axis has a fixed number of weekly ticks, so a
-    # too-strict cut silently drops every other tick rather than failing).
-    best_n = 0
-    best = Int[]
-    for cut in (4, 3, 2, 1)
-        cand = cluster([x for x in 1:W if band[x] >= cut])
-        length(cand) >= 8 || continue
-        if length(cand) > best_n
-            best_n = length(cand)
-            best = cand
+    # it at 4 and losing the axis entirely on the smaller figures. They sit
+    # just below the baseline (2-6 rows) and, on the faint JPEG-compressed
+    # figures (SitRep 081), can be only 1px tall, so cut must come all the
+    # way down to 1 to resolve them; the window stops at base+6 so a wide
+    # low-cut scan cannot pick up the x-axis date labels further down. Step
+    # down through the cuts and keep the most complete regular weekly tick
+    # row (the true axis has a fixed number of weekly ticks, so a too-strict
+    # cut silently drops every other tick rather than failing).
+    function weekly_ticks(mask)
+        band = vec(sum(mask[(base + 2):min(base + 6, H), :]; dims = 1))
+        best_n = 0
+        found = Int[]
+        for cut in (4, 3, 2, 1)
+            cand = cluster([x for x in 1:W if band[x] >= cut])
+            length(cand) >= 8 || continue
+            if length(cand) > best_n
+                best_n = length(cand)
+                found = cand
+            end
         end
+        return found
+    end
+    best = weekly_ticks(dark)
+    if isempty(best)
+        # Only fall back to the <180 near-gray mask when the strict mask
+        # finds nothing, so every already-committed vintage (059-107) keeps
+        # digitising under the original threshold.
+        line = (R .< 180) .& (G .< 180) .& (B .< 180)
+        best = weekly_ticks(line)
     end
     isempty(best) && error("no x-axis weekly tick row found")
     xt = best
@@ -382,7 +509,16 @@ function main(pdf_dir = "data/sitrep_pdfs",
                 @warn "skip $sr: no onset curve found"
                 continue
             end
-            rows = digitize(img..., last_tick)
+            rows = digitize(img..., last_tick, get(Y_AXIS_STEP, sr, 20))
+            ## An onset date can never sit later than the axis of the
+            ## report that draws it, and that axis runs at most a day past
+            ## the rapportage date (the date-de-publication lag). The
+            ## window above self-calibrates from pixel content and can
+            ## read a few stray days past the last labelled tick when the
+            ## figure's own "donnees potentiellement incompletes" band
+            ## extends that far (SitRep 115); drop those here rather than
+            ## loosen the invariant test/test_onset_digitiser.jl checks.
+            filter!(r -> r[1] <= report_date + Day(1), rows)
             total = sum(a + d for (_, a, d) in rows)
             @printf("SitRep %s (%s): %d onset days, total %d confirmed\n",
                 sr, report_date, length(rows), total)

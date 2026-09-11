@@ -229,15 +229,17 @@
 
     ## Manual occupancy break days: an opt-in dated list within the grid,
     ## sorted ascending. The 9 and 19 June and 14 July DHIS2
-    ## reclassifications are listed, so each resolves to its grid day and
-    ## falls inside the isolation window.
+    ## reclassifications and the 11 August MVEBDB-format break (see
+    ## data/observations.toml's occupancy_break_dates source) are listed,
+    ## so each resolves to its grid day and falls inside the isolation
+    ## window.
     @test obs.occupancy_break_days isa AbstractVector{<:Integer}
     @test issorted(obs.occupancy_break_days)
     @test all(1 .<= obs.occupancy_break_days .<= obs.n)
     @test obs.occupancy_break_days ==
           [obs.n - (Date(obs.cutoff) - Date(d)).value
            for d in (Date("2026-06-09"), Date("2026-06-19"),
-        Date("2026-07-14"))]
+        Date("2026-07-14"), Date("2026-08-11"))]
     @test all(minimum(obs.isolation_history.days) .<=
               obs.occupancy_break_days .<= maximum(obs.isolation_history.days))
 

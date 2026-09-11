@@ -749,6 +749,79 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "_vintage_ticks labels about one vintage a week" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## A long, irregular vintage grid: daily from 14 May with a handful of
+    ## days missing, as the situation reports skip days.
+    all_dates = [Date("2026-05-14") + Day(i) for i in 0:100]
+    skipped = Set(Date.(["2026-05-24", "2026-05-25", "2026-06-30",
+        "2026-07-01", "2026-08-11"]))
+    dates = string.(filter(!in(skipped), all_dates))
+    pos, labels = _vintage_ticks(dates)
+    @test length(pos) == length(labels)
+    @test issorted(pos)
+    @test allunique(pos)
+    @test all(1 .<= pos .<= length(dates))
+    @test labels == [dates[i] for i in pos]
+    ## The last vintage is always labelled, and consecutive labels are at
+    ## least a week apart.
+    @test last(pos) == length(dates)
+    gaps = diff(Date.(labels))
+    @test all(g -> g >= Day(7), gaps)
+    ## A weekly cadence over a 100-day span is around 15 labels, far below
+    ## the ~93 vintages the axis would otherwise carry.
+    @test 10 <= length(pos) <= 18
+end
+
+@testitem "_vintage_ticks widens the step on a long series" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## Three years of weekly vintages. A strict weekly rule would put ~157
+    ## labels on the axis, so the step widens in whole weeks instead.
+    dates = string.([Date("2026-05-14") + Day(7i) for i in 0:156])
+    pos, labels = _vintage_ticks(dates)
+    @test length(pos) <= 18
+    @test last(pos) == length(dates)
+    gaps = diff(Date.(labels))
+    @test all(g -> g >= Day(7), gaps)
+    @test all(g -> g.value % 7 == 0, gaps)
+end
+
+@testitem "_vintage_ticks keeps every label on a short series" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: _vintage_ticks
+    ## Six consecutive daily vintages span under two weeks, so a weekly
+    ## rule would leave two labels. Every vintage is kept instead.
+    dates = string.([Date("2026-05-18") + Day(i) for i in 0:5])
+    pos, labels = _vintage_ticks(dates)
+    @test pos == collect(1:6)
+    @test labels == dates
+    @test _vintage_ticks(String[]) == (Int[], String[])
+end
+
+@testitem "vintage PPC plots take a long series and an empty group" setup=[
+    HeadlessMakie
+] begin
+    using Dates: Date, Day
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_conditional_ppc,
+                           plot_vintage_incidence_ppc
+    rng = MersenneTwister(24)
+    dates = string.([Date("2026-05-14") + Day(i) for i in 0:100])
+    reps = [rand(rng, 1:30, length(dates)) for _ in 1:60]
+    observed = cumsum(rand(rng, 1:30, length(dates)))
+    panel = (; title = "Confirmed", dates = dates,
+        replicates = reps, observed = observed)
+    @test plot_vintage_conditional_ppc([panel]) isa CairoMakie.Makie.Figure
+    @test plot_vintage_incidence_ppc([panel]) isa CairoMakie.Makie.Figure
+    ## A stream group with no members (an early cut-off where nothing has
+    ## stopped reporting yet) renders as a blank figure.
+    @test plot_vintage_conditional_ppc(NamedTuple[]) isa
+          CairoMakie.Makie.Figure
+    @test plot_vintage_incidence_ppc(NamedTuple[]) isa CairoMakie.Makie.Figure
+end
+
 @testitem "plot_cfr_prior returns a Makie figure" setup=[HeadlessMakie] begin
     using Distributions: Beta
     using BVDOutbreakSize: plot_cfr_prior
@@ -877,6 +950,37 @@ end
     @test fig isa CairoMakie.Makie.Figure
 end
 
+@testitem "plot_forecast_latent clips the reproduction number at zero" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast_latent
+    rng = MersenneTwister(36)
+    n = 400
+    ## A right-skewed forecast reproduction number sitting close to zero, so
+    ## the Gaussian kernel reaches past the smallest draw and the estimator
+    ## itself spans negative values.
+    fc = DataFrame(
+        infections_new = abs.(randn(rng, n)) .* 500,
+        onsets_new = abs.(randn(rng, n)) .* 300,
+        deaths_latent_new = abs.(randn(rng, n)) .* 30,
+        rt_forecast = 0.05 .+ abs.(randn(rng, n)) .* 0.3
+    )
+    fig = plot_forecast_latent(fc)
+    axs = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    rt_label = "Forecast reproduction number (DRC)"
+    ax = only(a for a in axs if a.xlabel[] == rt_label)
+    dens = only(p for p in ax.scene.plots if p isa CairoMakie.Makie.Density)
+    ## The estimator keeps its full support, mass below zero included, and
+    ## the axis is what crops it, so the test fails if either half is lost.
+    @test CairoMakie.Makie.data_limits(dens).origin[1] < 0
+    xlims, _ = ax.limits[]
+    @test xlims == (0.0, nothing)
+    CairoMakie.Makie.update_state_before_display!(fig)
+    @test ax.finallimits[].origin[1] == 0.0
+end
+
 @testitem "plot_forecast_vs_truth_latent returns a Makie figure" setup=[
     HeadlessMakie
 ] begin
@@ -983,6 +1087,56 @@ end
     @test naxes(fig7) == 2
 end
 
+@testitem "forecast validation splits off the streams that stopped" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using Dates: Date, Day
+    using DataFrames: DataFrame
+    using BVDOutbreakSize: plot_forecast, plot_forecast_vs_truth,
+                           stream_reporting, stream_forecast_columns
+    rng = MersenneTwister(35)
+    n = 300
+    naxes(fig) = count(x -> x isa CairoMakie.Makie.Axis, fig.content)
+    fc = DataFrame(
+        cases_cum = rand(rng, 50:150, n), cases_new = rand(rng, 0:30, n),
+        deaths_cum = rand(rng, 40:100, n), deaths_new = rand(rng, 0:20, n),
+        confirmed_cum = rand(rng, 20:80, n),
+        confirmed_new = rand(rng, 0:15, n),
+        confirmed_deaths_cum = rand(rng, 1:20, n),
+        confirmed_deaths_new = rand(rng, 0:5, n))
+    ## The suspected streams stopped being reported 60 days before the
+    ## cut-off; the confirmed streams run to it.
+    grid = 90
+    cutoff = Date(2026, 8, 22)
+    obs = (; cutoff = cutoff, n = grid,
+        reported_history = (; days = [10, grid - 60], counts = [50.0, 90.0]),
+        deaths_history = (; days = [10, grid - 60], counts = [5.0, 9.0]),
+        confirmed_history = (; days = [10, grid], counts = [20.0, 80.0]),
+        confirmed_deaths_history = (; days = [10, grid],
+            counts = [1.0, 18.0]))
+    observed = (cases_cum = 1077, deaths_cum = 246, confirmed_cum = 70,
+        confirmed_deaths_cum = 18)
+    cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum)
+    reporting = Tuple(c for c in cum_cols if stream_reporting(obs, c))
+    stopped = Tuple(c for c in cum_cols if !stream_reporting(obs, c))
+    @test reporting == (:confirmed_cum, :confirmed_deaths_cum)
+    @test stopped == (:cases_cum, :deaths_cum)
+    ## The validation figure draws only the streams still reported, so the
+    ## two stale streams contribute no dashed truth rule: two columns of a
+    ## cumulative and a new panel each.
+    kept = NamedTuple(k => v for (k, v) in pairs(observed) if k in reporting)
+    fig = plot_forecast_vs_truth(fc; observed = kept)
+    @test naxes(fig) == 4
+    ## Their projection is kept as its own figure instead, one panel per
+    ## stopped stream and no observation drawn.
+    stopped_new = [stream_forecast_columns(c).new for c in stopped]
+    fig_stopped = plot_forecast(fc[!, stopped_new])
+    @test fig_stopped isa CairoMakie.Makie.Figure
+    @test naxes(fig_stopped) == 2
+end
+
 @testitem "plot_projection_comparison returns a Makie figure" setup=[
     HeadlessMakie
 ] begin
@@ -1016,4 +1170,123 @@ end
     ## Renders without an `ours` overlay too (every panel still draws).
     @test plot_scenario_comparison(REPORT_SCENARIOS_CI) isa
           CairoMakie.Makie.Figure
+end
+
+@testitem "vintage PPC plots label an occupancy census as a level" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_vintage_conditional_ppc,
+                           plot_vintage_incidence_ppc
+    rng = MersenneTwister(24)
+    ## Bed occupancy is a census stock: a level at the end of each report
+    ## day, not a count of new events. It shares `cumulative = false` with
+    ## the genuine per-day flows, so without its own `ylabel` it would be
+    ## labelled "Daily count" here and "New per vintage" in the incidence
+    ## view, both of which read as an accumulating total.
+    dates = ["2026-06-04", "2026-06-05", "2026-06-06", "2026-06-07"]
+    reps = [rand(rng, 200:300, length(dates)) for _ in 1:80]
+    occupancy = [258, 267, 283, 260]
+    flow = [153, 119, 117, 94]
+    stock = (; title = "Patients in isolation", dates = dates,
+        replicates = reps, observed = occupancy, cumulative = false,
+        ylabel = "Beds occupied")
+    daily = (; title = "New suspects/day", dates = dates,
+        replicates = reps, observed = flow, cumulative = false)
+    ylabels(fig) = [ax.ylabel[] for ax in fig.content
+                    if ax isa CairoMakie.Makie.Axis]
+
+    ## The census panel keeps its own label in both views; the per-day flow
+    ## beside it keeps each view's default.
+    cond = plot_vintage_conditional_ppc([stock, daily])
+    @test ylabels(cond) == ["Beds occupied", "Daily count"]
+
+    inc = plot_vintage_incidence_ppc([stock, daily])
+    @test ylabels(inc) == ["Beds occupied", ""]
+
+    ## A cumulative panel is untouched by the override: it still names the
+    ## running total in the first column only.
+    cumulative = (; title = "Confirmed", dates = dates,
+        replicates = reps, observed = cumsum(flow))
+    @test ylabels(plot_vintage_conditional_ppc([cumulative])) ==
+          ["Cumulative count"]
+    @test ylabels(plot_vintage_incidence_ppc([cumulative])) ==
+          ["New per vintage"]
+end
+
+@testitem "onset_nowcast_draws narrows as the reporting delay grows" begin
+    using Random: MersenneTwister
+    using Statistics: quantile
+    using BVDOutbreakSize: onset_nowcast_draws
+    rng = MersenneTwister(4242)
+    D, gs, ge = 21, 1, 60
+    ndraws = 200
+    ## A fitted hazard with posterior spread in every component, so the
+    ## nowcast interval has something to be wide about at a short delay.
+    hazard = (;
+        logit_h0 = [fill(-1.4 + 0.2 * randn(rng), D) for _ in 1:ndraws],
+        γ = [zeros(ge) for _ in 1:ndraws],
+        alpha = [fill(0.4 + 0.05 * randn(rng), ge - gs + 1)
+                 for _ in 1:ndraws])
+    onsets = [fill(150.0 + 30 * randn(rng), ge) for _ in 1:ndraws]
+    ## One onset day per delay, all carrying the same observed count so the
+    ## only thing separating them is how much reporting has happened.
+    delays = [0, 5, 10, D - 1]
+    days = [40, 39, 38, 37]
+    observed = fill(50.0, length(days))
+    draws = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs)
+    @test length(draws) == length(days)
+    @test all(length(d) == ndraws for d in draws)
+    ## Never below what is already reported.
+    @test all(all(d .>= 50.0 - 1e-9) for d in draws)
+    ## The interval collapses onto the observed count once the delay has
+    ## run out, and widens monotonically as the delay shortens.
+    width(d) = quantile(d, 0.95) - quantile(d, 0.05)
+    ws = width.(draws)
+    @test ws[end] < 1e-6
+    @test all(diff(ws) .< 0)
+    @test all(isapprox.(draws[end], 50.0; atol = 1e-6))
+    @test_throws ErrorException onset_nowcast_draws(days, observed[1:2],
+        delays, onsets, hazard; grid_start = gs)
+    ## Onsets and hazard must be the same fit's draws, paired one to one.
+    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
+        onsets[1:(ndraws - 1)], hazard; grid_start = gs)
+    ## A day off the end of the onset series is named rather than left to a
+    ## `BoundsError` from inside the draw loop.
+    @test_throws ErrorException onset_nowcast_draws([ge + 1], [1.0], [0],
+        onsets, hazard; grid_start = gs)
+    ## `target_delays` stops the prediction at a given delay: nothing
+    ## outstanding when it is the delay already reached, and no more than
+    ## the eventual total when it is the end of the delay axis.
+    same = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = delays)
+    @test all(all(isapprox.(d, 50.0; atol = 1e-9)) for d in same)
+    full = onset_nowcast_draws(days, observed, delays, onsets, hazard;
+        grid_start = gs, target_delays = fill(D - 1, length(days)))
+    @test all(all(full[k] .<= draws[k] .+ 1e-9) for k in eachindex(days))
+    @test_throws ErrorException onset_nowcast_draws(days, observed, delays,
+        onsets, hazard; grid_start = gs, target_delays = delays[1:2])
+end
+
+@testitem "plot_onset_nowcast_grid returns a Makie figure" setup=[HeadlessMakie] begin
+    using Random: MersenneTwister
+    using Dates: Date, Day
+    using BVDOutbreakSize: plot_onset_nowcast_grid
+    rng = MersenneTwister(4243)
+    function panel(title, n)
+        dates = [Date("2026-07-01") + Day(i) for i in 0:(n - 1)]
+        observed = [40.0 + 10 * randn(rng) for _ in dates]
+        nowcast = [observed[k] .+ abs.(randn(rng, 120)) .* k
+                   for k in eachindex(dates)]
+        return (; title, dates, observed, nowcast, latest = observed .+ 5)
+    end
+    fig = plot_onset_nowcast_grid([panel("2026-08-01", 30),
+        panel("2026-08-08", 34)])
+    @test fig isa CairoMakie.Makie.Figure
+    ## No digitised snapshots: a blank figure rather than an empty grid.
+    @test plot_onset_nowcast_grid([]) isa CairoMakie.Makie.Figure
+    p = panel("2026-08-15", 12)
+    @test_throws ErrorException plot_onset_nowcast_grid([(; p.title, p.dates,
+        observed = p.observed[1:5], p.nowcast, p.latest)])
 end

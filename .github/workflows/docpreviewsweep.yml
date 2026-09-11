@@ -1,0 +1,27 @@
+name: Doc Preview Sweep
+
+# The docs build is fanned across runners and outlives the PR, so a preview is
+# often pushed to gh-pages hours after docpreviewcleanup.yml has already run
+# and found nothing. This sweep collects whatever that race leaves behind.
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'log what would be removed without pushing'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  doc-preview-sweep:
+    uses: EpiAware/.github/.github/workflows/docs-preview-sweep.yml@fa1c3f79b3930165aada12b2c6ab30d83e281cf1
+    with:
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets: inherit  # pragma: allowlist secret

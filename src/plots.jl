@@ -4,6 +4,26 @@
 # densities, and the one-week-ahead forecast figures.
 
 """
+Kernel density for a quantity that cannot fall below `lower`, with the axis
+clipped to the side of the bound the quantity can reach. A Gaussian KDE puts
+mass past the smallest draw, so a bounded quantity otherwise shows a tail on
+the impossible side. This is how the count and CFR panels here handle it.
+
+Do not narrow the estimator with `boundary` instead: the tabulation drops
+draws landing on the first grid point while still normalising by the full
+sample size, so a boundary at the bound discards the mass piled against it,
+and an unpadded grid wraps under the FFT convolution.
+"""
+function _bounded_density!(ax, x; lower::Real, kwargs...)
+    h = density!(ax, x; kwargs...)
+    ## Only the impossible side is clipped. Pinning the upper limit as well
+    ## would cut the curve off at the largest draw, while it is still well
+    ## clear of zero, and trade one misleading edge for another.
+    CairoMakie.xlims!(ax, float(lower), nothing)
+    return h
+end
+
+"""
 Overlaid posterior densities of `C_T` from one or more fits, built
 through AlgebraOfGraphics. The 15 published scenario point estimates
 are drawn as faint dashed Makie `vlines` on top of the AoG figure.
@@ -108,6 +128,10 @@ function plot_cumulative_trajectories(chn;
         ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                                   for v in vals]
 
+        ## Deliberately unbounded. These cumulative counts sit in the
+        ## thousands, far from zero, so no impossible mass is drawn, and
+        ## anchoring the axis at zero squashes the posterior into a spike
+        ## against the right-hand edge of the panel.
         finals = Float64[t[n] for t in trajs]
         axd = Axis(fig[i, 2];
             xlabel = "Cumulative $name at the cut-off",
@@ -186,11 +210,18 @@ end
 Overlaid posterior densities of an arbitrary scalar quantity from one
 or more fits, built through AlgebraOfGraphics. Pass each fit as
 `"label" => draws`; `xlabel` and `title` set the axis text.
+
+`lower` clips the axis for a quantity that cannot fall below it, such as a
+count or a duration. The kernel density spreads mass past the smallest draw,
+so without it the curve runs onto the impossible side of the bound. The
+estimate itself is left alone, for the reason given on
+`_bounded_density!`.
 """
 function plot_density_overlay(
         streams::Pair{String, <:AbstractVector}...;
         xlabel::AbstractString = "Value",
-        title::AbstractString = "Posterior density")
+        title::AbstractString = "Posterior density",
+        lower::Union{Nothing, Real} = nothing)
     df = @chain DataFrame(stream = String[], value = Float64[]) begin
         let df = _
             for (label, draws) in streams
@@ -206,10 +237,11 @@ function plot_density_overlay(
            AoG.mapping(:value => xlabel, color = :stream => "Fit") *
            AoG.AlgebraOfGraphics.density() *
            AoG.subvisual(:line, linewidth = 2)
-    return AoG.draw(spec;
-        axis = (; ylabel = "Posterior density", title = title),
-        figure = (; size = (760, 420))
-    )
+    ax = isnothing(lower) ?
+         (; ylabel = "Posterior density", title = title) :
+         (; ylabel = "Posterior density", title = title,
+        limits = ((float(lower), nothing), nothing))
+    return AoG.draw(spec; axis = ax, figure = (; size = (760, 420)))
 end
 
 _panel_pos(pos::Integer) = (1, pos)
@@ -913,20 +945,6 @@ function plot_evolution_by_group(
     return fig
 end
 
-## Role of a forecast within a stream: the persistence baseline, the joint
-## model or the stream's own individual single-stream fit. Deriving the
-## role from the fit id keeps the colour stable across streams, whichever
-## single-stream fit produced the individual row, and folds recovered's
-## missing individual into a baseline-versus-joint comparison without a
-## per-stream label. A frozen row takes the joint role, being the joint
-## model re-fit at a past cut-off. Every other id is a per-stream fit
-## spec, an open-ended set, so it falls through to the individual role.
-function _fit_role(fit)
-    fit == BASELINE_FIT && return "baseline"
-    (fit == JOINT_FIT || fit == FROZEN_FIT) && return "joint"
-    return "individual"
-end
-
 """
 Forecasts-versus-now overlay: a grid of panels, one row per observed stream
 and one column per forecast horizon, each showing the forecasts made at every
@@ -1054,7 +1072,7 @@ function plot_forecast_overlay(overlay::DataFrame)
             [o for (_, o) in od]; color = :black, markersize = 7)
         isnothing(obs_handle) && (obs_handle = oh)
         for role in role_order
-            rs = cell[_fit_role.(cell.fit) .== role, :]
+            rs = select_fit_role(cell, role)
             isempty(rs) && continue
             col = role_colour[role]
             off = slot[role] * dodge
@@ -1176,7 +1194,7 @@ function plot_forecast_relative_skill(scores::DataFrame;
         hlines!(ax, [1.0]; color = (:grey, 0.6), linestyle = :dash,
             linewidth = 2)
         for role in role_order
-            rs = cell[_fit_role.(cell.fit) .== role, :]
+            rs = select_fit_role(cell, role)
             isempty(rs) && continue
             keep = [!ismissing(v) && isfinite(v) for v in rs[!, value_col]]
             any(keep) || continue
@@ -1692,6 +1710,154 @@ function reconstruct_onset_hazard(chn; grid_start::Integer,
     return (; logit_h0, γ, alpha)
 end
 
+"""
+    onset_nowcast_draws(days, observed, delays, onsets, hazard;
+                        grid_start, target_delays)
+
+[`onset_nowcast`](@ref) per posterior draw, one `ndraws`-long vector per
+onset day in `days`. `observed[k]` is the count a digitised figure prints
+for `days[k]` and `delays[k]` is that figure's own reporting delay, so a
+snapshot's cells are nowcast from the delay that snapshot had run to.
+
+`target_delays` is the delay to nowcast to, one per day; the default
+`nothing` targets each day's eventual total. Pass the delay of the figure
+the prediction will be compared against to keep the two like for like.
+
+`onsets` holds each draw's daily onsets indexed by grid day (the `diff` of
+the chain's `cumulative_onsets`), and `hazard` is
+[`reconstruct_onset_hazard`](@ref)'s `(; logit_h0, γ, alpha)`, with `alpha`
+indexed from `grid_start` and held flat outside the fitted grid. The two are
+paired draw by draw and must come from one fit. Summarised by
+[`plot_onset_nowcast_grid`](@ref).
+"""
+function onset_nowcast_draws(days::AbstractVector{<:Integer},
+        observed::AbstractVector{<:Real},
+        delays::AbstractVector{<:Integer},
+        onsets::AbstractVector{<:AbstractVector{<:Real}},
+        hazard::NamedTuple; grid_start::Integer,
+        target_delays::Union{Nothing, AbstractVector{<:Integer}} = nothing)
+    n = length(days)
+    if length(observed) != n || length(delays) != n ||
+       (!isnothing(target_delays) && length(target_delays) != n)
+        error("onset_nowcast_draws: `days`, `observed`, `delays` and any " *
+              "`target_delays` must have the same length, got $n, " *
+              "$(length(observed)), $(length(delays)) and " *
+              "$(isnothing(target_delays) ? "none" : length(target_delays)).")
+    end
+    nd = length(onsets)
+    if length(hazard.alpha) != nd || length(hazard.logit_h0) != nd ||
+       length(hazard.γ) != nd
+        error("onset_nowcast_draws: `onsets` and `hazard` must come from " *
+              "the same fit, got $nd onset draws against " *
+              "$(length(hazard.alpha)) ascertainment, " *
+              "$(length(hazard.logit_h0)) baseline-hazard and " *
+              "$(length(hazard.γ)) calendar-walk draws.")
+    end
+    ## The onset series is indexed by grid day, so an out-of-range day is a
+    ## caller error worth naming rather than a bare `BoundsError` from deep
+    ## inside the draw loop.
+    ndays = nd == 0 ? 0 : length(first(onsets))
+    for d in days
+        (1 <= d <= ndays) ||
+            error("onset_nowcast_draws: day $d is outside the onset " *
+                  "series, which runs 1:$ndays.")
+    end
+    out = Vector{Vector{Float64}}(undef, n)
+    for k in 1:n
+        u = Int(days[k])
+        δ = Int(delays[k])
+        y = float(observed[k])
+        until = isnothing(target_delays) ? nothing : Int(target_delays[k])
+        out[k] = [begin
+                      a = hazard.alpha[i]
+                      α = a[clamp(u - Int(grid_start) + 1, 1, length(a))]
+                      onset_nowcast(y, onsets[i][u], δ, hazard.logit_h0[i],
+                          hazard.γ[i], u, grid_start, α; until)
+                  end
+                  for i in eachindex(onsets)]
+    end
+    return out
+end
+
+"""
+    plot_onset_nowcast_grid(panels; kwargs...)
+
+Nowcast of the symptom-onset reporting triangle, one panel per digitised
+snapshot: what that snapshot's own figure implied for the onset dates it
+printed, against what the figures print for them now.
+
+Each `panel` is a `NamedTuple` of `title` (the snapshot's report date),
+`dates` (the onset dates, one per x position), `observed` (that snapshot's
+own counts, grey crosses), `nowcast` (per-draw predictions of the count the
+latest figure prints, drawn as 30/60/90% ribbons with a median line) and
+`latest` (that count, black points).
+
+The panel is read on whether the ribbon covers the black points. Pass
+`nowcast` as a predictive rather than the latent count: two scans of one bar
+disagree by the scan error the stream estimates, so on the onset dates where
+reporting had already finished the latent quantity is the grey cross exactly
+and would be scored against a reading it cannot match. Build it from
+[`onset_nowcast_draws`](@ref) at the latest figure's own delay, then through
+the stream's bar measurement error.
+
+A panel whose series disagree in length raises, and an empty `panels`
+returns a blank figure.
+"""
+function plot_onset_nowcast_grid(panels::AbstractVector;
+        ncol::Integer = 3, colour = :steelblue,
+        title = "Symptom-onset reporting triangle: nowcast vs digitised")
+    isempty(panels) && return Figure()
+    ncols = min(length(panels), Int(ncol))
+    nrows = cld(length(panels), ncols)
+    fig = Figure(; size = (360 * ncols, 280 * nrows + 60))
+    for (j, p) in enumerate(panels)
+        n = length(p.dates)
+        if length(p.observed) != n || length(p.nowcast) != n ||
+           length(p.latest) != n
+            error("plot_onset_nowcast_grid: panel $(p.title) must carry " *
+                  "one `observed`, `nowcast` and `latest` entry per onset " *
+                  "date, got $(length(p.observed)), $(length(p.nowcast)) " *
+                  "and $(length(p.latest)) for $n dates.")
+        end
+        row, col = fldmod1(j, ncols)
+        x = collect(1:n)
+        ## Sorted once per cell: the seven ribbon and median quantiles below
+        ## would otherwise sort every draw vector seven times.
+        sorted = [sort(float.(d)) for d in p.nowcast]
+        q(pr) = [quantile(d, pr; sorted = true) for d in sorted]
+        hi60 = q(0.80)
+        ## The 90% tail on the newest onset dates runs well past the counts
+        ## the panel is read on, so the axis is set by the 60% ribbon.
+        yupper = 1.6 * max(1.0,
+            isempty(p.latest) ? 1.0 : maximum(float.(p.latest)),
+            isempty(hi60) ? 1.0 : maximum(hi60))
+        ax = Axis(fig[row, col]; title = string(p.title),
+            xlabel = row == nrows ? "onset date" : "",
+            ylabel = col == 1 ? "cases at this onset date" : "",
+            xticks = _vintage_ticks(p.dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
+            limits = (nothing, (0, yupper)))
+        band!(ax, x, q(0.05), q(0.95); color = (colour, 0.15))
+        band!(ax, x, q(0.20), hi60; color = (colour, 0.28))
+        band!(ax, x, q(0.35), q(0.65); color = (colour, 0.42))
+        lines!(ax, x, q(0.5); color = colour, linewidth = 2)
+        scatter!(ax, x, float.(p.observed); color = (:grey40, 0.9),
+            marker = :cross, markersize = 8)
+        scatter!(ax, x, float.(p.latest); color = :black, markersize = 6)
+    end
+    CairoMakie.Label(fig[0, 1:ncols], title; font = :bold,
+        tellwidth = false)
+    CairoMakie.Legend(fig[nrows + 1, 1:ncols],
+        [CairoMakie.MarkerElement(color = (:grey40, 0.9), marker = :cross),
+            CairoMakie.LineElement(color = colour),
+            CairoMakie.PolyElement(color = (colour, 0.28)),
+            CairoMakie.MarkerElement(color = :black, marker = :circle)],
+        ["digitised at this snapshot", "nowcast median",
+            "nowcast 30/60/90%", "digitised to date"];
+        orientation = :horizontal, tellwidth = false)
+    return fig
+end
+
 ## Per-day quantile `pr` of an established-window Rt matrix, skipping the
 ## masked (pre-renewal) days: `missing` where a day has no established draws.
 function _rt_quantile(rt::AbstractMatrix, d::Integer, pr::Real)
@@ -2088,27 +2254,30 @@ Two-panel density of the no-onward-transmission counterfactual from
 expected* deaths (`:delta_deaths`, the future deaths in cases already
 infected by `T`, net of the `obs_deaths` already observed). The right
 panel shows the *projected total* (`:total_projected = obs_deaths +
-delta_deaths`) with a dashed black rule at `obs_deaths`. Both are
+delta_deaths`), whose axis starts at `obs_deaths`. Both are
 lower bounds: they assume every onward transmission stops at time `T`.
 """
 function plot_no_onward_deaths(df::DataFrame; obs_deaths::Real)
     fig = Figure(; size = (980, 420))
 
+    ## Both quantities have a hard floor: `delta_deaths` is clamped at zero in
+    ## `predict_no_onward_deaths`, so the projected total cannot fall below the
+    ## deaths already observed.
     ax1 = Axis(fig[1, 1];
         xlabel = "Still expected deaths (beyond those already observed)",
         ylabel = "Posterior density",
         title = "Still expected (future)")
-    density!(ax1, df.delta_deaths; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
+    _bounded_density!(ax1, df.delta_deaths; lower = 0,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
+    ## The axis starts at the deaths already observed, so the left spine is
+    ## that reference and a rule drawn on it would be invisible.
     ax2 = Axis(fig[1, 2];
-        xlabel = "Projected total deaths (no onward transmission)",
+        xlabel = "Projected total deaths, from the $(obs_deaths) observed",
         ylabel = "Posterior density",
         title = "Projected total")
-    density!(ax2, df.total_projected; color = (:firebrick, 0.5),
-        strokecolor = :firebrick, strokewidth = 2)
-    vlines!(ax2, [float(obs_deaths)];
-        color = :black, linestyle = :dash, linewidth = 2)
+    _bounded_density!(ax2, df.total_projected; lower = obs_deaths,
+        color = (:firebrick, 0.5), strokecolor = :firebrick, strokewidth = 2)
 
     return fig
 end
@@ -2162,7 +2331,9 @@ function plot_forecast_latent(fc::DataFrame)
     ax = Axis(fig[r, c];
         xlabel = "Forecast reproduction number (DRC)",
         ylabel = "Posterior density", title = "One week ahead")
-    density!(ax, rt; color = (:purple, 0.5),
+    ## A reproduction number cannot be negative, and the horizon walk leaves
+    ## draws close enough to zero for the kernel to spill past them.
+    _bounded_density!(ax, rt; lower = 0, color = (:purple, 0.5),
         strokecolor = :purple, strokewidth = 2)
     vlines!(ax, [1.0]; color = :black, linestyle = :dash, linewidth = 2)
     return fig
@@ -2174,9 +2345,10 @@ One-week-ahead forecast of the observed count streams from
 Panels cover reported cases, suspected deaths, laboratory-confirmed cases,
 confirmed deaths and recovered, each drawn only when the forecast carries that
 stream's `*_new` column, so a fit that observes fewer streams shows fewer
-panels. Each panel histograms the projected new count with its 90% predictive
-interval shaded. The latent counterparts are shown by
-[`plot_forecast_latent`](@ref).
+panels. Passing a column subset restricts the panels further, which is how the
+report draws the stopped streams on their own. Each panel histograms the
+projected new count with its 90% predictive interval shaded. The latent
+counterparts are shown by [`plot_forecast_latent`](@ref).
 """
 function plot_forecast(fc::DataFrame)
     count_cols = Tuple{Symbol, String, Symbol}[]
@@ -2234,11 +2406,12 @@ end
 """
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed demand (the need a week ahead,
-under unconstrained supply) against the supply-limited occupancy (the beds
-actually filled), and the shortfall between them. The left panel overlays the
-two predictive distributions, so the gap between the need and the
-supply-limited occupancy is the unmet demand. The right panel histograms the
-shortfall directly. Drawn only when the forecast carries the bed streams
+under unconstrained supply) against the occupancy the situation reports would
+print, and the demand above the beds available. The left panel overlays the
+two predictive distributions. The right panel histograms the shortfall, which
+is the need above the capacity rather than the gap between the two panels'
+densities: the occupancy carries the fitted reporting-basis offset and the
+shortfall does not. Drawn only when the forecast carries the bed streams
 (`bed_demand` and `isolation_level`).
 
 Because the model carries a single national bed capacity it cannot represent
@@ -2251,7 +2424,12 @@ function plot_forecast_beds(fc::DataFrame)
      :isolation_level in propertynames(fc)) || return Figure()
     demand = float.(fc[!, :bed_demand])
     occ = float.(fc[!, :isolation_level])
-    shortfall = max.(demand .- occ, 0.0)
+    ## The shortfall is the need above the beds available, which the forecast
+    ## carries against the capacity. A frame without that column predates it,
+    ## and there the occupancy is the demand capped at the capacity, so their
+    ## difference is the same quantity.
+    shortfall = :bed_shortfall in propertynames(fc) ?
+                float.(fc[!, :bed_shortfall]) : max.(demand .- occ, 0.0)
     fig = Figure(; size = (800, 360))
     ## Cap the x-axis at the 98th percentile of demand: the unconstrained
     ## bed-demand projection is heavy-tailed (it grows with the reproduction
@@ -2276,7 +2454,7 @@ end
 
 """
 Validate a [`forecast_reported`](@ref) bed projection against the beds
-actually occupied a week later. Histograms the projected supply-limited
+actually occupied a week later. Histograms the projected reported
 isolation-bed occupancy with the 90% predictive interval shaded and the
 `isolation` count observed at the target date drawn as a dashed black rule,
 so last week's bed forecast is scored against what the beds held. Drawn only
@@ -2342,9 +2520,14 @@ when the forecast carries that stream's `*_cum`/`*_new` columns and an observed
 cumulative count is supplied for it. `observed` is a `NamedTuple` mapping a
 stream's cumulative column (`:confirmed_cum`, `:cases_cum`, …) to its observed
 cumulative count at the target date. A stream absent from `observed` is
-skipped. `baseline` maps the same columns to the cumulative count at the
-forecast origin (default `0`), so the observed new count is
-`max(observed − baseline, 0)`. `individual` is an optional `NamedTuple`
+skipped, which is how the caller withholds a stream whose reporting does not
+cover the target date (see [`stream_reporting`](@ref)). `baseline` maps the
+same columns to the cumulative count at the forecast origin (default `0`), so
+the observed new count is
+`max(observed − baseline − breaks, 0)`. `breaks` is keyed the same way and
+carries each stream's retrospective harmonisation correction over the
+forecast window (see [`confirmed_break_correction`](@ref)), defaulting to
+zero. `individual` is an optional `NamedTuple`
 mapping a stream's new-count column (`:confirmed_new`, `:cases_new`, …) to
 that stream's own frozen individual (single-stream) model's forecast draws
 of the new count, from [`forecast_stream`](@ref). A stream present in
@@ -2358,6 +2541,7 @@ scored distribution-versus-distribution by
 """
 function plot_forecast_vs_truth(fc::DataFrame;
         observed::NamedTuple, baseline::NamedTuple = NamedTuple(),
+        breaks::NamedTuple = NamedTuple(),
         individual::NamedTuple = NamedTuple())
     specs = (
         (:cases_cum, :cases_new, "reported cases (DRC)", :steelblue),
@@ -2368,16 +2552,21 @@ function plot_forecast_vs_truth(fc::DataFrame;
         (:recovered_cum, :recovered_new, "recovered (DRC)", :seagreen)
     )
     streams = Vector{
-        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64,
+        Tuple{Symbol, Symbol, String, Symbol, Float64, Float64, Float64,
         Union{Nothing, Vector{Float64}}}}()
     for (cumcol, newcol, name, colour) in specs
         (cumcol in propertynames(fc) && haskey(observed, cumcol)) || continue
-        obs = float(observed[cumcol])
+        ## Both truths are what was notified across the week, so a
+        ## retrospective harmonisation sitting in the reported cumulative
+        ## comes out of each. The projected cumulative cannot contain one.
+        brk = float(get(breaks, cumcol, 0))
+        obs = float(observed[cumcol]) - brk
         base = float(get(baseline, cumcol, 0))
         indiv_new = haskey(individual, newcol) ?
                     Float64.(individual[newcol]) : nothing
         push!(streams,
-            (cumcol, newcol, name, colour, obs, obs - base, indiv_new))
+            (cumcol, newcol, name, colour, obs, obs - base, base,
+                indiv_new))
     end
     ncols = length(streams)
     ncols == 0 && return Figure()
@@ -2404,10 +2593,12 @@ function plot_forecast_vs_truth(fc::DataFrame;
         end
         vlines!(ax, [obs]; color = :black, linestyle = :dash, linewidth = 2)
     end
-    for (j, stream_entry) in enumerate(streams)
-        ccol, ncol, name, colour, obs_cum, obs_new, indiv_new = stream_entry
-        indiv_cum = isnothing(indiv_new) ? nothing :
-                    indiv_new .+ (obs_cum - obs_new)
+    for (j, entry) in enumerate(streams)
+        ccol, ncol, name, colour, obs_cum, obs_new, origin,
+        indiv_new = entry
+        ## The individual fit forecasts new counts from the frozen origin, so
+        ## its cumulative overlay is anchored there.
+        indiv_cum = isnothing(indiv_new) ? nothing : indiv_new .+ origin
         panel!(1, j, fc[!, ccol], obs_cum, "Cumulative $name", colour,
             indiv_cum)
         panel!(2, j, fc[!, ncol], max(obs_new, 0.0), "New $name", colour,
@@ -2461,6 +2652,31 @@ function plot_forecast_vs_truth_latent(fc::DataFrame; now::NamedTuple)
     return fig
 end
 
+## Date ticks for a vintage-indexed axis, at about one label a week.
+## `dates` are the panel's vintage labels, one per x position, so the
+## returned positions index into them. Labels are picked by calendar date
+## rather than by index stride, because the vintages are irregular and a
+## stride drifts off a weekly cadence. Selection walks back from the
+## latest vintage, so the last vintage is always labelled. Once a weekly
+## cadence would need more than `max_ticks` labels the step widens in
+## whole weeks, so the axis stays readable as the series grows. A series
+## too short to carry three ticks keeps every vintage labelled.
+function _vintage_ticks(dates::AbstractVector; step_days::Integer = 7,
+        max_ticks::Integer = 18)
+    n = length(dates)
+    n == 0 && return (Int[], String[])
+    ds = [d isa Date ? d : Date(String(d)) for d in dates]
+    weeks = (ds[end] - ds[begin]).value ÷ step_days + 1
+    step = step_days * max(1, cld(weeks, max_ticks))
+    keep = [n]
+    for i in (n - 1):-1:1
+        (ds[last(keep)] - ds[i]).value >= step && push!(keep, i)
+    end
+    reverse!(keep)
+    length(keep) < 3 && (keep = collect(1:n))
+    return (keep, [string(ds[i]) for i in keep])
+end
+
 """
 Per-vintage conditional one-step-ahead posterior-predictive for the DRC
 streams. For each `panel` the predicted cumulative count at vintage `v`
@@ -2484,7 +2700,10 @@ conditioning baselines. `colour` is optional per panel. A panel may set
 cumulative series (e.g. the post-26 May daily new-suspect inflow, or the 24h
 analysed volume): there is no previous-vintage baseline, so each replicate is
 plotted as its own daily count against the observed daily count, and the
-y-axis reads "Daily count".
+y-axis reads "Daily count". A panel may also set `ylabel` to name its own
+y-axis. An occupancy census (a bed count at the end of the day) is a level
+rather than a count of new events, so it sets `ylabel` and neither of the
+default labels is applied to it.
 
 `max_date` (an ISO date string or `Date`) truncates every panel to the
 vintages on or before that date, so streams that keep reporting past the
@@ -2493,12 +2712,18 @@ streams freeze earlier) are cut back to the shared last date. Without
 this the confirmed panel runs further along the date axis than the
 suspected panel and reads as though it overtakes it, when the two are
 simply shown to different end dates.
+
+The date axis carries about one label a week and always labels the last
+vintage, so a long series does not collapse into a wall of labels.
 """
 function plot_vintage_conditional_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
         max_date::Union{Nothing, Date, AbstractString} = nothing)
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
+    ## An empty panel set (a stream group with no members) has no grid to
+    ## lay out, so return a blank figure rather than dividing by zero.
+    isempty(panels) && return Figure()
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
@@ -2530,6 +2755,10 @@ function plot_vintage_conditional_ppc(
         obs_cum = float.(observed)
         obs_prev = cumulative ?
                    [v == 1 ? 0.0 : obs_cum[v - 1] for v in 1:n] : zeros(n)
+        ## `ylabel` lets a panel that is neither a running total nor a
+        ## per-day flow name its own axis; see the docstring.
+        ylabel = get(p, :ylabel,
+            cumulative ? (col == 1 ? "Cumulative count" : "") : "Daily count")
         ## `replicates` is already flattened to one vector of per-draw
         ## increment vectors and truncated to the kept vintages above.
         ## Each draw's conditional cumulative at vintage `v` is the
@@ -2551,10 +2780,9 @@ function plot_vintage_conditional_ppc(
         yupper = 1.6 * max(isempty(obs_cum) ? 1.0 : maximum(obs_cum),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
-            ylabel = cumulative ? (col == 1 ? "Cumulative count" : "") :
-                     "Daily count",
-            xticks = (x, string.(dates)),
-            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            ylabel = ylabel,
+            xticks = _vintage_ticks(dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
         ## 30/60/90% credible ribbons over the situation-report dates.
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
@@ -2576,14 +2804,19 @@ its own baseline). For a non-cumulative panel (a standalone per-day count
 such as the 24h analysed volume or the daily new-suspect inflow) it is the
 count itself. The replicates are already per-vintage increments, so they are
 the modelled incidence directly and are summarised as 30/60/90% credible
-ribbons with the observed incidence overlaid. `panels` and `max_date` match
-[`plot_vintage_conditional_ppc`](@ref).
+ribbons with the observed incidence overlaid. `panels`, `max_date` and the
+weekly date axis match [`plot_vintage_conditional_ppc`](@ref), including the
+optional per-panel `ylabel`. An occupancy census sets it so that a bed count
+sharing this grid is not read as an accumulating total.
 """
 function plot_vintage_incidence_ppc(
         panels::AbstractVector; xlabel = "Sitrep date",
         max_date::Union{Nothing, Date, AbstractString} = nothing)
     cap = isnothing(max_date) ? nothing :
           (max_date isa Date ? max_date : Date(String(max_date)))
+    ## An empty panel set (a stream group with no members) has no grid to
+    ## lay out, so return a blank figure rather than dividing by zero.
+    isempty(panels) && return Figure()
     npanels = length(panels)
     ## Cap the grid at four columns so a large stream set lays out over
     ## several rows rather than one very wide strip that the page downscales
@@ -2609,6 +2842,8 @@ function plot_vintage_incidence_ppc(
         obs_inc = cumulative ?
                   [v == 1 ? obs_cum[v] : obs_cum[v] - obs_cum[v - 1]
                    for v in 1:n] : obs_cum
+        ## As in the conditional view, `ylabel` overrides the default.
+        ylabel = get(p, :ylabel, col == 1 ? "New per vintage" : "")
         ## The replicates are already per-vintage increments (per-day counts
         ## for a non-cumulative panel), so they are the modelled incidence.
         q(i, pr) = quantile([r[i] for r in replicates], pr)
@@ -2622,9 +2857,9 @@ function plot_vintage_incidence_ppc(
         yupper = 1.6 * max(isempty(obs_inc) ? 1.0 : maximum(obs_inc),
             isempty(hi60) ? 1.0 : maximum(hi60), 1.0)
         ax = Axis(fig[row, col]; title = p.title, xlabel = xlabel,
-            ylabel = col == 1 ? "New per vintage" : "",
-            xticks = (x, string.(dates)),
-            xticklabelrotation = pi / 4, xticklabelsize = 9,
+            ylabel = ylabel,
+            xticks = _vintage_ticks(dates),
+            xticklabelrotation = pi / 4, xticklabelsize = 11,
             limits = (nothing, (0, yupper)))
         band!(ax, x, lo90, hi90; color = (colour, 0.15))
         band!(ax, x, lo60, hi60; color = (colour, 0.28))

@@ -4,6 +4,12 @@ A one-page overview of the headline results for readers with limited time.
 Every number, table and figure on this page is produced by the same model fit as the full [Analysis](analysis.md) and refreshes whenever the data updates.
 See the [Analysis](analysis.md) page for the methods, assumptions and supporting detail behind each result, and the [Sensitivity](sensitivity.md) page for the forecast validation, the outbreak size implied by each data stream, the comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity analyses.
 
+> **Reduced data streams.**
+> The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
+> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen pending a decision on whether the two are comparable.
+> Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
+> See the inclusion rules in `data/README.md`.
+
 ```@eval
 using Markdown, BVDOutbreakSize
 dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")

@@ -160,7 +160,14 @@ runs:
           exit 0
         fi
 
-        # Create PR using GitHub CLI
+        # Create PR using GitHub CLI. A repository with "Allow GitHub
+        # Actions to create and approve pull requests" turned off rejects
+        # this with a permissions error, having already accepted the branch
+        # push above. Left there, that branch trips the already-exists guard
+        # on every later push, so the increment stops running at all and
+        # does so silently. Clean the branch up and warn instead: a version
+        # bump that needs a settings change is not a reason to fail main.
+        set +e
         PR_OUTPUT=$(gh pr create \
           --title "${{ inputs.pr-title-prefix }} to $NEW_VERSION" \
           --body "This PR automatically increments the version from \`$OLD_VERSION\` to \`$NEW_VERSION\` as a **$INCREMENT_TYPE** release.
@@ -182,7 +189,27 @@ runs:
         *This PR was created automatically by the Version Increment workflow.*" \
           --base main \
           --head "$BRANCH_NAME" \
-          --assignee "${{ inputs.assignee }}")
+          --assignee "${{ inputs.assignee }}" 2>&1)
+        PR_STATUS=$?
+        set -e
+
+        if [ $PR_STATUS -ne 0 ]; then
+          echo "$PR_OUTPUT"
+          git push origin --delete "$BRANCH_NAME" || true
+          if echo "$PR_OUTPUT" | grep -q "not permitted to create or approve"; then
+            echo "::warning::Version increment to $NEW_VERSION could not open" \
+              "a pull request: this repository has \"Allow GitHub Actions to" \
+              "create and approve pull requests\" disabled (Settings ->" \
+              "Actions -> General -> Workflow permissions). Branch" \
+              "$BRANCH_NAME was removed so a later push can retry. Bump the" \
+              "version by hand or enable that setting."
+          else
+            echo "::warning::Version increment to $NEW_VERSION could not open" \
+              "a pull request; branch $BRANCH_NAME was removed so a later" \
+              "push can retry. See the log above."
+          fi
+          exit 0
+        fi
 
         # Extract PR number
         PR_NUMBER=$(echo "$PR_OUTPUT" | grep -o '/pull/[0-9]*' | grep -o '[0-9]*')

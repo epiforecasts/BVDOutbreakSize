@@ -91,8 +91,14 @@ end
 
 # Pull the SitRep number out of a filename, tolerating the inconsistent
 # `N°60`, `N_61`, `No59`, `N°055` spellings, and zero-pad it to three digits.
+# From SitRep 084 the "MVEBDB brief format" renamed files to
+# `SitRep_MVEBDB_NNN_...` with no `N`/`No`/`N°` before the digits at all, so
+# the `n[...]` alternative alone silently matched nothing for 084 onward -
+# not even landing in the "rejected" list, since `sitrep_number` returning
+# `nothing` skips the file before the MVE-vs-other-disease check runs. The
+# `mvebdb[...]` alternative below recovers that convention too.
 function sitrep_number(name)
-    m = match(r"(?i)sitrep.*?n[°o._\- ]*0*(\d{2,3})", name)
+    m = match(r"(?i)sitrep.*?(?:n[°o._\- ]*|mvebdb[_\- ]*)0*(\d{2,3})", name)
     m === nothing ? nothing : lpad(m.captures[1], 3, '0')
 end
 

@@ -26,6 +26,15 @@ using TensorBoardLogger
 ## Render figures at higher resolution so they stay crisp in the docs.
 CairoMakie.activate!(type = "png", px_per_unit = 3)
 
+## `activate!(type = "png")` leaves Figures still showable as `MIME"text/html"`,
+## which Literate prefers over `image/png`, and Documenter's raw-block regex
+## hits PCRE's ~64KB limit once a block grows past it. Disabling the
+## html-family mimes forces every Figure display onto the image/png path.
+CairoMakie.disable_mime!(
+    "text/html", "application/vnd.webio.application+html",
+    "application/prs.juno.plotpane+html", "juliavscode/html",
+    "svg", "pdf")
+
 Random.seed!(20260518)
 
 ## Guard the stateful setup against running twice in one module: the Literate
@@ -43,6 +52,31 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## Date a cumulative history last reports (the cut-off for streams that
     ## run to it, or the freeze date for streams that stop earlier).
     hist_last_date(h) = isempty(h.days) ? missing : grid_date(maximum(h.days))
+
+    ## The forecast's count streams, split by whether the situation reports
+    ## still update each one (`stream_reporting`). A stream that has stopped
+    ## carries a cumulative total that only repeats its last reported value,
+    ## so it can be projected but not validated against an observation.
+    ## `scripts/score_releases.jl` withholds the same streams, though by its
+    ## own per-target rule rather than this one. Both pages read the split
+    ## from here so they agree.
+    forecast_cum_cols = (:cases_cum, :deaths_cum, :confirmed_cum,
+        :confirmed_deaths_cum, :recovered_cum)
+    reporting_cum_cols = Tuple(c for c in forecast_cum_cols
+    if stream_reporting(obs, c))
+    stopped_cum_cols = Tuple(c for c in forecast_cum_cols
+    if !stream_reporting(obs, c))
+    ## The matching new-count columns, for a figure that takes the forecast
+    ## frame column by column rather than a keyed NamedTuple.
+    new_cols(cols) = [stream_forecast_columns(c).new for c in cols]
+    ## Keep the entries of a stream-keyed NamedTuple (`observed`, `baseline`,
+    ## `individual`) belonging to `cols`, whichever of a stream's cumulative
+    ## or new-count column each side is keyed by.
+    function keep_streams(nt, cols)
+        ids = [stream_id(c) for c in cols]
+        return NamedTuple(k => v
+        for (k, v) in pairs(nt) if stream_id(k) in ids)
+    end
 
     ## The fits are defined once in `docs/fits/registry.jl` as a registry, so
     ## each can be run and cached independently — one per CI matrix job, or
@@ -156,8 +190,12 @@ if !@isdefined(_BVD_SETUP_LOADED)
     ## stream's own model alongside the frozen joint. Keyed by the same
     ## `fit` ids the current-data individual fits use (`chn_cases`, …), so
     ## the two dicts read the same way.
+    ## Only the still-reported streams are fitted, so a stream that has
+    ## stopped is simply absent here rather than present and filtered out
+    ## later (see `validation_stream_ids`).
     frozen_lastweek_streams = Dict(
-        sid => _fits["frozen_validation_$sid"] for sid in VALIDATION_STREAM_IDS)
+        sid => _fits["frozen_validation_$sid"]
+    for sid in validation_stream_ids(obs))
     frozen_results = [_fits["frozen_$c"] for c in frozen_cutoffs]
     frozen_by_cutoff = Dict(zip(frozen_cutoffs, frozen_results))
     frozen_by_cutoff[chamla_cutoff] = _fits["frozen_$chamla_cutoff"]

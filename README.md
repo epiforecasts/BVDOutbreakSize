@@ -12,6 +12,12 @@ DRC counts come from the situation reports of the Institut National de Santé Pu
 Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
+> **Reduced data streams.**
+> The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
+> The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen, since the prose does not carry the table's own counts (issue #562).
+> Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
+> See the inclusion rules in `data/README.md`.
+
 **See:**
 [current outbreak size](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#Summary) ·
 [one-week-ahead forecast](https://epiforecasts.io/BVDOutbreakSize/stable/analysis#One-week-ahead-forecast-results) ·
@@ -25,10 +31,16 @@ The rendered report fills in the build date and the exact data cut-off automatic
 **Abstract.** An outbreak of Ebola disease caused by Bundibugyo virus (BVD) is ongoing in the Democratic Republic of the Congo (DRC), with cases also detected across the border in Uganda.
 This is a real-time joint Bayesian estimate of the current size of that outbreak, refreshed as new data arrive.
 Most infections are not yet reported, so the current size has to be inferred from the surveillance data that are available.
-The model is a discrete-time renewal process on a daily grid that fits the surveillance streams jointly in a single posterior: the DRC suspected cases, suspected deaths, laboratory-confirmed cases and confirmed deaths, and the cases and deaths exported to Uganda.
-It estimates: the latent infections, symptom onsets and deaths over time; the reported and confirmed cases; the time-varying reproduction number, its growth rate and doubling time; the case-fatality ratio; the ascertainment of each surveillance system; and a short-term forecast of each stream over the coming week.
-The DRC data come from the INSP situation reports, and the Uganda exports come from the WHO situation reports and Disease Outbreak News.
+The model is a discrete-time renewal process on a daily grid.
+It fits in a single posterior the daily counts the INSP situation reports publish, including the suspected and confirmed case and death series as well as the laboratory, isolation, treatment-centre and recovery records.
+We also digitise the epidemic curve by symptom-onset date as intermittently reported in the INSP situation reports and fit them using a model that accounts for time-varying ascertainment and reporting delays.
+Finally, we fit to data on initial exports of cases and deaths to Uganda, taken from the WHO situation reports and Disease Outbreak News.
+The same infection process generates all of them, staged to daily symptom onsets and routed into every observation stream.
 A genetic bound on the time to the most recent common ancestor and priors from the McCabe et al. report complete the inputs.
+From these it estimates the infections and deaths to date, reported and unreported, the time-varying reproduction number with its growth rate and doubling time, the case-fatality ratio, and the ascertainment of each surveillance system.
+Every release projects each DRC stream a week ahead.
+The forecasts are scored with the continuous ranked probability score against the data that arrive later and against a persistence baseline.
+The aim is a transparent estimate of how far the outbreak has already grown, and of how much each published stream contributes to it.
 
 **Scope.** This work adds an external view of the current situation, drawing on our understanding of real-time infectious disease dynamics and the infection process behind the observed surveillance counts.
 We are developing it and encourage feedback, so please get in touch.
@@ -102,10 +114,10 @@ The observations live in `data/observations.toml`.
 The literate picks up new numbers automatically.
 The figures come from the INSP situation reports, transcribed by [INRB-UMIE/BDBV2026-Data](https://github.com/INRB-UMIE/BDBV2026-Data), and are refreshed for each new sitrep with the `scripts/` tooling (`task download-sitreps`, `task confirm-data`):
 
-- The cumulative confirmed-case and confirmed-death series come from the upstream `national_*` daily CSVs, regenerated and spot-confirmed against our own scan by `scripts/confirm_insp_data.jl`.
+- The cumulative confirmed-case and confirmed-death series are read from the situation-report PDFs like every other stream, and cross-checked against the upstream `national_*` daily CSVs by `scripts/confirm_insp_data.jl`.
 - Every other stream (suspected totals, laboratory cumulatives, the 24h analysed volume, daily new suspects, isolation occupancy, bed capacity and recoveries) is read directly from the situation-report PDFs (fetched by `scripts/download_sitreps.jl` into `data/sitrep_pdfs/`) and recorded in `data/insp_sitrep_scanned.csv`.
 
-`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream national series and exits non-zero on any disagreement.
+`scripts/confirm_insp_data.jl` cross-checks the scan against the upstream national series and exits non-zero on any disagreement it does not already document.
 
 ## Outputs and releases
 

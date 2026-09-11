@@ -6,112 +6,398 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## v1.14.0
-
-Changes since v1.13.1
+## Unreleased
 
 ### Model
 
-- The headline joint model is now a **meta-population model** over the three
-  affected provinces (Ituri, Nord-Kivu, Sud-Kivu). It is the same `bvd_joint`:
-  `n_patches` defaults to 1, which collapses it exactly onto the previous
-  single-population model (the sum-to-zero deviations vanish, there is nothing
-  to import between, and there is no per-province likelihood), so there is one
-  model rather than two. The single-patch case is fitted as the
-  `sens_no_patches` sensitivity, which is the check on the spatial structure.
-- **Fixed three structural asymmetries that made the national outbreak size
-  depend on how many provinces the country was split into.** Splitting the
-  country adds no national data, so the national total must be invariant to the
-  patch count. It was not, for three reasons, all visible before any data:
-  - The per-province deviations are centred unweighted, so the trend the
-    molecular clock constrains was the geometric mean of the provincial
-    reproduction numbers while the epidemic ran at the force-weighted
-    arithmetic mean. The renewal is now anchored, scaling all provinces by one
-    common factor each day so the implied national reproduction number is the
-    trend exactly. The deviations became pure contrasts between provinces and
-    the national level is left to the trend alone. This was much the largest
-    term, being exponential in the excess growth rate.
-  - Importation manufactured infections instead of moving them: the
-    destination gained while the origin lost nothing. Coupling now debits the
-    origin exactly what the destinations are credited.
-  - The seed fractions added to the national cryptic seed instead of
-    partitioning it, so the initial condition grew with the patch count. They
-    now partition it.
-
-  With the same trend and the same total seed, three provinces now reproduce
-  the single-population national trajectory exactly, day by day. On the test
-  setup the old code inflated the national cumulative total roughly
-  thirtyfold. Pinned in `test/test_patch_model.jl`.
-- The headline fit runs at 200 draws rather than the 500 every other fit in the
-  matrix uses. Three provinces cost about twice as much per draw as one: the
-  gradient is 53.0 ms at three patches (220 parameters) against 26.2 ms at one
-  (140), and the extra dimensions lengthen the sampler's trajectories on top of
-  that. The single-patch fit takes 314 minutes at 500 draws, so three patches
-  at 500 needs on the order of 700, against a 350-minute job budget. This
-  halves the headline's effective sample size and is worth revisiting.
-- Fixed the headline and control fits drifting apart. They are the two halves
-  of the spatial sensitivity, so they must differ only in the patch structure,
-  and they had come to differ in **nine** keyword arguments. `genetic` defaults
-  to `nothing`, so the headline was silently running with no genetic TMRCA
-  likelihood while the control had one; the comparison was not controlled at
-  all. Both now splat one shared configuration, so they cannot diverge again.
-- Per-province reproduction numbers are a common national trend plus deviations
-  that sum to zero, drawn from a multivariate-normal random walk with a learned
-  cross-patch correlation. The deviation scale is sampled, so whether the
-  provinces share one temporal `Rt` shape is *estimated* rather than assumed.
-- **The per-province split is identified by the deaths.** A province's confirmed
-  case count is the product of its incidence and its case-finding, and only the
-  product is observed; the tests-analysed denominator cancels out of the
-  normalised shares, so no amount of case or laboratory data separates them.
-  Deaths are far harder to miss than cases, and the case-fatality ratio and the
-  death-confirmation probability belong to the virus and to a national
-  laboratory rather than to a province, so they cancel out of the normalised
-  death shares. The death split therefore identifies the incidence split, and
-  the case split identifies ascertainment as the residual.
-- Both splits are scored as compositions conditional on the national total, so
-  neither re-scores data the national streams already carry. The death
-  composition convolves each province's own incidence curve through the shared
-  onset-to-death and reporting delays, so the downward bias in observed CFR
-  during fast growth is predicted rather than mistaken for poor case-finding.
-- Provinces are coupled by importation (a gravity kernel weighted by destination
-  population). There is no mobility data, so the kernel is a structural
-  assumption and its intensity is weakly identified against the secondary-patch
-  seeds; that is documented rather than hidden.
+- The headline joint model is a meta-population model over the three affected provinces, Ituri, Nord-Kivu and Sud-Kivu.
+It runs one renewal equation per province, coupled by importation, and fits every national stream against the summed provinces.
+It is the same `bvd_joint`.
+`n_patches` defaults to 1, which collapses it onto the previous single-population model, so there is one model rather than two.
+That single-population case is fitted as the `sens_no_patches` sensitivity, which is the check on the spatial structure.
+- Provincial reproduction numbers are the national weekly-knot walk plus deviations that sum to zero, drawn from a multivariate-normal random walk with a learned cross-province correlation.
+The deviation scale is sampled, so whether the provinces share one temporal shape is estimated rather than assumed.
+The national reproduction number is backed out by inverting the renewal equation on the summed infections, which is the force-of-infection-weighted mean of the provincial values.
+- The national outbreak size does not depend on how many provinces the country is split into.
+Splitting the country adds no national data, so it must not.
+Three asymmetries broke this before any data entered, and all three are fixed.
+The renewal is anchored, scaling every province by one common factor each day so the implied national reproduction number is the trend exactly.
+Importation debits the origin what the destinations are credited, where before it created infections.
+The seed fractions partition the national cryptic seed rather than adding to it.
+With the same trend and total seed, three provinces now reproduce the single-population trajectory day by day, pinned in `test/test_patch_model.jl`.
+- The per-province split is identified by the confirmed deaths.
+A province's confirmed case count is the product of its incidence and its case-finding, and only the product is observed.
+The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory rather than to a province, so they cancel out of the normalised death shares.
+The death split identifies the incidence split, and the case split then identifies relative case ascertainment as the residual.
+Both splits are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
+- Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
+There is no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
+- The headline fit runs at 200 draws against the 500 every other fit in the matrix uses.
+Three provinces cost about twice as much per draw as one, and the fit job has a 350-minute budget.
 
 ### Data
 
-- Added `[province_confirmed_history]` and `[province_death_history]`:
-  per-province cumulative confirmed cases **and deaths** from Tableau 1 of the
-  situation reports (20 vintages, 15 Jun -- 8 Jul), scanned by
-  `scripts/scan_province_tableau1.jl` (`task province-tableau1`). The scan is
-  gated on the per-province figures summing exactly to the national confirmed
-  case and death totals on every date; all 20 reconcile.
-- Added `[province_lab_daily_history]`: per-province laboratory throughput from
-  section 4.3 of the situation reports (18 vintages), scanned by
-  `scripts/scan_province_lab.jl` (`task province-lab-data`), likewise gated on
-  reconciling with the national analysed series.
-- The data show that the provinces are testing very differently-selected pools
-  (Ituri 31.8% test positivity against Nord-Kivu's 5.5%), and that Nord-Kivu
-  holds a steady 8-9% of confirmed cases but 14-19% of confirmed deaths. Both
-  point the same way: Nord-Kivu is finding fewer of its cases, not transmitting
-  less.
+- Added per-province cumulative confirmed cases and deaths from Tableau 1 of the situation reports, as `[province_confirmed_history]` and `[province_death_history]` over 20 vintages, scanned by `scripts/scan_province_tableau1.jl`.
+The scan is gated on the province rows summing exactly to the national totals on every date.
+- Added per-province laboratory throughput from section 4.3 of the reports, as `[province_lab_daily_history]` over 18 vintages, scanned by `scripts/scan_province_lab.jl` and gated the same way.
+Ituri ran a test positivity of 31.8% against Nord-Kivu's 5.5% over the window, so the provinces are testing differently selected pools.
 
-### Reporting
+### Report
 
-- The spatial section now leads with a cross-province overview
-  (`patch_overview_table`), one row per province, and then reports each
-  province in its own table (`patch_summary_table(...; patch = ...)`). It
-  previously stacked every province against every quantity in a single
-  twenty-one-row table, which could not be read as a comparison.
-- Added the reproduction number by province over time (`plot_rt_patches`),
-  faceted one panel per province with the national trajectory behind it. The
-  provincial `Rt` was previously reported only at the cut-off, so the question
-  the meta-population model exists to answer was not shown. The trajectory is
-  rebuilt by `reconstruct_patch_rt` from the deviation knots the chain now
-  carries as `delta_knots`, and a test pins that reconstruction against the
-  model's own `R_T_patch`.
-- Reported the importation intensity alongside the kernel it scales, so the
-  coupling between provinces is stated rather than left implicit.
+- The spatial section leads with a cross-province overview, one row per province, and then reports each province in its own table.
+- Added the reproduction number by province over time, one panel per province with the national trajectory behind it.
+The trajectory is rebuilt from the deviation knots the chain carries, and a test pins that reconstruction against the model's own cut-off value.
+- The importation intensity is reported alongside the kernel it scales.
+
+## v1.18.0
+
+Changes since v1.17.0
+
+### Performance
+
+- The observation models no longer box the locals their closures capture (#656).
+Four model bodies assigned a variable inside a branch or a loop and then captured it in a comprehension, which makes Julia hold it in a `Core.Box`.
+A boxed local is type-unstable at every use, and Mooncake answers type instability with a dictionary lookup per call site on every gradient evaluation.
+Assigning each name once leaves the log-density bit-identical and roughly halves the gradient on the joint fit, from about 21 ms to about 10 ms.
+`test/test_boxed_captures.jl` now fails if any method under `src/models/` carries a box, and the rule is recorded under "Closures in model code" in the [contributing guide](contributing.md).
+Three sites outside `src/models/`, in forecast replication and plotting, still carry the pattern, and are left alone because nothing there runs on the gradient path.
+
+### Report
+
+- The symptom-onset reporting-triangle panels are nowcasts rather than fits (#648).
+Each panel drew the expected count for the bar it was compared against, which does not condition on what that snapshot had already printed, so its interval was set by uncertainty in the onsets rather than by how much of the reporting delay had elapsed.
+Each panel now starts from the counts its own figure printed, adds only the reporting the fitted delay curve puts between that figure and the latest one covering each onset date, and puts the result through the measurement error a digitised bar carries.
+It is read against that latest reading, so the band and the point it is scored on are the same quantity.
+The single figure by onset date is unchanged, since it is read for the gap between the modelled onsets and what the figures carry, which is ascertainment.
+- Seven references the text quoted by hand are now citations, so they reach the References page (#627).
+The onset-to-sample cohort, the `epidist` model behind it, the Wilson-Hilferty median, the RealStar assay and the three GeneXpert sources were all named in prose or given as a bare DOI, which left the assay sensitivities and the delay prior unsourced on the page.
+
+### Data
+
+- Advanced the model cut-off from SitRep 110 (1 September) to SitRep 115 (6 September) (#655).
+Confirmed cases reach 6686 and confirmed deaths 3226, with 1563 recovered and 819 in isolation.
+Every day's net confirmed-case and confirmed-death change matches that report's own printed 24h figure, with no harmonisation anywhere in the run.
+The treatment-centre flows and the daily suspected case and death series stay frozen, as they have since the reports dropped the tables that carried them.
+- The ERVEBO ring and front-line-worker vaccination campaign is now tracked as a candidate signal (#651, #650).
+Eight rows backfill every numeric mention from its first appearance in SitRep 097 through SitRep 113, each double-read against the source report.
+The signal is not fitted, and SitReps 114 and 115 have not yet been read for it.
+
+### Infrastructure
+
+- Removed `forecast_vs_truth_trajectory`, which no code called.
+It scored a cumulative trajectory from the exponential-growth model's `r`, `expected_reports_T` and `k`, none of which the renewal model carries.
+
+### Dependencies
+
+- Turing 0.48 is allowed alongside 0.45, 0.46 and 0.47, in the package and in the Enzyme test environment (#652, #653).
+
+## v1.17.0
+
+Changes since v1.16.0
+
+### Fixes
+
+- The Python onset-curve digitiser no longer disagrees with the Julia reference (#594).
+Three off-by-one errors in the port's translation of the reference's 1-based ranges had put it 175 cells adrift over SitReps 083, 094-096 and 106-109.
+Rounding half to even is not translation-invariant, so bar windows rounded in the 0-based frame sat one column from the reference's.
+Both scripts now reproduce the committed onset CSV byte-identically across all 44 vintages, and no committed row changes.
+- The symptom-onset reporting triangle now carries a per-scan level error (#507).
+A bar's height is read in pixels and converted with the axis scale that scan calibrated, so the absolute part of the digitisation error belongs to the bar and the multiplicative part is one number for the whole figure.
+Scoring that second part as independent per-cell noise got the spread right and the shape wrong: independent errors average out across a snapshot's cells, so the net correction each snapshot adds was predicted far too tightly, at 1 of 11 snapshots inside a nominal 50% interval while the 90% interval and the aggregate variance were both at nominal.
+The modelled level each cell differences now carries its own scan's multiplier, sampled rather than assumed, and the per-cell scale keeps counting and pixel noise alone.
+On a simulated reporting triangle this moves per-snapshot central coverage from 0.29 to 0.48 against a nominal 0.50, and 90% coverage from 0.69 to 0.89.
+The outbreak size and the recent reproduction number are unchanged by the term.
+`C_T` moves from 13022 to 12566 against a 95% interval about 12000 wide, and `R_T` from 1.009 to 0.976 against an interval width of 0.85.
+On the joint fit itself, per-snapshot central coverage moves from 8 of 30 to 17 of 30 against a nominal half.
+The reporting delay's calendar walk narrows from 0.49 to 0.11, so it had been absorbing per-scan level movement as reporting drift.
+The same term gives the fit somewhere to put a vintage that reprints at its predecessor's level, which previously could only be fitted by driving the reporting hazard towards zero at the delays that vintage covers.
+- Bed forecasts are now scored against the occupancy the situation reports print.
+The projection carries the reclassification offset the model absorbs a change of reporting basis with, so it no longer sits above the series it is compared against.
+The persistence baseline drops a window spanning one of those basis changes, and the symptom-onset stream has a baseline for the first time.
+For an incident stream the baseline's step pool holds changes in the window total rather than the window's own count (#623, #612).
+
+### Report
+
+- The bed-occupancy panels read as occupancy rather than as counts of new events (#628).
+All three are census stocks but shared a flag with the per-day flows, so the vintage predictive plots labelled them "Daily count" and "New per vintage".
+A rising occupancy series under a new-events axis, among true incidence panels, reads as an accumulating total.
+- The symptom-onset methods section now derives the digitisation error from how a bar is read rather than quoting a single per-scan percentage, and the reporting-delay summary table and pair plot carry the sampled per-scan level (#507).
+The recovered stream's description is also corrected: it still said the observed totals were 12 to 40 over 6-13 June, when the series now runs from 12 on 6 June to 1409 on 31 August over 81 vintages.
+- The frozen validation fits no longer include the streams the situation reports have stopped updating (#611).
+Suspected cases and suspected deaths stopped reporting early, so their frozen fits scored a validation panel that had already gone quiet, 16 fits a build down from 18.
+The release-fit registry is hashed into every fit's cache key, so the next docs build refits the whole set once.
+
+### Data
+
+- Advanced the model cut-off from SitRep 108 (30 August) to SitRep 109 (31 August).
+Confirmed cases reach 6186 and confirmed deaths 3007.
+Sud-Kivu prints its first bed-capacity figure, 25 beds.
+The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+- Three scan-versus-mirror disagreements in the confirmed case and death history are settled against the situation-report PDFs (#624).
+The committed values are right in all three, so no fitted number changes.
+2026-08-08 is the mirror filing SitRep 085 under its publication date rather than its reporting date.
+2026-08-11 is SitRep 089's printed total of 4566 against its own province rows summing to 4567.
+2026-08-25 is a mirror transcription error, 2755 for a figure that reads 2744 in the headline, the total row and the province sum alike.
+The cross-check script now records each with both values, and fails on any disagreement it does not document or on an entry that stops reproducing.
+It no longer prints TOML regenerated from the mirror, which covers 86 of the 102 report dates the manifest holds.
+- SitRep 090's mixed-direction harmonisation gets no break-date entry (#569).
+The gap is 2 cases and 3 deaths, smaller than the SitRep 065 precedent already left off that list.
+- SitRep 098 stays out of the digitised onset curve, and the reason is now the measured one (#594).
+The render size is not what makes it read high.
+It is the only vintage embedded losslessly, and the fixed colour masks lose a bar-edge fringe to JPEG blur on every other one.
+- The SitRep 102 to 103 date-alignment failure is not a misread axis tick on either vintage (#617).
+Both neighbouring pairs land cleanly on shift 0.
+- The per-scan digitisation error on the onset curve is a per-vintage level, not a stationary error (#636).
+The colour masks are fixed thresholds, so how much of each bar survives them depends on how blurred its edges are, and a smaller render blurs more.
+Edge softness roughly doubles between SitRep 105 and 106 as the render halves in area, and the digitised total falls 214 on onset dates that can only accrue.
+The shift does not cancel in the between-vintage increments the reporting-delay hazard is fitted through.
+
+### Infrastructure
+
+- The onset-curve digitiser and the file it writes now have tests, including the date-alignment sweep and a parity check holding the Python port to the committed file (#629).
+- The release rescore's hard failure is now permanent rather than a stopgap (#588).
+It used to fall back to the committed scoring tables when the rescore step failed, but that fallback would publish skill scores and validation figures against whatever truth series those tables were last written from, with nothing on the rendered page saying so.
+A failed rescore now fails the build outright, which a re-run of the job recovers from; a silent substitution was not detectable from the page at all.
+
+## v1.16.0
+
+Changes since v1.15.0
+
+### Report
+
+- The cross-release forecast scores, the forecast-versus-observed validation tables and the situation-report data tables stay tables on the page.
+A `DataFrame` is html-showable, so each one went into the page as a raw HTML block, and Documenter compiles a regex from every raw block's own text, which fails once a block passes PCRE's compiled-pattern limit.
+The scoring tables grow with every release and crossed it after v1.15.0, taking the docs build down with them.
+The stop-gap printed each table as a fixed-width block of text instead, which built but is not a table.
+They now go out as markdown tables, which carry no such limit.
+Float columns are rounded rather than printed to their full binary expansion, and numeric columns are right-aligned.
+
+### Data
+
+- Advanced the model cut-off from SitRep 102 (24 August) to SitRep 108 (30 August), six vintages.
+Confirmed cases reach 6100 and confirmed deaths 2950.
+Two health zones enter the case table at SitRep 104, Biena and Manguredjipa in Nord-Kivu, taking the affected count from 58 to 60 of 151.
+Bas-Uélé prints its first bed-capacity figure at SitRep 106.
+The daily suspected case and death series and the seven treatment-centre streams stay frozen, as they have since the reports dropped the tables that carried them.
+- SitRep 107's isolation occupancy is excluded rather than recorded.
+Its page-1 tile reconciles exactly to the province prose, but only because Nord-Kivu is absent from that section altogether, having carried 236 the day before and 282 the day after.
+Bed capacity for the same date is kept, on the split already established at SitRep 085.
+- The onset-curve digitiser reads SitRep 108.
+That vintage embeds its chart at a size no neighbour uses, which anti-aliased the axis border and the weekly ticks too light for the mask the digitiser reads dark pixels with.
+A looser mask now runs only where the strict one finds nothing, so every earlier vintage still digitises to the committed values.
+
+### Dependencies
+
+- Turing 0.47 is allowed alongside 0.45 and 0.46, in the package and in the Enzyme test environment.
+
+## v1.15.0
+
+Changes since v1.14.0
+
+### Fixes
+
+Five defects in the one-week-ahead forecast are corrected here.
+All five affected the headline forecast in the published report, not only the evaluation, so skill numbers from earlier releases were measured against a forecaster carrying them.
+That is why 90% coverage sat at 1.00 at nearly every stream and horizon against a nominal 0.90.
+
+- Each observed count stream now projects from its own cumulative trajectory.
+`cumulative_reports` and `cumulative_deaths_total` were named by the forecast and by the stream registry but defined in no model, so reported cases, suspected deaths and confirmed deaths all fell back to inverting the cumulative total under exponential growth.
+That inversion collapses towards zero once the fitted growth rate is at or below zero, and on one cached fit gave a median 0.55 confirmed deaths per day against an observed 17.
+- The confirmed-death forecast is no longer capped at the cumulative suspected deaths.
+The model does impose a thinning, but per day and on the latent pool, before positivity scales it down.
+The forecast capped a different quantity against a reported headline that froze at 246 on 26 May while confirmed deaths passed 246 on 19 June, clamping the forecast below its own origin and flooring the new count at zero in most draws.
+- Each stream is replicated through its own dispersion rather than the population mean.
+The per-stream forecaster already used the right one, so the two disagreed for the same model on the same stream.
+- The observation replicate accumulates day by day rather than in one draw on the horizon total.
+The dispersion is fitted against single-day counts and short vintage increments, so carrying it on the summed mean inflated the overdispersion term by roughly the length of the horizon.
+- The reproduction number continues its fitted walk past the cut-off.
+The forecast repeated the last sampled innovation as a fixed daily slope for the whole horizon, so the spread in log-`R_t` grew with the horizon rather than with its square root, putting the four-week reproduction number between 0.245 and 14.9.
+It now draws fresh weekly innovations at the fitted step scale and interpolates between them, as the walk is built in the first place.
+
+The forecast validation is corrected with them.
+
+- A retrospective harmonisation now comes out of the cumulative truth as well as the new-count truth.
+A projection cannot contain an administrative reattachment, so leaving it in the truth scored the forecast against something it could not produce.
+This is a no-op at the current cut-off and bites whenever a break day falls inside a validation week.
+
+### Report
+
+- The joint posterior predictive checks are split by whether a stream is still reported, cumulative then per-vintage within each group, and the vintage axes tick weekly rather than crowding as the outbreak runs on.
+- The forecast is validated only against streams the situation reports still update.
+Reported cases and suspected deaths stopped on 26 May, so their new-count truth was a guaranteed zero and the figure was scoring a forecast against an unmoving series, which the release scoring already withheld.
+They are still drawn, in their own figure, as a projection rather than a validation.
+- The sensitivity page said the confirmed new-count rows keep any retrospective harmonisation step.
+The code has subtracted it since the break-day correction was consolidated.
+
+### Data
+
+- Advanced the model cut-off from SitRep 100 (22 August) to SitRep 102 (24 August).
+Both are clean days, with the cumulative case and death increments equal to the printed 24h gross.
+Bas-Uélé prints its first traveller count at SitRep 102.
+
+### Infrastructure
+
+- The docs-preview cleanup collects previews that land after the pull request closes.
+The close-triggered job assumed the preview existed by then, but the docs build is fanned across runners and publishes hours later, so it found nothing and exited green every time, leaving two hundred preview directories against three open pull requests.
+A nightly sweep now drops every preview directory with no open pull request behind it, and refuses to run when the pull-request listing fails.
+
+### Known issues
+
+- The release comparison mixes two forecast constructions.
+Every row in it is reconstructed by running each release tag's own code, so the historical rows keep the defects corrected above and cannot be regenerated without rewriting what those tags would have produced.
+Read a change in forecast width across this release as a change in the code rather than in the outbreak.
+- The automatic version increment is wedged by a stale branch and skips silently on every push, so `Project.toml` does not advance on its own (#607).
+
+## v1.14.0
+
+Changes since v1.13.2
+
+### Data
+
+- Advanced the model cut-off from SitRep 089 (11 August) to SitRep 100
+  (22 August). The reports returned to their full-length format at SitRep
+  090 after five vintages of the shorter "MVEBDB" brief, restoring the
+  laboratory, point-of-entry and continuity-of-care sections. The
+  confirmed-case and confirmed-death series, recoveries, isolation
+  occupancy, bed capacity and the 24h analysed volume all advance with
+  them, and the symptom-onset curve is digitised for each new vintage that
+  carries a fresh figure. The daily new-suspected-case count stays frozen
+  at 5 August and the treatment-centre patient-movement series at 2 August.
+- A sixth province, Bas-Uélé, records its first confirmed case at SitRep
+  090 (ZS Buta). No isolation, occupancy or laboratory figures are printed
+  for it in any vintage, so it contributes zero to every per-province
+  stream, following the convention already in place for a non-reporting
+  province.
+- The 17 August point was recorded from the INRB-UMIE mirror alone while
+  INSP had published nothing beyond SitRep 093, verified against its posts
+  and media endpoints rather than inferred from a failed fetch. Publication
+  has since resumed and every stream is scanned from the reports again.
+  `scripts/check_new_sitreps.jl` reports how far the mirror leads insp.cd,
+  so a mirror-only point stays visible rather than silently absorbed.
+- `candidate_signals.csv` gains a `province` column and holds one row per
+  signal per vintage per province, replacing the national figure that was
+  a hand-made sum over whichever provinces happened to print a count. A
+  province the report is silent on now gets no row, which distinguishes it
+  from a printed zero. `province = Ensemble` marks a national figure the
+  report prints itself. Coverage changes are now readable from the data
+  rather than only from the prose in `source_note`: SitRep 069, for
+  example, gives Ituri and Nord-Kivu for `eds_death_alerts` but Ituri
+  alone for `eds_investigations_performed`.
+- Corrected SitRep 089's `eds_investigations_performed`, whose national
+  value of 107 included the 15 CTE EDS its own note recorded as excluded.
+  The per-province rows carry community-alert EDS only and sum to 92.
+
+### Fixes
+
+- The still-expected-deaths density no longer extends below zero. The draws
+  were never negative; the kernel density spread mass past the smallest
+  draw, putting a tail on the impossible side of the bound. The axis now
+  stops at the bound, as the count and CFR panels already did. The same
+  applies to the projected-total panel, which had been drawn crossing left
+  of the observed-deaths rule.
+- The forecast reproduction-number density stops at zero, the same bound
+  already applied to the still-expected-deaths and projected-total
+  densities. A posterior sitting close to zero picks up a tail on the
+  impossible side from the kernel.
+- The posterior outbreak age on the tree-prior sensitivity figure stops at
+  zero for the same reason. An age in days cannot be negative, and that
+  figure renders in every published build.
+- The doubling-time interval is the image of the growth rate's interval
+  rather than the quantiles of its own draws, which bounded nothing once
+  the posterior for the growth rate spanned zero and reported a range of
+  -306 to 301 days. The row now runs from the fastest decline, through the
+  zero-growth pole, to the fastest growth, and is ordered by growth rate
+  rather than by value. The narrative summary carried the same fault and is
+  fixed with it.
+- The joint model's score tables show the joint model alone. Every fit was
+  rendered as a row, so each stream's individual fit appeared twice, once
+  in the headline table and again in the section built for it. A frozen
+  fit, which is the joint model refit at an earlier cut-off, was also read
+  as an individual fit rather than a joint one.
+- The persistence baseline is withheld where its own window is not covered
+  by the vintage's reporting, rather than scored from a degenerate centre.
+  An uncovered window let the centre saturate at the whole cumulative to
+  the made date, or collapse to a point mass at zero, and either flattered
+  the fits it was compared against. A test now pins that the baseline sees
+  nothing after the date it is made on, and fails under three deliberate
+  leaks.
+- The in-report forecast validation subtracts a retrospective harmonisation
+  from its new-count truth, as the release scoring already did. A frozen
+  cut-off sitting before a listed break day and a current cut-off after it
+  put records into the confirmed truth that were never notified that week.
+  The cumulative rows are unchanged, the harmonisation being genuinely part
+  of the reported total.
+
+### Infrastructure
+
+- The macOS test cell runs the platform-sensitive items only. It was the
+  one cell skipping nothing, so it re-ran the sampling fits and the quality
+  checks on the slowest runner, never finished, and was cancelled at
+  GitHub's six-hour ceiling on every run. It now completes in about twelve
+  minutes. The job also carries a timeout below that ceiling, so a stall
+  reports as a failure rather than as a cancellation hours later.
+- The automatic version increment deletes its branch and warns when GitHub
+  refuses the pull request it opens, rather than leaving the branch behind.
+  A leftover branch tripped the increment's own already-exists guard on
+  every later push, so the first failure was loud and the rest were silent.
+- Turing's compat bound admits 0.46.
+
+### Documentation
+
+- Rewrote the reduced-data-streams warning in the README and the summary
+  page. The situation reports returned to their full format on 12 August,
+  so the note now covers only what stayed frozen: the daily
+  new-suspected-case count and the treatment-centre patient-movement
+  series.
+- Rewrote the abstract around the situation reports and the data they
+  publish rather than a list of streams, in the wording the analysis
+  report itself uses. It now covers the digitised symptom-onset curve and
+  the recoveries, which the earlier text left out, and says that each
+  release projects each DRC stream a week ahead and scores those
+  forecasts against later data and a persistence baseline.
+- A newly spotted surveillance signal now goes to an issue rather than a
+  row in `data/README.md`'s scan table. The table is a short index, and
+  rows added to it on a data update had to be reverted; the values still
+  accumulate in `candidate_signals.csv` on the same pull request either
+  way.
+- The docs deploy job serialises on the `gh-pages` ref it writes to. The
+  workflow's own concurrency group is keyed on the source branch, so two
+  pull requests publishing previews at once raced and the loser's push was
+  rejected.
+- Gave one display block each to the tested BVD share and the positivity,
+  the cumulative infections and the completed-detection-delay term, and the
+  daily export intensity and its running sum, finishing the
+  one-quantity-per-block pass. The export-death prevalence gets its own
+  block rather than an inline definition.
+- Split the death-pool BVD share and the assay positivity built on it into
+  a display block each, matching the confirmed-case pipeline.
+- Cut the symptom-onset reporting-delay methods section and its results
+  text to the length and shape the other observation modules carry. The
+  model definition, the priors and the limitations all remain. The
+  identifiability discussion is condensed, and the prose runs one sentence
+  per line like the rest of the document.
+
+## v1.13.2
+
+Changes since v1.13.1
+
+### Data
+
+- Advanced the model cut-off from SitRep 082 (4 August) to SitRep 089
+  (11 August): added SitReps 083-089, advancing the confirmed-case and
+  confirmed-death series and the recovered, isolation-occupancy and 24h
+  laboratory-analysed streams, and digitising the symptom-onset curve
+  vintages restored from SitRep 087 (the 084-086 brief-format reports carry
+  a different, notification-week chart and so contribute no onset
+  snapshot).
+- From SitRep 084 (6 August) the INSP switched to a shorter "MVEBDB" brief
+  format that no longer publishes the daily new-suspected-case stream
+  (`suspected_daily_history` freezes at SitRep 083) or the treatment-centre
+  patient-movement streams (frozen at SitRep 080), so the fit now depends
+  on just the confirmed-case, confirmed-death, recovered and isolation
+  streams rather than the full surveillance suite. The README and report
+  carry a warning to this effect; see the inclusion rules in
+  `data/README.md`.
 
 ## v1.13.1
 
@@ -128,6 +414,7 @@ Changes since v1.13.0
   4 August onset snapshots are now included.
 
 ## v1.13.0
+
 Changes since v1.12.0
 
 ### Data
@@ -227,7 +514,6 @@ Changes since v1.12.0
   open items are filed as issues #544 to #549.
 - Added `AGENTS.md`, pointing at `README.md`, `contributing.md` and
   `scripts/README.md`, so a session starts with the rules in context.
-
 
 ## v1.12.0
 

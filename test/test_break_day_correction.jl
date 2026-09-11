@@ -103,8 +103,8 @@ end
     include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
 
     grid_date(day) = Date(2026, 1, 1) + Day(day)
-    ## The current manifest declares two break days, at 25 and 60 days
-    ## after the grid origin.
+    ## A declaration of two break days, at 25 and 60 days after the grid
+    ## origin, in the shape `load_observations` returns.
     obs = (; confirmed_break_days = [25, 60],
         confirmed_break_gross_cases = [97, 40],
         confirmed_break_gross_deaths = [62, 20])
@@ -212,4 +212,144 @@ end
     @test break_correction(
         obs, grid_date, "confirmed cases", grid_date(17), grid_date(31)) ==
           282.0  # 379 - 97
+end
+
+@testitem "confirmed deaths carry their own break-day correction" begin
+    using Dates: Date, Day
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    ## The two confirmed streams read their own history and their own
+    ## printed 24h counts. The deaths vintage at day 24 steps 40 -> 190, a
+    ## net of 150 against a gross of 30, so 120 is retrospective, while the
+    ## cases step of 269 against 97 gives 172.
+    cases = (; days = [10, 17, 24, 31], counts = [100.0, 110.0, 379.0, 400.0])
+    deaths = (; days = [10, 17, 24, 31], counts = [30.0, 40.0, 190.0, 205.0])
+    obs = (; cutoff = grid_date(40),
+        confirmed_history = cases, confirmed_deaths_history = deaths,
+        confirmed_break_days = [24],
+        confirmed_break_gross_cases = [97],
+        confirmed_break_gross_deaths = [30])
+
+    @test break_correction(obs, grid_date, "confirmed deaths",
+        grid_date(17), grid_date(31)) == 120.0
+    @test break_correction(obs, grid_date, "confirmed cases",
+        grid_date(17), grid_date(31)) == 172.0
+    ## Half open on the left, for the deaths stream as for cases.
+    @test break_correction(obs, grid_date, "confirmed deaths",
+        grid_date(24), grid_date(31)) == 0.0
+
+    ## And it reaches the scored truth: the raw 165 less the 120.
+    @test truth_at(obs, grid_date, "confirmed deaths",
+        grid_date(17), grid_date(31)) == 45.0
+end
+
+@testitem "break_correction matches the package helper on a fixture" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: confirmed_break_correction
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The scorer reads break days through the same `confirmed_break_steps`
+    ## the in-report validation does, so the two agree window for window.
+    ## The scorer takes calendar dates and the helper grid days, which is
+    ## the one thing that could drift apart, so every window of a small
+    ## grid is checked rather than a chosen few.
+    grid_date(day) = Date(2026, 1, 1) + Day(day)
+    cases = (; days = [10, 17, 24, 31], counts = [100.0, 110.0, 379.0, 469.0])
+    deaths = (; days = [10, 17, 24, 31], counts = [30.0, 40.0, 190.0, 220.0])
+    obs = (; cutoff = grid_date(40),
+        confirmed_history = cases, confirmed_deaths_history = deaths,
+        confirmed_break_days = [24, 31],
+        confirmed_break_gross_cases = [97, 40],
+        confirmed_break_gross_deaths = [30, 12])
+
+    for (stream, deaths_flag) in (("confirmed cases", false),
+        ("confirmed deaths", true))
+        for from_day in 0:40
+            for to_day in from_day:40
+                @test break_correction(obs, grid_date, stream,
+                    grid_date(from_day), grid_date(to_day)) ==
+                      confirmed_break_correction(obs, from_day, to_day;
+                    deaths = deaths_flag)
+            end
+        end
+    end
+end
+
+@testitem "the live manifest reads the same through both paths" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations, confirmed_break_correction
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## A realism check against the manifest as it actually stands, stated as
+    ## identities that hold for any manifest rather than as the values this
+    ## week's data happens to give. The manifest advances with each
+    ## situation report and gains break days as they are found, so an
+    ## assertion on a particular count would go red on a data update with no
+    ## code having changed.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    for (stream, deaths, hist, gross) in (
+        ("confirmed cases", false, obs.confirmed_history,
+        obs.confirmed_break_gross_cases),
+        ("confirmed deaths", true, obs.confirmed_deaths_history,
+        obs.confirmed_break_gross_deaths))
+        ## Each listed day's correction is its own vintage's step less the
+        ## printed 24h count, floored at zero. The window `(d - 1, d]` holds
+        ## that day and no other, whatever else is listed.
+        for (i, d) in enumerate(obs.confirmed_break_days)
+            pos = findfirst(==(d), hist.days)
+            pos === nothing && continue
+            net = hist.counts[pos] - (pos == 1 ? 0 : hist.counts[pos - 1])
+            @test break_correction(obs, grid_date, stream,
+                grid_date(d - 1), grid_date(d)) == max(net - gross[i], 0)
+        end
+        ## Over every window of the grid the scorer and the package helper
+        ## return the same non-negative correction. Both sides are zero for
+        ## a manifest that lists no break days, which is a valid state.
+        for from_day in 1:7:obs.n
+            for to_day in from_day:7:obs.n
+                corr = break_correction(obs, grid_date, stream,
+                    grid_date(from_day), grid_date(to_day))
+                @test corr >= 0
+                @test corr == confirmed_break_correction(
+                    obs, from_day, to_day; deaths = deaths)
+            end
+        end
+    end
+end
+
+@testitem "the live manifest's scored truth is the corrected increment" begin
+    using Dates: Date, Day
+    using BVDOutbreakSize: load_observations
+
+    include(joinpath(@__DIR__, "..", "scripts", "score_releases.jl"))
+
+    ## The end-to-end identity on the real data: a scorable window is scored
+    ## on its cumulative difference less whatever harmonisation it carries,
+    ## never on the cumulative total itself. Written as the identity so it
+    ## holds however the manifest moves, including when it carries no break
+    ## day at all and the correction is zero throughout.
+    obs = load_observations()
+    grid_date(day) = obs.cutoff - Day(obs.n - day)
+    for stream in ("confirmed cases", "confirmed deaths")
+        h, _ = stream_history(obs, stream)
+        for from_day in 1:7:obs.n
+            for to_day in (from_day + 1):7:obs.n
+                made_date = grid_date(from_day)
+                target_date = grid_date(to_day)
+                truth = truth_at(
+                    obs, grid_date, stream, made_date, target_date)
+                truth isa Symbol && continue
+                raw = cum_at(h, target_date, grid_date) -
+                      cum_at(h, made_date, grid_date)
+                corr = break_correction(
+                    obs, grid_date, stream, made_date, target_date)
+                @test truth == max(raw - corr, 0)
+            end
+        end
+    end
 end
