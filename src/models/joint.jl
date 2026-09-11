@@ -961,8 +961,7 @@ reproduction number implied by the summed patch infections.
             modelled_deaths_prov;
             ascertainment_sd_prior = death_ascertainment_sd_prior))
         province_death_shares := death_composition_state.shares
-        province_death_ascertainment :=
-            death_composition_state.province_ascertainment
+        province_death_ascertainment := death_composition_state.province_ascertainment
     end
 
     ## Daily cumulative trajectories for the headline 3x2 figure: the
