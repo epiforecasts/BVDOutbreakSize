@@ -368,7 +368,7 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
         ## destinations are credited and the national total is untouched by
         ## coupling. Crediting the destination without debiting the origin, as
         ## an earlier version did, makes coupling a net source of infections --
-        ## every patch's total rises and none falls -- and the surplus
+        ## every patch's total rises and none falls, and the surplus
         ## compounds through the renewal into the national cumulative total.
         for p in 1:np
             outflow = zero(Tp)

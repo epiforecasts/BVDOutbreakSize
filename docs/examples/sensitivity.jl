@@ -1351,30 +1351,16 @@ chamla_rt_fig #hide
 
 # ## Spatial structure sensitivity
 #
-# The headline model runs a renewal equation per province, coupled by
-# importation, with every national stream fitted against the summed provinces.
-# Reducing it to a single province collapses the model onto one well-mixed
+# The headline runs the model over the three affected provinces.
+# Reducing it to a single province collapses it onto one well-mixed
 # population, which is the model the earlier releases used.
+# The spatial section of the analysis page describes what the provinces add.
 #
-# Splitting the country into provinces adds no national data.
-# The national outbreak size should therefore be the same either way, and the
-# two posteriors below are a gate rather than a curiosity.
-# Agreement says the spatial structure buys provincial detail without
-# disturbing the headline.
-# Disagreement says it is doing something to the national fit the provincial
-# data cannot justify.
-# The headline should then not be read from the patch model until that is
-# explained.
-#
-# The per-province split rests on the confirmed deaths.
-# A province's case count is the product of its incidence and its case-finding
-# and only the product is observed, so the case split alone cannot separate
-# them.
-# The death split can, because the case-fatality ratio and the
-# death-confirmation probability belong to the virus and to a national
-# laboratory rather than to a province.
-# With the provinces off, that split is not estimated at all and the national
-# estimate is what remains.
+# Splitting the country into provinces adds no national data, so the national
+# outbreak size should be the same either way.
+# A gap between the two posteriors below is a defect in the spatial structure
+# rather than a finding about it, and the headline should not be read from the
+# meta-population fit until such a gap is explained.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,

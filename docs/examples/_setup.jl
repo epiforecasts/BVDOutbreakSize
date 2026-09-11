@@ -170,7 +170,7 @@ if !@isdefined(_BVD_SETUP_LOADED)
                                  for s in _fit_specs])
     _fits = Dict(s.id => r for (s, r) in zip(_fit_specs, _fit_results))
 
-    ## The headline joint IS the patch (meta-population) model, run over the
+    ## The headline joint is the patch (meta-population) model, run over the
     ## three affected provinces. With `n_patches = 1` the same model collapses
     ## exactly onto the single-population one, so there is one model, not two;
     ## `sens_no_patches` is that degenerate case, fitted as the sensitivity

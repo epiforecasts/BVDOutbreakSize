@@ -3836,7 +3836,7 @@ spatial_hyper_table = summary_table(chn_joint,
         :province_ascertainment_sd => "Ascertainment spread"));
 spatial_hyper_table
 
-# ### Sensitivity: turning the spatial structure off
+# ### Turning the spatial structure off
 #
 # The same model run over a single province.
 # Splitting the country into provinces adds no national data, so it should not move the national outbreak size.

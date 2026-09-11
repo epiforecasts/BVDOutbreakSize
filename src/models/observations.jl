@@ -3660,10 +3660,10 @@ modelled expected share of patch `p` at vintage `i`.
     ##     pi_p  ∝  asc_p * lambda_p,
     ##
     ## where `lambda_p` is the modelled BVD incidence in `p` and `asc_p` the
-    ## probability that an infection there becomes a CONFIRMED case. Only the
-    ## PRODUCT is identified: the data cannot separate "more infections" from
+    ## probability that an infection there becomes a confirmed case. Only the
+    ## product is identified: the data cannot separate "more infections" from
     ## "better case-finding". That is not a defect of this parameterisation,
-    ## it is a property of the data — the per-province laboratory series pins
+    ## it is a property of the data, the per-province laboratory series pins
     ## `asc_p * lambda_p` and nothing finer.
     ##
     ## Fixing `asc_p` equal across provinces would hide that. It is also known
@@ -3674,11 +3674,11 @@ modelled expected share of patch `p` at vintage `i`.
     ## provincial `Rt`, reporting a case-finding artefact as epidemiology.
     ##
     ## So `asc_p` is sampled, partially pooled toward equality on the log
-    ## scale, and constrained to sum to zero (only RELATIVE ascertainment
+    ## scale, and constrained to sum to zero (only relative ascertainment
     ## enters a composition; the overall level belongs to the national
     ## ascertainment). `tau_asc -> 0` recovers the equal-ascertainment model.
     ## The pooling prior is what identifies `asc_p`, so the per-patch results
-    ## are correspondingly wider — which is the honest width, not a loss.
+    ## are correspondingly wider, which is the honest width, not a loss.
     τ_asc ~ ascertainment_sd_prior
     z_asc ~ product_distribution(fill(ascertainment_offset_prior, np))
     log_asc_raw = τ_asc .* z_asc
@@ -3699,7 +3699,7 @@ modelled expected share of patch `p` at vintage `i`.
             shares[p, i] = asc[p] * safe_rate(modelled_confirmed[p, i]) / tot
         end
     end
-    ## The totals are CONDITIONED ON, not scored: they are already in the
+    ## The totals are conditioned on, not scored: they are already in the
     ## joint density through the national confirmed stream. On the
     ## predictive path there is no observed total, so the modelled column
     ## sums stand in for it and the composition is generated against those.
@@ -3715,16 +3715,16 @@ modelled expected share of patch `p` at vintage `i`.
     ## final patch takes the remainder and carries no free draw, so the
     ## composition has `np - 1` degrees of freedom per vintage, as it must.
     ##
-    ## The loop runs over PATCHES on the outside and scores every vintage in
-    ## ONE `~` statement, rather than a scalar `~` per (patch, vintage). Within
-    ## a vintage the patches are sequential — patch `p`'s trial count is what
-    ## patches `1 … p-1` left behind — but ACROSS vintages they are
+    ## The loop runs over patches on the outside and scores every vintage in
+    ## one `~` statement, rather than a scalar `~` per (patch, vintage). Within
+    ## a vintage the patches are sequential, patch `p`'s trial count is what
+    ## patches `1 … p-1` left behind, but across vintages they are
     ## independent, so the vintages vectorise.
     ##
     ## This is a performance fix, not a style one. Each `~` puts DynamicPPL
     ## bookkeeping on the Mooncake tape, and with two compositions over 20
     ## vintages the scalar form emitted 80 of them. That inflated the tape
-    ## enough to push the gradient COMPILE past an hour and the fit past CI's
+    ## enough to push the gradient compile past an hour and the fit past CI's
     ## job cap. The vectorised form emits `2 * (np - 1)` = 4.
     remaining = copy(totals)
     tail = ones(eltype(shares), nv)

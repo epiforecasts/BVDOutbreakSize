@@ -1,7 +1,7 @@
 #!/usr/bin/env julia
 #
-# Scan Tableau 1 of the INSP situation reports — the per-province split of
-# CONFIRMED CASES and CONFIRMED DEATHS — and emit the
+# Scan Tableau 1 of the INSP situation reports, the per-province split of
+# confirmed cases and confirmed deaths, and emit the
 # `[province_confirmed_history]` and `[province_death_history]` blocks for
 # data/observations.toml.
 #
@@ -13,30 +13,30 @@
 #    Sud-Kivu                    3                  1      33,3%
 #    Total                    1 792                625      34,9%
 #
-# WHY THE DEATHS COLUMN MATTERS
+# Why the deaths column matters
 #
-# The per-province CASE split alone cannot separate "more infections" from
+# The per-province case split alone cannot separate "more infections" from
 # "better case-finding": the confirmed count in a province is the product of
 # its ascertainment and its incidence, and only that product is observed.
 #
 # The deaths column breaks the tie. Deaths are far harder to miss than cases,
 # and the virus's case-fatality does not change at a provincial border. So
-# under a shared true CFR, the per-province DEATH split identifies the
-# per-province INCIDENCE split, and the gap between the death split and the
+# under a shared true CFR, the per-province death split identifies the
+# per-province incidence split, and the gap between the death split and the
 # case split is what identifies the relative case ascertainment.
 #
 # The signal is large and sustained: Nord-Kivu holds a steady ~8.5-9% of
 # confirmed cases but ~15-19% of confirmed deaths across every vintage, with a
 # confirmed CFR of 54-59% against Ituri's 20-33%.
 #
-# Part of that gap is NOT ascertainment: in a fast-growing epidemic the
-# observed CFR is biased DOWN, because recent cases have not yet died. Ituri
+# Part of that gap is not ascertainment: in a fast-growing epidemic the
+# observed CFR is biased down, because recent cases have not yet died. Ituri
 # grows faster than Nord-Kivu, so some of its lower CFR is right-censoring.
 # The model separates the two by applying the shared CFR and onset-to-death
 # delay to each province's own incidence curve; this script only supplies the
 # data.
 #
-# VALIDATION: the per-province cases must sum to the national
+# Validation. The per-province cases must sum to the national
 # `confirmed_case_history` and the per-province deaths to the national
 # `confirmed_death_history`, on every date. Exits non-zero on any
 # disagreement, so a mis-parse cannot reach the manifest.
@@ -165,7 +165,7 @@ function main()
               "mismatch means a mis-parse. Not emitting the blocks.")
     end
     println("\nAll $(length(keep)) dates reconcile with the national " *
-            "confirmed case AND death totals.")
+            "confirmed case and death totals.")
 
     ## Nord-Kivu's death share sits well above its case share at every
     ## vintage; that gap is the identifying signal, so report it.

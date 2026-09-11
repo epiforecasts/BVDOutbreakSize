@@ -223,7 +223,7 @@ const ITURI_POPULATION = 4_392_200
     PROVINCE_NAMES
 
 The provinces of the patch (meta-population) model, in patch order. The
-first entry is the PRIMARY patch: the origin of the outbreak, the
+first entry is the primary patch: the origin of the outbreak, the
 reference for the per-patch reproduction-number modifiers in
 [`patch_rt_model`](@ref), and the source of the Uganda exports. The names
 key the per-province blocks of `data/observations.toml`.
@@ -245,7 +245,7 @@ const PROVINCE_POPULATIONS = [4_392_200, 6_655_000, 5_772_000]
 
 Between-province importation kernel `K`, where `K[p, q]` is the relative
 rate of infectious travel from province `q` into province `p`. Diagonal is
-zero (no self-importation) and each entry is scaled by the DESTINATION
+zero (no self-importation) and each entry is scaled by the destination
 population share, so a larger province absorbs proportionally more
 introductions. The overall intensity is carried by the sampled `ε` in
 [`patch_infection_model`](@ref), so only the relative structure matters

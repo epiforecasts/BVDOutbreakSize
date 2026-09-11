@@ -516,12 +516,12 @@ label. The `Patch` column is then dropped, since it would repeat one value:
 this is how the analysis reports one table per province rather than one
 table of every province stacked together.
 
-The deviations are SUM-TO-ZERO contrasts around the national trend (see
+The deviations are sum-to-zero contrasts around the national trend (see
 [`patch_rt_model`](@ref)), so `δ` is read relative to the national average
 across provinces, not relative to any one patch: a negative `δ` means that
 province transmits below the national trend. Every patch, including the
 primary, carries its own deviation, and they sum to zero in every draw.
-For the log-Rt of a province relative to ITURI specifically, read the
+For the log-Rt of a province relative to Ituri specifically, read the
 chain's `log_rt_contrast` instead.
 
 Expects a chain from [`bvd_joint`](@ref), which stores the per-patch
@@ -558,13 +558,13 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     inf_T = per_patch(:infections_T_patch)
     δ = per_patch(:delta_patch)
     ## Case ascertainment and the Rt contrast against the primary patch are the
-    ## two quantities that must be read TOGETHER: the case composition
+    ## two quantities that must be read together. The case composition
     ## identifies only their product, and it is the per-province deaths that
     ## tilt the balance between them. Reporting one without the other invites
     ## a low provincial Rt to be read as epidemiology when it is case-finding.
     asc = _has_key(chn, :province_ascertainment) ?
           per_patch(:province_ascertainment) : nothing
-    ## The deviation-walk scale is PER PATCH, so it belongs here rather than in
+    ## The deviation-walk scale is per patch, so it belongs here rather than in
     ## a table of scalar hyperparameters. Near zero means that province's Rt
     ## tracks the national trend; away from zero it is pulling away from it.
     drift = _has_key(chn, :region_drift_sd) ?

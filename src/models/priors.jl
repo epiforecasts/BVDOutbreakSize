@@ -1219,7 +1219,7 @@ end
 """
 Reproduction numbers for several spatial patches (Ituri, Nord-Kivu,
 Sud-Kivu): a common national trend plus per-patch deviations that are free
-to vary in space AND in time, drawn from a multivariate-normal random walk
+to vary in space and in time, drawn from a multivariate-normal random walk
 with a learned cross-patch correlation.
 
 ```math
@@ -1244,11 +1244,11 @@ daily grid.
 kept intact: the national streams see exactly the `Rt` process the headline
 model fits, and it is the target the provinces pool toward.
 
-That pooling target is the point. An unstructured multivariate walk — one
+That pooling target is the point. An unstructured multivariate walk, one
 free `log Rt` trajectory per province, correlated through an LKJ prior and
-no common trend — is strictly more flexible, but it shrinks the wrong way.
+no common trend, is strictly more flexible, but it shrinks the wrong way.
 `LKJ(η)` has density proportional to `det(Ω)^(η-1)`, maximised at `Ω = I`,
-so `η = 2` mildly favours INDEPENDENT provincial walks. The provinces are
+so `η = 2` mildly favours independent provincial walks. The provinces are
 not equally observed: over the fitted window Nord-Kivu contributes 74
 laboratory positives and Sud-Kivu contributes none at all. Shrinking toward
 independence estimates their `Rt` almost entirely from that, while shrinking
@@ -1258,7 +1258,7 @@ partial pooling toward a shared trend is the right inductive bias.
 
 Writing the model this way costs nothing in generality: with `μ(t)` present,
 the deviation covariance `Σ` is still free, so the cross-patch correlation is
-LEARNED rather than assumed. This IS a multivariate-normal random walk — it
+learned rather than assumed. This is a multivariate-normal random walk, it
 just carries a common factor rather than leaving the correlation structure to
 carry it.
 
@@ -1278,7 +1278,7 @@ dimensions rather than a posterior ridge.
 
 ### What the data can and cannot identify here
 
-The composition of the confirmed cases identifies the CONTRAST between
+The composition of the confirmed cases identifies the contrast between
 provinces. With three patches that is essentially one number, the Ituri /
 Nord-Kivu contrast, since Sud-Kivu carries no signal. Expect `Ω` to be
 largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation prior
@@ -1288,7 +1288,7 @@ shrinkage prior rather than a flat one.
 `σ_δ → 0` recovers a common `Rt` shape shared by every province (a fixed
 ratio between them). It is a special case of this model, not an assumption
 baked into it: whether the provinces are really moving together is
-ESTIMATED. `σ_δ` is therefore the headline spatial diagnostic — a posterior
+estimated. `σ_δ` is therefore the headline spatial diagnostic, a posterior
 pushed away from zero is direct evidence that provincial `Rt` trajectories
 are separating, which is exactly what a response concentrated on the Ituri
 epicentre would produce.
@@ -1312,24 +1312,24 @@ scales and the correlation matrix.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
     ## convention in [`infection_model`](@ref).
     ##
-    ## PREFIXED (no `false`), so the walk's parameters reach the chain as
+    ## prefixed (no `false`), so the walk's parameters reach the chain as
     ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
-    ## `rt_state.intervention_effect` — the names the single-population model
+    ## `rt_state.intervention_effect`, the names the single-population model
     ## used and that the analysis and sensitivity pages read. Attaching it
     ## unprefixed surfaces them bare, which is invisible to the model tests
-    ## and to a parameter COUNT (the same parameters are still sampled) but
+    ## and to a parameter count (the same parameters are still sampled) but
     ## fails at render time on a KeyError.
     rt_state ~ to_submodel(
         rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start))
     Rt_national = rt_state.Rt
     log_Rt_national = log.(Rt_national)
-    ## The deviations live on the SAME weekly knots as the national walk, so
+    ## The deviations live on the same weekly knots as the national walk, so
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    ## SINGLE PATCH: the deviations are sum-to-zero across the patches, so with
-    ## one patch delta is identically zero and the patch Rt IS the national
-    ## walk. None of the deviation machinery is then identified -- sampling it
+    ## Single patch: the deviations are sum-to-zero across the patches, so with
+    ## one patch delta is identically zero and the patch Rt is the national
+    ## walk. None of the deviation machinery is then identified, sampling it
     ## would add prior-only dimensions the likelihood never touches. Skip it
     ## entirely, so `n_patches = 1` collapses this model exactly onto the
     ## single-population one. This is the switch that turns the patch structure
@@ -1349,7 +1349,7 @@ scales and the correlation matrix.
             intervention_effect = rt_state.intervention_effect)
     end
     ## Deviation scales (one per patch) and their cross-patch correlation.
-    ## `LKJCholesky` samples the Cholesky FACTOR directly, so the
+    ## `LKJCholesky` samples the Cholesky factor directly, so the
     ## decomposition never lands on the AD tape.
     σ_level ~ region_sd_prior
     σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
@@ -1439,17 +1439,19 @@ importation intensity.
 
 ### Importation
 
-`ε` is sampled only when a non-zero `importation_kernel` is supplied. The
-default kernel is all-zero, so by default the patches are uncoupled and no
-`ε` enters the parameter space. This is deliberate. There is no mobility
-or origin-destination data for this outbreak, and the per-province case
-composition is flat over the observed window, which leaves importation and
-the secondary-patch seeds confounded: any `(ε, seed)` pair that reproduces
-the observed Nord-Kivu level fits the data equally well. Sampling `ε`
-against an all-zero kernel would add a dimension the likelihood never
-touches, giving a parameter whose posterior is exactly its prior. With the
-default, each secondary patch is explained by its own seed and its own
-`R_t`. Passing a kernel turns the coupling on for a sensitivity analysis.
+The default `importation_kernel` is the gravity kernel of
+[`province_importation_kernel`](@ref), a fixed weighting by destination
+population, so the provinces are coupled and the intensity `ε` is sampled.
+There is no mobility or origin-destination data for this outbreak, so the
+kernel is a structural assumption, and `ε` is weakly identified against
+the secondary-patch seeds: both raise a secondary province's early
+incidence. Read `ε` as the scale of coupling the data will tolerate rather
+than as a measured flow.
+
+Passing an all-zero kernel uncouples the provinces. `ε` is then not
+sampled, since against a zero kernel it would be a dimension the
+likelihood never touches, and each secondary patch is explained by its own
+seed and its own `R_t`.
 
 ### Seeding
 
@@ -1457,7 +1459,7 @@ The primary patch (`p = 1`, Ituri) uses the existing cryptic-exponential
 seed: growth at the sampled molecular-clock rate `r` over the cryptic
 window, reaching `seed_at_renewal_start(C_T)` at the renewal start.
 
-Each secondary patch is seeded as a FRACTION of the primary patch's seed
+Each secondary patch is seeded as a fraction of the primary patch's seed
 (`seed_fraction_prior`), not as an absolute count. The fraction stands in
 for the unobserved early introductions from Ituri, and it is the natural
 scale because it is what the data speak to: with importation off, the
@@ -1466,7 +1468,7 @@ observed Nord-Kivu share (~9% of confirmed, near-constant across the
 window) maps almost directly onto a seed fraction of roughly the same size.
 
 This matters more than it looks. An absolute seed prior on the secondary
-patches — an earlier version of this model used
+patches, an earlier version of this model used
 `N⁺(0.01, 0.01)` — puts them ~4 orders of magnitude below the primary
 patch's `2^m ≈ 164`, a seed ratio of about 13,700 : 1. With importation off
 by default, a secondary patch then has only two routes to infections: its
@@ -1480,8 +1482,8 @@ artefact of the seed prior rather than an epidemiological finding, which is
 precisely the quantity the patch model exists to estimate.
 
 Parameterising the seed as a fraction decouples the two: the seed explains
-the LEVEL of the provincial split and `δ_p` is identified by its TIME
-TREND. That is the decomposition the data actually support.
+the level of the provincial split and `δ_p` is identified by its time
+trend. That is the decomposition the data actually support.
 
 The default `LogNormal(log(0.05), 1)` has a median of 5% of the primary
 seed and a 90% interval of roughly 1% to 26%, so it spans the observed
@@ -1516,7 +1518,7 @@ patch chain carries the same headline quantities as a single-patch one.
     ## 1. Shared generation interval.
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
-    ## 2. ONE growth source, as in [`infection_model`](@ref): the prior is on
+    ## 2. One growth source, as in [`infection_model`](@ref): the prior is on
     ##    the cryptic growth rate `r`, and the established `R0` (the walk
     ##    base) is derived forward from `r` and the generation interval
     ##    through Euler-Lotka.
@@ -1529,10 +1531,10 @@ patch chain carries the same headline quantities as a single-patch one.
     Rt_matrix = rt_state.Rt_matrix
     δ_patch = rt_state.δ_patch
     ## 4. Per-patch seeds. The primary patch takes the cryptic exponential.
-    ##    Each secondary patch takes a FRACTION of that seed, which is the
+    ##    Each secondary patch takes a fraction of that seed, which is the
     ##    scale the data speak to: with importation off, the relative seed
-    ##    sets the LEVEL of the provincial case split, leaving `δ_p` to be
-    ##    identified by its TIME TREND. An absolute seed prior pinned far
+    ##    sets the level of the provincial case split, leaving `δ_p` to be
+    ##    identified by its time trend. An absolute seed prior pinned far
     ##    below the primary's `2^m` would force `δ_p` to absorb the whole
     ##    level difference, making the reported provincial Rt gap an artefact
     ##    of the seed prior (see the docstring).
@@ -1577,8 +1579,8 @@ patch chain carries the same headline quantities as a single-patch one.
         end
     end
     ## 5. Importation intensity, only when the kernel actually couples the
-    ##    patches (see the docstring: unidentified against an all-zero
-    ##    kernel, and confounded with the secondary seeds in any case).
+    ##    patches (see the docstring: against an all-zero kernel it would be
+    ##    a prior-only dimension).
     coupled = any(!iszero, importation_kernel)
     ε = zero(Tp)
     if coupled
@@ -1587,7 +1589,7 @@ patch chain carries the same headline quantities as a single-patch one.
     end
     ## 6. Multi-patch renewal.
     ## Anchored to the national walk, so the reproduction number implied by
-    ## the summed patches IS `mu(t)` and the deviations are pure contrasts
+    ## the summed patches is `mu(t)` and the deviations are pure contrasts
     ## between provinces. Without this the country grows at the force-weighted
     ## arithmetic mean of the patch Rts while the molecular-clock prior
     ## constrains their geometric mean, and the gap compounds into `C_T`.
@@ -1609,7 +1611,7 @@ patch chain carries the same headline quantities as a single-patch one.
     C_T_patch = [@inbounds(cumulative_matrix[p, n]) for p in 1:n_patches]
     infections_total = vec(sum(infections_matrix; dims = 1))
     cumulative_total = cumsum(infections_total)
-    ## 8. Per-patch onsets through the SHARED incubation PMF.
+    ## 8. Per-patch onsets through the shared incubation PMF.
     inc_state ~ to_submodel(incubation(incubation_nmax))
     onsets_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches

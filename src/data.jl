@@ -512,7 +512,7 @@ Reshape the per-province cumulative histories loaded by
 new-confirmed counts that [`province_composition_model`](@ref) scores,
 together with the shared vintage day indices.
 
-Every province must be reported on the SAME vintage days (the spatial
+Every province must be reported on the same vintage days (the spatial
 tables share one `dates` array), which the patch composition likelihood
 requires: it allocates each vintage's national total across the provinces,
 so a province missing from a vintage would silently shift cases into the

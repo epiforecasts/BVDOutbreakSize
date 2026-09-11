@@ -10,7 +10,7 @@ each push to `main` also republishes the rendered analysis and the
 
 ### Model
 
-- The headline joint model is a meta-population model over the three affected provinces, Ituri, Nord-Kivu and Sud-Kivu.
+- The headline joint model is a meta-population model over the three affected provinces, Ituri, Nord-Kivu and Sud-Kivu (#412).
 It runs one renewal equation per province, coupled by importation, and fits every national stream against the summed provinces.
 It is the same `bvd_joint`.
 `n_patches` defaults to 1, which collapses it onto the previous single-population model, so there is one model rather than two.
@@ -37,14 +37,14 @@ Three provinces cost about twice as much per draw as one, and the fit job has a 
 
 ### Data
 
-- Added per-province cumulative confirmed cases and deaths from Tableau 1 of the situation reports, as `[province_confirmed_history]` and `[province_death_history]` over 20 vintages, scanned by `scripts/scan_province_tableau1.jl`.
+- Added per-province cumulative confirmed cases and deaths from Tableau 1 of the situation reports, as `[province_confirmed_history]` and `[province_death_history]` over 20 vintages, scanned by `scripts/scan_province_tableau1.jl` (#412).
 The scan is gated on the province rows summing exactly to the national totals on every date.
 - Added per-province laboratory throughput from section 4.3 of the reports, as `[province_lab_daily_history]` over 18 vintages, scanned by `scripts/scan_province_lab.jl` and gated the same way.
 Ituri ran a test positivity of 31.8% against Nord-Kivu's 5.5% over the window, so the provinces are testing differently selected pools.
 
 ### Report
 
-- The spatial section leads with a cross-province overview, one row per province, and then reports each province in its own table.
+- The spatial section leads with a cross-province overview, one row per province, and then reports each province in its own table (#412).
 - Added the reproduction number by province over time, one panel per province with the national trajectory behind it.
 The trajectory is rebuilt from the deviation knots the chain carries, and a test pins that reconstruction against the model's own cut-off value.
 - The importation intensity is reported alongside the kernel it scales.
