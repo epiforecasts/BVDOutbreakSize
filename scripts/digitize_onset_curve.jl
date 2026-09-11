@@ -141,6 +141,9 @@ const CONFIG = [
     # convergence failure (Rhat 2.6+); held back pending investigation
     # rather than folded into an unstable fit. See data/README.md and
     # issue #662.
+    # "118" is likewise absent: same 07 September tick, plotted window
+    # ending 2026-09-04 against 116's 2026-09-08 (a four-day retreat from
+    # the last digitised vintage), trial total 4362 against n = 5 263.
 ]
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,

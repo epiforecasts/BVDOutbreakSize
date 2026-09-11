@@ -90,7 +90,7 @@ end
     @test "097" in ids && "099" in ids && "100" in ids
 end
 
-@testitem "SitRep 117 stays out of the digitised onset curve" begin
+@testitem "SitReps 117 and 118 stay out of the digitised onset curve" begin
     ## 117's onset-date figure plots only up to 2026-09-03, five days short
     ## of its own 2026-09-08 report date - the first time in this series the
     ## plotted window has retreated relative to the immediately preceding
@@ -103,6 +103,10 @@ end
     rows = filter(!isempty, strip.(readlines(path)[2:end]))
     ids = Set(String(split(l, ',')[1]) for l in rows)
     @test !("117" in ids)
+    ## 118 (9 September) shows the same shape: same 07 September tick, a
+    ## plotted window ending 2026-09-04, four days behind 116's, so it is
+    ## held back on the same grounds until #662 settles the handling.
+    @test !("118" in ids)
     ## Its predecessor is digitised, so this is a deliberate exclusion and
     ## not a hole in the downloaded reports.
     @test "116" in ids
