@@ -2081,3 +2081,81 @@ poe_alertes_notifiees,117,2026-09-08,Ensemble,7,alerts,Tableau 4 'Nombre d'alert
 poe_corpses_swabbed,117,2026-09-08,Ensemble,1,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
 vaccination_persons_cumulative,117,2026-09-08,Tshopo,1582,persons,"section 1.6.1 prose: '1 582 personnes ont ete vaccinees a ce jour sur 11 703 cibles TPL/PPL (14%), dont 1 079 a Makiso-Kisangani, 269 a Kabondo et 234 a Mangobo'; 1079+269+234=1582 exact. First appearance of a target-population coverage percentage (persons vaccinated / named TPL-PPL target, 14%) for this signal - checked directly against the full local archive, appears nowhere before 117; a fourth number-shape alongside doses-available (097), doses-received (099 national, 116 province-level) and persons-vaccinated-cumulative (104+), all already catalogued in data/README.md under issue #650. Solde disponible 2 918 doses (not recorded as a separate signal)."
 vaccination_doses_received,116,2026-09-07,Tshopo,3000,doses,"section 1.6.1 prose: 'reception de 3 000 doses d'ERVEBO sur 11 000 attendus, decongelation de 500 doses et deploiement de 100 a Kabondo, 300 a Makiso-Kisangani, 100 a Mangobo' (100+300+100=500 exact). A PROVINCE-level doses-received figure, distinct from the existing national-only vaccination_doses_received_national signal (SitRep 099, 16520/50120) - checked directly against the full local archive, this exact 3000/11000 phrasing appears nowhere before 116 (and is then stale-carried, unchanged, into SitRep 117's own 1.6.2 Defis text - see that report's insp_sitrep_scanned.csv note). A new number-shape for the same ERVEBO signal family, not a new signal; flagged for the maintainer (issue #650)."
+contact_tracing_coverage,118,2026-09-09,Ituri,83.6,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Ituri,8971,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Ituri,10732,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Nord-Kivu,86.1,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Nord-Kivu,9131,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Nord-Kivu,10600,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Bas-Uele,80.3,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Bas-Uele,122,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Bas-Uele,152,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Tshopo,83.5,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Tshopo,237,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Tshopo,284,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Haut-Uele,79.7,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Haut-Uele,1484,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Haut-Uele,1862,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Ensemble,84.4,percent,section 1.1.2 prose: national 84.4% (19945/23630 vus sur a suivre); Sud-Kivu not mentioned this vintage
+contacts_seen,118,2026-09-09,Ensemble,19945,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Ensemble,23630,persons,see contact_tracing_coverage row note
+alerts_total_day,118,2026-09-09,Haut-Uele,26,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Haut-Uele,13,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Haut-Uele,3,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Haut-Uele,12,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Bas-Uele,36,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Bas-Uele,14,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Bas-Uele,1,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Bas-Uele,0,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Ituri,901,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Ituri,146,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Ituri,73,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Ituri,115,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Nord-Kivu,865,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Nord-Kivu,94,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Nord-Kivu,32,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Nord-Kivu,71,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Sud-Kivu,7,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Sud-Kivu,1,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Sud-Kivu,0,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Sud-Kivu,1,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Tshopo,106,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Tshopo,6,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Tshopo,3,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Tshopo,6,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alerts_total_day,118,2026-09-09,Ensemble,1941,alerts,"Tableau 3 'Situation des alertes notifiees par province', Total (Vivants+Decedes) column"
+alerts_validated_alive,118,2026-09-09,Ensemble,274,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Vivants column"
+alerts_validated_dead_community,118,2026-09-09,Ensemble,112,alerts,"Tableau 3, Alertes verifiees et validees (cas suspect), Decedes column"
+alerts_investigated,118,2026-09-09,Ensemble,205,alerts,"Tableau 3, 'Nombre de suspects investigues et transferes au CT/CTE (du jour)' column"
+alert_investigation_rate,116,2026-09-07,Ensemble,100.0,percent,"section 1.1.2 prose ('... suspects ont ete investigues (100 %) et 154 d'entre eux ont ete transferes vers les CT/CTE'); backfilled in the SitRep 118 update, omitted from the 116/117 update"
+alert_investigation_rate,117,2026-09-08,Ensemble,100.0,percent,"section 1.1.2 prose ('... investigues (100 %) et 229 d'entre eux ont ete transferes vers les CT/CTE'); backfilled in the SitRep 118 update, omitted from the 116/117 update"
+alert_investigation_rate,118,2026-09-09,Ensemble,100.0,percent,"section 1.1.2 prose ('Toutes les 386 alertes validees comme cas suspects ont ete investigues (100 %) et 205 d'entre eux ont ete transferes vers les CT/CTE')"
+eds_death_alerts,118,2026-09-09,Ituri,96,alerts,"section 1.4.1 prose: '96 alertes ont ete enregistrees (dont 7 reports de la veille), 77 EDS realises (80,2 %) et 65 corps swabes'"
+eds_investigations_performed,118,2026-09-09,Ituri,77,investigations,see eds_death_alerts row note
+eds_corpses_swabbed,118,2026-09-09,Ituri,65,corpses,see eds_death_alerts row note
+eds_death_alerts,118,2026-09-09,Nord-Kivu,40,alerts,"section 1.4.1 prose: 'le pilier EDS a recu 40 alertes (21 reports de la veille), realise 40 EDS avec swabs (100 %)'"
+eds_investigations_performed,118,2026-09-09,Nord-Kivu,40,investigations,see eds_death_alerts row note
+eds_corpses_swabbed,118,2026-09-09,Nord-Kivu,40,corpses,see eds_death_alerts row note
+eds_death_alerts,118,2026-09-09,Tshopo,3,alerts,"section 1.4.1 prose: 'Le pilier EDS a recu 3 alertes (dont 2 reports), aucun EDS n'a ete realise et 2 corps n'ont pu etre swabes' - printed zero EDS, no corpse swabbed; Haut-Uele gives narrative only (no EDS figures this vintage)"
+eds_investigations_performed,118,2026-09-09,Tshopo,0,investigations,see eds_death_alerts row note
+eds_corpses_swabbed,118,2026-09-09,Tshopo,0,corpses,see eds_death_alerts row note
+poe_travellers_screened,118,2026-09-09,Ituri,142526,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_alertes_notifiees,118,2026-09-09,Ituri,1,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Ituri,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,118,2026-09-09,Nord-Kivu,88843,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_alertes_notifiees,118,2026-09-09,Nord-Kivu,3,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Nord-Kivu,2,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,118,2026-09-09,Sud-Kivu,7361,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_alertes_notifiees,118,2026-09-09,Sud-Kivu,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Sud-Kivu,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,118,2026-09-09,Tshopo,18072,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_alertes_notifiees,118,2026-09-09,Tshopo,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Tshopo,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,118,2026-09-09,Haut-Uele,13336,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'"
+poe_alertes_notifiees,118,2026-09-09,Haut-Uele,0,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Haut-Uele,0,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+poe_travellers_screened,118,2026-09-09,Ensemble,270138,persons,"Tableau 4 'Nombre de personnes passees aux PoE/PoC'; Bas-Uele column absent this vintage (section 1.2.2: 'absence de rapport PoE/PoC du Bas-Uele'), so no Bas-Uele row - silent, not zero"
+poe_alertes_notifiees,118,2026-09-09,Ensemble,4,alerts,Tableau 4 'Nombre d'alertes notifiees'
+poe_corpses_swabbed,118,2026-09-09,Ensemble,2,corpses,Tableau 4 'Nombre de corps sans vie interceptes ce jour'
+vaccination_persons_cumulative,118,2026-09-09,Tshopo,1779,persons,"section 1.6.1 prose: '1 779 personnes ont ete vaccinees a ce jour sur 11 000 TPL/PPL cibles (16,2 %), dont 1 142 a Makiso-Kisangani, 291 a Kabondo, 271 a Mangobo et 75 a Tshopo'; 1142+291+271+75=1779 exact. The printed target falls from 11 703 (SitRep 117) to 11 000 (the 1.6.2 'exprimees' figure), so the 14% and 16,2% coverage percentages are not on the same denominator. 2 500 doses deployed to the zones, solde 721 in the zones and 2 000 frozen at the hub depot (2500-1779=721 exact; not recorded as separate signals)."
+vaccination_doses_received,118,2026-09-09,Tshopo,4500,doses,"section 1.6.2 Defis: 'Insuffisance des doses disponibles a la Tshopo (4 500 recues pour 11 000 exprimees)', up from the 3 000 first printed at SitRep 116 and stale-carried at 117; reconciles with 1.6.1 (2 500 deployed + 2 000 frozen at the hub = 4 500). Bas-Uele reports an ERVEBO stock rupture at Buta with PPL/TPL vaccination suspended, no figure."
