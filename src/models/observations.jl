@@ -3588,6 +3588,19 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
 end
 
 """
+Per-vintage totals a province composition is conditioned on: the observed
+column sums where the increments are observed, and the modelled column sums
+on the predictive path, where there is no observed total to condition on.
+"""
+function _composition_totals(obs_increments, modelled_confirmed)
+    nv = size(modelled_confirmed, 2)
+    ismissing(obs_increments) || return [sum(@view obs_increments[:, i])
+                                         for i in 1:nv]
+    return [round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
+            for i in 1:nv]
+end
+
+"""
 Per-province composition of the confirmed cases, from the Tableau 1
 spatial tables.
 
@@ -3654,6 +3667,9 @@ modelled expected share of patch `p` at vintage `i`.
         ascertainment_offset_prior = Normal(0, 1))
     np, nv = size(modelled_confirmed)
     ρ ~ rho_prior
+    ## Read through a local. The tilde assigns `ρ` on more than one path, so
+    ## the comprehension below would box it if it captured `ρ` itself.
+    rho = ρ
     ## --- Province-specific ascertainment, partially pooled ---------------
     ## The share of confirmed cases falling in province `p` is
     ##
@@ -3703,13 +3719,14 @@ modelled expected share of patch `p` at vintage `i`.
     ## joint density through the national confirmed stream. On the
     ## predictive path there is no observed total, so the modelled column
     ## sums stand in for it and the composition is generated against those.
+    ## The totals are built in a helper rather than in a branch here.
+    ## `obs_increments` is rebound just below, and a local that a closure
+    ## reads and the body reassigns is boxed, so reading it from a
+    ## comprehension in the other arm boxed it.
     predictive = ismissing(obs_increments)
+    totals = _composition_totals(obs_increments, modelled_confirmed)
     if predictive
-        totals = [round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
-                  for i in 1:nv]
         obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
-    else
-        totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
     end
     ## Stick-breaking: allocate each vintage's total across the patches. The
     ## final patch takes the remainder and carries no free draw, so the
@@ -3726,18 +3743,31 @@ modelled expected share of patch `p` at vintage `i`.
     ## vintages the scalar form emitted 80 of them. That inflated the tape
     ## enough to push the gradient compile past an hour and the fit past CI's
     ## job cap. The vectorised form emits `2 * (np - 1)` = 4.
+    ##
+    ## The running state is allocated once and mutated, rather than rebound
+    ## each time round the loop. A local that a closure reads and the body
+    ## later reassigns is put in a `Core.Box`, which costs Mooncake a
+    ## dictionary lookup per use on every gradient (see "Closures in model
+    ## code" in the contributing guide); the comprehension below reads all
+    ## three, so rebinding them boxed all three.
     remaining = copy(totals)
     tail = ones(eltype(shares), nv)
+    p_cond = zeros(eltype(shares), nv)
+    trials = zeros(Int, nv)
     for p in 1:(np - 1)
         ## Conditional share of patch `p` among the patches not yet allocated.
-        p_cond = [clamp(shares[p, i] / tail[i], 0.0, 1.0) for i in 1:nv]
-        trials = [max(remaining[i], 0) for i in 1:nv]
+        for i in 1:nv
+            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
+            trials[i] = max(remaining[i], 0)
+        end
         obs_increments[p, :] ~ product_distribution(
-            [safe_betabinomial(trials[i], p_cond[i], ρ) for i in 1:nv])
-        remaining = [remaining[i] - obs_increments[p, i] for i in 1:nv]
+            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv])
         ## Guard the running tail against round-off driving it to zero or
         ## negative on the last step.
-        tail = [max(tail[i] - shares[p, i], 1e-10) for i in 1:nv]
+        for i in 1:nv
+            remaining[i] -= obs_increments[p, i]
+            tail[i] = max(tail[i] - shares[p, i], 1e-10)
+        end
     end
     ## The last patch is the remainder, not a free draw. Filled in only on the
     ## predictive path; on the fitting path it is already the observed count
