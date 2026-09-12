@@ -117,40 +117,38 @@ is `:chain` for the headline joint and single-stream fits or `:frozen` for the
 frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
 sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
-## Adapt delta for the headline and its spatial control.
+## Sampler settings for the headline and its spatial control.
 ##
-## The headline runs at the matrix draw count, like every other fit. It used
-## to run at 200, because three patches were measured at twice the
-## per-gradient cost of one and a 500-draw fit did not finish inside the fit
-## job's `timeout-minutes: 350`. That factor is now 1.32, measured with the
-## two models interleaved so machine load falls on both equally: 8.4 ms at
-## one patch (217 parameters) against 11.1 ms at three (300). Part of the
-## drop is the v1.18.0 removal of the boxed captures from the observation
-## models, and part is the same removal from the province composition on
-## this branch, which took the factor from 1.45 to 1.32.
+## Both must use the same adapt delta and the same draw count. They are the
+## two halves of the spatial sensitivity, so a difference between their C_T
+## posteriors is only readable as evidence about the spatial structure if
+## nothing else about the two fits differs.
 ##
-## Measured end to end at 500 draws and 200 adaptation steps over two
-## chains, three patches take 204 minutes locally against the single patch's
-## 132, and the single patch takes 145 to 153 minutes on the CI runner. So
-## three patches project to roughly 200 to 240 minutes there, inside the
-## budget with room to spare.
+## Adapt delta is 0.90. Lowering it to 0.80 was measured and does not help:
+## NUTS terminates at the tree-depth cap on every iteration of both fits, at
+## 1023 leapfrog steps, rather than at a U-turn, and it did so at 0.80 too on
+## an adapted step size of 0.003. Exploration is therefore truncated, and the
+## effective sample size is limited by that rather than by the draw count.
+## Raising `max_depth` is the direct fix, but each extra level doubles the
+## leapfrog steps, which does not fit the fit job's `timeout-minutes: 350`.
 ##
-## NUTS terminates at the depth cap on every iteration of both fits, at 1023
-## leapfrog steps, rather than at a U-turn. Exploration is therefore
-## truncated, and the effective sample size is limited by that rather than
-## by the draw count: 78 bulk and 64 tail over 1000 draws at three patches.
-## Raising `max_depth` is the fix, but each extra level doubles the steps, so
-## even depth 11 projects to 400 minutes or more. That needs a cheaper
-## gradient or a runner without the 360-minute ceiling, not a setting.
-##
-## Both fits must use the same adapt delta, since they are the two halves of
-## the spatial sensitivity, and while it changes sampling efficiency rather
-## than the target posterior, letting them drift apart is how the
-## nine-keyword divergence started. Lowering it to 0.80 was tried and
-## measured not to help: the depth cap bound at every draw there too, on an
-## adapted step size of 0.003.
+## The draw count is 1000 rather than the 500 every other fit uses, because
+## at 500 the headline returned 78 bulk and 64 tail effective samples over
+## its 1000 draws. Three patches cost 1.32 times a single patch per gradient,
+## measured with the two models interleaved so machine load falls on both
+## equally: 8.4 ms at one patch (217 parameters) against 11.1 ms at three
+## (300). At 500 draws and 200 adaptation steps over two chains, three
+## patches took 204 minutes locally against the single patch's 132, and the
+## single patch takes 145 to 153 minutes on the CI runner. Scaling by the
+## iteration count, 1000 draws project to roughly 350 minutes locally and 385
+## to 405 on CI, which is past both the job's 350-minute cap and the
+## 360-minute ceiling on a hosted runner. Set `BVD_JOINT_SAMPLES` to fall
+## back to 500 if the job needs to land inside the budget before a cheaper
+## gradient is available.
 joint_target_accept() = parse(Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
+joint_samples(default::Integer) = parse(Int,
+    get(ENV, "BVD_JOINT_SAMPLES", string(default)))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
@@ -343,12 +341,9 @@ function build_fit_specs(obs;
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
     ## between their C_T posteriors is read as evidence about the spatial
-    ## structure, which is only meaningful if nothing else differs.
-    ##
-    ## They previously drifted apart by nine keyword arguments, including
-    ## `genetic`, which defaults to `nothing`, so the headline silently ran
-    ## with no genetic TMRCA likelihood while the control had one. Splatting
-    ## one shared NamedTuple into both stops that recurring.
+    ## structure, which is only meaningful if nothing else differs. Splatting
+    ## one shared NamedTuple into both is what keeps them from drifting apart
+    ## a keyword at a time.
     joint_common = (;
         confirmed_deaths = obs.confirmed_deaths,
         recovered_cases = obs.recovered_cases,
@@ -405,7 +400,7 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...);
-                samples = samples, chains = chains,
+                samples = joint_samples(1000), chains = chains,
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
         ## Sensitivity: the same model with the spatial structure turned off
@@ -415,7 +410,8 @@ function build_fit_specs(obs;
         ## The renewal is anchored to the national trend, the seed is
         ## partitioned across patches and importation conserves infections, so
         ## the two are comparable by construction, and that is pinned in
-        ## test/test_patch_model.jl.
+        ## test/test_patch_model.jl. It runs at the headline's draw count, not
+        ## the matrix one, so the comparison is like for like.
         (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(
@@ -423,7 +419,7 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...);
-                samples = samples, chains = chains,
+                samples = joint_samples(1000), chains = chains,
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
         (; id = "exports",
