@@ -117,61 +117,38 @@ is `:chain` for the headline joint and single-stream fits or `:frozen` for the
 frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
 sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
-## Sampler settings, overridable from the environment. A full render refits
-## thirteen models at 1000x2, which is hours -- too slow to use the docs build
-## as a check that the pages still render. `BVD_FIT_SAMPLES=60 task docs-main`
-## exercises the whole render path (every chain key the pages read, every table
-## and plot call) in minutes. The draws are useless for inference and the
-## content hash changes, so a short run never pollutes the real fit cache.
-default_samples() = parse(Int, get(ENV, "BVD_FIT_SAMPLES", "1000"))
-default_chains() = parse(Int, get(ENV, "BVD_FIT_CHAINS", "2"))
-
-## The meta-population "joint" fit is the slowest in the matrix: the posterior
-## is high-curvature and needs long NUTS trajectories (median tree depth 9, 43%
-## at the max of 10). This is not a mixing failure -- the chain mixes well
-## (worst lag-1 autocorrelation 0.25, few divergences), and there is no funnel
-## to reparameterise (an Rt-parameterisation experiment found every alternative
-## equivalent, and the worst-mixing params are in the base CFR/treatment model,
-## not the patch structure). The two levers are therefore trajectory length,
-## through the adapt delta below, and the draw count; with autocorrelation that
-## low the effective sample size stays ample either way.
+## Adapt delta for the headline and its spatial control.
 ##
-## The budget is the `timeout-minutes: 350` on the fit job in
-## `.github/workflows/docs.yml`, not GitHub's 6h ceiling, and three patches is
-## roughly twice the work per draw. Measured: the gradient costs 26.2 ms at one
-## patch (140 parameters) against 53.0 ms at three (220), a factor of 2.03, and
-## the extra dimensions lengthen NUTS trajectories on top of that. The
-## single-patch fit takes 314 minutes at 500 draws, so three patches at 500
-## needs on the order of 700 minutes. Both 800 and 500 draws were duly
-## cancelled at the 350-minute mark without finishing.
+## The headline runs at the matrix draw count, like every other fit. It used
+## to run at 200, because three patches were measured at twice the
+## per-gradient cost of one and a 500-draw fit did not finish inside the fit
+## job's `timeout-minutes: 350`. That factor is now 1.32, measured with the
+## two models interleaved so machine load falls on both equally: 8.4 ms at
+## one patch (217 parameters) against 11.1 ms at three (300). Part of the
+## drop is the v1.18.0 removal of the boxed captures from the observation
+## models, and part is the same removal from the province composition on
+## this branch, which took the factor from 1.45 to 1.32.
 ##
-## 200 draws is therefore the setting that fits, and it is half what every
-## other fit in the matrix uses. That is a real cost to the headline and worth
-## revisiting: raising it again is the first thing to try if the lower adapt
-## delta below buys as much as it should. Raising the timeout is not an option,
-## since the ceiling above it is only 360.
-default_joint_samples() = parse(Int, get(ENV, "BVD_JOINT_SAMPLES", "200"))
-
-## Adapt delta for the headline and its spatial control, kept at the 0.90 the
-## rest of the matrix uses.
+## Measured end to end at 500 draws and 200 adaptation steps over two
+## chains, three patches take 204 minutes locally against the single patch's
+## 132, and the single patch takes 145 to 153 minutes on the CI runner. So
+## three patches project to roughly 200 to 240 minutes there, inside the
+## budget with room to spare.
 ##
-## Lowering it was tried and MEASURED NOT TO WORK. The reasoning was that the
-## cost is trajectory length, so a larger step size should shorten it: at 0.90
-## the joint runs a median tree depth of 9 with 43% of draws at the cap of 10.
-## At 0.80 the fit came back with tree depth pinned at 10 for EVERY draw, 1023
-## leapfrog steps throughout and an adapted step size of 0.003 -- longer
-## trajectories, not shorter. The 178-minute wall clock that run achieved came
-## entirely from cutting draws to 200, not from the adapt delta.
+## NUTS terminates at the depth cap on every iteration of both fits, at 1023
+## leapfrog steps, rather than at a U-turn. Exploration is therefore
+## truncated, and the effective sample size is limited by that rather than
+## by the draw count: 78 bulk and 64 tail over 1000 draws at three patches.
+## Raising `max_depth` is the fix, but each extra level doubles the steps, so
+## even depth 11 projects to 400 minutes or more. That needs a cheaper
+## gradient or a runner without the 360-minute ceiling, not a setting.
 ##
-## So the draw count is the only lever that has actually delivered here. Note
-## that trajectories terminating at the depth cap rather than by the U-turn
-## criterion means exploration is being truncated; the effective sample size at
-## 200 draws is worth checking before this fit is trusted as the headline.
-##
-## Both fits must use the same value. They are the two halves of the spatial
-## sensitivity, and while adapt delta changes sampling efficiency rather than
-## the target posterior, letting them drift apart is how the nine-keyword
-## divergence started.
+## Both fits must use the same adapt delta, since they are the two halves of
+## the spatial sensitivity, and while it changes sampling efficiency rather
+## than the target posterior, letting them drift apart is how the
+## nine-keyword divergence started. Lowering it to 0.80 was tried and
+## measured not to help: the depth cap bound at every draw there too, on an
+## adapted step size of 0.003.
 joint_target_accept() = parse(Float64,
     get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
 
@@ -182,7 +159,6 @@ function build_fit_specs(obs;
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 500,
-        joint_samples::Integer = default_joint_samples(),
         chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
@@ -354,7 +330,7 @@ function build_fit_specs(obs;
     clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
-    ## Per-province spatial-table data for the patch fit, reshaped ONCE here.
+    ## Per-province spatial-table data for the patch fit, reshaped once here.
     ## It must not be built inside the model body: it looks provinces up by
     ## name in a `Dict{String}`, and a string compare on the AD tape is a
     ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
@@ -364,17 +340,15 @@ function build_fit_specs(obs;
     patch_prov_deaths = province_increment_matrix(
         obs.province_death_history, PROVINCE_NAMES, 3)
 
-    ## The headline fit and its spatial control MUST differ only in the patch
+    ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
     ## between their C_T posteriors is read as evidence about the spatial
     ## structure, which is only meaningful if nothing else differs.
     ##
     ## They previously drifted apart by nine keyword arguments, including
-    ## `genetic`, which defaults to `nothing` -- so the headline silently ran
-    ## with no genetic TMRCA likelihood while the control had one, and the
-    ## comparison was not controlled at all. Splatting one shared NamedTuple
-    ## into both makes that failure structurally impossible rather than a
-    ## thing to remember.
+    ## `genetic`, which defaults to `nothing`, so the headline silently ran
+    ## with no genetic TMRCA likelihood while the control had one. Splatting
+    ## one shared NamedTuple into both stops that recurring.
     joint_common = (;
         confirmed_deaths = obs.confirmed_deaths,
         recovered_cases = obs.recovered_cases,
@@ -410,7 +384,7 @@ function build_fit_specs(obs;
         genetic = genetic_seeding_model,
         tmrca_days = obs.tmrca_days)
 
-    ## The ONLY difference between the headline and the control.
+    ## The only difference between the headline and the control.
     patch_only = (;
         n_patches = 3,
         province_increments = patch_prov.increments,
@@ -419,7 +393,7 @@ function build_fit_specs(obs;
         province_death_days = patch_prov_deaths.days)
 
     specs = Any[
-        ## Headline fit. The patch (meta-population) model IS the joint: with
+        ## Headline fit. The patch (meta-population) model is the joint. With
         ## `n_patches = 1` it collapses exactly onto the single-population
         ## model (the sum-to-zero deviations vanish, no importation, no
         ## composition terms), so there is one model rather than two. The
@@ -431,7 +405,7 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...);
-                samples = joint_samples, chains = chains,
+                samples = samples, chains = chains,
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
         ## Sensitivity: the same model with the spatial structure turned off
@@ -452,13 +426,6 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
-        ## The patch (meta-population) fit. Registered so that it is fitted
-        ## end-to-end in CI like every other stream: the two defects that the
-        ## patch model shipped with (a seed prior that forced the provincial
-        ## Rt to absorb the case-split level, and an AD-breaking Dict lookup
-        ## inside the model body) were invisible to the unit tests and only
-        ## surfaced on a real fit. A standing fit makes the
-        ## posterior-predictive check a gate rather than a manual step.
         (; id = "exports",
             kind = :chain,
             thunk = () -> nuts_sample(

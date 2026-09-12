@@ -32,8 +32,9 @@ The death split identifies the incidence split, and the case split then identifi
 Both splits are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
 - Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
 There is no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
-- The headline fit runs at 200 draws against the 500 every other fit in the matrix uses.
-Three provinces cost about twice as much per draw as one, and the fit job has a 350-minute budget.
+- The headline fit runs at the same 500 draws as every other fit in the matrix, where it previously ran at 200.
+Three provinces now cost 1.32 times as much per gradient as one rather than the 2.03 measured before, so a 500-draw fit of the three provinces projects to roughly 200 to 240 minutes against the fit job's 350-minute budget.
+NUTS still terminates at the tree-depth cap on every iteration, so exploration is truncated and the effective sample size is limited by that rather than by the draw count.
 
 ### Data
 
@@ -41,6 +42,13 @@ Three provinces cost about twice as much per draw as one, and the fit job has a 
 The scan is gated on the province rows summing exactly to the national totals on every date.
 - Added per-province laboratory throughput from section 4.3 of the reports, as `[province_lab_daily_history]` over 18 vintages, scanned by `scripts/scan_province_lab.jl` and gated the same way.
 Ituri ran a test positivity of 31.8% against Nord-Kivu's 5.5% over the window, so the provinces are testing differently selected pools.
+
+### Performance
+
+- The province composition no longer boxes the locals its likelihood closure captures (#412).
+The stick-breaking state was rebound each time round the patch loop and the composition overdispersion was read from the closure directly, which put four `Core.Box` wrappers in the model body and a dictionary lookup per use on every gradient.
+Removing them takes the three-patch gradient from 1.45 to 1.32 times the one-patch cost.
+`test/test_boxed_captures.jl`, added in v1.18.0, fails on exactly this pattern.
 
 ### Report
 
