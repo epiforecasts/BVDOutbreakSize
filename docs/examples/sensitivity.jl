@@ -1382,6 +1382,81 @@ spatial_sensitivity_fig = plot_density_overlay(
 
 spatial_sensitivity_fig #hide
 
+# The size is the gate, but it is not the only quantity the spatial structure could move.
+# The three panels below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
+# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other in every panel.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures</summary>
+#md # ```
+
+spatial_rt_fig = plot_rt_streams(
+    [(; label = "Single population (n_patches = 1)",
+        chn = chn_no_patches, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n), colour = :steelblue)];
+    joint = (; chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n)),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ncols = 1);
+
+spatial_cfr_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:CFR])),
+    "Single population" => vec(Array(chn_no_patches[:CFR]));
+    xlabel = "Case-fatality ratio");
+
+spatial_rt_density_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:R_T])),
+    "Single population" => vec(Array(chn_no_patches[:R_T]));
+    xlabel = "Reproduction number at the cut-off");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_rt_fig #hide
+
+spatial_cfr_fig #hide
+
+spatial_rt_density_fig #hide
+
+# The table gathers the same three quantities as credible intervals, alongside the outbreak start date the two fits imply.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures, as a table</summary>
+#md # ```
+
+## One row per national quantity, one column per structure, each cell a
+## median with a 90% credible interval. Built here rather than by stacking
+## two `summary_table` calls, so the two structures sit side by side and the
+## reader compares along a row.
+spatial_quantities_table = let
+    ## A count rounded to zero decimals still prints a trailing ".0", so
+    ## whole-number quantities go through `Int`.
+    fmt(x, d) = d <= 0 ? string(round(Int, x)) : string(round(x; digits = d))
+    cell(v, d) = string(fmt(quantile(v, 0.5), d), " (",
+        fmt(quantile(v, 0.05), d), "–", fmt(quantile(v, 0.95), d), ")")
+    rows = [("Cumulative infections", :C_T, 0),
+        ("Reproduction number at the cut-off", :R_T, 2),
+        ("Case-fatality ratio", :CFR, 2),
+        ("Outbreak age (days)", :T, 0),
+        ("Latest growth rate (per day)", :r, 3)]
+    DataFrame("Quantity" => [r[1] for r in rows],
+        "Meta-population (headline)" => [cell(
+             vec(Array(chn_joint[r[2]])), r[3])
+         for r in rows],
+        "Single population" => [cell(vec(Array(chn_no_patches[r[2]])), r[3])
+                                for r in rows])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_quantities_table #hide
+
 # ## Delay sensitivity
 #
 # The death stream dates the outbreak from how far deaths lag symptom onset, so the assumed onset-to-death delay sets the implied infection count.
