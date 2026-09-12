@@ -508,10 +508,21 @@ ramped effect on transmission rather than an instantaneous step. Returns
 a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
 intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
+
+Split into two dispatches on `day`'s concrete type, rather than a single
+method with a runtime `ismissing(day) && return ...` branch: Mooncake's
+reverse-rule construction fails to build a rule for the latter shape under
+Julia 1.13.0 + Mooncake v0.5.54 (`TypeError: non-boolean (Missing) used in
+boolean context`, deep in `infection_model`'s AD path, since `breakpoint`'s
+`Union{Missing, Real}` default is `missing`). Multiple dispatch resolves
+`day`'s type at the call site instead of branching on it at runtime, so
+each method's body is differentiated on its own, concretely-typed slot.
 """
-function sigmoid_ramp(n::Integer, day::Union{Missing, Real};
-        ramp::Real = RT_INTERVENTION_RAMP)
-    ismissing(day) && return zeros(Float64, n)
+function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RT_INTERVENTION_RAMP)
+    return zeros(Float64, n)
+end
+
+function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
     return Float64[logistic((t - day) / ramp) for t in 1:n]
 end
 
