@@ -1383,8 +1383,10 @@ spatial_sensitivity_fig = plot_density_overlay(
 spatial_sensitivity_fig #hide
 
 # The size is the gate, but it is not the only quantity the spatial structure could move.
-# The three panels below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
-# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other in every panel.
+# The three figures below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
+# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other.
+# In the trajectory figure they do, closely enough that the grey reference is hidden behind the coloured band for most of the window.
+# The table after them gives the same quantities as numbers, which is where the agreement is read rather than eyeballed.
 
 #md # ```@raw html
 #md # <details><summary>National quantities under both structures</summary>
@@ -1400,7 +1402,10 @@ spatial_rt_fig = plot_rt_streams(
             obs.n)),
     n = obs.n, breakpoint = _BREAKPOINT,
     as_of_date = string(obs.cutoff), seeding = obs.seeding,
-    display_start = _rt_start_plot, ncols = 1);
+    display_start = _rt_start_plot, ncols = 1,
+    title = "National reproduction number under both structures",
+    reference_label = "the meta-population headline",
+    panel_label = "the single-population fit");
 
 spatial_cfr_fig = plot_density_overlay(
     "Meta-population (headline)" => vec(Array(chn_joint[:CFR])),

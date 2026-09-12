@@ -2023,13 +2023,23 @@ breakpoint lead). `display_start` is the shared grid day the panels draw from
 `seeding + (d - 1)`. The intervention breakpoint, the end of the scale-up
 (`breakpoint + ramp`, dotted) and the cut-off are marked as in
 [`plot_rt`](@ref).
+
+`title`, `reference_label` and `panel_label` name what the figure is showing.
+They default to the per-stream reading, and the sensitivity page passes its
+own so the same figure can set two model structures against each other
+rather than a stream against the joint.
 """
 function plot_rt_streams(streams::AbstractVector;
         joint, n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         display_start::Integer = 1, week::Integer = 7,
         ramp::Real = RT_INTERVENTION_RAMP,
-        ncols::Integer = 2, joint_colour = :grey25)
+        ncols::Integer = 2, joint_colour = :grey25,
+        title::AbstractString =
+        "Implied Rt by data stream, with the joint fit overlaid",
+        reference_label::AbstractString = "the joint fit",
+        panel_label::AbstractString =
+        "the single-stream fit named in the panel title")
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in 1:n]
     ds = clamp(display_start, 1, n)
@@ -2086,13 +2096,11 @@ function plot_rt_streams(streams::AbstractVector;
     end
 
     CairoMakie.Label(fig[nrows + 1, 1:ncols],
-        "Bands are 30/60/90% credible intervals. Grey is the joint fit " *
-        "(the same in every panel); the coloured band is the single-stream " *
-        "fit named in the panel title.";
+        "Bands are 30/60/90% credible intervals. Grey is " *
+        reference_label * ", the same in every panel. The coloured band " *
+        "is " * panel_label * ".";
         fontsize = 12, padding = (0, 0, 0, 6))
-    CairoMakie.Label(fig[0, 1:ncols],
-        "Implied Rt by data stream, with the joint fit overlaid";
-        fontsize = 16, font = :bold)
+    CairoMakie.Label(fig[0, 1:ncols], title; fontsize = 16, font = :bold)
     return fig
 end
 
