@@ -6,7 +6,13 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## Unreleased (v2.0.0)
+
+The next release is a major version.
+The headline model becomes spatial, so the report is no longer the
+single-population one v1 published and its parameter set is not the same.
+The release-prep commit renames this heading and bumps `Project.toml` and
+`CITATION.cff` to 2.0.0.
 
 ### Model
 
@@ -16,7 +22,7 @@ It is the same `bvd_joint`.
 `n_patches` defaults to 1, which collapses it onto the previous single-population model, so there is one model rather than two.
 That single-population case is fitted as the `sens_no_patches` sensitivity, which is the check on the spatial structure.
 - Provincial reproduction numbers are the national weekly-knot walk plus deviations that sum to zero, drawn from a multivariate-normal random walk with a learned cross-province correlation.
-The deviation scale is sampled, so whether the provinces share one temporal shape is estimated rather than assumed.
+The deviation scale is sampled, so a posterior pushed away from zero says the provinces are separating.
 The national reproduction number is backed out by inverting the renewal equation on the summed infections, which is the force-of-infection-weighted mean of the provincial values.
 - The national outbreak size does not depend on how many provinces the country is split into.
 Splitting the country adds no national data, so it must not.
@@ -32,9 +38,11 @@ The death split identifies the incidence split, and the case split then identifi
 Both splits are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
 - Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
 There is no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
-- The headline fit runs at the same 500 draws as every other fit in the matrix, where it previously ran at 200.
-Three provinces now cost 1.32 times as much per gradient as one rather than the 2.03 measured before, so a 500-draw fit of the three provinces projects to roughly 200 to 240 minutes against the fit job's 350-minute budget.
-NUTS still terminates at the tree-depth cap on every iteration, so exploration is truncated and the effective sample size is limited by that rather than by the draw count.
+- The headline fit and its spatial control run at 1000 draws, where the headline previously ran at 200 and every other fit in the matrix runs at 500.
+At 500 draws the headline returned 78 bulk and 64 tail effective samples.
+Three provinces cost 1.32 times as much per gradient as one rather than the 2.03 measured before, but 1000 draws still project to roughly 385 to 405 minutes on the CI runner against the fit job's 350-minute budget.
+`BVD_JOINT_SAMPLES` falls back to 500 for a run that has to land inside it.
+NUTS terminates at the tree-depth cap on every iteration, so exploration is truncated and the effective sample size is limited by that rather than by the draw count.
 
 ### Data
 
@@ -52,10 +60,13 @@ Removing them takes the three-patch gradient from 1.45 to 1.32 times the one-pat
 
 ### Report
 
-- The spatial section leads with a cross-province overview, one row per province, and then reports each province in its own table (#412).
+- Province-level results are reported alongside the national ones rather than in a section of their own (#412).
+The reproduction number by province sits under the national trajectory, the province sizes and infection shares under the national size, the province case-fatality ratios under the national ones, the composition fits with the other posterior predictive checks, and the province forecast split with the forecast.
 - Added the reproduction number by province over time, one panel per province with the national trajectory behind it.
 The trajectory is rebuilt from the deviation knots the chain carries, and a test pins that reconstruction against the model's own cut-off value.
-- The importation intensity is reported alongside the kernel it scales.
+- Added modelled infections by province over time, imported infections by province over time, and posterior predictive checks on both province compositions.
+- The methods section describes the meta-population structure, what identifies the split, what the model does not account for, and the sampler settings the fits use.
+- The spatial-structure comparison moved to the sensitivity page, where it is set out against the single-population fit's reproduction number, case-fatality ratio and outbreak size.
 
 ## v1.18.0
 
