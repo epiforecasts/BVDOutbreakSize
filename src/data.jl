@@ -539,9 +539,19 @@ function province_increment_matrix(province_history,
     ## Cumulative -> per-vintage increments. The first increment is the
     ## cumulative to the first vintage day, matching `bin_increments`,
     ## which bins the modelled daily series from day 1 to `days[1]`.
+    ##
+    ## A province's cumulative count can fall between vintages when cases are
+    ## reclassified: Haut-Uélé drops from 22 confirmed cases to 16 on 18 July
+    ## 2026, and its deaths from 13 to 10, both of which reconcile with the
+    ## revised national totals. The raw difference is then negative, which the
+    ## composition likelihood cannot take, since it scores a count drawn from
+    ## a total. Clamping at zero reads a downward revision as no new cases in
+    ## that province this vintage, which is the closest true statement
+    ## available. The composition conditions on the sum of these increments
+    ## rather than on the national total, so the clamp stays self-consistent.
     increments = Matrix{Int}(undef, length(names), length(days))
     for (p, h) in enumerate(hists)
-        increments[p, :] = diff(vcat(0, collect(h.counts)))
+        increments[p, :] = max.(diff(vcat(0, collect(h.counts))), 0)
     end
     return (; days, increments)
 end
