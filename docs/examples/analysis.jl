@@ -402,12 +402,15 @@ MarkdownTable(vintage_table) #hide
 # Both are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
 #
 # Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
-# Coupling conserves infections: the origin province is debited exactly what the destinations are credited, so importation moves transmission between provinces rather than adding to the national total.
+# Coupling conserves infections.
+# The origin province is debited exactly what the destinations are credited, so importation moves transmission between provinces rather than adding to the national total.
 #
 # Four things are left out.
 # There is no mobility or origin-destination data for this outbreak, so the kernel is a structural assumption and its intensity is weakly identified against the secondary provinces' seeds.
 # The case-fatality ratio, the assay and the reporting delays are national and shared, so a provincial difference in the confirmed case-fatality ratio is case-finding rather than lethality ([#667](https://github.com/epiforecasts/BVDOutbreakSize/issues/667)).
-# Export pressure is national: the Uganda export streams are fitted against the summed provinces, so a province on the border does not export more per infection than one further from it, and we expect it does.
+# Export pressure is national.
+# The Uganda export streams are fitted against the summed provinces, so a province on the border does not export more per infection than one further from it.
+# We expect it does.
 # Fitting a per-province export pressure, partially pooled toward a national value, is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only ([#664](https://github.com/epiforecasts/BVDOutbreakSize/issues/664)).
 
@@ -2303,8 +2306,6 @@ cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
 
 cumulative_traj_fig #hide
 
-# #### By province
-#
 # The national count above is the sum of three provincial renewal equations.
 # The table below gives each province's cumulative infections, its share of the national total, its reproduction number at the cut-off and its case ascertainment relative to the national average, each as a median with a 90% credible interval.
 # The reproduction number and the relative ascertainment are read together.
@@ -2379,8 +2380,6 @@ province_infections_fig = plot_infections_patches(chn_joint;
 
 province_infections_fig #hide
 
-# #### Importation between provinces
-#
 # The provinces are coupled by a gravity kernel weighted by destination population, described in the [spatial structure](@ref "Spatial structure") Methods section, with its intensity estimated.
 # Coupling moves transmission between provinces and does not add to the national total, so the figure reads as where infection occurred rather than as extra infection.
 # The intensity is weakly identified against the seeds of the secondary provinces, since both raise a secondary province's early incidence, so it is read as the scale of coupling the data will tolerate rather than as a measured flow.
