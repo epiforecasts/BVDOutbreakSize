@@ -681,6 +681,7 @@ reproduction number implied by the summed patch infections.
         death_composition = province_composition_model,
         death_ascertainment_sd_prior = truncated(
             Normal(0, 0.1); lower = 0),
+        province_cfr_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -943,11 +944,28 @@ reproduction number implied by the summed patch infections.
     ## `lambda_p`, and the case composition then identifies `asc_p` as the
     ## residual.
     ##
+    ## The death composition carries two per-province multipliers rather than
+    ## one. The composition identifies only their product, so the split
+    ## between them is the priors' and nothing else, which is why they are
+    ## given very different ones.
+    ##
+    ## `province_cfr_sd_prior` is the looser of the two. It gives each
+    ## province its own case-fatality ratio, partially pooled toward the
+    ## national value, so a province where cases reach care later can be more
+    ## lethal per case than one where they do not. The national ratio keeps
+    ## its meaning because the provincial contrasts sum to zero on the log
+    ## scale.
+    ##
     ## `death_ascertainment_sd_prior` is deliberately tight: the identifying
     ## assumption is that death ascertainment is near-uniform across
     ## provinces, which is far weaker and more defensible than assuming case
     ## ascertainment is. It is not fixed at zero, so the assumption can bend
     ## where the data insist rather than snapping.
+    ##
+    ## Together these say a provincial excess of deaths over cases is read
+    ## first as lethality and only marginally as death-finding. The reverse
+    ## reading is available by swapping the two priors, and the report checks
+    ## which way the posterior moves rather than assuming.
     ##
     ## The data say this matters: Nord-Kivu holds a steady 8-9% of confirmed
     ## cases but 14-19% of confirmed deaths at every vintage.
@@ -959,9 +977,18 @@ reproduction number implied by the summed patch infections.
         death_composition_state ~ to_submodel(
             death_composition(province_death_increments,
             modelled_deaths_prov;
-            ascertainment_sd_prior = death_ascertainment_sd_prior))
+            ascertainment_sd_prior = death_ascertainment_sd_prior,
+            severity_sd_prior = province_cfr_sd_prior))
         province_death_shares := death_composition_state.shares
         province_death_ascertainment := death_composition_state.province_ascertainment
+        province_death_ascertainment_sd := death_composition_state.ascertainment_sd
+        ## Per-province case-fatality ratio: the national ratio times that
+        ## province's sum-to-zero contrast, so the provinces are reported on
+        ## the same scale as the national quantity they pool toward.
+        province_cfr_relative := death_composition_state.province_severity
+        CFR_patch := deaths_state.CFR .*
+                     death_composition_state.province_severity
+        province_cfr_sd := death_composition_state.severity_sd
     end
 
     ## Daily cumulative trajectories for the headline 3x2 figure: the
@@ -1090,6 +1117,12 @@ reproduction number implied by the summed patch infections.
     ## See [`patch_rt_model`](@ref).
     region_sd := patch_state.σ_level
     region_drift_sd := patch_state.σ_δ
+    ## Half-life of a provincial deviation, in days. The deviations
+    ## mean-revert to the national trend rather than random-walk, so this is
+    ## how long a divergence is estimated to persist once the per-province
+    ## data stop. A half-life far longer than the fitted window is the
+    ## random-walk limit.
+    region_halflife := patch_state.δ_halflife
     ## `seed_fraction` (each secondary patch's seed as a fraction of the
     ## primary patch's) is sampled inside the latent submodel and already
     ## reaches the chain under that name, so it is not re-surfaced here. Read

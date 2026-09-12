@@ -1293,6 +1293,31 @@ pushed away from zero is direct evidence that provincial `Rt` trajectories
 are separating, which is exactly what a response concentrated on the Ituri
 epicentre would produce.
 
+### Mean reversion, not a random walk
+
+The deviations mean-revert to zero rather than random-walk. A random walk
+has no mean: its forecast expectation is wherever it last was and its
+forecast variance grows without bound, so a province that happens to sit
+above the national trend at the last vintage is projected to stay above it
+for ever, with the gap as likely to widen as to close. That is not what we
+believe once the data run out, and it matters here, because the per-province
+vintages stop well before the cut-off.
+
+The knots therefore follow
+
+```math
+\\boldsymbol{\\delta}(t_k) = \\phi\\, \\boldsymbol{\\delta}(t_{k-1})
+    + \\boldsymbol{\\eta}_k, \\qquad
+\\phi = 2^{-\\text{week} / h},
+```
+
+with `h` the half-life of a provincial divergence in days, sampled, so a
+province with persistent divergence can still show one. The innovations are
+centred at every knot as before and `φ` is one shared scalar, so the
+sum-to-zero constraint survives exactly. A half-life far longer than the
+window recovers the random walk, which makes the old model a special case of
+this one rather than a rival to it.
+
 Returns the Rt matrix `(n_patches × n)`, the national trend, the full
 deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch deviation
 scales and the correlation matrix.
@@ -1306,6 +1331,7 @@ scales and the correlation matrix.
         rt = rt_walk_model,
         region_sd_prior = truncated(Normal(0, 0.15); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.05); lower = 0),
+        region_halflife_prior = LogNormal(log(42), 0.6),
         lkj_prior = LKJCholesky(max(n_patches, 2), 2.0),
         region_offset_prior = Normal(0, 1))
     ## Common national trend: the existing single-patch walk, unchanged.
@@ -1344,7 +1370,8 @@ scales and the correlation matrix.
         return (; Rt_matrix = Rt_matrix1, Rt_national, log_Rt_national,
             δ_patch = δ_patch1, δ_knots = zeros(Tp1, 1, nb),
             σ_level = zero(Tp1), σ_δ = zeros(Tp1, 1),
-            Ω = ones(Tp1, 1, 1), sigma_rw = rt_state.sigma_rw,
+            Ω = ones(Tp1, 1, 1), δ_halflife = zero(Tp1),
+            sigma_rw = rt_state.sigma_rw,
             log_R0 = rt_state.log_R0,
             intervention_effect = rt_state.intervention_effect)
     end
@@ -1353,6 +1380,19 @@ scales and the correlation matrix.
     ## decomposition never lands on the AD tape.
     σ_level ~ region_sd_prior
     σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
+    ## Mean reversion. The deviations are an AR(1) toward zero on the knots
+    ## rather than a random walk, parameterised by the half-life of a
+    ## provincial divergence in days, which is the elicitable quantity. The
+    ## per-knot retention is `phi = 2^(-week / halflife)`, so a half-life far
+    ## longer than the window recovers the random walk and a short one pulls
+    ## each province back to the national trend between knots.
+    ##
+    ## One half-life shared across provinces, not one each. The retention
+    ## multiplies the whole deviation vector, so a shared scalar keeps the
+    ## sum-to-zero constraint exactly: a centred vector scaled by a scalar is
+    ## still centred. A per-province retention would not.
+    δ_halflife ~ region_halflife_prior
+    φ = exp2(-week / δ_halflife)
     Ω_L ~ lkj_prior
     L = Ω_L.L
     ## Standard-normal draws for the level and for each knot's innovation.
@@ -1387,7 +1427,7 @@ scales and the correlation matrix.
         end
         innov_bar = sum(innov) / n_patches
         for i in 1:n_patches
-            δ_knots[i, k] = δ_knots[i, k - 1] + (innov[i] - innov_bar)
+            δ_knots[i, k] = φ * δ_knots[i, k - 1] + (innov[i] - innov_bar)
         end
     end
     ## Interpolate each patch's deviation to the daily grid and build Rt.
@@ -1412,7 +1452,7 @@ scales and the correlation matrix.
         Ω[i, j] = acc
     end
     return (; Rt_matrix, Rt_national, log_Rt_national, δ_patch, δ_knots,
-        σ_level, σ_δ, Ω, sigma_rw = rt_state.sigma_rw,
+        σ_level, σ_δ, Ω, δ_halflife, sigma_rw = rt_state.sigma_rw,
         log_R0 = rt_state.log_R0,
         intervention_effect = rt_state.intervention_effect)
 end
@@ -1639,6 +1679,7 @@ others, which is what the imports figure on the analysis page draws.
         C_T_patch,
         σ_level = rt_state.σ_level,
         σ_δ = rt_state.σ_δ,
+        δ_halflife = rt_state.δ_halflife,
         Ω = rt_state.Ω,
         infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,

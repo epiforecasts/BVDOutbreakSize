@@ -386,8 +386,15 @@ MarkdownTable(vintage_table) #hide
 # \log R_{p,t} = \mu(t) + \delta_p(t), \qquad \sum_p \delta_p(t) = 0,
 # ```
 #
-# with the deviations drawn from a multivariate-normal random walk on the same weekly knots as the national trend, with a sampled scale and a learned cross-province correlation.
+# with the deviations drawn from a correlated multivariate process on the same weekly knots as the national trend, with a sampled scale and a learned cross-province correlation.
 # A deviation scale at zero gives every province the same temporal shape, so the scale is the spatial diagnostic.
+#
+# The deviations mean-revert to zero rather than random-walk.
+# A random walk has no mean, so a province sitting above the national trend at the last per-province vintage would be projected to stay above it indefinitely, with the gap as likely to widen as to close.
+# The per-province vintages stop well before the cut-off, so that is not a hypothetical.
+# Each knot instead retains a fraction of the last, $\phi = 2^{-7/h}$ with $h$ the half-life of a provincial divergence in days.
+# The half-life is sampled, so a province with persistent divergence can still show one, and a half-life far longer than the window is the random walk.
+# One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
 #
 # The renewal is anchored to the trend.
 # Each day every province is scaled by one common factor, chosen so the reproduction number implied by the summed provinces is $\mu(t)$ exactly.
@@ -401,13 +408,16 @@ MarkdownTable(vintage_table) #hide
 # The death split therefore identifies the incidence split, and the case split identifies relative case ascertainment as the residual.
 # Both are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
 #
-# Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
+# Provinces are coupled by a gravity kernel, with a sampled intensity.
+# Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
+# The distance decides where a province's exported transmission lands, not how much of it leaves, because each origin's total outflow is held at the population-only value.
 # Coupling conserves infections.
 # The origin province is debited exactly what the destinations are credited, so importation moves transmission between provinces rather than adding to the national total.
 #
-# Four things are left out.
+# Three things are left out, and one is settled by assumption.
 # There is no mobility or origin-destination data for this outbreak, so the kernel is a structural assumption and its intensity is weakly identified against the secondary provinces' seeds.
-# The case-fatality ratio, the assay and the reporting delays are national and shared, so a provincial difference in the confirmed case-fatality ratio is case-finding rather than lethality ([#667](https://github.com/epiforecasts/BVDOutbreakSize/issues/667)).
+# Each province has its own case-fatality ratio and its own death confirmation, but the death composition identifies only their product, so their split rests on their priors and not on the data.
+# The assay and the reporting delays stay national and shared.
 # Export pressure is national.
 # The Uganda export streams are fitted against the summed provinces, so a province on the border does not export more per infection than one further from it.
 # We expect it does.
@@ -2383,6 +2393,7 @@ province_infections_fig #hide
 # The provinces are coupled by a gravity kernel weighted by destination population, described in the [spatial structure](@ref "Spatial structure") Methods section, with its intensity estimated.
 # Coupling moves transmission between provinces and does not add to the national total, so the figure reads as where infection occurred rather than as extra infection.
 # The intensity is weakly identified against the seeds of the secondary provinces, since both raise a secondary province's early incidence, so it is read as the scale of coupling the data will tolerate rather than as a measured flow.
+# The distances between the provincial capitals are 379 km from Bunia to Goma, 478 km from Bunia to Bukavu and 99 km from Goma to Bukavu, so the kernel sends most of what leaves Nord-Kivu to Sud-Kivu rather than back to Ituri.
 
 #md # ```@raw html
 #md # <details><summary>Importation intensity and imports by province</summary>
@@ -3731,10 +3742,30 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 confirmed_cfr_fig #hide
 
 # The same three ratios by province are below.
-# The delay-corrected ratio is the national corrected ratio scaled by each province's relative death confirmation over its relative case ascertainment, which is the only province-varying factor once the delays are corrected for.
-# The structural ratio is one national parameter shared by every province, so its column repeats.
-# That is the reading rather than a gap in the table: with lethality and death confirmation held national, a provincial difference in the confirmed ratio is case-finding.
-# Fitting a per-province structural ratio pooled toward the national one is [#667](https://github.com/epiforecasts/BVDOutbreakSize/issues/667).
+# Each province has its own case-fatality ratio, partially pooled toward the national value, and its own death confirmation, pooled far more tightly.
+# The delay-corrected ratio is the national corrected ratio scaled by a province's lethality and death confirmation over its case ascertainment, which is what varies by province once the delays are corrected for.
+# The structural ratio is the national ratio times that province's lethality contrast.
+#
+# The death composition identifies only the product of the lethality and death-confirmation contrasts, so their split is set by their priors rather than by the data.
+# The lethality prior is the looser of the two, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding.
+# The spread of the lethality contrast is reported below against its prior, so a posterior that has not moved can be read as the prior's rather than as a finding.
+# The two spreads are on the same log scale, so their sizes are comparable directly.
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality spread</summary>
+#md # ```
+
+province_cfr_spread = summary_table(chn_joint,
+    [:province_cfr_sd, :province_death_ascertainment_sd];
+    digits = 3,
+    labels = Dict(:province_cfr_sd => "Lethality spread",
+        :province_death_ascertainment_sd => "Death-confirmation spread"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr_spread #hide
 
 #md # ```@raw html
 #md # <details><summary>Province case-fatality table</summary>

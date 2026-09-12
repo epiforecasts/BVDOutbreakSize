@@ -241,31 +241,132 @@ importation kernel.
 const PROVINCE_POPULATIONS = [4_392_200, 6_655_000, 5_772_000]
 
 """
-    province_importation_kernel(pops = PROVINCE_POPULATIONS)
+    PROVINCE_CAPITALS
 
-Between-province importation kernel `K`, where `K[p, q]` is the relative
-rate of infectious travel from province `q` into province `p`. Diagonal is
-zero (no self-importation) and each entry is scaled by the destination
-population share, so a larger province absorbs proportionally more
-introductions. The overall intensity is carried by the sampled `ε` in
-[`patch_infection_model`](@ref), so only the relative structure matters
-here.
+Latitude and longitude of each province's capital, in
+[`PROVINCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
+degrees north and east. Coordinates from GeoNames
+(<https://www.geonames.org>), which is the source for the distance term in
+[`province_importation_kernel`](@ref).
 
-This is a gravity kernel without a distance term, which is the most that is
-defensible: there is no origin-destination or mobility data for this
-outbreak. It is a structural assumption, and `ε` is weakly identified
-against the secondary-patch seeds (both can raise a secondary province's
-early incidence), so treat the split between imported and locally-seeded
-infections as poorly determined even though their sum is not.
+The capital stands in for the province. That is coarse, but it is the level
+the data are reported at, and the provinces are far enough apart that the
+ordering of the distances between them does not depend on the choice of
+point within each one.
 """
-function province_importation_kernel(pops::AbstractVector = PROVINCE_POPULATIONS)
-    np = length(pops)
-    tot = sum(pops)
-    K = zeros(Float64, np, np)
+const PROVINCE_CAPITALS = [
+    (1.56667, 30.25000),    # Bunia, Ituri
+    (-1.67918, 29.22195),   # Goma, Nord-Kivu
+    (-2.50000, 28.86667)    # Bukavu, Sud-Kivu
+]
+
+"""
+    PROVINCE_DISTANCE_DECAY
+
+Exponent on the distance term of [`province_importation_kernel`](@ref). One
+is the conventional gravity value, and it is fixed rather than sampled: the
+importation intensity it scales is already weakly identified against the
+secondary provinces' seeds, so a second free parameter on the same term
+would not be determined by anything.
+"""
+const PROVINCE_DISTANCE_DECAY = 1.0
+
+"""
+    haversine_km(a, b)
+
+Great-circle distance in kilometres between two `(latitude, longitude)`
+points in decimal degrees, on a spherical Earth of radius 6371 km.
+"""
+function haversine_km(a::Tuple{<:Real, <:Real}, b::Tuple{<:Real, <:Real})
+    φ1, λ1 = deg2rad(a[1]), deg2rad(a[2])
+    φ2, λ2 = deg2rad(b[1]), deg2rad(b[2])
+    h = sin((φ2 - φ1) / 2)^2 +
+        cos(φ1) * cos(φ2) * sin((λ2 - λ1) / 2)^2
+    return 2 * 6371.0 * asin(sqrt(clamp(h, 0.0, 1.0)))
+end
+
+"""
+    province_distance_matrix(capitals = PROVINCE_CAPITALS)
+
+Great-circle distances in kilometres between every pair of province
+capitals, as a symmetric matrix with a zero diagonal. Built from
+[`PROVINCE_CAPITALS`](@ref) by [`haversine_km`](@ref).
+"""
+function province_distance_matrix(
+        capitals::AbstractVector = PROVINCE_CAPITALS)
+    np = length(capitals)
+    D = zeros(Float64, np, np)
     @inbounds for p in 1:np, q in 1:np
 
         p == q && continue
-        K[p, q] = pops[p] / tot
+        D[p, q] = haversine_km(capitals[p], capitals[q])
+    end
+    return D
+end
+
+"""
+    province_importation_kernel(pops = PROVINCE_POPULATIONS; distances, decay)
+
+Between-province importation kernel `K`, where `K[p, q]` is the relative
+rate of infectious travel from province `q` into province `p`. Diagonal is
+zero (no self-importation). The overall intensity is carried by the sampled
+`ε` in [`patch_infection_model`](@ref), so only the relative structure
+matters here.
+
+This is a gravity kernel: travel from `q` to `p` scales with the destination
+population and falls with the distance between the two capitals,
+
+```math
+K_{p,q} \\propto \\frac{N_p}{d_{p,q}^{\\gamma}},
+```
+
+with `γ` fixed at [`PROVINCE_DISTANCE_DECAY`](@ref) and `d` from
+[`province_distance_matrix`](@ref). Pass `distances` as a zero matrix to
+recover the population-only kernel.
+
+Each column is scaled so that its off-diagonal entries sum to `1 - N_q/N`,
+the share of the country that is not `q` itself. That is what the kernel
+summed to before the distance term was added, so the distance changes where
+a province's exported transmission lands without changing how much of it
+leaves. `ε` keeps its meaning, and every column's off-diagonal sum stays
+below one at any `ε` in `[0, 1]`, which is what stops a province exporting
+more transmission than it generates.
+
+There is no origin-destination or mobility data for this outbreak, so the
+kernel is still a structural assumption rather than a measurement, and `ε`
+is weakly identified against the secondary-patch seeds (both can raise a
+secondary province's early incidence). Treat the split between imported and
+locally-seeded infections as poorly determined even though their sum is not.
+"""
+function province_importation_kernel(
+        pops::AbstractVector = PROVINCE_POPULATIONS;
+        distances::AbstractMatrix = province_distance_matrix(
+            PROVINCE_CAPITALS[1:min(length(pops), end)]),
+        decay::Real = PROVINCE_DISTANCE_DECAY)
+    np = length(pops)
+    tot = sum(pops)
+    K = zeros(Float64, np, np)
+    size(distances) == (np, np) || error(
+        "province_importation_kernel: `distances` is $(size(distances)) " *
+        "but there are $np provinces.")
+    @inbounds for q in 1:np
+        ## Relative pull of each destination from origin `q`, by destination
+        ## size and by how far it is. A zero distance matrix leaves the
+        ## population-only kernel.
+        pull = zeros(Float64, np)
+        for p in 1:np
+            p == q && continue
+            d = distances[p, q]
+            pull[p] = d > 0 ? pops[p] / d^decay : Float64(pops[p])
+        end
+        s = sum(pull)
+        s > 0 || continue
+        ## Hold the column total at the pre-distance value, so the distance
+        ## redistributes a province's exports without changing their volume.
+        outflow = 1 - pops[q] / tot
+        for p in 1:np
+            K[p, q] = outflow * pull[p] / s
+        end
     end
     return K
 end

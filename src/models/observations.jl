@@ -3656,14 +3656,22 @@ between health zones). `ρ → 0` recovers a plain Multinomial split.
   per-province confirmed increments, binned to the same vintages.
 - `rho_prior`: prior on the composition overdispersion.
 
-Returns `(; shares, rho, obs_increments)` where `shares[p, i]` is the
-modelled expected share of patch `p` at vintage `i`.
+`severity_sd_prior` optionally adds a second sum-to-zero log multiplier on
+the shares, partially pooled toward equality. The death composition uses it
+for the per-province case-fatality ratio; the case composition leaves it
+`nothing` and samples nothing. A composition identifies only the product of
+the two multipliers, so their priors are what separates them.
+
+Returns `(; shares, rho, obs_increments, province_ascertainment,
+ascertainment_sd, province_severity, severity_sd)` where `shares[p, i]` is
+the modelled expected share of patch `p` at vintage `i`.
 """
 @model function province_composition_model(
         obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
         modelled_confirmed::AbstractMatrix;
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         ascertainment_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        severity_sd_prior = nothing,
         ascertainment_offset_prior = Normal(0, 1))
     np, nv = size(modelled_confirmed)
     ρ ~ rho_prior
@@ -3700,19 +3708,44 @@ modelled expected share of patch `p` at vintage `i`.
     log_asc_raw = τ_asc .* z_asc
     log_asc = log_asc_raw .- (sum(log_asc_raw) / np)
     asc = exp.(log_asc)
+    ## --- Optional second multiplier: per-province severity ---------------
+    ## The death composition uses this for the per-province case-fatality
+    ## ratio, partially pooled toward the national value on the log scale and
+    ## constrained to sum to zero, so the national ratio keeps its meaning and
+    ## only the provincial contrast lives here. The case composition passes
+    ## `nothing`, samples nothing, and gains no dimension its likelihood never
+    ## touches.
+    ##
+    ## A composition identifies only the product `sev_p * asc_p`, so the two
+    ## are separated by their priors and by nothing else. That is the design
+    ## rather than an oversight. On the death side the case-fatality ratio
+    ## takes the looser prior and death confirmation the tight one, because
+    ## near-uniform death ascertainment is the weaker and more defensible half
+    ## of the identifying assumption. Read `severity_sd` against its prior:
+    ## a posterior that has not moved says the split is the prior's.
+    τ_sev = 0.0
+    sev = ones(np)
+    if severity_sd_prior !== nothing
+        τ_sev ~ severity_sd_prior
+        z_sev ~ product_distribution(fill(ascertainment_offset_prior, np))
+        log_sev_raw = τ_sev .* z_sev
+        sev = exp.(log_sev_raw .- (sum(log_sev_raw) / np))
+    end
     ## Expected share of each patch at each vintage. `safe_rate` floors the
     ## modelled increments away from zero so an early vintage with no
     ## modelled cases in a patch still gives a defined (tiny) share rather
     ## than a 0/0.
-    Ts = promote_type(eltype(modelled_confirmed), eltype(asc))
+    Ts = promote_type(eltype(modelled_confirmed), eltype(asc), eltype(sev))
+    weight = asc .* sev
     shares = zeros(Ts, np, nv)
     @inbounds for i in 1:nv
         tot = zero(Ts)
         for p in 1:np
-            tot += asc[p] * safe_rate(modelled_confirmed[p, i])
+            tot += weight[p] * safe_rate(modelled_confirmed[p, i])
         end
         for p in 1:np
-            shares[p, i] = asc[p] * safe_rate(modelled_confirmed[p, i]) / tot
+            shares[p, i] = weight[p] * safe_rate(modelled_confirmed[p, i]) /
+                           tot
         end
     end
     ## The totals are conditioned on, not scored: they are already in the
@@ -3778,5 +3811,6 @@ modelled expected share of patch `p` at vintage `i`.
         end
     end
     return (; shares, rho = ρ, obs_increments,
-        province_ascertainment = asc, ascertainment_sd = τ_asc)
+        province_ascertainment = asc, ascertainment_sd = τ_asc,
+        province_severity = sev, severity_sd = τ_sev)
 end

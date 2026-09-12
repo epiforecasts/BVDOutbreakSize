@@ -625,16 +625,18 @@ except the observed ratio, which is a count:
 - the naive observed confirmed ratio, that province's reported confirmed
   deaths over its reported confirmed cases;
 - the delay-corrected confirmed ratio, the national corrected ratio scaled
-  by the province's relative death-confirmation over its relative case
-  ascertainment, which is the only province-varying factor once the delays
-  are corrected for;
-- the structural, infection-based ratio.
+  by the province's relative lethality and death confirmation over its
+  relative case ascertainment, which is what varies by province once the
+  delays are corrected for;
+- the structural, infection-based ratio, read from `CFR_patch`, the national
+  ratio times that province's sum-to-zero lethality contrast.
 
-The structural ratio is a single national parameter in this model, shared by
-every province, so its column repeats. That is the finding rather than a
-placeholder: with lethality and death confirmation held national, every
-provincial difference in the confirmed ratio is case-finding. A per-province
-structural ratio pooled toward the national one is issue #667.
+The death composition identifies only the product of the lethality and the
+death-confirmation contrasts, so their split is set by their priors. The
+lethality prior is the looser of the two, so a provincial excess of deaths
+over cases is read first as lethality. A chain fitted before the per-province
+ratio existed carries no `CFR_patch`, and the structural column then falls
+back to the national ratio in every row.
 
 `province_cases` and `province_deaths` are the observed per-province
 confirmed case and death totals over the fitted window, in the order of
@@ -653,6 +655,14 @@ function province_cfr_table(chn, res;
     death_asc = _has_key(chn, :province_death_ascertainment) ?
                 _per_patch(chn, :province_death_ascertainment, np) :
                 [ones(length(case_asc[1])) for _ in 1:np]
+    ## Per-province lethality contrast, and the per-province structural ratio
+    ## it implies. Both absent on a chain fitted before the per-province ratio
+    ## existed, which then reports the national ratio in every row.
+    sev = _has_key(chn, :province_cfr_relative) ?
+          _per_patch(chn, :province_cfr_relative, np) :
+          [ones(length(case_asc[1])) for _ in 1:np]
+    cfr_patch = _has_key(chn, :CFR_patch) ?
+                _per_patch(chn, :CFR_patch, np) : nothing
     ## Mask rather than filter, so the corrected draws and the per-province
     ## scaling below stay aligned draw for draw.
     mask = isfinite.(res.corrected)
@@ -673,9 +683,11 @@ function province_cfr_table(chn, res;
         ## relative case ascertainment. Both are sum-to-zero on the log
         ## scale, so the provinces' corrected ratios sit around the national
         ## one rather than all above or all below it.
-        scale = (death_asc[p] ./ case_asc[p])[mask]
+        scale = ((sev[p] .* death_asc[p]) ./ case_asc[p])[mask]
+        struc_p = cfr_patch === nothing ? structural :
+                  filter(isfinite, cfr_patch[p])
         push!(df, (patch_labels[p], naive,
-            cell(corrected .* scale), cell(structural)))
+            cell(corrected .* scale), cell(struc_p)))
     end
     return df
 end

@@ -1250,3 +1250,106 @@ end
     deaths = df[df[!, "Quantity"] .== "New confirmed deaths by T+7", :]
     @test sum(deaths[!, "Upper 90%"]) ≈ 40.0
 end
+
+@testitem "province kernel: distance should redistribute, not change volume" begin
+    using BVDOutbreakSize: province_importation_kernel,
+                           province_distance_matrix, haversine_km,
+                           PROVINCE_POPULATIONS, PROVINCE_CAPITALS
+
+    pops = PROVINCE_POPULATIONS[1:3]
+    tot = sum(pops)
+    K = province_importation_kernel(pops)
+
+    ## Volume: each column's off-diagonal sum is the share of the country
+    ## that is not the origin, which is what the population-only kernel
+    ## summed to. The distance term must not change how much leaves a
+    ## province, only where it lands, or `epsilon` changes meaning.
+    for q in 1:3
+        @test sum(@view K[:, q])≈1 - pops[q] / tot rtol=1e-12
+        @test K[q, q] == 0
+    end
+    ## A zero distance matrix is the population-only kernel exactly.
+    flat = province_importation_kernel(pops; distances = zeros(3, 3))
+    for p in 1:3, q in 1:3
+
+        p == q && continue
+        @test flat[p, q]≈pops[p] / tot rtol=1e-12
+    end
+    ## Direction: from Ituri, Nord-Kivu is both larger and nearer than
+    ## Sud-Kivu, so distance widens the gap between them rather than
+    ## reversing it.
+    D = province_distance_matrix(PROVINCE_CAPITALS[1:3])
+    @test D[2, 1] < D[3, 1]
+    @test K[2, 1] / K[3, 1] > flat[2, 1] / flat[3, 1]
+    ## Symmetric with a zero diagonal, and the pairwise distances are the
+    ## great-circle ones to the nearest kilometre.
+    @test D ≈ D'
+    @test all(iszero, [D[i, i] for i in 1:3])
+    @test haversine_km(PROVINCE_CAPITALS[1], PROVINCE_CAPITALS[2])≈379 atol=5
+    @test haversine_km(PROVINCE_CAPITALS[2], PROVINCE_CAPITALS[3])≈99 atol=5
+    ## A steeper decay concentrates exports on the nearer destination.
+    steep = province_importation_kernel(pops; decay = 2.0)
+    @test steep[2, 1] / steep[3, 1] > K[2, 1] / K[3, 1]
+end
+
+@testitem "province composition: the severity multiplier should be sum-to-zero" begin
+    using BVDOutbreakSize: province_composition_model
+    using Turing: sample, Prior
+    using Turing.DynamicPPL: returned
+    using Distributions: truncated, Normal
+
+    ## The death composition carries a second per-province multiplier for
+    ## lethality. It must be sum-to-zero on the log scale, so the national
+    ## case-fatality ratio it multiplies keeps its meaning, and it must
+    ## actually move the shares.
+    modelled = [10.0 12.0; 4.0 5.0; 1.0 1.0]
+    obs = [8 9; 3 4; 1 1]
+    m = province_composition_model(obs, modelled;
+        severity_sd_prior = truncated(Normal(0, 0.5); lower = 0))
+    rets = vec(returned(m, sample(m, Prior(), 200; progress = false)))
+    @test all(abs(sum(log.(r.province_severity))) < 1e-10 for r in rets)
+    @test all(all(≈(1.0), sum(r.shares; dims = 1)) for r in rets)
+    ## Spread away from zero on at least some draws, so the multiplier is a
+    ## live parameter rather than pinned at one.
+    @test maximum(maximum(abs.(log.(r.province_severity))) for r in rets) > 0.01
+
+    ## Without the prior it is not sampled and the shares are the
+    ## ascertainment-only ones, so the case composition gains no dimension.
+    m0 = province_composition_model(obs, modelled)
+    rets0 = vec(returned(m0, sample(m0, Prior(), 50; progress = false)))
+    @test all(all(==(1.0), r.province_severity) for r in rets0)
+    @test all(iszero(r.severity_sd) for r in rets0)
+end
+
+@testitem "patch Rt deviations should mean-revert to the national trend" begin
+    using BVDOutbreakSize: patch_rt_model
+    using Turing: sample, Prior
+    using Turing.DynamicPPL: returned
+    using Distributions: Dirac
+    using Statistics: std
+
+    ## The deviations are an AR(1) toward zero rather than a random walk, so
+    ## the provincial gap decays once the data stop rather than persisting at
+    ## whatever it last was. A short half-life must leave a narrower spread at
+    ## the final knot than a long one, and the sum-to-zero constraint has to
+    ## survive the reversion.
+    function last_knot_spread(halflife; draws = 500)
+        m = patch_rt_model(206, 3, log(2.0); breakpoint = 100.0,
+            rt_start = 1, rt_walk_start = 1,
+            region_halflife_prior = Dirac(halflife))
+        ks = [r.δ_knots
+              for r in vec(returned(m,
+            sample(m, Prior(), draws; progress = false)))]
+        nb = size(first(ks), 2)
+        worst = maximum(maximum(abs, sum(k; dims = 1)) for k in ks)
+        return (spread = std([k[1, nb] for k in ks]), centred = worst)
+    end
+    short = last_knot_spread(14.0)
+    long = last_knot_spread(10_000.0)
+    ## Sum-to-zero at every knot, both ways.
+    @test short.centred < 1e-10
+    @test long.centred < 1e-10
+    ## Reversion narrows the final deviation. A half-life far longer than the
+    ## window is the random-walk limit, which is the wider of the two.
+    @test short.spread < long.spread
+end

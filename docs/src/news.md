@@ -36,8 +36,19 @@ A province's confirmed case count is the product of its incidence and its case-f
 The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory rather than to a province, so they cancel out of the normalised death shares.
 The death split identifies the incidence split, and the case split then identifies relative case ascertainment as the residual.
 Both splits are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
-- Provinces are coupled by a gravity kernel weighted by destination population, with a sampled intensity.
-There is no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
+- Provincial deviations mean-revert to the national trend rather than random-walk (#665).
+Each weekly knot retains a fraction of the last, set by the half-life of a provincial divergence in days, which is sampled.
+A random walk has no mean, so a province above the trend at the last per-province vintage was projected to stay above it indefinitely, and the per-province vintages stop well before the cut-off.
+One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
+A half-life far longer than the window recovers the random walk.
+- Each province has its own case-fatality ratio, partially pooled toward the national value, alongside its own death confirmation pooled far more tightly (#667).
+The death composition identifies only their product, so the split rests on the two priors.
+The looser prior is on lethality, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding, and both spreads are reported against their priors.
+- Provinces are coupled by a gravity kernel with a distance term (#666).
+Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
+Capital coordinates are from GeoNames and live in `src/constants.jl` with the distances they imply.
+Each origin's total outflow is held at the population-only value, so the distance decides where a province's exports land rather than how many leave, and the importation intensity keeps its meaning.
+There is still no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
 - The headline fit and its spatial control run at 1000 draws, where the headline previously ran at 200 and every other fit in the matrix runs at 500.
 At 500 draws the headline returned 78 bulk and 64 tail effective samples.
 Three provinces cost 1.32 times as much per gradient as one rather than the 2.03 measured before, but 1000 draws still project to roughly 385 to 405 minutes on the CI runner against the fit job's 350-minute budget.
@@ -67,6 +78,7 @@ The trajectory is rebuilt from the deviation knots the chain carries, and a test
 - Added modelled infections by province over time, imported infections by province over time, and posterior predictive checks on both province compositions.
 - The methods section describes the meta-population structure, what identifies the split, what the model does not account for, and the sampler settings the fits use.
 - The spatial-structure comparison moved to the sensitivity page, where it is set out against the single-population fit's reproduction number, case-fatality ratio and outbreak size.
+- The summary dashboard gains the cross-province overview under the headline estimates and the by-province reproduction number under the national trajectory (#668).
 
 ## v1.18.0
 
