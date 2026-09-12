@@ -17,6 +17,7 @@
 ## --- Committed CSV: schema and structural invariants ----------------------
 
 @testitem "onset curve CSV rows are internally consistent" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
 
     path = joinpath(pkgdir(BVDOutbreakSize), "data",
@@ -71,6 +72,7 @@
 end
 
 @testitem "SitRep 098 stays out of the digitised onset curve" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     ## 098 is the only vintage whose onset figure INSP embedded losslessly
     ## rather than as JPEG. The digitiser's colour masks are fixed
     ## thresholds, so JPEG edge blur costs every other vintage a fringe of
@@ -91,6 +93,7 @@ end
 end
 
 @testitem "onset curve reprints collapse to identical blocks" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
 
     csv = _read_onset_csv(joinpath(pkgdir(BVDOutbreakSize), "data",
@@ -109,6 +112,7 @@ end
 ## --- Committed CSV: L1 date alignment -------------------------------------
 
 @testitem "onset curve L1 alignment lands on shift 0 bar the documented pairs" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Day
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
 
@@ -154,6 +158,7 @@ end
 ## --- digitize on a synthetic figure ---------------------------------------
 
 @testitem "digitize recovers a synthetic chart's counts and dates" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date, Day
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
     include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
@@ -175,6 +180,7 @@ end
 end
 
 @testitem "digitize reads the count scale off the y-axis gridline step" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
     include(joinpath(pkgdir(BVDOutbreakSize), "scripts",
@@ -197,6 +203,7 @@ end
 ## --- End to end against the real figures ----------------------------------
 
 @testitem "digitiser reproduces the committed onset CSV from the SitRep PDFs" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     using Dates: Date
 
     root = pkgdir(BVDOutbreakSize)
@@ -239,6 +246,7 @@ end
 end
 
 @testitem "the Python port reproduces the committed onset CSV" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     include(joinpath(@__DIR__, "onset_digitiser_helpers.jl"))
 
     ## The port is the script the automated data-updater runs, so a drift in
