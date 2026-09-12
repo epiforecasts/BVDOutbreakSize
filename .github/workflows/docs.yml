@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: '1.12'
+          version: '1'
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: '1.12'
+          version: '1'
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
@@ -160,7 +160,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: '1.12'
+          version: '1'
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
@@ -263,7 +263,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
-          version: '1.12'
+          version: '1'
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
