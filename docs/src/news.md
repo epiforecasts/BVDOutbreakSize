@@ -6,22 +6,6 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
-
-### Fixed
-
-- NUTS chains no longer start on the prior tail they cannot recover from (#662).
-`nuts_sample` initialised every chain with an independent draw from the prior.
-About a fifth of the joint model's prior draws put the whole latent trajectory where the data score it hundreds of thousands of log units below the posterior, and a chain that starts there never arrives.
-Dual averaging shrinks the step size towards zero instead of moving, so the chain crawls in place at its starting value for the entire run.
-Nothing diverges, so the failure is silent, and it shows only as a split R-hat pinned near its two-chain ceiling once a healthy chain is compared against the frozen one.
-Which chains are affected turns on the random number stream, so any change to the model's variable structure re-rolls it, and a fit that converges today can fail tomorrow on unchanged code.
-That is what it did on the SitRep 118 data branch, where the joint fit reported a max R-hat of 2.644 and a minimum bulk effective sample size of 2 while one of its two chains sat 423,000 log-likelihood units away from the other and moved its growth exponent by 0.004 over 500 draws.
-The new default, `ViablePrior`, keeps the best of eight independent prior draws per chain by initial log joint density.
-Each chain still starts at its own genuinely prior-drawn and over-dispersed point, so R-hat keeps the between-chain contrast it is built on, but no chain starts where it cannot leave.
-Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
-Passing `init = Turing.DynamicPPL.InitFromPrior()` restores the old behaviour.
-
 ## v1.18.0
 
 Changes since v1.17.0

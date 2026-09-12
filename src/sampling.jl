@@ -211,72 +211,9 @@ function _tensorboard_if_loaded(logdir)
 end
 
 """
-$(TYPEDEF)
-
-Prior initialisation guarded against the prior predictive's unrecoverable
-tail. Each chain keeps the best of `attempts` independent prior draws, by
-initial log joint density. The default `init` of [`nuts_sample`](@ref).
-
-`InitFromPrior` draws each parameter from its own prior independently. The
-joint model's product prior is dispersed enough that a sizeable minority of
-those draws put the whole latent trajectory somewhere the data score
-hundreds of thousands of log units below the posterior. NUTS does not
-recover from such a point. Dual averaging shrinks the step size towards
-zero instead of moving, and the chain then crawls in place at its starting
-value for the entire run. Nothing diverges, so the failure is silent, and
-it surfaces only as a split R-hat pinned near its ceiling once a healthy
-chain is compared against the frozen one.
-
-Keeping the best of several draws removes that tail while leaving each
-chain an independent, genuinely prior-drawn and still over-dispersed
-starting point, so R-hat keeps its between-chain contrast. Only forward
-density evaluations are used, so the guard costs milliseconds against a fit
-measured in hours.
-
-$(TYPEDFIELDS)
-"""
-struct ViablePrior
-    "Prior draws to choose between, per chain."
-    attempts::Int
-    function ViablePrior(attempts::Integer = 8)
-        attempts >= 1 ||
-            throw(ArgumentError("attempts must be at least 1, got $attempts"))
-        return new(Int(attempts))
-    end
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-One starting point for `model` under [`ViablePrior`](@ref) semantics: the
-highest-log-joint of `attempts` independent prior draws, returned as an
-initialisation strategy. Falls back to `InitFromPrior()` when no attempt
-gives a finite log density, so a model this guard cannot evaluate still
-samples exactly as before.
-"""
-function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8)
-    attempts >= 1 ||
-        throw(ArgumentError("attempts must be at least 1, got $attempts"))
-    best = nothing
-    best_logp = -Inf
-    for _ in 1:attempts
-        vi = VarInfo(rng, model, InitFromPrior())
-        logp = getlogjoint(vi)
-        (isfinite(logp) && logp > best_logp) || continue
-        best_logp = logp
-        best = collect(vi[:])
-    end
-    best === nothing && return InitFromPrior()
-    return InitFromVector(best, LogDensityFunction(model))
-end
-
-"""
 NUTS on `model`, parallel chains via `MCMCThreads`. Chains
-initialise from the prior, each keeping the best of eight draws
-([`ViablePrior`](@ref)), which keeps the sampler in regions with
-reasonable physical interpretation and off the prior tail no chain
-recovers from. Pass `init = Turing.DynamicPPL.InitFromPrior()` for
-unguarded prior initialisation, or `init =
+initialise from the prior (`InitFromPrior()`) to keep the sampler
+in regions with reasonable physical interpretation. Pass `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
@@ -338,19 +275,12 @@ function nuts_sample(model;
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
-        init = ViablePrior(),
+        init = InitFromPrior(),
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
         kwargs...)
     rng = MersenneTwister(seed)
-    ## Each chain draws and screens its own starting point, so the chains
-    ## stay independent and over-dispersed; any other strategy is shared
-    ## across chains exactly as `sample` would use it.
-    inits = init isa ViablePrior ?
-            [viable_prior_init(rng, model; attempts = init.attempts)
-             for _ in 1:chains] :
-            fill(init, chains)
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
     return sample(
@@ -359,7 +289,7 @@ function nuts_sample(model;
         NUTS(n_adapts, target_accept; max_depth, adtype),
         MCMCThreads(),
         samples, chains;
-        initial_params = inits,
+        initial_params = fill(init, chains),
         progress = progress,
         check_model = check_model,
         cb_kwargs...,
