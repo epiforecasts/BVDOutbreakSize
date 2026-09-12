@@ -205,7 +205,7 @@ end
     for s in 1:5
         seed!(s)
         res = m()
-        ## Sum-to-zero at EVERY time: the national walk is the common trend
+        ## Sum-to-zero at every time. The national walk is the common trend
         ## and the deviations are contrasts around it.
         @test maximum(abs, sum(res.δ_patch; dims = 1)) < 1e-10
         ## Every patch, INCLUDING the primary, carries its own deviation.
@@ -234,7 +234,7 @@ end
     end
 end
 
-@testitem "patch_rt_model: Rt may vary across space AND over time" begin
+@testitem "patch_rt_model: Rt may vary across space and over time" begin
     using BVDOutbreakSize: patch_rt_model
     using Distributions: Normal, truncated
     using Random: seed!
@@ -304,7 +304,7 @@ end
     using Turing: DynamicPPL
     using Random: Xoshiro
 
-    ## The whole point of the composition likelihood is that it adds ONLY the
+    ## The whole point of the composition likelihood is that it adds only the
     ## spatial split and leaves the national total to the national confirmed
     ## stream. So its log-density must be invariant to rescaling the modelled
     ## confirmed level: doubling every patch's modelled cases leaves the
@@ -322,7 +322,7 @@ end
     @test logp(2.0 .* modelled) ≈ base rtol = 1e-10
     @test logp(100.0 .* modelled) ≈ base rtol = 1e-10
 
-    ## But it MUST respond to a change in the split.
+    ## But it must respond to a change in the split.
     skewed = [8.0 4.0; 5.0 3.0; 0.5 0.2]
     @test !isapprox(logp(skewed), base; rtol = 1e-6)
 
@@ -391,7 +391,7 @@ end
     @test K[2, 1] > K[1, 2]          ## Nord-Kivu (6.7M) > Ituri (4.4M)
 
     ## Passing an all-zero kernel switches the coupling off, and then epsilon
-    ## must NOT be sampled: it would multiply zero and be a dimension the
+    ## must not be sampled. It would multiply zero and be a dimension the
     ## likelihood never touches, whose posterior is exactly its prior.
     @test !has_eps(patch_infection_model(n, np;
         importation_kernel = zeros(np, np)))
@@ -647,7 +647,7 @@ end
     @test "Quantity" in names(one)
     ## Selecting by index and by label must agree.
     @test patch_summary_table(chn, 3; patch = 2) == one
-    ## The selected rows must be the SAME numbers the full table reports for
+    ## The selected rows must be the same numbers the full table reports for
     ## that province, not a re-summary of a different patch.
     nk = full[full[!, "Patch"] .== "Nord-Kivu", :]
     @test one[!, "Lower 90%"] == nk[!, "Lower 90%"]
@@ -830,7 +830,7 @@ end
     end
 
     ## The finding that motivates using this data at all: the provinces test
-    ## very differently-selected pools, so confirmed-case share is NOT
+    ## very differently-selected pools, so confirmed-case share is not
     ## infection share. Ituri runs ~32% positivity against Nord-Kivu's ~6%.
     it_pos = sum(lab["ituri_positive"].counts) /
              sum(lab["ituri_analysed"].counts)
@@ -888,7 +888,7 @@ end
 
     ## With importation off (the default), a secondary patch has only two
     ## routes to infections: its own seed and its own Rt. So the seed prior
-    ## MUST be able to reach the observed provincial split on its own, at
+    ## must be able to reach the observed provincial split on its own, at
     ## zero Rt difference. If it cannot, the log-Rt deviation is forced to
     ## absorb the level difference and the reported provincial Rt gap becomes
     ## an artefact of the seed prior -- which is the one thing the patch model
@@ -985,12 +985,12 @@ end
     @test nk_death_share > 1.4 * nk_case_share ## the gap that does the work
 end
 
-@testitem "bvd_joint is a drop-in for bvd_joint (headline model)" tags=[:slow] begin
+@testitem "bvd_joint: a patch chain carries every headline quantity" tags=[:slow] begin
     using BVDOutbreakSize
     using Turing: sample, Prior
     import FlexiChains
 
-    ## The patch model is the HEADLINE joint, not a side analysis. So a patch
+    ## The patch model is the headline joint, not a side analysis. So a patch
     ## chain must carry every quantity a single-patch chain does: analysis.jl,
     ## the forecast machinery and the plots all key off these names, and a
     ## missing one is a silent failure at report-render time rather than a

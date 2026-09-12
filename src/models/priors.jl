@@ -1462,18 +1462,18 @@ window, reaching `seed_at_renewal_start(C_T)` at the renewal start.
 Each secondary patch is seeded as a fraction of the primary patch's seed
 (`seed_fraction_prior`), not as an absolute count. The fraction stands in
 for the unobserved early introductions from Ituri, and it is the natural
-scale because it is what the data speak to: with importation off, the
-per-province *level* of the case split is set by the relative seed, so the
-observed Nord-Kivu share (~9% of confirmed, near-constant across the
-window) maps almost directly onto a seed fraction of roughly the same size.
+scale because it is what the data speak to. The relative seed sets the
+per-province *level* of the case split, so the observed Nord-Kivu share
+(~9% of confirmed, near-constant across the window) maps almost directly
+onto a seed fraction of roughly the same size.
 
 This matters more than it looks. An absolute seed prior on the secondary
-patches, an earlier version of this model used
-`N⁺(0.01, 0.01)` — puts them ~4 orders of magnitude below the primary
-patch's `2^m ≈ 164`, a seed ratio of about 13,700 : 1. With importation off
-by default, a secondary patch then has only two routes to infections: its
-own seed and its own `R_t`. If the seed is pinned that far below what the
-data need, the log-Rt deviation `δ_p` is forced to absorb the entire
+patches puts them about four orders of magnitude below the primary patch's
+`2^m ≈ 164`, a seed ratio of about 13,700 to 1. An earlier version of this
+model used `N⁺(0.01, 0.01)`. Uncoupled, a secondary patch has only two
+routes to infections, its own seed and its own `R_t`, and the figures below
+are measured in that setting. If the seed is pinned that far below what the
+data need, the log-Rt deviation `δ_p` is forced to absorb the whole
 shortfall: reaching a 9% Nord-Kivu share requires `δ ≈ 1.0` (an `Rt` ratio
 of 2.7), which is a 3.4-sigma draw on the deviation prior, and the mapping
 from `δ` to the share is a knife-edge (`δ = 0.5` gives 0.5%, `δ = 1.0`
