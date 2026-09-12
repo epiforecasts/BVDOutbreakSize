@@ -1054,6 +1054,15 @@ reproduction number implied by the summed patch infections.
     R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]
     infections_T_patch := [@inbounds(patch_state.infections_matrix[p, n])
                            for p in 1:n_patches]
+    ## Daily per-province infections and daily per-province imported
+    ## infections, both flattened column-major from their
+    ## `(n_patches × n)` matrices as `delta_knots` is. These carry the
+    ## provincial trajectories the analysis page plots beside the national
+    ## ones: cumulative infections by province, and where the coupling moved
+    ## transmission. Imports are the arrivals term alone, so the national sum
+    ## says how much transmission was relocated, not how much was added.
+    infections_patch := vec(patch_state.infections_matrix)
+    importation_patch := vec(patch_state.importation_matrix)
     ## The per-patch log-Rt deviation at the cut-off (one entry per patch),
     ## and its spread at the start of the walk, so a change in the provincial
     ## Rt gap over the window is visible as the difference between them.
