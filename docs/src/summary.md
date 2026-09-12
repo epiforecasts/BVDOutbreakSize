@@ -42,12 +42,29 @@ Markdown.parse(read(joinpath(dir, "headline_rates.md"), String))
 
 All intervals are equal-tailed 30%, 60% and 90% credible intervals from the joint posterior.
 
+### By province
+
+The model runs one renewal equation per province and fits the national streams against the summed provinces, so the national count above is the sum of the three below.
+Each cell is a median with a 90% credible interval.
+The reproduction number and the relative ascertainment are read together, because the per-province case data identify only their product.
+
+```@eval
+using Markdown, BVDOutbreakSize
+dir = joinpath(pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
+Markdown.parse(read(joinpath(dir, "provinces.md"), String))
+```
+
 ## Estimated reproduction number
 
 The time-varying reproduction number R(t), the average number of further infections caused by each infection.
 A value above one means the outbreak is growing.
 
 ![Estimated reproduction number over time](summary_assets/rt.png)
+
+The same trajectory by province, with the national one in grey behind each panel.
+A panel tracking grey says that province moves with the national trend.
+
+![Estimated reproduction number over time by province](summary_assets/rt_provinces.png)
 
 ## Infections over time
 

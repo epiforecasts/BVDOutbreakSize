@@ -4252,7 +4252,7 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the four figures it shows (reproduction number, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -4268,6 +4268,7 @@ mkpath(dashboard_dir)
 ## cases. All are produced in the Results sections above; here we just write
 ## them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 ## The report splits the surveillance panels by whether the stream was
@@ -4300,6 +4301,12 @@ open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
 end
 open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
+end
+
+## Province table: the cross-province overview from the Results section,
+## which is the by-province counterpart of the two headline tables above.
+open(joinpath(dashboard_dir, "provinces.md"), "w") do io
+    print(io, markdown_table(province_overview_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.
