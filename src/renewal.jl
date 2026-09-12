@@ -318,18 +318,25 @@ where the importation term couples patches through a kernel `K`:
   off-diagonal sum times `epsilon` must be at most one, so a patch cannot
   export more transmission than it generates. Both hold for
   [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
-- `epsilon`: importation intensity, scaling the whole kernel. Coupling
-  conserves infections: the origin patch is debited exactly what the
-  destination patches are credited, so the national total is the same as
-  it would be with `epsilon = 0`. Importation changes where infections
-  occur, never how many.
+- `epsilon`: importation intensity, scaling the whole kernel. Importation
+  is a transfer on the day it happens: the origin patch is debited exactly
+  what the destination patches are credited, so coupling is never a source
+  of infections. It is not a conservation law across days. The destination
+  then grows at its own reproduction number, so relocating infections from
+  a fast patch to a slow one lowers the national total and the reverse
+  raises it. With one shared reproduction number the transfer cancels
+  exactly and the national total is what it would be at `epsilon = 0`.
 
 # Returns
 
-Matrix `I` of shape `(n_patches, n_days)` where row `p` is the daily
-infection trajectory for patch `p`. The first `L` days are copied from
-`seeds_matrix`; the remaining days are the renewal recursion with
-importation. The element type is promoted from all input types.
+`(; infections, importation)`. `infections` is a matrix of shape
+`(n_patches, n_days)` where row `p` is the daily infection trajectory for
+patch `p`. The first `L` days are copied from `seeds_matrix`; the remaining
+days are the renewal recursion with importation. `importation` is the
+matching matrix of infections each patch received from the others, the
+arrivals term alone rather than the net of arrivals and departures. It is
+what was relocated, not what was added: every arrival is debited from its
+origin the same day. The element type is promoted from all input types.
 
 # AD transparency
 
@@ -346,6 +353,7 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
     Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
         eltype(importation_kernel), typeof(float(epsilon)))
     I = zeros(Tp, np, n)
+    imports = zeros(Tp, np, n)
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -378,107 +386,12 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
                 outflow += importation_kernel[q, p]
                 arrivals += importation_kernel[p, q] * gen[q]
             end
-            I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
-                      epsilon * arrivals
-        end
-    end
-    return I
-end
-
-"""
-As [`patch_infections`](@ref), but anchored so that the reproduction number
-implied by the summed patches is exactly `national_rt` on every day.
-
-`Rt_matrix` is read for its per-patch ratios only. On each day the patch
-reproduction numbers are scaled by one common factor chosen so that the
-force-weighted mean matches `national_rt[t]`, which is the quantity
-[`implied_national_Rt`](@ref) recovers from the national trajectory.
-
-This is what makes `mu(t)` in [`patch_rt_model`](@ref) mean what the model
-says it means. The deviations are centred as `sum_p delta_p = 0`, so `mu` is
-the geometric mean of the patch reproduction numbers, while the national
-epidemic grows at the force-weighted arithmetic mean. The arithmetic mean is
-the larger of the two, and the gap widens as the dominant patch pulls away, so
-without anchoring the country grows faster than the trend the molecular-clock
-prior constrains, and the surplus compounds over the whole renewal window into
-the national cumulative total. Anchoring makes the deviations pure contrasts
-between provinces and leaves the national level to `mu` alone.
-
-Returns `(; infections, Rt_matrix, anchor_scale, importation)`. `Rt_matrix` is
-the realised per-patch reproduction numbers after scaling, which is what should
-be reported, and `anchor_scale` is the daily common factor, one before the
-renewal starts. The scale depends on the forces, so it cannot be recovered from
-the deviation knots alone; carrying it is what lets a saved chain rebuild the
-provincial trajectories (see [`reconstruct_patch_rt`](@ref)).
-
-`importation` is the `(n_patches × n_days)` matrix of infections each patch
-received from the others, the arrivals term alone rather than the net of
-arrivals and departures. Coupling conserves infections nationally, so the
-national column sums of `importation` say how much transmission was
-relocated, never how much was added.
-"""
-function patch_infections_anchored(Rt_matrix::AbstractMatrix,
-        g::AbstractVector, seeds_matrix::AbstractMatrix,
-        importation_kernel::AbstractMatrix, epsilon::Real,
-        national_rt::AbstractVector)
-    np, n = size(Rt_matrix)
-    L = size(seeds_matrix, 2)
-    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
-        eltype(importation_kernel), typeof(float(epsilon)),
-        eltype(national_rt))
-    I = zeros(Tp, np, n)
-    Rt_realised = zeros(Tp, np, n)
-    imports = zeros(Tp, np, n)
-    anchor_scale = ones(Tp, n)
-    @inbounds for p in 1:np
-        for j in 1:min(L, n)
-            I[p, j] = seeds_matrix[p, j]
-        end
-        for t in 1:min(L, n)
-            Rt_realised[p, t] = Rt_matrix[p, t]
-        end
-    end
-    force = zeros(Tp, np)
-    gen = zeros(Tp, np)
-    @inbounds for t in (L + 1):n
-        total_force = zero(Tp)
-        weighted = zero(Tp)
-        for p in 1:np
-            f = zero(Tp)
-            kmax = min(t - 1, length(g))
-            for s in 1:kmax
-                f += I[p, t - s] * g[s]
-            end
-            force[p] = f
-            total_force += f
-            weighted += Rt_matrix[p, t] * f
-        end
-        ## The common scale that puts the force-weighted mean on `national_rt`.
-        ## With no force yet, or a degenerate weighted sum, leave the ratios
-        ## alone rather than dividing by zero; those days carry no infections
-        ## so the choice does not affect the trajectory.
-        scale = (total_force > 0 && weighted > 0) ?
-                national_rt[t] * total_force / weighted : one(Tp)
-        anchor_scale[t] = scale
-        for p in 1:np
-            Rt_realised[p, t] = scale * Rt_matrix[p, t]
-            gen[p] = Rt_realised[p, t] * force[p]
-        end
-        for p in 1:np
-            outflow = zero(Tp)
-            arrivals = zero(Tp)
-            for q in 1:np
-                q == p && continue
-                outflow += importation_kernel[q, p]
-                arrivals += importation_kernel[p, q] * gen[q]
-            end
             imports[p, t] = epsilon * arrivals
             I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
                       epsilon * arrivals
         end
     end
-    return (; infections = I, Rt_matrix = Rt_realised, anchor_scale,
-        importation = imports)
+    return (; infections = I, importation = imports)
 end
 
 """

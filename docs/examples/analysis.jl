@@ -396,11 +396,15 @@ MarkdownTable(vintage_table) #hide
 # The half-life is sampled, so a province with persistent divergence can still show one, and a half-life far longer than the window is the random walk.
 # One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
 #
-# The renewal is anchored to the trend.
-# Each day every province is scaled by one common factor, chosen so the reproduction number implied by the summed provinces is $\mu(t)$ exactly.
-# Left free, the country grows at the force-weighted arithmetic mean of the provincial reproduction numbers while the molecular-clock prior constrains their geometric mean, and the gap compounds over the unobserved window.
-# On prior draws at the fitted deviation scale that inflates the national outbreak size by about half.
-# Anchoring makes the deviations contrasts between provinces and leaves the national level to the trend, so splitting the country into provinces does not move the national outbreak size.
+# Each province runs its own renewal at its own reproduction number, and the national trajectory is their sum.
+# There is no separate national process and nothing rescales the provinces to match one.
+# The national reproduction number is read back off the summed infections by inverting the renewal equation, which recovers the force-weighted mean of the provincial values.
+# The trend $\mu(t)$ is therefore the central value the provinces pool toward rather than the country's own reproduction number.
+# Because the deviations are centred unweighted, $\mu$ is their geometric mean while the country runs at the force-weighted arithmetic mean, and the arithmetic mean is the larger.
+# That gap is first order in the deviation scale, not second, and it persists rather than averaging out: the faster province keeps gaining share of the force, so the country's reproduction number converges on the fastest province's, an excess of $\exp(\max_p \delta_p)$ over the trend.
+# Because it is an excess growth rate it compounds over the window, so it reaches the cumulative total multiplied rather than added.
+# The national streams constrain the summed trajectory directly, so this does not float free: the fitted trend moves down to meet them.
+# What it does mean is that the molecular-clock prior, which sets the walk base, is a prior on the trend rather than on the country, and the deviation prior reaches the national size through that route.
 #
 # The split is identified by the confirmed deaths.
 # A province's confirmed case count is the product of its incidence and its case-finding, and only the product is observed.
@@ -411,17 +415,18 @@ MarkdownTable(vintage_table) #hide
 # Provinces are coupled by a gravity kernel, with a sampled intensity.
 # Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
 # The distance decides where a province's exported transmission lands, not how much of it leaves, because each origin's total outflow is held at the population-only value.
-# Coupling conserves infections.
-# The origin province is debited exactly what the destinations are credited, so importation moves transmission between provinces rather than adding to the national total.
+# Coupling is a transfer, not a source.
+# The origin province is debited exactly what the destinations are credited on the day it happens, so importation never creates infections.
+# It can still move the national total, because the destination then grows at its own reproduction number.
 #
 # Three things are left out, and one is settled by assumption.
 # There is no mobility or origin-destination data for this outbreak, so the kernel is a structural assumption and its intensity is weakly identified against the secondary provinces' seeds.
 # Each province has its own case-fatality ratio and its own death confirmation, but the death composition identifies only their product, so their split rests on their priors and not on the data.
 # The assay and the reporting delays stay national and shared.
-# Export pressure is national.
-# The Uganda export streams are fitted against the summed provinces, so a province on the border does not export more per infection than one further from it.
-# We expect it does.
-# Fitting a per-province export pressure, partially pooled toward a national value, is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
+# Export pressure is Ituri's alone.
+# The Uganda export streams are driven by Ituri's infections and nothing else, so a case in Nord-Kivu contributes no chance of being detected across the border.
+# Nord-Kivu also borders Uganda, so that is an assumption rather than a fact.
+# Fitting a per-province export pressure, partially pooled, is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only ([#664](https://github.com/epiforecasts/BVDOutbreakSize/issues/664)).
 
 # #### Infections
@@ -2391,7 +2396,7 @@ province_infections_fig = plot_infections_patches(chn_joint;
 province_infections_fig #hide
 
 # The provinces are coupled by a gravity kernel weighted by destination population, described in the [spatial structure](@ref "Spatial structure") Methods section, with its intensity estimated.
-# Coupling moves transmission between provinces and does not add to the national total, so the figure reads as where infection occurred rather than as extra infection.
+# Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
 # The intensity is weakly identified against the seeds of the secondary provinces, since both raise a secondary province's early incidence, so it is read as the scale of coupling the data will tolerate rather than as a measured flow.
 # The distances between the provincial capitals are 379 km from Bunia to Goma, 478 km from Bunia to Bukavu and 99 km from Goma to Bukavu, so the kernel sends most of what leaves Nord-Kivu to Sud-Kivu rather than back to Ituri.
 

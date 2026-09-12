@@ -407,11 +407,14 @@ function build_fit_specs(obs;
         ## (`n_patches` defaults to 1). Splitting the country into provinces
         ## adds no national data, so the two C_T posteriors should agree; a
         ## gap is a defect in the spatial structure, not a finding about it.
-        ## The renewal is anchored to the national trend, the seed is
-        ## partitioned across patches and importation conserves infections, so
-        ## the two are comparable by construction, and that is pinned in
-        ## test/test_patch_model.jl. It runs at the headline's draw count, not
-        ## the matrix one, so the comparison is like for like.
+        ## The provinces run free and the national trajectory is their sum,
+        ## so the two are not identical by construction. The seed is
+        ## partitioned across patches and importation is a transfer rather
+        ## than a source, so with no deviations the two match exactly. What is
+        ## left between them is the country running at the force-weighted mean
+        ## of the provincial Rts rather than at the trend they are centred on;
+        ## test/test_patch_model.jl pins the size of that. It runs at the headline's draw
+        ## count, not the matrix one, so the comparison is like for like.
         (; id = "sens_no_patches",
             kind = :chain,
             thunk = () -> nuts_sample(

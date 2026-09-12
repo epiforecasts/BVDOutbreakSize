@@ -1357,10 +1357,14 @@ chamla_rt_fig #hide
 # The spatial section of the analysis page describes what the provinces add.
 #
 # Splitting the country into provinces adds no national data, so the national
-# outbreak size should be the same either way.
-# A gap between the two posteriors below is a defect in the spatial structure
-# rather than a finding about it, and the headline should not be read from the
-# meta-population fit until such a gap is explained.
+# outbreak size should not move far either way.
+# The two are not identical by construction: the provinces run free and the
+# country grows at the force-weighted mean of their reproduction numbers,
+# which sits above the central trend they pool toward. That gap is second
+# order in the deviation scale.
+# A large gap between the two posteriors below would therefore point at the
+# deviation priors rather than at the data, and the headline should not be
+# read from the meta-population fit until such a gap is explained.
 
 spatial_sensitivity_table = streams_table(
     "Meta-population (headline)" => posterior_C_joint,

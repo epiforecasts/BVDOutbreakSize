@@ -682,6 +682,7 @@ reproduction number implied by the summed patch infections.
         death_ascertainment_sd_prior = truncated(
             Normal(0, 0.1); lower = 0),
         province_cfr_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        export_pressure = province_export_pressure_model,
         exports = exports_model,
         deaths = deaths_model,
         cases = reported_cases_model,
@@ -883,11 +884,32 @@ reproduction number implied by the summed patch infections.
         recovered(recovered_history, recovered_cases,
         confirmed_state.confirmed_daily, deaths_state.CFR;
         k_external = k_recovered))
-    ## Uganda exports are driven by the primary patch (Ituri) alone: the
-    ## border crossings this stream describes are Ituri-to-Uganda.
+    ## Uganda exports. The traveller volume and source population this stream
+    ## carries are Ituri's, since the point-of-entry counts were collected
+    ## there, so Ituri is the reference at weight one and every other province
+    ## is measured against it. The weights are partially pooled (see
+    ## [`province_export_pressure_model`](@ref)).
+    ##
+    ## Driving the stream from Ituri alone, as this did, asserts that a case
+    ## in Nord-Kivu has no chance of being detected crossing into Uganda.
+    ## Nord-Kivu also borders Uganda, so that is an assumption rather than a
+    ## fact. Four events reach these streams over the whole window, so expect
+    ## the weights to track their prior; what changes is which province's
+    ## incidence the export stream constrains.
+    export_pressure_state ~ to_submodel(export_pressure(n_patches))
+    export_weight := export_pressure_state.weights
+    export_pressure_sd := export_pressure_state.pooling_sd
+    ## Built in one pass into a preallocated vector, so the submodel call
+    ## below cannot box a rebound local.
+    _wts = export_pressure_state.weights
+    Tw = promote_type(eltype(patch_state.infections_matrix), eltype(_wts))
+    export_infections = zeros(Tw, n)
+    @inbounds for p in 1:n_patches, t in 1:n
+
+        export_infections[t] += _wts[p] * patch_state.infections_matrix[p, t]
+    end
     exports_state ~ to_submodel(
-        exports(exported_cases, vec(patch_state.infections_matrix[1, :]),
-        p_uganda;
+        exports(exported_cases, export_infections, p_uganda;
         export_case_days, incubation_pmf = patch_state.incubation_pmf,
         source_population))
     exports_deaths_state ~ to_submodel(
@@ -1104,12 +1126,6 @@ reproduction number implied by the summed patch infections.
     ## (three patches by ~17 knots), and flattening keeps it a plain vector
     ## deterministic like every other per-patch quantity here.
     delta_knots := vec(patch_state.δ_knots)
-    ## The daily common factor the anchored renewal applies to every patch so
-    ## the implied national reproduction number is the trend exactly. The
-    ## deviation knots alone do not determine it, since it depends on the
-    ## force split across patches, so it is carried here for
-    ## [`reconstruct_patch_rt`](@ref) to rebuild the provincial trajectories.
-    rt_anchor_scale := patch_state.anchor_scale
     ## The spatial diagnostic: the per-patch scale of the log-Rt deviation
     ## walk. A posterior concentrated near zero says the provinces share one
     ## temporal Rt shape (a fixed ratio between them); pushed away from zero

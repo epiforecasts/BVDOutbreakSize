@@ -1629,18 +1629,15 @@ others, which is what the imports figure on the analysis page draws.
         ε ~ importation_epsilon_prior
         importation_epsilon := ε
     end
-    ## 6. Multi-patch renewal.
-    ## Anchored to the national walk, so the reproduction number implied by
-    ## the summed patches is `mu(t)` and the deviations are pure contrasts
-    ## between provinces. Without this the country grows at the force-weighted
-    ## arithmetic mean of the patch Rts while the molecular-clock prior
-    ## constrains their geometric mean, and the gap compounds into `C_T`.
-    renewal_state = patch_infections_anchored(Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε, rt_state.Rt_national)
+    ## 6. Multi-patch renewal. Each province runs its own renewal at its own
+    ##    reproduction number and the national trajectory is their sum. There
+    ##    is no separate national process and nothing rescales the patches to
+    ##    match one: `mu(t)` is a central trend the provinces pool toward, and
+    ##    the reproduction number the country actually ran at is read back off
+    ##    the summed infections in step 9.
+    renewal_state = patch_infections(Rt_matrix, g, seeds_matrix,
+        importation_kernel, ε)
     infections_matrix = renewal_state.infections
-    ## Report the realised per-patch reproduction numbers, after anchoring.
-    Rt_matrix = renewal_state.Rt_matrix
-    anchor_scale = renewal_state.anchor_scale
     importation_matrix = renewal_state.importation
     ## 7. Per-patch cumulatives and the national aggregate.
     cumulative_matrix = zeros(Tp, n_patches, n)
@@ -1674,7 +1671,7 @@ others, which is what the imports figure on the analysis page draws.
     r = euler_lotka_r(R_T, g)
     T_total = growth_state.T + τ_obs
     return (; infections_matrix, cumulative_matrix, onsets_matrix,
-        Rt_matrix, anchor_scale, importation_matrix,
+        Rt_matrix, importation_matrix,
         δ_patch, δ_knots = rt_state.δ_knots,
         C_T_patch,
         σ_level = rt_state.σ_level,
@@ -1690,4 +1687,56 @@ others, which is what the imports figure on the analysis page draws.
         seed_at_renewal_start = seed0_total, seed_fraction,
         seeding_age = seeding_age(cumulative_total, n),
         incubation_pmf = inc_state.pmf)
+end
+
+"""
+Relative export propensity of each province into Uganda, partially pooled.
+
+The Uganda export streams are driven by one province's infections. Ituri is
+the reference, at one, because the traveller volume and the source population
+[`exports_model`](@ref) carries are Ituri's: the point-of-entry counts were
+collected there. Every other province is measured against it, as the chance
+that one of its infections is detected crossing into Uganda relative to one
+of Ituri's.
+
+The secondary weights are drawn from a common log-normal whose location and
+spread are both sampled, so they pool toward each other rather than toward a
+fixed number, and `tau -> 0` makes them one shared weight. The default
+location prior has a median of 15% of Ituri's propensity with a 90% interval
+of roughly 3% to 80%, which spans "Nord-Kivu exports meaningfully" and
+"nothing but Ituri exports" without asserting either.
+
+### What the data can say
+
+Very little, and that is the point of reporting it. Four events reach these
+streams over the whole window, three exported cases and one exported death,
+and the weights enter only through the summed exporting infections. Expect
+the posterior to track the prior. Read it as what the model assumes rather
+than as an estimate, and read the difference it makes to the provincial
+incidence split rather than the weight itself: with Ituri alone exporting,
+the export stream constrains Ituri's incidence, and with the weights on it
+constrains a mixture.
+
+Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
+"""
+@model function province_export_pressure_model(n_patches::Integer;
+        location_prior = Normal(log(0.15), 1.0),
+        pooling_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        offset_prior = Normal(0, 1))
+    ## One province has nothing to pool with and no secondary weight to
+    ## sample, so the reference weight alone is returned and no dimension the
+    ## likelihood never touches is added.
+    if n_patches <= 1
+        return (; weights = ones(Float64, max(n_patches, 1)),
+            pooling_sd = 0.0, location = 0.0)
+    end
+    μ_w ~ location_prior
+    τ_w ~ pooling_sd_prior
+    z_w ~ product_distribution(fill(offset_prior, n_patches - 1))
+    Tw = promote_type(typeof(float(μ_w)), typeof(float(τ_w)), eltype(z_w))
+    weights = ones(Tw, n_patches)
+    @inbounds for p in 2:n_patches
+        weights[p] = exp(μ_w + τ_w * z_w[p - 1])
+    end
+    return (; weights, pooling_sd = τ_w, location = μ_w)
 end

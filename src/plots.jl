@@ -2111,23 +2111,22 @@ masked to the draw's established window exactly as [`reconstruct_rt`](@ref)
 masks the national trajectory.
 
 The chain stores the provincial `Rt` only at the cut-off (`R_T_patch`), so
-the trajectory is rebuilt by mirroring the model: the national walk from
+the trajectory is rebuilt by mirroring the model: the central trend from
 [`reconstruct_rt`](@ref), times `exp(δ_p(t))` with `δ_p` the sum-to-zero
 deviation interpolated from the weekly knots the chain carries as
-`delta_knots` ([`interpolate_knots`](@ref)), times the daily anchoring factor
-`rt_anchor_scale`. `delta_knots` is the `(n_patches × n_knots)` deviation
-matrix flattened column-major.
+`delta_knots` ([`interpolate_knots`](@ref)). `delta_knots` is the
+`(n_patches × n_knots)` deviation matrix flattened column-major.
 
-The anchoring factor is not optional. The renewal scales every patch by one
-common factor each day so the implied national reproduction number is the
-trend exactly (see [`patch_infections_anchored`](@ref)), and that factor
-depends on how the force is split across patches, so it cannot be recovered
-from the knots. Dropping it would put the panels on a different scale from
-the `R_T_patch` the tables report.
+That is the whole construction. Each province runs its own renewal at its
+own `Rt` and nothing rescales it, so `μ(t) · exp(δ_p(t))` is what the model
+used and what `R_T_patch` reports. The national reproduction number is not
+`μ` but the value implied by the summed infections, which is why
+[`plot_rt_patches`](@ref) draws it from the chain's own national
+trajectory rather than from these.
 
-A chain sampled before these were surfaced carries neither, and one sampled
-with `n_patches = 1` carries a single row of zero deviations. Both are an
-error here rather than a silent national trajectory repeated per panel.
+A chain sampled with `n_patches = 1`, or before `delta_knots` was surfaced,
+carries no usable deviations. That is an error here rather than a silent
+national trajectory repeated per panel.
 """
 function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
         n_patches::Integer = length(PROVINCE_NAMES),
@@ -2137,14 +2136,13 @@ function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
         week, ramp)
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    knots, scales = try
-        ([collect(v) for v in vec(collect(chn[:delta_knots]))],
-            [collect(v) for v in vec(collect(chn[:rt_anchor_scale]))])
+    knots = try
+        [collect(v) for v in vec(collect(chn[:delta_knots]))]
     catch
-        error("reconstruct_patch_rt: the chain is missing `delta_knots` or " *
-              "`rt_anchor_scale`, so the provincial Rt trajectories cannot " *
-              "be rebuilt. It was sampled either with `n_patches = 1` or " *
-              "before those were surfaced; refit with the patch structure on.")
+        error("reconstruct_patch_rt: the chain is missing `delta_knots`, " *
+              "so the provincial Rt trajectories cannot be rebuilt. It was " *
+              "sampled either with `n_patches = 1` or before that was " *
+              "surfaced; refit with the patch structure on.")
     end
     ndraws = size(national, 1)
     expected = n_patches * nb
@@ -2157,12 +2155,11 @@ function reconstruct_patch_rt(chn; n::Integer, breakpoint::Real,
            for _ in 1:n_patches]
     for i in 1:ndraws
         δ_knots = reshape(knots[i], n_patches, nb)
-        s = scales[i]
         for p in 1:n_patches
             δ_daily = interpolate_knots(δ_knots[p, :], days, n)
             for d in 1:n
                 ismissing(national[i, d]) && continue
-                out[p][i, d] = national[i, d] * exp(δ_daily[d]) * s[d]
+                out[p][i, d] = national[i, d] * exp(δ_daily[d])
             end
         end
     end
@@ -2181,11 +2178,11 @@ are compared rather than each rescaled to its own range. The intervention
 breakpoint (dashed), the end of the scale-up (dotted) and the cut-off are
 marked as in [`plot_rt`](@ref).
 
-Because the provincial deviations are sum-to-zero around the national trend,
-the grey reference is the incidence-weighted middle of the panels rather than
-any one province. A panel tracking the grey band says that province moves
-with the national trend; separation between panels is the spatial signal, and
-its scale is what `region_drift_sd` estimates.
+The grey reference is the reproduction number implied by the summed
+provinces, which is the incidence-weighted mean of the panels rather than any
+one province or the central trend they pool toward. A panel tracking the grey
+band says that province moves with the country; separation between panels is
+the spatial signal, and its scale is what `region_drift_sd` estimates.
 """
 function plot_rt_patches(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
@@ -2346,8 +2343,10 @@ Imported infections by province over time, one panel per province: the daily
 infections a province received from the others through the importation
 kernel, as 30/60/90% credible ribbons.
 
-Coupling conserves infections nationally, so these are transmission
-relocated rather than transmission added. The intensity is weakly identified
+Every arrival is debited from its origin the same day, so these are
+transmission relocated rather than transmission added. The national total
+still moves with the coupling, because the destination then grows at its own
+reproduction number. The intensity is weakly identified
 against the secondary provinces' seeds, since both raise a secondary
 province's early incidence, so the level is read as the coupling the data
 tolerate rather than as a measured flow. Reads the `importation_patch`
@@ -2378,8 +2377,8 @@ function plot_imports_patches(chn; n::Integer, seeding::Date,
     end
     CairoMakie.Label(fig[2, 1:np],
         "Bands are 30/60/90% credible intervals. Each panel has its own " *
-        "y-axis. Importation moves transmission between provinces and does " *
-        "not add to the national total.";
+        "y-axis. Importation relocates transmission between provinces " *
+        "rather than adding it.";
         fontsize = 12, padding = (0, 0, 0, 6))
     CairoMakie.Label(fig[0, 1:np], "Imported infections by province";
         fontsize = 16, font = :bold)

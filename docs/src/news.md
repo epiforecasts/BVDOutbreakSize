@@ -24,13 +24,15 @@ That single-population case is fitted as the `sens_no_patches` sensitivity, whic
 - Provincial reproduction numbers are the national weekly-knot walk plus deviations that sum to zero, drawn from a multivariate-normal random walk with a learned cross-province correlation.
 The deviation scale is sampled, so a posterior pushed away from zero says the provinces are separating.
 The national reproduction number is backed out by inverting the renewal equation on the summed infections, which is the force-of-infection-weighted mean of the provincial values.
-- The national outbreak size does not depend on how many provinces the country is split into.
-Splitting the country adds no national data, so it must not.
-Three asymmetries broke this before any data entered, and all three are fixed.
-The renewal is anchored, scaling every province by one common factor each day so the implied national reproduction number is the trend exactly.
-Importation debits the origin what the destinations are credited, where before it created infections.
-The seed fractions partition the national cryptic seed rather than adding to it.
-With the same trend and total seed, three provinces now reproduce the single-population trajectory day by day, pinned in `test/test_patch_model.jl`.
+- The provinces run free and the national trajectory is their sum.
+Each province has its own renewal at its own reproduction number, every national stream is fitted against the summed provinces, and the national reproduction number is read back off the summed infections.
+The weekly-knot trend is the central value the provinces pool toward rather than a national process they are rescaled to match.
+Two structural asymmetries that would have made the national total grow with the patch count are fixed: importation debits the origin what the destinations are credited, and the seed fractions partition the national cryptic seed rather than adding to it.
+With no deviations the three provinces reproduce the single-population trajectory to machine precision.
+What is left is that the country runs at the force-weighted mean of the provincial reproduction numbers rather than at the trend they are centred on.
+The faster province keeps gaining share of the force, so that mean converges on the fastest province and the excess over the trend tends to exp(max delta), which is first order in the deviation scale and compounds over the window.
+`test/test_patch_model.jl` pins both the limit and its scaling.
+The national streams constrain the summed trajectory directly, so the fitted trend moves down to meet them; the consequence is that the molecular-clock prior is a prior on the trend rather than on the country.
 - The per-province split is identified by the confirmed deaths.
 A province's confirmed case count is the product of its incidence and its case-finding, and only the product is observed.
 The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory rather than to a province, so they cancel out of the normalised death shares.

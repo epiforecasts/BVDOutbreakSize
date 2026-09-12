@@ -13,7 +13,7 @@
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = zeros(3, 3)
 
-    I = patch_infections(Rt, g, seeds, K, 0.0)
+    I = patch_infections(Rt, g, seeds, K, 0.0).infections
     @test size(I) == (3, n)
     for p in 1:3
         single = renewal_infections(vec(Rt[p, :]), g, vec(seeds[p, :]))
@@ -32,10 +32,10 @@ end
     seeds = [1.0 1.0; 0.0 0.0]
     K = [0.0 0.0; 0.1 0.0]   ## K[2, 1]: flow from patch 1 into patch 2
 
-    off = patch_infections(Rt, g, seeds, K, 0.0)
+    off = patch_infections(Rt, g, seeds, K, 0.0).infections
     @test all(iszero, off[2, :])           ## epsilon = 0: no importation
 
-    on = patch_infections(Rt, g, seeds, K, 0.5)
+    on = patch_infections(Rt, g, seeds, K, 0.5).infections
     @test all(>(0), on[2, 3:n])            ## epsilon > 0: patch 2 seeded
     ## Patch 1 is debited what it exports. Coupling moves transmission, so the
     ## origin must lose exactly what the destination gains; an earlier version
@@ -48,63 +48,48 @@ end
     end
 end
 
-@testitem "patch Rt: the aggregate should equal the common trend" begin
-    using BVDOutbreakSize: patch_infections, patch_infections_anchored,
-                           implied_national_Rt
+@testitem "patch Rt: the national value should be the weighted mean" begin
+    using BVDOutbreakSize: patch_infections, implied_national_Rt
 
-    ## `patch_rt_model` builds `R_p(t) = exp(log mu(t) + delta_p(t))` with the
-    ## deviations centred unweighted across patches, `sum_p delta_p = 0`, which
-    ## makes `mu(t)` the geometric mean of the patch Rts. What drives the
-    ## national trajectory is the force-weighted arithmetic mean, which is what
-    ## `implied_national_Rt` recovers and what the chain reports as `R_T`. The
-    ## arithmetic mean is the larger of the two, so left alone the country
-    ## grows faster than its own trend.
+    ## Each province runs its own renewal and the national trajectory is their
+    ## sum, so there is no separate national process to match. The
+    ## reproduction number the country ran at is read back off the summed
+    ## infections, and what that recovers is the force-weighted arithmetic
+    ## mean of the provincial values.
     ##
-    ## The renewal is therefore anchored: each day every patch is scaled by one
-    ## common factor so the force-weighted mean is `mu(t)` exactly. The
-    ## deviations become pure contrasts between provinces and the national
-    ## level is left to `mu` alone.
-    ##
-    ## This matters because the trend is the constrained object. The molecular
-    ## clock pins the walk base (`R0 = r_to_R0(r_clock, g)`), i.e. it pins
-    ## `mu`. Unanchored, the excess growth is spent in the pre-surveillance
-    ## window where no counts contradict it, so the fit reaches surveillance
-    ## onset with a much larger epidemic and still matches every national
-    ## stream. The sign is forced by the data: Ituri carries ~90% of the force
-    ## and Sud-Kivu is frozen at 3 confirmed cases across every vintage, so the
-    ## compositions push the small patches below trend and unweighted centring
-    ## pushes the dominant patch above it.
+    ## `mu(t)` is the central trend the provinces pool toward, not that mean.
+    ## The deviations are centred unweighted, so `mu` is their geometric mean,
+    ## and the weighted arithmetic mean is the larger of the two. The gap is
+    ## second order in the deviation scale, so it is small wherever the
+    ## deviations are, which is what the pooling prior is for.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 80
     mu = fill(1.2, n)
-    ## Sum-to-zero deviations, and patches with very unequal seeds so one
-    ## dominates the force, as Ituri does.
     delta = [0.15, -0.10, -0.05]
+    @test sum(delta)≈0 atol=1e-12
     Rt = reduce(vcat, [fill(1.2 * exp(d), n)' for d in delta])
+    ## Very unequal seeds, so one province dominates the force as Ituri does.
     seeds = [100.0 100.0; 5.0 5.0; 0.5 0.5]
 
-    ## Unanchored, the aggregate is pulled toward the dominant patch and runs
-    ## above the trend the molecular-clock prior constrains.
-    plain = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
-    implied_plain = implied_national_Rt(vec(sum(plain; dims = 1)), g)
-    @test implied_plain[n] > mu[n]
+    st = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
+    total = vec(sum(st.infections; dims = 1))
+    implied = implied_national_Rt(total, g)
 
-    ## Anchored, the aggregate is the trend, on every day, and the deviations
-    ## are pure contrasts between provinces.
-    st = patch_infections_anchored(Rt, g, seeds, zeros(3, 3), 0.0, mu)
-    implied = implied_national_Rt(vec(sum(st.infections; dims = 1)), g)
+    ## The national value sits inside the range of the provincial ones, and
+    ## above the trend they are centred on, because the mean that drives the
+    ## epidemic is the arithmetic one.
     for t in (size(seeds, 2) + 1):n
-        @test implied[t]≈mu[t] rtol=1e-8
+        @test minimum(Rt[:, t]) <= implied[t] <= maximum(Rt[:, t])
+        @test implied[t] > mu[t]
     end
-    ## The per-patch ratios are untouched: anchoring rescales every patch by
-    ## one common factor, so what the composition data identify is preserved.
-    for t in (size(seeds, 2) + 1):n, p in 2:3
-
-        @test st.Rt_matrix[p, t] / st.Rt_matrix[1, t] ≈
-              exp(delta[p] - delta[1]) rtol=1e-10
+    ## It is the force-weighted mean exactly, not some other summary.
+    for t in (size(seeds, 2) + 4):n
+        force = [sum(st.infections[p, t - k] * g[k]
+                 for k in 1:min(t - 1, length(g))) for p in 1:3]
+        @test implied[t]≈sum(Rt[:, t] .* force) / sum(force) rtol=1e-10
     end
-    ## Anchoring bites downward here, since the unanchored aggregate was high.
-    @test st.Rt_matrix[1, n] < Rt[1, n]
+    ## Nothing rescales the provinces, so the Rt matrix is used as given.
+    @test all(st.infections[p, size(seeds, 2) + 1] > 0 for p in 1:3)
 end
 
 @testitem "patch_infections: importation should conserve infections" begin
@@ -133,8 +118,8 @@ end
     seeds = [1.0 2.0; 0.5 0.6; 0.1 0.2]
     K = province_importation_kernel()
 
-    off = patch_infections(Rt, g, seeds, K, 0.0)
-    on = patch_infections(Rt, g, seeds, K, 0.01)
+    off = patch_infections(Rt, g, seeds, K, 0.0).infections
+    on = patch_infections(Rt, g, seeds, K, 0.01).infections
 
     ## Moving infections around cannot change how many there are.
     @test sum(on)≈sum(off) rtol=1e-8
@@ -175,7 +160,7 @@ end
     R1, R2 = 1.8, 0.6
     Rt = [fill(R1, n)'; fill(R2, n)']
     seeds = [5.0 5.0; 1.0 1.0]
-    I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0)
+    I = patch_infections(Rt, g, seeds, zeros(2, 2), 0.0).infections
     total = vec(sum(I; dims = 1))
     implied = implied_national_Rt(total, g)
 
@@ -702,18 +687,17 @@ end
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol=1e-8
     end
 
-    ## The deviations sum to zero, so the unweighted geometric mean of the
-    ## provincial Rt is the national walk times that day's anchoring factor.
-    ## It is not the walk alone: the renewal rescales every province so the
-    ## force-weighted mean is the walk, and Ituri carries almost all the force.
+    ## The deviations sum to zero and nothing rescales the provinces, so the
+    ## unweighted geometric mean of the provincial Rt is the central trend
+    ## exactly. That is the whole construction, and it is what makes the grey
+    ## reference in the figure readable against the panels.
     nat = reconstruct_rt(chn; n = obs.n,
         breakpoint = obs.who_first_sitrep_days,
         rt_start = rt_start, rt_walk_start = rt_walk_start)
-    scales = [collect(v) for v in vec(collect(chn[:rt_anchor_scale]))]
     for i in 1:5, d in (obs.n, obs.n - 7)
 
         gm = exp(sum(log(rt[p][i, d]) for p in 1:3) / 3)
-        @test gm≈nat[i, d] * scales[i][d] rtol=1e-8
+        @test gm≈nat[i, d] rtol=1e-8
     end
 
     ## A chain with no patch structure carries no deviation knots, so the
@@ -734,68 +718,76 @@ end
         rt_start = rt_start, rt_walk_start = rt_walk_start)
 end
 
-@testitem "the national total does not depend on the patch count" begin
-    using BVDOutbreakSize: patch_infections, patch_infections_anchored,
-                           renewal_infections, seed_infections,
-                           province_importation_kernel
+@testitem "the free patches should run above the trend by exp(max delta)" begin
+    using BVDOutbreakSize: patch_infections, renewal_infections,
+                           seed_infections, province_importation_kernel,
+                           implied_national_Rt
 
-    ## Splitting the country into provinces adds no national data and changes
-    ## no national parameter, so the national trajectory must be identical to
-    ## the single-population one given the same trend and the same total seed.
-    ## The whole spatial sensitivity rests on this: it reads a difference
-    ## between `n_patches = 1` and `n_patches = 3` as evidence about the
-    ## spatial structure, which is only valid if the two are otherwise the
-    ## same model.
+    ## The provinces run free and the national trajectory is their sum, so the
+    ## country does not run at the trend the deviations are centred on. It
+    ## runs at the force-weighted arithmetic mean of the provincial
+    ## reproduction numbers, and because the faster province keeps gaining
+    ## share of the force, that mean converges on the fastest province.
     ##
-    ## Three structural asymmetries used to break it, and this test is what
-    ## holds them fixed:
+    ## So the excess over the trend tends to `exp(max_p delta_p)`, which is
+    ## first order in the deviation scale rather than second. It is a
+    ## persistent excess growth rate, so it compounds: on the setup below it
+    ## multiplies the national cumulative total by 2.7 over 80 days and by 63
+    ## over 206. This test is what stops that being rediscovered by surprise.
     ##
-    ## 1. Aggregation. The deviations are centred unweighted, so `mu(t)` is the
-    ##    geometric mean of the patch Rts while the epidemic runs at the
-    ##    force-weighted arithmetic mean. The renewal is now anchored so the
-    ##    implied national Rt is `mu(t)` exactly. This was by far the largest
-    ##    term: it is exponential in the excess growth rate, so it compounds
-    ##    over the whole renewal window.
-    ## 2. Seeding. The fractions now partition the national cryptic seed `2^m`
-    ##    instead of adding to it.
-    ## 3. Importation, which now conserves infections rather than creating
-    ##    them.
-    ##
-    ## On the setup below the old code inflated the national cumulative total
-    ## roughly thirtyfold. Deterministic on purpose: a Monte Carlo comparison
-    ## of prior medians cannot resolve this, because the prior on `C_T` is
-    ## heavy-tailed enough that the median is dominated by sampling noise.
+    ## Nothing here says the model is wrong. The national streams constrain
+    ## the summed trajectory directly, so the fitted trend moves down to
+    ## compensate. What it does mean is that the molecular-clock prior, which
+    ## sets the walk base, is a prior on the trend and not on the country, and
+    ## the deviation prior reaches the national size through that route.
     g = [0.05, 0.1, 0.15, 0.2, 0.2, 0.15, 0.1, 0.05]
-    n, L = 160, 40
-    ## A trend that rises and falls, so the check is not special to constant Rt.
-    mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
-    seed0, r = 32.0, 0.06
-
-    single = renewal_infections(mu, g, seed_infections(seed0, r, L))
-
-    ## Three patches: the seed partitioned, deviations that sum to zero, and
-    ## importation live.
+    L, seed0, r = 40, 32.0, 0.06
     fracs = [0.17, 0.04]
     shares = [1.0; fracs] ./ (1 + sum(fracs))
-    seeds = reduce(vcat, [seed_infections(s * seed0, r, L)' for s in shares])
-    @test sum(seeds) ≈ seed0 * sum(seed_infections(1.0, r, L))
-    delta = [0.15, -0.10, -0.05]
-    @test sum(delta)≈0 atol=1e-12
-    Rt = reduce(vcat, [(mu .* exp(d))' for d in delta])
-    st = patch_infections_anchored(Rt, g, seeds,
-        province_importation_kernel(), 0.01, mu)
-    total = vec(sum(st.infections; dims = 1))
+    base = [0.15, -0.10, -0.05]
+    @test sum(base)≈0 atol=1e-12
 
-    ## Identical day by day, not merely close in the cumulative total.
-    for t in 1:n
-        @test total[t]≈single[t] rtol=1e-10
+    function run(scale, n)
+        mu = [1.0 + 0.5 * exp(-(t - 60)^2 / 2000) for t in 1:n]
+        single = renewal_infections(mu, g, seed_infections(seed0, r, L))
+        seeds = reduce(vcat,
+            [seed_infections(s * seed0, r, L)' for s in shares])
+        Rt = reduce(vcat, [(mu .* exp(scale * d))' for d in base])
+        st = patch_infections(Rt, g, seeds,
+            province_importation_kernel(), 0.01)
+        tot = vec(sum(st.infections; dims = 1))
+        return (ratio = sum(tot) / sum(single),
+            excess = implied_national_Rt(tot, g)[n] / mu[n],
+            infections = st.infections)
     end
-    @test sum(total)≈sum(single) rtol=1e-10
 
-    ## And the provinces genuinely differ, so this is not passing by collapsing
+    ## Zero deviations: the provinces are one population split three ways, so
+    ## the totals match to machine precision. This is what pins the seed
+    ## partition and the conserved importation; without either, the national
+    ## total would grow with the patch count before any deviation existed.
+    @test run(0.0, 206).ratio≈1 atol=1e-10
+
+    ## The excess over the trend converges on the fastest province, within a
+    ## per cent of `exp(max delta)` by the end of the window, at every scale.
+    for sc in (0.25, 0.5, 1.0)
+        @test run(sc, 206).excess≈exp(sc * maximum(base)) rtol=0.02
+    end
+
+    ## First order, not second: halving the deviations roughly halves the
+    ## excess growth rate rather than quartering it.
+    half = run(0.5, 206).excess - 1
+    full = run(1.0, 206).excess - 1
+    @test 0.45 < half / full < 0.55
+
+    ## And it compounds with the window, so the cumulative total is much more
+    ## sensitive than the rate.
+    @test run(1.0, 80).ratio < run(1.0, 120).ratio < run(1.0, 206).ratio
+    @test run(1.0, 206).ratio > 10
+
+    ## The provinces genuinely differ, so none of this passes by collapsing
     ## the spatial structure.
-    @test st.Rt_matrix[1, n] > st.Rt_matrix[2, n]
-    @test !isapprox(st.infections[1, :], st.infections[2, :])
+    inf = run(1.0, 206).infections
+    @test !isapprox(inf[1, :], inf[2, :])
 end
 
 @testitem "province lab data: an exact partition of the national analysed" begin
@@ -925,7 +917,7 @@ end
         seeds = zeros(3, rt_start)
         seeds[1, :] = seed_infections(seed0, r, rt_start)
         seeds[2, :] = seed_infections(frac * seed0, r, rt_start)
-        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0)
+        I = patch_infections(Rtm, g, seeds, zeros(3, 3), 0.0).infections
         a, b = sum(I[1, :]), sum(I[2, :])
         return b / (a + b)
     end
@@ -1158,8 +1150,8 @@ end
     @test_throws ErrorException DynamicPPL.VarInfo(Xoshiro(1), bad)
 end
 
-@testitem "patch_infections_anchored: reported imports are arrivals" begin
-    using BVDOutbreakSize: patch_infections_anchored,
+@testitem "patch_infections: reported imports are arrivals" begin
+    using BVDOutbreakSize: patch_infections,
                            province_importation_kernel, PROVINCE_POPULATIONS
 
     ## The analysis page plots the imports the renewal reports, so they have
@@ -1168,22 +1160,21 @@ end
     ## generated force is the check.
     g = [0.2, 0.3, 0.3, 0.2]
     n = 40
-    mu = fill(1.3, n)
     Rt = reduce(vcat, [fill(1.3 * exp(d), n)' for d in [0.1, -0.05, -0.05]])
     seeds = [50.0 50.0; 4.0 4.0; 1.0 1.0]
     K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
     eps = 0.02
-    st = patch_infections_anchored(Rt, g, seeds, K, eps, mu)
+    st = patch_infections(Rt, g, seeds, K, eps)
 
     @test size(st.importation) == (3, n)
     ## Nothing is imported before the renewal starts, and nothing is negative.
     @test all(iszero, st.importation[:, 1:size(seeds, 2)])
     @test all(>=(0), st.importation)
 
-    ## Rebuild each day's generated force from the realised Rt and check the
-    ## reported arrivals against it.
+    ## Rebuild each day's generated force from the province's own Rt and
+    ## check the reported arrivals against it.
     for t in (size(seeds, 2) + 1):n
-        gen = [st.Rt_matrix[p, t] *
+        gen = [Rt[p, t] *
                sum(st.infections[p, t - s] * g[s]
                for s in 1:min(t - 1, length(g)))
                for p in 1:3]
@@ -1193,11 +1184,21 @@ end
         end
     end
 
-    ## Coupling conserves infections, so what one province receives another
-    ## must have given up. The national total is what it would be uncoupled.
-    uncoupled = patch_infections_anchored(Rt, g, seeds, zeros(3, 3), 0.0, mu)
-    @test sum(st.infections)≈sum(uncoupled.infections) rtol=1e-8
+    ## Importation is a transfer on the day it happens: the origin is debited
+    ## exactly what the destinations are credited. It is not a conservation
+    ## law across days, because the provinces then grow at their own
+    ## reproduction numbers, and here the origin is the fastest. Relocating
+    ## its infections to slower provinces lowers the national total, which is
+    ## epidemiology rather than bookkeeping.
+    uncoupled = patch_infections(Rt, g, seeds, zeros(3, 3), 0.0)
     @test sum(st.importation) > 0
+    @test sum(st.infections) < sum(uncoupled.infections)
+    ## With one shared reproduction number the transfer cancels exactly, which
+    ## is the bookkeeping half of the same statement.
+    flat = fill(1.3, 3, n)
+    a = patch_infections(flat, g, seeds, K, eps).infections
+    b = patch_infections(flat, g, seeds, K, 0.0).infections
+    @test sum(a)≈sum(b) rtol=1e-8
 end
 
 @testitem "province_cfr_table: provinces differ by case-finding" begin
@@ -1352,4 +1353,25 @@ end
     ## Reversion narrows the final deviation. A half-life far longer than the
     ## window is the random-walk limit, which is the wider of the two.
     @test short.spread < long.spread
+end
+
+@testitem "province_increment_matrix: a downward revision should not go negative" begin
+    using BVDOutbreakSize: province_increment_matrix
+
+    ## A province's cumulative count falls between vintages when cases are
+    ## reclassified. The composition scores a count drawn from a total, so a
+    ## negative increment is not something it can take. The clamp reads the
+    ## revision as no new cases that vintage.
+    hist = Dict(
+        "a" => (; days = [1, 2, 3, 4], counts = [10, 22, 16, 20]),
+        "b" => (; days = [1, 2, 3, 4], counts = [1, 2, 3, 4]))
+    m = province_increment_matrix(hist, ["a", "b"], 2)
+    @test m.days == [1, 2, 3, 4]
+    @test m.increments[1, :] == [10, 12, 0, 4]
+    @test m.increments[2, :] == [1, 1, 1, 1]
+    @test all(>=(0), m.increments)
+    ## A monotone series is untouched, so the clamp only ever bites on a
+    ## revision.
+    mono = Dict("a" => (; days = [1, 2], counts = [3, 9]))
+    @test province_increment_matrix(mono, ["a"], 1).increments == [3 6]
 end
