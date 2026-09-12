@@ -2248,6 +2248,201 @@ function plot_rt_patches(chn; n::Integer, breakpoint::Real,
     return fig
 end
 
+## Per-patch daily series from a flattened `(n_patches x n)` vector
+## deterministic (`infections_patch`, `importation_patch`). The matrix reaches
+## the chain flattened column-major, so day `t` of patch `p` sits at
+## `(t - 1) * np + p`. Returns one vector of per-draw daily series per patch.
+function _patch_daily(chn, sym::Symbol, np::Integer, n::Integer)
+    vs = try
+        [collect(v) for v in vec(collect(chn[sym]))]
+    catch
+        error("plot: the chain carries no `$(sym)`, so the per-province " *
+              "trajectories cannot be drawn. It was sampled either with " *
+              "`n_patches = 1` or before that was surfaced.")
+    end
+    length(first(vs)) == np * n || error(
+        "plot: `$(sym)` holds $(length(first(vs))) entries but $np patches " *
+        "by $n days is $(np * n).")
+    return [[Float64[v[(t - 1) * np + p] for t in 1:n] for v in vs]
+            for p in 1:np]
+end
+
+## 30/60/90% ribbons of a set of per-draw daily series, in the band style
+## used across the report.
+function _traj_bands(trajs, n::Integer)
+    q(d, pr) = quantile(Float64[t[d] for t in trajs], pr)
+    return (lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
+        lo60 = [q(d, 0.20) for d in 1:n], hi60 = [q(d, 0.80) for d in 1:n],
+        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n])
+end
+
+function _draw_traj_bands!(ax, x, b, colour)
+    band!(ax, x, b.lo90, b.hi90; color = (colour, 0.15))
+    band!(ax, x, b.lo60, b.hi60; color = (colour, 0.28))
+    band!(ax, x, b.lo30, b.hi30; color = (colour, 0.42))
+    return ax
+end
+
+"""
+Modelled infections by province over time, one column per province, with the
+daily infections on the top row and the cumulative total on the bottom. Every
+panel is 30/60/90% credible ribbons with no median line, as elsewhere in the
+report.
+
+Each panel carries its own y-axis. The provinces differ by orders of
+magnitude, so a shared axis would flatten every province but the epicentre
+into the floor; the cross-province comparison belongs in
+[`patch_overview_table`](@ref), which puts the totals side by side. Reads the
+`infections_patch` deterministic, the daily per-province infection matrix
+flattened column-major.
+"""
+function plot_infections_patches(chn; n::Integer, seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        colours = [:firebrick, :steelblue, :seagreen])
+    np = min(n_patches, length(patch_labels))
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+    daily = _patch_daily(chn, :infections_patch, np, n)
+    cumul = [[cumsum(t) for t in daily[p]] for p in 1:np]
+    lo = floor(Int, minimum(x))
+    hi = ceil(Int, maximum(x))
+    fig = Figure(; size = (460 * np, 700))
+    for p in 1:np
+        colour = colours[mod1(p, length(colours))]
+        for (r, (trajs, lab)) in enumerate(
+            ((daily[p], "Daily infections"),
+            (cumul[p], "Cumulative infections")))
+            ax = Axis(fig[r, p]; xlabel = "Date", ylabel = lab,
+                title = r == 1 ? patch_labels[p] : "",
+                titlecolor = colour, xticklabelrotation = pi / 6)
+            _draw_traj_bands!(ax, x, _traj_bands(trajs, n), colour)
+            CairoMakie.xlims!(ax, lo, hi)
+            ax.xticks = collect(lo:28:hi)
+            ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                      for v in vals]
+        end
+    end
+    CairoMakie.Label(fig[3, 1:np],
+        "Bands are 30/60/90% credible intervals. Each panel has its own " *
+        "y-axis, so panels are read for shape and timing rather than " *
+        "compared by height.";
+        fontsize = 12, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:np], "Modelled infections by province";
+        fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+Imported infections by province over time, one panel per province: the daily
+infections a province received from the others through the importation
+kernel, as 30/60/90% credible ribbons.
+
+Coupling conserves infections nationally, so these are transmission
+relocated rather than transmission added. The intensity is weakly identified
+against the secondary provinces' seeds, since both raise a secondary
+province's early incidence, so the level is read as the coupling the data
+tolerate rather than as a measured flow. Reads the `importation_patch`
+deterministic.
+"""
+function plot_imports_patches(chn; n::Integer, seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        colours = [:firebrick, :steelblue, :seagreen])
+    np = min(n_patches, length(patch_labels))
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in 1:n]
+    imports = _patch_daily(chn, :importation_patch, np, n)
+    lo = floor(Int, minimum(x))
+    hi = ceil(Int, maximum(x))
+    fig = Figure(; size = (460 * np, 400))
+    for p in 1:np
+        colour = colours[mod1(p, length(colours))]
+        ax = Axis(fig[1, p]; xlabel = "Date",
+            ylabel = "Imported infections per day",
+            title = patch_labels[p], titlecolor = colour,
+            xticklabelrotation = pi / 6)
+        _draw_traj_bands!(ax, x, _traj_bands(imports[p], n), colour)
+        CairoMakie.xlims!(ax, lo, hi)
+        ax.xticks = collect(lo:28:hi)
+        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                  for v in vals]
+    end
+    CairoMakie.Label(fig[2, 1:np],
+        "Bands are 30/60/90% credible intervals. Each panel has its own " *
+        "y-axis. Importation moves transmission between provinces and does " *
+        "not add to the national total.";
+        fontsize = 12, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:np], "Imported infections by province";
+        fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+Posterior predictive check on a per-province composition: the modelled share
+of each province at every spatial vintage, as 30/60/90% credible ribbons,
+with the observed share drawn over it as black points.
+
+`share_key` is the chain's share deterministic (`province_shares` for the
+confirmed cases, `province_death_shares` for the confirmed deaths),
+`obs_increments` the matching `(n_patches x n_vintages)` observed increments
+and `days` their grid days, both from
+[`province_increment_matrix`](@ref).
+
+Shares rather than counts is what the model scores: the per-province totals
+are an exact partition of the national totals the confirmed streams already
+carry, so only the split is new information (see
+[`province_composition_model`](@ref)). A panel whose points sit inside the
+ribbon says the model reproduces that province's share.
+
+Every panel starts at zero but takes its own upper limit. The shares differ
+by orders of magnitude, so a common axis leaves every province but the
+epicentre pinned to the floor and unreadable.
+"""
+function plot_province_composition_ppc(chn; share_key::Symbol,
+        obs_increments::AbstractMatrix, days::AbstractVector{<:Integer},
+        seeding::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        colours = [:firebrick, :steelblue, :seagreen],
+        title::AbstractString = "Province share, modelled against observed")
+    np = min(n_patches, length(patch_labels))
+    ms = [collect(v) for v in vec(collect(chn[share_key]))]
+    nv = size(first(ms), 2)
+    nv == length(days) || error(
+        "plot_province_composition_ppc: `$(share_key)` holds $nv vintages " *
+        "but `days` holds $(length(days)).")
+    epoch = date2epochdays(seeding)
+    x = Float64[epoch + (d - 1) for d in days]
+    totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
+    fig = Figure(; size = (460 * np, 400))
+    for p in 1:np
+        colour = colours[mod1(p, length(colours))]
+        trajs = [Float64[m[p, i] for i in 1:nv] for m in ms]
+        b = _traj_bands(trajs, nv)
+        ax = Axis(fig[1, p]; xlabel = "Vintage", ylabel = "Share of total",
+            title = patch_labels[p], titlecolor = colour,
+            xticklabelrotation = pi / 6)
+        _draw_traj_bands!(ax, x, b, colour)
+        obs = [totals[i] > 0 ? obs_increments[p, i] / totals[i] : NaN
+               for i in 1:nv]
+        CairoMakie.scatter!(ax, x, obs; color = :black, markersize = 8)
+        CairoMakie.ylims!(ax, 0, nothing)
+        loax = floor(Int, minimum(x))
+        hiax = ceil(Int, maximum(x))
+        ax.xticks = collect(loax:7:hiax)
+        ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                                  for v in vals]
+    end
+    CairoMakie.Label(fig[2, 1:np],
+        "Bands are 30/60/90% credible intervals on the modelled share. " *
+        "Black points are the observed share at each vintage. Each panel " *
+        "starts at zero and takes its own upper limit.";
+        fontsize = 12, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:np], title; fontsize = 16, font = :bold)
+    return fig
+end
+
 """
 Two-panel density of the no-onward-transmission counterfactual from
 [`predict_no_onward_deaths`](@ref). The left panel shows the *still

@@ -58,6 +58,7 @@ end
 ## the point each table is returned.
 const _PRETTY_COLS = Dict(
     "quantity" => "Quantity",
+    "province" => "Province",
     "stream" => "Stream",
     "scenario" => "Scenario",
     "central_estimate" => "Central estimate",
@@ -602,4 +603,132 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     ## `_prettify` handles the remaining column names.
     patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
     _prettify(select(df, Not(:patch)))
+end
+
+## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
+## deterministic (`province_shares`, `province_death_shares`): the modelled
+## split at the most recent vintage.
+function _per_patch_last_share(chn, sym::Symbol, np::Integer)
+    ms = [collect(v) for v in vec(collect(chn[sym]))]
+    nv = size(first(ms), 2)
+    return [[m[p, nv] for m in ms] for p in 1:np]
+end
+
+"""
+Per-province case-fatality ratios, set against the national ones the
+[`confirmed_cfr_table`](@ref) reports. `res` is a
+[`delay_corrected_confirmed_cfr`](@ref) result and `chn` the patch chain.
+
+Three quantities per province, each a median with a 90% credible interval
+except the observed ratio, which is a count:
+
+- the naive observed confirmed ratio, that province's reported confirmed
+  deaths over its reported confirmed cases;
+- the delay-corrected confirmed ratio, the national corrected ratio scaled
+  by the province's relative death-confirmation over its relative case
+  ascertainment, which is the only province-varying factor once the delays
+  are corrected for;
+- the structural, infection-based ratio.
+
+The structural ratio is a single national parameter in this model, shared by
+every province, so its column repeats. That is the finding rather than a
+placeholder: with lethality and death confirmation held national, every
+provincial difference in the confirmed ratio is case-finding. A per-province
+structural ratio pooled toward the national one is issue #667.
+
+`province_cases` and `province_deaths` are the observed per-province
+confirmed case and death totals over the fitted window, in the order of
+`patch_labels`.
+"""
+function province_cfr_table(chn, res;
+        province_cases::AbstractVector, province_deaths::AbstractVector,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        digits::Integer = 1)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_ascertainment) || error(
+        "chain carries no `province_ascertainment`; it was not sampled " *
+        "from `bvd_joint` with the per-province compositions on.")
+    case_asc = _per_patch(chn, :province_ascertainment, np)
+    death_asc = _has_key(chn, :province_death_ascertainment) ?
+                _per_patch(chn, :province_death_ascertainment, np) :
+                [ones(length(case_asc[1])) for _ in 1:np]
+    ## Mask rather than filter, so the corrected draws and the per-province
+    ## scaling below stay aligned draw for draw.
+    mask = isfinite.(res.corrected)
+    corrected = res.corrected[mask]
+    structural = filter(isfinite, res.structural)
+    pct(x) = round(100 * x; digits)
+    cell(v) = string(pct(quantile(v, 0.5)), "% (",
+        pct(quantile(v, 0.05)), "–", pct(quantile(v, 0.95)), "%)")
+    df = DataFrame("Province" => String[],
+        "Naive observed confirmed ratio" => String[],
+        "Delay-corrected confirmed CFR" => String[],
+        "Structural (infection-based) CFR" => String[])
+    for p in 1:np
+        naive = province_cases[p] > 0 ?
+                string(pct(province_deaths[p] / province_cases[p]), "%") : "—"
+        ## The delay correction is national, so the province enters only
+        ## through the ratio of its relative death confirmation to its
+        ## relative case ascertainment. Both are sum-to-zero on the log
+        ## scale, so the provinces' corrected ratios sit around the national
+        ## one rather than all above or all below it.
+        scale = (death_asc[p] ./ case_asc[p])[mask]
+        push!(df, (patch_labels[p], naive,
+            cell(corrected .* scale), cell(structural)))
+    end
+    return df
+end
+
+"""
+Per-province split of the one-week-ahead national forecast `fc` from
+[`forecast_reported`](@ref): the new confirmed cases and confirmed deaths
+expected in each province over the week to `T + 7`, as the same 90/60/30%
+credible intervals [`forecast_table`](@ref) reports nationally.
+
+Each province's count is the national draw times that province's modelled
+share at the most recent spatial vintage. The split is therefore held at its
+current value over the week rather than projected forward: the provincial
+compositions are fitted only where the spatial tables report, so a province
+whose share is moving is not tracked past the last vintage. Forecasting the
+provinces in their own right is issue #668.
+"""
+function province_forecast_table(chn, fc;
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        digits::Integer = 0)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_shares) || error(
+        "chain carries no `province_shares`; it was not sampled from " *
+        "`bvd_joint` with the per-province compositions on.")
+    case_share = _per_patch_last_share(chn, :province_shares, np)
+    death_share = _has_key(chn, :province_death_shares) ?
+                  _per_patch_last_share(chn, :province_death_shares, np) :
+                  case_share
+    cols = propertynames(fc)
+    rows = NamedTuple[]
+    function add!(label, province, draws)
+        s = posterior_summary(draws)
+        push!(rows,
+            (province = province, quantity = label,
+                lower_90 = round(s.lo90; digits),
+                lower_60 = round(s.lo60; digits),
+                lower_30 = round(s.lo30; digits),
+                upper_30 = round(s.hi30; digits),
+                upper_60 = round(s.hi60; digits),
+                upper_90 = round(s.hi90; digits)))
+    end
+    for p in 1:np
+        if :confirmed_new in cols
+            v = fc[!, :confirmed_new]
+            add!("New confirmed cases by T+7", patch_labels[p],
+                v .* case_share[p][1:length(v)])
+        end
+        if :confirmed_deaths_new in cols
+            v = fc[!, :confirmed_deaths_new]
+            add!("New confirmed deaths by T+7", patch_labels[p],
+                v .* death_share[p][1:length(v)])
+        end
+    end
+    return _prettify(DataFrame(rows))
 end
