@@ -1157,3 +1157,96 @@ end
         tmrca_days = obs.tmrca_days)
     @test_throws ErrorException DynamicPPL.VarInfo(Xoshiro(1), bad)
 end
+
+@testitem "patch_infections_anchored: reported imports are arrivals" begin
+    using BVDOutbreakSize: patch_infections_anchored,
+                           province_importation_kernel, PROVINCE_POPULATIONS
+
+    ## The analysis page plots the imports the renewal reports, so they have
+    ## to be the arrivals term itself and not a residual reconstructed from
+    ## the infection trajectory. Reconstructing it from the kernel and the
+    ## generated force is the check.
+    g = [0.2, 0.3, 0.3, 0.2]
+    n = 40
+    mu = fill(1.3, n)
+    Rt = reduce(vcat, [fill(1.3 * exp(d), n)' for d in [0.1, -0.05, -0.05]])
+    seeds = [50.0 50.0; 4.0 4.0; 1.0 1.0]
+    K = province_importation_kernel(PROVINCE_POPULATIONS[1:3])
+    eps = 0.02
+    st = patch_infections_anchored(Rt, g, seeds, K, eps, mu)
+
+    @test size(st.importation) == (3, n)
+    ## Nothing is imported before the renewal starts, and nothing is negative.
+    @test all(iszero, st.importation[:, 1:size(seeds, 2)])
+    @test all(>=(0), st.importation)
+
+    ## Rebuild each day's generated force from the realised Rt and check the
+    ## reported arrivals against it.
+    for t in (size(seeds, 2) + 1):n
+        gen = [st.Rt_matrix[p, t] *
+               sum(st.infections[p, t - s] * g[s]
+               for s in 1:min(t - 1, length(g)))
+               for p in 1:3]
+        for p in 1:3
+            arrivals = eps * sum(K[p, q] * gen[q] for q in 1:3 if q != p)
+            @test st.importation[p, t]≈arrivals rtol=1e-10
+        end
+    end
+
+    ## Coupling conserves infections, so what one province receives another
+    ## must have given up. The national total is what it would be uncoupled.
+    uncoupled = patch_infections_anchored(Rt, g, seeds, zeros(3, 3), 0.0, mu)
+    @test sum(st.infections)≈sum(uncoupled.infections) rtol=1e-8
+    @test sum(st.importation) > 0
+end
+
+@testitem "province_cfr_table: provinces differ by case-finding" begin
+    using BVDOutbreakSize: province_cfr_table
+    using DataFrames: DataFrame
+
+    ## The delay correction is national, so once it is applied the only
+    ## province-varying factor left in the confirmed ratio is the relative
+    ## death confirmation over the relative case ascertainment. A province
+    ## with worse case-finding must come out with a higher corrected ratio.
+    nd = 200
+    chn = (; province_ascertainment = [[1.5, 0.8, 0.833] for _ in 1:nd],
+        province_death_ascertainment = [[1.0, 1.0, 1.0] for _ in 1:nd])
+    res = (; corrected = fill(0.4, nd), structural = fill(0.5, nd),
+        modelled_naive = fill(0.3, nd), naive_observed = 0.3)
+    df = province_cfr_table(chn, res;
+        province_cases = [600, 100, 3], province_deaths = [200, 50, 1],
+        n_patches = 3)
+    @test size(df, 1) == 3
+    @test df[1, "Province"] == "Ituri"
+    ## 0.4 / 1.5 = 26.7% for the best-ascertained province, 0.4 / 0.8 = 50%
+    ## for the worst. The structural column is the same national value in
+    ## every row, which is the point of reporting it.
+    @test startswith(df[1, "Delay-corrected confirmed CFR"], "26.7%")
+    @test startswith(df[2, "Delay-corrected confirmed CFR"], "50.0%")
+    @test length(unique(df[!, "Structural (infection-based) CFR"])) == 1
+    ## The naive column is the observed counts, not a modelled quantity.
+    @test df[1, "Naive observed confirmed ratio"] == "33.3%"
+end
+
+@testitem "province_forecast_table: provinces sum to the national" begin
+    using BVDOutbreakSize: province_forecast_table
+    using DataFrames: DataFrame
+
+    ## Each province's forecast is the national draw times its modelled share
+    ## at the last vintage, so the provinces partition the national count
+    ## exactly. A split that does not add up would double-count or lose cases.
+    nd = 200
+    shares = [0.8 0.75; 0.15 0.20; 0.05 0.05]
+    chn = (; province_shares = [shares for _ in 1:nd],
+        province_death_shares = [shares for _ in 1:nd])
+    fc = DataFrame(confirmed_new = fill(100.0, nd),
+        confirmed_deaths_new = fill(40.0, nd))
+    df = province_forecast_table(chn, fc; n_patches = 3)
+    @test size(df, 1) == 6
+    cases = df[df[!, "Quantity"] .== "New confirmed cases by T+7", :]
+    ## The last vintage is column 2, so the shares used are 0.75/0.20/0.05.
+    @test sum(cases[!, "Lower 90%"]) ≈ 100.0
+    @test cases[1, "Lower 90%"] ≈ 75.0
+    deaths = df[df[!, "Quantity"] .== "New confirmed deaths by T+7", :]
+    @test sum(deaths[!, "Upper 90%"]) ≈ 40.0
+end
