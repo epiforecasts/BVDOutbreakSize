@@ -214,8 +214,9 @@ end
 $(TYPEDEF)
 
 Prior initialisation guarded against the prior predictive's unrecoverable
-tail. Each chain keeps the best of `attempts` independent prior draws, by
-initial log joint density. The default `init` of [`nuts_sample`](@ref).
+tail. Each chain screens `attempts` independent prior draws and starts at
+the first whose initial log joint density is at or above that batch's
+median. The default `init` of [`nuts_sample`](@ref).
 
 `InitFromPrior` draws each parameter from its own prior independently. The
 joint model's product prior is dispersed enough that a sizeable minority of
