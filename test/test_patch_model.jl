@@ -105,7 +105,7 @@ end
     ## `C_T` and compounds through the renewal over the whole window. Crediting
     ## the destination without debiting the origin makes every patch's total
     ## rise and none fall, and leaves national `C_T` incomparable between
-    ## `n_patches = 1` and `n_patches = 3`, which is exactly what the spatial
+    ## one patch and several, which is exactly what the spatial
     ## sensitivity comparison assumes.
     ##
     ## The patches share one `Rt` here so conservation is exact. With patches
@@ -369,11 +369,14 @@ end
     ## The kernel is a gravity kernel weighted by DESTINATION population, with
     ## a zero diagonal (no self-importation).
     K = province_importation_kernel()
-    @test size(K) == (3, 3)
-    @test all(iszero, [K[p, p] for p in 1:3])
-    @test all(>(0), [K[p, q] for p in 1:3, q in 1:3 if p != q])
-    ## A bigger destination province absorbs proportionally more.
-    @test K[2, 1] > K[1, 2]          ## Nord-Kivu (6.7M) > Ituri (4.4M)
+    npk = length(PROVINCE_NAMES)
+    @test size(K) == (npk, npk)
+    @test all(iszero, [K[p, p] for p in 1:npk])
+    @test all(>(0), [K[p, q] for p in 1:npk, q in 1:npk if p != q])
+    ## A bigger destination province absorbs proportionally more. Nord-Kivu
+    ## holds 7.6M against Ituri's 4.0M and is the same distance away either
+    ## way, so the population term alone decides this pair.
+    @test K[2, 1] > K[1, 2]
 
     ## Passing an all-zero kernel switches the coupling off, and then epsilon
     ## must not be sampled. It would multiply zero and be a dimension the
@@ -441,7 +444,7 @@ end
             export_case_days = obs.export_case_days,
             export_death_days = obs.export_death_days,
             breakpoint = obs.who_first_sitrep_days,
-            n_patches = 3,
+            n_patches = length(PROVINCE_NAMES),
             province_increments = prov.increments,
             province_days = prov.days,
             tmrca_days = obs.tmrca_days)
@@ -479,14 +482,14 @@ end
     ## so assert on a real chain rather than on the model's return value.
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -537,14 +540,14 @@ end
 
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -552,7 +555,7 @@ end
     chn = sample(m, Prior(), 100; chain_type = FlexiChains.VNChain,
         progress = false)
 
-    df = patch_summary_table(chn, 3)
+    df = patch_summary_table(chn, length(PROVINCE_NAMES))
     @test df isa DataFrame
     ## Seven quantities per patch, three patches: cumulative infections, Rt,
     ## daily infections, the log-Rt deviation from the national trend, the
@@ -592,14 +595,14 @@ end
 
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -625,21 +628,21 @@ end
 
     ## Selecting one province gives that province's rows only, and drops the
     ## Patch column, which would otherwise repeat one value down every row.
-    full = patch_summary_table(chn, 3)
-    one = patch_summary_table(chn, 3; patch = "Nord-Kivu")
+    full = patch_summary_table(chn, length(PROVINCE_NAMES))
+    one = patch_summary_table(chn, length(PROVINCE_NAMES); patch = "Nord-Kivu")
     @test nrow(one) == nrow(full) / 3
     @test !("Patch" in names(one))
     @test "Quantity" in names(one)
     ## Selecting by index and by label must agree.
-    @test patch_summary_table(chn, 3; patch = 2) == one
+    @test patch_summary_table(chn, length(PROVINCE_NAMES); patch = 2) == one
     ## The selected rows must be the same numbers the full table reports for
     ## that province, not a re-summary of a different patch.
     nk = full[full[!, "Patch"] .== "Nord-Kivu", :]
     @test one[!, "Lower 90%"] == nk[!, "Lower 90%"]
     @test one[!, "Upper 90%"] == nk[!, "Upper 90%"]
 
-    @test_throws ErrorException patch_summary_table(chn, 3; patch = "Kinshasa")
-    @test_throws ErrorException patch_summary_table(chn, 3; patch = 9)
+    @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = "Kinshasa")
+    @test_throws ErrorException patch_summary_table(chn, length(PROVINCE_NAMES); patch = 9)
 end
 
 @testitem "reconstruct_patch_rt: matches the chain's own per-patch Rt" tags=[:slow] begin
@@ -650,14 +653,14 @@ end
 
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
         obs.exports_deaths, obs.confirmed_cases, obs.tests_analysed;
         reported_history = obs.reported_history,
         confirmed_history = obs.confirmed_history,
         deaths_history = obs.deaths_history,
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments,
         province_days = prov.days,
         breakpoint = obs.who_first_sitrep_days,
@@ -672,7 +675,8 @@ end
         round(Int, obs.who_first_sitrep_days) - RT_WALK_LEAD, rt_start, obs.n)
 
     rt = reconstruct_patch_rt(chn; n = obs.n,
-        breakpoint = obs.who_first_sitrep_days, n_patches = 3,
+        breakpoint = obs.who_first_sitrep_days,
+        n_patches = length(PROVINCE_NAMES),
         rt_start = rt_start, rt_walk_start = rt_walk_start)
     @test length(rt) == 3
     @test all(size(r) == (40, obs.n) for r in rt)
@@ -682,7 +686,8 @@ end
     ## `R_T_patch` the model itself computed. Without this the panels could
     ## drift from the tables and nothing would catch it.
     rtp = [collect(v) for v in vec(collect(chn[:R_T_patch]))]
-    for p in 1:3, i in 1:length(rtp)
+    npr = length(PROVINCE_NAMES)
+    for p in 1:npr, i in 1:length(rtp)
 
         @test rt[p][i, obs.n] ≈ rtp[i][p] rtol=1e-8
     end
@@ -696,7 +701,7 @@ end
         rt_start = rt_start, rt_walk_start = rt_walk_start)
     for i in 1:5, d in (obs.n, obs.n - 7)
 
-        gm = exp(sum(log(rt[p][i, d]) for p in 1:3) / 3)
+        gm = exp(sum(log(rt[p][i, d]) for p in 1:npr) / npr)
         @test gm≈nat[i, d] rtol=1e-8
     end
 
@@ -714,7 +719,8 @@ end
     chn1 = sample(single, Prior(), 5; chain_type = FlexiChains.VNChain,
         progress = false)
     @test_throws ErrorException reconstruct_patch_rt(chn1; n = obs.n,
-        breakpoint = obs.who_first_sitrep_days, n_patches = 3,
+        breakpoint = obs.who_first_sitrep_days,
+        n_patches = length(PROVINCE_NAMES),
         rt_start = rt_start, rt_walk_start = rt_walk_start)
 end
 
@@ -802,13 +808,13 @@ end
     obs = load_observations()
     lab = obs.province_lab_daily_history
     @test !isempty(lab)
-    for k in ("ituri_analysed", "ituri_positive", "nord_kivu_analysed",
-        "nord_kivu_positive", "sud_kivu_analysed", "sud_kivu_positive")
-        @test haskey(lab, k)
+    for p in PROVINCE_SOURCE_NAMES, suffix in ("_analysed", "_positive")
+
+        @test haskey(lab, p * suffix)
     end
 
     nat = Dict(zip(obs.lab_daily_history.days, obs.lab_daily_history.counts))
-    an = [lab["$(p)_analysed"] for p in ("ituri", "nord_kivu", "sud_kivu")]
+    an = [lab["$(p)_analysed"] for p in PROVINCE_SOURCE_NAMES]
     days = an[1].days
     @test all(a -> a.days == days, an)
     for (i, d) in enumerate(days)
@@ -817,7 +823,7 @@ end
     end
 
     ## Positives never exceed the samples analysed in the same province.
-    for p in ("ituri", "nord_kivu", "sud_kivu")
+    for p in PROVINCE_SOURCE_NAMES
         @test all(lab["$(p)_positive"].counts .<= lab["$(p)_analysed"].counts)
     end
 
@@ -828,7 +834,11 @@ end
              sum(lab["ituri_analysed"].counts)
     nk_pos = sum(lab["nord_kivu_positive"].counts) /
              sum(lab["nord_kivu_analysed"].counts)
-    @test it_pos > 3 * nk_pos
+    ## Ituri ran 24.3% positivity against Nord-Kivu's 11.1% over the window.
+    ## The gap has narrowed as Nord-Kivu's epidemic grew, from better than
+    ## threefold when the series stopped in July to roughly twofold now, so
+    ## this pins the gap surviving rather than its old size.
+    @test it_pos > 2 * nk_pos
 end
 
 @testitem "patch_rt_model: the drift prior permits real divergence" tags=[:slow] begin
@@ -898,11 +908,14 @@ end
 
     ## The observed Nord-Kivu share of confirmed cases.
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     it = sum(prov.increments[1, :])
     nk = sum(prov.increments[2, :])
     obs_share = nk / (it + nk)
-    @test 0.05 < obs_share < 0.15          ## ~9%, guards the fixture
+    ## ~17% over the full window, up from ~9% when the series stopped in
+    ## July. Guards the fixture, so a scan that silently changed the split
+    ## would be caught here rather than in a fit.
+    @test 0.10 < obs_share < 0.25
 
     seed!(1)
     g = generation_interval_model(cdf_nmax(Gamma(2.71, 5.65)))().g
@@ -948,21 +961,41 @@ end
     ## the provincial INCIDENCE split free of case-ascertainment.
     obs = load_observations()
     cases = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     deaths = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
 
     ## Both are exact partitions of their national totals (the scanner gates
     ## on this), and they share a vintage grid so the two compositions line up.
     @test deaths.days == cases.days
     @test size(deaths.increments) == size(cases.increments)
+    ## Compared on the cumulative rather than vintage by vintage, because the
+    ## national series does not carry every province vintage's predecessor and
+    ## a missing one would make the expected increment wrong rather than the
+    ## observed one.
+    ##
+    ## The provinces are an exact partition of the national totals except for
+    ## one documented revision: Haut-Uele is cut from 22 confirmed cases to 16
+    ## on 18 July, and `province_increment_matrix` clamps that at zero rather
+    ## than emitting a count the composition cannot score. The provincial
+    ## cumulative therefore runs 6 cases above the national one from that date
+    ## on, and exactly equal before it.
     natc = Dict(zip(obs.confirmed_history.days, obs.confirmed_history.counts))
     natd = Dict(zip(obs.confirmed_deaths_history.days,
         obs.confirmed_deaths_history.counts))
-    for (i, d) in enumerate(cases.days)
-        haskey(natc, d) && @test sum(cases.increments[:, i]) ==
-              (i == 1 ? natc[d] : natc[d] - natc[cases.days[i - 1]])
-    end
+    cum_cases = cumsum(vec(sum(cases.increments; dims = 1)))
+    cum_deaths = cumsum(vec(sum(deaths.increments; dims = 1)))
+    case_gaps = [cum_cases[i] - natc[d]
+                 for (i, d) in enumerate(cases.days) if haskey(natc, d)]
+    death_gaps = [cum_deaths[i] - natd[d]
+                  for (i, d) in enumerate(deaths.days) if haskey(natd, d)]
+    ## Non-decreasing and bounded by the size of the revision, never negative,
+    ## and zero for the early vintages before it.
+    @test all(0 .<= case_gaps .<= 6)
+    @test all(0 .<= death_gaps .<= 3)
+    @test iszero(first(case_gaps))
+    @test iszero(first(death_gaps))
+    @test issorted(case_gaps)
 
     ## THE identifying signal: Nord-Kivu holds a far larger share of the
     ## confirmed DEATHS than of the confirmed CASES, at every vintage. If this
@@ -972,9 +1005,13 @@ end
     dt = sum(deaths.increments; dims = 2)
     nk_case_share = ct[2] / sum(ct)
     nk_death_share = dt[2] / sum(dt)
-    @test 0.05 < nk_case_share < 0.12          ## ~9%
-    @test 0.12 < nk_death_share < 0.22         ## ~14%
-    @test nk_death_share > 1.4 * nk_case_share ## the gap that does the work
+    @test 0.12 < nk_case_share < 0.22          ## ~16%
+    @test 0.16 < nk_death_share < 0.28         ## ~22%
+    ## The gap that does the work. It has narrowed as the series lengthened,
+    ## from roughly 1.6 when the province data stopped in July to 1.3 now, so
+    ## the deaths identify ascertainment less sharply than they did. Pinned
+    ## loosely enough to track that and tightly enough to catch it vanishing.
+    @test nk_death_share > 1.15 * nk_case_share
 end
 
 @testitem "bvd_joint: a patch chain carries every headline quantity" tags=[:slow] begin
@@ -993,9 +1030,9 @@ end
     ## forecast cannot be produced from a patch fit at all.
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
     provd = province_increment_matrix(obs.province_death_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
 
     m = bvd_joint(obs.n,
         obs.exported_cases, obs.total_deaths, obs.reported_cases,
@@ -1019,7 +1056,7 @@ end
         export_case_days = obs.export_case_days,
         export_death_days = obs.export_death_days,
         breakpoint = obs.who_first_sitrep_days,
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = prov.increments, province_days = prov.days,
         province_death_increments = provd.increments,
         province_death_days = provd.days,
@@ -1132,7 +1169,7 @@ end
     ## mistake was made once already, by a rename that dropped the argument.
     obs = load_observations()
     prov = province_increment_matrix(obs.province_confirmed_history,
-        PROVINCE_NAMES, 3)
+        PROVINCE_NAMES, length(PROVINCE_NAMES))
 
     ## The guard lives in the model body, so it fires on EVALUATION, not on
     ## construction -- which is the right place: it is the fit that would be
@@ -1255,9 +1292,11 @@ end
 @testitem "province kernel: distance should redistribute, not change volume" begin
     using BVDOutbreakSize: province_importation_kernel,
                            province_distance_matrix, haversine_km,
-                           PROVINCE_POPULATIONS, PROVINCE_CAPITALS
+                           PROVINCE_POPULATIONS, PROVINCE_CAPITALS,
+                           PROVINCE_SOURCE_CAPITALS
 
-    pops = PROVINCE_POPULATIONS[1:3]
+    pops = PROVINCE_POPULATIONS
+    np = length(pops)
     tot = sum(pops)
     K = province_importation_kernel(pops)
 
@@ -1265,32 +1304,37 @@ end
     ## that is not the origin, which is what the population-only kernel
     ## summed to. The distance term must not change how much leaves a
     ## province, only where it lands, or `epsilon` changes meaning.
-    for q in 1:3
+    for q in 1:np
         @test sum(@view K[:, q])≈1 - pops[q] / tot rtol=1e-12
         @test K[q, q] == 0
     end
     ## A zero distance matrix is the population-only kernel exactly.
-    flat = province_importation_kernel(pops; distances = zeros(3, 3))
-    for p in 1:3, q in 1:3
+    flat = province_importation_kernel(pops; distances = zeros(np, np))
+    for p in 1:np, q in 1:np
 
         p == q && continue
         @test flat[p, q]≈pops[p] / tot rtol=1e-12
     end
-    ## Direction: from Ituri, Nord-Kivu is both larger and nearer than
-    ## Sud-Kivu, so distance widens the gap between them rather than
-    ## reversing it.
-    D = province_distance_matrix(PROVINCE_CAPITALS[1:3])
-    @test D[2, 1] < D[3, 1]
-    @test K[2, 1] / K[3, 1] > flat[2, 1] / flat[3, 1]
+    ## Direction: of two destinations from the same origin, the nearer one
+    ## gains share against the population-only kernel and the further one
+    ## loses it. Stated as the property rather than as a named pair, because
+    ## which patch is nearest changes with the patch set.
+    D = province_distance_matrix(PROVINCE_CAPITALS)
+    near, far = argmin(D[2:np, 1]) + 1, argmax(D[2:np, 1]) + 1
+    @test D[near, 1] < D[far, 1]
+    @test K[near, 1] / K[far, 1] > flat[near, 1] / flat[far, 1]
     ## Symmetric with a zero diagonal, and the pairwise distances are the
-    ## great-circle ones to the nearest kilometre.
+    ## great-circle ones to the nearest kilometre. Bunia to Goma and Goma to
+    ## Bukavu are read off the source capitals, since the patches pool them.
     @test D ≈ D'
-    @test all(iszero, [D[i, i] for i in 1:3])
-    @test haversine_km(PROVINCE_CAPITALS[1], PROVINCE_CAPITALS[2])≈379 atol=5
-    @test haversine_km(PROVINCE_CAPITALS[2], PROVINCE_CAPITALS[3])≈99 atol=5
+    @test all(iszero, [D[i, i] for i in 1:np])
+    @test haversine_km(PROVINCE_SOURCE_CAPITALS[1],
+        PROVINCE_SOURCE_CAPITALS[2])≈379 atol=5
+    @test haversine_km(PROVINCE_SOURCE_CAPITALS[2],
+        PROVINCE_SOURCE_CAPITALS[3])≈99 atol=5
     ## A steeper decay concentrates exports on the nearer destination.
     steep = province_importation_kernel(pops; decay = 2.0)
-    @test steep[2, 1] / steep[3, 1] > K[2, 1] / K[3, 1]
+    @test steep[near, 1] / steep[far, 1] > K[near, 1] / K[far, 1]
 end
 
 @testitem "province composition: the severity multiplier should be sum-to-zero" begin
@@ -1374,4 +1418,50 @@ end
     ## revision.
     mono = Dict("a" => (; days = [1, 2], counts = [3, 9]))
     @test province_increment_matrix(mono, ["a"], 1).increments == [3 6]
+end
+
+@testitem "the patches should partition the provinces the reports carry" begin
+    using BVDOutbreakSize: PROVINCE_NAMES, PROVINCE_LABELS,
+                           PROVINCE_MEMBERS, PROVINCE_POPULATIONS,
+                           PROVINCE_CAPITALS, PROVINCE_SOURCE_NAMES,
+                           PROVINCE_SOURCE_POPULATIONS,
+                           PROVINCE_SOURCE_CAPITALS,
+                           province_increment_matrix
+
+    ## Every province the reports carry belongs to exactly one patch. If one
+    ## were dropped the patches would no longer sum to the national totals and
+    ## the compositions, which condition on those totals, would be scoring a
+    ## partition that is not one.
+    covered = reduce(vcat, [PROVINCE_MEMBERS[n] for n in PROVINCE_NAMES])
+    @test sort(covered) == sort(PROVINCE_SOURCE_NAMES)
+    @test length(covered) == length(unique(covered))
+    @test length(PROVINCE_LABELS) == length(PROVINCE_NAMES)
+
+    ## A pooled patch takes the summed population of its members and the
+    ## population-weighted mean of their capitals, so its point sits among
+    ## them rather than on any one.
+    @test sum(PROVINCE_POPULATIONS) == sum(PROVINCE_SOURCE_POPULATIONS)
+    other = findfirst(==("other"), PROVINCE_NAMES)
+    idx = [findfirst(==(m), PROVINCE_SOURCE_NAMES)
+           for m in PROVINCE_MEMBERS["other"]]
+    @test PROVINCE_POPULATIONS[other] == sum(PROVINCE_SOURCE_POPULATIONS[idx])
+    lats = [PROVINCE_SOURCE_CAPITALS[i][1] for i in idx]
+    @test minimum(lats) < PROVINCE_CAPITALS[other][1] < maximum(lats)
+    ## A patch holding one province keeps that province's capital exactly.
+    @test PROVINCE_CAPITALS[1] == PROVINCE_SOURCE_CAPITALS[1]
+
+    ## Pooling happens on the cumulative counts before differencing, so a
+    ## member revised down cannot be clamped away while another member rises.
+    hist = Dict(
+        "sud_kivu" => (; days = [1, 2, 3], counts = [5, 9, 7]),
+        "tshopo" => (; days = [1, 2, 3], counts = [1, 2, 6]),
+        "bas_uele" => (; days = [1, 2, 3], counts = [0, 0, 1]),
+        "ituri" => (; days = [1, 2, 3], counts = [10, 20, 30]),
+        "nord_kivu" => (; days = [1, 2, 3], counts = [2, 4, 6]),
+        "haut_uele" => (; days = [1, 2, 3], counts = [0, 1, 2]))
+    m = province_increment_matrix(hist, PROVINCE_NAMES, length(PROVINCE_NAMES))
+    ## Pooled cumulative is 6, 11, 14, so the increments are 6, 5, 3. Per
+    ## member they would have been 6, 5, and (-2 + 4 + 1) clamped to 5.
+    @test m.increments[other, :] == [6, 5, 3]
+    @test all(>=(0), m.increments)
 end

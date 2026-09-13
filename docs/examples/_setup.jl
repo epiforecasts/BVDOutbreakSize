@@ -223,10 +223,15 @@ if !@isdefined(_BVD_SETUP_LOADED)
 
     ## Per-province spatial-table data, reshaped once (a Dict{String} lookup
     ## inside a model body puts a memcmp foreigncall on the AD tape).
+    ## `N_PATCHES` is the report's single source for the patch count, so a
+    ## change to `PROVINCE_NAMES` reaches every table and figure at once.
+    N_PATCHES = length(PROVINCE_NAMES)
     province_cases = province_increment_matrix(
-        obs.province_confirmed_history, PROVINCE_NAMES, 3)
+        obs.province_confirmed_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
     province_deaths = province_increment_matrix(
-        obs.province_death_history, PROVINCE_NAMES, 3)
+        obs.province_death_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
     posterior_C_no_patches = vec(Array(chn_no_patches[:C_T]))
 
     posterior_C_joint = vec(Array(chn_joint[:C_T]))

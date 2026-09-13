@@ -334,9 +334,11 @@ function build_fit_specs(obs;
     ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
     ## gradient of the whole joint.
     patch_prov = province_increment_matrix(
-        obs.province_confirmed_history, PROVINCE_NAMES, 3)
+        obs.province_confirmed_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
     patch_prov_deaths = province_increment_matrix(
-        obs.province_death_history, PROVINCE_NAMES, 3)
+        obs.province_death_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
 
     ## The headline fit and its spatial control must differ only in the patch
     ## structure. They are the two halves of the spatial sensitivity: a gap
@@ -381,7 +383,7 @@ function build_fit_specs(obs;
 
     ## The only difference between the headline and the control.
     patch_only = (;
-        n_patches = 3,
+        n_patches = length(PROVINCE_NAMES),
         province_increments = patch_prov.increments,
         province_days = patch_prov.days,
         province_death_increments = patch_prov_deaths.increments,

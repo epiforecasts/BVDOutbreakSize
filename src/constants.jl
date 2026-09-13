@@ -220,45 +220,140 @@ Source population for the Ituri Province (McCabe et al., Table 1).
 const ITURI_POPULATION = 4_392_200
 
 """
-    PROVINCE_NAMES
+    PROVINCE_SOURCE_NAMES
 
-The provinces of the patch (meta-population) model, in patch order. The
-first entry is the primary patch: the origin of the outbreak, the
-reference for the per-patch reproduction-number modifiers in
-[`patch_rt_model`](@ref), and the source of the Uganda exports. The names
-key the per-province blocks of `data/observations.toml`.
+Every province the situation reports carry a per-province row for, in the
+order they first appear. These key the per-province blocks of
+`data/observations.toml`. They are not the model's patches: see
+[`PROVINCE_NAMES`](@ref) for those and [`PROVINCE_MEMBERS`](@ref) for how
+the two relate.
 """
-const PROVINCE_NAMES = ["ituri", "nord_kivu", "sud_kivu"]
-
-"""
-    PROVINCE_POPULATIONS
-
-Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order. Used
-to put the per-province testing effort on a per-capita scale (the covariate
-for the provincial ascertainment) and to weight the between-province
-importation kernel.
-"""
-const PROVINCE_POPULATIONS = [4_392_200, 6_655_000, 5_772_000]
+const PROVINCE_SOURCE_NAMES = ["ituri", "nord_kivu", "sud_kivu",
+    "haut_uele", "tshopo", "bas_uele"]
 
 """
-    PROVINCE_CAPITALS
+    PROVINCE_SOURCE_POPULATIONS
 
-Latitude and longitude of each province's capital, in
-[`PROVINCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
-degrees north and east. Coordinates from GeoNames
-(<https://www.geonames.org>), which is the source for the distance term in
-[`province_importation_kernel`](@ref).
+Resident population of each province in [`PROVINCE_SOURCE_NAMES`](@ref)
+order: 2019 figures from the Democratic Republic of the Congo's Institut
+National de la Statistique, *Annuaire statistique RDC 2020* (March 2021),
+as tabulated at
+<https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
+(accessed 12 September 2026).
+
+One source for all six rather than the best figure for each. Only the
+relative sizes enter the model, through the importation kernel and the
+per-capita testing covariate, so consistency between provinces matters more
+than the accuracy of any one of them.
+"""
+const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
+    2_046_000, 2_582_000, 1_250_000]
+
+"""
+    PROVINCE_SOURCE_CAPITALS
+
+Latitude and longitude of each province's capital in
+[`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
+degrees north and east: Bunia, Goma, Bukavu, Isiro, Kisangani and Buta.
+Coordinates from GeoNames (<https://www.geonames.org>), the source for the
+distance term in [`province_importation_kernel`](@ref).
 
 The capital stands in for the province. That is coarse, but it is the level
 the data are reported at, and the provinces are far enough apart that the
 ordering of the distances between them does not depend on the choice of
 point within each one.
 """
-const PROVINCE_CAPITALS = [
+const PROVINCE_SOURCE_CAPITALS = [
     (1.56667, 30.25000),    # Bunia, Ituri
     (-1.67918, 29.22195),   # Goma, Nord-Kivu
-    (-2.50000, 28.86667)    # Bukavu, Sud-Kivu
+    (-2.50000, 28.86667),   # Bukavu, Sud-Kivu
+    (2.77374, 27.61674),    # Isiro, Haut-Uele
+    (0.51528, 25.19099),    # Kisangani, Tshopo
+    (2.78594, 24.73876)     # Buta, Bas-Uele
 ]
+
+"""
+    PROVINCE_NAMES
+
+The patches of the meta-population model, in patch order. The first entry is
+the primary patch: the origin of the outbreak, the reference for the
+per-patch reproduction-number deviations in [`patch_rt_model`](@ref), and
+the reference for the Uganda export propensities in
+[`province_export_pressure_model`](@ref).
+
+Three provinces are patches in their own right and the rest are pooled into
+`other`. Ituri, Nord-Kivu and Haut-Uele carry signal: at the cut-off they
+hold 5508, 1139 and 264 confirmed cases. Sud-Kivu, Tshopo and Bas-Uele hold
+3, 24 and 4 between them, and Sud-Kivu has reported no new confirmed case
+since 26 May. Giving each of those its own reproduction number and its own
+ascertainment would sample dimensions nothing informs, and their estimates
+would be the deviation prior read back. Pooled they are one weak patch,
+which is what they are.
+"""
+const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
+
+"""
+    PROVINCE_LABELS
+
+Display names for the patches, in [`PROVINCE_NAMES`](@ref) order, for table
+rows and figure panels.
+"""
+const PROVINCE_LABELS = ["Ituri", "Nord-Kivu", "Haut-Uele",
+    "Other provinces"]
+
+"""
+    PROVINCE_MEMBERS
+
+Which source provinces each patch pools, keyed by [`PROVINCE_NAMES`](@ref)
+and valued in [`PROVINCE_SOURCE_NAMES`](@ref). Every source province belongs
+to exactly one patch, so the patches partition the national totals and the
+composition likelihoods stay conditional on them.
+"""
+const PROVINCE_MEMBERS = Dict(
+    "ituri" => ["ituri"],
+    "nord_kivu" => ["nord_kivu"],
+    "haut_uele" => ["haut_uele"],
+    "other" => ["sud_kivu", "tshopo", "bas_uele"])
+
+## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
+## once so the pooled population and capital below, and the pooled increments
+## in `province_increment_matrix`, all read the same membership.
+const _PROVINCE_MEMBER_IDX = [[findfirst(==(m), PROVINCE_SOURCE_NAMES)
+                               for m in PROVINCE_MEMBERS[name]] for name in PROVINCE_NAMES]
+
+"""
+    PROVINCE_POPULATIONS
+
+Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, summed
+over the provinces it pools. Used to put the per-province testing effort on
+a per-capita scale (the covariate for the provincial ascertainment) and to
+weight the between-province importation kernel.
+"""
+const PROVINCE_POPULATIONS = [sum(PROVINCE_SOURCE_POPULATIONS[idx])
+                              for idx in _PROVINCE_MEMBER_IDX]
+
+"""
+    PROVINCE_CAPITALS
+
+Representative point of each patch, in [`PROVINCE_NAMES`](@ref) order, as
+`(latitude, longitude)` in decimal degrees north and east. A patch holding
+one province takes its capital from [`PROVINCE_SOURCE_CAPITALS`](@ref); a
+pooled patch takes the population-weighted mean of its members' capitals.
+
+A weighted mean rather than a member's capital, because the pooled patch is
+a stand-in for several places at once and the kernel asks where its
+population is. The pooled patch here spans Bukavu, Kisangani and Buta, so
+its point sits between them and its distance to the epicentre is a weighted
+compromise rather than any one province's.
+"""
+const PROVINCE_CAPITALS = [(
+                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
+                                   PROVINCE_SOURCE_CAPITALS[i][1]
+                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
+                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
+                                   PROVINCE_SOURCE_CAPITALS[i][2]
+                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]))
+                           for idx in _PROVINCE_MEMBER_IDX]
 
 """
     PROVINCE_DISTANCE_DECAY

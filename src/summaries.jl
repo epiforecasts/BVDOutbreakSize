@@ -476,7 +476,7 @@ and it is the per-province deaths that tilt the balance between them.
 """
 function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         digits::Integer = 2,
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"])
+        patch_labels::AbstractVector = PROVINCE_LABELS)
     required = [:C_T_patch, :R_T_patch]
     absent = filter(p -> !_has_key(chn, p), required)
     isempty(absent) || error(
@@ -532,7 +532,7 @@ quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
 function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         digits::Integer = 2,
         patch::Union{Nothing, Integer, AbstractString} = nothing,
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"])
+        patch_labels::AbstractVector = PROVINCE_LABELS)
     required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
     absent = filter(p -> !_has_key(chn, p), required)
     isempty(absent) || error(
@@ -645,7 +645,7 @@ confirmed case and death totals over the fitted window, in the order of
 function province_cfr_table(chn, res;
         province_cases::AbstractVector, province_deaths::AbstractVector,
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         digits::Integer = 1)
     np = min(n_patches, length(patch_labels))
     _has_key(chn, :province_ascertainment) || error(
@@ -707,7 +707,7 @@ provinces in their own right is issue #668.
 """
 function province_forecast_table(chn, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         digits::Integer = 0)
     np = min(n_patches, length(patch_labels))
     _has_key(chn, :province_shares) || error(

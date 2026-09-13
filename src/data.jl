@@ -526,15 +526,22 @@ function province_increment_matrix(province_history,
     empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
     isempty(province_history) && return empty
     names = province_names[1:min(n_patches, length(province_names))]
-    any(nm -> !haskey(province_history, nm), names) && return empty
-    hists = [province_history[nm] for nm in names]
-    days = hists[1].days
+    ## A patch may pool several source provinces (see
+    ## [`PROVINCE_MEMBERS`](@ref)), so resolve each patch to the manifest
+    ## blocks it covers. A name with no membership entry is its own province,
+    ## which keeps this usable with an arbitrary province list.
+    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in names]
+    any(ms -> any(m -> !haskey(province_history, m), ms), members) &&
+        return empty
+    hists = [[province_history[m] for m in ms] for ms in members]
+    days = hists[1][1].days
     isempty(days) && return empty
-    for (nm, h) in zip(names, hists)
+    for (ms, hs) in zip(members, hists), (m, h) in zip(ms, hs)
+
         h.days == days || error(
-            "province `$(nm)` is reported on different vintage days to " *
-            "`$(first(names))`; the composition likelihood needs every " *
-            "province on the same vintages.")
+            "province `$(m)` is reported on different vintage days to " *
+            "`$(first(members)[1])`; the composition likelihood needs " *
+            "every province on the same vintages.")
     end
     ## Cumulative -> per-vintage increments. The first increment is the
     ## cumulative to the first vintage day, matching `bin_increments`,
@@ -549,9 +556,14 @@ function province_increment_matrix(province_history,
     ## that province this vintage, which is the closest true statement
     ## available. The composition conditions on the sum of these increments
     ## rather than on the national total, so the clamp stays self-consistent.
+    ## A pooled patch is the sum of its members' cumulative counts, differenced
+    ## once. Summing before differencing rather than after keeps a downward
+    ## revision in one member from being clamped away while another member
+    ## rises, which would inflate the patch.
     increments = Matrix{Int}(undef, length(names), length(days))
-    for (p, h) in enumerate(hists)
-        increments[p, :] = max.(diff(vcat(0, collect(h.counts))), 0)
+    for (p, hs) in enumerate(hists)
+        pooled = reduce(.+, (collect(h.counts) for h in hs))
+        increments[p, :] = max.(diff(vcat(0, pooled)), 0)
     end
     return (; days, increments)
 end

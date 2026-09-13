@@ -2187,7 +2187,7 @@ the spatial signal, and its scale is what `region_drift_sd` estimates.
 function plot_rt_patches(chn; n::Integer, breakpoint::Real,
         as_of_date::AbstractString, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start,
         display_start::Integer = rt_start,
         week::Integer = 7, ramp::Real = RT_INTERVENTION_RAMP,
@@ -2303,7 +2303,7 @@ flattened column-major.
 """
 function plot_infections_patches(chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen])
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -2354,7 +2354,7 @@ deterministic.
 """
 function plot_imports_patches(chn; n::Integer, seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen])
     np = min(n_patches, length(patch_labels))
     epoch = date2epochdays(seeding)
@@ -2410,7 +2410,7 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
         obs_increments::AbstractMatrix, days::AbstractVector{<:Integer},
         seeding::Date,
         n_patches::Integer = length(PROVINCE_NAMES),
-        patch_labels::AbstractVector = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+        patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
         title::AbstractString = "Province share, modelled against observed")
     np = min(n_patches, length(patch_labels))

@@ -2330,7 +2330,7 @@ cumulative_traj_fig #hide
 #md # <details><summary>Cross-province overview table</summary>
 #md # ```
 
-province_overview_table = patch_overview_table(chn_joint, 3);
+province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
@@ -2371,7 +2371,7 @@ province_split_table #hide
 #md # <details><summary>Per-province summary table</summary>
 #md # ```
 
-province_detail_table = patch_summary_table(chn_joint, 3);
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
@@ -2387,7 +2387,7 @@ province_detail_table #hide
 #md # ```
 
 province_infections_fig = plot_infections_patches(chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = 3);
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
@@ -2409,7 +2409,7 @@ importation_table = summary_table(chn_joint, [:importation_epsilon];
     labels = Dict(:importation_epsilon => "Importation intensity"));
 
 province_imports_fig = plot_imports_patches(chn_joint;
-    n = obs.n, seeding = obs.seeding, n_patches = 3);
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
@@ -2549,7 +2549,7 @@ rt_fig #hide
 
 province_rt_fig = plot_rt_patches(chn_joint;
     n = obs.n, breakpoint = _BREAKPOINT,
-    n_patches = 3,
+    n_patches = N_PATCHES,
     rt_start = _rt_start_plot,
     rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
     display_start = _rt_start_plot,
@@ -3250,13 +3250,13 @@ joint_ppc_fig #hide
 province_case_ppc_fig = plot_province_composition_ppc(chn_joint;
     share_key = :province_shares,
     obs_increments = province_cases.increments,
-    days = province_cases.days, seeding = obs.seeding, n_patches = 3,
+    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
     title = "Confirmed case share by province");
 
 province_death_ppc_fig = plot_province_composition_ppc(chn_joint;
     share_key = :province_death_shares,
     obs_increments = province_deaths.increments,
-    days = province_deaths.days, seeding = obs.seeding, n_patches = 3,
+    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
     title = "Confirmed death share by province");
 
 #md # ```@raw html
@@ -3779,7 +3779,7 @@ province_cfr_spread #hide
 province_cfr = province_cfr_table(chn_joint, confirmed_cfr;
     province_cases = vec(sum(province_cases.increments; dims = 2)),
     province_deaths = vec(sum(province_deaths.increments; dims = 2)),
-    n_patches = 3);
+    n_patches = N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
@@ -3893,7 +3893,7 @@ forecast_flows_fig #hide
 #md # ```
 
 province_forecast = province_forecast_table(chn_joint, forecast;
-    n_patches = 3);
+    n_patches = N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
