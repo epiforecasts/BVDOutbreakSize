@@ -10,7 +10,8 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
-using Turing.DynamicPPL: InitFromPrior
+using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
+                         VarInfo, getlogjoint
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -48,6 +49,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        forecast_score_by_release, drop_individual_fit_columns,
        drop_degenerate_fit_column, select_fit_role,
        nuts_sample, fit_parallel, default_adtype, enzyme_adtype,
+       ViablePrior, viable_prior_init,
        progress_callback, tensorboard_callback,
        combined_callback, fit_callback,
        plot_cumulative_cases, plot_cumulative_trajectories,
