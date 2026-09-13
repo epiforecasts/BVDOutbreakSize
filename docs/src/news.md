@@ -6,6 +6,96 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased (v2.0.0)
+
+The next release is a major version.
+The headline model becomes spatial, so the report is no longer the
+single-population one v1 published and its parameter set is not the same.
+The release-prep commit renames this heading and bumps `Project.toml` and
+`CITATION.cff` to 2.0.0.
+
+### Model
+
+- The headline joint model is a meta-population model over the three affected provinces, Ituri, Nord-Kivu and Sud-Kivu (#412).
+It runs one renewal equation per province, coupled by importation, and fits every national stream against the summed provinces.
+It is the same `bvd_joint`.
+`n_patches` defaults to 1, which collapses it onto the previous single-population model, so there is one model rather than two.
+That single-population case is fitted as the `sens_no_patches` sensitivity, which is the check on the spatial structure.
+- Provincial reproduction numbers are the national weekly-knot walk plus deviations that sum to zero, drawn from a multivariate-normal random walk with a learned cross-province correlation.
+The deviation scale is sampled, so a posterior pushed away from zero says the provinces are separating.
+The national reproduction number is backed out by inverting the renewal equation on the summed infections, which is the force-of-infection-weighted mean of the provincial values.
+- The provinces run free and the national trajectory is their sum.
+Each province has its own renewal at its own reproduction number, every national stream is fitted against the summed provinces, and the national reproduction number is read back off the summed infections.
+The weekly-knot trend is the central value the provinces pool toward rather than a national process they are rescaled to match.
+Two structural asymmetries that would have made the national total grow with the patch count are fixed: importation debits the origin what the destinations are credited, and the seed fractions partition the national cryptic seed rather than adding to it.
+With no deviations the three provinces reproduce the single-population trajectory to machine precision.
+What is left is that the country runs at the force-weighted mean of the provincial reproduction numbers rather than at the trend they are centred on.
+The faster province keeps gaining share of the force, so that mean converges on the fastest province and the excess over the trend tends to exp(max delta), which is first order in the deviation scale and compounds over the window.
+`test/test_patch_model.jl` pins both the limit and its scaling.
+The national streams constrain the summed trajectory directly, so the fitted trend moves down to meet them; the consequence is that the molecular-clock prior is a prior on the trend rather than on the country.
+- The per-province split is identified by the confirmed deaths.
+A province's confirmed case count is the product of its incidence and its case-finding, and only the product is observed.
+The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory rather than to a province, so they cancel out of the normalised death shares.
+The death split identifies the incidence split, and the case split then identifies relative case ascertainment as the residual.
+Both splits are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
+- Provincial deviations mean-revert to the national trend rather than random-walk (#665).
+Each weekly knot retains a fraction of the last, set by the half-life of a provincial divergence in days, which is sampled.
+A random walk has no mean, so a province above the trend at the last per-province vintage was projected to stay above it indefinitely, and the per-province vintages stop well before the cut-off.
+One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
+A half-life far longer than the window recovers the random walk.
+- Each province has its own case-fatality ratio, partially pooled toward the national value, alongside its own death confirmation pooled far more tightly (#667).
+The death composition identifies only their product, so the split rests on the two priors.
+The looser prior is on lethality, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding, and both spreads are reported against their priors.
+- Provinces are coupled by a gravity kernel with a distance term (#666).
+Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
+Capital coordinates are from GeoNames and live in `src/constants.jl` with the distances they imply.
+Each origin's total outflow is held at the population-only value, so the distance decides where a province's exports land rather than how many leave, and the importation intensity keeps its meaning.
+There is still no mobility data, so the kernel is a structural assumption and its intensity is weakly identified against the secondary-province seeds.
+- The headline fit and its spatial control run at 1000 draws, where the headline previously ran at 200 and every other fit in the matrix runs at 500.
+At 500 draws the headline returned 78 bulk and 64 tail effective samples.
+Three provinces cost 1.32 times as much per gradient as one rather than the 2.03 measured before, but 1000 draws still project to roughly 385 to 405 minutes on the CI runner against the fit job's 350-minute budget.
+`BVD_JOINT_SAMPLES` falls back to 500 for a run that has to land inside it.
+NUTS terminates at the tree-depth cap on every iteration, so exploration is truncated and the effective sample size is limited by that rather than by the draw count.
+
+### Data
+
+- The province scans reach the current situation report (#664).
+Confirmed cases and deaths cover 75 vintages ending 9 September against 21 ending 9 July, and the laboratory series 72.
+Three provinces to 10 July, five from 11 July, six from 12 August.
+The spatial likelihood now covers the whole window instead of its first 71%.
+- The model runs four patches: Ituri, Nord-Kivu, Haut-Uele, and an "other" patch pooling Sud-Kivu, Tshopo and Bas-Uele (#664).
+The three named provinces carry 5508, 1139 and 264 confirmed cases at the cut-off; the pooled three carry 31 between them.
+Populations are 2019 figures from the DRC Institut National de la Statistique, and capitals are from GeoNames; a pooled patch takes the summed population and the population-weighted mean of its members' capitals.
+- The longer series narrows the signal that identifies provincial ascertainment.
+Nord-Kivu holds 16.4% of confirmed cases against 9% when the scans stopped in July, and 21.6% of deaths, so the death-over-case ratio falls from roughly 1.6 to 1.3.
+Provincial test positivity converged too, Ituri 24.3% against Nord-Kivu 11.1%, where it was more than threefold apart.
+
+- Added per-province cumulative confirmed cases and deaths from Tableau 1 of the situation reports, as `[province_confirmed_history]` and `[province_death_history]` over 20 vintages, scanned by `scripts/scan_province_tableau1.jl` (#412).
+The scan is gated on the province rows summing exactly to the national totals on every date.
+- Added per-province laboratory throughput from section 4.3 of the reports, as `[province_lab_daily_history]` over 18 vintages, scanned by `scripts/scan_province_lab.jl` and gated the same way.
+Ituri ran a test positivity of 31.8% against Nord-Kivu's 5.5% over the window, so the provinces are testing differently selected pools.
+
+### Performance
+
+- The province composition no longer boxes the locals its likelihood closure captures (#412).
+The stick-breaking state was rebound each time round the patch loop and the composition overdispersion was read from the closure directly, which put four `Core.Box` wrappers in the model body and a dictionary lookup per use on every gradient.
+Removing them takes the three-patch gradient from 1.45 to 1.32 times the one-patch cost.
+`test/test_boxed_captures.jl`, added in v1.18.0, fails on exactly this pattern.
+
+### Report
+
+- Province-level results are reported alongside the national ones rather than in a section of their own (#412).
+The reproduction number by province sits under the national trajectory, the province sizes and infection shares under the national size, the province case-fatality ratios under the national ones, the composition fits with the other posterior predictive checks, and the province forecast split with the forecast.
+- Added the reproduction number by province over time, one panel per province with the national trajectory behind it.
+The trajectory is rebuilt from the deviation knots the chain carries, and a test pins that reconstruction against the model's own cut-off value.
+- Added modelled infections by province over time, imported infections by province over time, and posterior predictive checks on both province compositions.
+- The methods section describes the meta-population structure, what identifies the split, what the model does not account for, and the sampler settings the fits use.
+- The spatial-structure comparison moved to the sensitivity page, where it is set out against the single-population fit's reproduction number, case-fatality ratio and outbreak size.
+- The summary dashboard gains the cross-province overview under the headline estimates and the by-province reproduction number under the national trajectory (#668).
+- The sensitivity page scores the one-week-ahead forecast by province against what each province went on to report (#668).
+Each province's forecast is the national draw times its modelled share, multiplied draw by draw so the interval carries the correlation between them.
+The one-week-back validation joint is now a patch fit, which is what makes this possible; the McCabe and Chamla frozen comparisons stay single-population.
+
 ## v1.18.0
 
 Changes since v1.17.0

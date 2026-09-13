@@ -117,18 +117,67 @@ is `:chain` for the headline joint and single-stream fits or `:frozen` for the
 frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
 sensitivity re-fits are appended only when `run_sensitivity` is true.
 """
+## Sampler settings for the headline and its spatial control.
+##
+## Both must use the same adapt delta and the same draw count. They are the
+## two halves of the spatial sensitivity, so a difference between their C_T
+## posteriors is only readable as evidence about the spatial structure if
+## nothing else about the two fits differs.
+##
+## Adapt delta is 0.90. Lowering it to 0.80 was measured and does not help:
+## NUTS terminates at the tree-depth cap on every iteration of both fits, at
+## 1023 leapfrog steps, rather than at a U-turn, and it did so at 0.80 too on
+## an adapted step size of 0.003. Exploration is therefore truncated, and the
+## effective sample size is limited by that rather than by the draw count.
+## Raising `max_depth` is the direct fix, but each extra level doubles the
+## leapfrog steps, which does not fit the fit job's `timeout-minutes: 350`.
+##
+## The draw count is 1000 rather than the 500 every other fit uses, because
+## at 500 the headline returned 78 bulk and 64 tail effective samples over
+## its 1000 draws. Three patches cost 1.32 times a single patch per gradient,
+## measured with the two models interleaved so machine load falls on both
+## equally: 8.4 ms at one patch (217 parameters) against 11.1 ms at three
+## (300). At 500 draws and 200 adaptation steps over two chains, three
+## patches took 204 minutes locally against the single patch's 132, and the
+## single patch takes 145 to 153 minutes on the CI runner. Scaling by the
+## iteration count, 1000 draws project to roughly 350 minutes locally and 385
+## to 405 on CI, which is past both the job's 350-minute cap and the
+## 360-minute ceiling on a hosted runner. Set `BVD_JOINT_SAMPLES` to fall
+## back to 500 if the job needs to land inside the budget before a cheaper
+## gradient is available.
+joint_target_accept() = parse(Float64,
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
+joint_samples(default::Integer) = parse(Int,
+    get(ENV, "BVD_JOINT_SAMPLES", string(default)))
+
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
         chamla_cutoff = default_chamla_cutoff(),
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
-        samples::Integer = 500, chains::Integer = 2)
+        samples::Integer = 500,
+        chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
-    function fit_frozen_joint(cutoff_date)
+    ## `patches` turns the spatial structure on for this frozen fit. Only the
+    ## one-week-back validation uses it, because it is the only frozen fit
+    ## whose forecast is scored by province. The McCabe and Chamla
+    ## comparisons stay single-population: they are set against external
+    ## national estimates, where patches add cost and nothing else.
+    function fit_frozen_joint(cutoff_date; patches::Bool = false)
         o = freeze_observations(cutoff_date)
         bp = o.n - o.who_first_sitrep_days
+        pp = province_increment_matrix(o.province_confirmed_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES))
+        pd = province_increment_matrix(o.province_death_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES))
+        patch_args = patches ?
+                     (; n_patches = length(PROVINCE_NAMES),
+            province_increments = pp.increments,
+            province_days = pp.days,
+            province_death_increments = pd.increments,
+            province_death_days = pd.days) : (;)
         chn = nuts_sample(
             bvd_joint(
                 o.n, o.exported_cases, o.total_deaths,
@@ -154,8 +203,8 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
-                tmrca_days = o.tmrca_days);
-            samples = samples, chains = chains, target_accept = 0.95,
+                tmrca_days = o.tmrca_days, patch_args...);
+            samples = samples, chains = chains, target_accept = 0.90,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
     end
@@ -277,7 +326,7 @@ function build_fit_specs(obs;
                 genetic = genetic_seeding_model,
                 tmrca_days = tmrca_days,
                 tmrca_days_sd = tmrca_days_sd);
-            samples = samples, chains = chains, target_accept = 0.95,
+            samples = samples, chains = chains, target_accept = 0.90,
             callback = fit_callback("variant"))
     end
 
@@ -294,54 +343,105 @@ function build_fit_specs(obs;
     clock_alt_offset = value(Date("2026-03-08") - Date("2026-03-15"))
     tmrca_days_alt = obs.tmrca_days - clock_alt_offset
 
+    ## Per-province spatial-table data for the patch fit, reshaped once here.
+    ## It must not be built inside the model body: it looks provinces up by
+    ## name in a `Dict{String}`, and a string compare on the AD tape is a
+    ## `memcmp` foreigncall Mooncake has no rule for, which aborts the
+    ## gradient of the whole joint.
+    patch_prov = province_increment_matrix(
+        obs.province_confirmed_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
+    patch_prov_deaths = province_increment_matrix(
+        obs.province_death_history, PROVINCE_NAMES,
+        length(PROVINCE_NAMES))
+
+    ## The headline fit and its spatial control must differ only in the patch
+    ## structure. They are the two halves of the spatial sensitivity: a gap
+    ## between their C_T posteriors is read as evidence about the spatial
+    ## structure, which is only meaningful if nothing else differs. Splatting
+    ## one shared NamedTuple into both is what keeps them from drifting apart
+    ## a keyword at a time.
+    joint_common = (;
+        confirmed_deaths = obs.confirmed_deaths,
+        recovered_cases = obs.recovered_cases,
+        deaths_history = obs.deaths_history,
+        reported_history = obs.reported_history,
+        confirmed_history = obs.confirmed_history,
+        confirmed_deaths_history = obs.confirmed_deaths_history,
+        lab_history = obs.lab_history,
+        lab_daily_history = obs.lab_daily_history,
+        suspected_daily_history = obs.suspected_daily_history,
+        suspected_daily_deaths_history = obs.suspected_daily_deaths_history,
+        isolation_history = obs.isolation_history,
+        bed_capacity_history = obs.bed_capacity_history,
+        recovered_history = obs.recovered_history,
+        treatment_admissions_history = obs.treatment_admissions_history,
+        treatment_deaths_history = obs.treatment_deaths_history,
+        treatment_ruleout_history = obs.treatment_ruleout_history,
+        treatment_absconded_history = obs.treatment_absconded_history,
+        treatment_confirmed_incare_history =
+        obs.treatment_confirmed_incare_history,
+        treatment_suspect_incare_history =
+        obs.treatment_suspect_incare_history,
+        occupancy_break_days = obs.occupancy_break_days,
+        confirmed_break_days = obs.confirmed_break_days,
+        confirmed_break_gross_cases = obs.confirmed_break_gross_cases,
+        confirmed_break_gross_deaths = obs.confirmed_break_gross_deaths,
+        export_case_days = obs.export_case_days,
+        export_death_days = obs.export_death_days,
+        onset_curve_history = obs.onset_curve_history,
+        breakpoint = breakpoint,
+        background_re = true,
+        confirmed_positivity_link = :composition,
+        genetic = genetic_seeding_model,
+        tmrca_days = obs.tmrca_days)
+
+    ## The only difference between the headline and the control.
+    patch_only = (;
+        n_patches = length(PROVINCE_NAMES),
+        province_increments = patch_prov.increments,
+        province_days = patch_prov.days,
+        province_death_increments = patch_prov_deaths.increments,
+        province_death_days = patch_prov_deaths.days)
+
     specs = Any[
+        ## Headline fit. The patch (meta-population) model is the joint. With
+        ## `n_patches = 1` it collapses exactly onto the single-population
+        ## model (the sum-to-zero deviations vanish, no importation, no
+        ## composition terms), so there is one model rather than two. The
+        ## headline runs it over the three affected provinces.
         (; id = "joint",
             kind = :chain,
             thunk = () -> nuts_sample(
-                bvd_joint(
-                    obs.n, obs.exported_cases, obs.total_deaths,
-                    obs.reported_cases, obs.exports_deaths, obs.confirmed_cases,
-                    obs.tests_analysed;
-                    confirmed_deaths = obs.confirmed_deaths,
-                    recovered_cases = obs.recovered_cases,
-                    deaths_history = obs.deaths_history,
-                    reported_history = obs.reported_history,
-                    confirmed_history = obs.confirmed_history,
-                    confirmed_deaths_history = obs.confirmed_deaths_history,
-                    lab_history = obs.lab_history,
-                    lab_daily_history = obs.lab_daily_history,
-                    suspected_daily_history = obs.suspected_daily_history,
-                    suspected_daily_deaths_history =
-                    obs.suspected_daily_deaths_history,
-                    isolation_history = obs.isolation_history,
-                    bed_capacity_history = obs.bed_capacity_history,
-                    recovered_history = obs.recovered_history,
-                    treatment_admissions_history =
-                    obs.treatment_admissions_history,
-                    treatment_deaths_history = obs.treatment_deaths_history,
-                    treatment_ruleout_history = obs.treatment_ruleout_history,
-                    treatment_absconded_history =
-                    obs.treatment_absconded_history,
-                    treatment_confirmed_incare_history =
-                    obs.treatment_confirmed_incare_history,
-                    treatment_suspect_incare_history =
-                    obs.treatment_suspect_incare_history,
-                    occupancy_break_days = obs.occupancy_break_days,
-                    confirmed_break_days = obs.confirmed_break_days,
-                    confirmed_break_gross_cases =
-                    obs.confirmed_break_gross_cases,
-                    confirmed_break_gross_deaths =
-                    obs.confirmed_break_gross_deaths,
-                    export_case_days = obs.export_case_days,
-                    export_death_days = obs.export_death_days,
-                    onset_curve_history = obs.onset_curve_history,
-                    breakpoint = breakpoint,
-                    background_re = true,
-                    confirmed_positivity_link = :composition,
-                    genetic = genetic_seeding_model,
-                    tmrca_days = obs.tmrca_days);
-                samples = samples, chains = chains, target_accept = 0.90,
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    joint_common..., patch_only...);
+                samples = joint_samples(1000), chains = chains,
+                target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
+        ## Sensitivity: the same model with the spatial structure turned off
+        ## (`n_patches` defaults to 1). Splitting the country into provinces
+        ## adds no national data, so the two C_T posteriors should agree; a
+        ## gap is a defect in the spatial structure, not a finding about it.
+        ## The provinces run free and the national trajectory is their sum,
+        ## so the two are not identical by construction. The seed is
+        ## partitioned across patches and importation is a transfer rather
+        ## than a source, so with no deviations the two match exactly. What is
+        ## left between them is the country running at the force-weighted mean
+        ## of the provincial Rts rather than at the trend they are centred on;
+        ## test/test_patch_model.jl pins the size of that. It runs at the headline's draw
+        ## count, not the matrix one, so the comparison is like for like.
+        (; id = "sens_no_patches",
+            kind = :chain,
+            thunk = () -> nuts_sample(
+                bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
+                    obs.reported_cases, obs.exports_deaths,
+                    obs.confirmed_cases, obs.tests_analysed;
+                    joint_common...);
+                samples = joint_samples(1000), chains = chains,
+                target_accept = joint_target_accept(),
+                callback = fit_callback("sens_no_patches"))),
         (; id = "exports",
             kind = :chain,
             thunk = () -> nuts_sample(
@@ -425,7 +525,8 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("onsets"))),
         (; id = "frozen_validation", kind = :frozen,
-            thunk = () -> fit_frozen_joint(validation_cutoff))
+            thunk = () -> fit_frozen_joint(validation_cutoff;
+                patches = true))
     ]
     ## One frozen individual fit per still-reported stream at the validation
     ## cut-off, so the "last week versus now" forecast validation can show

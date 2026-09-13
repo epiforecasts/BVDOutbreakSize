@@ -1443,6 +1443,7 @@ quantities.
 
     return (; τ_test, bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
+        s_test, spec,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
         expected_analysed, expected_confirmed, p_positive)
@@ -3584,4 +3585,232 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         grid_start = hazard_state.grid_start, grid_end, alpha, σ_mult,
         σ_scan, η0 = hazard_state.η0, σ_h0 = hazard_state.σ_h0,
         σ_γ = hazard_state.σ_γ, β = asc_state.β, σ_a = asc_state.σ_a)
+end
+
+"""
+Per-vintage totals a province composition is conditioned on: the observed
+column sums where the increments are observed, and the modelled column sums
+on the predictive path, where there is no observed total to condition on.
+"""
+function _composition_totals(obs_increments, modelled_confirmed)
+    nv = size(modelled_confirmed, 2)
+    ismissing(obs_increments) || return [sum(@view obs_increments[:, i])
+                                         for i in 1:nv]
+    return [round(Int, max(sum(@view modelled_confirmed[:, i]), 0.0))
+            for i in 1:nv]
+end
+
+"""
+Per-province composition of the confirmed cases, from the Tableau 1
+spatial tables.
+
+### Why a composition and not per-province counts
+
+The per-province confirmed totals are an exact partition of the national
+confirmed totals: at every one of the 17 shared vintages, Ituri +
+Nord-Kivu + Sud-Kivu equals the national confirmed count that
+[`confirmed_cases_model`](@ref) already scores. Fitting the per-province
+counts with their own count likelihood would therefore put the same
+observations into the joint density twice, double-weighting the confirmed
+stream against every other stream in the model.
+
+The information the spatial tables add over the national series is
+purely *spatial*: how the confirmed cases divide between provinces. So
+the likelihood factorises as
+
+```math
+P(y_1, y_2, y_3) = P(N) \\; P(y_1, y_2, y_3 \\mid N),
+\\qquad N = \\textstyle\\sum_p y_p,
+```
+
+where the national confirmed stream supplies the total term `P(N)` and
+this model supplies only the conditional composition term. The vintage
+totals are conditioned on, never scored, so nothing is counted twice.
+
+### Likelihood
+
+The composition is scored by stick-breaking over the patches with the
+overdispersed-Binomial [`safe_betabinomial`](@ref), which is the
+sequential form of a Dirichlet-multinomial. For each vintage the
+observed count in patch `p` is drawn from the cases not yet allocated to
+patches `1 … p−1`, at the conditional share implied by the modelled
+per-patch confirmed increments:
+
+```math
+y_{p} \\sim \\mathrm{BetaBinomial}\\Bigl(
+    N - \\textstyle\\sum_{q<p} y_q, \\;\\;
+    \\pi_p \\big/ \\textstyle\\sum_{q \\ge p} \\pi_q, \\;\\; \\rho \\Bigr),
+```
+
+with the last patch taking the remainder. `ρ` is an overdispersion,
+shared across provinces and vintages, that absorbs the extra-Binomial
+variation in how cases are attributed to provinces (reporting lags
+between the provincial and national tables, reassignment of cases
+between health zones). `ρ → 0` recovers a plain Multinomial split.
+
+### Arguments
+
+- `obs_increments`: `(n_patches × n_vintages)` observed per-province
+  new-confirmed counts, or `missing` for the predictive path.
+- `modelled_confirmed`: `(n_patches × n_vintages)` modelled expected
+  per-province confirmed increments, binned to the same vintages.
+- `rho_prior`: prior on the composition overdispersion.
+
+`severity_sd_prior` optionally adds a second sum-to-zero log multiplier on
+the shares, partially pooled toward equality. The death composition uses it
+for the per-province case-fatality ratio; the case composition leaves it
+`nothing` and samples nothing. A composition identifies only the product of
+the two multipliers, so their priors are what separates them.
+
+Returns `(; shares, rho, obs_increments, province_ascertainment,
+ascertainment_sd, province_severity, severity_sd)` where `shares[p, i]` is
+the modelled expected share of patch `p` at vintage `i`.
+"""
+@model function province_composition_model(
+        obs_increments::Union{Missing, AbstractMatrix{<:Integer}},
+        modelled_confirmed::AbstractMatrix;
+        rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
+        ascertainment_sd_prior = truncated(Normal(0, 0.3); lower = 0),
+        severity_sd_prior = nothing,
+        ascertainment_offset_prior = Normal(0, 1))
+    np, nv = size(modelled_confirmed)
+    ρ ~ rho_prior
+    ## Read through a local. The tilde assigns `ρ` on more than one path, so
+    ## the comprehension below would box it if it captured `ρ` itself.
+    rho = ρ
+    ## --- Province-specific ascertainment, partially pooled ---------------
+    ## The share of confirmed cases falling in province `p` is
+    ##
+    ##     pi_p  ∝  asc_p * lambda_p,
+    ##
+    ## where `lambda_p` is the modelled BVD incidence in `p` and `asc_p` the
+    ## probability that an infection there becomes a confirmed case. Only the
+    ## product is identified: the data cannot separate "more infections" from
+    ## "better case-finding". That is not a defect of this parameterisation,
+    ## it is a property of the data, the per-province laboratory series pins
+    ## `asc_p * lambda_p` and nothing finer.
+    ##
+    ## Fixing `asc_p` equal across provinces would hide that. It is also known
+    ## to be wrong here: over the fitted window Ituri ran 2112 tests for 671
+    ## positives (31.8% positivity) against Nord-Kivu's 1340 for 74 (5.5%),
+    ## so the provinces are testing very differently-selected pools. Forcing
+    ## equal ascertainment would push that entire difference into the
+    ## provincial `Rt`, reporting a case-finding artefact as epidemiology.
+    ##
+    ## So `asc_p` is sampled, partially pooled toward equality on the log
+    ## scale, and constrained to sum to zero (only relative ascertainment
+    ## enters a composition; the overall level belongs to the national
+    ## ascertainment). `tau_asc -> 0` recovers the equal-ascertainment model.
+    ## The pooling prior is what identifies `asc_p`, so the per-patch results
+    ## are correspondingly wider, which is the honest width, not a loss.
+    τ_asc ~ ascertainment_sd_prior
+    z_asc ~ product_distribution(fill(ascertainment_offset_prior, np))
+    log_asc_raw = τ_asc .* z_asc
+    log_asc = log_asc_raw .- (sum(log_asc_raw) / np)
+    asc = exp.(log_asc)
+    ## --- Optional second multiplier: per-province severity ---------------
+    ## The death composition uses this for the per-province case-fatality
+    ## ratio, partially pooled toward the national value on the log scale and
+    ## constrained to sum to zero, so the national ratio keeps its meaning and
+    ## only the provincial contrast lives here. The case composition passes
+    ## `nothing`, samples nothing, and gains no dimension its likelihood never
+    ## touches.
+    ##
+    ## A composition identifies only the product `sev_p * asc_p`, so the two
+    ## are separated by their priors and by nothing else. That is the design
+    ## rather than an oversight. On the death side the case-fatality ratio
+    ## takes the looser prior and death confirmation the tight one, because
+    ## near-uniform death ascertainment is the weaker and more defensible half
+    ## of the identifying assumption. Read `severity_sd` against its prior:
+    ## a posterior that has not moved says the split is the prior's.
+    τ_sev = 0.0
+    sev = ones(np)
+    if severity_sd_prior !== nothing
+        τ_sev ~ severity_sd_prior
+        z_sev ~ product_distribution(fill(ascertainment_offset_prior, np))
+        log_sev_raw = τ_sev .* z_sev
+        sev = exp.(log_sev_raw .- (sum(log_sev_raw) / np))
+    end
+    ## Expected share of each patch at each vintage. `safe_rate` floors the
+    ## modelled increments away from zero so an early vintage with no
+    ## modelled cases in a patch still gives a defined (tiny) share rather
+    ## than a 0/0.
+    Ts = promote_type(eltype(modelled_confirmed), eltype(asc), eltype(sev))
+    weight = asc .* sev
+    shares = zeros(Ts, np, nv)
+    @inbounds for i in 1:nv
+        tot = zero(Ts)
+        for p in 1:np
+            tot += weight[p] * safe_rate(modelled_confirmed[p, i])
+        end
+        for p in 1:np
+            shares[p, i] = weight[p] * safe_rate(modelled_confirmed[p, i]) /
+                           tot
+        end
+    end
+    ## The totals are conditioned on, not scored: they are already in the
+    ## joint density through the national confirmed stream. On the
+    ## predictive path there is no observed total, so the modelled column
+    ## sums stand in for it and the composition is generated against those.
+    ## The totals are built in a helper rather than in a branch here.
+    ## `obs_increments` is rebound just below, and a local that a closure
+    ## reads and the body reassigns is boxed, so reading it from a
+    ## comprehension in the other arm boxed it.
+    predictive = ismissing(obs_increments)
+    totals = _composition_totals(obs_increments, modelled_confirmed)
+    if predictive
+        obs_increments = Matrix{Union{Missing, Int}}(missing, np, nv)
+    end
+    ## Stick-breaking: allocate each vintage's total across the patches. The
+    ## final patch takes the remainder and carries no free draw, so the
+    ## composition has `np - 1` degrees of freedom per vintage, as it must.
+    ##
+    ## The loop runs over patches on the outside and scores every vintage in
+    ## one `~` statement, rather than a scalar `~` per (patch, vintage). Within
+    ## a vintage the patches are sequential, patch `p`'s trial count is what
+    ## patches `1 … p-1` left behind, but across vintages they are
+    ## independent, so the vintages vectorise.
+    ##
+    ## This is a performance fix, not a style one. Each `~` puts DynamicPPL
+    ## bookkeeping on the Mooncake tape, and with two compositions over 20
+    ## vintages the scalar form emitted 80 of them. That inflated the tape
+    ## enough to push the gradient compile past an hour and the fit past CI's
+    ## job cap. The vectorised form emits `2 * (np - 1)` = 4.
+    ##
+    ## The running state is allocated once and mutated, rather than rebound
+    ## each time round the loop. A local that a closure reads and the body
+    ## later reassigns is put in a `Core.Box`, which costs Mooncake a
+    ## dictionary lookup per use on every gradient (see "Closures in model
+    ## code" in the contributing guide); the comprehension below reads all
+    ## three, so rebinding them boxed all three.
+    remaining = copy(totals)
+    tail = ones(eltype(shares), nv)
+    p_cond = zeros(eltype(shares), nv)
+    trials = zeros(Int, nv)
+    for p in 1:(np - 1)
+        ## Conditional share of patch `p` among the patches not yet allocated.
+        for i in 1:nv
+            p_cond[i] = clamp(shares[p, i] / tail[i], 0.0, 1.0)
+            trials[i] = max(remaining[i], 0)
+        end
+        obs_increments[p, :] ~ product_distribution(
+            [safe_betabinomial(trials[i], p_cond[i], rho) for i in 1:nv])
+        ## Guard the running tail against round-off driving it to zero or
+        ## negative on the last step.
+        for i in 1:nv
+            remaining[i] -= obs_increments[p, i]
+            tail[i] = max(tail[i] - shares[p, i], 1e-10)
+        end
+    end
+    ## The last patch is the remainder, not a free draw. Filled in only on the
+    ## predictive path; on the fitting path it is already the observed count
+    ## and must not be written over.
+    if predictive
+        for i in 1:nv
+            obs_increments[np, i] = max(remaining[i], 0)
+        end
+    end
+    return (; shares, rho = ρ, obs_increments,
+        province_ascertainment = asc, ascertainment_sd = τ_asc,
+        province_severity = sev, severity_sd = τ_sev)
 end

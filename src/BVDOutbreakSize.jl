@@ -1,8 +1,8 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor
+using Statistics: quantile, mean, median, cor
 using TOML: TOML
-using DataFrames: DataFrame, rename
+using DataFrames: DataFrame, rename, select, Not
 using Chain: @chain
 using Random: AbstractRNG, MersenneTwister
 using Dates: Date, Day, date2epochdays, epochdays2date
@@ -17,7 +17,7 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
                            TYPEDFIELDS, TYPEDSIGNATURES
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
-                     LogNormal, Beta,
+                     LogNormal, Beta, LKJCholesky,
                      Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic
@@ -40,6 +40,9 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        stream_reporting,
        stream_report_status,
        summary_table, posterior_summary, markdown_table, MarkdownTable,
+       patch_summary_table, patch_overview_table,
+       province_cfr_table, province_forecast_table,
+       province_forecast_vs_truth,
        fit_diagnostics, diagnostics_table,
        streams_table, comparison_table,
        bias_sample, stream_calibration, onsets_over_time,
@@ -62,8 +65,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        plot_scenario_comparison,
        plot_cfr_prior, plot_vintage_conditional_ppc,
        plot_vintage_incidence_ppc, plot_stream_calibration,
-       plot_rt, plot_rt_streams,
-       reconstruct_rt, reconstruct_onset_hazard,
+       plot_rt, plot_rt_streams, plot_rt_patches,
+       plot_infections_patches, plot_imports_patches,
+       plot_province_composition_ppc,
+       reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
        onset_nowcast_draws, plot_onset_nowcast_grid,
        predict_no_onward_deaths, plot_no_onward_deaths,
        forecast_reported, forecast_stream, forecast_table, forecast_archive,
@@ -124,7 +129,19 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_only_model, confirmed_deaths_only_model,
        treatment_only_model,
        exports_deaths_only_model, exports_joint_only_model, bvd_joint,
-       onsets_only_model
+       onsets_only_model,
+       PROVINCE_NAMES, PROVINCE_LABELS, PROVINCE_POPULATIONS,
+       PROVINCE_CAPITALS, PROVINCE_MEMBERS,
+       PROVINCE_SOURCE_NAMES, PROVINCE_SOURCE_POPULATIONS,
+       PROVINCE_SOURCE_CAPITALS,
+       PROVINCE_DISTANCE_DECAY, haversine_km,
+       province_distance_matrix, province_importation_kernel,
+       province_increment_matrix,
+       patch_infections, importation_from_kernel,
+       implied_national_Rt,
+       patch_rt_model, patch_infection_model,
+       province_export_pressure_model,
+       province_composition_model
 
 include("docstrings.jl")
 include("constants.jl")

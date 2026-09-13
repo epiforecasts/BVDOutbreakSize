@@ -110,7 +110,7 @@
 #
 # **Model assumptions and design**
 #
-# - *Inherits McCabe et al.'s epidemiological assumptions.* A single zoonotic seed, an assumed generation interval, no spatial structure beyond the Ituri / Nord Kivu split, and no depletion of susceptibles.
+# - *Inherits McCabe et al.'s epidemiological assumptions.* A single zoonotic seed, an assumed generation interval, and no depletion of susceptibles.
 #   The onset-to-death delay is grounded on Isiro 2012 and the genetic seeding bound on an external clock rate.
 #   Neither propagates cross-outbreak or clock uncertainty.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
@@ -372,6 +372,62 @@ MarkdownTable(vintage_table) #hide
 #md # ```@setup main
 #md # using BVDOutbreakSize, CodeTracking, Revise
 #md # ```
+
+# #### Spatial structure
+#
+# The headline model runs one renewal equation per province, for Ituri, Nord-Kivu and Sud-Kivu, coupled by importation.
+# Every national stream is fitted against the summed provinces, so the national quantities are aggregates of the provincial ones rather than a separate process.
+# Setting the patch count to one collapses this onto a single well-mixed population.
+# That is the model we fit to each data stream on its own, where there is no spatial data to split, and it is the control in the [spatial sensitivity](sensitivity.md).
+#
+# Provincial reproduction numbers are a common national trend plus deviations that sum to zero,
+#
+# ```math
+# \log R_{p,t} = \mu(t) + \delta_p(t), \qquad \sum_p \delta_p(t) = 0,
+# ```
+#
+# with the deviations drawn from a correlated multivariate process on the same weekly knots as the national trend, with a sampled scale and a learned cross-province correlation.
+# A deviation scale at zero gives every province the same temporal shape, so the scale is the spatial diagnostic.
+#
+# The deviations mean-revert to zero rather than random-walk.
+# A random walk has no mean, so a province sitting above the national trend at the last per-province vintage would be projected to stay above it indefinitely, with the gap as likely to widen as to close.
+# The per-province vintages stop well before the cut-off, so that is not a hypothetical.
+# Each knot instead retains a fraction of the last, $\phi = 2^{-7/h}$ with $h$ the half-life of a provincial divergence in days.
+# The half-life is sampled, so a province with persistent divergence can still show one, and a half-life far longer than the window is the random walk.
+# One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
+#
+# Each province runs its own renewal at its own reproduction number, and the national trajectory is their sum.
+# There is no separate national process and nothing rescales the provinces to match one.
+# The national reproduction number is read back off the summed infections by inverting the renewal equation, which recovers the force-weighted mean of the provincial values.
+# The trend $\mu(t)$ is therefore the central value the provinces pool toward rather than the country's own reproduction number.
+# Because the deviations are centred unweighted, $\mu$ is their geometric mean while the country runs at the force-weighted arithmetic mean, and the arithmetic mean is the larger.
+# That gap is first order in the deviation scale, not second, and it persists rather than averaging out: the faster province keeps gaining share of the force, so the country's reproduction number converges on the fastest province's, an excess of $\exp(\max_p \delta_p)$ over the trend.
+# Because it is an excess growth rate it compounds over the window, so it reaches the cumulative total multiplied rather than added.
+# The national streams constrain the summed trajectory directly, so this does not float free: the fitted trend moves down to meet them.
+# What it does mean is that the molecular-clock prior, which sets the walk base, is a prior on the trend rather than on the country, and the deviation prior reaches the national size through that route.
+#
+# The split is identified by the confirmed deaths.
+# A province's confirmed case count is the product of its incidence and its case-finding, and only the product is observed.
+# The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory rather than to a province, so they cancel out of the normalised death shares.
+# The death split therefore identifies the incidence split, and the case split identifies relative case ascertainment as the residual.
+# Both are scored as compositions conditional on the national total, so neither re-scores data the national streams already carry.
+#
+# Provinces are coupled by a gravity kernel, with a sampled intensity.
+# Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
+# The distance decides where a province's exported transmission lands, not how much of it leaves, because each origin's total outflow is held at the population-only value.
+# Coupling is a transfer, not a source.
+# The origin province is debited exactly what the destinations are credited on the day it happens, so importation never creates infections.
+# It can still move the national total, because the destination then grows at its own reproduction number.
+#
+# Three things are left out, and one is settled by assumption.
+# There is no mobility or origin-destination data for this outbreak, so the kernel is a structural assumption and its intensity is weakly identified against the secondary provinces' seeds.
+# Each province has its own case-fatality ratio and its own death confirmation, but the death composition identifies only their product, so their split rests on their priors and not on the data.
+# The assay and the reporting delays stay national and shared.
+# Export pressure is Ituri's alone.
+# The Uganda export streams are driven by Ituri's infections and nothing else, so a case in Nord-Kivu contributes no chance of being detected across the border.
+# Nord-Kivu also borders Uganda, so that is an assumption rather than a fact.
+# Fitting a per-province export pressure, partially pooled, is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
+# The per-province vintages stop before the cut-off, so the last stretch of the window is national data only ([#664](https://github.com/epiforecasts/BVDOutbreakSize/issues/664)).
 
 # #### Infections
 #
@@ -1900,8 +1956,11 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# We run two chains of 1000 post-warmup draws each after 1000 warmup adaptation steps, at a target acceptance probability of 0.85.
-# Chains initialise from the prior.
+# Chains initialise from the prior and run at a maximum tree depth of 10.
+# Every fit runs two chains.
+# The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
+# The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
+# Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
 # We fit the joint model and each single-stream model so the per-stream posteriors over the outbreak size can be compared with the joint.
 
 # #### Fit diagnostics
@@ -2165,6 +2224,10 @@ summary_ranges = let
         "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
         ", 60% ", round(Int, s.lo60), "–", round(Int, s.hi60),
         ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90))
+    ## Per-province cumulative infections, read off the patch deterministic
+    ## one draw at a time so the provinces stay coupled draw for draw.
+    C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
+    sprov = [posterior_summary([v[p] for v in C_patch]) for p in 1:3]
     ints_f(s,
         d) = string(
         "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
@@ -2205,6 +2268,10 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
+    - **By province:** Ituri is estimated to have had $(ints_i(sprov[1]))
+      infections to date, Nord-Kivu $(ints_i(sprov[2])) and Sud-Kivu
+      $(ints_i(sprov[3])).
+      The national count is the sum of the three.
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
@@ -2253,6 +2320,104 @@ cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
 #md # ```
 
 cumulative_traj_fig #hide
+
+# The national count above is the sum of three provincial renewal equations.
+# The table below gives each province's cumulative infections, its share of the national total, its reproduction number at the cut-off and its case ascertainment relative to the national average, each as a median with a 90% credible interval.
+# The reproduction number and the relative ascertainment are read together.
+# The case composition identifies only their product, so a province with a low reproduction number and high case-finding looks much like one with the reverse, and it is the per-province deaths that tilt the balance between them.
+
+#md # ```@raw html
+#md # <details><summary>Cross-province overview table</summary>
+#md # ```
+
+province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_overview_table #hide
+
+# The observed split over the fitted window is below, to be read against the modelled one.
+# Ituri is the epicentre and Sud-Kivu has reported no new confirmed case since 26 May.
+
+#md # ```@raw html
+#md # <details><summary>Observed province split</summary>
+#md # ```
+
+province_split_table = DataFrame(
+    Province = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+    Cases = vec(sum(province_cases.increments; dims = 2)),
+    Deaths = vec(sum(province_deaths.increments; dims = 2)));
+province_split_table.:"Case share" = round.(
+    100 .* province_split_table.Cases ./ sum(province_split_table.Cases);
+    digits = 1);
+province_split_table.:"Death share" = round.(
+    100 .* province_split_table.Deaths ./ sum(province_split_table.Deaths);
+    digits = 1);
+province_split_table.:"Confirmed CFR" = round.(
+    100 .* province_split_table.Deaths ./ province_split_table.Cases;
+    digits = 1);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_split_table #hide
+
+# The table below reports each province on the same 30/60/90% credible-interval layout as the national tables, adding the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary table</summary>
+#md # ```
+
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_detail_table #hide
+
+# The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
+# Each panel carries its own y-axis, because the provinces differ by orders of magnitude, so the panels are read for shape and timing and the table above for size.
+
+#md # ```@raw html
+#md # <details><summary>Modelled infections by province</summary>
+#md # ```
+
+province_infections_fig = plot_infections_patches(chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_infections_fig #hide
+
+# The provinces are coupled by a gravity kernel weighted by destination population, described in the [spatial structure](@ref "Spatial structure") Methods section, with its intensity estimated.
+# Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
+# The intensity is weakly identified against the seeds of the secondary provinces, since both raise a secondary province's early incidence, so it is read as the scale of coupling the data will tolerate rather than as a measured flow.
+# The distances between the provincial capitals are 379 km from Bunia to Goma, 478 km from Bunia to Bukavu and 99 km from Goma to Bukavu, so the kernel sends most of what leaves Nord-Kivu to Sud-Kivu rather than back to Ituri.
+
+#md # ```@raw html
+#md # <details><summary>Importation intensity and imports by province</summary>
+#md # ```
+
+importation_table = summary_table(chn_joint, [:importation_epsilon];
+    digits = 4,
+    labels = Dict(:importation_epsilon => "Importation intensity"));
+
+province_imports_fig = plot_imports_patches(chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+importation_table #hide
+
+province_imports_fig #hide
 
 # The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
 # The left panel below shows the posterior for the outbreak start date.
@@ -2372,6 +2537,54 @@ rt_fig = plot_rt(chn_joint;
 #md # ```
 
 rt_fig #hide
+
+# The same trajectory by province is below, one panel per province with the national trajectory in grey behind it.
+# The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
+# A panel tracking grey says that province moves with the national trend.
+# Sud-Kivu has reported no new confirmed case since 26 May, so its panel is carried by the deviation prior rather than by data and its width is not a measurement.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number by province</summary>
+#md # ```
+
+province_rt_fig = plot_rt_patches(chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT,
+    n_patches = N_PATCHES,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    display_start = _rt_start_plot,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    ramp = RT_INTERVENTION_RAMP);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_rt_fig #hide
+
+# The spread of those deviations is the spatial diagnostic.
+# Near zero the provinces share one temporal shape for the reproduction number.
+# The prior admits real divergence, with a 31% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
+# The cross-province correlation is reported for completeness.
+# With three provinces and one carrying almost no signal it is not identified, and it tracks its prior.
+
+#md # ```@raw html
+#md # <details><summary>Spatial hyperparameter summary table</summary>
+#md # ```
+
+spatial_hyper_table = summary_table(chn_joint,
+    [:region_sd, :region_corr_primary_secondary,
+        :province_ascertainment_sd];
+    digits = 3,
+    labels = Dict(:region_sd => "Rt deviation spread",
+        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+        :province_ascertainment_sd => "Ascertainment spread"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_hyper_table #hide
 
 # The table reports the posterior of the response effect on the reproduction number as a multiplier, where a value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
 
@@ -3020,6 +3233,40 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
+# #### Province compositions
+#
+# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
+# The panels below show that modelled share at every spatial vintage against the observed one.
+# The ribbon is the expected share, not the predicted count, so the observed points are not meant to fall inside it.
+# They scatter around it through the composition overdispersion, which is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
+# What the panels are read for is whether the points sit around the ribbon rather than consistently to one side of it.
+# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
+# The vintages stop before the cut-off, so the panels end earlier than the national posterior predictive checks above.
+
+#md # ```@raw html
+#md # <details><summary>Province composition posterior predictive checks</summary>
+#md # ```
+
+province_case_ppc_fig = plot_province_composition_ppc(chn_joint;
+    share_key = :province_shares,
+    obs_increments = province_cases.increments,
+    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Confirmed case share by province");
+
+province_death_ppc_fig = plot_province_composition_ppc(chn_joint;
+    share_key = :province_death_shares,
+    obs_increments = province_deaths.increments,
+    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Confirmed death share by province");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_case_ppc_fig #hide
+
+province_death_ppc_fig #hide
+
 # ### Symptom-onset reporting delay and ascertainment
 #
 # The table reports the onset-report hazard's hyperparameters and two derived quantities.
@@ -3499,6 +3746,47 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 
 confirmed_cfr_fig #hide
 
+# The same three ratios by province are below.
+# Each province has its own case-fatality ratio, partially pooled toward the national value, and its own death confirmation, pooled far more tightly.
+# The delay-corrected ratio is the national corrected ratio scaled by a province's lethality and death confirmation over its case ascertainment, which is what varies by province once the delays are corrected for.
+# The structural ratio is the national ratio times that province's lethality contrast.
+#
+# The death composition identifies only the product of the lethality and death-confirmation contrasts, so their split is set by their priors rather than by the data.
+# The lethality prior is the looser of the two, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding.
+# The spread of the lethality contrast is reported below against its prior, so a posterior that has not moved can be read as the prior's rather than as a finding.
+# The two spreads are on the same log scale, so their sizes are comparable directly.
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality spread</summary>
+#md # ```
+
+province_cfr_spread = summary_table(chn_joint,
+    [:province_cfr_sd, :province_death_ascertainment_sd];
+    digits = 3,
+    labels = Dict(:province_cfr_sd => "Lethality spread",
+        :province_death_ascertainment_sd => "Death-confirmation spread"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr_spread #hide
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality table</summary>
+#md # ```
+
+province_cfr = province_cfr_table(chn_joint, confirmed_cfr;
+    province_cases = vec(sum(province_cases.increments; dims = 2)),
+    province_deaths = vec(sum(province_deaths.increments; dims = 2)),
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr #hide
+
 # ### One-week-ahead forecast results
 #
 # The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
@@ -3595,6 +3883,23 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 #md # ```
 
 forecast_flows_fig #hide
+
+# The forecast split by province is below, for the two streams the spatial tables report.
+# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week rather than projected forward.
+# A province whose share is moving is not tracked past the last vintage, and forecasting the provinces in their own right is [#668](https://github.com/epiforecasts/BVDOutbreakSize/issues/668).
+
+#md # ```@raw html
+#md # <details><summary>Province forecast split</summary>
+#md # ```
+
+province_forecast = province_forecast_table(chn_joint, forecast;
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_forecast #hide
 
 # ### Symptom-onset nowcast and forecast results
 #
@@ -3983,7 +4288,7 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the four figures it shows (reproduction number, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -3999,6 +4304,7 @@ mkpath(dashboard_dir)
 ## cases. All are produced in the Results sections above; here we just write
 ## them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 ## The report splits the surveillance panels by whether the stream was
@@ -4031,6 +4337,12 @@ open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
 end
 open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
+end
+
+## Province table: the cross-province overview from the Results section,
+## which is the by-province counterpart of the two headline tables above.
+open(joinpath(dashboard_dir, "provinces.md"), "w") do io
+    print(io, markdown_table(province_overview_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.

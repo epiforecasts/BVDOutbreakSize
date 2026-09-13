@@ -244,6 +244,51 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
+# ### Forecast by province
+#
+# The one-week-ahead forecast split by province, scored against what each province went on to report.
+# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
+# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
+# This is what #668 asks for, and it is possible only because the province vintages now run to the cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Province forecast against observed</summary>
+#md # ```
+
+## Per-province cumulative confirmed cases and deaths at the frozen cut-off
+## and at the current one, so the truth for the week is their difference.
+## Read off the same increment matrices the compositions are scored on, so
+## the clamped revision is treated identically on both sides.
+province_truth = let
+    cur_c = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    cur_d = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_c = province_increment_matrix(
+        frozen_lastweek.o.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_d = province_increment_matrix(
+        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES)
+    (; observed = vec(sum(cur_c.increments; dims = 2)),
+        baseline = vec(sum(froz_c.increments; dims = 2)),
+        death_observed = vec(sum(cur_d.increments; dims = 2)),
+        death_baseline = vec(sum(froz_d.increments; dims = 2)))
+end
+
+province_validation_table = province_forecast_vs_truth(
+    frozen_lastweek.chn, validation_forecast;
+    observed = province_truth.observed,
+    baseline = province_truth.baseline,
+    death_observed = province_truth.death_observed,
+    death_baseline = province_truth.death_baseline,
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_validation_table) #hide
+
 # ### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
@@ -1348,6 +1393,123 @@ chamla_rt_fig = plot_rt(chamla_anchor.chn;
 #md # ```
 
 chamla_rt_fig #hide
+
+# ## Spatial structure sensitivity
+#
+# The headline runs the model over the three affected provinces.
+# Reducing it to a single province collapses it onto one well-mixed
+# population, which is the model the earlier releases used.
+# The spatial section of the analysis page describes what the provinces add.
+#
+# Splitting the country into provinces adds no national data, so the national
+# outbreak size should not move far either way.
+# The two are not identical by construction: the provinces run free and the
+# country grows at the force-weighted mean of their reproduction numbers,
+# which sits above the central trend they pool toward. That gap is second
+# order in the deviation scale.
+# A large gap between the two posteriors below would therefore point at the
+# deviation priors rather than at the data, and the headline should not be
+# read from the meta-population fit until such a gap is explained.
+
+spatial_sensitivity_table = streams_table(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population (n_patches = 1)" => posterior_C_no_patches);
+spatial_sensitivity_table
+
+#md # ```@raw html
+#md # <details><summary>Spatial-structure density overlay</summary>
+#md # ```
+
+spatial_sensitivity_fig = plot_density_overlay(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population" => posterior_C_no_patches;
+    xlabel = "Cumulative infections");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_sensitivity_fig #hide
+
+# The size is the gate, but it is not the only quantity the spatial structure could move.
+# The three figures below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
+# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other.
+# In the trajectory figure they do, closely enough that the grey reference is hidden behind the coloured band for most of the window.
+# The table after them gives the same quantities as numbers, which is where the agreement is read rather than eyeballed.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures</summary>
+#md # ```
+
+spatial_rt_fig = plot_rt_streams(
+    [(; label = "Single population (n_patches = 1)",
+        chn = chn_no_patches, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n), colour = :steelblue)];
+    joint = (; chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n)),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ncols = 1,
+    title = "National reproduction number under both structures",
+    reference_label = "the meta-population headline",
+    panel_label = "the single-population fit");
+
+spatial_cfr_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:CFR])),
+    "Single population" => vec(Array(chn_no_patches[:CFR]));
+    xlabel = "Case-fatality ratio");
+
+spatial_rt_density_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:R_T])),
+    "Single population" => vec(Array(chn_no_patches[:R_T]));
+    xlabel = "Reproduction number at the cut-off");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_rt_fig #hide
+
+spatial_cfr_fig #hide
+
+spatial_rt_density_fig #hide
+
+# The table gathers the same three quantities as credible intervals, alongside the outbreak start date the two fits imply.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures, as a table</summary>
+#md # ```
+
+## One row per national quantity, one column per structure, each cell a
+## median with a 90% credible interval. Built here rather than by stacking
+## two `summary_table` calls, so the two structures sit side by side and the
+## reader compares along a row.
+spatial_quantities_table = let
+    ## A count rounded to zero decimals still prints a trailing ".0", so
+    ## whole-number quantities go through `Int`.
+    fmt(x, d) = d <= 0 ? string(round(Int, x)) : string(round(x; digits = d))
+    cell(v, d) = string(fmt(quantile(v, 0.5), d), " (",
+        fmt(quantile(v, 0.05), d), "–", fmt(quantile(v, 0.95), d), ")")
+    rows = [("Cumulative infections", :C_T, 0),
+        ("Reproduction number at the cut-off", :R_T, 2),
+        ("Case-fatality ratio", :CFR, 2),
+        ("Outbreak age (days)", :T, 0),
+        ("Latest growth rate (per day)", :r, 3)]
+    DataFrame("Quantity" => [r[1] for r in rows],
+        "Meta-population (headline)" => [cell(
+             vec(Array(chn_joint[r[2]])), r[3])
+         for r in rows],
+        "Single population" => [cell(vec(Array(chn_no_patches[r[2]])), r[3])
+                                for r in rows])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_quantities_table #hide
 
 # ## Delay sensitivity
 #

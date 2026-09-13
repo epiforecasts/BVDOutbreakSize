@@ -220,6 +220,253 @@ Source population for the Ituri Province (McCabe et al., Table 1).
 const ITURI_POPULATION = 4_392_200
 
 """
+    PROVINCE_SOURCE_NAMES
+
+Every province the situation reports carry a per-province row for, in the
+order they first appear. These key the per-province blocks of
+`data/observations.toml`. They are not the model's patches: see
+[`PROVINCE_NAMES`](@ref) for those and [`PROVINCE_MEMBERS`](@ref) for how
+the two relate.
+"""
+const PROVINCE_SOURCE_NAMES = ["ituri", "nord_kivu", "sud_kivu",
+    "haut_uele", "tshopo", "bas_uele"]
+
+"""
+    PROVINCE_SOURCE_POPULATIONS
+
+Resident population of each province in [`PROVINCE_SOURCE_NAMES`](@ref)
+order: 2019 figures from the Democratic Republic of the Congo's Institut
+National de la Statistique, *Annuaire statistique RDC 2020* (March 2021),
+as tabulated at
+<https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
+(accessed 12 September 2026).
+
+One source for all six rather than the best figure for each. Only the
+relative sizes enter the model, through the importation kernel and the
+per-capita testing covariate, so consistency between provinces matters more
+than the accuracy of any one of them.
+"""
+const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
+    2_046_000, 2_582_000, 1_250_000]
+
+"""
+    PROVINCE_SOURCE_CAPITALS
+
+Latitude and longitude of each province's capital in
+[`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
+degrees north and east: Bunia, Goma, Bukavu, Isiro, Kisangani and Buta.
+Coordinates from GeoNames (<https://www.geonames.org>), the source for the
+distance term in [`province_importation_kernel`](@ref).
+
+The capital stands in for the province. That is coarse, but it is the level
+the data are reported at, and the provinces are far enough apart that the
+ordering of the distances between them does not depend on the choice of
+point within each one.
+"""
+const PROVINCE_SOURCE_CAPITALS = [
+    (1.56667, 30.25000),    # Bunia, Ituri
+    (-1.67918, 29.22195),   # Goma, Nord-Kivu
+    (-2.50000, 28.86667),   # Bukavu, Sud-Kivu
+    (2.77374, 27.61674),    # Isiro, Haut-Uele
+    (0.51528, 25.19099),    # Kisangani, Tshopo
+    (2.78594, 24.73876)     # Buta, Bas-Uele
+]
+
+"""
+    PROVINCE_NAMES
+
+The patches of the meta-population model, in patch order. The first entry is
+the primary patch: the origin of the outbreak, the reference for the
+per-patch reproduction-number deviations in [`patch_rt_model`](@ref), and
+the reference for the Uganda export propensities in
+[`province_export_pressure_model`](@ref).
+
+Three provinces are patches in their own right and the rest are pooled into
+`other`. Ituri, Nord-Kivu and Haut-Uele carry signal: at the cut-off they
+hold 5508, 1139 and 264 confirmed cases. Sud-Kivu, Tshopo and Bas-Uele hold
+3, 24 and 4 between them, and Sud-Kivu has reported no new confirmed case
+since 26 May. Giving each of those its own reproduction number and its own
+ascertainment would sample dimensions nothing informs, and their estimates
+would be the deviation prior read back. Pooled they are one weak patch,
+which is what they are.
+"""
+const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
+
+"""
+    PROVINCE_LABELS
+
+Display names for the patches, in [`PROVINCE_NAMES`](@ref) order, for table
+rows and figure panels.
+"""
+const PROVINCE_LABELS = ["Ituri", "Nord-Kivu", "Haut-Uele",
+    "Other provinces"]
+
+"""
+    PROVINCE_MEMBERS
+
+Which source provinces each patch pools, keyed by [`PROVINCE_NAMES`](@ref)
+and valued in [`PROVINCE_SOURCE_NAMES`](@ref). Every source province belongs
+to exactly one patch, so the patches partition the national totals and the
+composition likelihoods stay conditional on them.
+"""
+const PROVINCE_MEMBERS = Dict(
+    "ituri" => ["ituri"],
+    "nord_kivu" => ["nord_kivu"],
+    "haut_uele" => ["haut_uele"],
+    "other" => ["sud_kivu", "tshopo", "bas_uele"])
+
+## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
+## once so the pooled population and capital below, and the pooled increments
+## in `province_increment_matrix`, all read the same membership.
+const _PROVINCE_MEMBER_IDX = [[findfirst(==(m), PROVINCE_SOURCE_NAMES)
+                               for m in PROVINCE_MEMBERS[name]] for name in PROVINCE_NAMES]
+
+"""
+    PROVINCE_POPULATIONS
+
+Resident population of each patch, in [`PROVINCE_NAMES`](@ref) order, summed
+over the provinces it pools. Used to put the per-province testing effort on
+a per-capita scale (the covariate for the provincial ascertainment) and to
+weight the between-province importation kernel.
+"""
+const PROVINCE_POPULATIONS = [sum(PROVINCE_SOURCE_POPULATIONS[idx])
+                              for idx in _PROVINCE_MEMBER_IDX]
+
+"""
+    PROVINCE_CAPITALS
+
+Representative point of each patch, in [`PROVINCE_NAMES`](@ref) order, as
+`(latitude, longitude)` in decimal degrees north and east. A patch holding
+one province takes its capital from [`PROVINCE_SOURCE_CAPITALS`](@ref); a
+pooled patch takes the population-weighted mean of its members' capitals.
+
+A weighted mean rather than a member's capital, because the pooled patch is
+a stand-in for several places at once and the kernel asks where its
+population is. The pooled patch here spans Bukavu, Kisangani and Buta, so
+its point sits between them and its distance to the epicentre is a weighted
+compromise rather than any one province's.
+"""
+const PROVINCE_CAPITALS = [(
+                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
+                                   PROVINCE_SOURCE_CAPITALS[i][1]
+                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]),
+                               sum(PROVINCE_SOURCE_POPULATIONS[i] *
+                                   PROVINCE_SOURCE_CAPITALS[i][2]
+                               for i in idx) / sum(PROVINCE_SOURCE_POPULATIONS[idx]))
+                           for idx in _PROVINCE_MEMBER_IDX]
+
+"""
+    PROVINCE_DISTANCE_DECAY
+
+Exponent on the distance term of [`province_importation_kernel`](@ref). One
+is the conventional gravity value, and it is fixed rather than sampled: the
+importation intensity it scales is already weakly identified against the
+secondary provinces' seeds, so a second free parameter on the same term
+would not be determined by anything.
+"""
+const PROVINCE_DISTANCE_DECAY = 1.0
+
+"""
+    haversine_km(a, b)
+
+Great-circle distance in kilometres between two `(latitude, longitude)`
+points in decimal degrees, on a spherical Earth of radius 6371 km.
+"""
+function haversine_km(a::Tuple{<:Real, <:Real}, b::Tuple{<:Real, <:Real})
+    φ1, λ1 = deg2rad(a[1]), deg2rad(a[2])
+    φ2, λ2 = deg2rad(b[1]), deg2rad(b[2])
+    h = sin((φ2 - φ1) / 2)^2 +
+        cos(φ1) * cos(φ2) * sin((λ2 - λ1) / 2)^2
+    return 2 * 6371.0 * asin(sqrt(clamp(h, 0.0, 1.0)))
+end
+
+"""
+    province_distance_matrix(capitals = PROVINCE_CAPITALS)
+
+Great-circle distances in kilometres between every pair of province
+capitals, as a symmetric matrix with a zero diagonal. Built from
+[`PROVINCE_CAPITALS`](@ref) by [`haversine_km`](@ref).
+"""
+function province_distance_matrix(
+        capitals::AbstractVector = PROVINCE_CAPITALS)
+    np = length(capitals)
+    D = zeros(Float64, np, np)
+    @inbounds for p in 1:np, q in 1:np
+
+        p == q && continue
+        D[p, q] = haversine_km(capitals[p], capitals[q])
+    end
+    return D
+end
+
+"""
+    province_importation_kernel(pops = PROVINCE_POPULATIONS; distances, decay)
+
+Between-province importation kernel `K`, where `K[p, q]` is the relative
+rate of infectious travel from province `q` into province `p`. Diagonal is
+zero (no self-importation). The overall intensity is carried by the sampled
+`ε` in [`patch_infection_model`](@ref), so only the relative structure
+matters here.
+
+This is a gravity kernel: travel from `q` to `p` scales with the destination
+population and falls with the distance between the two capitals,
+
+```math
+K_{p,q} \\propto \\frac{N_p}{d_{p,q}^{\\gamma}},
+```
+
+with `γ` fixed at [`PROVINCE_DISTANCE_DECAY`](@ref) and `d` from
+[`province_distance_matrix`](@ref). Pass `distances` as a zero matrix to
+recover the population-only kernel.
+
+Each column is scaled so that its off-diagonal entries sum to `1 - N_q/N`,
+the share of the country that is not `q` itself. That is what the kernel
+summed to before the distance term was added, so the distance changes where
+a province's exported transmission lands without changing how much of it
+leaves. `ε` keeps its meaning, and every column's off-diagonal sum stays
+below one at any `ε` in `[0, 1]`, which is what stops a province exporting
+more transmission than it generates.
+
+There is no origin-destination or mobility data for this outbreak, so the
+kernel is still a structural assumption rather than a measurement, and `ε`
+is weakly identified against the secondary-patch seeds (both can raise a
+secondary province's early incidence). Treat the split between imported and
+locally-seeded infections as poorly determined even though their sum is not.
+"""
+function province_importation_kernel(
+        pops::AbstractVector = PROVINCE_POPULATIONS;
+        distances::AbstractMatrix = province_distance_matrix(
+            PROVINCE_CAPITALS[1:min(length(pops), end)]),
+        decay::Real = PROVINCE_DISTANCE_DECAY)
+    np = length(pops)
+    tot = sum(pops)
+    K = zeros(Float64, np, np)
+    size(distances) == (np, np) || error(
+        "province_importation_kernel: `distances` is $(size(distances)) " *
+        "but there are $np provinces.")
+    @inbounds for q in 1:np
+        ## Relative pull of each destination from origin `q`, by destination
+        ## size and by how far it is. A zero distance matrix leaves the
+        ## population-only kernel.
+        pull = zeros(Float64, np)
+        for p in 1:np
+            p == q && continue
+            d = distances[p, q]
+            pull[p] = d > 0 ? pops[p] / d^decay : Float64(pops[p])
+        end
+        s = sum(pull)
+        s > 0 || continue
+        ## Hold the column total at the pre-distance value, so the distance
+        ## redistributes a province's exports without changing their volume.
+        outflow = 1 - pops[q] / tot
+        for p in 1:np
+            K[p, q] = outflow * pull[p] / s
+        end
+    end
+    return K
+end
+
+"""
     ITURI_DAILY_TRAVEL
 
 Default prior mean for the daily outbound traveller volume from

@@ -28,14 +28,29 @@ const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
 ## so a caller may pass a chain carrying a derived quantity without the
 ## parameter it is derived from; fall back to its own draws there.
 function _summary_for(chn, p::Symbol)
-    haskey(_DERIVED_FROM, p) || return posterior_summary(_draws(chn, p))
+    haskey(_DERIVED_FROM, p) ||
+        return posterior_summary(_scalar_draws(chn, p))
     src, f = _DERIVED_FROM[p]
     src_draws = try
         _draws(chn, src)
     catch
-        return posterior_summary(_draws(chn, p))
+        return posterior_summary(_scalar_draws(chn, p))
     end
     return map(f, posterior_summary(src_draws))
+end
+
+## Draws of a scalar quantity. A vector-valued deterministic (one entry per
+## patch, or a daily trajectory) reaches here as a vector of vectors, and
+## `quantile` then fails deep inside with a cryptic `isfinite(::Vector)`
+## MethodError at render time. Say what is actually wrong: the summary table
+## is for scalars, and a per-patch quantity belongs in `patch_summary_table`.
+function _scalar_draws(chn, p::Symbol)
+    d = _draws(chn, p)
+    eltype(d) <: Number || error(
+        "summary_table: `$(p)` is vector-valued, not a scalar. " *
+        "Per-patch quantities go in `patch_summary_table`; daily " *
+        "trajectories are read with `_draw_vectors`.")
+    return d
 end
 
 ## Human-readable headers for the displayed summary tables. Internal
@@ -43,6 +58,7 @@ end
 ## the point each table is returned.
 const _PRETTY_COLS = Dict(
     "quantity" => "Quantity",
+    "province" => "Province",
     "stream" => "Stream",
     "scenario" => "Scenario",
     "central_estimate" => "Central estimate",
@@ -409,6 +425,382 @@ function stream_calibration(panels::AbstractVector)
             bias = round(n == 0 ? NaN : mean(biases); digits = 2),
             coverage_50 = round(n == 0 ? NaN : mean(cov50); digits = 2),
             coverage_90 = round(n == 0 ? NaN : mean(cov90); digits = 2))
+    end
+    return _prettify(DataFrame(rows))
+end
+
+## Whether a chain carries a given key. Chain types throw on a missing key
+## rather than returning a sentinel, so presence has to be probed.
+function _has_key(chn, key::Symbol)
+    try
+        chn[key]
+        return true
+    catch
+        return false
+    end
+end
+
+## Per-patch draw vectors for a vector deterministic: `_draw_vectors` gives one
+## vector per draw, so transpose to one draw vector per patch.
+function _per_patch(chn, sym::Symbol, np::Integer)
+    vs = _draw_vectors(chn, sym)
+    return [[v[p] for v in vs] for p in 1:np]
+end
+
+## Median and 90% credible interval as one cell, `median (lower–upper)`. The
+## cross-province overview puts several quantities side by side, so it trades
+## the six-column interval layout for one column per quantity; the per-province
+## tables below keep the full layout.
+function _median_ci(draws; digits::Integer = 2)
+    fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
+    return string(fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
+        fmt(quantile(draws, 0.95)), ")")
+end
+
+"""
+Cross-province overview for the patch model: one row per province and one
+column per quantity, each a median with a 90% credible interval. Reads the
+reproduction number at the cut-off, cumulative infections, the province's
+share of national infections, and its case ascertainment relative to the
+national average.
+
+This is the scannable comparison across provinces. The per-province detail,
+with the full 30/60/90% intervals and the deviation parameters, is in
+[`patch_summary_table`](@ref).
+
+The infection share is computed per draw before summarising, so its interval
+carries the correlation between provinces rather than dividing two
+independently summarised numbers. Ascertainment and the reproduction number
+must be read together: the case composition identifies only their product,
+and it is the per-province deaths that tilt the balance between them.
+"""
+function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 2,
+        patch_labels::AbstractVector = PROVINCE_LABELS)
+    required = [:C_T_patch, :R_T_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+        "not sampled from `bvd_joint`.")
+    np = min(n_patches, length(patch_labels))
+    C_T = _per_patch(chn, :C_T_patch, np)
+    R_T = _per_patch(chn, :R_T_patch, np)
+    ## Share per draw, so the interval reflects that the provinces' shares are
+    ## constrained to sum to one rather than varying independently.
+    totals = sum(C_T)
+    share = [100 .* C_T[p] ./ totals for p in 1:np]
+    asc = _has_key(chn, :province_ascertainment) ?
+          _per_patch(chn, :province_ascertainment, np) : nothing
+    df = DataFrame("Province" => String[],
+        "Reproduction number" => String[],
+        "Cumulative infections" => String[],
+        "Share of infections (%)" => String[])
+    asc === nothing || (df[!, "Relative ascertainment"] = String[])
+    for p in 1:np
+        row = Any[patch_labels[p], _median_ci(R_T[p]; digits),
+            _median_ci(C_T[p]; digits = 0), _median_ci(share[p]; digits = 1)]
+        asc === nothing || push!(row, _median_ci(asc[p]; digits))
+        push!(df, row)
+    end
+    return df
+end
+
+"""
+Per-patch outbreak summary for the patch model: one row per province, with
+the cut-off cumulative infections `C_T`, the cut-off reproduction number
+`R_T`, the daily infections at the cut-off, and the log-Rt deviation `δ`
+from the common national trend. Each is reported as the same 90/60/30%
+credible intervals [`summary_table`](@ref) uses.
+
+Pass `patch` to restrict the table to a single province, by index or by
+label. The `Patch` column is then dropped, since it would repeat one value:
+this is how the analysis reports one table per province rather than one
+table of every province stacked together.
+
+The deviations are sum-to-zero contrasts around the national trend (see
+[`patch_rt_model`](@ref)), so `δ` is read relative to the national average
+across provinces, not relative to any one patch: a negative `δ` means that
+province transmits below the national trend. Every patch, including the
+primary, carries its own deviation, and they sum to zero in every draw.
+For the log-Rt of a province relative to Ituri specifically, read the
+chain's `log_rt_contrast` instead.
+
+Expects a chain from [`bvd_joint`](@ref), which stores the per-patch
+quantities as vector deterministics (`C_T_patch`, `R_T_patch`,
+`infections_T_patch`, `delta_patch`), one entry per patch.
+"""
+function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
+        digits::Integer = 2,
+        patch::Union{Nothing, Integer, AbstractString} = nothing,
+        patch_labels::AbstractVector = PROVINCE_LABELS)
+    required = [:C_T_patch, :R_T_patch, :infections_T_patch, :delta_patch]
+    absent = filter(p -> !_has_key(chn, p), required)
+    isempty(absent) || error(
+        "chain is missing the per-patch deterministics $(absent); it was " *
+        "not sampled from `bvd_joint`.")
+    np = min(n_patches, length(patch_labels))
+    ## Which patches to report. A label is matched against `patch_labels`, so
+    ## the caller names the province rather than tracking its index.
+    selected = if patch === nothing
+        1:np
+    elseif patch isa Integer
+        1 <= patch <= np || error(
+            "patch = $patch is out of range; the chain has $np patches.")
+        patch:patch
+    else
+        i = findfirst(==(patch), patch_labels[1:np])
+        i === nothing && error(
+            "patch = \"$patch\" is not one of $(patch_labels[1:np]).")
+        i:i
+    end
+    per_patch(sym) = _per_patch(chn, sym, np)
+    C_T = per_patch(:C_T_patch)
+    R_T = per_patch(:R_T_patch)
+    inf_T = per_patch(:infections_T_patch)
+    δ = per_patch(:delta_patch)
+    ## Case ascertainment and the Rt contrast against the primary patch are the
+    ## two quantities that must be read together. The case composition
+    ## identifies only their product, and it is the per-province deaths that
+    ## tilt the balance between them. Reporting one without the other invites
+    ## a low provincial Rt to be read as epidemiology when it is case-finding.
+    asc = _has_key(chn, :province_ascertainment) ?
+          per_patch(:province_ascertainment) : nothing
+    ## The deviation-walk scale is per patch, so it belongs here rather than in
+    ## a table of scalar hyperparameters. Near zero means that province's Rt
+    ## tracks the national trend; away from zero it is pulling away from it.
+    drift = _has_key(chn, :region_drift_sd) ?
+            per_patch(:region_drift_sd) : nothing
+    contrast = _has_key(chn, :log_rt_contrast) ?
+               per_patch(:log_rt_contrast) : nothing
+    df = DataFrame(
+        patch = String[],
+        quantity = String[],
+        lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
+        upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
+    )
+    for p in selected
+        rows = Any[("Cumulative infections", C_T[p], 0),
+            ("Reproduction number", R_T[p], digits),
+            ("Daily infections at cut-off", inf_T[p], 0),
+            ("log-Rt deviation from trend", δ[p], digits)]
+        contrast === nothing ||
+            push!(rows, ("log-Rt vs primary patch", contrast[p], digits))
+        drift === nothing ||
+            push!(rows, ("Rt deviation drift", drift[p], 3))
+        asc === nothing ||
+            push!(rows, ("Relative case ascertainment", asc[p], digits))
+        for (label, draws, dg) in rows
+            s = posterior_summary(draws)
+            push!(df,
+                (patch_labels[p], label,
+                    round(s.lo90; digits = dg), round(s.lo60; digits = dg),
+                    round(s.lo30; digits = dg), round(s.hi30; digits = dg),
+                    round(s.hi60; digits = dg), round(s.hi90; digits = dg)))
+        end
+    end
+    ## A single-province table would repeat one patch name down every row, so
+    ## drop the column: the province belongs in the surrounding heading.
+    ## `_prettify` handles the remaining column names.
+    patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
+    _prettify(select(df, Not(:patch)))
+end
+
+## Per-patch draws of the final column of a `(n_patches × n_vintages)` matrix
+## deterministic (`province_shares`, `province_death_shares`): the modelled
+## split at the most recent vintage.
+function _per_patch_last_share(chn, sym::Symbol, np::Integer)
+    ms = [collect(v) for v in vec(collect(chn[sym]))]
+    nv = size(first(ms), 2)
+    return [[m[p, nv] for m in ms] for p in 1:np]
+end
+
+"""
+Per-province case-fatality ratios, set against the national ones the
+[`confirmed_cfr_table`](@ref) reports. `res` is a
+[`delay_corrected_confirmed_cfr`](@ref) result and `chn` the patch chain.
+
+Three quantities per province, each a median with a 90% credible interval
+except the observed ratio, which is a count:
+
+- the naive observed confirmed ratio, that province's reported confirmed
+  deaths over its reported confirmed cases;
+- the delay-corrected confirmed ratio, the national corrected ratio scaled
+  by the province's relative lethality and death confirmation over its
+  relative case ascertainment, which is what varies by province once the
+  delays are corrected for;
+- the structural, infection-based ratio, read from `CFR_patch`, the national
+  ratio times that province's sum-to-zero lethality contrast.
+
+The death composition identifies only the product of the lethality and the
+death-confirmation contrasts, so their split is set by their priors. The
+lethality prior is the looser of the two, so a provincial excess of deaths
+over cases is read first as lethality. A chain fitted before the per-province
+ratio existed carries no `CFR_patch`, and the structural column then falls
+back to the national ratio in every row.
+
+`province_cases` and `province_deaths` are the observed per-province
+confirmed case and death totals over the fitted window, in the order of
+`patch_labels`.
+"""
+function province_cfr_table(chn, res;
+        province_cases::AbstractVector, province_deaths::AbstractVector,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        digits::Integer = 1)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_ascertainment) || error(
+        "chain carries no `province_ascertainment`; it was not sampled " *
+        "from `bvd_joint` with the per-province compositions on.")
+    case_asc = _per_patch(chn, :province_ascertainment, np)
+    death_asc = _has_key(chn, :province_death_ascertainment) ?
+                _per_patch(chn, :province_death_ascertainment, np) :
+                [ones(length(case_asc[1])) for _ in 1:np]
+    ## Per-province lethality contrast, and the per-province structural ratio
+    ## it implies. Both absent on a chain fitted before the per-province ratio
+    ## existed, which then reports the national ratio in every row.
+    sev = _has_key(chn, :province_cfr_relative) ?
+          _per_patch(chn, :province_cfr_relative, np) :
+          [ones(length(case_asc[1])) for _ in 1:np]
+    cfr_patch = _has_key(chn, :CFR_patch) ?
+                _per_patch(chn, :CFR_patch, np) : nothing
+    ## Mask rather than filter, so the corrected draws and the per-province
+    ## scaling below stay aligned draw for draw.
+    mask = isfinite.(res.corrected)
+    corrected = res.corrected[mask]
+    structural = filter(isfinite, res.structural)
+    pct(x) = round(100 * x; digits)
+    cell(v) = string(pct(quantile(v, 0.5)), "% (",
+        pct(quantile(v, 0.05)), "–", pct(quantile(v, 0.95)), "%)")
+    df = DataFrame("Province" => String[],
+        "Naive observed confirmed ratio" => String[],
+        "Delay-corrected confirmed CFR" => String[],
+        "Structural (infection-based) CFR" => String[])
+    for p in 1:np
+        naive = province_cases[p] > 0 ?
+                string(pct(province_deaths[p] / province_cases[p]), "%") : "—"
+        ## The delay correction is national, so the province enters only
+        ## through the ratio of its relative death confirmation to its
+        ## relative case ascertainment. Both are sum-to-zero on the log
+        ## scale, so the provinces' corrected ratios sit around the national
+        ## one rather than all above or all below it.
+        scale = ((sev[p] .* death_asc[p]) ./ case_asc[p])[mask]
+        struc_p = cfr_patch === nothing ? structural :
+                  filter(isfinite, cfr_patch[p])
+        push!(df, (patch_labels[p], naive,
+            cell(corrected .* scale), cell(struc_p)))
+    end
+    return df
+end
+
+"""
+Per-province split of the one-week-ahead national forecast `fc` from
+[`forecast_reported`](@ref): the new confirmed cases and confirmed deaths
+expected in each province over the week to `T + 7`, as the same 90/60/30%
+credible intervals [`forecast_table`](@ref) reports nationally.
+
+Each province's count is the national draw times that province's modelled
+share at the most recent spatial vintage. The split is therefore held at its
+current value over the week rather than projected forward: the provincial
+compositions are fitted only where the spatial tables report, so a province
+whose share is moving is not tracked past the last vintage. Forecasting the
+provinces in their own right is issue #668.
+"""
+function province_forecast_table(chn, fc;
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        digits::Integer = 0)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_shares) || error(
+        "chain carries no `province_shares`; it was not sampled from " *
+        "`bvd_joint` with the per-province compositions on.")
+    case_share = _per_patch_last_share(chn, :province_shares, np)
+    death_share = _has_key(chn, :province_death_shares) ?
+                  _per_patch_last_share(chn, :province_death_shares, np) :
+                  case_share
+    cols = propertynames(fc)
+    rows = NamedTuple[]
+    function add!(label, province, draws)
+        s = posterior_summary(draws)
+        push!(rows,
+            (province = province, quantity = label,
+                lower_90 = round(s.lo90; digits),
+                lower_60 = round(s.lo60; digits),
+                lower_30 = round(s.lo30; digits),
+                upper_30 = round(s.hi30; digits),
+                upper_60 = round(s.hi60; digits),
+                upper_90 = round(s.hi90; digits)))
+    end
+    for p in 1:np
+        if :confirmed_new in cols
+            v = fc[!, :confirmed_new]
+            add!("New confirmed cases by T+7", patch_labels[p],
+                v .* case_share[p][1:length(v)])
+        end
+        if :confirmed_deaths_new in cols
+            v = fc[!, :confirmed_deaths_new]
+            add!("New confirmed deaths by T+7", patch_labels[p],
+                v .* death_share[p][1:length(v)])
+        end
+    end
+    return _prettify(DataFrame(rows))
+end
+
+"""
+Per-province forecast against what was observed. `fc` is a
+[`forecast_reported`](@ref) result from a frozen patch fit, `chn` that same
+chain, and `observed` and `baseline` the per-province cumulative counts at
+the target date and at the forecast origin, so the truth is their difference.
+
+Each province's forecast is the national draw times that province's modelled
+share at the frozen fit's most recent spatial vintage. The two factors are
+multiplied draw by draw, so the interval carries their correlation rather
+than treating a province's share as independent of the national total. The
+share itself is held over the horizon, which is the assumption the width does
+not express: a province whose share is moving is scored as though it were
+not.
+
+Reports the median and 90% predictive interval, the observed count, and
+whether the observation fell inside the interval, one row per province and
+stream.
+"""
+function province_forecast_vs_truth(chn, fc;
+        observed::AbstractVector, baseline::AbstractVector,
+        death_observed::Union{Nothing, AbstractVector} = nothing,
+        death_baseline::Union{Nothing, AbstractVector} = nothing,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        digits::Integer = 0)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_shares) || error(
+        "chain carries no `province_shares`; the frozen fit was not run " *
+        "with the per-province compositions on.")
+    case_share = _per_patch_last_share(chn, :province_shares, np)
+    death_share = _has_key(chn, :province_death_shares) ?
+                  _per_patch_last_share(chn, :province_death_shares, np) :
+                  case_share
+    cols = propertynames(fc)
+    rows = NamedTuple[]
+    function add!(stream, p, draws, truth)
+        s = posterior_summary(draws)
+        push!(rows,
+            (province = patch_labels[p], stream = stream,
+                central_estimate = round(quantile(draws, 0.5); digits),
+                lower_90 = round(s.lo90; digits),
+                upper_90 = round(s.hi90; digits),
+                observed = truth,
+                within_90 = s.lo90 <= truth <= s.hi90))
+    end
+    for p in 1:np
+        if :confirmed_new in cols
+            v = fc[!, :confirmed_new]
+            add!("Confirmed cases", p, v .* case_share[p][1:length(v)],
+                observed[p] - baseline[p])
+        end
+        if :confirmed_deaths_new in cols && death_observed !== nothing
+            v = fc[!, :confirmed_deaths_new]
+            add!("Confirmed deaths", p, v .* death_share[p][1:length(v)],
+                death_observed[p] - death_baseline[p])
+        end
     end
     return _prettify(DataFrame(rows))
 end

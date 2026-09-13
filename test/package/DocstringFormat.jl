@@ -276,10 +276,16 @@ end
                                 end
 
                                 # If function has arguments across any method, should have Arguments section
-                                # BVDOutbreakSize docstrings rely on prose rather than
-                                # explicit "# Arguments" sections; mark this as a known gap.
+                                # Most BVDOutbreakSize docstrings rely on prose rather
+                                # than explicit "# Arguments" sections; that remains a
+                                # known gap. Docstrings that do list their arguments
+                                # explicitly pass the check.
                                 if function_has_args
-                                    @test_broken occursin("# Arguments", doc_str)
+                                    if occursin("# Arguments", doc_str)
+                                        @test occursin("# Arguments", doc_str)
+                                    else
+                                        @test_broken occursin("# Arguments", doc_str)
+                                    end
                                 end
 
                                 # If function has keyword arguments, check for Keyword Arguments section

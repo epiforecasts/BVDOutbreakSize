@@ -242,6 +242,32 @@ function load_observations(
     confirmed_break_gross_cases = break_gross("gross_cases")
     confirmed_break_gross_deaths = break_gross("gross_deaths")
 
+    ## Per-province history from a TOML block with one shared `dates` array
+    ## and one array per series. Used for the cumulative confirmed counts
+    ## (`province_confirmed_history`, keyed by province) and for the daily
+    ## laboratory throughput (`province_lab_daily_history`, keyed by
+    ## province-and-measure, e.g. `ituri_analysed` / `ituri_positive`).
+    ## Returns a Dict mapping each series name to the same (; days, counts)
+    ## shape as history(). Empty when the block is absent. The counts are
+    ## cumulative or daily according to the block; the caller knows which.
+
+    function province_history(key)
+        ProvHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        !haskey(raw, key) && return Dict{String, ProvHistory}()
+        block = raw[key]
+        !haskey(block, "dates") && return Dict{String, ProvHistory}()
+        provinces = sort!([k for k in keys(block) if k != "dates" && k != "source"])
+        result = Dict{String, ProvHistory}()
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        ord = sortperm(idx)
+        for prov in provinces
+            vals = Int.(block[prov][keep])
+            result[prov] = (; days = idx[ord], counts = vals[ord])
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -471,8 +497,75 @@ function load_observations(
         tests_received_history = tests_received_history,
         onset_curve_history = onset_curve_history,
         onset_report_history = onset_report_history,
+        province_confirmed_history = province_history("province_confirmed_history"),
+        province_death_history = province_history("province_death_history"),
+        province_lab_daily_history = province_history("province_lab_daily_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
+end
+
+"""
+    province_increment_matrix(province_history, province_names, n_patches)
+
+Reshape the per-province cumulative histories loaded by
+[`load_observations`](@ref) into the `(n_patches × n_vintages)` matrix of
+new-confirmed counts that [`province_composition_model`](@ref) scores,
+together with the shared vintage day indices.
+
+Every province must be reported on the same vintage days (the spatial
+tables share one `dates` array), which the patch composition likelihood
+requires: it allocates each vintage's national total across the provinces,
+so a province missing from a vintage would silently shift cases into the
+others. A mismatch is an error, not a silent reshape.
+
+Returns `(; days, increments)`. When no per-province data is supplied,
+`days` is empty and the caller skips the composition term.
+"""
+function province_increment_matrix(province_history,
+        province_names::AbstractVector, n_patches::Integer)
+    empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
+    isempty(province_history) && return empty
+    names = province_names[1:min(n_patches, length(province_names))]
+    ## A patch may pool several source provinces (see
+    ## [`PROVINCE_MEMBERS`](@ref)), so resolve each patch to the manifest
+    ## blocks it covers. A name with no membership entry is its own province,
+    ## which keeps this usable with an arbitrary province list.
+    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in names]
+    any(ms -> any(m -> !haskey(province_history, m), ms), members) &&
+        return empty
+    hists = [[province_history[m] for m in ms] for ms in members]
+    days = hists[1][1].days
+    isempty(days) && return empty
+    for (ms, hs) in zip(members, hists), (m, h) in zip(ms, hs)
+
+        h.days == days || error(
+            "province `$(m)` is reported on different vintage days to " *
+            "`$(first(members)[1])`; the composition likelihood needs " *
+            "every province on the same vintages.")
+    end
+    ## Cumulative -> per-vintage increments. The first increment is the
+    ## cumulative to the first vintage day, matching `bin_increments`,
+    ## which bins the modelled daily series from day 1 to `days[1]`.
+    ##
+    ## A province's cumulative count can fall between vintages when cases are
+    ## reclassified: Haut-Uélé drops from 22 confirmed cases to 16 on 18 July
+    ## 2026, and its deaths from 13 to 10, both of which reconcile with the
+    ## revised national totals. The raw difference is then negative, which the
+    ## composition likelihood cannot take, since it scores a count drawn from
+    ## a total. Clamping at zero reads a downward revision as no new cases in
+    ## that province this vintage, which is the closest true statement
+    ## available. The composition conditions on the sum of these increments
+    ## rather than on the national total, so the clamp stays self-consistent.
+    ## A pooled patch is the sum of its members' cumulative counts, differenced
+    ## once. Summing before differencing rather than after keeps a downward
+    ## revision in one member from being clamped away while another member
+    ## rises, which would inflate the patch.
+    increments = Matrix{Int}(undef, length(names), length(days))
+    for (p, hs) in enumerate(hists)
+        pooled = reduce(.+, (collect(h.counts) for h in hs))
+        increments[p, :] = max.(diff(vcat(0, pooled)), 0)
+    end
+    return (; days, increments)
 end
 
 """

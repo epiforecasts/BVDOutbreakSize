@@ -221,6 +221,10 @@ a pre-computed `seed` of length `L < n` filling the first `L` days (see
 `Rt[1]` (used to imply the seeding growth) and the seed are mutually
 consistent. Returns the length-`n` infection trajectory. The output
 element type is promoted from `Rt`, `g` and `seed`.
+
+!!! note "Multi-patch analogue"
+    See [`patch_infections`](@ref) for the meta-population extension
+    with between-patch importation.
 """
 function renewal_infections(Rt::AbstractVector, g::AbstractVector,
         seed::AbstractVector)
@@ -240,6 +244,154 @@ function renewal_infections(Rt::AbstractVector, g::AbstractVector,
         I[t] = Rt[t] * force
     end
     return I
+end
+
+## --- Multi-patch (meta-population) renewal primitives --------------------
+
+"""
+    importation_from_kernel(K, I_prev, epsilon)
+
+Per-patch importation into each of `n_patches` patches on a single day,
+given the `n_patches x n_patches` importation kernel `K`, the previous
+day's infections per patch `I_prev` (length `n_patches`), and the
+importation intensity `epsilon`.
+
+```math
+\\text{importation}_p = \\varepsilon \\sum_{q} K_{p,q} I_{q,t-1}
+```
+
+`K[p, q]` is the per-capita daily travel rate from patch `q` to patch `p`
+(the first index is the destination). Diagonal entries should be zero (no
+self-importation). Each entry is unitless (a rate per day per traveller in
+the source patch).
+
+Returns a length-`n_patches` vector of imported infections expected on the
+current day. Pure and AD-transparent: only arithmetic and `@inbounds` loops,
+no allocations of tracked containers.
+"""
+function importation_from_kernel(K::AbstractMatrix, I_prev::AbstractVector,
+        epsilon::Real)
+    np = size(K, 1)
+    Tp = promote_type(eltype(K), eltype(I_prev), typeof(float(epsilon)))
+    imp = zeros(Tp, np)
+    @inbounds for p in 1:np
+        acc = zero(Tp)
+        for q in 1:np
+            acc += K[p, q] * I_prev[q]
+        end
+        imp[p] = epsilon * acc
+    end
+    return imp
+end
+
+"""
+    patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
+
+Multi-patch (meta-population) renewal with between-patch importation.
+Each patch `p` follows a modified renewal equation on a shared daily grid:
+
+```math
+I_{p,t} = R_{p,t}\\, \\sum_{s \\ge 1} I_{p,t-s}\\, g_s\\;+\\;\\text{importation}_{p,t}
+```
+
+where the importation term couples patches through a kernel `K`:
+
+```math
+\\text{importation}_{p,t} =
+    \\varepsilon \\sum_{q} K_{p,q}\\, I_{q,t-1}.
+```
+
+# Arguments
+
+- `Rt_matrix`: `n_patches x n_days` matrix whose `[p, t]` entry is the
+  reproduction number in patch `p` on day `t`. Each row is one patch's
+  daily `R_t` trajectory.
+- `g`: shared generation-interval PMF (indexed from lag 1, so `g[1]` is
+  the probability of a one-day generation interval). Same for all patches.
+- `seeds_matrix`: `n_patches x L` matrix whose `[p, :]` row is the
+  pre-computed seed infection trajectory for patch `p` (see
+  [`seed_infections`](@ref)). The seed fills days `1 ... L` and the renewal
+  recursion begins on day `L+1`.
+- `importation_kernel`: `n_patches x n_patches` matrix `K` where
+  `K[p, q]` is the share of patch `q`'s transmission that lands in patch
+  `p` rather than at home. The diagonal should be zero, and each column's
+  off-diagonal sum times `epsilon` must be at most one, so a patch cannot
+  export more transmission than it generates. Both hold for
+  [`province_importation_kernel`](@ref) at any `epsilon` in `[0, 1]`.
+- `epsilon`: importation intensity, scaling the whole kernel. Importation
+  is a transfer on the day it happens: the origin patch is debited exactly
+  what the destination patches are credited, so coupling is never a source
+  of infections. It is not a conservation law across days. The destination
+  then grows at its own reproduction number, so relocating infections from
+  a fast patch to a slow one lowers the national total and the reverse
+  raises it. With one shared reproduction number the transfer cancels
+  exactly and the national total is what it would be at `epsilon = 0`.
+
+# Returns
+
+`(; infections, importation)`. `infections` is a matrix of shape
+`(n_patches, n_days)` where row `p` is the daily infection trajectory for
+patch `p`. The first `L` days are copied from `seeds_matrix`; the remaining
+days are the renewal recursion with importation. `importation` is the
+matching matrix of infections each patch received from the others, the
+arrivals term alone rather than the net of arrivals and departures. It is
+what was relocated, not what was added: every arrival is debited from its
+origin the same day. The element type is promoted from all input types.
+
+# AD transparency
+
+Uses only basic arithmetic and `@inbounds` loops. No `push!`, `append!`,
+closures that capture mutated variables, or other constructs that would
+obscure Mooncake's AD reverse pass. The importation is computed inline
+in each day's patch loop (no closure allocation).
+"""
+function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
+        seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
+        epsilon::Real)
+    np, n = size(Rt_matrix)
+    L = size(seeds_matrix, 2)
+    Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
+        eltype(importation_kernel), typeof(float(epsilon)))
+    I = zeros(Tp, np, n)
+    imports = zeros(Tp, np, n)
+    @inbounds for p in 1:np
+        for j in 1:min(L, n)
+            I[p, j] = seeds_matrix[p, j]
+        end
+    end
+    gen = zeros(Tp, np)
+    @inbounds for t in (L + 1):n
+        ## What each patch generates today from its own renewal force.
+        for p in 1:np
+            force = zero(Tp)
+            kmax = min(t - 1, length(g))
+            for s in 1:kmax
+                force += I[p, t - s] * g[s]
+            end
+            gen[p] = Rt_matrix[p, t] * force
+        end
+        ## Importation redistributes that transmission rather than adding to
+        ## it: a fraction `epsilon * K[p, q]` of what `q` generates is realised
+        ## in `p` instead of at home, so `q` is debited exactly what the
+        ## destinations are credited and the national total is untouched by
+        ## coupling. Crediting the destination without debiting the origin, as
+        ## an earlier version did, makes coupling a net source of infections --
+        ## every patch's total rises and none falls, and the surplus
+        ## compounds through the renewal into the national cumulative total.
+        for p in 1:np
+            outflow = zero(Tp)
+            arrivals = zero(Tp)
+            for q in 1:np
+                q == p && continue
+                outflow += importation_kernel[q, p]
+                arrivals += importation_kernel[p, q] * gen[q]
+            end
+            imports[p, t] = epsilon * arrivals
+            I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
+                      epsilon * arrivals
+        end
+    end
+    return (; infections = I, importation = imports)
 end
 
 """
@@ -356,10 +508,21 @@ ramped effect on transmission rather than an instantaneous step. Returns
 a length-`n` `Float64` vector. `day = missing` gives an all-zero ramp (no
 intervention). Type-stable and AD-transparent in the effect size it
 multiplies.
+
+Split into two dispatches on `day`'s concrete type, rather than a single
+method with a runtime `ismissing(day) && return ...` branch: Mooncake's
+reverse-rule construction fails to build a rule for the latter shape under
+Julia 1.13.0 + Mooncake v0.5.54 (`TypeError: non-boolean (Missing) used in
+boolean context`, deep in `infection_model`'s AD path, since `breakpoint`'s
+`Union{Missing, Real}` default is `missing`). Multiple dispatch resolves
+`day`'s type at the call site instead of branching on it at runtime, so
+each method's body is differentiated on its own, concretely-typed slot.
 """
-function sigmoid_ramp(n::Integer, day::Union{Missing, Real};
-        ramp::Real = RT_INTERVENTION_RAMP)
-    ismissing(day) && return zeros(Float64, n)
+function sigmoid_ramp(n::Integer, day::Missing; ramp::Real = RT_INTERVENTION_RAMP)
+    return zeros(Float64, n)
+end
+
+function sigmoid_ramp(n::Integer, day::Real; ramp::Real = RT_INTERVENTION_RAMP)
     return Float64[logistic((t - day) / ramp) for t in 1:n]
 end
 
@@ -435,4 +598,34 @@ function interpolate_knots(knot_vals::AbstractVector,
         out[t] = knot_vals[b] + frac * (knot_vals[b + 1] - knot_vals[b])
     end
     return out
+end
+
+"""
+Derive the implied national reproduction number from a summed infection
+trajectory by inverting the renewal equation:
+
+    Rt_national(t) = I_total(t) / sum_s I_total(t-s) * g_s
+
+This reconstructs what a single-patch model would estimate as the national
+Rt from the aggregated infection count. The first day is set to zero (no
+prior infections to divide by). Days where the force of infection is zero
+(no prior infections) also return zero. AD-transparent under Mooncake
+(only arithmetic and `@inbounds` loops).
+"""
+function implied_national_Rt(infections_total::AbstractVector,
+        g::AbstractVector)
+    n = length(infections_total)
+    Tp = promote_type(eltype(infections_total), eltype(g))
+    Rt = zeros(Tp, n)
+    @inbounds for t in 2:n
+        force = zero(Tp)
+        kmax = min(t - 1, length(g))
+        for s in 1:kmax
+            force += infections_total[t - s] * g[s]
+        end
+        if force > zero(Tp)
+            Rt[t] = safe_rate(infections_total[t]) / force
+        end
+    end
+    return Rt
 end
