@@ -1507,19 +1507,17 @@ per-province *level* of the case split, so the observed Nord-Kivu share
 (~9% of confirmed, near-constant across the window) maps almost directly
 onto a seed fraction of roughly the same size.
 
-This matters more than it looks. An absolute seed prior on the secondary
-patches puts them about four orders of magnitude below the primary patch's
-`2^m ≈ 164`, a seed ratio of about 13,700 to 1. An earlier version of this
-model used `N⁺(0.01, 0.01)`. Uncoupled, a secondary patch has only two
-routes to infections, its own seed and its own `R_t`, and the figures below
-are measured in that setting. If the seed is pinned that far below what the
-data need, the log-Rt deviation `δ_p` is forced to absorb the whole
-shortfall: reaching a 9% Nord-Kivu share requires `δ ≈ 1.0` (an `Rt` ratio
-of 2.7), which is a 3.4-sigma draw on the deviation prior, and the mapping
-from `δ` to the share is a knife-edge (`δ = 0.5` gives 0.5%, `δ = 1.0`
-gives 54%). The reported provincial `Rt` difference would then be an
-artefact of the seed prior rather than an epidemiological finding, which is
-precisely the quantity the patch model exists to estimate.
+The scale matters more than it looks. An absolute prior of the order of
+`N⁺(0.01, 0.01)` would put a secondary patch about four orders of magnitude
+below the primary patch's `2^m ≈ 164`, a seed ratio of about 13,700 to 1.
+Uncoupled, a secondary patch has only two routes to infections, its own seed
+and its own `R_t`, so a seed pinned that far below what the data need forces
+the log-Rt deviation `δ_p` to absorb the whole shortfall: reaching a 9%
+Nord-Kivu share then requires `δ ≈ 1.0` (an `Rt` ratio of 2.7), a 3.4-sigma
+draw on the deviation prior, and the mapping from `δ` to the share is a
+knife-edge (`δ = 0.5` gives 0.5%, `δ = 1.0` gives 54%). The provincial `Rt`
+difference would be an artefact of the seed prior rather than the
+epidemiological quantity the patch model exists to estimate.
 
 Parameterising the seed as a fraction decouples the two: the seed explains
 the level of the provincial split and `δ_p` is identified by its time
@@ -1552,6 +1550,8 @@ others, which is what the imports figure on the analysis page draws.
         importation_kernel::AbstractMatrix = province_importation_kernel(
             PROVINCE_POPULATIONS[1:min(n_patches, end)]),
         importation_epsilon_prior = Beta(1, 100),
+        importation_sd_prior = truncated(Normal(0, 0.5); lower = 0),
+        importation_effect_prior = Normal(0, 0.5),
         seed_fraction_prior = LogNormal(log(0.05), 1.0),
         incubation = (nmax) -> censored_delay_model(nmax;
             mean_prior = truncated(Normal(6.3, 0.54); lower = 1),
@@ -1620,14 +1620,44 @@ others, which is what the imports figure on the analysis page draws.
             seeds_matrix[p, j] = s_p[j]
         end
     end
-    ## 5. Importation intensity, only when the kernel actually couples the
-    ##    patches (see the docstring: against an all-zero kernel it would be
-    ##    a prior-only dimension).
+    ## 5. Importation intensity: one level per origin, partially pooled, and
+    ##    a common change at detection on the ramp the reproduction number
+    ##    already uses. Only sampled when the kernel couples the patches
+    ##    (against an all-zero kernel it would be a prior-only dimension).
+    ##
+    ##    Per origin because the provinces do not export alike and the kernel
+    ##    only carries size and distance. Pooled because the small provinces
+    ##    export too little for their own level to be identified: `σ_ε → 0`
+    ##    recovers one shared intensity, and a province the data say nothing
+    ##    about sits at the pooled mean. The deviations are centred, so
+    ##    `ε_bar` stays the overall level, as with the provincial `R_t` and
+    ##    ascertainment contrasts.
+    ##
+    ##    Time-varying because the outbreak being known changes movement: the
+    ##    provinces that arrive either side of the breakpoint are what
+    ##    separates `β_ε`.
     coupled = any(!iszero, importation_kernel)
-    ε = zero(Tp)
+    ε_matrix = zeros(Tp, n_patches, n)
     if coupled
-        ε ~ importation_epsilon_prior
-        importation_epsilon := ε
+        ε_bar ~ importation_epsilon_prior
+        σ_ε ~ importation_sd_prior
+        z_ε ~ product_distribution(fill(Normal(0, 1), n_patches))
+        β_ε ~ importation_effect_prior
+        z_bar = sum(z_ε) / n_patches
+        ramp = sigmoid_ramp(n, breakpoint)
+        @inbounds for q in 1:n_patches
+            lvl = ε_bar * exp(σ_ε * (z_ε[q] - z_bar))
+            for t in 1:n
+                ## Capped at one: the origin cannot send away more than it
+                ## generates. The prior sits four orders of magnitude below
+                ## the cap, so this binds only in the far tail.
+                ε_matrix[q, t] = min(lvl * exp(β_ε * ramp[t]), one(Tp))
+            end
+        end
+        importation_epsilon := ε_bar
+        importation_epsilon_sd := σ_ε
+        importation_epsilon_effect := β_ε
+        importation_epsilon_patch := [ε_matrix[q, n] for q in 1:n_patches]
     end
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
@@ -1636,7 +1666,7 @@ others, which is what the imports figure on the analysis page draws.
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(Rt_matrix, g, seeds_matrix,
-        importation_kernel, ε)
+        importation_kernel, ε_matrix)
     infections_matrix = renewal_state.infections
     importation_matrix = renewal_state.importation
     ## 7. Per-patch cumulatives and the national aggregate.

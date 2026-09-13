@@ -345,15 +345,29 @@ closures that capture mutated variables, or other constructs that would
 obscure Mooncake's AD reverse pass. The importation is computed inline
 in each day's patch loop (no closure allocation).
 """
+## Importation intensity of origin `q` on day `t`. A scalar applies to every
+## origin and every day; a matrix carries one level per origin over time.
+@inline _eps(e::Real, q::Integer, t::Integer) = e
+@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
+
 function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
-        epsilon::Real)
+        epsilon::Union{Real, AbstractMatrix})
     np, n = size(Rt_matrix)
     L = size(seeds_matrix, 2)
     Tp = promote_type(eltype(Rt_matrix), eltype(g), eltype(seeds_matrix),
-        eltype(importation_kernel), typeof(float(epsilon)))
+        eltype(importation_kernel),
+        epsilon isa Real ? typeof(float(epsilon)) : eltype(epsilon))
     I = zeros(Tp, np, n)
     imports = zeros(Tp, np, n)
+    ## What each origin sends away per unit of its own generated infections:
+    ## the kernel's column sums, constant in time.
+    outflow = zeros(Tp, np)
+    @inbounds for q in 1:np, r in 1:np
+
+        r == q && continue
+        outflow[q] += importation_kernel[r, q]
+    end
     @inbounds for p in 1:np
         for j in 1:min(L, n)
             I[p, j] = seeds_matrix[p, j]
@@ -370,25 +384,24 @@ function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
             end
             gen[p] = Rt_matrix[p, t] * force
         end
-        ## Importation redistributes that transmission rather than adding to
-        ## it: a fraction `epsilon * K[p, q]` of what `q` generates is realised
-        ## in `p` instead of at home, so `q` is debited exactly what the
-        ## destinations are credited and the national total is untouched by
-        ## coupling. Crediting the destination without debiting the origin, as
-        ## an earlier version did, makes coupling a net source of infections --
-        ## every patch's total rises and none falls, and the surplus
-        ## compounds through the renewal into the national cumulative total.
+        ## Importation redistributes transmission rather than adding to it:
+        ## a fraction `epsilon * K[p, q]` of what `q` generates is realised in
+        ## `p` instead of at home, so `q` is debited exactly what the
+        ## destinations are credited. That balances on the day it happens, not
+        ## across days: what moves then grows at the destination's own `R`, so
+        ## the national total is not invariant under coupling.
+        ## The intensity belongs to the ORIGIN: `p` is debited at its own
+        ## rate and credited at each sender's.
         for p in 1:np
-            outflow = zero(Tp)
             arrivals = zero(Tp)
             for q in 1:np
                 q == p && continue
-                outflow += importation_kernel[q, p]
-                arrivals += importation_kernel[p, q] * gen[q]
+                arrivals += _eps(epsilon, q, t) *
+                            importation_kernel[p, q] * gen[q]
             end
-            imports[p, t] = epsilon * arrivals
-            I[p, t] = (one(Tp) - epsilon * outflow) * gen[p] +
-                      epsilon * arrivals
+            imports[p, t] = arrivals
+            I[p, t] = (one(Tp) - _eps(epsilon, p, t) * outflow[p]) * gen[p] +
+                      arrivals
         end
     end
     return (; infections = I, importation = imports)

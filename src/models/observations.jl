@@ -3738,14 +3738,17 @@ the modelled expected share of patch `p` at vintage `i`.
     Ts = promote_type(eltype(modelled_confirmed), eltype(asc), eltype(sev))
     weight = asc .* sev
     shares = zeros(Ts, np, nv)
+    ## Each numerator is written once and read twice, rather than recomputing
+    ## `weight[p] * safe_rate(...)` for the denominator and again for the
+    ## share.
     @inbounds for i in 1:nv
         tot = zero(Ts)
         for p in 1:np
-            tot += weight[p] * safe_rate(modelled_confirmed[p, i])
+            shares[p, i] = weight[p] * safe_rate(modelled_confirmed[p, i])
+            tot += shares[p, i]
         end
         for p in 1:np
-            shares[p, i] = weight[p] * safe_rate(modelled_confirmed[p, i]) /
-                           tot
+            shares[p, i] /= tot
         end
     end
     ## The totals are conditioned on, not scored: they are already in the

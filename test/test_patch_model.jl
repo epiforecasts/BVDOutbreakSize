@@ -511,7 +511,8 @@ end
     ## Per-patch vector deterministics, one entry per patch.
     for q in (:C_T_patch, :R_T_patch, :delta_patch, :infections_T_patch,
         :region_drift_sd, :log_rt_contrast)
-        @test all(v -> length(v) == 3, vec(collect(chn[q])))
+        @test all(v -> length(v) == length(PROVINCE_NAMES),
+            vec(collect(chn[q])))
     end
     ## The deviations are contrasts around the common trend, so they sum to
     ## zero in every draw.
@@ -557,19 +558,19 @@ end
 
     df = patch_summary_table(chn, length(PROVINCE_NAMES))
     @test df isa DataFrame
-    ## Seven quantities per patch, three patches: cumulative infections, Rt,
+    ## Seven quantities per patch: cumulative infections, Rt,
     ## daily infections, the log-Rt deviation from the national trend, the
     ## log-Rt contrast against the primary patch, and the relative case
     ## ascertainment. The last two must BOTH be present: the case composition
     ## identifies only their product, so reporting a provincial Rt without the
     ## ascertainment beside it invites a case-finding artefact to be read as
     ## epidemiology.
-    @test nrow(df) == 21
+    @test nrow(df) == 7 * length(PROVINCE_NAMES)
     quantities = unique(df[!, "Quantity"])
     @test "Relative case ascertainment" in quantities
     @test "log-Rt vs primary patch" in quantities
     @test "Rt deviation drift" in quantities
-    @test unique(df[!, "Patch"]) == ["Ituri", "Nord-Kivu", "Sud-Kivu"]
+    @test unique(df[!, "Patch"]) == PROVINCE_LABELS
     ## The reported quantiles must be ordered, which the previous
     ## implementation's invented "median" (the midpoint of the 20-80
     ## interval) did not guarantee.
@@ -613,10 +614,10 @@ end
     ## The cross-province overview is one ROW per province, not one row per
     ## (province, quantity). This is the whole point of it: the long-format
     ## table is unreadable as a comparison across provinces.
-    ov = patch_overview_table(chn, 3)
+    ov = patch_overview_table(chn, length(PROVINCE_NAMES))
     @test ov isa DataFrame
-    @test nrow(ov) == 3
-    @test ov[!, "Province"] == ["Ituri", "Nord-Kivu", "Sud-Kivu"]
+    @test nrow(ov) == length(PROVINCE_NAMES)
+    @test ov[!, "Province"] == PROVINCE_LABELS
     @test "Reproduction number" in names(ov)
     @test "Share of infections (%)" in names(ov)
     ## Shares are computed per draw and must therefore still sum to 100 in the
@@ -630,7 +631,7 @@ end
     ## Patch column, which would otherwise repeat one value down every row.
     full = patch_summary_table(chn, length(PROVINCE_NAMES))
     one = patch_summary_table(chn, length(PROVINCE_NAMES); patch = "Nord-Kivu")
-    @test nrow(one) == nrow(full) / 3
+    @test nrow(one) == nrow(full) / length(PROVINCE_NAMES)
     @test !("Patch" in names(one))
     @test "Quantity" in names(one)
     ## Selecting by index and by label must agree.
@@ -678,7 +679,7 @@ end
         breakpoint = obs.who_first_sitrep_days,
         n_patches = length(PROVINCE_NAMES),
         rt_start = rt_start, rt_walk_start = rt_walk_start)
-    @test length(rt) == 3
+    @test length(rt) == length(PROVINCE_NAMES)
     @test all(size(r) == (40, obs.n) for r in rt)
 
     ## THE test that makes the figure trustworthy: rebuilding the provincial
