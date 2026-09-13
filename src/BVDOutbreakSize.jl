@@ -1,6 +1,6 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor
+using Statistics: quantile, mean, cor, median
 using TOML: TOML
 using DataFrames: DataFrame, rename
 using Chain: @chain

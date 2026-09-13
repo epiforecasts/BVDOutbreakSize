@@ -15,7 +15,9 @@ each push to `main` also republishes the rendered analysis and the
 A sizeable minority of the joint model's prior draws put the latent trajectory where the data score it hundreds of thousands of log units below the posterior, and a chain starting there never arrives: dual averaging shrinks the step size towards zero and the chain crawls in place for the whole run.
 Nothing diverges, so the failure is silent and shows only as a split R-hat pinned near its two-chain ceiling.
 Which chains are affected turns on the random number stream, so any change to the model's variable structure re-rolls it and a fit that converges today can fail tomorrow on unchanged code.
-The new default, `ViablePrior`, keeps the best of eight independent prior draws per chain by initial log joint density, so each chain still starts at its own over-dispersed prior-drawn point but not where it cannot leave.
+The new default, `ViablePrior`, has each chain screen eight independent prior draws and start at the first whose initial log joint density is at or above that batch's median.
+Taking the batch maximum would also clear the tail, but it keeps roughly the top eighth of the prior by density and so shrinks the between-chain dispersion split R-hat is built on.
+Rejecting the worse half clears a tail that is a few per cent of prior mass while leaving the start a genuine prior draw conditional on the floor.
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 

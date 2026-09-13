@@ -57,10 +57,10 @@ end
         1:50)
 end
 
-@testitem "viable_prior_init keeps more attempts at least as good" begin
+@testitem "viable_prior_init does not concentrate as attempts grow" begin
     using Distributions: Normal, truncated
     using Random: MersenneTwister
-    using Statistics: median
+    using Statistics: median, std
     using Turing: @model
     using Turing.DynamicPPL: VarInfo, getlogjoint
     using BVDOutbreakSize: viable_prior_init
@@ -71,11 +71,19 @@ end
     end
     model = _wide() | (; y = 0.5)
 
-    score(n) = median([getlogjoint(VarInfo(MersenneTwister(1), model,
-                           viable_prior_init(MersenneTwister(s), model;
-                               attempts = n))) for s in 1:100])
+    draws(n) = [getlogjoint(VarInfo(MersenneTwister(1), model,
+                    viable_prior_init(MersenneTwister(s), model;
+                        attempts = n))) for s in 1:200]
 
-    @test score(16) >= score(4)
+    ## Screening to the batch median keeps the upper half of the prior, so
+    ## raising `attempts` sharpens the floor estimate without walking the
+    ## starts towards the mode. An argmax rule would instead make the
+    ## spread shrink steadily as `attempts` grows, which is the behaviour
+    ## this guard deliberately avoids: R-hat needs that dispersion.
+    d4, d16 = draws(4), draws(16)
+    @test std(d16) > 0.5 * std(d4)
+    @test median(d16) > median(d4) - 3 * std(d4)
+
     @test_throws ArgumentError viable_prior_init(MersenneTwister(1), model;
         attempts = 0)
 end
@@ -179,4 +187,26 @@ end
     one = nuts_sample(_two(); samples = 50, chains = 2,
         init = ViablePrior(1))
     @test all(isfinite, vec(Array(one[:x])))
+end
+
+@testitem "viable_prior_init keeps a median draw, not the batch maximum" begin
+    using Distributions: Normal
+    using Turing: @model
+    using Random: MersenneTwister
+    using Statistics: mean
+    using BVDOutbreakSize: viable_prior_init
+
+    @model function _one()
+        x ~ Normal(0.0, 1.0)
+    end
+
+    ## Taking the batch argmax would pull starts towards the prior mode and
+    ## shrink the dispersion split R-hat relies on. Screening to the batch
+    ## median must leave the spread of starts close to the prior's own.
+    rng = MersenneTwister(7)
+    xs = [only(viable_prior_init(rng, _one(); attempts = 8).vect)
+          for _ in 1:400]
+    ## The prior is standard normal; argmax-of-8 would collapse the spread
+    ## towards zero, so a generous floor still separates the two rules.
+    @test 0.4 < sqrt(mean(abs2, xs .- mean(xs))) < 1.6
 end
