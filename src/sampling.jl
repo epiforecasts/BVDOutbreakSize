@@ -227,11 +227,16 @@ value for the entire run. Nothing diverges, so the failure is silent, and
 it surfaces only as a split R-hat pinned near its ceiling once a healthy
 chain is compared against the frozen one.
 
-Keeping the best of several draws removes that tail while leaving each
-chain an independent, genuinely prior-drawn and still over-dispersed
-starting point, so R-hat keeps its between-chain contrast. Only forward
-density evaluations are used, so the guard costs milliseconds against a fit
-measured in hours.
+Keeping the best of `attempts` draws is an argmax, not a draw from the
+prior: it reweights towards an order statistic of the joint density, so
+the starting points are systematically less dispersed than a genuine
+prior draw would be. That is the correction this guard is for — it turns
+an unrecoverable-tail draw into a viable one — but it also means R-hat's
+own between-chain contrast is reduced for a reason unrelated to mixing,
+which matters because R-hat is exactly the diagnostic this guard is
+being judged by. With `attempts = 8` and `chains = 2` the effect is not
+negligible. Only forward density evaluations are used, so the guard
+costs milliseconds against a fit measured in hours.
 
 $(TYPEDFIELDS)
 """
