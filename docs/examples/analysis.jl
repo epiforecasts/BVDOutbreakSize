@@ -375,7 +375,7 @@ MarkdownTable(vintage_table) #hide
 
 # #### Spatial structure
 #
-# The headline model runs one renewal equation per province, for Ituri, Nord-Kivu and Sud-Kivu, coupled by importation.
+# The headline model runs one renewal equation per patch, for Ituri, Nord-Kivu, Haut-Uele and a fourth pooling Tshopo, Sud-Kivu and Bas-Uele, coupled by importation.
 # Every national stream is fitted against the summed provinces, so the national quantities are aggregates of the provincial ones rather than a separate process.
 # Setting the patch count to one collapses this onto a single well-mixed population.
 # That is the model we fit to each data stream on its own, where there is no spatial data to split, and it is the control in the [spatial sensitivity](sensitivity.md).
@@ -396,7 +396,34 @@ MarkdownTable(vintage_table) #hide
 # The half-life is sampled, so a province with persistent divergence can still show one, and a half-life far longer than the window is the random walk.
 # One half-life is shared across provinces, which is what keeps the deviations summing to zero under the reversion.
 #
+# The cryptic phase is one epidemic partitioned across the provinces rather than one per province.
+# With sampled fractions $f_p$ of the primary patch's seed,
+#
+# ```math
+# s_1 = \frac{1}{1 + \sum_q f_q}, \qquad
+# s_p = \frac{f_{p-1}}{1 + \sum_q f_q}, \qquad
+# I_{p,j} = s_p\, 2^{m} e^{r(j - L)} \;\; (j \le L),
+# ```
+#
+# so the shares sum to one and the national seed is $2^m$ for any number of patches.
+# The genetic prior therefore keeps its meaning as the country's cryptic size and the cumulative total stays comparable with the single-population model.
+#
 # Each province runs its own renewal at its own reproduction number, and the national trajectory is their sum.
+#
+# ```math
+# G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+# I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+#           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t},
+# ```
+#
+# with $g$ the shared generation-interval distribution, $K$ the importation kernel and $\varepsilon$ its intensity.
+# The national series and the reproduction number it implies are read off the sum,
+#
+# ```math
+# I_t = \sum_p I_{p,t}, \qquad
+# R^{\text{nat}}_t = \frac{I_t}{\sum_{s} I_{t-s}\, g_s}.
+# ```
+#
 # There is no separate national process and nothing rescales the provinces to match one.
 # The national reproduction number is read back off the summed infections by inverting the renewal equation, which recovers the force-weighted mean of the provincial values.
 # The trend $\mu(t)$ is therefore the central value the provinces pool toward rather than the country's own reproduction number.
@@ -414,7 +441,27 @@ MarkdownTable(vintage_table) #hide
 #
 # Provinces are coupled by a gravity kernel, with a sampled intensity.
 # Travel from one province to another scales with the destination population and falls with the distance between the two provincial capitals, at the conventional gravity exponent of one.
-# The distance decides where a province's exported transmission lands, not how much of it leaves, because each origin's total outflow is held at the population-only value.
+#
+# ```math
+# K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr)
+#           \frac{N_p\, d_{pq}^{-1}}{\sum_{r \ne q} N_r\, d_{rq}^{-1}},
+# \qquad K_{q,q} = 0.
+# ```
+#
+# The distance decides where a province's exported transmission lands, not how much of it leaves, because each origin's total outflow is held at the population-only value $1 - N_q/N$.
+# The exponent is fixed rather than sampled, since it would trade off against the intensity on the same term.
+#
+# The intensity is one level per origin, partially pooled, and changes at detection on the ramp the reproduction number already uses,
+#
+# ```math
+# \varepsilon_{q,t} = \bar\varepsilon\,
+#   \exp\bigl(\sigma_\varepsilon (z_q - \bar z)\bigr)\,
+#   \exp\bigl(\beta_\varepsilon S(t)\bigr).
+# ```
+#
+# A scale of zero recovers one shared intensity, and a province that exports too little to identify its own level sits at the pooled mean.
+# The deviations are centred, so $\bar\varepsilon$ stays the overall level.
+# The provinces arrive either side of the breakpoint, which is what separates the change at detection from the level.
 # Coupling is a transfer, not a source.
 # The origin province is debited exactly what the destinations are credited on the day it happens, so importation never creates infections.
 # It can still move the national total, because the destination then grows at its own reproduction number.
@@ -426,7 +473,7 @@ MarkdownTable(vintage_table) #hide
 # Export pressure is Ituri's alone.
 # The Uganda export streams are driven by Ituri's infections and nothing else, so a case in Nord-Kivu contributes no chance of being detected across the border.
 # Nord-Kivu also borders Uganda, so that is an assumption rather than a fact.
-# Fitting a per-province export pressure, partially pooled, is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
+# The internal coupling is fitted per origin and pooled; doing the same for the Uganda export streams is the natural extension ([#669](https://github.com/epiforecasts/BVDOutbreakSize/issues/669)).
 # The per-province vintages stop before the cut-off, so the last stretch of the window is national data only ([#664](https://github.com/epiforecasts/BVDOutbreakSize/issues/664)).
 
 # #### Infections
