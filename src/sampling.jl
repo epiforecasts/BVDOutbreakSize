@@ -281,13 +281,21 @@ in the returned chain, so the first `n_adapts` draws are adaptation
 steps rather than posterior samples. Raise `samples` accordingly or drop
 them before summarising.
 
-`pathfinder = true` initialises each chain from a multi-path Pathfinder
-(Zhang et al. 2022) variational approximation of the model instead of the prior,
-which can shorten NUTS warmup. It requires `using Pathfinder` (a weak-dependency
-extension) and is off by default. `pathfinder_nruns` (default `max(chains, 4)`)
-sets the number of Pathfinder runs and `pathfinder_ndraws` (default
-`max(100, chains)`) the importance-resampled draw pool the per-chain initial
-points are spread across, so distinct posterior modes can seed distinct chains.
+`pathfinder = true` initialises each chain from a Pathfinder (Zhang et al.
+2022) variational approximation of the model instead of the prior, which
+starts the chains near the posterior rather than wherever the prior happens
+to land them. It requires `using Pathfinder` (a weak-dependency extension)
+and is off by default.
+
+`pathfinder_multipath` chooses how the per-chain points are produced.
+`false` (the default) gives each chain its own single-path run from its own
+seed, so the starting points are independent by construction. `true` runs
+`pathfinder_nruns` paths (default `max(chains, 4)`) and spreads the chains
+over a shared pool of `pathfinder_ndraws` importance-resampled draws
+(default `max(100, chains)`), which is meant to let distinct posterior modes
+seed distinct chains. On the joint model it does the reverse: the importance
+weights are degenerate, the pool collapses and every chain gets the same
+point, which leaves R-hat with no between-chain contrast to read.
 """
 function nuts_sample(model;
         samples::Integer = 500,
@@ -302,19 +310,21 @@ function nuts_sample(model;
         pathfinder::Bool = false,
         pathfinder_nruns::Integer = max(chains, 4),
         pathfinder_ndraws::Integer = max(100, chains),
+        pathfinder_multipath::Bool = false,
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
         kwargs...)
     rng = MersenneTwister(seed)
     ## Per-chain initialisation: the prior (or a passed strategy) by default; a
-    ## multi-path Pathfinder variational approximation when `pathfinder = true`,
-    ## which seeds each chain from a Pathfinder draw to cut NUTS warmup. The
-    ## Pathfinder run consumes `rng` first, then the sampler continues from it,
-    ## so the whole fit stays deterministic in `seed`.
+    ## Pathfinder variational approximation when `pathfinder = true`, which
+    ## starts each chain near the posterior instead of wherever its prior draw
+    ## fell. The Pathfinder run consumes `rng` first, then the sampler
+    ## continues from it, so the whole fit stays deterministic in `seed`.
     initial = pathfinder ?
               _pathfinder_init(model, chains; nruns = pathfinder_nruns,
-        ndraws = pathfinder_ndraws, adtype = adtype, rng = rng) :
+        ndraws = pathfinder_ndraws, adtype = adtype, rng = rng,
+        multipath = pathfinder_multipath) :
               fill(init, chains)
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)

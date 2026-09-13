@@ -24,6 +24,38 @@
     @test all(x -> x isa InitFromParams, inits)
 end
 
+@testitem "single-path pathfinder_init gives each chain its own point" begin
+    using BVDOutbreakSize: pathfinder_init, default_adtype
+    using Pathfinder
+    using Turing
+    using Turing.DynamicPPL: DynamicPPL, InitFromParams, VarInfo, getlogjoint
+    using Random: MersenneTwister
+
+    @model function _m()
+        a ~ Normal(0, 1)
+        z ~ filldist(Normal(0, 1), 3)
+        s ~ truncated(Normal(0, 1); lower = 0)
+        y ~ Normal(a + sum(z), s + 0.1)
+    end
+    model = _m() | (; y = 1.0)
+
+    inits = pathfinder_init(model, 3; nruns = 4, ndraws = 100,
+        adtype = default_adtype(), rng = MersenneTwister(1),
+        multipath = false)
+    @test length(inits) == 3
+    @test all(x -> x isa InitFromParams, inits)
+
+    ## The point of the single-path mode: independent runs, so the chains do
+    ## not all start on the same draw the way the shared resampled pool can
+    ## make them.
+    values(s) = DynamicPPL.getindex_internal(
+        VarInfo(MersenneTwister(1), model, s),
+        only(filter(k -> string(k) == "a", keys(
+            VarInfo(MersenneTwister(1), model, s)))))
+    points = [only(values(s)) for s in inits]
+    @test length(unique(points)) == 3
+end
+
 @testitem "nuts_sample pathfinder-init runs and returns a chain" begin
     using BVDOutbreakSize: nuts_sample
     using Pathfinder
