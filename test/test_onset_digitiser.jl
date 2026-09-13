@@ -93,6 +93,7 @@ end
 end
 
 @testitem "SitReps 117 and 118 stay out of the digitised onset curve" begin
+    using BVDOutbreakSize: BVDOutbreakSize
     ## 117's onset-date figure plots only up to 2026-09-03, five days short
     ## of its own 2026-09-08 report date - the first time in this series the
     ## plotted window has retreated relative to the immediately preceding
