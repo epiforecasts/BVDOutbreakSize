@@ -99,6 +99,60 @@ end
           InitFromPrior
 end
 
+@testitem "viable_prior_init gives independent chains different starts" begin
+    using Distributions: Normal
+    using Random: MersenneTwister
+    using Turing: @model
+    using BVDOutbreakSize: viable_prior_init
+
+    ## `nuts_sample` calls `viable_prior_init` once per chain from a shared
+    ## `rng`, so distinct chains must draw distinct starting vectors: that
+    ## independence is what keeps split R-hat meaningful once the argmax
+    ## selection has already pulled every start toward the mode (see the
+    ## dispersion note on `ViablePrior`). A comprehension that accidentally
+    ## hoisted the call out of the per-chain loop would still pass every
+    ## other test in this file while giving every chain the same start.
+    @model function _two()
+        x ~ Normal(0.0, 1.0)
+        z ~ Normal(0.0, 1.0)
+    end
+    model = _two()
+
+    rng = MersenneTwister(1)
+    a = viable_prior_init(rng, model)
+    b = viable_prior_init(rng, model)
+    @test a.vect != b.vect
+end
+
+@testitem "viable_prior_init falls back on a dimension-mismatched ldf" begin
+    using Distributions: Normal
+    using Random: MersenneTwister
+    using Turing: @model
+    using Turing.DynamicPPL: InitFromPrior, LogDensityFunction
+    using BVDOutbreakSize: viable_prior_init
+
+    ## `ldf` normally comes from the same model as the draw it wraps, but
+    ## nothing at the call site enforces that, and a model whose dimension
+    ## varies between prior draws could hand `InitFromVector` a vector of
+    ## the wrong length for the `ldf` `nuts_sample` built earlier. A
+    ## deliberately mismatched `ldf` (3 parameters against a 1-parameter
+    ## draw) reproduces that deterministically: the guard must degrade to
+    ## `InitFromPrior()` rather than throwing, matching its documented
+    ## contract for a model it cannot evaluate.
+    @model function _one()
+        x ~ Normal(0.0, 1.0)
+    end
+    @model function _three()
+        a ~ Normal(0.0, 1.0)
+        b ~ Normal(0.0, 1.0)
+        c ~ Normal(0.0, 1.0)
+    end
+    mismatched_ldf = LogDensityFunction(_three())
+
+    @test viable_prior_init(MersenneTwister(1), _one(); ldf = mismatched_ldf) isa
+          InitFromPrior
+end
+
 @testitem "nuts_sample starts each chain independently" tags=[:slow] begin
     using Distributions: Normal
     using Turing: @model

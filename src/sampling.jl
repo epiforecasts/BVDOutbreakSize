@@ -256,10 +256,20 @@ $(TYPEDSIGNATURES)
 One starting point for `model` under [`ViablePrior`](@ref) semantics: the
 highest-log-joint of `attempts` independent prior draws, returned as an
 initialisation strategy. Falls back to `InitFromPrior()` when no attempt
-gives a finite log density, so a model this guard cannot evaluate still
+gives a finite log density, or when the chosen draw cannot be wrapped as
+an initial vector for `ldf` (e.g. a model whose dimension varies between
+prior draws, since both the draw and `ldf` each come from their own fresh
+evaluation of `model`), so a model this guard cannot evaluate still
 samples exactly as before.
+
+`ldf` defaults to a fresh `LogDensityFunction(model)`, but
+[`nuts_sample`](@ref) builds one `LogDensityFunction` and passes it to
+every chain's call instead: construction re-evaluates `model`, so
+building it fresh per chain is not part of the guard's advertised
+forward-evaluation-only cost.
 """
-function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8)
+function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
+        ldf = LogDensityFunction(model))
     attempts >= 1 ||
         throw(ArgumentError("attempts must be at least 1, got $attempts"))
     best = nothing
@@ -272,7 +282,12 @@ function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8)
         best = collect(vi[:])
     end
     best === nothing && return InitFromPrior()
-    return InitFromVector(best, LogDensityFunction(model))
+    try
+        return InitFromVector(best, ldf)
+    catch e
+        e isa ArgumentError || rethrow()
+        return InitFromPrior()
+    end
 end
 
 """
@@ -351,11 +366,17 @@ function nuts_sample(model;
     rng = MersenneTwister(seed)
     ## Each chain draws and screens its own starting point, so the chains
     ## stay independent and over-dispersed; any other strategy is shared
-    ## across chains exactly as `sample` would use it.
-    inits = init isa ViablePrior ?
-            [viable_prior_init(rng, model; attempts = init.attempts)
-             for _ in 1:chains] :
-            fill(init, chains)
+    ## across chains exactly as `sample` would use it. The LogDensityFunction
+    ## is built once and shared across chains: construction re-evaluates
+    ## `model`, so rebuilding it per chain would not be the free forward-only
+    ## cost the guard advertises.
+    inits = if init isa ViablePrior
+        ldf = LogDensityFunction(model)
+        [viable_prior_init(rng, model; attempts = init.attempts, ldf)
+         for _ in 1:chains]
+    else
+        fill(init, chains)
+    end
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
     return sample(
