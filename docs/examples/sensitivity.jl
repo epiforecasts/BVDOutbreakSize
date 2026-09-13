@@ -244,6 +244,51 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
+# ### Forecast by province
+#
+# The one-week-ahead forecast split by province, scored against what each province went on to report.
+# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
+# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
+# This is what #668 asks for, and it is possible only because the province vintages now run to the cut-off.
+
+#md # ```@raw html
+#md # <details><summary>Province forecast against observed</summary>
+#md # ```
+
+## Per-province cumulative confirmed cases and deaths at the frozen cut-off
+## and at the current one, so the truth for the week is their difference.
+## Read off the same increment matrices the compositions are scored on, so
+## the clamped revision is treated identically on both sides.
+province_truth = let
+    cur_c = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    cur_d = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_c = province_increment_matrix(
+        frozen_lastweek.o.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_d = province_increment_matrix(
+        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES)
+    (; observed = vec(sum(cur_c.increments; dims = 2)),
+        baseline = vec(sum(froz_c.increments; dims = 2)),
+        death_observed = vec(sum(cur_d.increments; dims = 2)),
+        death_baseline = vec(sum(froz_d.increments; dims = 2)))
+end
+
+province_validation_table = province_forecast_vs_truth(
+    frozen_lastweek.chn, validation_forecast;
+    observed = province_truth.observed,
+    baseline = province_truth.baseline,
+    death_observed = province_truth.death_observed,
+    death_baseline = province_truth.death_baseline,
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_validation_table) #hide
+
 # ### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.

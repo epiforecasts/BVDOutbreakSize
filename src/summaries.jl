@@ -744,3 +744,63 @@ function province_forecast_table(chn, fc;
     end
     return _prettify(DataFrame(rows))
 end
+
+"""
+Per-province forecast against what was observed. `fc` is a
+[`forecast_reported`](@ref) result from a frozen patch fit, `chn` that same
+chain, and `observed` and `baseline` the per-province cumulative counts at
+the target date and at the forecast origin, so the truth is their difference.
+
+Each province's forecast is the national draw times that province's modelled
+share at the frozen fit's most recent spatial vintage. The two factors are
+multiplied draw by draw, so the interval carries their correlation rather
+than treating a province's share as independent of the national total. The
+share itself is held over the horizon, which is the assumption the width does
+not express: a province whose share is moving is scored as though it were
+not.
+
+Reports the median and 90% predictive interval, the observed count, and
+whether the observation fell inside the interval, one row per province and
+stream.
+"""
+function province_forecast_vs_truth(chn, fc;
+        observed::AbstractVector, baseline::AbstractVector,
+        death_observed::Union{Nothing, AbstractVector} = nothing,
+        death_baseline::Union{Nothing, AbstractVector} = nothing,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        digits::Integer = 0)
+    np = min(n_patches, length(patch_labels))
+    _has_key(chn, :province_shares) || error(
+        "chain carries no `province_shares`; the frozen fit was not run " *
+        "with the per-province compositions on.")
+    case_share = _per_patch_last_share(chn, :province_shares, np)
+    death_share = _has_key(chn, :province_death_shares) ?
+                  _per_patch_last_share(chn, :province_death_shares, np) :
+                  case_share
+    cols = propertynames(fc)
+    rows = NamedTuple[]
+    function add!(stream, p, draws, truth)
+        s = posterior_summary(draws)
+        push!(rows,
+            (province = patch_labels[p], stream = stream,
+                central_estimate = round(quantile(draws, 0.5); digits),
+                lower_90 = round(s.lo90; digits),
+                upper_90 = round(s.hi90; digits),
+                observed = truth,
+                within_90 = s.lo90 <= truth <= s.hi90))
+    end
+    for p in 1:np
+        if :confirmed_new in cols
+            v = fc[!, :confirmed_new]
+            add!("Confirmed cases", p, v .* case_share[p][1:length(v)],
+                observed[p] - baseline[p])
+        end
+        if :confirmed_deaths_new in cols && death_observed !== nothing
+            v = fc[!, :confirmed_deaths_new]
+            add!("Confirmed deaths", p, v .* death_share[p][1:length(v)],
+                death_observed[p] - death_baseline[p])
+        end
+    end
+    return _prettify(DataFrame(rows))
+end

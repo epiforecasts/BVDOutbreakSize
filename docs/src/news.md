@@ -59,6 +59,17 @@ NUTS terminates at the tree-depth cap on every iteration, so exploration is trun
 
 ### Data
 
+- The province scans reach the current situation report (#664).
+Confirmed cases and deaths cover 75 vintages ending 9 September against 21 ending 9 July, and the laboratory series 72.
+Three provinces to 10 July, five from 11 July, six from 12 August.
+The spatial likelihood now covers the whole window instead of its first 71%.
+- The model runs four patches: Ituri, Nord-Kivu, Haut-Uele, and an "other" patch pooling Sud-Kivu, Tshopo and Bas-Uele (#664).
+The three named provinces carry 5508, 1139 and 264 confirmed cases at the cut-off; the pooled three carry 31 between them.
+Populations are 2019 figures from the DRC Institut National de la Statistique, and capitals are from GeoNames; a pooled patch takes the summed population and the population-weighted mean of its members' capitals.
+- The longer series narrows the signal that identifies provincial ascertainment.
+Nord-Kivu holds 16.4% of confirmed cases against 9% when the scans stopped in July, and 21.6% of deaths, so the death-over-case ratio falls from roughly 1.6 to 1.3.
+Provincial test positivity converged too, Ituri 24.3% against Nord-Kivu 11.1%, where it was more than threefold apart.
+
 - Added per-province cumulative confirmed cases and deaths from Tableau 1 of the situation reports, as `[province_confirmed_history]` and `[province_death_history]` over 20 vintages, scanned by `scripts/scan_province_tableau1.jl` (#412).
 The scan is gated on the province rows summing exactly to the national totals on every date.
 - Added per-province laboratory throughput from section 4.3 of the reports, as `[province_lab_daily_history]` over 18 vintages, scanned by `scripts/scan_province_lab.jl` and gated the same way.
@@ -81,6 +92,9 @@ The trajectory is rebuilt from the deviation knots the chain carries, and a test
 - The methods section describes the meta-population structure, what identifies the split, what the model does not account for, and the sampler settings the fits use.
 - The spatial-structure comparison moved to the sensitivity page, where it is set out against the single-population fit's reproduction number, case-fatality ratio and outbreak size.
 - The summary dashboard gains the cross-province overview under the headline estimates and the by-province reproduction number under the national trajectory (#668).
+- The sensitivity page scores the one-week-ahead forecast by province against what each province went on to report (#668).
+Each province's forecast is the national draw times its modelled share, multiplied draw by draw so the interval carries the correlation between them.
+The one-week-back validation joint is now a patch fit, which is what makes this possible; the McCabe and Chamla frozen comparisons stay single-population.
 
 ## v1.18.0
 

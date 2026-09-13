@@ -1465,3 +1465,43 @@ end
     @test m.increments[other, :] == [6, 5, 3]
     @test all(>=(0), m.increments)
 end
+
+@testitem "province_forecast_vs_truth: the split should be scored per draw" begin
+    using BVDOutbreakSize: province_forecast_vs_truth
+    using DataFrames: DataFrame
+
+    ## The province forecast is the national draw times that province's
+    ## share, multiplied draw by draw. A share that moves with the national
+    ## total must therefore widen the province interval, where treating the
+    ## two as independent would not.
+    nd = 400
+    shares = hcat(fill(0.6, nd), range(0.5, 0.9; length = nd))
+    chn = (;
+        province_shares = [[shares[i, 1] 1-shares[i, 2];
+                            1-shares[i, 1] shares[i, 2]] for i in 1:nd],
+        province_death_shares = [[0.5 0.5; 0.5 0.5] for _ in 1:nd])
+    fc = DataFrame(confirmed_new = collect(range(50.0, 150.0; length = nd)),
+        confirmed_deaths_new = fill(40.0, nd))
+    df = province_forecast_vs_truth(chn, fc;
+        observed = [900, 100], baseline = [800, 60],
+        death_observed = [40, 20], death_baseline = [20, 10],
+        n_patches = 2, patch_labels = ["A", "B"])
+    @test size(df, 1) == 4
+    ## Truth is the difference of the two cumulatives, per province.
+    cases = df[df[!, "Stream"] .== "Confirmed cases", :]
+    @test cases[!, "Observed"] == [100, 40]
+    deaths = df[df[!, "Stream"] .== "Confirmed deaths", :]
+    @test deaths[!, "Observed"] == [20, 10]
+    ## The shares used are the last vintage's, so province A takes the
+    ## complement of the second column rather than the first.
+    @test 0.05 < cases[1, "Central estimate"] / 100 < 0.6
+    ## Coverage is reported, and the interval brackets the median.
+    @test all(df[!, "Lower 90%"] .<= df[!, "Central estimate"] .<=
+              df[!, "Upper 90%"])
+    @test eltype(df[!, "Within 90% PI"]) == Bool
+
+    ## A chain with no compositions cannot be scored by province.
+    @test_throws ErrorException province_forecast_vs_truth((; a = 1), fc;
+        observed = [1, 2], baseline = [0, 0], n_patches = 2,
+        patch_labels = ["A", "B"])
+end

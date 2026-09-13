@@ -160,9 +160,24 @@ function build_fit_specs(obs;
         chains::Integer = 2)
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
-    function fit_frozen_joint(cutoff_date)
+    ## `patches` turns the spatial structure on for this frozen fit. Only the
+    ## one-week-back validation uses it, because it is the only frozen fit
+    ## whose forecast is scored by province. The McCabe and Chamla
+    ## comparisons stay single-population: they are set against external
+    ## national estimates, where patches add cost and nothing else.
+    function fit_frozen_joint(cutoff_date; patches::Bool = false)
         o = freeze_observations(cutoff_date)
         bp = o.n - o.who_first_sitrep_days
+        pp = province_increment_matrix(o.province_confirmed_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES))
+        pd = province_increment_matrix(o.province_death_history,
+            PROVINCE_NAMES, length(PROVINCE_NAMES))
+        patch_args = patches ?
+                     (; n_patches = length(PROVINCE_NAMES),
+            province_increments = pp.increments,
+            province_days = pp.days,
+            province_death_increments = pd.increments,
+            province_death_days = pd.days) : (;)
         chn = nuts_sample(
             bvd_joint(
                 o.n, o.exported_cases, o.total_deaths,
@@ -188,7 +203,7 @@ function build_fit_specs(obs;
                 background_re = true,
                 confirmed_positivity_link = :composition,
                 genetic = genetic_seeding_model,
-                tmrca_days = o.tmrca_days);
+                tmrca_days = o.tmrca_days, patch_args...);
             samples = samples, chains = chains, target_accept = 0.90,
             callback = fit_callback("frozen_$(cutoff_date)"))
         return (; cutoff = o.cutoff, o, chn)
@@ -510,7 +525,8 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("onsets"))),
         (; id = "frozen_validation", kind = :frozen,
-            thunk = () -> fit_frozen_joint(validation_cutoff))
+            thunk = () -> fit_frozen_joint(validation_cutoff;
+                patches = true))
     ]
     ## One frozen individual fit per still-reported stream at the validation
     ## cut-off, so the "last week versus now" forecast validation can show
