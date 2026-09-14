@@ -715,18 +715,16 @@ m_0 = m_\\text{base} +
     \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
 ```
 
-Written for the integral model, where `m` counted doublings over the whole
-outbreak and `2^m` was the cut-off cumulative case total, so a base of 9
-matched McCabe et al.'s Method 2 central 501 cases. The renewal model
-redefined `m` to count only the cryptic doublings, making `2^m` the daily
-incidence at the renewal start, and `M_PRIOR_BASE` was recomputed 9.0 to
-3.0 to match. This helper is used only by the v1.3.0 integral backfill
-(`scripts/backfill_forecasts.jl`), which resolves it against that tag's
-own source where the base is still 9. Nothing in the renewal era calls it:
-the main fit takes `exponential_growth_model`'s own default. Do not pass
-it into a renewal fit expecting an outbreak-size centre — it advances at
-`M_PRIOR_DOUBLING_DAYS` per doubling, which for a current cut-off gives a
-centre near 19, i.e. a seed of order half a million per day.
+For the v1.3.0 integral backfill only, where `m` counts doublings over the
+whole outbreak and `2^m` is the cut-off cumulative case total, so a base of
+9 matches McCabe et al.'s Method 2 central 501 cases. That tag resolves this
+helper against its own source, where `M_PRIOR_BASE` is 9.
+
+Not for a renewal fit. There `m` counts only the cryptic doublings and
+`2^m` is a daily incidence, so an advancing outbreak-size centre would give
+a seed of order half a million per day. `exponential_growth_model` carries
+its own default and nothing in the renewal era calls this.
+
 """
 function m_prior_centre(as_of_date::Union{Date, AbstractString};
         base_date::AbstractString = M_PRIOR_BASE_DATE,

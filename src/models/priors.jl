@@ -269,45 +269,27 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(3, 1.5); lower = 0)` encodes the same belief the
-earlier `Normal(5, 4)` did, converted at the doubling time the data
-support rather than the one its prior assumed, and with a spread elicited
-in the units `m` now acts in.
+`m ~ truncated(Normal(3, 1.5); lower = 0)` counts the cryptic doublings,
+so the origin sits `m · τ` before the renewal start and `2^m` is the daily
+infection incidence there.
 
-The belief is unchanged: field work in Mongbwalu traced a sustained
-transmission chain back to a death on 25 January 2026 and identified 500+
-suspected cases between mid-January and mid-May (kupferschmidt2026), and
-the genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak age
-consistent with an origin that early. `m` counts only the cryptic
-doublings, not the cut-off case total, so the origin sits `m · τ` before
-the renewal start.
+The centre follows from the origin and the doubling time. Field work in
+Mongbwalu traced a sustained transmission chain back to a death on 25
+January 2026 (kupferschmidt2026), which is 63 days before the renewal
+start; at the posterior doubling of about 20 days that is roughly three
+doublings. The genetic TMRCA (mbalaplacide2026) is a lower bound on the
+outbreak age consistent with an origin that early.
 
-The centre follows from that origin and τ. At the prior median doubling
-of 11.7 days a 25 January origin is 63/11.7 ≈ 5.4 doublings, which is
-where the centre of 5 came from; at the posterior doubling of 19.9 days
-the same origin is 63/19.9 ≈ 3.2. The centre is converted, not revised.
-τ also carries its own wide prior, so the origin date `m · τ` is far more
-dispersed than `m` — a belief about the origin needs a tighter prior on
-`m` than the date uncertainty suggests, because τ supplies spread for
-free.
-
-The spread is elicited here for the first time in these units. `2^m` is a
-daily incidence at the renewal start, but the SD of 3 it inherited was
-elicited for the integral model, where `2^m` was the cut-off cumulative
-case total and the 95% support spanned 8 to 32,000 *cases*. That spread
-passed through the renewal reparameterisation untouched and became a
-spread on one day's infections: at SD 4 the 99th percentile is 22,722
-infections per day, against a fitted outbreak of roughly 14,700
-infections in total, so a prior on a single day reaches about one and a
-half times the whole outbreak. Integrating over the `r` prior, SD 1.5
-puts the 90% prior origin between 2 January and 21 March 2026, bracketed
-by the field-epi first death at the late end and the genetic TMRCA point
-estimate at the early end. It still asserts a pre-MRCA origin, which is
-the field-epi claim; it stops asserting an origin in autumn 2025, which
-nothing supports (17.2% of prior mass before December 2025, against 1.2%
-here). The genetic term itself is flat above `m ≈ 4`, contributing 1.66
-nats in total and essentially all of it below `m ≈ 3`, so the old upper
-tail carried no genetic support at all.
+The spread is elicited in seed units. Integrating over the `r` prior, SD
+1.5 puts the 90% prior origin between 2 January and 21 March 2026,
+bracketed by the field-epi first death at the late end and the genetic
+TMRCA point estimate at the early end, and its 99th percentile seed is a
+few hundred infections per day against a fitted outbreak of order ten
+thousand in total. A belief about the origin needs a tighter prior on `m`
+than the date uncertainty suggests, because τ carries its own wide prior
+and so supplies spread for free. The genetic term is flat above `m ≈ 4`,
+contributing 1.66 nats in total and essentially all of it below `m ≈ 3`,
+so the prior above that is unconstrained by the genetics.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override. Do **not** pass a
