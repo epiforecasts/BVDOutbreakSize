@@ -5,8 +5,7 @@
 
 @testitem "specimen_intensity_model is flat when the trend is zero" begin
     using BVDOutbreakSize: specimen_intensity_model
-    using Turing.DynamicPPL: VarInfo, InitFromPrior, fix
-    using Random: MersenneTwister
+    using Turing.DynamicPPL: fix
 
     m = fix(specimen_intensity_model(30; ref_day = 10), (; κ0 = 2.0, β_κ = 0.0))
     st = m()
@@ -48,33 +47,34 @@ end
     ## Old behaviour: bounded above by the suspect inflow, for any τ_test < 1.
     @test sum(τ_test .* carried) < sum(suspects)
 
-    ## With a multiplier of 1.6 the volume can exceed it, as the data do.
-    @test sum(1.6 .* τ_test .* carried) > sum(suspects[1:(end - 10)])
+    ## With a multiplier above 1/τ_test the volume exceeds the carried
+    ## inflow, which is the structural claim; the data reach 1.50 monthly.
+    @test sum(1.6 .* τ_test .* carried) > sum(carried)
 end
 
-@testitem "specimen_intensity = false reproduces the unmultiplied volume" begin
-    ## The keyword must nest: switching the submodel off has to leave the
-    ## confirmed stream exactly as it was, so an unchanged posterior under
-    ## `false` and a moved one under `true` are attributable to the data.
-    using BVDOutbreakSize: confirmed_cases_model, onset_incidence_model
-    using Turing.DynamicPPL: VarInfo, InitFromPrior, getlogjoint
+@testitem "a unit intensity reproduces the unmultiplied volume exactly" begin
+    ## The nesting claim, tested rather than asserted: with `κ0 = 1` and
+    ## `β_κ = 0` the analysed volume must match the `nothing` path
+    ## element-wise, so `specimen_intensity = false` and an unmoved
+    ## posterior mean the same thing.
+    using BVDOutbreakSize: confirmed_cases_model, specimen_intensity_model
+    using Turing: returned
+    using Turing.DynamicPPL: fix
     using Random: MersenneTwister
 
     onsets = [10.0 + 0.5i for i in 1:80]
     bg = fill(4.0, 80)
-    bvd = copy(onsets)
     hist = (; days = Int[60, 70], counts = Int[120, 180])
     lab = (; days = Int[60, 70], counts = Int[400, 500])
 
     build(si) = confirmed_cases_model(hist, 180, onsets, 0.1, 0.6, bg, 0.8,
-        bvd; lab_history = lab, specimen_intensity = si)
+        copy(onsets); lab_history = lab, specimen_intensity = si)
 
-    off = getlogjoint(VarInfo(MersenneTwister(3), build(nothing),
-        InitFromPrior()))
-    @test isfinite(off)
-    ## Drawing the submodel adds its two parameters, so the log joint differs;
-    ## what must hold is that both paths evaluate and neither errors.
-    on = getlogjoint(VarInfo(MersenneTwister(3),
-        build(BVDOutbreakSize.specimen_intensity_model(80)), InitFromPrior()))
-    @test isfinite(on)
+    unit = fix(specimen_intensity_model(80), (; κ0 = 1.0, β_κ = 0.0))
+    rng() = MersenneTwister(3)
+    off = returned(build(nothing), rand(rng(), build(nothing)))
+    on = returned(build(unit), rand(rng(), build(unit)))
+    @test off.analysed_daily ≈ on.analysed_daily
+    @test off.κ_daily === nothing
+    @test all(≈(1.0), on.κ_daily)
 end

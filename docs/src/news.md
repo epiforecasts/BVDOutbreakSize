@@ -21,10 +21,6 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
-## Unreleased
-
-### Fixed
-
 - The analysed volume is no longer capped below the modelled suspect inflow.
 `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
 The receipt PMF sums to one and `convolve_delay` only loses mass, so with `τ_test` a probability on `(0, 1)` the modelled analysed volume could never exceed the modelled suspect inflow.

@@ -1172,14 +1172,18 @@ quantities.
     ## the receipt PMF sums to one, so without this factor the modelled
     ## analysed volume is capped below the modelled suspect inflow, a ceiling
     ## the reported data cross.
+    carried = convolve_delay(suspected_daily, receipt_state.pmf)
     κ_daily = if specimen_intensity === nothing
-        fill(one(τ_test), n)
+        nothing
     else
         intensity_state ~ to_submodel(specimen_intensity)
         intensity_state.κ
     end
-    analysed_daily_raw = κ_daily .* τ_test .*
-                         convolve_delay(suspected_daily, receipt_state.pmf)
+    ## Branch the whole product, not just `κ`: on the `nothing` path a
+    ## length-`n` vector of ones would be a real broadcast multiply on every
+    ## gradient call.
+    analysed_daily_raw = κ_daily === nothing ? τ_test .* carried :
+                         κ_daily .* τ_test .* carried
     ## In predict mode (no AD) the daily series can infer as `Vector{Any}` on
     ## some Julia versions, which then makes `reduce_empty` / `zero(Any)` fail
     ## on the empty derived window vectors below, so it is concretised to the
@@ -1456,7 +1460,7 @@ quantities.
     p_pos_grid = expand_vintage_rate(p_pos_daily, window_days, n)
     confirmed_daily = p_pos_grid .* analysed_daily
 
-    return (; τ_test, bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
+    return (; τ_test, κ_daily, bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,

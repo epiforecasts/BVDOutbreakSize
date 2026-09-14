@@ -1298,14 +1298,18 @@ cfr_prior_fig #hide
 # ##### Laboratory pipeline
 #
 # The laboratory pipeline fits a single analysed-specimen volume.
-# There is no separately-modelled testing capacity: the analysed volume is a deterministic function of the suspected-case incidence.
-# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory),
+# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\kappa_t$,
 #
 # ```math
-# v_t = \tau_{\text{test}} \sum_{s \ge 0}
+# v_t = \kappa_t\, \tau_{\text{test}} \sum_{s \ge 0}
 #     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg},t-s}\bigr)\,
 #     f_{\text{rec},s}.
 # ```
+#
+# $\kappa_t$ exists because $\tau_{\text{test}}$ is a probability and the receipt kernel conserves mass, so without it the modelled volume could never exceed the modelled suspect inflow.
+# The reported data cross that ceiling: the analysed-to-suspect ratio runs 0.93 in June, 1.01 in July and 1.50 over 1-5 August.
+# A suspect can yield several specimens through repeat control testing, and swabbed community deaths and screened contacts enter the laboratory denominator without being counted as suspects reported.
+# It is a log-linear trend centred on no effect, so $\kappa \equiv 1$ recovers the earlier construction.
 #
 # This analysed volume is gated to zero before the testing onset.
 # No specimens are analysed before the laboratory existed, so $v_t$ does not accrue over the pre-surveillance cryptic phase.
@@ -1313,7 +1317,7 @@ cfr_prior_fig #hide
 # The first confirmed vintage is treated as the baseline and the early confirmed increments are scored from it.
 # The suspected-case count itself is not gated, as those cases did accumulate over the cryptic phase.
 #
-# This construction, a testing fraction times the suspected pipeline carried to laboratory receipt, gives the modelled case analysed volume that the confirmed deaths reuse.
+# This construction, a specimens-per-suspect factor times a testing fraction times the suspected pipeline carried to laboratory receipt, gives the modelled case analysed volume that the confirmed deaths reuse.
 # The death volume scales it at the per-day suspected death-to-case ratio (described in the confirmed deaths section below).
 # The two therefore share the laboratory capacity onset.
 #
