@@ -2403,9 +2403,6 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 
 province_overview_table #hide
 
-# The observed split over the fitted window is below, to be read against the modelled one.
-# Ituri is the epicentre and Sud-Kivu has reported no new confirmed case since 26 May.
-
 #md # ```@raw html
 #md # <details><summary>Observed province split</summary>
 #md # ```
