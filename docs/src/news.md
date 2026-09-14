@@ -21,6 +21,11 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
+`test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
+The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
+Both offsets are now scored on one set of prior draws, which isolates the shift itself: the difference is exactly 200 on every seed tested, and the tolerance is 1.
+
 - The analysed volume is no longer capped below the modelled suspect inflow.
 `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
 The receipt PMF sums to one and `convolve_delay` only loses mass, so with `τ_test` a probability the modelled analysed volume could never exceed the modelled suspect inflow.
