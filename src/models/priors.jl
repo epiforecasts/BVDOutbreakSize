@@ -870,12 +870,23 @@ the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
 knot spacing.
 
-The baseline level `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is a
-half-normal, so it shrinks the background toward zero and cannot
-out-explain the outbreak signal on its own. The scale is wide enough not to
-truncate the level the suspected-case data support: the joint posterior for
-`λ_mu` runs about 16 to 30 suspected cases per day, which sits between the
-58th and 87th percentiles here. Pass `baseline_prior` to override.
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the level on the first knot
+day, not the level over the window: the walk's log-deviation is pinned to zero
+there, so the prior anchors the start of the window and the innovations carry
+it from there. On the production grid that day is 1 May and the fitted
+background reaches a few hundred per day by the cut-off, so this scale is not
+comparable to a mid-window level.
+
+The half-normal shrinks that anchor toward zero, which is what stops the
+background out-explaining the outbreak signal. The scale is wide enough not to
+truncate the anchor the suspected-case data support: the joint posterior for
+`λ_mu` runs about 16 to 30 per day, which sits between the 58th and 87th
+percentiles here. Pass `baseline_prior` to override.
+
+The anchor is one of three prior-posterior conflicts the fitted background
+shows, alongside `σ_bg` near the top of its own prior and every innovation
+sharing a sign. Together those are the signature of a zero-mean walk carrying a
+systematic trend, which a wider anchor does not address.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
