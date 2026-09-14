@@ -21,6 +21,19 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+## Unreleased
+
+### Fixed
+
+- Absconding no longer discharges patients the clinical exits have already discharged.
+`accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
+Both length-of-stay PMFs sum to one, so the clinical schedules alone account for every admitted patient and the abscond flow removes mass a second time.
+The schedules are convolutions of past admissions, so they keep removing cohort mass that absconds have already taken, and in a cohort's tail the scheduled discharge exceeds the remaining stock.
+The `max(., 0)` guards then clip it to exactly zero, which floors the modelled occupancy rate and flattens the likelihood.
+Each length-of-stay PMF is now thinned by the abscond survival over cohort age, `(1 - κ)^d`, so absconding competes with the clinical exits instead of adding to them.
+Thinning by cohort age rather than calendar day is what makes it a competing risk: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
+`κ = 0` leaves the schedules unchanged.
+
 ## v1.18.0
 
 Changes since v1.17.0

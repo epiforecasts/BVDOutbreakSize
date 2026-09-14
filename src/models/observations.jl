@@ -1817,6 +1817,27 @@ positivity and the expected confirmed-death count.
 end
 
 """
+$(TYPEDSIGNATURES)
+
+Length-of-stay PMF thinned by survival against absconding over cohort age:
+`pmf[d+1] * (1 - κ)^d`, renormalised only by what absconding removes, so the
+result sums to the fraction of a cohort that leaves clinically rather than by
+absconding.
+
+`accumulate_occupancy` removes an abscond flow from the occupied stock. The
+clinical schedules are convolutions of past admissions and, unthinned,
+already account for the whole admitted mass, so the two together discharge
+more than was admitted. Thinning the schedule by the same hazard makes
+absconding a competing risk: deaths, recoveries and absconds then partition
+each cohort. `κ = 0` returns the PMF unchanged.
+"""
+function abscond_thinned(pmf::AbstractVector, κ::Real)
+    T = promote_type(eltype(pmf), typeof(κ))
+    surv = one(T) - κ
+    return T[pmf[i] * surv^(i - 1) for i in eachindex(pmf)]
+end
+
+"""
     accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard)
 
 Treatment-centre occupancy built as a forward day-by-day running balance of
@@ -2280,11 +2301,22 @@ series for forecasting and replication.
 
     ## Label-independent clinical discharge events. Deaths and recoveries split
     ## `A_bvd` by `CFR_iso`. Rule-outs discharge `A_bg`.
-    dpmf = death_los_state.pmf
-    rpmf = recovery_los_state.pmf
+    ##
+    ## Each length-of-stay PMF is thinned by the abscond survival over cohort
+    ## age, `(1 - κ)^d`, so absconding competes with the clinical exits rather
+    ## than draining a stock they already close. Deaths and recoveries alone
+    ## discharge the whole of `A_bvd` — `CFR_iso + (1 - CFR_iso) = 1` and both
+    ## PMFs sum to one — and rule-outs the whole of `A_bg`, so an unthinned
+    ## schedule plus an abscond outflow removes more than was ever admitted.
+    ## Thinning by cohort AGE is what makes the three partition the cohort: a
+    ## patient resident ten days faces ten days of abscond hazard, not one per
+    ## day of the whole grid.
+    dpmf = abscond_thinned(death_los_state.pmf, κ)
+    rpmf = abscond_thinned(recovery_los_state.pmf, κ)
     deaths_daily = convolve_delay(CFR_iso .* A_bvd, dpmf)
     recover_daily = convolve_delay((one(CFR_iso) - CFR_iso) .* A_bvd, rpmf)
-    ruleout_daily = convolve_delay(A_bg, ruleout_los_state.pmf)
+    ruleout_daily = convolve_delay(A_bg,
+        abscond_thinned(ruleout_los_state.pmf, κ))
     admit_daily = A_bvd .+ A_bg
 
     ## Community confirmation hazard `τ_test · p_pos` borrowed from the lab
