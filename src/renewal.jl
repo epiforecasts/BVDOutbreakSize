@@ -184,10 +184,16 @@ end
 """
 Renewal-start seed magnitude for the two-phase renewal: the daily
 infection incidence the analytic cryptic phase reaches ON the
-renewal-start day. It is an incidence, not a cumulative count — the
-cryptic total on the grid is larger by roughly `1/(1 - e^{-r})`, about 17
-to 29 at the fitted growth rate. Reading it as cumulative and "correcting"
-the code to match would shift `m` by 4.1 to 4.9 doublings. The renewal is two-phase: an analytic exponential cryptic phase from
+renewal-start day.
+
+It is an incidence, not a cumulative count. The cryptic total accumulated
+over the `renewal_start` grid days is larger by
+`(1 - e^{-r·len}) / (1 - e^{-r})`, which runs about 16 to 23 across the
+prior-to-posterior range of the doubling time. Reading the seed as
+cumulative, and "correcting" the code to match, would shift `m` by
+roughly 4.0 to 4.5 doublings.
+
+The renewal is two-phase: an analytic exponential cryptic phase from
 the origin to the renewal start (≈ the genetic TMRCA day, off the renewal
 grid), then the renewal recursion on `[renewal_start, cut-off]`. The
 doubling count `m` counts the doublings during the cryptic phase

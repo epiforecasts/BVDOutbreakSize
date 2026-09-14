@@ -53,11 +53,11 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 5.8, SD near 3.4 (truncated Normal(5, 4); lower 0): `m`
-    ## counts only the cryptic doublings. The prior is deliberately wide so
-    ## the cryptic duration stays uncertain.
-    @test 5.3 < mean(m) < 6.3
-    @test 3.0 < std(m) < 3.8
+    ## Centre near 3.08, SD near 1.41 (truncated Normal(3, 1.5); lower 0):
+    ## `m` counts only the cryptic doublings, and `2^m` is a daily incidence,
+    ## so the spread is elicited in seed units rather than outbreak totals.
+    @test 2.6 < mean(m) < 3.6
+    @test 1.1 < std(m) < 1.7
     ## The growth rate is centred on the BEAST X 11.7-day doubling
     ## (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
@@ -74,8 +74,9 @@ end
     τ = log(2) ./ r
     @test 4.9 < quantile(τ, 0.025) < 5.8
     @test 23.6 < quantile(τ, 0.975) < 27.8
-    ## The induced cryptic duration T = m·τ is correspondingly wide.
-    @test std(T) > 30.0
+    ## The induced cryptic duration T = m·τ stays wide, because τ carries
+    ## its own prior: std(T) ≈ 25 even though `m`'s own SD is 1.41.
+    @test std(T) > 15.0
 end
 
 @testitem "infection_model: two-phase renewal-start seeding" tags=[:slow] begin
@@ -107,7 +108,9 @@ end
     @test all(isfinite, T) && all(isfinite, C_T) && all(C_T .> 0)
     ## Total age T = m·τ + τ_obs is wide (prior-dominated by the m prior)
     ## and ≥ τ_obs by construction (the cryptic phase adds m·τ ≥ 0).
-    @test std(T) > 20.0
+    ## Headroom here is ≈25 against an MC se of ≈0.9 at this draw count,
+    ## so the bound is set well clear rather than just under the old value.
+    @test std(T) > 12.0
     @test all(T .>= τ_obs)
     @test mean(T) > τ_obs    # origin sits before the renewal start (cryptic)
     ## The renewal-start seed magnitude is `2^m` directly, r-independent (no

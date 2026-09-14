@@ -297,9 +297,9 @@ elicited for the integral model, where `2^m` was the cut-off cumulative
 case total and the 95% support spanned 8 to 32,000 *cases*. That spread
 passed through the renewal reparameterisation untouched and became a
 spread on one day's infections: at SD 4 the 99th percentile is 22,722
-infections per day, over three times the whole fitted outbreak in a
-single day, and the prior median seed of 46/day exceeds the posterior's
-whole-outbreak average incidence. Integrating over the `r` prior, SD 1.5
+infections per day, against a fitted outbreak of roughly 12,700
+infections in total, so a prior on a single day reaches nearly twice the
+whole outbreak. Integrating over the `r` prior, SD 1.5
 puts the 90% prior origin between 2 January and 21 March 2026, bracketed
 by the field-epi first death at the late end and the genetic TMRCA point
 estimate at the early end. It still asserts a pre-MRCA origin, which is
@@ -310,9 +310,11 @@ nats in total and essentially all of it below `m ≈ 3`, so the old upper
 tail carried no genetic support at all.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
-renewal recursion grows forward under `R_t`. Pass `m_prior` to override,
-e.g. one whose centre advances via [`m_prior_centre`](@ref) for a later
-cut-off. Returns `(; τ, r, m, T, C_T)`.
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override. Do **not** pass a
+centre from [`m_prior_centre`](@ref): that helper is for the v1.3.0
+integral backfill, where `2^m` was the cut-off cumulative case total, and
+its advancing centre would give a renewal seed of order half a million
+per day. Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
