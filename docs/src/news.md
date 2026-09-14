@@ -21,6 +21,11 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
+`test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
+The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
+Both offsets are now scored on one set of prior draws, which isolates the shift itself: the difference is exactly 200 on every seed tested, and the tolerance is 1.
+
 - Absconding no longer discharges patients the clinical exits have already discharged.
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 Both length-of-stay PMFs sum to one, so the clinical schedules alone account for every admitted patient and the abscond flow removes mass a second time.
