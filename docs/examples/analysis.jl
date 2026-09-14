@@ -2274,7 +2274,8 @@ summary_ranges = let
     ## Per-province cumulative infections, read off the patch deterministic
     ## one draw at a time so the provinces stay coupled draw for draw.
     C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
-    sprov = [posterior_summary([v[p] for v in C_patch]) for p in 1:3]
+    sprov = [posterior_summary([v[p] for v in C_patch])
+             for p in 1:N_PATCHES]
     ints_f(s,
         d) = string(
         "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
@@ -2315,10 +2316,11 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
-    - **By province:** Ituri is estimated to have had $(ints_i(sprov[1]))
-      infections to date, Nord-Kivu $(ints_i(sprov[2])) and Sud-Kivu
-      $(ints_i(sprov[3])).
-      The national count is the sum of the three.
+    - **By province:** $(join([string(PROVINCE_LABELS[p], " ",
+                                  ints_i(sprov[p]))
+                              for p in 1:N_PATCHES], "; ")) infections to
+      date.
+      The national count is their sum.
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
@@ -2393,7 +2395,7 @@ province_overview_table #hide
 #md # ```
 
 province_split_table = DataFrame(
-    Province = ["Ituri", "Nord-Kivu", "Sud-Kivu"],
+    Province = PROVINCE_LABELS,
     Cases = vec(sum(province_cases.increments; dims = 2)),
     Deaths = vec(sum(province_deaths.increments; dims = 2)));
 province_split_table.:"Case share" = round.(
