@@ -1366,3 +1366,48 @@ end
     pax = first(x for x in pfig.content if x isa CairoMakie.Makie.Axis)
     @test count(p -> p isa CairoMakie.Makie.Band, pax.scene.plots) == 3
 end
+
+@testitem "plot_patch_summary: one panel per quantity, one interval per province" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_patch_summary, PROVINCE_LABELS
+
+    rng = MersenneTwister(11)
+    nd = 200
+    np = 3
+    draws(centre) = [centre .+ 0.1 .* randn(rng, np) for _ in 1:nd]
+    base = (; C_T_patch = draws([900.0, 300.0, 80.0]),
+        R_T_patch = draws([1.2, 0.9, 0.7]),
+        infections_T_patch = draws([40.0, 12.0, 3.0]),
+        delta_patch = draws([0.2, -0.05, -0.15]))
+    fig = plot_patch_summary(base, np)
+    @test fig isa CairoMakie.Makie.Figure
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 4
+    for ax in axes
+        ## Three nested bars and a median dot per province.
+        @test count(p -> p isa CairoMakie.Makie.Lines, ax.scene.plots) ==
+              3 * np
+        @test count(p -> p isa CairoMakie.Makie.Scatter, ax.scene.plots) == np
+        ## The provinces share the axis, one named tick each, rather than
+        ## being stacked on one position.
+        positions, labels = ax.xticks[]
+        @test positions == Float64.(1:np)
+        @test labels == String.(PROVINCE_LABELS[1:np])
+    end
+    ## A reference rule only where the quantity has one: the reproduction
+    ## number against one, the log-Rt deviation against zero.
+    @test [count(p -> p isa CairoMakie.Makie.HLines, ax.scene.plots)
+           for ax in axes] == [0, 1, 0, 1]
+    ## The optional quantities gain a panel each when the chain carries them,
+    ## matching the seven `patch_summary_table` reports.
+    full = (; base..., log_rt_contrast = draws([0.0, -0.3, -0.5]),
+        region_drift_sd = draws([0.05, 0.04, 0.06]),
+        province_ascertainment = draws([1.4, 0.8, 0.6]))
+    ffig = plot_patch_summary(full, np)
+    @test count(x -> x isa CairoMakie.Makie.Axis, ffig.content) == 7
+    ## A chain that is not from `bvd_joint` says so rather than failing deep
+    ## inside the draw lookup.
+    @test_throws ErrorException plot_patch_summary((; base.C_T_patch), np)
+end

@@ -2403,19 +2403,34 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 
 province_overview_table #hide
 
-#md # ```@raw html
-#md # <details><summary>Per-province summary table</summary>
-#md # ```
-#
-# Each province on the same 30/60/90% credible-interval layout as the national tables, adding the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
+# The figure below puts every province on the same 30/60/90% credible-interval layout as the national tables, one panel per quantity, and adds the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
+# Each panel carries its own y-axis, so the provinces are compared within a panel rather than across panels.
+# Dashed rules mark the reference value each quantity is read against.
+# The same numbers are in the table below it, which is folded away because seven quantities over four provinces is 28 rows.
 
-province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+#md # ```@raw html
+#md # <details><summary>Per-province summary figure</summary>
+#md # ```
+
+province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+province_detail_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary table</summary>
+#md # ```
+
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+
 province_detail_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
 # Each panel carries its own y-axis, because the provinces differ by orders of magnitude, so the panels are read for shape and timing and the table above for size.
