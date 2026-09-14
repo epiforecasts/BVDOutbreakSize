@@ -2020,6 +2020,7 @@ prior_pair_fig #hide
 
 diagnostics_table( #hide
     "joint" => chn_joint, #hide
+    "joint, no patches" => chn_no_patches, #hide
     "exports" => chn_exports, #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
@@ -2276,6 +2277,15 @@ summary_ranges = let
     C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
     sprov = [posterior_summary([v[p] for v in C_patch])
              for p in 1:N_PATCHES]
+    ## The same draws give each province's reproduction number at the cut-off
+    ## and its case-fatality ratio, so the three read coupled draw for draw.
+    Rt_patch_draws = [collect(v) for v in vec(collect(chn_joint[:R_T_patch]))]
+    sprov_rt = [posterior_summary([v[p] for v in Rt_patch_draws])
+                for p in 1:N_PATCHES]
+    cfr_patch_draws = [collect(v)
+                       for v in vec(collect(chn_joint[:CFR_patch]))]
+    sprov_cfr = [posterior_summary([100 * v[p] for v in cfr_patch_draws])
+                 for p in 1:N_PATCHES]
     ints_f(s,
         d) = string(
         "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
@@ -2316,11 +2326,17 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
-    - **By province:** $(join([string(PROVINCE_LABELS[p], " ",
-                                  ints_i(sprov[p]))
-                              for p in 1:N_PATCHES], "; ")) infections to
+    - **By province, infections:** $(join([string(PROVINCE_LABELS[p], " ",
+                                              ints_i(sprov[p]))
+                                          for p in 1:N_PATCHES], "; ")) to
       date.
       The national count is their sum.
+    - **By province, reproduction number:** $(join([
+          string(PROVINCE_LABELS[p], " ", ints_f(sprov_rt[p], 2))
+          for p in 1:N_PATCHES], "; ")) at the cut-off.
+    - **By province, case-fatality ratio:** $(join([
+          string(PROVINCE_LABELS[p], " ", ints_f(sprov_cfr[p], 1), "%")
+          for p in 1:N_PATCHES], "; ")).
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
