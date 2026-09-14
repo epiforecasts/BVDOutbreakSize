@@ -29,8 +29,10 @@ A suspect can yield more than one specimen, and swabbed community deaths and scr
 Without a way to represent it the fit pressed `τ_test` against its ceiling (posterior 0.921-0.994, the 92nd to 99.6th percentile of its `Beta(5, 2)` prior) and inflated the modelled suspect inflow by about 10% over the observed window, pushing the non-BVD background up to carry specimens that were never extra suspects.
 `specimen_intensity_model` adds specimens analysed per suspect sampled, `κ(t) = κ0 · exp(β_κ (t − ref) / 30)`, multiplying only the analysed volume.
 `τ_test` keeps its meaning as a probability, which it must: it is also the in-care confirmation hazard and the onset stream's ascertainment anchor.
-The ratio rises through the observed window, so a level alone would repeat the error being fixed; the trend is identified by the June-August overlap where both streams are observed.
-Both priors are centred on no effect, so `κ ≡ 1` is the prior centre and `specimen_intensity = false` reproduces the previous behaviour exactly.
+The ratio rises through the observed window, so a level alone would repeat the error being fixed, but the trend is not cleanly identified: `lab_daily_history` runs 36 days past the end of `suspected_daily_history`, and 54% of the analysed data lies in that window where the ratio cannot be observed, so `β_κ` is fit partly by extrapolation.
+The fitted slope over the observed overlap is 0.21 per 30 days (se 0.08, t = 2.6) — real, but the case for a trend over a level rests as much on mechanism as on the data. The ceiling itself is structural and is not in question.
+Both priors are centred on no effect at the reference day, which defaults to the midpoint of the observed overlap rather than the cut-off, and `specimen_intensity = false` reproduces the previous behaviour exactly.
+`bvd_joint` defaults it on; `confirmed_only_model` defaults it off, because `τ_test` reaches that composer's likelihood only through the `κ · τ_test` product and sampling both would be an exactly non-identified ridge.
 
 ## v1.18.0
 

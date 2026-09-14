@@ -500,13 +500,26 @@ and lagged by a confirmation-to-recovery delay (see
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. Tracked deterministics:
+seeding submodel when `tmrca_days` is given.
+
+`specimen_intensity` (on by default) lets the analysed volume carry more
+than one specimen per suspect sampled
+([`specimen_intensity_model`](@ref)). `τ_test` is a probability and the
+receipt kernel conserves mass, so without it the modelled volume is
+capped below the modelled suspect inflow, a ceiling the reported ratio
+crosses. `intensity_ref_day` is the day the level refers to, defaulting
+to the midpoint of the window where the suspect and analysed streams are
+both observed; the trend runs from there.
+
+Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), the established
 reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
 (outbreak age), `R_T` (current reproduction number), the per-stream
-expected counts, the testing fraction `tau_test`, the background rate
-`lambda_bg`, the death ascertainment `death_ascertainment`, the
+expected counts, the testing fraction `tau_test`, the specimens
+analysed per suspect at the reference day (`specimens_per_suspect`), at
+the cut-off (`specimens_per_suspect_T`) and its 30-day log trend
+(`specimen_intensity_trend`), the background rate `lambda_bg`, the death ascertainment `death_ascertainment`, the
 background CFR `background_cfr`, the death testing fraction `tau_death`,
 the implied per-suspected (`suspected_positivity`) and per-test
 (`test_positivity`) positivities, and the death-pool BVD composition
@@ -921,11 +934,22 @@ the implied per-suspected (`suspected_positivity`) and per-test
     recovery_delay_mean := recovered_state.recovery_delay_mean
     recovered_dispersion := recovered_state.k_recovered
     tau_test := cases_state.τ_test
-    ## Specimens analysed per suspect sampled at the cut-off, so the fitted
-    ## ratio can be read against the observed one (0.93 June, 1.01 July,
-    ## 1.50 over 1-5 August). `1.0` when the factor is switched off.
+    ## Specimens analysed per suspect sampled, at the reference day. That is
+    ## the midpoint of the window where the ratio is actually observable, so
+    ## this is the value that can be read against the data (0.99 there), and
+    ## the prior median is 1.0, so a posterior away from 1.0 is informative.
     specimens_per_suspect := confirmed_state.κ_daily === nothing ? 1.0 :
-                             confirmed_state.κ_daily[n]
+                             confirmed_state.κ_daily[clamp(
+        intensity_ref_day, 1, n)]
+    ## The same ratio extrapolated to the cut-off, 36 days past the last day
+    ## a ratio is observed. Reported separately so it is not mistaken for a
+    ## fitted-against-data quantity.
+    specimens_per_suspect_T := confirmed_state.κ_daily === nothing ? 1.0 :
+                               confirmed_state.κ_daily[n]
+    ## Log change in the ratio per 30 days; the observed overlap gives
+    ## 0.21 (se 0.08).
+    specimen_intensity_trend := confirmed_state.β_κ === nothing ? 0.0 :
+                                confirmed_state.β_κ
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
     background_total := cases_state.bg_total

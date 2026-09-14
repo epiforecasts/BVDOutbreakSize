@@ -1173,12 +1173,15 @@ quantities.
     ## analysed volume is capped below the modelled suspect inflow, a ceiling
     ## the reported data cross.
     carried = convolve_delay(suspected_daily, receipt_state.pmf)
-    κ_daily = if specimen_intensity === nothing
-        nothing
+    κ_state = if specimen_intensity === nothing
+        (; κ = nothing, κ0 = nothing, β_κ = nothing)
     else
         intensity_state ~ to_submodel(specimen_intensity)
-        intensity_state.κ
+        (; intensity_state.κ, intensity_state.κ0, intensity_state.β_κ)
     end
+    κ_daily = κ_state.κ
+    κ_level = κ_state.κ0
+    κ_trend = κ_state.β_κ
     ## Branch the whole product, not just `κ`: on the `nothing` path a
     ## length-`n` vector of ones would be a real broadcast multiply on every
     ## gradient call.
@@ -1460,7 +1463,8 @@ quantities.
     p_pos_grid = expand_vintage_rate(p_pos_daily, window_days, n)
     confirmed_daily = p_pos_grid .* analysed_daily
 
-    return (; τ_test, κ_daily, bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
+    return (; τ_test, κ_daily, κ0 = κ_level, β_κ = κ_trend,
+        bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
         receipt_pmf = receipt_state.pmf,
         receipt_mean = receipt_state.mean, receipt_sd = receipt_state.sd,
