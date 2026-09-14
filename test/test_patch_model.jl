@@ -1506,3 +1506,110 @@ end
         observed = [1, 2], baseline = [0, 0], n_patches = 2,
         patch_labels = ["A", "B"])
 end
+
+@testitem "patch_infection_model: the importation intensity is per origin" begin
+    using BVDOutbreakSize: patch_infection_model, sigmoid_ramp
+    using Turing: DynamicPPL, returned
+    using Random: Xoshiro
+
+    n, np, rt_start, bp = 60, 3, 30, 10
+    ## A flat kernel, so the importation a province receives is the sum of
+    ## what the other two send at their own intensities and nothing else.
+    K = [p == q ? 0.0 : 1.0 for p in 1:np, q in 1:np]
+    base = patch_infection_model(n, np; breakpoint = bp, rt_start,
+        importation_kernel = K)
+    ## Everything but the intensity is held at one draw, so the trajectories
+    ## differ only through what the intensity does.
+    function run(; ε_bar = 0.02, σ_ε = 0.0, z_ε = [-1.0, 0.5, 2.0],
+            β_ε = 0.0)
+        m = DynamicPPL.fix(base; ε_bar, σ_ε, z_ε, β_ε)
+        return returned(m, rand(Xoshiro(7), m))
+    end
+
+    ## `σ_ε -> 0` recovers one shared intensity: the per-origin offsets stop
+    ## mattering, so the arrivals no longer depend on `z_ε` at all.
+    shared = run()
+    other_z = run(z_ε = [3.0, -4.0, 1.5])
+    @test shared.importation_matrix ≈ other_z.importation_matrix
+    ## With spread on, they do. A pooled intensity that ignored `σ_ε` would
+    ## pass the check above and fail this one.
+    spread = run(σ_ε = 0.7)
+    @test !(spread.importation_matrix ≈ shared.importation_matrix)
+
+    ## The deviations are centred, so `ε_bar` is the level: shifting every
+    ## offset by a constant leaves the intensities, and the arrivals, alone.
+    shifted = run(σ_ε = 0.7, z_ε = [-1.0, 0.5, 2.0] .+ 5.0)
+    @test shifted.importation_matrix ≈ spread.importation_matrix
+
+    ## The detection ramp moves the intensity the way its sign says. On the
+    ## first renewal day every history is still the seed, so the arrivals
+    ## scale exactly by `exp(β_ε * ramp)` and nothing else.
+    ramp = sigmoid_ramp(n, bp)
+    day = rt_start + 1
+    for β in (0.8, -0.8)
+        got = run(β_ε = β).importation_matrix[:, day]
+        want = shared.importation_matrix[:, day] .* exp(β * ramp[day])
+        @test got ≈ want
+    end
+    ## Ituri alone is seeded, so on that day it is the only origin and the
+    ## other two receive everything Ituri sends.
+    @test iszero(shared.importation_matrix[1, day])
+    @test all(>(0), shared.importation_matrix[2:np, day])
+    @test run(β_ε = 0.8).importation_matrix[2, day] >
+          shared.importation_matrix[2, day]
+
+    ## The intensity is capped at one: an origin cannot send away more than
+    ## it generates, so pushing the ramp effect further changes nothing.
+    @test run(ε_bar = 0.9, β_ε = 5.0).importation_matrix[:, day] ≈
+          run(ε_bar = 0.9, β_ε = 50.0).importation_matrix[:, day]
+end
+
+@testitem "patch_infection_model: Ituri alone is seeded when coupled" begin
+    using BVDOutbreakSize: patch_infection_model, seed_at_renewal_start,
+                           seed_infections
+    using Turing: DynamicPPL, returned
+    using Random: Xoshiro
+
+    n, np, rt_start, bp = 60, 3, 30, 10
+    has_frac(m) = any(v -> occursin("seed_fraction", string(v)),
+        keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
+    ## The national cryptic seed the growth prior speaks to, whatever the
+    ## patch count: `2^m` is elicited as a country-wide quantity.
+    national_seed(s) = seed_infections(
+        seed_at_renewal_start(2.0^s.m), s.r0, rt_start)
+
+    ## Coupled: the outbreak began in Ituri, so the primary patch takes the
+    ## whole cryptic seed and the seed fraction is not a free dimension.
+    coupled = patch_infection_model(n, np; breakpoint = bp, rt_start)
+    @test !has_frac(coupled)
+    sc = returned(coupled, rand(Xoshiro(9), coupled))
+    @test isempty(sc.seed_fraction)
+    @test sc.infections_matrix[1, 1:rt_start] ≈ national_seed(sc)
+    @test all(iszero, sc.infections_matrix[2:np, 1:rt_start])
+    ## The secondary provinces are filled by importation once the renewal
+    ## starts, so they are empty at the start and not at the end.
+    for p in 2:np
+        @test sum(sc.infections_matrix[p, (rt_start + 1):n]) > 0
+    end
+
+    ## An all-zero kernel leaves a secondary patch no route to infections,
+    ## so the sampled fractions still apply and seed it directly.
+    uncoupled = patch_infection_model(n, np; breakpoint = bp, rt_start,
+        importation_kernel = zeros(np, np))
+    @test has_frac(uncoupled)
+    su = returned(uncoupled, rand(Xoshiro(9), uncoupled))
+    @test length(su.seed_fraction) == np - 1
+    @test all(>(0), su.infections_matrix[:, 1])
+    ## The fractions partition the national seed rather than adding to it,
+    ## so the patch sum is the same cryptic curve a single patch would run
+    ## and `2^m` keeps its meaning as the country's cryptic size.
+    @test vec(sum(su.infections_matrix[:, 1:rt_start]; dims = 1)) ≈
+          national_seed(su)
+    ## And each province holds its own share of it, `f_p / (1 + Σf)`.
+    denom = 1 + sum(su.seed_fraction)
+    shares = su.infections_matrix[:, 1] ./ sum(su.infections_matrix[:, 1])
+    @test shares ≈ vcat(1 / denom, su.seed_fraction ./ denom)
+
+    ## One patch has nothing to seed either way.
+    @test !has_frac(patch_infection_model(n, 1; breakpoint = bp, rt_start))
+end

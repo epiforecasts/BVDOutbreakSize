@@ -1411,3 +1411,303 @@ end
     ## inside the draw lookup.
     @test_throws ErrorException plot_patch_summary((; base.C_T_patch), np)
 end
+
+@testitem "reconstruct_patch_rt: the deviation knots unflatten per province" begin
+    using Random: MersenneTwister
+    import FlexiChains
+    using BVDOutbreakSize: reconstruct_patch_rt, reconstruct_rt, knot_days,
+                           interpolate_knots, RT_INTERVENTION_RAMP
+
+    rng = MersenneTwister(5)
+    nd, n, np = 40, 60, 3
+    walk_start = 12
+    days = knot_days(n; week = 7, start = walk_start)
+    nb = length(days)
+    P = FlexiChains.Parameter
+    ## Deviations that differ along both axes, so a row/column-major mix-up
+    ## in the reshape moves values rather than permuting equal ones.
+    dev(p, k) = 0.1 * p + 0.03 * k
+    rt_keys = Dict(
+        P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
+        P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
+        P(Symbol("rt_state.intervention_effect")) => reshape(
+            fill(-0.3, nd), nd, 1),
+        P(Symbol("rt_state.z")) => reshape(
+            [randn(rng, nb - 1) for _ in 1:nd], nd, 1))
+    chain(knots) = FlexiChains.FlexiChain{Symbol}(nd, 1,
+        merge(rt_keys, Dict(P(:delta_knots) => reshape(knots, nd, 1))))
+    args = (; n, breakpoint = n - 11, n_patches = np, rt_start = walk_start,
+        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP)
+
+    national = reconstruct_rt(chain([zeros(np * nb) for _ in 1:nd]);
+        n, breakpoint = n - 11, rt_start = walk_start,
+        rt_walk_start = walk_start, week = 7, ramp = RT_INTERVENTION_RAMP)
+    ## Zero deviations leave the national trajectory untouched in every
+    ## panel, mask included: nothing rescales a province to the trend.
+    flat = reconstruct_patch_rt(chain([zeros(np * nb) for _ in 1:nd]); args...)
+    @test length(flat) == np
+    for p in 1:np
+        @test isequal(flat[p], national)
+    end
+    ## Days before the renewal start are masked in every province exactly as
+    ## they are nationally, rather than filled with the walk base.
+    @test all(ismissing, flat[1][:, 1:(walk_start - 1)])
+    @test all(!ismissing, flat[1][:, walk_start:n])
+
+    ## The matrix reaches the chain flattened column-major, so patch `p` at
+    ## knot `k` sits at `(k - 1) * np + p`.
+    knots = [vec([dev(p, k) for p in 1:np, k in 1:nb]) for _ in 1:nd]
+    rt = reconstruct_patch_rt(chain(knots); args...)
+    for p in 1:np
+        daily = interpolate_knots([dev(p, k) for k in 1:nb], days, n)
+        @test all(rt[p][i, d] ≈ national[i, d] * exp(daily[d])
+        for i in 1:nd, d in walk_start:n)
+    end
+    ## Province 3 sits above province 1 throughout, since its deviation is
+    ## larger at every knot. A transposed reshape would not preserve that.
+    @test all(rt[3][i, d] > rt[1][i, d] for i in 1:nd, d in walk_start:n)
+
+    ## A chain sampled with no spatial structure says so rather than
+    ## silently repeating the national trajectory in every panel.
+    nodev = FlexiChains.FlexiChain{Symbol}(nd, 1, rt_keys)
+    @test_throws ErrorException reconstruct_patch_rt(nodev; args...)
+    ## A knot vector that does not match `n_patches` by the knot grid is a
+    ## mismatched `rt_walk_start` or patch count, not a usable deviation.
+    short = [zeros(np * nb - 1) for _ in 1:nd]
+    @test_throws ErrorException reconstruct_patch_rt(chain(short); args...)
+end
+
+@testitem "plot_rt_patches: one panel per province on a shared axis" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_rt_patches, knot_days, PROVINCE_LABELS,
+                           RT_INTERVENTION_RAMP
+
+    rng = MersenneTwister(23)
+    nd, n, np = 40, 60, 3
+    walk_start = 12
+    nb = length(knot_days(n; week = 7, start = walk_start))
+    P = FlexiChains.Parameter
+    ## Province 3 runs well above province 1, so a per-panel autoscale would
+    ## give the panels different y-limits.
+    knots = [vec([0.4 * p for p in 1:np, _ in 1:nb]) for _ in 1:nd]
+    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
+        Dict(
+            P(Symbol("rt_state.log_R0")) => reshape(fill(log(1.5), nd), nd, 1),
+            P(Symbol("rt_state.sigma_rw")) => reshape(fill(0.05, nd), nd, 1),
+            P(Symbol("rt_state.intervention_effect")) => reshape(
+                fill(-0.3, nd), nd, 1),
+            P(Symbol("rt_state.z")) => reshape(
+                [randn(rng, nb - 1) for _ in 1:nd], nd, 1),
+            P(:delta_knots) => reshape(knots, nd, 1)))
+
+    fig = plot_rt_patches(chn; n, breakpoint = n - 11,
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
+        n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
+        ramp = RT_INTERVENTION_RAMP)
+    @test fig isa CairoMakie.Makie.Figure
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == np
+    @test [ax.title[] for ax in axes] == String.(PROVINCE_LABELS[1:np])
+    for ax in axes
+        ## The national reference behind the province: three ribbons each.
+        @test count(p -> p isa CairoMakie.Makie.Band, ax.scene.plots) == 6
+        ## No-growth line, plus the breakpoint, the end of the scale-up and
+        ## the cut-off as vertical rules.
+        @test count(p -> p isa CairoMakie.Makie.HLines, ax.scene.plots) == 1
+        @test count(p -> p isa CairoMakie.Makie.VLines, ax.scene.plots) == 3
+    end
+    ## The provinces are compared rather than each rescaled to its own range,
+    ## so every panel carries the same y-limits, from zero.
+    ylims = [ax.limits[][2] for ax in axes]
+    @test all(==(ylims[1]), ylims)
+    @test ylims[1][1] == 0
+    @test ylims[1][2] >= 2.5
+    ## The panels do differ in what they draw, so a per-panel autoscale
+    ## would have given them different limits.
+    function panel_top(ax)
+        lim = CairoMakie.Makie.data_limits(ax.scene)
+        return lim.origin[2] + lim.widths[2]
+    end
+    @test panel_top(axes[3]) > panel_top(axes[1])
+
+    ## The panels wrap onto a second row when the column count does not
+    ## divide the provinces.
+    wide = plot_rt_patches(chn; n, breakpoint = n - 11,
+        as_of_date = "2026-05-28", seeding = Date("2026-02-23"),
+        n_patches = np, rt_start = walk_start, rt_walk_start = walk_start,
+        ramp = RT_INTERVENTION_RAMP, ncols = 2)
+    @test count(x -> x isa CairoMakie.Makie.Axis, wide.content) == np
+end
+
+@testitem "_patch_daily: reads the column-major per-province matrix" begin
+    import FlexiChains
+    using BVDOutbreakSize: _patch_daily
+
+    np, n, nd = 3, 5, 4
+    ## Day `t` of patch `p` sits at `(t - 1) * np + p`, so a value encoding
+    ## both indices catches a transposed read.
+    flat = [Float64[100 * p + t for t in 1:n for p in 1:np] for _ in 1:nd]
+    P = FlexiChains.Parameter
+    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
+        Dict(P(:infections_patch) => reshape(flat, nd, 1)))
+    out = _patch_daily(chn, :infections_patch, np, n)
+    @test length(out) == np
+    for p in 1:np
+        @test length(out[p]) == nd
+        @test all(v == Float64[100 * p + t for t in 1:n] for v in out[p])
+    end
+    ## A chain without the deterministic, and one whose matrix does not match
+    ## the patch count by the day count, both name what is wrong.
+    @test_throws ErrorException _patch_daily(chn, :importation_patch, np, n)
+    @test_throws ErrorException _patch_daily(chn, :infections_patch, np, n + 1)
+end
+
+@testitem "plot_infections_patches: the cumulative row sums the daily one" setup=[
+    HeadlessMakie
+] begin
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_infections_patches, PROVINCE_LABELS
+    Mk = CairoMakie.Makie
+
+    np, n, nd = 3, 20, 30
+    ## A constant daily rate per province, so the cumulative panel must end
+    ## at `n` times it and the daily panel must stay flat.
+    rate(p) = p == 1 ? 1.0 : 0.5
+    flat = [Float64[rate(p) for t in 1:n for p in 1:np] for _ in 1:nd]
+    P = FlexiChains.Parameter
+    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
+        Dict(P(:infections_patch) => reshape(flat, nd, 1)))
+    fig = plot_infections_patches(chn; n, seeding = Date("2026-02-23"),
+        n_patches = np)
+    @test fig isa Mk.Figure
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    ## A daily and a cumulative panel per province, the province named once.
+    @test length(axes) == 2 * np
+    @test [ax.ylabel[] for ax in axes] ==
+          repeat(["Daily infections", "Cumulative infections"], np)
+    @test [ax.title[] for ax in axes] ==
+          vcat([[String(PROVINCE_LABELS[p]), ""] for p in 1:np]...)
+    for (i, ax) in enumerate(axes)
+        @test count(p -> p isa Mk.Band, ax.scene.plots) == 3
+        p = cld(i, 2)
+        ylo = Mk.data_limits(ax.scene).origin[2]
+        yhi = ylo + Mk.data_limits(ax.scene).widths[2]
+        if isodd(i)
+            ## Daily: flat at the province's own rate.
+            @test ylo ≈ rate(p)
+            @test yhi ≈ rate(p)
+        else
+            ## Cumulative: the running sum of the panel above it.
+            @test ylo ≈ rate(p)
+            @test yhi ≈ n * rate(p)
+        end
+    end
+end
+
+@testitem "plot_imports_patches: one panel per province" setup=[
+    HeadlessMakie
+] begin
+    using Dates: Date
+    import FlexiChains
+    using BVDOutbreakSize: plot_imports_patches, PROVINCE_LABELS
+    Mk = CairoMakie.Makie
+
+    np, n, nd = 3, 20, 30
+    ## Arrivals that differ by province and rise over the window, so a panel
+    ## reading the wrong slice of the flattened matrix shows it.
+    flat = [Float64[p * t for t in 1:n for p in 1:np] for _ in 1:nd]
+    P = FlexiChains.Parameter
+    chn = FlexiChains.FlexiChain{Symbol}(nd, 1,
+        Dict(P(:importation_patch) => reshape(flat, nd, 1)))
+    fig = plot_imports_patches(chn; n, seeding = Date("2026-02-23"),
+        n_patches = np)
+    @test fig isa Mk.Figure
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test length(axes) == np
+    @test [ax.title[] for ax in axes] == String.(PROVINCE_LABELS[1:np])
+    ## Each panel carries its own y-axis, reaching that province's own peak.
+    for (p, ax) in enumerate(axes)
+        @test count(q -> q isa Mk.Band, ax.scene.plots) == 3
+        lim = Mk.data_limits(ax.scene)
+        @test lim.origin[2] ≈ p * 1.0
+        @test lim.origin[2] + lim.widths[2] ≈ p * n
+    end
+end
+
+@testitem "plot_forecast_flows: a panel per flow stream carried" setup=[
+    HeadlessMakie
+] begin
+    using DataFrames: DataFrame
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_forecast_flows
+    Mk = CairoMakie.Makie
+
+    rng = MersenneTwister(3)
+    draws = 400
+    full = DataFrame(admissions_fc = rand(rng, 0:20, draws),
+        incare_deaths_fc = rand(rng, 0:5, draws),
+        ruleouts_fc = rand(rng, 0:40, draws))
+    fig = plot_forecast_flows(full)
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test length(axes) == 3
+    @test [ax.xlabel[] for ax in axes] == ["New isolation admissions (DRC)",
+        "New in-care deaths (DRC)", "New rule-outs (DRC)"]
+    for ax in axes
+        ## A histogram of the predictive with its 90% interval shaded.
+        @test count(p -> p isa Mk.Hist, ax.scene.plots) == 1
+        @test count(p -> p isa Mk.VSpan, ax.scene.plots) == 1
+    end
+    ## Only the streams the forecast carries get a panel.
+    part = plot_forecast_flows(full[!, [:admissions_fc, :ruleouts_fc]])
+    @test [ax.xlabel[] for ax in part.content if ax isa Mk.Axis] ==
+          ["New isolation admissions (DRC)", "New rule-outs (DRC)"]
+    ## A forecast without the flow streams draws nothing rather than an
+    ## empty grid of axes.
+    none = plot_forecast_flows(DataFrame(cases_fc = [1, 2, 3]))
+    @test none isa Mk.Figure
+    @test count(x -> x isa Mk.Axis, none.content) == 0
+end
+
+@testitem "plot_stream_calibration: streams against their nominal level" setup=[
+    HeadlessMakie
+] begin
+    using Random: MersenneTwister
+    using BVDOutbreakSize: plot_stream_calibration, stream_calibration
+    Mk = CairoMakie.Makie
+
+    rng = MersenneTwister(3)
+    observed = [10, 20, 30, 40]
+    ## One calibrated stream and one that predicts far too high, so the bias
+    ## panel has a sign to place.
+    panels = [
+        (; title = "cases", observed = observed,
+            replicates = [10 .+ rand(rng, -5:5, 4) for _ in 1:500]),
+        (; title = "deaths", observed = observed,
+            replicates = [fill(40.0, 4) for _ in 1:200])]
+    tbl = stream_calibration(panels)
+    fig = plot_stream_calibration(tbl)
+    @test fig isa Mk.Figure
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test length(axes) == 2
+    ## Streams share the row labels, the first stream at the top, and only
+    ## the left panel names them.
+    pos, labs = axes[1].yticks[]
+    @test pos == [2, 1]
+    @test labs == ["cases", "deaths"]
+    @test axes[2].yticks[][2] == ["", ""]
+    ## Coverage is a fraction, so the left panel is pinned to [0, 1] and
+    ## carries the two nominal reference lines.
+    @test axes[1].limits[][1] == (0, 1)
+    @test count(p -> p isa Mk.VLines, axes[1].scene.plots) == 2
+    @test count(p -> p isa Mk.Scatter, axes[1].scene.plots) == 2
+    ## The bias panel is symmetric about zero and clears the largest bias.
+    lo, hi = axes[2].limits[][1]
+    @test lo ≈ -hi
+    @test hi >= maximum(abs, tbl[!, "Bias"])
+    @test count(p -> p isa Mk.VLines, axes[2].scene.plots) == 1
+end
