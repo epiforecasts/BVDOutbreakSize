@@ -1495,37 +1495,25 @@ seed and its own `R_t`.
 
 ### Seeding
 
-The primary patch (`p = 1`, Ituri) uses the existing cryptic-exponential
-seed: growth at the sampled molecular-clock rate `r` over the cryptic
-window, reaching `seed_at_renewal_start(C_T)` at the renewal start.
+The outbreak began in Ituri, so the primary patch carries the whole cryptic
+seed: growth at the sampled molecular-clock rate `r` over the cryptic window,
+reaching `seed_at_renewal_start(C_T)` at the renewal start. The secondary
+patches start empty and are seeded by importation from it.
 
-Each secondary patch is seeded as a fraction of the primary patch's seed
-(`seed_fraction_prior`), not as an absolute count. The fraction stands in
-for the unobserved early introductions from Ituri, and it is the natural
-scale because it is what the data speak to. The relative seed sets the
-per-province *level* of the case split, so the observed Nord-Kivu share
-(~9% of confirmed, near-constant across the window) maps almost directly
-onto a seed fraction of roughly the same size.
+That makes a province's arrival a consequence of the kernel and of `ε`
+rather than a parameter. The first-appearance dates carry real information
+about how fast the outbreak spread between provinces, and a free seed
+fraction per province absorbs exactly that information: both a larger seed
+and a stronger coupling raise a secondary province's early incidence, so the
+two cannot be told apart. Dropping the fractions leaves one interpretable
+quantity where there were `n_patches` confounded ones.
 
-The scale matters more than it looks. An absolute prior of the order of
-`N⁺(0.01, 0.01)` would put a secondary patch about four orders of magnitude
-below the primary patch's `2^m ≈ 164`, a seed ratio of about 13,700 to 1.
-Uncoupled, a secondary patch has only two routes to infections, its own seed
-and its own `R_t`, so a seed pinned that far below what the data need forces
-the log-Rt deviation `δ_p` to absorb the whole shortfall: reaching a 9%
-Nord-Kivu share then requires `δ ≈ 1.0` (an `Rt` ratio of 2.7), a 3.4-sigma
-draw on the deviation prior, and the mapping from `δ` to the share is a
-knife-edge (`δ = 0.5` gives 0.5%, `δ = 1.0` gives 54%). The provincial `Rt`
-difference would be an artefact of the seed prior rather than the
-epidemiological quantity the patch model exists to estimate.
-
-Parameterising the seed as a fraction decouples the two: the seed explains
-the level of the provincial split and `δ_p` is identified by its time
-trend. That is the decomposition the data actually support.
-
-The default `LogNormal(log(0.05), 1)` has a median of 5% of the primary
-seed and a 90% interval of roughly 1% to 26%, so it spans the observed
-share comfortably without asserting it.
+An all-zero kernel leaves a secondary patch no route to infections at all,
+so the uncoupled path keeps the sampled fractions
+(`seed_fraction_prior`, a `LogNormal` on the fraction of the primary seed).
+They partition the national cryptic seed rather than adding to it, so
+`2^m` stays the country's cryptic size for any patch count and `C_T` stays
+comparable across them.
 
 ### Returns
 
@@ -1583,9 +1571,19 @@ others, which is what the imports figure on the analysis page draws.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0_total = seed_at_renewal_start(growth_state.C_T)
-    ## With one patch there are no secondary patches to seed, so the seed
-    ## fraction is not sampled: it would be a prior-only dimension.
-    if n_patches > 1
+    ## The outbreak began in Ituri, so the primary patch takes the whole
+    ## cryptic seed and the others are seeded by importation from it. When a
+    ## province first carries infections is then a consequence of the kernel
+    ## and the coupling intensity, which is what the first-appearance dates
+    ## speak to, rather than a free fraction that does the same job and
+    ## trades off against `ε`.
+    ##
+    ## An all-zero kernel leaves a secondary patch no route to infections at
+    ## all, so the uncoupled path keeps the sampled fractions. With one patch
+    ## there is nothing to seed and the fraction would be a prior-only
+    ## dimension either way.
+    coupled = any(!iszero, importation_kernel)
+    if n_patches > 1 && !coupled
         seed_fraction ~ product_distribution(
             fill(seed_fraction_prior, n_patches - 1))
     else
@@ -1603,11 +1601,15 @@ others, which is what the imports figure on the analysis page draws.
     ## than the country's. Dividing through by `(1 + Σf)` keeps the national
     ## seed at `2^m` for any number of patches, so `C_T` stays comparable
     ## across `n_patches` and the genetic prior keeps its meaning.
-    seed_denom = one(Tp) + sum(seed_fraction)
     seed_shares = zeros(Tp, n_patches)
-    seed_shares[1] = one(Tp) / seed_denom
-    @inbounds for p in 2:n_patches
-        seed_shares[p] = seed_fraction[p - 1] / seed_denom
+    if isempty(seed_fraction)
+        seed_shares[1] = one(Tp)
+    else
+        seed_denom = one(Tp) + sum(seed_fraction)
+        seed_shares[1] = one(Tp) / seed_denom
+        @inbounds for p in 2:n_patches
+            seed_shares[p] = seed_fraction[p - 1] / seed_denom
+        end
     end
     seeds_matrix = zeros(Tp, n_patches, renewal_start)
     @inbounds for p in 1:n_patches
@@ -1636,7 +1638,6 @@ others, which is what the imports figure on the analysis page draws.
     ##    Time-varying because the outbreak being known changes movement: the
     ##    provinces that arrive either side of the breakpoint are what
     ##    separates `β_ε`.
-    coupled = any(!iszero, importation_kernel)
     ε_matrix = zeros(Tp, n_patches, n)
     if coupled
         ε_bar ~ importation_epsilon_prior
