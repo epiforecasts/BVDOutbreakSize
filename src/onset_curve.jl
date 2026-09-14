@@ -240,7 +240,13 @@ function load_onset_curve(path::AbstractString;
             cov_hi = min(cov_hi, extents[s - 1][2])
         end
         lo = max(R - H + 1, 1, cov_lo)
-        hi = min(R, cov_hi)
+        ## A cell differences this vintage against its predecessor, so the
+        ## predecessor must have been able to report that onset date. An
+        ## onset day past `Rprev` has a negative previous delay, for which
+        ## [`onset_report_cdf`](@ref) is zero, so the cell's mean collapses
+        ## from an increment to a level while its observed value stays an
+        ## increment. Bound `hi` by `Rprev` so such a cell is never scored.
+        hi = s == 1 ? min(R, cov_hi) : min(R, cov_hi, Rprev)
         for u in lo:hi
             d = _date(u)
             prev = s == 1 ? 0 : get(snaps[s - 1].onsets, d, 0)

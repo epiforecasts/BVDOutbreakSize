@@ -96,6 +96,19 @@ The trajectory is rebuilt from the deviation knots the chain carries, and a test
 Each province's forecast is the national draw times its modelled share, multiplied draw by draw so the interval carries the correlation between them.
 The one-week-back validation joint is now a patch fit, which is what makes this possible; the McCabe and Chamla frozen comparisons stay single-population.
 
+### Fixed
+
+- NUTS chains no longer start on the prior tail they cannot recover from (#671).
+`nuts_sample` initialised every chain with an independent prior draw.
+A sizeable minority of the joint model's prior draws put the latent trajectory where the data score it hundreds of thousands of log units below the posterior, and a chain starting there never arrives: dual averaging shrinks the step size towards zero and the chain crawls in place for the whole run.
+Nothing diverges, so the failure is silent and shows only as a split R-hat pinned near its two-chain ceiling.
+Which chains are affected turns on the random number stream, so any change to the model's variable structure re-rolls it and a fit that converges today can fail tomorrow on unchanged code.
+The new default, `ViablePrior`, has each chain screen eight independent prior draws and start at the first whose initial log joint density is at or above that batch's median.
+Taking the batch maximum would also clear the tail, but it keeps roughly the top eighth of the prior by density and so shrinks the between-chain dispersion split R-hat is built on.
+Rejecting the worse half clears a tail that is a few per cent of prior mass while leaving the start a genuine prior draw conditional on the floor.
+Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
+Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
+
 ## v1.18.0
 
 Changes since v1.17.0

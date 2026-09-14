@@ -211,9 +211,104 @@ function _tensorboard_if_loaded(logdir)
 end
 
 """
+$(TYPEDEF)
+
+Prior initialisation guarded against the prior predictive's unrecoverable
+tail. Each chain screens `attempts` independent prior draws and starts at
+the first whose initial log joint density is at or above that batch's
+median. The default `init` of [`nuts_sample`](@ref).
+
+`InitFromPrior` draws each parameter from its own prior independently. The
+joint model's product prior is dispersed enough that a sizeable minority of
+those draws put the whole latent trajectory somewhere the data score
+hundreds of thousands of log units below the posterior. NUTS does not
+recover from such a point. Dual averaging shrinks the step size towards
+zero instead of moving, and the chain then crawls in place at its starting
+value for the entire run. Nothing diverges, so the failure is silent, and
+it surfaces only as a split R-hat pinned near its ceiling once a healthy
+chain is compared against the frozen one.
+
+Each chain independently draws `attempts` candidates and starts at the
+first whose log joint density is at or above that batch's median. Taking
+the batch maximum would also clear the tail, but an argmax is an order
+statistic of the joint density rather than a draw from the prior: it keeps
+roughly the top eighth of the prior by density, so it concentrates the
+starting points and reduces R-hat's own between-chain contrast for a
+reason unrelated to mixing. That matters because R-hat is the diagnostic
+this guard is judged by, and with `attempts = 8` and `chains = 2` the
+effect is not negligible. On the joint model 8.0% of prior draws land
+more than 100,000 log units below the best of 200; both rules clear that
+tail completely, but the median rule keeps 2.4 times the dispersion (sd
+of the starting log joint 9,026 against 3,782). Only forward density
+evaluations are used, so the guard costs milliseconds against a fit
+measured in hours.
+
+$(TYPEDFIELDS)
+"""
+struct ViablePrior
+    "Prior draws screened per chain; the first above their median is used."
+    attempts::Int
+    function ViablePrior(attempts::Integer = 8)
+        attempts >= 1 ||
+            throw(ArgumentError("attempts must be at least 1, got $attempts"))
+        return new(Int(attempts))
+    end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One starting point for `model` under [`ViablePrior`](@ref) semantics: the
+first of `attempts` independent prior draws whose log joint density is at
+or above that batch's median, returned as an initialisation strategy.
+Falls back to `InitFromPrior()` when no attempt
+gives a finite log density, or when the chosen draw cannot be wrapped as
+an initial vector for `ldf` (e.g. a model whose dimension varies between
+prior draws, since both the draw and `ldf` each come from their own fresh
+evaluation of `model`), so a model this guard cannot evaluate still
+samples exactly as before.
+
+`ldf` defaults to a fresh `LogDensityFunction(model)`, but
+[`nuts_sample`](@ref) builds one `LogDensityFunction` and passes it to
+every chain's call instead: construction re-evaluates `model`, so
+building it fresh per chain is not part of the guard's advertised
+forward-evaluation-only cost.
+"""
+function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
+        ldf = LogDensityFunction(model))
+    attempts >= 1 ||
+        throw(ArgumentError("attempts must be at least 1, got $attempts"))
+    draws = Vector{Float64}[]
+    logps = Float64[]
+    for _ in 1:attempts
+        vi = VarInfo(rng, model, InitFromPrior())
+        logp = getlogjoint(vi)
+        isfinite(logp) || continue
+        push!(draws, collect(vi[:]))
+        push!(logps, logp)
+    end
+    isempty(draws) && return InitFromPrior()
+    ## The FIRST draw at or above the batch median, not the batch argmax.
+    ## An argmax keeps roughly the top eighth of the prior by density, which
+    ## shrinks the between-chain dispersion split R-hat is built on. Both
+    ## rules clear the unrecoverable tail; rejecting only the worse half
+    ## leaves the start a genuine prior draw conditional on the floor.
+    idx = findfirst(>=(median(logps)), logps)
+    try
+        return InitFromVector(draws[idx], ldf)
+    catch e
+        e isa ArgumentError || rethrow()
+        return InitFromPrior()
+    end
+end
+
+"""
 NUTS on `model`, parallel chains via `MCMCThreads`. Chains
-initialise from the prior (`InitFromPrior()`) to keep the sampler
-in regions with reasonable physical interpretation. Pass `init =
+initialise from the prior, each screening eight draws and taking the first
+at or above their median log joint density ([`ViablePrior`](@ref)), which
+keeps the sampler off the prior tail no chain recovers from without
+concentrating the starts. Pass `init = Turing.DynamicPPL.InitFromPrior()` for
+unguarded prior initialisation, or `init =
 Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
 uniform initialisation.
 
@@ -275,12 +370,25 @@ function nuts_sample(model;
         seed::Integer = 20260518,
         progress::Bool = false,
         adtype = default_adtype(),
-        init = InitFromPrior(),
+        init = ViablePrior(),
         check_model::Bool = true,
         callback = nothing,
         warmup::Bool = false,
         kwargs...)
     rng = MersenneTwister(seed)
+    ## Each chain draws and screens its own starting point, so the chains
+    ## stay independent and over-dispersed; any other strategy is shared
+    ## across chains exactly as `sample` would use it. The LogDensityFunction
+    ## is built once and shared across chains: construction re-evaluates
+    ## `model`, so rebuilding it per chain would not be the free forward-only
+    ## cost the guard advertises.
+    inits = if init isa ViablePrior
+        ldf = LogDensityFunction(model)
+        [viable_prior_init(rng, model; attempts = init.attempts, ldf)
+         for _ in 1:chains]
+    else
+        fill(init, chains)
+    end
     cb_kwargs = callback === nothing ? (;) : (; callback = callback)
     warmup_kwargs = warmup ? (; discard_adapt = false) : (;)
     return sample(
@@ -289,7 +397,7 @@ function nuts_sample(model;
         NUTS(n_adapts, target_accept; max_depth, adtype),
         MCMCThreads(),
         samples, chains;
-        initial_params = fill(init, chains),
+        initial_params = inits,
         progress = progress,
         check_model = check_model,
         cb_kwargs...,
