@@ -2856,7 +2856,20 @@ pp_joint = predict(
         background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days),
+        tmrca_days = obs.tmrca_days,
+        ## The generator must be the model that was fitted. `n_patches`
+        ## defaults to one, so leaving these out regenerates every stream
+        ## from a single well-mixed population while the chain carries a
+        ## four-patch fit: the draws still apply, the latent trajectory they
+        ## are replayed through does not, and every stream driven by BVD
+        ## cases comes out short by the difference. The province grids are
+        ## kept with `missing` increments, like the onset triangle above, so
+        ## `predict` resamples the compositions over the real cells.
+        n_patches = N_PATCHES,
+        province_increments = missing,
+        province_days = province_cases.days,
+        province_death_increments = missing,
+        province_death_days = province_deaths.days),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one
