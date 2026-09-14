@@ -21,18 +21,17 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
-## Unreleased
-
-### Fixed
-
 - Absconding no longer discharges patients the clinical exits have already discharged.
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 Both length-of-stay PMFs sum to one, so the clinical schedules alone account for every admitted patient and the abscond flow removes mass a second time.
 The schedules are convolutions of past admissions, so they keep removing cohort mass that absconds have already taken, and in a cohort's tail the scheduled discharge exceeds the remaining stock.
 The `max(., 0)` guards then clip it to exactly zero, which floors the modelled occupancy rate and flattens the likelihood.
-Each length-of-stay PMF is now thinned by the abscond survival over cohort age, `(1 - κ)^d`, so absconding competes with the clinical exits instead of adding to them.
-Thinning by cohort age rather than calendar day is what makes it a competing risk: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
-`κ = 0` leaves the schedules unchanged.
+Each schedule is now thinned by the abscond survival over cohort age, so absconding competes with the clinical exits instead of adding to them.
+Cohort age rather than calendar day is what makes it a competing risk: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
+The balance exposes only the suspect sub-stock to absconding, so a confirmed patient cannot abscond and the true-case schedules carry the confirmation hazard alongside the abscond one, stopping the discount once a cohort is confirmed.
+Discounting every day of a true-case stay instead leaves the schedules under-discharging by 1.8% of admissions at the fitted abscond rate, stranding occupancy that never clears; carrying the confirmation hazard brings that to 0.01%.
+Background admissions are never confirmed, so the rule-out schedule keeps the flat cohort-age thinning, which is exact for it.
+`κ = 0` leaves every schedule unchanged.
 
 ## v1.18.0
 
