@@ -983,6 +983,7 @@ end
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated, product_distribution
     using Statistics: median
+    using Random: seed!
     import FlexiChains
     using BVDOutbreakSize: forecast_stream, knot_days
 
@@ -1006,10 +1007,18 @@ end
         var"treatment_state.occupancy_break" := offset
         return nothing
     end
-    _beds(offset) = forecast_stream(
-        sample(_stream_offset_test(offset), Prior(), 400;
-            chain_type = FlexiChains.VNChain, progress = false),
-        :isolation_beds; horizon = 7, obs_value = 800, n = 60,
-        breakpoint = 30.0)
-    @test median(_beds(0.0)) - median(_beds(-200.0)) ≈ 200 atol=25
+    ## Both offsets are scored on one set of prior draws. The offset is a
+    ## deterministic `:=` quantity, so reseeding before each sample pairs
+    ## the draws and isolates the shift itself. Two independent 400-draw
+    ## samples put a Monte Carlo SD of ~12 on the difference, which an
+    ## `atol` of 25 rejects in a few percent of runs.
+    function _beds(offset)
+        seed!(20260520)
+        return forecast_stream(
+            sample(_stream_offset_test(offset), Prior(), 400;
+                chain_type = FlexiChains.VNChain, progress = false),
+            :isolation_beds; horizon = 7, obs_value = 800, n = 60,
+            breakpoint = 30.0)
+    end
+    @test median(_beds(0.0)) - median(_beds(-200.0)) ≈ 200 atol=1
 end
