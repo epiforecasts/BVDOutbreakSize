@@ -26,7 +26,8 @@ Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.
 Those items do not vary by platform or Julia version, so they now run once in their own `Quality` job and every matrix cell runs `skip_quality`.
 The two filters are exact complements, so the suite is still covered in full.
-Each job then sits well inside the ceiling and the two run in parallel.
+The two now run in parallel, and the cell that was timing out drops to the ~53 minutes its `skip_quality` twin takes.
+The quality half is the faster-growing one, at roughly 72 minutes on 9 September and at least 97 by 14 September, so it has the less comfortable margin against the ceiling and is the half to watch.
 
 - The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
 `test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
