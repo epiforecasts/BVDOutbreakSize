@@ -868,12 +868,24 @@ posterior mode that breaks convergence) and keeps the series smooth (so a
 death background scaled from it carries no steps). Knots run only over
 the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
-knot spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily
-series (zero before `onset`).
+knot spacing.
+
+The baseline level `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is a
+half-normal, so it still shrinks the background toward zero and cannot
+out-explain the outbreak signal on its own. The scale is set so it does not
+truncate the level the suspected-case data support: the joint posterior for
+`λ_mu` runs about 16 to 30 suspected cases per day, which sits between the
+55th and 87th percentiles here. A half-normal SD of 8 puts its 95th
+percentile at 15.7, below the whole of that interval, so the prior rather
+than the data would set the background level. Pass `baseline_prior` to
+override.
+
+Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
+before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
-        baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
     ## Weekly knots over the window, linearly interpolated to the daily grid

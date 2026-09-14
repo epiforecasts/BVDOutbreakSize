@@ -26,6 +26,12 @@ Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
 Both offsets are now scored on one set of prior draws, which isolates the shift itself: the difference is exactly 200 on every seed tested, and the tolerance is 1.
 
+- The non-BVD background baseline prior no longer truncates the level the data support.
+`background_walk_model`'s baseline `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 suspected cases per day.
+The joint posterior for `λ_mu` runs about 16 to 30 per day, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the background level.
+The SD is now 20, which puts the same posterior interval between the 55th and 87th percentiles.
+It stays a half-normal shrinking toward zero, so the background still cannot out-explain the outbreak signal on its own, and the tight pooling SD on the walk is unchanged.
+
 ## v1.18.0
 
 Changes since v1.17.0
