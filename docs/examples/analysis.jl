@@ -2404,34 +2404,10 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 province_overview_table #hide
 
 #md # ```@raw html
-#md # <details><summary>Observed province split</summary>
-#md # ```
-
-province_split_table = DataFrame(
-    Province = PROVINCE_LABELS,
-    Cases = vec(sum(province_cases.increments; dims = 2)),
-    Deaths = vec(sum(province_deaths.increments; dims = 2)));
-province_split_table.:"Case share" = round.(
-    100 .* province_split_table.Cases ./ sum(province_split_table.Cases);
-    digits = 1);
-province_split_table.:"Death share" = round.(
-    100 .* province_split_table.Deaths ./ sum(province_split_table.Deaths);
-    digits = 1);
-province_split_table.:"Confirmed CFR" = round.(
-    100 .* province_split_table.Deaths ./ province_split_table.Cases;
-    digits = 1);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_split_table #hide
-
-# The table below reports each province on the same 30/60/90% credible-interval layout as the national tables, adding the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
-
-#md # ```@raw html
 #md # <details><summary>Per-province summary table</summary>
 #md # ```
+#
+# Each province on the same 30/60/90% credible-interval layout as the national tables, adding the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
 
 province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
 
