@@ -140,15 +140,24 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 ## (300). At 500 draws and 200 adaptation steps over two chains, three
 ## patches took 204 minutes locally against the single patch's 132, and the
 ## single patch takes 145 to 153 minutes on the CI runner. Scaling by the
-## iteration count, 1000 draws project to roughly 350 minutes locally and 385
-## to 405 on CI, which is past both the job's 350-minute cap and the
-## 360-minute ceiling on a hosted runner. Set `BVD_JOINT_SAMPLES` to fall
-## back to 500 if the job needs to land inside the budget before a cheaper
-## gradient is available.
+## Measured on CI at 750 draws, 200 adaptation steps and a target acceptance
+## of 0.90: the four-patch headline took 268 minutes and its single-population
+## control 137, against the job's 350-minute cap. The patch fit costs about
+## twice the control while its gradient costs only about a fifth more, so the
+## excess is trajectory length rather than gradient cost, which is what the
+## acceptance target buys back. Dropping it to 0.85 lengthens the step and
+## shortens the trajectories, and the time that frees goes into adaptation,
+## where the shortfall actually is: the bulk effective sample size was 25.
+## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
+## override all three without editing this file.
 joint_target_accept() = parse(Float64,
-    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.90"))
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.85"))
 joint_samples(default::Integer) = parse(Int,
     get(ENV, "BVD_JOINT_SAMPLES", string(default)))
+## `nuts_sample` caps its own default at 200 adaptation steps, which is where
+## this fit is short.
+joint_warmup(default::Integer) = parse(Int,
+    get(ENV, "BVD_JOINT_WARMUP", string(default)))
 
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
@@ -417,7 +426,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...);
-                samples = joint_samples(750), chains = chains,
+                samples = joint_samples(900), chains = chains,
+                n_adapts = joint_warmup(400),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
         ## Sensitivity: the same model with the spatial structure turned off
@@ -439,7 +449,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...);
-                samples = joint_samples(750), chains = chains,
+                samples = joint_samples(900), chains = chains,
+                n_adapts = joint_warmup(400),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
         (; id = "exports",
