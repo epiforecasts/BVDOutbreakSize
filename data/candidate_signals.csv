@@ -1927,3 +1927,137 @@ vaccination_persons_cumulative,112,2026-09-03,Ensemble,1834,persons,"section 1.6
 vaccination_persons_cumulative,112,2026-09-03,Tshopo,1375,persons,see the Ensemble row source note (same sentence)
 vaccination_persons_cumulative,112,2026-09-03,Bas-Uele,459,persons,see the Ensemble row source note (same sentence)
 vaccination_persons_cumulative,113,2026-09-04,Bas-Uele,486,persons,"section 1.6.1 prose: 'La vaccination avec le vaccin ERVEBO s'est poursuivie au Bas-Uele... (cumul personnes vaccines : 486)'. Tshopo gives only 'l'appui a la supervision des equipes de vaccination des PPL s'est poursuivi' with no updated cumulative figure this vintage - silent, not a stall (its own last explicit value, 1375, stands from 112)."
+contact_tracing_coverage,116,2026-09-07,Ensemble,88.3,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Ensemble,21359,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Ensemble,24719,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,116,2026-09-07,Ituri,90.7,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Ituri,12054,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Ituri,13289,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,116,2026-09-07,Nord-Kivu,87.3,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Nord-Kivu,8580,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Nord-Kivu,9833,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,116,2026-09-07,Bas-Uele,70.4,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Bas-Uele,107,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Bas-Uele,152,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,116,2026-09-07,Tshopo,69.5,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Tshopo,196,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Tshopo,282,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,116,2026-09-07,Haut-Uele,67.7,percent,"section 1.1.2 prose: national 88.3% (21359 vus sur 24719 a suivre); per-province: Ituri 90.7% (12054/13289), Nord-Kivu 87.3% (8580/9833), Bas-Uele 70.4% (107/152), Tshopo 69.5% (196/282), Haut-Uele 67.7% (422/623)"
+contacts_seen,116,2026-09-07,Haut-Uele,422,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,116,2026-09-07,Haut-Uele,623,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Ensemble,86.5,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Ensemble,21723,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Ensemble,25108,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Ituri,90.1,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Ituri,11210,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Ituri,12446,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Nord-Kivu,84.3,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Nord-Kivu,8733,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Nord-Kivu,10358,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Bas-Uele,71.1,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Bas-Uele,108,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Bas-Uele,152,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Tshopo,83.2,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Tshopo,223,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Tshopo,268,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,117,2026-09-08,Haut-Uele,76.9,percent,"section 1.1.2 prose: national 86.5% (21723 vus sur 25108 a suivre); per-province: Ituri 90.1% (11210/12446), Nord-Kivu 84.3% (8733/10358), Bas-Uele 71.1% (108/152), Tshopo 83.2% (223/268), Haut-Uele 76.9% (1449/1884)"
+contacts_seen,117,2026-09-08,Haut-Uele,1449,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,117,2026-09-08,Haut-Uele,1884,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Ensemble,84.4,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Ensemble,19945,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Ensemble,23630,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Nord-Kivu,86.1,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Nord-Kivu,9131,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Nord-Kivu,10600,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Ituri,83.6,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Ituri,8971,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Ituri,10732,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Bas-Uele,80.3,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Bas-Uele,122,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Bas-Uele,152,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Tshopo,83.5,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Tshopo,237,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Tshopo,284,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,118,2026-09-09,Haut-Uele,79.7,percent,"section 1.1.2 prose: national 84.4% (19945 vus sur 23630 a suivre); per-province: Nord-Kivu 86.1% (9131/10600), Ituri 83.6% (8971/10732), Bas-Uele 80.3% (122/152), Tshopo 83.5% (237/284), Haut-Uele 79.7% (1484/1862)"
+contacts_seen,118,2026-09-09,Haut-Uele,1484,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,118,2026-09-09,Haut-Uele,1862,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Ensemble,87.6,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Ensemble,25117,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Ensemble,28672,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Ituri,90.0,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Ituri,13606,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Ituri,15118,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Nord-Kivu,86.7,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Nord-Kivu,9865,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Nord-Kivu,11381,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Bas-Uele,77.6,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Bas-Uele,104,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Bas-Uele,134,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Haut-Uele,76.1,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Haut-Uele,1335,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Haut-Uele,1755,persons,see contact_tracing_coverage row note
+contact_tracing_coverage,119,2026-09-10,Tshopo,72.9,percent,"section 1.1.2 prose: national 87.6% (25117 vus sur 28672 a suivre); per-province: Ituri 90.0% (13606/15118), Nord-Kivu 86.7% (9865/11381), Bas-Uele 77.6% (104/134), Haut-Uele 76.1% (1335/1755), Tshopo 72.9% (207/284)"
+contacts_seen,119,2026-09-10,Tshopo,207,persons,see contact_tracing_coverage row note
+contacts_under_follow_up,119,2026-09-10,Tshopo,284,persons,see contact_tracing_coverage row note
+alerts_total_day,116,2026-09-07,Ensemble,1508,alerts,"'Situation des alertes notifiees par province' table (Tableau 3), Tableau 3 Total General row"
+alerts_validated_alive,116,2026-09-07,Ensemble,226,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,116,2026-09-07,Ensemble,103,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,116,2026-09-07,Ensemble,154,alerts,alert table 'Nombre de suspects investigues et transferes au CT/CTE (du jour)'
+alert_investigation_rate,116,2026-09-07,Ensemble,100.0,percent,section 1.1.2 prose ('investigues (100%)')
+alerts_total_day,117,2026-09-08,Ensemble,2140,alerts,"'Situation des alertes notifiees par province' table (Tableau 3), Tableau 3 Total General row"
+alerts_validated_alive,117,2026-09-08,Ensemble,312,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,117,2026-09-08,Ensemble,96,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,117,2026-09-08,Ensemble,229,alerts,alert table 'Nombre de suspects investigues et transferes au CT/CTE (du jour)'
+alert_investigation_rate,117,2026-09-08,Ensemble,100.0,percent,section 1.1.2 prose ('investigues (100%)')
+alerts_total_day,118,2026-09-09,Ensemble,1941,alerts,"'Situation des alertes notifiees par province' table (Tableau 3), Tableau 3 Total General row"
+alerts_validated_alive,118,2026-09-09,Ensemble,274,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,118,2026-09-09,Ensemble,112,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,118,2026-09-09,Ensemble,205,alerts,alert table 'Nombre de suspects investigues et transferes au CT/CTE (du jour)'
+alert_investigation_rate,118,2026-09-09,Ensemble,100.0,percent,section 1.1.2 prose ('investigues (100%)')
+alerts_total_day,119,2026-09-10,Ensemble,2254,alerts,"'Situation des alertes notifiees par province' table (Tableau 3), Tableau 3 Total General row; Sud-Kivu AND Sud Ubangi both printed ND this vintage"
+alerts_validated_alive,119,2026-09-10,Ensemble,290,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_validated_dead_community,119,2026-09-10,Ensemble,139,alerts,"alert table, validated-suspect vivants/decedes"
+alerts_investigated,119,2026-09-10,Ensemble,192,alerts,alert table 'Nombre de suspects investigues et transferes au CT/CTE (du jour)'
+alert_investigation_rate,119,2026-09-10,Ensemble,100.0,percent,section 1.1.2 prose ('investigues (100%)')
+alerts_total_day,119,2026-09-10,Sud-Kivu,ND,alerts,Tableau 3: Sud-Kivu row entirely ND this vintage
+alerts_total_day,119,2026-09-10,Sud Ubangi,ND,alerts,Tableau 3: Sud Ubangi (new province) row entirely ND this vintage - no alert data yet for the newly-touched province
+eds_death_alerts,116,2026-09-07,Ituri,92,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,116,2026-09-07,Ituri,79,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,116,2026-09-07,Ituri,67,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,116,2026-09-07,Nord-Kivu,51,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,116,2026-09-07,Nord-Kivu,50,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,116,2026-09-07,Nord-Kivu,51,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,116,2026-09-07,Haut-Uele,5,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,116,2026-09-07,Haut-Uele,4,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,116,2026-09-07,Haut-Uele,5,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,117,2026-09-08,Ituri,75,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,117,2026-09-08,Ituri,62,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,117,2026-09-08,Ituri,51,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,117,2026-09-08,Nord-Kivu,42,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,117,2026-09-08,Nord-Kivu,44,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,117,2026-09-08,Nord-Kivu,42,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,117,2026-09-08,Haut-Uele,3,investigations,"section 1.4.1 prose: '5 EDS etaient prevus, 3 ont ete realises, 2 echecs consecutifs a des resistances communautaires dans la ZS d'Isiro' - no alertes/swabs count printed this vintage, a coverage gap not a zero"
+eds_death_alerts,118,2026-09-09,Ituri,96,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,118,2026-09-09,Ituri,77,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,118,2026-09-09,Ituri,65,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,118,2026-09-09,Nord-Kivu,40,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,118,2026-09-09,Nord-Kivu,40,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,118,2026-09-09,Nord-Kivu,40,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,118,2026-09-09,Tshopo,3,alerts,"section 1.4.1 prose: 'Le pilier EDS a recu 3 alertes (dont 2 reports), aucun EDS n'a ete realise et 2 corps n'ont pu etre swabes' - printed zero EDS realized, swabs attempted but 0 succeeded"
+eds_investigations_performed,118,2026-09-09,Tshopo,0,investigations,"section 1.4.1 prose: 'Le pilier EDS a recu 3 alertes (dont 2 reports), aucun EDS n'a ete realise et 2 corps n'ont pu etre swabes' - printed zero EDS realized, swabs attempted but 0 succeeded"
+eds_corpses_swabbed,118,2026-09-09,Tshopo,0,corpses,"section 1.4.1 prose: 'Le pilier EDS a recu 3 alertes (dont 2 reports), aucun EDS n'a ete realise et 2 corps n'ont pu etre swabes' - printed zero EDS realized, swabs attempted but 0 succeeded"
+eds_death_alerts,119,2026-09-10,Ituri,95,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,119,2026-09-10,Ituri,71,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,119,2026-09-10,Ituri,54,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,119,2026-09-10,Nord-Kivu,54,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,119,2026-09-10,Nord-Kivu,46,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,119,2026-09-10,Nord-Kivu,51,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_death_alerts,119,2026-09-10,Tshopo,0,alerts,"section 1.4.1 prose: 'Le pilier EDS n'a enregistre aucune alerte ni realise d'EDS au cours des dernieres 24 heures' - a printed zero, not silence"
+eds_investigations_performed,119,2026-09-10,Tshopo,0,investigations,"section 1.4.1 prose: 'Le pilier EDS n'a enregistre aucune alerte ni realise d'EDS au cours des dernieres 24 heures' - a printed zero, not silence"
+eds_death_alerts,119,2026-09-10,Haut-Uele,9,alerts,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_investigations_performed,119,2026-09-10,Haut-Uele,9,investigations,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+eds_corpses_swabbed,119,2026-09-10,Haut-Uele,9,corpses,"section 1.4.1 prose, per-province EDS alerts/realise/swabbed"
+vaccination_doses_available,116,2026-09-07,Tshopo,3000,doses,"section 1.6.1 prose: 'reception de 3 000 doses d'ERVEBO sur 11 000 attendus' (Tshopo-specific shipment/available event, distinct from the SitRep 097/099 national figures)"
+vaccination_persons_cumulative,117,2026-09-08,Tshopo,1582,persons,"section 1.6.1 prose: '1 582 personnes ont ete vaccinees a ce jour sur 11 703 cibles TPL/PPL (14%), dont 1 079 a Makiso-Kisangani, 269 a Kabondo et 234 a Mangobo'; solde 2918 doses"
+vaccination_persons_cumulative,118,2026-09-09,Tshopo,1779,persons,"section 1.6.1 prose: '1 779 personnes ont ete vaccinees a ce jour sur 11 000 TPL/PPL cibles (16,2 %), dont 1 142 a Makiso-Kisangani, 291 a Kabondo, 271 a Mangobo et 75 a Tshopo'; solde 721 doses zones + 2000 congelees Hub"
+vaccination_persons_cumulative,119,2026-09-10,Tshopo,2006,persons,"section 1.6.1 prose: '2 006 personnes ont ete vaccinees a ce jour sur 11 000 TPL/PPL cibles (18,2 %), dont 1 311 a Makiso-Kisangani, 301 a Kabondo, 287 a Mangobo, 89 a Tshopo et 18 a Lubunga'; solde 494 doses zones + 1500 congelees Hub"
