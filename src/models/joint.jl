@@ -137,7 +137,9 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        confirmed_positivity_link::Symbol = :composition)
+        confirmed_positivity_link::Symbol = :composition,
+        specimen_intensity::Bool = true,
+        intensity_ref_day::Integer = n)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -155,6 +157,9 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
+        specimen_intensity = specimen_intensity ?
+                             specimen_intensity_model(n;
+            ref_day = intensity_ref_day) : nothing,
         positivity_link = confirmed_positivity_link))
     ## Cut-off expected confirmed count, aliased under the same un-prefixed
     ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
@@ -529,6 +534,14 @@ the implied per-suspected (`suspected_positivity`) and per-test
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
+        ## Let the analysed volume carry more than one specimen per suspect
+        ## ([`specimen_intensity_model`](@ref)). `τ_test` is a probability, so
+        ## without it the modelled analysed volume is capped below the
+        ## modelled suspect inflow, a ceiling the reported ratio crosses
+        ## (0.93 June, 1.01 July, 1.50 over 1-5 August). Centred on no effect.
+        specimen_intensity::Bool = true,
+        ## Grid day the intensity level refers to; the trend runs from it.
+        intensity_ref_day::Integer = n,
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
@@ -645,6 +658,9 @@ the implied per-suspected (`suspected_positivity`) and per-test
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
+        specimen_intensity = specimen_intensity ?
+                             specimen_intensity_model(n;
+            ref_day = intensity_ref_day) : nothing,
         positivity_link = confirmed_positivity_link))
     ## Symptom-onset reporting-triangle stream
     ## ([`onset_reporting_model`](@ref)): the only direct observation of the

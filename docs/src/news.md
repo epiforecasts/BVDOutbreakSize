@@ -21,6 +21,21 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+## Unreleased
+
+### Fixed
+
+- The analysed volume is no longer capped below the modelled suspect inflow.
+`confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
+The receipt PMF sums to one and `convolve_delay` only loses mass, so with `τ_test` a probability on `(0, 1)` the modelled analysed volume could never exceed the modelled suspect inflow.
+The reported data cross that ceiling: over the window where both streams are observed the analysed-to-suspect ratio runs 0.93 in June, 1.01 in July and 1.50 over 1-5 August, reaching 2.06 on a single day.
+A suspect can yield more than one specimen, and swabbed community deaths and screened contacts enter the laboratory denominator without being counted as suspects reported, so a ratio above one is ordinary.
+Without a way to represent it the fit pressed `τ_test` against its ceiling (posterior 0.921-0.994, the 92nd to 99.6th percentile of its `Beta(5, 2)` prior) and inflated the modelled suspect inflow by about 10% over the observed window, pushing the non-BVD background up to carry specimens that were never extra suspects.
+`specimen_intensity_model` adds specimens analysed per suspect sampled, `κ(t) = κ0 · exp(β_κ (t − ref) / 30)`, multiplying only the analysed volume.
+`τ_test` keeps its meaning as a probability, which it must: it is also the in-care confirmation hazard and the onset stream's ascertainment anchor.
+The ratio rises through the observed window, so a level alone would repeat the error being fixed; the trend is identified by the June-August overlap where both streams are observed.
+Both priors are centred on no effect, so `κ ≡ 1` is the prior centre and `specimen_intensity = false` reproduces the previous behaviour exactly.
+
 ## v1.18.0
 
 Changes since v1.17.0

@@ -1097,6 +1097,11 @@ quantities.
         lab_daily_history = (; days = Int[], counts = Int[]),
         tests_analysed::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
+        ## Specimens analysed per suspect sampled, allowed above one
+        ## ([`specimen_intensity_model`](@ref)). `nothing` keeps the previous
+        ## behaviour, in which `τ_test` alone caps the volume below the
+        ## suspect inflow.
+        specimen_intensity = nothing,
         positivity = confirmed_positivity_model,
         positivity_link::Symbol = :composition,
         severity_enrichment = severity_enrichment_model(),
@@ -1163,8 +1168,18 @@ quantities.
     ## background.
     receipt_state ~ to_submodel(receipt)
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
-    analysed_daily_raw = τ_test .* convolve_delay(suspected_daily,
-        receipt_state.pmf)
+    ## Specimens analysed per suspect sampled. `τ_test` is a probability and
+    ## the receipt PMF sums to one, so without this factor the modelled
+    ## analysed volume is capped below the modelled suspect inflow, a ceiling
+    ## the reported data cross.
+    κ_daily = if specimen_intensity === nothing
+        fill(one(τ_test), n)
+    else
+        intensity_state ~ to_submodel(specimen_intensity)
+        intensity_state.κ
+    end
+    analysed_daily_raw = κ_daily .* τ_test .*
+                         convolve_delay(suspected_daily, receipt_state.pmf)
     ## In predict mode (no AD) the daily series can infer as `Vector{Any}` on
     ## some Julia versions, which then makes `reduce_empty` / `zero(Any)` fail
     ## on the empty derived window vectors below, so it is concretised to the
