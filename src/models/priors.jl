@@ -297,9 +297,9 @@ elicited for the integral model, where `2^m` was the cut-off cumulative
 case total and the 95% support spanned 8 to 32,000 *cases*. That spread
 passed through the renewal reparameterisation untouched and became a
 spread on one day's infections: at SD 4 the 99th percentile is 22,722
-infections per day, against a fitted outbreak of roughly 12,700
-infections in total, so a prior on a single day reaches nearly twice the
-whole outbreak. Integrating over the `r` prior, SD 1.5
+infections per day, against a fitted outbreak of roughly 14,700
+infections in total, so a prior on a single day reaches about one and a
+half times the whole outbreak. Integrating over the `r` prior, SD 1.5
 puts the 90% prior origin between 2 January and 21 March 2026, bracketed
 by the field-epi first death at the late end and the genetic TMRCA point
 estimate at the early end. It still asserts a pre-MRCA origin, which is
