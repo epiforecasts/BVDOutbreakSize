@@ -2403,19 +2403,34 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 
 province_overview_table #hide
 
-#md # ```@raw html
-#md # <details><summary>Per-province summary table</summary>
-#md # ```
-#
-# Each province on the same 30/60/90% credible-interval layout as the national tables, adding the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
+# The figure below puts every province on the same 30/60/90% credible-interval layout as the national tables, one panel per quantity, and adds the log-Rt deviation from the national trend, its walk scale, and the contrast against Ituri.
+# Each panel carries its own y-axis, so the provinces are compared within a panel rather than across panels.
+# Dashed rules mark the reference value each quantity is read against.
+# The same numbers are in the table below it, which is folded away because seven quantities over four provinces is 28 rows.
 
-province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+#md # ```@raw html
+#md # <details><summary>Per-province summary figure</summary>
+#md # ```
+
+province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
 
 #md # ```@raw html
 #md # </details>
 #md # ```
 
+province_detail_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary table</summary>
+#md # ```
+
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+
 province_detail_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
 # Each panel carries its own y-axis, because the provinces differ by orders of magnitude, so the panels are read for shape and timing and the table above for size.
@@ -3288,9 +3303,12 @@ joint_ppc_fig #hide
 #
 # The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
 # The panels below show that modelled share at every spatial vintage against the observed one.
-# The ribbon is the expected share, not the predicted count, so the observed points are not meant to fall inside it.
-# They scatter around it through the composition overdispersion, which is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# What the panels are read for is whether the points sit around the ribbon rather than consistently to one side of it.
+# Each panel carries two bands.
+# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
+# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
+# The observed points should fall inside it.
+# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
+# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
 # Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
 # The vintages stop before the cut-off, so the panels end earlier than the national posterior predictive checks above.
 

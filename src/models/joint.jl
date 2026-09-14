@@ -1002,6 +1002,7 @@ reproduction number implied by the summed patch infections.
             ascertainment_sd_prior = death_ascertainment_sd_prior,
             severity_sd_prior = province_cfr_sd_prior))
         province_death_shares := death_composition_state.shares
+        province_death_composition_rho := death_composition_state.rho
         province_death_ascertainment := death_composition_state.province_ascertainment
         province_death_ascertainment_sd := death_composition_state.ascertainment_sd
         ## Per-province case-fatality ratio: the national ratio times that
