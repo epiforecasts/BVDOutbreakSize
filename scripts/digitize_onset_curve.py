@@ -148,6 +148,14 @@ CONFIG = {
     "113": ("2026-09-04", "2026-08-31"),
     "114": ("2026-09-05", "2026-08-31"),
     "115": ("2026-09-06", "2026-09-07"),
+    "116": ("2026-09-07", "2026-09-07"),
+    # 117 and 118 keep 116's 07 September tick and plot a window that
+    # retreats behind their own report dates (to 09-03 and 09-04). That
+    # only shortens the pair's coverage intersection, which
+    # `load_onset_curve` drops as unobserved.
+    "117": ("2026-09-08", "2026-09-07"),
+    "118": ("2026-09-09", "2026-09-07"),
+    "119": ("2026-09-10", "2026-09-07"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -188,6 +196,10 @@ Y_AXIS_STEP = {
     "113": 25,
     "114": 25,
     "115": 25,
+    "116": 25,
+    "117": 25,
+    "118": 25,
+    "119": 25,
 }
 
 

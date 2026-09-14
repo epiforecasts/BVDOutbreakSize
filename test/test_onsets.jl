@@ -591,6 +591,60 @@ end
     @test minimum(h.increments) >= 0
 end
 
+@testitem "load_onset_curve: an onset past the predecessor's report drops" begin
+    ## A figure can print an onset date later than the previous vintage's
+    ## report date. That cell's previous delay is negative, where
+    ## `onset_report_cdf` is zero, so its mean would be a level while its
+    ## observed value stayed an increment. It must be dropped instead.
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date, date2epochdays
+
+    dir = mktempdir()
+    path = joinpath(dir, "onset.csv")
+    ## Both blocks print 03-06, which postdates block 001's own report date.
+    write(path, """
+    sitrep,report_date,onset_date,confirmed_alive,confirmed_dead,confirmed_total
+    001,2026-03-05,2026-03-04,4,0,4
+    001,2026-03-05,2026-03-06,3,0,3
+    002,2026-03-06,2026-03-04,6,0,6
+    002,2026-03-06,2026-03-06,9,0,9
+    """)
+    seeding = Date("2026-01-01")
+    h = load_onset_curve(path; cutoff = Date("2026-03-06"), seeding,
+        max_delay = 10)
+    _day(x) = Int(date2epochdays(Date(x)) - date2epochdays(seeding)) + 1
+    ## No cell for 03-06 in the 001-versus-002 pair.
+    @test isempty(findall(
+        i -> h.onset_days[i] == _day("2026-03-06") &&
+             h.report_days[i] == _day("2026-03-06"),
+        eachindex(h.onset_days)))
+    ## The 03-04 correction the pair does support is untouched.
+    idx = findall(
+        i -> h.onset_days[i] == _day("2026-03-04") &&
+             h.report_days[i] == _day("2026-03-06"),
+        eachindex(h.onset_days))
+    @test length(idx) == 1
+    @test h.increments[idx[1]] == 2
+    ## No scored correction cell ever carries a negative previous delay.
+    corr = findall(!=(0), h.prev_report_days)
+    @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
+end
+
+@testitem "load_onset_curve: the archive scores no negative previous delay" begin
+    ## Guards the committed CSV against the shape above: a vintage whose
+    ## printed window runs past its predecessor's report date.
+    using BVDOutbreakSize: load_onset_curve
+    using Dates: Date
+
+    path = joinpath(pkgdir(BVDOutbreakSize), "data",
+        "onset_curve_scanned.csv")
+    h = load_onset_curve(path; cutoff = Date("2100-01-01"),
+        seeding = Date("2026-01-01"))
+    corr = findall(!=(0), h.prev_report_days)
+    @test !isempty(corr)
+    @test all(h.prev_report_days[i] >= h.onset_days[i] for i in corr)
+end
+
 @testitem "onset_report_scales: error formula match, grows with magnitude" begin
     using BVDOutbreakSize: onset_report_scales
 

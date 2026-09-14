@@ -120,10 +120,12 @@ end
     ## the rightmost axis tick was read off the rendered figure directly,
     ## and a verified direct read outweighs this heuristic when the two
     ## conflict. They disagree in alternating directions rather than showing
-    ## a systematic offset, and each is bracketed by pairs that do land on
-    ## 0, so none of them can be a misread tick.
+    ## a systematic offset, so none of them can be a misread tick. (115->116
+    ## and 116->117 both prefer shift +1, the first same-direction
+    ## consecutive pair this stream has seen, but two instances do not
+    ## establish a systematic offset.)
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
-        "102" => "103", "112" => "113")
+        "102" => "103", "112" => "113", "115" => "116", "116" => "117")
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]
