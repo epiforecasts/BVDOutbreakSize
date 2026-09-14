@@ -870,12 +870,13 @@ the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
 knot spacing.
 
-`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the level on the first knot
-day, not the level over the window: the walk's log-deviation is pinned to zero
-there, so the prior anchors the start of the window and the innovations carry
-it from there. On the production grid that day is 1 May and the fitted
-background reaches a few hundred per day by the cut-off, so this scale is not
-comparable to a mid-window level.
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` anchors the start of the window,
+not the level over it. The walk's log-deviation is pinned to zero on the first
+knot and the onset ramp reaches one after `onset_ramp` days, so `λ_mu` is the
+level the series settles at once the ramp completes, with the innovations
+carrying it from there. On the production grid the window opens on 1 May and
+the fitted background reaches a few hundred per day by the cut-off, so this
+scale is not comparable to a mid-window level.
 
 The half-normal shrinks that anchor toward zero, which is what stops the
 background out-explaining the outbreak signal. The scale is wide enough not to
@@ -900,11 +901,12 @@ before `onset`).
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal baseline on the natural scale, the same informative prior
-    ## as the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
-    ## background level tightly (a lognormal/log-scale level has a heavy right
-    ## tail the background/outbreak-size degeneracy exploits to run away), so
-    ## the background cannot blow up to explain the suspected stream.
+    ## Half-normal window anchor on the natural scale. Half-normal rather than
+    ## lognormal because a log-scale level has a heavy right tail the
+    ## background/outbreak-size degeneracy exploits to run away, so the
+    ## background could blow up to explain the suspected stream. The scale is
+    ## wider than the scalar `λ_bg` ([`test_positivity_model`](@ref)), which
+    ## stands in for a whole window rather than anchoring one end of a walk.
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
