@@ -1290,3 +1290,79 @@ end
     @test_throws ErrorException plot_onset_nowcast_grid([(; p.title, p.dates,
         observed = p.observed[1:5], p.nowcast, p.latest)])
 end
+
+@testitem "_composition_predictive: allocates the observed total, wider with rho" begin
+    using Statistics: mean, std
+    using BVDOutbreakSize: _composition_predictive
+
+    ## The predictive path must reproduce the composition's own generative
+    ## step: the patches partition each vintage's observed total exactly, so
+    ## their predicted shares sum to one draw by draw.
+    nd = 400
+    shares = [0.6 0.5; 0.3 0.35; 0.1 0.15]
+    ms = [shares for _ in 1:nd]
+    totals = [200, 300]
+    preds = _composition_predictive(ms, fill(0.05, nd), totals, 2)
+    @test length(preds) == 3
+    for d in 1:nd, i in 1:2
+
+        @test sum(preds[p][d][i] for p in 1:3)≈1 atol=1e-12
+    end
+    ## Centred on the expected share: the allocation is unbiased, so only the
+    ## scatter around it is new.
+    for p in 1:3, i in 1:2
+
+        @test mean(preds[p][d][i] for d in 1:nd)≈shares[p, i] atol=0.03
+    end
+    ## The overdispersion is what the band is for. A larger rho must scatter
+    ## the predicted shares further, or the band says nothing the expected
+    ## ribbon did not.
+    tight = _composition_predictive(ms, fill(0.001, nd), totals, 2)
+    loose = _composition_predictive(ms, fill(0.3, nd), totals, 2)
+    for p in 1:2
+        @test std(t[1] for t in loose[p]) > 2 * std(t[1] for t in tight[p])
+    end
+    ## A vintage with no observed cases has no split to predict.
+    empty_v = _composition_predictive(ms, fill(0.05, nd), [0, 300], 2)
+    @test all(isnan(t[1]) for t in empty_v[1])
+    @test all(!isnan(t[2]) for t in empty_v[1])
+end
+
+@testitem "plot_province_composition_ppc: predictive band behind the expected" setup=[
+    HeadlessMakie
+] begin
+    using Dates: Date
+    using BVDOutbreakSize: plot_province_composition_ppc
+
+    nd = 120
+    shares = [0.7 0.7 0.6 0.6; 0.2 0.2 0.25 0.25; 0.1 0.1 0.15 0.15]
+    obs = [70 70 60 60; 20 20 25 25; 10 10 15 15]
+    days = [7, 14, 21, 28]
+    seeding = Date(2025, 8, 1)
+    chn = (; province_shares = [shares for _ in 1:nd],
+        province_composition_rho = fill(0.2, nd))
+    fig = plot_province_composition_ppc(chn; share_key = :province_shares,
+        obs_increments = obs, days, seeding, n_patches = 3)
+    @test fig isa CairoMakie.Makie.Figure
+    axes = [x for x in fig.content if x isa CairoMakie.Makie.Axis]
+    @test length(axes) == 3
+    ## Three predictive bands behind three expected-share bands per panel.
+    for ax in axes
+        @test count(p -> p isa CairoMakie.Makie.Band, ax.scene.plots) == 6
+    end
+    ## The death composition reads its own overdispersion, so a chain
+    ## carrying only the case one draws no band on the death panels.
+    death = (; province_death_shares = [shares for _ in 1:nd],
+        province_death_composition_rho = fill(0.2, nd))
+    dfig = plot_province_composition_ppc(death;
+        share_key = :province_death_shares, obs_increments = obs, days,
+        seeding, n_patches = 3)
+    dax = first(x for x in dfig.content if x isa CairoMakie.Makie.Axis)
+    @test count(p -> p isa CairoMakie.Makie.Band, dax.scene.plots) == 6
+    ## A chain predating the deterministic still plots the expected share.
+    plain = (; province_shares = [shares for _ in 1:nd])
+    pfig = plot_province_composition_ppc(plain; share_key = :province_shares,
+        obs_increments = obs, days, seeding, n_patches = 3)
+    pax = first(x for x in pfig.content if x isa CairoMakie.Makie.Axis)
+    @test count(p -> p isa CairoMakie.Makie.Band, pax.scene.plots) == 3
+end

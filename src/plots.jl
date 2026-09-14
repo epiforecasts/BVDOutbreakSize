@@ -2385,10 +2385,118 @@ function plot_imports_patches(chn; n::Integer, seeding::Date,
     return fig
 end
 
+## Quantile bands over per-draw trajectories that may be undefined at a
+## point. `_traj_bands` throws on a NaN, and a vintage whose observed total
+## is zero has no share to allocate, so it has no predictive share either.
+## Those points stay NaN, which Makie draws as a gap in the band.
+function _traj_bands_missing(trajs, n::Integer)
+    function q(d, pr)
+        v = Float64[t[d] for t in trajs]
+        any(isnan, v) && return NaN
+        return quantile(v, pr)
+    end
+    return (lo90 = [q(d, 0.05) for d in 1:n], hi90 = [q(d, 0.95) for d in 1:n],
+        lo60 = [q(d, 0.20) for d in 1:n], hi60 = [q(d, 0.80) for d in 1:n],
+        lo30 = [q(d, 0.35) for d in 1:n], hi30 = [q(d, 0.65) for d in 1:n])
+end
+
+## Predictive band behind an expected-value ribbon: the same 30/60/90%
+## nesting in grey, with the 90% edges outlined so the outer extent stays
+## legible where the coloured ribbon sits inside it.
+function _draw_pred_bands!(ax, x, b)
+    band!(ax, x, b.lo90, b.hi90; color = (:grey30, 0.12))
+    band!(ax, x, b.lo60, b.hi60; color = (:grey30, 0.20))
+    band!(ax, x, b.lo30, b.hi30; color = (:grey30, 0.28))
+    lines!(ax, x, b.lo90; color = (:grey20, 0.7), linestyle = :dash,
+        linewidth = 1)
+    lines!(ax, x, b.hi90; color = (:grey20, 0.7), linestyle = :dash,
+        linewidth = 1)
+    return ax
+end
+
+## Chain keys carrying a composition's overdispersion, most specific first.
+## The case composition exposes it as the `province_composition_rho`
+## deterministic and the death composition as
+## `province_death_composition_rho`; a chain fitted before those existed
+## still carries the submodel's own sampled `rho` under its submodel prefix.
+function _composition_rho_keys(share_key::Symbol)
+    return share_key === :province_death_shares ?
+           [:province_death_composition_rho,
+        Symbol("death_composition_state.ρ")] :
+           [:province_composition_rho, Symbol("composition_state.ρ")]
+end
+
+## Per-draw composition overdispersion, or `nothing` when the chain carries
+## none of the candidate keys. A chain that predates the deterministic still
+## plots, without the predictive band.
+function _composition_rho_draws(chn, keys, nd::Integer)
+    for k in keys
+        _has_key(chn, k) || continue
+        v = Float64[x for x in vec(collect(chn[k]))]
+        length(v) == nd && return v
+    end
+    return nothing
+end
+
+## Predictive shares for every patch at every vintage, one trajectory per
+## posterior draw. Each draw's expected shares `m` and overdispersion
+## `rho[d]` are pushed back through the stick-breaking allocation
+## [`province_composition_model`](@ref) scores: patch `p` takes a
+## `BetaBinomial` count out of what patches `1 ... p-1` left of the
+## vintage's observed total, at that patch's conditional share, and the last
+## patch takes the remainder. The returned shares therefore carry the
+## composition's extra-Multinomial scatter as well as the posterior width of
+## the expected share, which is what the observed points are drawn from.
+##
+## The vintage's observed total is the trial count, matching the fitted
+## likelihood: the totals are conditioned on, never scored, so the check is
+## on the split alone. A vintage with no observed cases has no split to
+## predict and stays NaN.
+##
+## The seed is fixed so a rebuilt report redraws the same band rather than
+## moving it by the Monte Carlo error of the predictive simulation.
+function _composition_predictive(ms, rho, totals, nv::Integer;
+        seed::Integer = 20_240)
+    rng = MersenneTwister(seed)
+    np = size(first(ms), 1)
+    nd = length(ms)
+    preds = [[fill(NaN, nv) for _ in 1:nd] for _ in 1:np]
+    counts = zeros(Int, np)
+    for (d, m) in enumerate(ms)
+        for i in 1:nv
+            total = totals[i]
+            total > 0 || continue
+            remaining = total
+            tail = 1.0
+            for p in 1:(np - 1)
+                p_cond = clamp(m[p, i] / tail, 0.0, 1.0)
+                counts[p] = rand(rng,
+                    safe_betabinomial(max(remaining, 0), p_cond, rho[d]))
+                remaining -= counts[p]
+                tail = max(tail - m[p, i], 1e-10)
+            end
+            counts[np] = max(remaining, 0)
+            for p in 1:np
+                preds[p][d][i] = counts[p] / total
+            end
+        end
+    end
+    return preds
+end
+
 """
 Posterior predictive check on a per-province composition: the modelled share
-of each province at every spatial vintage, as 30/60/90% credible ribbons,
-with the observed share drawn over it as black points.
+of each province at every spatial vintage, with the observed share drawn
+over it as black points.
+
+Each panel carries two bands. The grey predictive band is what the observed
+points are drawn from. Every posterior draw's expected shares and
+composition overdispersion are pushed back through the stick-breaking
+allocation [`province_composition_model`](@ref) scores, at that vintage's
+observed total, so the band carries the composition's extra-Multinomial
+scatter on top of the posterior width. The coloured ribbon inside it is the
+expected share alone. The points should fall inside the grey band, and the
+coloured ribbon is the modelled centre they scatter around.
 
 `share_key` is the chain's share deterministic (`province_shares` for the
 confirmed cases, `province_death_shares` for the confirmed deaths),
@@ -2405,6 +2513,10 @@ ribbon says the model reproduces that province's share.
 Every panel starts at zero but takes its own upper limit. The shares differ
 by orders of magnitude, so a common axis leaves every province but the
 epicentre pinned to the floor and unreadable.
+
+`rho_key` names the chain's overdispersion for this composition and defaults
+to the one matching `share_key`. A chain carrying neither that deterministic
+nor the submodel's own draw is drawn with the expected-share ribbon only.
 """
 function plot_province_composition_ppc(chn; share_key::Symbol,
         obs_increments::AbstractMatrix, days::AbstractVector{<:Integer},
@@ -2412,6 +2524,7 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
         n_patches::Integer = length(PROVINCE_NAMES),
         patch_labels::AbstractVector = PROVINCE_LABELS,
         colours = [:firebrick, :steelblue, :seagreen],
+        rho_key::Union{Nothing, Symbol} = nothing,
         title::AbstractString = "Province share, modelled against observed")
     np = min(n_patches, length(patch_labels))
     ms = [collect(v) for v in vec(collect(chn[share_key]))]
@@ -2422,6 +2535,14 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
     epoch = date2epochdays(seeding)
     x = Float64[epoch + (d - 1) for d in days]
     totals = [sum(@view obs_increments[:, i]) for i in 1:nv]
+    ## The predictive band needs the composition's own overdispersion, which
+    ## is the parameter that sets how far the observed shares are expected to
+    ## scatter from the modelled ones.
+    rho_keys = rho_key === nothing ? _composition_rho_keys(share_key) :
+               [rho_key]
+    rho = _composition_rho_draws(chn, rho_keys, length(ms))
+    preds = rho === nothing ? nothing :
+            _composition_predictive(ms, rho, totals, nv)
     fig = Figure(; size = (460 * np, 400))
     for p in 1:np
         colour = colours[mod1(p, length(colours))]
@@ -2430,6 +2551,10 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
         ax = Axis(fig[1, p]; xlabel = "Vintage", ylabel = "Share of total",
             title = patch_labels[p], titlecolor = colour,
             xticklabelrotation = pi / 6)
+        ## Predictive first, so the narrower expected-share ribbon stays
+        ## readable on top of it rather than being painted over.
+        preds === nothing ||
+            _draw_pred_bands!(ax, x, _traj_bands_missing(preds[p], nv))
         _draw_traj_bands!(ax, x, b, colour)
         obs = [totals[i] > 0 ? obs_increments[p, i] / totals[i] : NaN
                for i in 1:nv]
@@ -2441,10 +2566,17 @@ function plot_province_composition_ppc(chn; share_key::Symbol,
         ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
                                   for v in vals]
     end
-    CairoMakie.Label(fig[2, 1:np],
-        "Bands are 30/60/90% credible intervals on the modelled share. " *
-        "Black points are the observed share at each vintage. Each panel " *
-        "starts at zero and takes its own upper limit.";
+    caption = preds === nothing ?
+              "Bands are 30/60/90% credible intervals on the expected " *
+              "share. Black points are the observed share at each vintage. " *
+              "Each panel starts at zero and takes its own upper limit." :
+              "Grey band is the 30/60/90% posterior predictive interval on " *
+              "the observed share, dashed at its 90% edges. The coloured " *
+              "ribbon inside it is the same intervals on the expected " *
+              "share. Black points are the observed share at each vintage " *
+              "and should fall inside the grey band. Each panel starts at " *
+              "zero and takes its own upper limit."
+    CairoMakie.Label(fig[2, 1:np], caption;
         fontsize = 12, padding = (0, 0, 0, 6))
     CairoMakie.Label(fig[0, 1:np], title; fontsize = 16, font = :bold)
     return fig

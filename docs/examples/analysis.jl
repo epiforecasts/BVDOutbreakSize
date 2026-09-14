@@ -3288,9 +3288,12 @@ joint_ppc_fig #hide
 #
 # The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
 # The panels below show that modelled share at every spatial vintage against the observed one.
-# The ribbon is the expected share, not the predicted count, so the observed points are not meant to fall inside it.
-# They scatter around it through the composition overdispersion, which is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
-# What the panels are read for is whether the points sit around the ribbon rather than consistently to one side of it.
+# Each panel carries two bands.
+# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
+# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
+# The observed points should fall inside it.
+# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
+# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
 # Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
 # The vintages stop before the cut-off, so the panels end earlier than the national posterior predictive checks above.
 
