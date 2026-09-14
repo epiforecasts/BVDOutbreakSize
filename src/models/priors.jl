@@ -269,18 +269,45 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(5, 4); lower = 0)` is deliberately wide. The centre
-and spread are elicited from the field epidemiology and the genetics:
-field work in Mongbwalu traced a sustained transmission chain back to a
-death on 25 January 2026 and identified 500+ suspected cases between
-mid-January and mid-May (kupferschmidt2026), and the genetic TMRCA
-(mbalaplacide2026) is a lower bound on the outbreak age consistent with an
-origin that early. `m` counts only the cryptic doublings, not the cut-off
-case total. With the ≈11.7-day doubling, a centre of 5 spans
-`5 · τ ≈ 58.5` cryptic days, placing the implied prior origin at the end
-of January (the documented first deaths). The SD of 4 lets the data and
-the genetic seeding bound pull the origin earlier (into December) or
-later without over-committing.
+`m ~ truncated(Normal(3, 1.5); lower = 0)` encodes the same belief the
+earlier `Normal(5, 4)` did, converted at the doubling time the data
+support rather than the one its prior assumed, and with a spread elicited
+in the units `m` now acts in.
+
+The belief is unchanged: field work in Mongbwalu traced a sustained
+transmission chain back to a death on 25 January 2026 and identified 500+
+suspected cases between mid-January and mid-May (kupferschmidt2026), and
+the genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak age
+consistent with an origin that early. `m` counts only the cryptic
+doublings, not the cut-off case total, so the origin sits `m · τ` before
+the renewal start.
+
+The centre follows from that origin and τ. At the prior median doubling
+of 11.7 days a 25 January origin is 63/11.7 ≈ 5.4 doublings, which is
+where the centre of 5 came from; at the posterior doubling of 19.9 days
+the same origin is 63/19.9 ≈ 3.2. The centre is converted, not revised.
+τ also carries its own wide prior, so the origin date `m · τ` is far more
+dispersed than `m` — a belief about the origin needs a tighter prior on
+`m` than the date uncertainty suggests, because τ supplies spread for
+free.
+
+The spread is elicited here for the first time in these units. `2^m` is a
+daily incidence at the renewal start, but the SD of 3 it inherited was
+elicited for the integral model, where `2^m` was the cut-off cumulative
+case total and the 95% support spanned 8 to 32,000 *cases*. That spread
+passed through the renewal reparameterisation untouched and became a
+spread on one day's infections: at SD 4 the 99th percentile is 22,722
+infections per day, over three times the whole fitted outbreak in a
+single day, and the prior median seed of 46/day exceeds the posterior's
+whole-outbreak average incidence. Integrating over the `r` prior, SD 1.5
+puts the 90% prior origin between 2 January and 21 March 2026, bracketed
+by the field-epi first death at the late end and the genetic TMRCA point
+estimate at the early end. It still asserts a pre-MRCA origin, which is
+the field-epi claim; it stops asserting an origin in autumn 2025, which
+nothing supports (17.2% of prior mass before December 2025, against 1.2%
+here). The genetic term itself is flat above `m ≈ 4`, contributing 1.66
+nats in total and essentially all of it below `m ≈ 3`, so the old upper
+tail carried no genetic support at all.
 
 In the renewal, `2^m` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override,
@@ -289,7 +316,7 @@ cut-off. Returns `(; τ, r, m, T, C_T)`.
 """
 @model function exponential_growth_model(;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
-        m_prior = truncated(Normal(5.0, 4.0); lower = 0))
+        m_prior = truncated(Normal(3.0, 1.5); lower = 0))
     r ~ r_prior
     m ~ m_prior
     τ := log(2) / r

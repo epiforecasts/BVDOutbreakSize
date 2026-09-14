@@ -138,8 +138,11 @@ const REPORT_SCENARIOS_CI = [
     M_PRIOR_BASE_DATE
 
 Base date for the doubling-count prior centre: McCabe et al.'s first
-report (18 May 2026), whose Method 2 central scenario of 501 cases implies
-`m ≈ log2(501) ≈ 9`. Used by [`m_prior_centre`](@ref).
+report (18 May 2026). Under the integral model, where `2^m` was the
+cut-off cumulative case total, its Method 2 central scenario of 501 cases
+implied `m ≈ log2(501) ≈ 9`. `m` now counts cryptic doublings only and
+`M_PRIOR_BASE` is 3.0; see [`m_prior_centre`](@ref), which is used only by
+the v1.3.0 integral backfill.
 """
 const M_PRIOR_BASE_DATE = "2026-05-18"
 

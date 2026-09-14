@@ -715,13 +715,18 @@ m_0 = m_\\text{base} +
     \\frac{\\text{as\\_of} - \\text{base}}{\\text{doubling\\_days}}.
 ```
 
-The base is McCabe et al.'s first report (18 May 2026; Method 2 central
-501 cases ⇒ `m ≈ 9`), advancing at the outbreak-specific doubling time
-(`M_PRIOR_DOUBLING_DAYS`, the BEAST X estimate of mbalaplacide2026,
-mean 11.7 d), so the prior stays centred on the plausible outbreak
-size as the cut-off moves. `C_T = 2^m` is the cumulative infection
-count. 9 is a weakly-informative centre of the same order. Passed into
-[`exponential_growth_model`](@ref) as the centre of the wide `m` prior.
+Written for the integral model, where `m` counted doublings over the whole
+outbreak and `2^m` was the cut-off cumulative case total, so a base of 9
+matched McCabe et al.'s Method 2 central 501 cases. The renewal model
+redefined `m` to count only the cryptic doublings, making `2^m` the daily
+incidence at the renewal start, and `M_PRIOR_BASE` was recomputed 9.0 to
+3.0 to match. This helper is used only by the v1.3.0 integral backfill
+(`scripts/backfill_forecasts.jl`), which resolves it against that tag's
+own source where the base is still 9. Nothing in the renewal era calls it:
+the main fit takes `exponential_growth_model`'s own default. Do not pass
+it into a renewal fit expecting an outbreak-size centre — it advances at
+`M_PRIOR_DOUBLING_DAYS` per doubling, which for a current cut-off gives a
+centre near 19, i.e. a seed of order half a million per day.
 """
 function m_prior_centre(as_of_date::Union{Date, AbstractString};
         base_date::AbstractString = M_PRIOR_BASE_DATE,

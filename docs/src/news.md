@@ -21,6 +21,24 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+### Changed
+
+- `m`'s prior spread is re-elicited in the units it acts in (#672).
+`m` counts the cryptic doublings and `2^m` is the daily infection incidence at the renewal start.
+Its SD was elicited for the earlier integral model, where `m` counted doublings over the whole outbreak and `2^m` was the cut-off cumulative case total, with 95% support spanning 8 to 32,000 *cases*.
+That spread passed through the renewal reparameterisation untouched — the centre was correctly recomputed 9.0 to 3.0 in the same commit, the spread was not — and became a spread on one day's infections.
+At the old `truncated(Normal(5, 4); lower = 0)` the 99th percentile is 22,722 infections per day, over three times the whole fitted outbreak in a single day, and the prior median seed of 46/day exceeds the posterior's whole-outbreak average incidence.
+The centre moves for a separate reason: it was converted at the prior median doubling of 11.7 days, where a 25 January origin is 5.4 doublings, but the posterior doubling is 19.9 days, where the same origin is 3.2. The scientific belief is unchanged, only the arithmetic that turns it into `m`.
+The new `truncated(Normal(3, 1.5); lower = 0)` puts the 90% prior origin between 2 January and 21 March 2026, bracketed by the field-epi first death at one end and the genetic TMRCA point estimate at the other. It still asserts a pre-MRCA origin, which is the field-epi claim; it stops asserting an origin in autumn 2025, which nothing supports.
+This is expected to move the headline slightly: a local approximation puts the posterior `m` at 1.18 against 1.05 and the seed at 2.26 against 2.06, about +9%, because the tighter SD outweighs the lower centre at the posterior's location.
+It does **not** fix initialisation. The measured rate of prior draws landing more than 100,000 log units below the best is 8.67% before and 8.33% after, so `ViablePrior` is retained.
+
+### Fixed
+
+- Three docstrings that describe a model that no longer exists.
+`seed_at_renewal_start` called the seed "the cumulative infection count reached by the analytic cryptic phase", where the code means the daily incidence *on* the renewal-start day; the cryptic total is larger by roughly `1/(1 - e^{-r})`, so reconciling code to comment would shift `m` by 4.1 to 4.9 doublings.
+`m_prior_centre` and `M_PRIOR_BASE_DATE` still carry the integral-era reading (`m ≈ 9`, "`C_T = 2^m` is the cumulative infection count") while `M_PRIOR_BASE` is now 3.0, and `exponential_growth_model`'s docstring invites passing `m_prior_centre` into a renewal fit — where an advancing integral centre would give a seed of order half a million per day.
+
 ## v1.18.0
 
 Changes since v1.17.0
