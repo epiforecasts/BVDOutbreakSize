@@ -870,19 +870,19 @@ the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
 knot spacing.
 
-`λ_mu ~ truncated(Normal(0, 20); lower = 0)` anchors the start of the window,
-not the level over it. The walk's log-deviation is pinned to zero on the first
-knot and the onset ramp reaches one after `onset_ramp` days, so `λ_mu` is the
-level the series settles at once the ramp completes, with the innovations
-carrying it from there. On the production grid the window opens on 1 May and
-the fitted background reaches a few hundred per day by the cut-off, so this
-scale is not comparable to a mid-window level.
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk multiplies,
+not the level over the window. The log-deviation is pinned to zero on the first
+knot, so `λ_mu` anchors the start of the window and the innovations carry the
+series from there. It is the post-ramp level exactly only at `σ_rw = 0`, since
+by the day the onset ramp completes the walk already carries part of its first
+innovation. The fitted background is far above it well before the cut-off, so
+this scale is not comparable to a mid-window level.
 
 The half-normal shrinks that anchor toward zero, which is what stops the
 background out-explaining the outbreak signal. The scale is wide enough not to
-truncate the anchor the suspected-case data support: the joint posterior for
-`λ_mu` runs about 16 to 30 per day, which sits between the 58th and 87th
-percentiles here. Pass `baseline_prior` to override.
+truncate the anchor the suspected-case data support: under the previous SD of 8
+the joint posterior for `λ_mu` ran about 16 to 30 per day, which sits between
+the 58th and 87th percentiles here. Pass `baseline_prior` to override.
 
 The anchor is one of three prior-posterior conflicts the fitted background
 shows, alongside `σ_bg` near the top of its own prior and every innovation

@@ -28,11 +28,13 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 
 - The non-BVD background anchor prior no longer truncates the level the data support.
 `background_walk_model`'s `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 per day.
-The joint posterior for `λ_mu` runs about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
+Under that prior the joint posterior for `λ_mu` ran about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
+The registry fits on this change are what say where the anchor settles once the ceiling is lifted.
 The SD is now 20, which puts the same posterior interval between the 58th and 87th percentiles.
 It stays a half-normal shrinking toward zero, so the background still cannot out-explain the outbreak signal on its own, and the pooling SD on the walk is unchanged.
-`λ_mu` anchors the start of the window rather than the level over it: the log-deviation is pinned to zero on the first knot and the onset ramp reaches one after `onset_ramp` days, so `λ_mu` is the level the series settles at once the ramp completes.
-On the production grid the window opens on 1 May and the fitted background reaches a few hundred per day by the cut-off, so this scale is not comparable to a mid-window level.
+`λ_mu` anchors the start of the window rather than the level over it: the log-deviation is pinned to zero on the first knot, so the innovations carry the series from there.
+It is the post-ramp level exactly only at `σ_rw = 0`, since by the day the onset ramp completes the walk already carries part of its first innovation.
+The fitted background is far above it well before the cut-off, so this scale is not comparable to a mid-window level.
 The suspected-death background is the case background carried through the onset-to-death delay and scaled by a background CFR, so it widens by the same factor.
 The anchor is one of three prior-posterior conflicts the fitted background shows, alongside `σ_bg` near the top of its own prior and every innovation sharing a sign.
 Those together are the signature of a zero-mean walk carrying a systematic trend, which a wider anchor does not address.
