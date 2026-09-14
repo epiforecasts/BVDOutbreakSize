@@ -1306,8 +1306,7 @@ cfr_prior_fig #hide
 #     f_{\text{rec},s}.
 # ```
 #
-# $\varrho$ is the specimens analysed per suspect sampled, which exceeds one because a suspect can yield several specimens through repeat exclusion testing, and because swabbed community deaths and screened contacts enter the laboratory denominator without being counted as suspects reported.
-# It is needed because $\tau_{\text{test}}$ is a probability and the receipt kernel conserves mass, so without it the modelled volume could not exceed the modelled suspect inflow.
+# $\varrho$ exceeds one because repeat exclusion testing, swabbed community deaths and screened contacts all put specimens into the laboratory denominator without adding a reported suspect.
 #
 # This analysed volume is gated to zero before the testing onset.
 # No specimens are analysed before the laboratory existed, so $v_t$ does not accrue over the pre-surveillance cryptic phase.

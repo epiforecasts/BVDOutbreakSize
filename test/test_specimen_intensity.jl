@@ -21,14 +21,18 @@ end
     using BVDOutbreakSize: specimen_intensity_model
     using Turing: returned
     using Random: MersenneTwister
-    using Statistics: median
+    using Statistics: median, quantile
 
     m = specimen_intensity_model()
     κ = [returned(m, rand(MersenneTwister(s), m)).κ for s in 1:400]
     @test all(>(0), κ)
-    ## `LogNormal(0, 0.25)`: median 1, 90% range about 0.66 to 1.51.
+    ## `LogNormal(0, 0.25)`: median 1, 90% range 0.663 to 1.508. Quantiles
+    ## rather than the sample extremes: at this draw count a single draw
+    ## below 0.5 is a two-in-three event, so bounding the minimum tests the
+    ## random seed rather than the prior.
     @test 0.9 < median(κ) < 1.1
-    @test 0.5 < minimum(κ) && maximum(κ) < 2.5
+    @test 0.59 < quantile(κ, 0.05) < 0.74
+    @test 1.36 < quantile(κ, 0.95) < 1.66
 end
 
 @testitem "a unit intensity reproduces the unmultiplied volume exactly" begin
