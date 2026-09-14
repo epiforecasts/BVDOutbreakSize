@@ -871,14 +871,11 @@ small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
 knot spacing.
 
 The baseline level `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is a
-half-normal, so it still shrinks the background toward zero and cannot
-out-explain the outbreak signal on its own. The scale is set so it does not
+half-normal, so it shrinks the background toward zero and cannot
+out-explain the outbreak signal on its own. The scale is wide enough not to
 truncate the level the suspected-case data support: the joint posterior for
 `λ_mu` runs about 16 to 30 suspected cases per day, which sits between the
-55th and 87th percentiles here. A half-normal SD of 8 puts its 95th
-percentile at 15.7, below the whole of that interval, so the prior rather
-than the data would set the background level. Pass `baseline_prior` to
-override.
+58th and 87th percentiles here. Pass `baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
