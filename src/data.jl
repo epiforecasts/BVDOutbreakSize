@@ -720,9 +720,9 @@ whole outbreak and `2^m` is the cut-off cumulative case total, so a base of
 9 matches McCabe et al.'s Method 2 central 501 cases. That tag resolves this
 helper against its own source, where `M_PRIOR_BASE` is 9.
 
-Not for a renewal fit. There `m` counts only the cryptic doublings and
-`2^m` is a daily incidence, so an advancing outbreak-size centre would give
-a seed of order half a million per day. `exponential_growth_model` carries
+Not for a renewal fit. There `m` counts the cryptic generations and the seed
+is the daily incidence reached over them, so an advancing outbreak-size
+centre would give a seed of order half a million per day. `exponential_growth_model` carries
 its own default and nothing in the renewal era calls this.
 
 """

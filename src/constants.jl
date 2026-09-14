@@ -163,13 +163,9 @@ const M_PRIOR_DOUBLING_DAYS = 11.7
 Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing doubling-count
 prior centre used by the backfill fits via [`m_prior_centre`](@ref):
 `m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-The doubling count `m` counts only the cryptic-phase doublings (the origin to
-the renewal-process start): the cryptic duration is `m·τ` and the total
-outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. The
-genetic seeding bound pulls the lower tail of the outbreak age to sit at or
-before the most recent common ancestor. The main fit's `m` prior centre is
-set directly in [`exponential_growth_model`](@ref), from field intelligence
-and genetic evidence.
+The main fit's `m` prior centre is set directly in
+[`exponential_growth_model`](@ref), from field intelligence and genetic
+evidence, and counts transmission generations rather than doublings.
 """
 const M_PRIOR_BASE = 3.0
 
