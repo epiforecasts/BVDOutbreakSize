@@ -1101,48 +1101,24 @@ override. Returns `(; scaling)`.
 end
 
 """
-Specimens analysed per suspect sampled, over an `n`-day grid.
+Specimens analysed per suspect sampled.
 
-[`confirmed_cases_model`](@ref) builds the analysed volume as
-`τ_test · convolve_delay(suspected_daily, receipt_pmf)`. The receipt PMF
-sums to one and `convolve_delay` only loses mass, so with `τ_test` a
-probability on `(0, 1)` the modelled analysed volume can never exceed the
-modelled suspect inflow. The reported data cross that ceiling: over the
-window where both streams are observed the analysed-to-suspect ratio runs
-0.93 in June, 1.01 in July and 1.50 over 1-5 August, reaching 2.06 on a
-single day. A suspect can yield more than one specimen (repeat control
-tests before confirmation or rule-out), and swabbed community deaths and
+[`confirmed_cases_model`](@ref) scales the laboratory volume by this factor
+as well as by `τ_test`. `τ_test` is a probability and the receipt kernel
+conserves mass, so it alone bounds the modelled analysed volume below the
+modelled suspect inflow. Specimens are not persons: a suspect can yield
+several through repeat exclusion testing, and swabbed community deaths and
 screened contacts enter the laboratory denominator without being counted
-as suspects reported, so a ratio above one is ordinary rather than
-anomalous.
+as suspects reported, so the ratio can exceed one.
 
-Without this factor the fit has only two ways to buy the extra volume:
-press `τ_test` against its ceiling (its posterior sits at 0.921-0.994, the
-92nd to 99.6th percentile of its `Beta(5, 2)` prior) and inflate the
-modelled suspect inflow, which it does by about 10% over the observed
-window, pushing the non-BVD background up to carry specimens that were
-never extra suspects.
-
-`κ0` is the ratio at `ref_day` and `β_κ` its change per 30 days on the log
-scale, so `κ(t) = κ0 · exp(β_κ (t − ref_day) / 30)`. The ratio is not
-constant — it rises through the observed window — so a level alone would
-repeat the error this fixes, fitting one number across a trend. Both
-priors are centred on no effect (`κ ≡ 1`, `β_κ = 0`), so the previous
-behaviour is nested and the data must ask for the change. `κ0`'s
-`LogNormal(0, 0.25)` matches [`death_testing_scaling_model`](@ref)
-(median 1, 90% ≈ 0.66-1.51); `β_κ`'s `Normal(0, 0.25)` admits a 90% range
-of roughly 0.29-3.43 over three months against an observed slope of about
-0.24 per 30 days. Returns `(; κ, κ0, β_κ)` with `κ` the length-`n` series.
+`κ ~ LogNormal(0, 0.25)` has median 1 and a 90% range of about 0.66 to
+1.51, matching [`death_testing_scaling_model`](@ref). It is centred on no
+effect, so the data must ask for a ratio away from one. Returns `(; κ)`.
 """
-@model function specimen_intensity_model(n::Integer;
-        ref_day::Integer = n,
-        level_prior = LogNormal(0.0, 0.25),
-        trend_prior = Normal(0.0, 0.25))
-    κ0 ~ level_prior
-    β_κ ~ trend_prior
-    r = clamp(Int(ref_day), 1, max(n, 1))
-    κ = κ0 .* exp.(β_κ .* (collect(1:n) .- r) ./ 30)
-    return (; κ, κ0, β_κ)
+@model function specimen_intensity_model(;
+        intensity_prior = LogNormal(0.0, 0.25))
+    κ ~ intensity_prior
+    return (; κ)
 end
 
 """

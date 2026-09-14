@@ -1097,10 +1097,9 @@ quantities.
         lab_daily_history = (; days = Int[], counts = Int[]),
         tests_analysed::Union{Missing, Integer} = missing,
         receipt = lab_delay_model(),
-        ## Specimens analysed per suspect sampled, allowed above one
-        ## ([`specimen_intensity_model`](@ref)). `nothing` keeps the previous
-        ## behaviour, in which `τ_test` alone caps the volume below the
-        ## suspect inflow.
+        ## Specimens analysed per suspect sampled
+        ## ([`specimen_intensity_model`](@ref)). `nothing` leaves `τ_test`
+        ## alone capping the volume below the suspect inflow.
         specimen_intensity = nothing,
         positivity = confirmed_positivity_model,
         positivity_link::Symbol = :composition,
@@ -1168,25 +1167,21 @@ quantities.
     ## background.
     receipt_state ~ to_submodel(receipt)
     suspected_daily = p_drc .* bvd_reports_daily .+ bg_daily
-    ## Specimens analysed per suspect sampled. `τ_test` is a probability and
-    ## the receipt PMF sums to one, so without this factor the modelled
-    ## analysed volume is capped below the modelled suspect inflow, a ceiling
-    ## the reported data cross.
+    ## `τ_test` is a probability and the receipt PMF sums to one, so without
+    ## this factor the modelled analysed volume cannot exceed the modelled
+    ## suspect inflow.
     carried = convolve_delay(suspected_daily, receipt_state.pmf)
-    κ_state = if specimen_intensity === nothing
-        (; κ = nothing, κ0 = nothing, β_κ = nothing)
+    κ_test = if specimen_intensity === nothing
+        nothing
     else
         intensity_state ~ to_submodel(specimen_intensity)
-        (; intensity_state.κ, intensity_state.κ0, intensity_state.β_κ)
+        intensity_state.κ
     end
-    κ_daily = κ_state.κ
-    κ_level = κ_state.κ0
-    κ_trend = κ_state.β_κ
     ## Branch the whole product, not just `κ`: on the `nothing` path a
     ## length-`n` vector of ones would be a real broadcast multiply on every
     ## gradient call.
-    analysed_daily_raw = κ_daily === nothing ? τ_test .* carried :
-                         κ_daily .* τ_test .* carried
+    analysed_daily_raw = κ_test === nothing ? τ_test .* carried :
+                         (κ_test * τ_test) .* carried
     ## In predict mode (no AD) the daily series can infer as `Vector{Any}` on
     ## some Julia versions, which then makes `reduce_empty` / `zero(Any)` fail
     ## on the empty derived window vectors below, so it is concretised to the
@@ -1463,7 +1458,7 @@ quantities.
     p_pos_grid = expand_vintage_rate(p_pos_daily, window_days, n)
     confirmed_daily = p_pos_grid .* analysed_daily
 
-    return (; τ_test, κ_daily, κ0 = κ_level, β_κ = κ_trend,
+    return (; τ_test, κ_test,
         bg_daily, p_pos, p_pos_grid, windows, analysed_daily,
         confirmed_daily,
         receipt_pmf = receipt_state.pmf,

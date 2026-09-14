@@ -1298,27 +1298,16 @@ cfr_prior_fig #hide
 # ##### Laboratory pipeline
 #
 # The laboratory pipeline fits a single analysed-specimen volume.
-# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\kappa_t$,
+# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\varrho$,
 #
 # ```math
-# v_t = \kappa_t\, \tau_{\text{test}} \sum_{s \ge 0}
+# v_t = \varrho\, \tau_{\text{test}} \sum_{s \ge 0}
 #     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg},t-s}\bigr)\,
 #     f_{\text{rec},s}.
 # ```
 #
-# $\kappa_t$ exists because $\tau_{\text{test}}$ is a probability and the receipt kernel conserves mass, so without it the modelled volume could never exceed the modelled suspect inflow.
-# The reported data cross that ceiling: the analysed-to-suspect ratio runs 0.93 in June, 1.01 in July and 1.50 over 1-5 August.
-# A suspect can yield several specimens through repeat control testing, and swabbed community deaths and screened contacts enter the laboratory denominator without being counted as suspects reported.
-# The factor is a log-linear trend,
-#
-# ```math
-# \kappa_t = \kappa_0 \exp\!\bigl(\beta_\kappa (t - t_{\text{ref}}) / 30\bigr),
-# ```
-#
-# with $t_{\text{ref}}$ the midpoint of the window where both the suspect and analysed streams are observed, so that $\kappa_0$'s prior median of one sits where the observed ratio is 0.99 rather than at the cut-off where it is about 1.59.
-# Both priors are centred on no effect, so $\kappa \equiv 1$ recovers the earlier construction.
-# The trend is only partly identified: the analysed stream runs 36 days past the end of the suspect stream, and 54% of the analysed data lies in that window where no ratio is observable, so $\beta_\kappa$ is fit partly by extrapolation.
-# Over the observed overlap the ratio's log slope is 0.21 per 30 days (se 0.08).
+# $\varrho$ is the specimens analysed per suspect sampled, which exceeds one because a suspect can yield several specimens through repeat exclusion testing, and because swabbed community deaths and screened contacts enter the laboratory denominator without being counted as suspects reported.
+# It is needed because $\tau_{\text{test}}$ is a probability and the receipt kernel conserves mass, so without it the modelled volume could not exceed the modelled suspect inflow.
 #
 # This analysed volume is gated to zero before the testing onset.
 # No specimens are analysed before the laboratory existed, so $v_t$ does not accrue over the pre-surveillance cryptic phase.
@@ -2483,8 +2472,7 @@ obs_delay_pair_fig #hide
 surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
         :k_confirmed_deaths, :dispersion_sd, :tau_test,
-        :specimens_per_suspect, :specimens_per_suspect_T,
-        :specimen_intensity_trend, :lambda_bg,
+        :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,

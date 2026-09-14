@@ -13,31 +13,6 @@
 
 ## Run the generating infection process and onset staging, returning the
 ## infection state and the daily onsets shared by every stream.
-"""
-$(TYPEDSIGNATURES)
-
-Grid day the specimens-per-suspect level refers to: the midpoint of the
-window where the suspect and analysed streams are both observed.
-
-`κ0`'s prior is centred on one, so the reference day should be a day where
-the observed analysed-to-suspect ratio is near one. Over the overlap the
-fitted log-ratio slope is about 0.21 per 30 days and the implied ratio at
-the overlap midpoint is 0.99; at the cut-off it is about 1.59, which is
-1.8 SD of `LogNormal(0, 0.25)`. Referring the level to the cut-off would
-therefore pull `κ0` down by nearly two prior SD and leave the trend
-fighting the level prior. Falls back to `n` when either stream is empty.
-"""
-function _intensity_ref(suspected_daily_history, lab_daily_history,
-        n::Integer)
-    sd = suspected_daily_history.days
-    ld = lab_daily_history.days
-    (isempty(sd) || isempty(ld)) && return Int(n)
-    lo = max(minimum(sd), minimum(ld))
-    hi = min(maximum(sd), maximum(ld))
-    hi < lo && return Int(n)
-    return clamp((lo + hi) ÷ 2, 1, Int(n))
-end
-
 @model function _latent(n::Integer, breakpoint, infection, onset_incidence;
         rt_start::Integer = 1, rt_walk_start::Integer = rt_start)
     infection_state ~ to_submodel(
@@ -166,11 +141,8 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         ## Off here, unlike [`bvd_joint`](@ref). This composer has no
         ## treatment or onset stream and its `cases_state` runs with a
         ## missing cut-off scalar, so `τ_test` reaches the likelihood only
-        ## through the `κ · τ_test` product in the analysed volume. Sampling
-        ## `κ` there would add an exactly non-identified multiplicative
-        ## ridge held together by the two priors alone.
-        specimen_intensity::Bool = false,
-        intensity_ref_day::Integer = n)
+        ## through the `κ · τ_test` product, which is not identified.
+        specimen_intensity::Bool = false)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -189,8 +161,7 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
         specimen_intensity = specimen_intensity ?
-                             specimen_intensity_model(n;
-            ref_day = intensity_ref_day) : nothing,
+                             specimen_intensity_model() : nothing,
         positivity_link = confirmed_positivity_link))
     ## Cut-off expected confirmed count, aliased under the same un-prefixed
     ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
@@ -502,14 +473,10 @@ and lagged by a confirmation-to-recovery delay (see
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
 seeding submodel when `tmrca_days` is given.
 
-`specimen_intensity` (on by default) lets the analysed volume carry more
-than one specimen per suspect sampled
-([`specimen_intensity_model`](@ref)). `τ_test` is a probability and the
-receipt kernel conserves mass, so without it the modelled volume is
-capped below the modelled suspect inflow, a ceiling the reported ratio
-crosses. `intensity_ref_day` is the day the level refers to, defaulting
-to the midpoint of the window where the suspect and analysed streams are
-both observed; the trend runs from there.
+`specimen_intensity` (on by default) scales the analysed volume by
+specimens analysed per suspect sampled
+([`specimen_intensity_model`](@ref)), which `τ_test` alone, being a
+probability, cannot exceed one of.
 
 Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), the established
@@ -517,9 +484,8 @@ reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
 (outbreak age), `R_T` (current reproduction number), the per-stream
 expected counts, the testing fraction `tau_test`, the specimens
-analysed per suspect at the reference day (`specimens_per_suspect`), at
-the cut-off (`specimens_per_suspect_T`) and its 30-day log trend
-(`specimen_intensity_trend`), the background rate `lambda_bg`, the death ascertainment `death_ascertainment`, the
+analysed per suspect (`specimens_per_suspect`), the background rate
+`lambda_bg`, the death ascertainment `death_ascertainment`, the
 background CFR `background_cfr`, the death testing fraction `tau_death`,
 the implied per-suspected (`suspected_positivity`) and per-test
 (`test_positivity`) positivities, and the death-pool BVD composition
@@ -578,21 +544,10 @@ the implied per-suspected (`suspected_positivity`) and per-test
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
-        ## Let the analysed volume carry more than one specimen per suspect
-        ## ([`specimen_intensity_model`](@ref)). `τ_test` is a probability, so
-        ## without it the modelled analysed volume is capped below the
-        ## modelled suspect inflow, a ceiling the reported ratio crosses
-        ## (0.93 June, 1.01 July, 1.50 over 1-5 August). Centred on no effect.
+        ## Scale the analysed volume by specimens analysed per suspect
+        ## ([`specimen_intensity_model`](@ref)), which `τ_test` alone cannot
+        ## exceed one of.
         specimen_intensity::Bool = true,
-        ## Grid day `κ0` refers to, with the trend measured from it. The
-        ## midpoint of the window where both the suspect and analysed
-        ## streams are observed, not the cut-off: the observed ratio there
-        ## is 0.99, so the `LogNormal(0, 0.25)` prior really is centred on
-        ## no effect. At the cut-off the observed ratio is about 1.59, 1.8
-        ## prior SD out, which would pull `κ0` down and make the trend
-        ## fight the level prior instead of carrying the growth.
-        intensity_ref_day::Integer = _intensity_ref(suspected_daily_history,
-            lab_daily_history, n),
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
@@ -710,8 +665,7 @@ the implied per-suspected (`suspected_positivity`) and per-test
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
         specimen_intensity = specimen_intensity ?
-                             specimen_intensity_model(n;
-            ref_day = intensity_ref_day) : nothing,
+                             specimen_intensity_model() : nothing,
         positivity_link = confirmed_positivity_link))
     ## Symptom-onset reporting-triangle stream
     ## ([`onset_reporting_model`](@ref)): the only direct observation of the
@@ -934,22 +888,9 @@ the implied per-suspected (`suspected_positivity`) and per-test
     recovery_delay_mean := recovered_state.recovery_delay_mean
     recovered_dispersion := recovered_state.k_recovered
     tau_test := cases_state.τ_test
-    ## Specimens analysed per suspect sampled, at the reference day. That is
-    ## the midpoint of the window where the ratio is actually observable, so
-    ## this is the value that can be read against the data (0.99 there), and
-    ## the prior median is 1.0, so a posterior away from 1.0 is informative.
-    specimens_per_suspect := confirmed_state.κ_daily === nothing ? 1.0 :
-                             confirmed_state.κ_daily[clamp(
-        intensity_ref_day, 1, n)]
-    ## The same ratio extrapolated to the cut-off, 36 days past the last day
-    ## a ratio is observed. Reported separately so it is not mistaken for a
-    ## fitted-against-data quantity.
-    specimens_per_suspect_T := confirmed_state.κ_daily === nothing ? 1.0 :
-                               confirmed_state.κ_daily[n]
-    ## Log change in the ratio per 30 days; the observed overlap gives
-    ## 0.21 (se 0.08).
-    specimen_intensity_trend := confirmed_state.β_κ === nothing ? 0.0 :
-                                confirmed_state.β_κ
+    ## Specimens analysed per suspect sampled. `1.0` when the factor is off.
+    specimens_per_suspect := confirmed_state.κ_test === nothing ? 1.0 :
+                             confirmed_state.κ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
     background_total := cases_state.bg_total
