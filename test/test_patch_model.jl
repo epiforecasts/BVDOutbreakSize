@@ -1574,9 +1574,10 @@ end
     has_frac(m) = any(v -> occursin("seed_fraction", string(v)),
         keys(DynamicPPL.VarInfo(Xoshiro(1), m)))
     ## The national cryptic seed the growth prior speaks to, whatever the
-    ## patch count: `2^m` is elicited as a country-wide quantity.
+    ## patch count. The model surfaces the anchor it used, so the curve is
+    ## rebuilt from that rather than from a second reading of the prior.
     national_seed(s) = seed_infections(
-        seed_at_renewal_start(2.0^s.m), s.r0, rt_start)
+        s.seed_at_renewal_start, s.r0, rt_start)
 
     ## Coupled: the outbreak began in Ituri, so the primary patch takes the
     ## whole cryptic seed and the seed fraction is not a free dimension.
