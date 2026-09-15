@@ -95,6 +95,17 @@ Agreement between the streams supports the joint estimate; disagreement shows wh
 
 ![Reproduction number implied by each data stream](summary_assets/rt_streams.png)
 
+## Health-zone map
+
+Each affected health zone coloured by its current reproduction number, with the seven-day confirmed-case forecast, the confirmed cases to date and the zone's share of its patch's infections available from the switcher.
+Hover over a zone for its estimate and 90% credible interval, click it for every number, or open the table view for a sortable list.
+The map needs a browser, so it appears only on the documentation site.
+
+```@raw html
+<p><a href="zone_map/index.html" target="_blank" rel="noopener">Open the map in a new tab</a>.</p>
+<iframe src="zone_map/index.html" title="Health-zone map" loading="lazy" style="width:100%;height:640px;border:1px solid var(--vp-c-divider);border-radius:8px;background:#fcfcfb"></iframe>
+```
+
 ---
 
 For the full results, methods and code see the [Analysis](analysis.md) page and the [epiforecasts/BVDOutbreakSize](https://github.com/epiforecasts/BVDOutbreakSize) repository.
