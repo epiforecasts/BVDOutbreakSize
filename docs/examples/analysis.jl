@@ -479,13 +479,12 @@ MarkdownTable(vintage_table) #hide
 #
 # From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
 # The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
-# Counting generations rather than doublings keeps the origin date free of the growth rate: $G$ does not depend on $r$, whereas a doubling count would make the elapsed time $m \log 2 / r$ and tie the two together.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths, and spread so its 90% range brackets them:
+# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(4,\ 1.2), \qquad
+# m \sim \mathrm{Normal}^{+}(4,\ 2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
 # C_T = e^{r T_{\text{cryptic}}}. \tag{8}
 # ```

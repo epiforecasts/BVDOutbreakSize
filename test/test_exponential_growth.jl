@@ -36,7 +36,6 @@
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r; T = m·G (cryptic duration), C_T = exp(r·T) hold
     ## draw-by-draw.
     @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
     @test all(isapprox.(G, G_true; rtol = 1e-8))

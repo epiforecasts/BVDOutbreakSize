@@ -270,7 +270,7 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(4, 1.2); lower = 0)` counts the generations between
+`m ~ truncated(Normal(4, 2); lower = 0)` counts the generations between
 the index infection and the renewal start. The origin therefore sits `T = m · G`
 days before the renewal start, with `G` the mean generation interval, and the
 cryptic phase grows one infection per day at the origin to `C_T = exp(r · T)`
@@ -308,7 +308,7 @@ per day. Returns `(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(g::AbstractVector;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
-        m_prior = truncated(Normal(4.0, 1.2); lower = 0))
+        m_prior = truncated(Normal(4.0, 2); lower = 0))
     r ~ r_prior
     m ~ m_prior
     ## Mean generation interval, the unit `m` is counted in. `g` is indexed
