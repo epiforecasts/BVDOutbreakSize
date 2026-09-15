@@ -1140,6 +1140,22 @@ cfr_prior_fig #hide
 #
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
 # The stay lives entirely in the discharge flows, each an admission stream convolved with its outcome density.
+#
+# Absconding competes with the clinical exits rather than adding to them.
+# The length-of-stay densities integrate to one, so the clinical schedules alone already account for every admitted patient, and an unthinned schedule plus an abscond outflow discharges more than was admitted.
+# Each discharge flow is therefore thinned by the abscond survival over the stay, written here for deaths,
+#
+# ```math
+# \text{deaths}_s = \sum_{t \le s} \text{CFR}_{\text{iso}}\, A_{\text{bvd},t}\,
+#     f_{\text{death},\,s-t}\, S_{t,\,s-t},
+# \qquad
+# S_{t,d} = \prod_{j < d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{29}
+# ```
+#
+# and likewise for recoveries and rule-outs.
+# The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
+# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
+# Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 # One inflow and one set of outcome timings therefore generate the bed stock, the discharge flows and the demand together.
 # The occupancy accumulates admissions over the stay, so it is a smooth integral of the infection signal.
 # A high, sustained bed stock informs the reproduction number.
@@ -1153,7 +1169,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}\bigl(\mathrm{logit}\,\text{CFR}
-#     + \beta_{\text{iso}}\bigr), \tag{29}
+#     + \beta_{\text{iso}}\bigr), \tag{30}
 # ```
 #
 # identified by the in-care death flow relative to admissions and occupancy.
@@ -1170,7 +1186,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # O_{\text{conf},t} = \sum_{u \le t} A_{\text{bvd},u}\,
-#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{30}
+#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{31}
 # ```
 #
 # with $F_{\text{conf}}$ the cumulative confirmation probability of a cohort
@@ -1213,7 +1229,7 @@ cfr_prior_fig #hide
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{31}
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{32}
 # ```
 #
 # with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds), all sharing the treatment dispersion $k_{\text{iso}}$.
@@ -1277,7 +1293,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{32}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{33}
 # ```
 
 #md # ```@raw html
@@ -1323,7 +1339,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{33}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{34}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a Binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
@@ -1352,7 +1368,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{34}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{35}
 # ```
 #
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
@@ -1362,7 +1378,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{35}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{36}
 # ```
 
 #md # ```@raw html
@@ -1439,7 +1455,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{36}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{37}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the case volume $v^{\text{c}}_t$, so $\text{cd}_t$ is zero before the first confirmed-case vintage.
@@ -1534,7 +1550,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export intensity:
 #
 # ```math
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{37}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{38}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
@@ -1549,7 +1565,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{38}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{39}
 # ```
 
 #md # ```@raw html
@@ -1586,7 +1602,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{39}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{40}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a per-day Poisson, the same dated-event likelihood the exports use, with a zero term before the first death day $\delta_1$:
@@ -1596,7 +1612,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{40}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{41}
 # ```
 
 #md # ```@raw html
@@ -1627,7 +1643,7 @@ cfr_prior_fig #hide
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{41}
+# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{42}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
@@ -1638,7 +1654,7 @@ cfr_prior_fig #hide
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
-# \tag{42}
+# \tag{43}
 # ```
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
@@ -1653,7 +1669,7 @@ cfr_prior_fig #hide
 # \qquad
 # F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
-#     + \beta + \omega_u\bigr). \tag{43}
+#     + \beta + \omega_u\bigr). \tag{44}
 # ```
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
@@ -1670,7 +1686,7 @@ cfr_prior_fig #hide
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
 #     \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),\
-#     \sigma_u,\ \nu{=}4\Bigr). \tag{44}
+#     \sigma_u,\ \nu{=}4\Bigr). \tag{45}
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
@@ -1955,7 +1971,7 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{45}
+#         \Pr(X_d - X_c \le T - t)}, \tag{46}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
@@ -2063,7 +2079,7 @@ diagnostics_table( #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{46}
+#     \tag{47}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
@@ -2086,14 +2102,14 @@ diagnostics_table( #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{47}
+# \end{cases} \tag{48}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{48}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{49}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2104,7 +2120,7 @@ diagnostics_table( #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{49}
+#     \tag{50}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$, and the interval widens with the square root of the horizon.

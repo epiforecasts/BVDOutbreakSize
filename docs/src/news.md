@@ -34,6 +34,10 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
+The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed; it now states the thinned discharge flow and the confirmation-dependent abscond survival.
+`seed_at_renewal_start`, `abscond_thinned` and `abscond_thinned_flow` carried docstrings several times the length of their bodies, much of it arguing against the alternatives rather than describing the contract.
+
 - The full test cell no longer times out.
 `Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
 It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.
