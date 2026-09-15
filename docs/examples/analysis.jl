@@ -47,7 +47,7 @@
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
 #   McCabe et al. [mccabe2026](@cite) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.* A single import grows through an unobserved cryptic exponential phase before the renewal process takes over.
-#   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a wide prior on the doubling count.
+#   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a prior on the number of cryptic generations.
 #   The established reproduction number is derived forward from that growth rate.
 #   The genetic time to the most recent common ancestor floors the cryptic duration from below.
 #   McCabe et al. fix the start from a single seed.
@@ -477,16 +477,16 @@ MarkdownTable(vintage_table) #hide
 # I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
 # ```
 #
-# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase, doubling $m$ times before sustained transmission was established.
-# The cryptic phase grows the seed to $2^m$ infections at the renewal start, the day the renewal takes over, over a duration $m\,\tau$ with $\tau$ the doubling time.
+# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
+# The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a wide prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
+# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(5,\ 4), \qquad
-# \tau = \frac{\log 2}{r}, \qquad
-# T_{\text{cryptic}} = m\,\tau. \tag{8}
+# m \sim \mathrm{Normal}^{+}(4,\ 1.2), \qquad
+# T_{\text{cryptic}} = m\,G, \qquad
+# C_T = e^{r T_{\text{cryptic}}}. \tag{8}
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs.
@@ -527,7 +527,8 @@ MarkdownTable(vintage_table) #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.exponential_growth_model(Float64[])),
+#md #     "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -581,13 +582,13 @@ MarkdownTable(vintage_table) #hide
 # \tau_{\text{obs}} = n - \text{renewal start}. \tag{11}
 # ```
 #
-# The grid days before the renewal start are filled by the cryptic exponential curve at rate $r$ ending at $2^m$.
+# The grid days before the renewal start are filled by the cryptic exponential curve at rate $r$ ending at $C_T$.
 # This gives the recursion a full generation interval of history.
 # The renewal then grows the trajectory forward under the time-varying reproduction number.
 # The total outbreak age is the cryptic duration plus the observed window:
 #
 # ```math
-# T = m\,\tau + \tau_{\text{obs}}. \tag{12}
+# T = m\,G + \tau_{\text{obs}}. \tag{12}
 # ```
 #
 # Cumulative infections are the running sum of the daily infection series.
@@ -1298,14 +1299,15 @@ cfr_prior_fig #hide
 # ##### Laboratory pipeline
 #
 # The laboratory pipeline fits a single analysed-specimen volume.
-# There is no separately-modelled testing capacity: the analysed volume is a deterministic function of the suspected-case incidence.
-# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$ and thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory),
+# It is the suspected daily pipeline ($p_{\text{DRC}}\,\text{bvd}_t$ plus the non-BVD background $\lambda_{\text{bg}}$) carried through the report-to-analysed delay $f_{\text{rec}}$, thinned by the testing fraction $\tau_{\text{test}}$ (the share of suspected cases routed to the laboratory), and multiplied by the specimens analysed per suspect sampled $\varrho$,
 #
 # ```math
-# v_t = \tau_{\text{test}} \sum_{s \ge 0}
+# v_t = \varrho\, \tau_{\text{test}} \sum_{s \ge 0}
 #     \bigl(p_{\text{DRC}}\, \text{bvd}_{t-s} + \lambda_{\text{bg},t-s}\bigr)\,
 #     f_{\text{rec},s}.
 # ```
+#
+# $\varrho$ exceeds one because repeat exclusion testing, swabbed community deaths and screened contacts all put specimens into the laboratory denominator without adding a reported suspect.
 #
 # This analysed volume is gated to zero before the testing onset.
 # No specimens are analysed before the laboratory existed, so $v_t$ does not accrue over the pre-surveillance cryptic phase.
@@ -1313,7 +1315,7 @@ cfr_prior_fig #hide
 # The first confirmed vintage is treated as the baseline and the early confirmed increments are scored from it.
 # The suspected-case count itself is not gated, as those cases did accumulate over the cryptic phase.
 #
-# This construction, a testing fraction times the suspected pipeline carried to laboratory receipt, gives the modelled case analysed volume that the confirmed deaths reuse.
+# This construction, a specimens-per-suspect factor times a testing fraction times the suspected pipeline carried to laboratory receipt, gives the modelled case analysed volume that the confirmed deaths reuse.
 # The death volume scales it at the per-day suspected death-to-case ratio (described in the confirmed deaths section below).
 # The two therefore share the laboratory capacity onset.
 #
@@ -2456,7 +2458,7 @@ obs_delay_pair_fig #hide
 
 # ### Surveillance parameters
 #
-# The surveillance-data parameters cover the reporting fractions for the DRC and Uganda, the surveillance dispersions, and the laboratory pipeline: the testing fraction and receipt delay, the per-suspected and per-test positivity, the non-BVD background rate, and the death-confirmation probability.
+# The surveillance-data parameters cover the reporting fractions for the DRC and Uganda, the surveillance dispersions, and the laboratory pipeline: the testing fraction and receipt delay, the specimens analysed per suspect sampled, the per-suspected and per-test positivity, the non-BVD background rate, and the death-confirmation probability.
 # The six passive-surveillance count streams (suspected cases, suspected deaths, confirmed cases, confirmed deaths, isolation occupancy and recovered) each have their own negative-binomial dispersion, partially pooled from a shared population.
 # $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
 # The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
@@ -2469,7 +2471,8 @@ obs_delay_pair_fig #hide
 
 surveillance_summary = summary_table(chn_joint,
     [:p_drc, :p_uganda, :k, :k_cases, :k_deaths, :k_confirmed,
-        :k_confirmed_deaths, :dispersion_sd, :tau_test, :lambda_bg,
+        :k_confirmed_deaths, :dispersion_sd, :tau_test,
+        :specimens_per_suspect, :lambda_bg,
         :suspected_positivity, :test_positivity, :expected_confirmed_T,
         :expected_analysed_T, :death_ascertainment, :background_cfr,
         :tau_death, :death_composition,

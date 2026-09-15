@@ -137,7 +137,12 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
         ascertainment = pooled_ascertainment_model(),
-        confirmed_positivity_link::Symbol = :composition)
+        confirmed_positivity_link::Symbol = :composition,
+        ## Off here, unlike [`bvd_joint`](@ref). This composer has no
+        ## treatment or onset stream and its `cases_state` runs with a
+        ## missing cut-off scalar, so `τ_test` reaches the likelihood only
+        ## through the `κ · τ_test` product, which is not identified.
+        specimen_intensity::Bool = false)
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -155,6 +160,8 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
+        specimen_intensity = specimen_intensity ?
+                             specimen_intensity_model() : nothing,
         positivity_link = confirmed_positivity_link))
     ## Cut-off expected confirmed count, aliased under the same un-prefixed
     ## name [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
@@ -464,12 +471,20 @@ and lagged by a confirmation-to-recovery delay (see
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report); `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. Tracked deterministics:
+seeding submodel when `tmrca_days` is given.
+
+`specimen_intensity` (on by default) scales the analysed volume by
+specimens analysed per suspect sampled
+([`specimen_intensity_model`](@ref)), which `τ_test` alone, being a
+probability, cannot exceed one of.
+
+Tracked deterministics:
 `C_T` (cumulative infections by the cut-off), the established
 reproduction number `R0` (= the first `R_t`), `r` and `doubling_time`
 (current growth), `r0` (the `R0`-implied cryptic growth rate), `T`
 (outbreak age), `R_T` (current reproduction number), the per-stream
-expected counts, the testing fraction `tau_test`, the background rate
+expected counts, the testing fraction `tau_test`, the specimens
+analysed per suspect (`specimens_per_suspect`), the background rate
 `lambda_bg`, the death ascertainment `death_ascertainment`, the
 background CFR `background_cfr`, the death testing fraction `tau_death`,
 the implied per-suspected (`suspected_positivity`) and per-test
@@ -529,6 +544,10 @@ the implied per-suspected (`suspected_positivity`) and per-test
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
+        ## Scale the analysed volume by specimens analysed per suspect
+        ## ([`specimen_intensity_model`](@ref)), which `τ_test` alone cannot
+        ## exceed one of.
+        specimen_intensity::Bool = true,
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
@@ -645,6 +664,8 @@ the implied per-suspected (`suspected_positivity`) and per-test
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
+        specimen_intensity = specimen_intensity ?
+                             specimen_intensity_model() : nothing,
         positivity_link = confirmed_positivity_link))
     ## Symptom-onset reporting-triangle stream
     ## ([`onset_reporting_model`](@ref)): the only direct observation of the
@@ -867,6 +888,9 @@ the implied per-suspected (`suspected_positivity`) and per-test
     recovery_delay_mean := recovered_state.recovery_delay_mean
     recovered_dispersion := recovered_state.k_recovered
     tau_test := cases_state.τ_test
+    ## Specimens analysed per suspect sampled. `1.0` when the factor is off.
+    specimens_per_suspect := confirmed_state.κ_test === nothing ? 1.0 :
+                             confirmed_state.κ_test
     lambda_bg := cases_state.λ_bg
     bg_sigma := cases_state.bg_sigma
     background_total := cases_state.bg_total

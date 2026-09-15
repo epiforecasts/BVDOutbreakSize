@@ -238,19 +238,20 @@ end
 Molecular-clock growth-and-size prior for the renewal cryptic phase.
 Samples the exponential growth rate `r` directly (the primary
 epidemiological assumption, placed on the genetic doubling time) and the
-doubling count `m`, then exposes
+generation count `m`, then exposes
 
 ```math
-\\tau = \\log 2 / r,\\qquad T_\\text{cryptic} = m\\,\\tau,
-\\qquad C_T = 2^m,
+\\tau = \\log 2 / r,\\qquad T_\\text{cryptic} = m\\,G,
+\\qquad C_T = e^{r T_\\text{cryptic}},
 ```
 
-as deterministics. `T = m·τ` is the cryptic-phase duration (origin →
-renewal start): `m` counts the doublings during the cryptic phase, so the
-cryptic phase grows a single import to `2^m` infections at the renewal
-start, independent of `r`. The composer ([`infection_model`](@ref)) adds
-the observation span `τ_obs = n − renewal_start` to get the total outbreak
-age `T_total = m·τ + τ_obs`, which carries the genetic seeding bound
+as deterministics, with `G` the mean generation interval. `T = m·G` is the
+cryptic-phase duration (origin → renewal start): `m` counts the transmission
+generations during the cryptic phase, and a single import grows over them to
+a daily incidence `C_T` at the renewal start. The composer
+([`infection_model`](@ref)) adds the observation span
+`τ_obs = n − renewal_start` to get the total outbreak age
+`T_total = m·G + τ_obs`, which carries the genetic seeding bound
 ([`genetic_seeding_model`](@ref)).
 
 The growth rate carries the prior `r ~ LogNormal(log(log2 /
@@ -269,33 +270,48 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(5, 4); lower = 0)` is deliberately wide. The centre
-and spread are elicited from the field epidemiology and the genetics:
-field work in Mongbwalu traced a sustained transmission chain back to a
-death on 25 January 2026 and identified 500+ suspected cases between
-mid-January and mid-May (kupferschmidt2026), and the genetic TMRCA
-(mbalaplacide2026) is a lower bound on the outbreak age consistent with an
-origin that early. `m` counts only the cryptic doublings, not the cut-off
-case total. With the ≈11.7-day doubling, a centre of 5 spans
-`5 · τ ≈ 58.5` cryptic days, placing the implied prior origin at the end
-of January (the documented first deaths). The SD of 4 lets the data and
-the genetic seeding bound pull the origin earlier (into December) or
-later without over-committing.
+`m ~ truncated(Normal(4, 1.2); lower = 0)` counts the transmission generations
+between the index infection and the renewal start, so the origin sits
+`T = m · G` days back, with `G` the mean generation interval, and the cryptic
+phase grows one infection per day there to `C_T = exp(r · T)` per day at the
+renewal start.
 
-In the renewal, `2^m` is the prior seed at the renewal start, which the
-renewal recursion grows forward under `R_t`. Pass `m_prior` to override,
-e.g. one whose centre advances via [`m_prior_centre`](@ref) for a later
-cut-off. Returns `(; τ, r, m, T, C_T)`.
+The centre is 4 generations: field work in Mongbwalu traced a sustained
+transmission chain back to a death on 25 January 2026 (kupferschmidt2026),
+63 days before the renewal start, which is four generation intervals. The
+genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak age
+consistent with an origin that early.
+
+The spread is elicited against the origin date and checked in seed units. SD
+1.2 puts the 90% prior origin between late December 2025 and late February
+2026, which brackets that death, and its 99th percentile seed at about 500
+infections per day against a fitted outbreak of order ten thousand in total.
+The genetic term is flat above about five generations, contributing 1.66 nats
+in total and essentially all of it below four.
+
+In the renewal, `C_T` is the prior seed at the renewal start, which the
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
+Do not pass a centre from [`m_prior_centre`](@ref): that helper is for the v1.3.0
+integral backfill, where `2^m` is the cut-off cumulative case total, and
+its advancing centre would give a renewal seed of order half a million
+per day. Returns `(; τ, r, m, T, C_T, G)`.
 """
-@model function exponential_growth_model(;
+@model function exponential_growth_model(g::AbstractVector;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
-        m_prior = truncated(Normal(5.0, 4.0); lower = 0))
+        m_prior = truncated(Normal(4.0, 1.2); lower = 0))
     r ~ r_prior
     m ~ m_prior
+    ## Mean generation interval, the unit `m` is counted in. `g` is indexed
+    ## from one day, so the mean is `Σ i·g[i]`.
+    G := sum(i * g[i] for i in eachindex(g))
     τ := log(2) / r
-    T := m * τ
-    C_T := 2.0^m
-    return (; τ, r, m, T, C_T)
+    ## Outbreak age is generations times the generation interval, so it does
+    ## not depend on `r`.
+    T := m * G
+    ## Daily incidence at the renewal start, grown from one infection per day
+    ## at the origin over `T` days at the cryptic rate.
+    C_T := exp(r * T)
+    return (; τ, r, m, T, C_T, G)
 end
 
 """
@@ -327,18 +343,18 @@ The renewal runs only over the observation window
 grid day `rt_start` (the day the reproduction-number walk starts, before
 which `R_t` is held flat). The cryptic exponential phase from the origin to
 the renewal start is analytic and off the renewal grid except for the
-days needed as recursion history. The seed at the renewal start is the
-cryptic-phase realised size `2^m` ([`seed_at_renewal_start`](@ref)), where
-`m` counts the doublings during the cryptic phase: the magnitude is
-independent of `r`, so `r` (hence the derived `R0`) leaves the seed
-magnitude alone and appears only in the renewal growth. A back-scaled
-seed `2^m e^{−r·τ_obs}` would put `r` into both the seed and the renewal
-growth, cancelling for a fixed realised size and opening a flat ridge
-along which `R0` slides to 1. Keeping the seed `r`-independent avoids
-this. The grid days `1 … renewal_start` before the renewal start are
-filled smoothly by the cryptic exponential curve at rate `r` ending at
-`2^m` ([`seed_infections`](@ref)), giving the recursion a full generation
-interval of differentiable history. The renewal recursion
+days needed as recursion history. The seed at the renewal start is the daily
+incidence the cryptic phase reaches, `C_T = e^{r·m·G}`
+([`seed_at_renewal_start`](@ref)), where `m` counts the transmission
+generations during the cryptic phase. The magnitude is referenced to the
+origin, so a larger `r` raises both the seed and the derived `R0` and the
+two compound. A cut-off-referenced seed `C_T e^{−r·τ_obs}` would instead put
+`r` into the seed and the renewal growth in opposing directions, cancelling
+for a fixed realised size and opening a flat ridge along which `R0` slides
+to 1. The grid days `1 … renewal_start` before the renewal start are filled
+smoothly by the cryptic exponential curve at rate `r` ending at `C_T`
+([`seed_infections`](@ref)), giving the recursion a full generation interval
+of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`.
 
@@ -356,7 +372,8 @@ cryptic-phase length through `T`.
 The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
 forwarded to the reproduction-number submodel. Exposes the daily
 infections and cumulative sum, the total prior outbreak age `T`, cryptic
-doubling count `m`/`τ` and prior size scale `C_T_prior`, the realised
+generation count `m`, doubling time `τ` and prior size scale `C_T_prior`,
+the realised
 cut-off size `C_T`, the established reproduction number `R0` and its
 implied cryptic rate `r0` (with `doubling_time_initial`), the current
 growth `r`/`doubling_time` derived from the cut-off reproduction number
@@ -381,7 +398,7 @@ seeding_age)`.
     ## `R0` (= the walk base, the first `R_t`) is derived forward from that
     ## `r` and the generation interval through Euler–Lotka. The cryptic
     ## phase and the established renewal therefore share `r`.
-    growth_state ~ to_submodel(growth())
+    growth_state ~ to_submodel(growth(g))
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
     ## The random walk's first knot sits at `rt_walk_start`, decoupled from
@@ -394,10 +411,11 @@ seeding_age)`.
     rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
     Rt = rt_state.Rt
     ## renewal_start = genetic-TMRCA grid day (`rt_start`). The observation
-    ## span is τ_obs = n − renewal_start. The renewal-start seed magnitude is
-    ## `2^m` directly (the cryptic phase grows one import to `2^m` over `m`
-    ## doublings, `r`-free). Fill grid days 1…renewal_start with the cryptic
-    ## exponential curve at rate `r` ending at `2^m` (a full GI of history),
+    ## span is τ_obs = n − renewal_start. The renewal-start seed is the daily
+    ## incidence `C_T = exp(r·T)` reached after the cryptic phase's `m`
+    ## generations.
+    ## Fill grid days 1…renewal_start with the cryptic exponential curve at
+    ## rate `r` ending at that seed (a full GI of history),
     ## then run the renewal forward from renewal_start+1.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
@@ -405,7 +423,7 @@ seeding_age)`.
     seed_vec = seed_infections(seed0, r_clock, renewal_start)
     infections = renewal_infections(Rt, g, seed_vec)
     cumulative = cumsum(infections)
-    ## Total outbreak age: cryptic duration (m·τ) plus the observation span.
+    ## Total outbreak age: cryptic duration (m generations) plus the span.
     T_total = growth_state.T + τ_obs
     ## Current growth rate at the cut-off, derived from the cut-off
     ## reproduction number `Rt[n]` and the generation interval through forward
@@ -1105,6 +1123,26 @@ override. Returns `(; scaling)`.
         scaling_prior = LogNormal(0.0, 0.25))
     scaling ~ scaling_prior
     return (; scaling)
+end
+
+"""
+Specimens analysed per suspect sampled.
+
+[`confirmed_cases_model`](@ref) scales the laboratory volume by this factor
+as well as by `τ_test`. `τ_test` is a probability and the receipt kernel
+conserves mass, so it alone bounds the modelled analysed volume below the
+modelled suspect inflow. Specimens are not persons: a suspect can yield
+several through repeat exclusion testing, and swabbed community deaths and
+screened contacts enter the laboratory denominator without being counted
+as suspects reported, so the ratio can exceed one.
+
+`κ ~ LogNormal(0, 0.25)` has median 1 and a 90% range of about 0.66 to
+1.51, matching [`death_testing_scaling_model`](@ref).
+"""
+@model function specimen_intensity_model(;
+        intensity_prior = LogNormal(0.0, 0.25))
+    κ ~ intensity_prior
+    return (; κ)
 end
 
 """
