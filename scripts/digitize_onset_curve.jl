@@ -53,8 +53,20 @@
 # Dependencies: poppler (`pdfimages`, `pdftotext`, `pdfinfo`) on PATH. No
 # Julia packages beyond stdlib.
 #
+# Incremental by default. Digitising a vintage means extracting the figure
+# and walking it pixel by pixel, and a data update adds one or two vintages
+# to a file that already holds every earlier one. So a run reuses the rows
+# `out_csv` already carries and opens the PDF only for the CONFIG vintages
+# missing from it. The rows are written back in CONFIG order either way, so
+# an incremental run and a full one produce the same file.
+#
+# A change to the digitiser itself does not invalidate those reused rows, so
+# re-run with `--rebuild` after touching the digitising code, which re-reads
+# every vintage. Each run prints how many vintages it reused and how many it
+# read, so a run that should have re-read everything and did not is visible.
+#
 # Usage:
-#   julia scripts/digitize_onset_curve.jl [pdf_dir] [out_csv]
+#   julia scripts/digitize_onset_curve.jl [pdf_dir] [out_csv] [--rebuild]
 # Defaults: pdf_dir = data/sitrep_pdfs, out_csv = data/onset_curve_scanned.csv
 # Download the PDFs first with scripts/download_sitreps.jl.
 
@@ -509,12 +521,44 @@ function onset_image(pdf)
     return nothing
 end
 
+const OUT_HEADER = "sitrep,report_date,onset_date,confirmed_alive," *
+                   "confirmed_dead,confirmed_total"
+
+## Rows `out_csv` already holds, keyed by the SitRep number in its first
+## field, so a run can reuse a vintage it has already read rather than open
+## the PDF again. An absent, empty or differently-headed file yields nothing
+## and every vintage is read, which is what a first run does anyway.
+function digitised_rows(out_csv)
+    rows = Dict{String, Vector{String}}()
+    isfile(out_csv) || return rows
+    lines = readlines(out_csv)
+    (isempty(lines) || strip(lines[1]) != OUT_HEADER) && return rows
+    for line in lines[2:end]
+        isempty(strip(line)) && continue
+        sr = first(split(line, ','))
+        push!(get!(rows, String(sr), String[]), line)
+    end
+    return rows
+end
+
 function main(pdf_dir = "data/sitrep_pdfs",
-        out_csv = "data/onset_curve_scanned.csv")
+        out_csv = "data/onset_curve_scanned.csv";
+        rebuild::Bool = false)
+    ## Read before the file is opened for writing, which truncates it.
+    cached = rebuild ? Dict{String, Vector{String}}() : digitised_rows(out_csv)
+    reused = 0
+    read_now = 0
     open(out_csv, "w") do io
-        println(io, "sitrep,report_date,onset_date,confirmed_alive," *
-                    "confirmed_dead,confirmed_total")
+        println(io, OUT_HEADER)
         for (sr, report_date, last_tick) in CONFIG
+            ## Already digitised, so its rows are carried through untouched.
+            ## They are written in CONFIG order like any other, so reusing
+            ## them cannot reorder the file.
+            if haskey(cached, sr)
+                foreach(line -> println(io, line), cached[sr])
+                reused += 1
+                continue
+            end
             pdf = joinpath(pdf_dir, "SitRep_MVE_$(sr)_2026.pdf")
             if !isfile(pdf)
                 @warn "skip $sr: $pdf not found"
@@ -542,12 +586,18 @@ function main(pdf_dir = "data/sitrep_pdfs",
                 println(io, join((sr, report_date, onset, alive, dead,
                         alive + dead), ","))
             end
+            read_now += 1
         end
     end
-    println("wrote $out_csv")
+    @printf("wrote %s: %d vintages read, %d reused from the existing file\n",
+        out_csv, read_now, reused)
+    reused > 0 && println("re-run with --rebuild to re-read every vintage " *
+            "after changing the digitiser")
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(get(ARGS, 1, "data/sitrep_pdfs"),
-        get(ARGS, 2, "data/onset_curve_scanned.csv"))
+    args = filter(a -> a != "--rebuild", ARGS)
+    main(get(args, 1, "data/sitrep_pdfs"),
+        get(args, 2, "data/onset_curve_scanned.csv");
+        rebuild = "--rebuild" in ARGS)
 end
