@@ -2833,6 +2833,69 @@ function plot_forecast_flows(fc::DataFrame)
 end
 
 """
+One-week-ahead forecast split by province, for the two streams the spatial
+tables report: the new confirmed cases and confirmed deaths expected in each
+province over the week to `T + 7`. One panel per stream, the provinces side
+by side on a shared axis, each drawn as a median dot over nested 30/60/90%
+credible bars, in the style of [`plot_patch_summary`](@ref).
+
+This is the figure form of [`province_forecast_table`](@ref), which reports
+the same intervals as numbers, and the figure the release archive
+[`province_forecast_archive`](@ref) carries the draws behind.
+
+Each province's count is the national draw times that province's modelled
+share at the most recent spatial vintage, multiplied draw by draw, so the
+interval carries the correlation between the two factors. The split is held
+at its current value over the horizon rather than projected forward, which
+is the assumption the bar widths do not express.
+
+Panels are drawn only for the streams `fc` carries, so a forecast without
+the confirmed deaths column shows the cases panel alone, and a forecast
+carrying neither returns an empty figure.
+"""
+function plot_province_forecast(chn, fc::DataFrame;
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        colours = [:firebrick, :steelblue, :seagreen],
+        title::AbstractString = "One-week-ahead forecast by province")
+    np = min(n_patches, length(patch_labels))
+    entries = _province_forecast_draws(chn, fc, np, patch_labels)
+    isempty(entries) && return Figure()
+    ## One panel per stream, in the order the streams are listed, each
+    ## holding every province's interval on the shared province axis.
+    labels = unique(first.(entries))
+    nc = length(labels)
+    fig = Figure(; size = (420 * nc, 380))
+    xs = Float64.(1:np)
+    for (k, label) in enumerate(labels)
+        sel = [e for e in entries if e[1] == label]
+        ax = Axis(fig[1, k]; ylabel = "Forecast count over the week",
+            title = "New $(label) by T+7",
+            xticks = (xs, String.(patch_labels[1:np])),
+            xticklabelrotation = pi / 6)
+        for (p, e) in enumerate(sel)
+            _draw_patch_interval!(ax, xs[p], e[3],
+                colours[mod1(p, length(colours))])
+        end
+        ## A single province would otherwise sit on the axis edge.
+        CairoMakie.xlims!(ax, 0.5, np + 0.5)
+        ## A count cannot be negative and the panel is read against zero,
+        ## so the axis starts there rather than at the smallest lower bound.
+        CairoMakie.ylims!(ax, 0, nothing)
+    end
+    ## Two panels is a narrower figure than the per-province summary grid,
+    ## so the caption wraps to the layout width rather than running past it.
+    CairoMakie.Label(fig[2, 1:nc],
+        "Bars are 30/60/90% credible intervals, thickest for the 30%, with " *
+        "the median as a dot. Each province's count is the national " *
+        "forecast draw times its modelled share at the last spatial " *
+        "vintage, held over the horizon.";
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
 One-week-ahead isolation/treatment-bed forecast from
 [`forecast_reported`](@ref): the projected bed demand (the need a week ahead,
 under unconstrained supply) against the occupancy the situation reports would

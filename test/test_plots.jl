@@ -1711,3 +1711,47 @@ end
     @test hi >= maximum(abs, tbl[!, "Bias"])
     @test count(p -> p isa Mk.VLines, axes[2].scene.plots) == 1
 end
+
+@testitem "plot_province_forecast draws one panel per stream" setup=[
+    HeadlessMakie
+] begin
+    using DataFrames: DataFrame
+    using CairoMakie: Makie as Mk
+    using BVDOutbreakSize: plot_province_forecast, PROVINCE_LABELS
+
+    ## Deterministic shares against a spread national forecast, so each
+    ## province's interval is a known fraction of the national one.
+    nd = 200
+    shares = [0.8 0.75; 0.15 0.20; 0.05 0.05]
+    chn = (; province_shares = [shares for _ in 1:nd],
+        province_death_shares = [shares for _ in 1:nd])
+    v = collect(range(50.0, 150.0; length = nd))
+    fc = DataFrame(confirmed_new = v, confirmed_deaths_new = v ./ 5)
+    fig = plot_province_forecast(chn, fc; n_patches = 3)
+    @test fig isa Mk.Figure
+
+    axes = [x for x in fig.content if x isa Mk.Axis]
+    @test length(axes) == 2
+    @test axes[1].title[] == "New confirmed cases by T+7"
+    @test axes[2].title[] == "New confirmed deaths by T+7"
+    ## Provinces are the shared category axis, in patch order.
+    pos, labs = axes[1].xticks[]
+    @test collect(pos) == [1, 2, 3]
+    @test labs == PROVINCE_LABELS[1:3]
+    ## Three nested interval bars and a median dot per province.
+    for ax in axes
+        @test count(p -> p isa Mk.Lines, ax.scene.plots) == 9
+        @test count(p -> p isa Mk.Scatter, ax.scene.plots) == 3
+        ## Counts are non-negative, so the panel is read against zero.
+        @test ax.limits[][2][1] == 0
+    end
+
+    ## A forecast carrying one stream draws that panel alone, and one
+    ## carrying neither returns an empty figure rather than erroring.
+    one = plot_province_forecast(chn,
+        DataFrame(confirmed_new = v); n_patches = 3)
+    @test length([x for x in one.content if x isa Mk.Axis]) == 1
+    none = plot_province_forecast(chn, DataFrame(cases_new = v);
+        n_patches = 3)
+    @test isempty([x for x in none.content if x isa Mk.Axis])
+end
