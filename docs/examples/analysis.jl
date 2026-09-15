@@ -2801,10 +2801,11 @@ province_detail_table #hide
 #md # ```
 
 spatial_hyper_table = summary_table(chn_joint,
-    [:region_sd, :region_corr_primary_secondary,
+    [:region_sd, :region_halflife, :region_corr_primary_secondary,
         :province_ascertainment_sd];
     digits = 3,
     labels = Dict(:region_sd => "Rt deviation spread",
+        :region_halflife => "Rt deviation half-life (days)",
         :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
         :province_ascertainment_sd => "Ascertainment spread"));
 
