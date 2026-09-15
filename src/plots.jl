@@ -3291,7 +3291,7 @@ function plot_stream_calibration(tbl::DataFrame)
 end
 
 ## Health-zone figures. Each takes plain vectors, matrices or a DataFrame
-## rather than a chain, so the zone chain is summarised once by its caller.
+## rather than a chain.
 
 """
     ZONE_MAP_PROVINCES
@@ -3327,8 +3327,8 @@ function zone_key(name::AbstractString)
     return String(strip(s, '_'))
 end
 
-## One geojson ring as Makie points. Geojson closes a ring by repeating its
-## first point, which Makie's polygons do for themselves.
+## One geojson ring as Makie points, without the closing repeat of the
+## first point.
 function _ring_points(ring)
     pts = CairoMakie.Point2f[(Float32(p[1]), Float32(p[2])) for p in ring]
     length(pts) > 1 && pts[end] == pts[1] && pop!(pts)
@@ -3459,13 +3459,10 @@ function _in_polygon(p, poly)
            !any(r -> _in_ring(p, coords(r)), poly.interiors)
 end
 
-## Province boundaries by dissolving the zone polygons. An edge lies on
-## the outline when the points `δ` degrees either side of its midpoint fall
-## on different sides of the province's zones (one inside a zone, one in
-## none). Neighbouring zones do not always agree on their shared vertices,
-## so matching edges would leave interior slivers; the sides of an edge do
-## not care. Returns the outline segments as consecutive point pairs, ready
-## for `linesegments!`.
+## Province boundaries by dissolving the zone polygons: an edge lies on the
+## outline when the points `δ` degrees either side of its midpoint fall one
+## inside a zone of the province and one in none. Returns the segments as
+## consecutive point pairs for `linesegments!`.
 function _province_outlines(geo; δ::Real = 2e-3)
     out = CairoMakie.Point2f[]
     for prov in unique(geo.province)
@@ -3506,10 +3503,8 @@ function _zone_parts(geo, idx)
     return parts, owner
 end
 
-## Colour range for one map. A diverging map is symmetric about its centre
-## on the colour scale, so the centre takes the neutral midpoint; a
-## sequential map spans the values drawn. A constant is widened by one so
-## Makie has a range to map.
+## Colour range for one map: symmetric about `diverging_at` on the colour
+## scale, or the span of the values drawn (widened by one when constant).
 function _zone_colorrange(v, diverging_at, scale)
     if diverging_at === nothing
         lo, hi = extrema(v)
@@ -3544,9 +3539,8 @@ function _zone_cbar_ticks(crange, scale)
     return CairoMakie.Makie.automatic
 end
 
-## Which zones to label: the first `top` of `order` whose centroid does not
-## sit within `gap` degrees (east-west, north-south) of a label already
-## placed, so a cluster of small zones takes one label rather than a pile.
+## The first `top` zones of `order` whose centroid is not within `gap`
+## degrees (east-west, north-south) of a label already placed.
 function _zone_label_pick(centroids, order, top::Integer;
         gap = (1.0, 0.35))
     picked = Int[]
@@ -3603,7 +3597,6 @@ function _zone_map_panel!(gl, geo, outline, values, zones;
     ax = Axis(gl[1, 1]; title, aspect = CairoMakie.DataAspect())
     CairoMakie.hidedecorations!(ax)
     CairoMakie.hidespines!(ax)
-    ## Zones without a value first, so the coloured ones sit on top.
     if !isempty(absent)
         parts, _ = _zone_parts(geo, absent)
         CairoMakie.poly!(ax, parts; color = missing_colour,
@@ -3614,8 +3607,7 @@ function _zone_map_panel!(gl, geo, outline, values, zones;
         CairoMakie.poly!(ax, parts; color = vals[owner], colormap = cmap,
             colorrange = crange, colorscale = scale, strokecolor = :white,
             strokewidth = 0.6)
-        ## A zone whose interval straddles the centre is washed towards
-        ## white.
+        ## Wash out the zones whose interval straddles the centre.
         mi = findall(muted)
         if !isempty(mi)
             mparts, _ = _zone_parts(geo, mi)
@@ -3631,7 +3623,6 @@ function _zone_map_panel!(gl, geo, outline, values, zones;
     top = _zone_label_pick(geo.centroid, present[sortperm(rank; rev = true)],
         label_top)
     if !isempty(top)
-        ## White halo under the label.
         CairoMakie.text!(ax, geo.centroid[top]; text = geo.label[top],
             fontsize, align = (:center, :center), color = :white,
             strokecolor = :white, strokewidth = 3.0)
@@ -3806,8 +3797,7 @@ function plot_rt_zones(rt_draws::AbstractVector{<:AbstractMatrix},
     pbands = patch_rt === nothing ? nothing :
              Dict(p => _rt_bands_matrix(patch_rt[p]; n, ds = 1)
     for p in unique(zone_patch[sel]))
-    ## Shared y-cap from the panels' typical 90% upper band, a median over
-    ## days so one spiky day in a sparse zone does not flatten the rest.
+    ## Shared y-cap: the median over days of each panel's 90% upper band.
     function panel_top(b)
         v = Float64[b.hi90[d] for d in b.est if !ismissing(b.hi90[d])]
         return isempty(v) ? 0.0 : quantile(v, 0.5)
@@ -3891,17 +3881,19 @@ share of zone `z`, `obs_shares` the `(n_zones × n_vintages)` observed share
 and `dates` the vintage dates.
 
 `pred_draws`, when given with the same shape as `share_draws`, is the
-predictive share that carries the composition's own scatter and is drawn
-behind the ribbon in grey, dashed at its 90% edges, as the band the points
-should fall inside. Every panel starts at zero and takes its own upper
-limit, since the shares differ by orders of magnitude.
+predictive share and is drawn behind the ribbon in grey, dashed at its 90%
+edges. `prior_draws`, same shape, is the prior predictive share, drawn
+behind everything as a tan 90% band with a dashed median. Every panel
+starts at zero and takes its upper limit from the posterior bands and the
+points. Date ticks are every `tick_step` days (automatic when `nothing`).
 """
 function plot_zone_shares(share_draws::AbstractVector{<:AbstractMatrix},
         obs_shares::AbstractMatrix, dates::AbstractVector,
         zone_labels::AbstractVector;
         zone_patch::AbstractVector{<:Integer} = ones(Int, length(share_draws)),
         patch_labels::AbstractVector = PROVINCE_LABELS,
-        pred_draws = nothing, top::Integer = 10, ncols::Integer = 5,
+        pred_draws = nothing, prior_draws = nothing, tick_step = nothing,
+        top::Integer = 10, ncols::Integer = 5,
         patch_colours = _ZONE_PATCH_COLOURS,
         title::AbstractString = "Zone share of the patch's confirmed cases, " *
                                 "modelled against observed")
@@ -3927,18 +3919,29 @@ function plot_zone_shares(share_draws::AbstractVector{<:AbstractMatrix},
         ax = Axis(fig[r, c]; title = String(zone_labels[z]),
             titlecolor = colour, ylabel = c == 1 ? "Share of patch" : "",
             xticklabelrotation = pi / 6)
-        pred_draws === nothing ||
-            _draw_pred_bands!(ax, x,
-                _traj_bands_missing(rows(pred_draws[z]), nv))
-        _draw_traj_bands!(ax, x, _traj_bands_missing(rows(share_draws[z]), nv),
-            colour)
+        prior_draws === nothing ||
+            _draw_prior_band!(ax, x, rows(prior_draws[z]), nv)
+        pb = pred_draws === nothing ? nothing :
+             _traj_bands_missing(rows(pred_draws[z]), nv)
+        pb === nothing || _draw_pred_bands!(ax, x, pb)
+        sb = _traj_bands_missing(rows(share_draws[z]), nv)
+        _draw_traj_bands!(ax, x, sb, colour)
         scatter!(ax, x, Float64.(obs_shares[z, :]); color = :black,
             markersize = 7)
-        CairoMakie.ylims!(ax, 0, nothing)
-        _zone_date_axis!(ax, x)
+        ## The upper limit ignores the prior band.
+        ytop = maximum(
+            filter(!isnan,
+                [sb.hi90; pb === nothing ? Float64[] : pb.hi90;
+                 Float64.(obs_shares[z, :])]);
+            init = 0.0)
+        CairoMakie.ylims!(ax, 0, ytop > 0 ? 1.05 * ytop : 1.0)
+        _zone_date_axis!(ax, x; step = tick_step)
     end
+    extra = prior_draws === nothing ? () :
+            ((CairoMakie.PolyElement(; color = (:tan, 0.5)),
+        "Prior predictive"),)
     _patch_legend!(fig, (nr + 1, 1:nc), zone_patch[sel], patch_labels,
-        patch_colours)
+        patch_colours; extra)
     caption = pred_draws === nothing ?
               "Bands are 30/60/90% credible intervals on the modelled " *
               "share. Black points are the observed share at each vintage. " *
@@ -3949,10 +3952,26 @@ function plot_zone_shares(share_draws::AbstractVector{<:AbstractMatrix},
               "share. Black points are the observed share at each vintage " *
               "and should fall inside the grey band. Each panel starts at " *
               "zero and takes its own upper limit."
+    prior_draws === nothing ||
+        (caption *= " The tan band is the prior predictive 90% interval, " *
+                    "with its median dashed.")
     CairoMakie.Label(fig[nr + 2, 1:nc], caption; fontsize = 12,
         word_wrap = true, padding = (0, 0, 0, 6))
     CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
     return fig
+end
+
+## Prior predictive 90% band in tan with a dashed median, NaN where a
+## vintage has no share.
+function _draw_prior_band!(ax, x, trajs, n::Integer)
+    b = _traj_bands_missing(trajs, n)
+    med = [let v = Float64[t[d] for t in trajs]
+               any(isnan, v) ? NaN : median(v)
+           end
+           for d in 1:n]
+    band!(ax, x, b.lo90, b.hi90; color = (:tan, 0.35))
+    lines!(ax, x, med; color = :tan4, linestyle = :dash, linewidth = 1.2)
+    return ax
 end
 
 ## Nested 50/90% horizontal interval bars at one y, topped by a median dot.
@@ -3991,13 +4010,11 @@ function _zone_patch_index(col, patch_labels)
     end
 end
 
-## The per-zone columns a zone summary table carries, under either the
+## The per-zone columns of a zone table, under either the
 ## [`zone_summary_table`](@ref) names (`label`, `median`, `lo90`, `lo50`)
 ## or the zone forecast tables' (`zone`, `central_estimate`, `lower_90`,
-## `lower_60`). `patch` may be the index or the label. `rows` are the zone
-## rows, leaving out the "Patch total" rows those tables append; `inner`
-## names the thick bar's level, the 50% interval when present and the 60%
-## otherwise.
+## `lower_60`). `patch` may be the index or the label. `rows` leaves out
+## the "Patch total" rows; `inner` names the thick bar's level.
 function _zone_table_columns(tbl::DataFrame, fname::AbstractString;
         patch_labels = PROVINCE_LABELS)
     need(names...) = _zone_need(tbl, fname, names...)
@@ -4075,7 +4092,7 @@ function plot_zone_forecast(tbl::DataFrame; top::Integer = 15,
             marker = :diamond, color = :white, strokecolor = :black,
             strokewidth = 1.5, markersize = 12)
     end
-    ## Read against zero, with room for a marker sitting on it.
+    ## Room below zero for a marker sitting on it.
     xmax = max(1.0, maximum(t.hi90[sel]),
         t.observed === nothing ? 0.0 :
         maximum(Float64.(skipmissing(t.observed[sel])); init = 0.0))
@@ -4137,7 +4154,7 @@ function plot_zone_comparison(series::AbstractVector{<:Pair};
     labels = lead.label[sel]
     nz = length(sel)
     ys = Float64.(nz:-1:1)
-    ## Each series sits at its own offset within the row, the first on top.
+    ## One offset per series within the row, the first on top.
     offsets = ns == 1 ? [0.0] : range(0.28, -0.28; length = ns)
     fig = Figure(; size = (680, 32 * nz + 190))
     ax = Axis(fig[1, 1]; xlabel, yticks = (ys, labels))
@@ -4209,7 +4226,7 @@ function plot_zone_ranking(overview::DataFrame;
     rt_hi90 = need(:rt_hi90)
     prob = need(:p_rt_above_one, :p_R_above_1)
     walking = something(_zone_col(overview, :walking), trues(length(label)))
-    ## A zone below the reporting floor has no estimate and is left out.
+    ## A zone with no estimate is left out.
     rows = findall(i -> !isnan(prob[i]) && !isnan(rt_median[i]),
         eachindex(label))
     order = rows[sortperm(collect(zip(prob[rows], rt_median[rows]));
