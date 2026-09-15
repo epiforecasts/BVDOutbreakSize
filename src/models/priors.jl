@@ -871,23 +871,12 @@ small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
 knot spacing.
 
 `λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk multiplies,
-not the level over the window. The log-deviation is pinned to zero on the first
-knot, so `λ_mu` anchors the start of the window and the innovations carry the
-series from there. It is the post-ramp level exactly only at `σ_rw = 0`, since
-by the day the onset ramp completes the walk already carries part of its first
-innovation. The fitted background is far above it well before the cut-off, so
-this scale is not comparable to a mid-window level.
-
-The half-normal shrinks that anchor toward zero, which is what stops the
-background out-explaining the outbreak signal. The scale is wide enough not to
-truncate the anchor the suspected-case data support: under the previous SD of 8
-the joint posterior for `λ_mu` ran about 16 to 30 per day, which sits between
-the 58th and 87th percentiles here. Pass `baseline_prior` to override.
-
-The anchor is one of three prior-posterior conflicts the fitted background
-shows, alongside `σ_bg` near the top of its own prior and every innovation
-sharing a sign. Together those are the signature of a zero-mean walk carrying a
-systematic trend, which a wider anchor does not address.
+not the level over the window: the log-deviation is pinned to zero on the
+first knot, so it anchors the window's start and the innovations carry the
+series from there. The half-normal shrinks that anchor toward zero, which is
+what stops the background out-explaining the outbreak signal, and the scale is
+wide enough not to truncate the anchor the suspected-case data support. Pass
+`baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
@@ -901,12 +890,8 @@ before `onset`).
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal window anchor on the natural scale. Half-normal rather than
-    ## lognormal because a log-scale level has a heavy right tail the
-    ## background/outbreak-size degeneracy exploits to run away, so the
-    ## background could blow up to explain the suspected stream. The scale is
-    ## wider than the scalar `λ_bg` ([`test_positivity_model`](@ref)), which
-    ## stands in for a whole window rather than anchoring one end of a walk.
+    ## Half-normal rather than lognormal: a log-scale level has a heavy right
+    ## tail the background/outbreak-size degeneracy exploits to run away.
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
