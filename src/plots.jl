@@ -1,7 +1,8 @@
 # All package figures: posterior densities of `C_T`, posterior- and
 # prior-predictive panel grids, pair plots, point-and-interval
 # comparison, CFR prior, start-date and no-onward-transmission
-# densities, and the one-week-ahead forecast figures.
+# densities, the one-week-ahead forecast figures, and the health-zone maps
+# and summaries at the end.
 
 """
 Kernel density for a quantity that cannot fall below `lower`, with the axis
@@ -3286,5 +3287,971 @@ function plot_stream_calibration(tbl::DataFrame)
         yticks = (y, fill("", n)), limits = ((-bmax, bmax), nothing))
     vlines!(ax2, [0.0]; color = :black, linestyle = :dash, linewidth = 2)
     scatter!(ax2, bias, y; color = :firebrick, markersize = 11)
+    return fig
+end
+
+## Health-zone figures. Each takes plain vectors, matrices or a DataFrame
+## rather than a chain, so the zone chain is summarised once by its caller.
+
+"""
+    ZONE_MAP_PROVINCES
+
+The provinces whose health zones the maps draw. Zones outside them are
+dropped when the geojson is read.
+"""
+const ZONE_MAP_PROVINCES = ["Ituri", "Nord-Kivu", "Sud-Kivu", "Haut-Uele",
+    "Tshopo", "Bas-Uele", "Sud-Ubangi"]
+
+## Fill colours by patch index: the patch figures' three, then the pooled
+## fourth patch.
+const _ZONE_PATCH_COLOURS = [:firebrick, :steelblue, :seagreen, :darkorange]
+
+"""
+$(TYPEDSIGNATURES)
+
+Path of the packaged health-zone geojson, `data/health_zones.geojson`.
+"""
+zone_geojson_path() = joinpath(pkgdir(@__MODULE__), "data",
+    "health_zones.geojson")
+
+"""
+$(TYPEDSIGNATURES)
+
+Fold a zone name to the snake_case key the zone data and the geojson share:
+accents stripped, lower-cased, and every run of non-alphanumerics collapsed
+to one underscore, so `"Bili (Bas-Uele)"` becomes `"bili_bas_uele"`.
+"""
+function zone_key(name::AbstractString)
+    s = Base.Unicode.normalize(String(name); stripmark = true, casefold = true)
+    s = replace(s, r"[^a-z0-9]+" => "_")
+    return String(strip(s, '_'))
+end
+
+## One geojson ring as Makie points. Geojson closes a ring by repeating its
+## first point, which Makie's polygons do for themselves.
+function _ring_points(ring)
+    pts = CairoMakie.Point2f[(Float32(p[1]), Float32(p[2])) for p in ring]
+    length(pts) > 1 && pts[end] == pts[1] && pop!(pts)
+    return pts
+end
+
+## A geojson polygon (exterior ring, then holes) as one Makie polygon.
+function _zone_polygon(coords)
+    return CairoMakie.Makie.Polygon(_ring_points(coords[1]),
+        Vector{CairoMakie.Point2f}[_ring_points(r) for r in coords[2:end]])
+end
+
+## Every part of a feature's geometry as Makie polygons.
+function _feature_polygons(geom)
+    t = geom["type"]
+    t == "Polygon" && return [_zone_polygon(geom["coordinates"])]
+    t == "MultiPolygon" &&
+        return [_zone_polygon(c) for c in geom["coordinates"]]
+    return error("zone geojson: unsupported geometry type `$t`.")
+end
+
+## Signed shoelace area and area-weighted centroid of one ring.
+function _ring_centroid(pts)
+    n = length(pts)
+    a = cx = cy = 0.0
+    for i in 1:n
+        x1, y1 = pts[i]
+        x2, y2 = pts[mod1(i + 1, n)]
+        w = x1 * y2 - x2 * y1
+        a += w
+        cx += (x1 + x2) * w
+        cy += (y1 + y2) * w
+    end
+    a == 0 && return (mean(p[1] for p in pts), mean(p[2] for p in pts), 0.0)
+    return (cx / (3a), cy / (3a), abs(a) / 2)
+end
+
+## Centroid of a zone's largest part, where its label goes.
+function _zone_centroid(polys)
+    best = (0.0, 0.0, -1.0)
+    for p in polys
+        c = _ring_centroid(
+            CairoMakie.Makie.GeometryBasics.coordinates(p.exterior))
+        c[3] > best[3] && (best = c)
+    end
+    return CairoMakie.Point2f(best[1], best[2])
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Read the health zones of `provinces` (matched through [`zone_key`](@ref))
+from a geojson, one NamedTuple per zone of `zone` (the key), `label`,
+`province`, `polygons` (one Makie polygon per part, holes included) and
+`centroid` (of the largest part). A feature is named by its `label` (or
+`nom`) property and keyed by its `zone` property when that is non-empty,
+otherwise by [`zone_key`](@ref) of the name.
+"""
+function load_health_zones_geojson(path::AbstractString = zone_geojson_path();
+        provinces::AbstractVector = ZONE_MAP_PROVINCES)
+    gj = JSON.parsefile(path)
+    keep = Set(zone_key(String(p)) for p in provinces)
+    zones = @NamedTuple{zone::String, label::String, province::String,
+        polygons::Vector{CairoMakie.Makie.Polygon},
+        centroid::CairoMakie.Point2f}[]
+    for f in gj["features"]
+        props = f["properties"]
+        prov = something(get(props, "province", nothing), "")
+        zone_key(prov) in keep || continue
+        name = something(get(props, "label", nothing),
+            get(props, "nom", nothing), "")
+        k = something(get(props, "zone", nothing), "")
+        isempty(k) && (k = zone_key(name))
+        polys = _feature_polygons(f["geometry"])
+        push!(zones,
+            (; zone = String(k), label = String(name),
+                province = String(prov), polygons = polys,
+                centroid = _zone_centroid(polys)))
+    end
+    isempty(zones) && error("zone geojson `$path` holds no zone in $provinces.")
+    return zones
+end
+
+## The zone records as one column per field, the form the map code indexes.
+function _zone_table(zones::AbstractVector{<:NamedTuple})
+    return (; key = [z.zone for z in zones], label = [z.label for z in zones],
+        province = [z.province for z in zones],
+        polygons = [z.polygons for z in zones],
+        centroid = [z.centroid for z in zones])
+end
+
+## Every edge of every ring of the zones `idx`, as point pairs.
+function _zone_edges(geo, idx)
+    edges = Tuple{CairoMakie.Point2f, CairoMakie.Point2f}[]
+    for z in idx, poly in geo.polygons[z]
+
+        for ring in (poly.exterior, poly.interiors...)
+            pts = CairoMakie.Makie.GeometryBasics.coordinates(ring)
+            m = length(pts)
+            for i in 1:m
+                push!(edges, (pts[i], pts[mod1(i + 1, m)]))
+            end
+        end
+    end
+    return edges
+end
+
+## Whether `p` lies inside the ring `pts`, by the even-odd rule.
+function _in_ring(p, pts)
+    inside = false
+    j = length(pts)
+    for i in eachindex(pts)
+        xi, yi = pts[i]
+        xj, yj = pts[j]
+        if (yi > p[2]) != (yj > p[2]) &&
+           p[1] < (xj - xi) * (p[2] - yi) / (yj - yi) + xi
+            inside = !inside
+        end
+        j = i
+    end
+    return inside
+end
+
+## Whether `p` lies inside the polygon `poly`, holes excluded.
+function _in_polygon(p, poly)
+    coords = CairoMakie.Makie.GeometryBasics.coordinates
+    return _in_ring(p, coords(poly.exterior)) &&
+           !any(r -> _in_ring(p, coords(r)), poly.interiors)
+end
+
+## Province boundaries by dissolving the zone polygons. An edge lies on
+## the outline when the points `δ` degrees either side of its midpoint fall
+## on different sides of the province's zones (one inside a zone, one in
+## none). Neighbouring zones do not always agree on their shared vertices,
+## so matching edges would leave interior slivers; the sides of an edge do
+## not care. Returns the outline segments as consecutive point pairs, ready
+## for `linesegments!`.
+function _province_outlines(geo; δ::Real = 2e-3)
+    out = CairoMakie.Point2f[]
+    for prov in unique(geo.province)
+        idx = findall(==(prov), geo.province)
+        polys = [poly for z in idx for poly in geo.polygons[z]]
+        boxes = [let r = CairoMakie.Makie.GeometryBasics.coordinates(
+                         poly.exterior)
+                     (extrema(p[1] for p in r), extrema(p[2] for p in r))
+                 end
+                 for poly in polys]
+        inside(q) = any(eachindex(polys)) do k
+            (bx, by) = boxes[k]
+            bx[1] <= q[1] <= bx[2] && by[1] <= q[2] <= by[2] &&
+                _in_polygon(q, polys[k])
+        end
+        for (a, b) in _zone_edges(geo, idx)
+            len = hypot(b[1] - a[1], b[2] - a[2])
+            len == 0 && continue
+            nx, ny = -(b[2] - a[2]) / len * δ, (b[1] - a[1]) / len * δ
+            mx, my = (a[1] + b[1]) / 2, (a[2] + b[2]) / 2
+            inside((mx + nx, my + ny)) == inside((mx - nx, my - ny)) ||
+                push!(out, a, b)
+        end
+    end
+    return out
+end
+
+## Every part of the listed zones flattened to one polygon list, with the
+## zone each part belongs to.
+function _zone_parts(geo, idx)
+    parts = CairoMakie.Makie.Polygon[]
+    owner = Int[]
+    for z in idx, p in geo.polygons[z]
+
+        push!(parts, p)
+        push!(owner, z)
+    end
+    return parts, owner
+end
+
+## Colour range for one map. A diverging map is symmetric about its centre
+## on the colour scale, so the centre takes the neutral midpoint; a
+## sequential map spans the values drawn. A constant is widened by one so
+## Makie has a range to map.
+function _zone_colorrange(v, diverging_at, scale)
+    if diverging_at === nothing
+        lo, hi = extrema(v)
+        return lo == hi ? (lo, hi + 1) : (lo, hi)
+    end
+    h = maximum(abs.(scale.(v) .- scale(diverging_at)); init = 0.0)
+    h == 0 && (h = 1.0)
+    inv = CairoMakie.Makie.inverse_transform(scale)
+    return (inv(scale(diverging_at) - h), inv(scale(diverging_at) + h))
+end
+
+## Colourbar ticks for a transformed colour scale: the round values inside
+## the range, thinned to at most seven. A range from zero is a count scale,
+## so ticks between zero and one are left out. An identity scale keeps
+## Makie's automatic ticks.
+function _zone_cbar_ticks(crange, scale)
+    scale === identity && return CairoMakie.Makie.automatic
+    lo, hi = crange
+    for mantissas in ((1, 1.5, 2, 3, 5, 7), (1, 2, 5), (1, 3), (1,))
+        ticks = [0.0; vec([round(m * 10.0^e; sigdigits = 3)
+                           for m in mantissas, e in -3:7])]
+        ticks = [t
+                 for t in ticks
+                 if lo <= t <= hi && isfinite(scale(t)) &&
+                        !(lo <= 0 && 0 < t < 1)]
+        if length(ticks) <= 7
+            labels = [t == round(t) ? string(round(Int, t)) : string(t)
+                      for t in ticks]
+            return (ticks, labels)
+        end
+    end
+    return CairoMakie.Makie.automatic
+end
+
+## Which zones to label: the first `top` of `order` whose centroid does not
+## sit within `gap` degrees (east-west, north-south) of a label already
+## placed, so a cluster of small zones takes one label rather than a pile.
+function _zone_label_pick(centroids, order, top::Integer;
+        gap = (1.0, 0.35))
+    picked = Int[]
+    for z in order
+        length(picked) >= top && break
+        c = centroids[z]
+        clash = any(picked) do q
+            abs(centroids[q][1] - c[1]) < gap[1] &&
+                abs(centroids[q][2] - c[2]) < gap[2]
+        end
+        clash || push!(picked, z)
+    end
+    return picked
+end
+
+## One choropleth into `gl[1, 1]` with its colourbar in `gl[1, 2]`. `values`
+## and `zones` pair a number with a zone key; the geo is the loaded polygon
+## table and `outline` its dissolved province boundaries.
+function _zone_map_panel!(gl, geo, outline, values, zones;
+        title::AbstractString = "", colormap = nothing, colorrange = nothing,
+        diverging_at = nothing, scale = identity, lower = nothing,
+        upper = nothing, label_top::Integer = 10,
+        colorbar_label::AbstractString = "", missing_colour = :grey85,
+        fontsize = 11)
+    length(values) == length(zones) || error(
+        "plot_zone_map: $(length(values)) values for $(length(zones)) zones.")
+    idx = Dict(k => i for (i, k) in enumerate(geo.key))
+    nz = length(geo.key)
+    vals = fill(NaN, nz)
+    muted = falses(nz)
+    unmatched = String[]
+    for (j, z) in enumerate(zones)
+        i = get(idx, String(z), nothing)
+        if i === nothing
+            push!(unmatched, String(z))
+            continue
+        end
+        vals[i] = Float64(values[j])
+        if diverging_at !== nothing && lower !== nothing && upper !== nothing
+            muted[i] = lower[j] <= diverging_at <= upper[j]
+        end
+    end
+    isempty(unmatched) || @warn "plot_zone_map: zones not in the geojson " *
+          "are not drawn" unmatched
+    present = findall(!isnan, vals)
+    absent = findall(isnan, vals)
+    cmap = colormap === nothing ?
+           (diverging_at === nothing ? :Blues : CairoMakie.Reverse(:RdBu)) :
+           colormap
+    crange = colorrange === nothing ?
+             (isempty(present) ? (0.0, 1.0) :
+              _zone_colorrange(vals[present], diverging_at, scale)) :
+             colorrange
+    ax = Axis(gl[1, 1]; title, aspect = CairoMakie.DataAspect())
+    CairoMakie.hidedecorations!(ax)
+    CairoMakie.hidespines!(ax)
+    ## Zones without a value first, so the coloured ones sit on top.
+    if !isempty(absent)
+        parts, _ = _zone_parts(geo, absent)
+        CairoMakie.poly!(ax, parts; color = missing_colour,
+            strokecolor = :white, strokewidth = 0.4)
+    end
+    if !isempty(present)
+        parts, owner = _zone_parts(geo, present)
+        CairoMakie.poly!(ax, parts; color = vals[owner], colormap = cmap,
+            colorrange = crange, colorscale = scale, strokecolor = :white,
+            strokewidth = 0.6)
+        ## A zone whose interval straddles the centre is washed towards
+        ## white.
+        mi = findall(muted)
+        if !isempty(mi)
+            mparts, _ = _zone_parts(geo, mi)
+            CairoMakie.poly!(ax, mparts; color = (:white, 0.55),
+                strokecolor = :white, strokewidth = 0.6)
+        end
+    end
+    CairoMakie.linesegments!(ax, outline; color = :black, linewidth = 1.0)
+    ## Label the largest values, or the furthest from the centre on a
+    ## diverging map.
+    rank = diverging_at === nothing ? vals[present] :
+           abs.(scale.(vals[present]) .- scale(diverging_at))
+    top = _zone_label_pick(geo.centroid, present[sortperm(rank; rev = true)],
+        label_top)
+    if !isempty(top)
+        ## White halo under the label.
+        CairoMakie.text!(ax, geo.centroid[top]; text = geo.label[top],
+            fontsize, align = (:center, :center), color = :white,
+            strokecolor = :white, strokewidth = 3.0)
+        CairoMakie.text!(ax, geo.centroid[top]; text = geo.label[top],
+            fontsize, align = (:center, :center), color = :black)
+    end
+    CairoMakie.Colorbar(gl[1, 2]; colormap = cmap, colorrange = crange,
+        scale, label = colorbar_label, width = 12,
+        ticks = _zone_cbar_ticks(crange, scale))
+    return ax
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Choropleth of the health zones, coloured by `values`, one per key in
+`zones`. Zones absent from `zones` are grey, province boundaries are black
+outlines dissolved from the zone polygons, and the `label_top` zones with
+the largest values are labelled at their centroids.
+
+With `diverging_at` the colour range is symmetric about that value on a
+red-blue colormap with a neutral centre; without it the map is sequential
+in blue over the range drawn. `scale` (`log10`, or
+`CairoMakie.Makie.pseudolog10` when zeros are present) is applied before
+colouring and the colourbar shows the untransformed values. With
+`diverging_at`, per-zone `lower` and `upper` bounds wash out the zones whose
+interval straddles the centre. `colormap` and `colorrange` override the
+defaults, and `geojson` is read by [`load_health_zones_geojson`](@ref) for
+`provinces`.
+"""
+function plot_zone_map(values::AbstractVector, zones::AbstractVector;
+        geojson::AbstractString = zone_geojson_path(),
+        provinces::AbstractVector = ZONE_MAP_PROVINCES,
+        title::AbstractString = "", colormap = nothing, colorrange = nothing,
+        lower = nothing, upper = nothing, label_top::Integer = 10,
+        diverging_at = nothing, scale = identity,
+        colorbar_label::AbstractString = "", size = (760, 540))
+    geo = _zone_table(load_health_zones_geojson(geojson; provinces))
+    outline = _province_outlines(geo)
+    fig = Figure(; size)
+    gl = fig[1, 1] = CairoMakie.GridLayout()
+    _zone_map_panel!(gl, geo, outline, values, zones; title, colormap,
+        colorrange, diverging_at, scale, lower, upper, label_top,
+        colorbar_label)
+    return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Several choropleths of the same zones side by side, one per entry of
+`panels`, wrapping after `ncols`. Each panel is a NamedTuple with `values`
+and `zones`, plus any of the [`plot_zone_map`](@ref) keywords (`title`,
+`colormap`, `colorrange`, `diverging_at`, `scale`, `lower`, `upper`,
+`colorbar_label`, `label_top`). The polygons are read once and shared.
+"""
+function plot_zone_map_panels(panels::AbstractVector{<:NamedTuple};
+        geojson::AbstractString = zone_geojson_path(),
+        provinces::AbstractVector = ZONE_MAP_PROVINCES, ncols::Integer = 3,
+        label_top::Integer = 10, title::AbstractString = "",
+        panel_size = (520, 400))
+    geo = _zone_table(load_health_zones_geojson(geojson; provinces))
+    outline = _province_outlines(geo)
+    np = length(panels)
+    nc = min(ncols, np)
+    nr = cld(np, nc)
+    fig = Figure(;
+        size = (panel_size[1] * nc, panel_size[2] * nr +
+                                    (isempty(title) ? 0 : 40)))
+    for (k, panel) in enumerate(panels)
+        r, c = cld(k, nc), mod1(k, nc)
+        gl = fig[r, c] = CairoMakie.GridLayout()
+        opts = Base.structdiff(panel, NamedTuple{(:values, :zones)})
+        _zone_map_panel!(gl, geo, outline, panel.values, panel.zones;
+            label_top, opts...)
+    end
+    isempty(title) || CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16,
+        font = :bold)
+    return fig
+end
+
+## Calendar day offsets for a daily series of length `n`, from explicit
+## `dates` or from the cut-off `as_of_date` the series ends on.
+function _zone_days(dates, as_of_date, n::Integer)
+    if dates !== nothing
+        length(dates) == n || error(
+            "zone plot: $(length(dates)) dates for a series of $n days.")
+        return Float64[date2epochdays(Date(d)) for d in dates]
+    end
+    as_of_date === nothing && error(
+        "zone plot: pass either `dates` or `as_of_date` to place the days.")
+    last = date2epochdays(Date(as_of_date))
+    return Float64[last - n + d for d in 1:n]
+end
+
+## Date ticks every `step` days across `x` (a whole number of weeks, at
+## most six ticks, when `nothing`), labelled as dates.
+function _zone_date_axis!(ax, x; step = nothing)
+    lo = floor(Int, minimum(x))
+    hi = ceil(Int, maximum(x))
+    s = step === nothing ? 7 * max(1, cld(hi - lo, 42)) : step
+    CairoMakie.xlims!(ax, lo, hi)
+    ax.xticks = collect(lo:s:hi)
+    ax.xtickformat = vals -> [string(epochdays2date(round(Int, v)))
+                              for v in vals]
+    return ax
+end
+
+## The zones to facet, grouped by patch: the `top` by `score` (all when
+## `score` is `nothing`), ordered by patch and then by score within it.
+function _zone_selection(score, zone_patch, top::Integer)
+    nz = length(zone_patch)
+    sel = score === nothing ? collect(1:min(top, nz)) :
+          sortperm(collect(score); rev = true)[1:min(top, nz)]
+    key(z) = (zone_patch[z], score === nothing ? z : -score[z])
+    return sort(sel; by = key)
+end
+
+## Legend swatches for the patches that appear in `patches`, in patch order.
+function _patch_legend!(fig, pos, patches, patch_labels, patch_colours;
+        extra = ())
+    ps = sort(unique(patches))
+    elems = Any[CairoMakie.PolyElement(;
+                    color = (patch_colours[mod1(p, length(patch_colours))],
+                    0.6)) for p in ps]
+    labels = Any[String(patch_labels[p]) for p in ps]
+    for (e, l) in extra
+        push!(elems, e)
+        push!(labels, l)
+    end
+    return CairoMakie.Legend(fig[pos...], elems, labels;
+        orientation = :horizontal, nbanks = cld(length(labels), 5),
+        framevisible = false, tellwidth = false)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Faceted reproduction number by health zone for the `top` zones by
+`cumulative` (every zone in the order given when `cumulative` is
+`nothing`), grouped and coloured by patch. `rt_draws[z]` is the
+`ndraws × n` daily trajectory of zone `z` (`missing` where a day is not
+established), `zone_labels` names the zones and `zone_patch[z]` indexes the
+patch the zone belongs to.
+
+Every panel draws 30/60/90% credible ribbons on a shared y-axis.
+`patch_rt[p]`, when given, is the patch's own trajectory, drawn behind each
+of its zones in grey with its median as a line. `reference_rt[z]`, when
+given, is another fit's trajectory for the same zone, drawn behind it as a
+dashed grey median with its 90% band. The days are placed by `dates` (one
+per column) or by `as_of_date`, the date the series ends on, which is also
+marked.
+"""
+function plot_rt_zones(rt_draws::AbstractVector{<:AbstractMatrix},
+        zone_labels::AbstractVector, zone_patch::AbstractVector{<:Integer};
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        dates = nothing, as_of_date = nothing,
+        cumulative = nothing, top::Integer = 12,
+        patch_rt = nothing, reference_rt = nothing,
+        reference_label::AbstractString = "Reference fit",
+        ncols::Integer = 4,
+        patch_colours = _ZONE_PATCH_COLOURS, patch_colour = :grey25,
+        title::AbstractString = "Reproduction number by health zone")
+    nz = length(rt_draws)
+    length(zone_labels) == nz && length(zone_patch) == nz || error(
+        "plot_rt_zones: $nz trajectories but $(length(zone_labels)) labels " *
+        "and $(length(zone_patch)) patch indices.")
+    n = size(first(rt_draws), 2)
+    x = _zone_days(dates, as_of_date, n)
+    sel = _zone_selection(cumulative, zone_patch, top)
+    bands = Dict(z => _rt_bands_matrix(rt_draws[z]; n, ds = 1) for z in sel)
+    pbands = patch_rt === nothing ? nothing :
+             Dict(p => _rt_bands_matrix(patch_rt[p]; n, ds = 1)
+    for p in unique(zone_patch[sel]))
+    ## Shared y-cap from the panels' typical 90% upper band, a median over
+    ## days so one spiky day in a sparse zone does not flatten the rest.
+    function panel_top(b)
+        v = Float64[b.hi90[d] for d in b.est if !ismissing(b.hi90[d])]
+        return isempty(v) ? 0.0 : quantile(v, 0.5)
+    end
+    tops = Float64[panel_top(bands[z]) for z in sel]
+    ytop = max(2.5, ceil(1.3 * maximum(tops; init = 0.0) * 2) / 2)
+    nc = min(ncols, length(sel))
+    nr = cld(length(sel), nc)
+    fig = Figure(; size = (360 * nc, 260 * nr + 110))
+    for (k, z) in enumerate(sel)
+        r, c = cld(k, nc), mod1(k, nc)
+        p = zone_patch[z]
+        colour = patch_colours[mod1(p, length(patch_colours))]
+        ax = Axis(fig[r, c]; title = String(zone_labels[z]),
+            titlecolor = colour, ylabel = c == 1 ? "Rt" : "",
+            xticklabelrotation = pi / 6)
+        if pbands !== nothing
+            pb = pbands[p]
+            _draw_rt_bands!(ax, x, pb, patch_colour;
+                alphas = (0.08, 0.13, 0.18))
+            if !isempty(pb.est)
+                med = [_rt_quantile(patch_rt[p], d, 0.5) for d in pb.est]
+                lines!(ax, x[pb.est], Float64.(med); color = patch_colour,
+                    linewidth = 1.2)
+            end
+        end
+        if reference_rt !== nothing
+            rb = _rt_bands_matrix(reference_rt[z]; n, ds = 1)
+            if !isempty(rb.est)
+                band!(ax, x[rb.est], Float64[rb.lo90[d] for d in rb.est],
+                    Float64[rb.hi90[d] for d in rb.est];
+                    color = (:grey40, 0.15))
+                med = [_rt_quantile(reference_rt[z], d, 0.5) for d in rb.est]
+                lines!(ax, x[rb.est], Float64.(med); color = :grey40,
+                    linestyle = :dash, linewidth = 1.5)
+            end
+        end
+        _draw_rt_bands!(ax, x, bands[z], colour)
+        hlines!(ax, [1.0]; color = (:grey, 0.8), linestyle = :dash,
+            linewidth = 2)
+        as_of_date === nothing ||
+            vlines!(ax, [Float64(date2epochdays(Date(as_of_date)))];
+                color = :grey, linestyle = :dash)
+        _zone_date_axis!(ax, x)
+        CairoMakie.ylims!(ax, 0, ytop)
+    end
+    extra = Any[]
+    pbands === nothing ||
+        push!(extra, (CairoMakie.LineElement(; color = patch_colour), "Patch"))
+    reference_rt === nothing ||
+        push!(extra,
+            (CairoMakie.LineElement(; color = :grey40, linestyle = :dash),
+                reference_label))
+    _patch_legend!(fig, (nr + 1, 1:nc), zone_patch[sel], patch_labels,
+        patch_colours; extra)
+    caption = "Bands are 30/60/90% credible intervals in the colour of " *
+              "the zone's patch."
+    pbands === nothing ||
+        (caption *= " The grey band and solid line are the patch's own " *
+                    "reproduction number, the same behind every zone of " *
+                    "that patch.")
+    reference_rt === nothing ||
+        (caption *= " The dashed grey line and its band are the " *
+                    "$(lowercase(reference_label))'s median and 90% " *
+                    "interval for the same zone.")
+    CairoMakie.Label(fig[nr + 2, 1:nc], caption;
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Posterior predictive check on the zone composition: for the `top` zones by
+observed share, the modelled share of the patch's confirmed cases at every
+vintage as 30/60/90% ribbons in the patch's colour, with the observed share
+as black points. `share_draws[z]` is the `ndraws × n_vintages` modelled
+share of zone `z`, `obs_shares` the `(n_zones × n_vintages)` observed share
+(`NaN` where the patch reported no cases in that vintage, drawn as a gap)
+and `dates` the vintage dates.
+
+`pred_draws`, when given with the same shape as `share_draws`, is the
+predictive share that carries the composition's own scatter and is drawn
+behind the ribbon in grey, dashed at its 90% edges, as the band the points
+should fall inside. Every panel starts at zero and takes its own upper
+limit, since the shares differ by orders of magnitude.
+"""
+function plot_zone_shares(share_draws::AbstractVector{<:AbstractMatrix},
+        obs_shares::AbstractMatrix, dates::AbstractVector,
+        zone_labels::AbstractVector;
+        zone_patch::AbstractVector{<:Integer} = ones(Int, length(share_draws)),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        pred_draws = nothing, top::Integer = 10, ncols::Integer = 5,
+        patch_colours = _ZONE_PATCH_COLOURS,
+        title::AbstractString = "Zone share of the patch's confirmed cases, " *
+                                "modelled against observed")
+    nz = length(share_draws)
+    nv = length(dates)
+    size(obs_shares) == (nz, nv) || error(
+        "plot_zone_shares: `obs_shares` is $(size(obs_shares)) but there " *
+        "are $nz zones and $nv vintages.")
+    all(m -> size(m, 2) == nv, share_draws) || error(
+        "plot_zone_shares: every `share_draws` matrix needs $nv columns.")
+    x = Float64[date2epochdays(Date(d)) for d in dates]
+    score = [sum(v for v in obs_shares[z, :] if !isnan(v); init = 0.0)
+             for z in 1:nz]
+    sel = _zone_selection(score, zone_patch, top)
+    nc = min(ncols, length(sel))
+    nr = cld(length(sel), nc)
+    fig = Figure(; size = (340 * nc, 260 * nr + 110))
+    rows(m) = [Float64.(m[i, :]) for i in 1:size(m, 1)]
+    for (k, z) in enumerate(sel)
+        r, c = cld(k, nc), mod1(k, nc)
+        p = zone_patch[z]
+        colour = patch_colours[mod1(p, length(patch_colours))]
+        ax = Axis(fig[r, c]; title = String(zone_labels[z]),
+            titlecolor = colour, ylabel = c == 1 ? "Share of patch" : "",
+            xticklabelrotation = pi / 6)
+        pred_draws === nothing ||
+            _draw_pred_bands!(ax, x,
+                _traj_bands_missing(rows(pred_draws[z]), nv))
+        _draw_traj_bands!(ax, x, _traj_bands_missing(rows(share_draws[z]), nv),
+            colour)
+        scatter!(ax, x, Float64.(obs_shares[z, :]); color = :black,
+            markersize = 7)
+        CairoMakie.ylims!(ax, 0, nothing)
+        _zone_date_axis!(ax, x)
+    end
+    _patch_legend!(fig, (nr + 1, 1:nc), zone_patch[sel], patch_labels,
+        patch_colours)
+    caption = pred_draws === nothing ?
+              "Bands are 30/60/90% credible intervals on the modelled " *
+              "share. Black points are the observed share at each vintage. " *
+              "Each panel starts at zero and takes its own upper limit." :
+              "Grey band is the 30/60/90% posterior predictive interval on " *
+              "the observed share, dashed at its 90% edges; the coloured " *
+              "ribbon inside it is the same intervals on the expected " *
+              "share. Black points are the observed share at each vintage " *
+              "and should fall inside the grey band. Each panel starts at " *
+              "zero and takes its own upper limit."
+    CairoMakie.Label(fig[nr + 2, 1:nc], caption; fontsize = 12,
+        word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:nc], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+## Nested 50/90% horizontal interval bars at one y, topped by a median dot.
+function _draw_zone_interval!(ax, y, lo90, hi90, lo50, hi50, med, colour)
+    lines!(ax, [lo90, hi90], [y, y]; color = (colour, 0.4), linewidth = 2)
+    lo50 === nothing ||
+        lines!(ax, [lo50, hi50], [y, y]; color = (colour, 0.75),
+            linewidth = 6)
+    return scatter!(ax, [med], [y]; color = :black, markersize = 8)
+end
+
+## The first of `names` present as a column of `tbl`, or `nothing`.
+function _zone_col(tbl::DataFrame, names::Symbol...)
+    for c in names
+        c in propertynames(tbl) && return tbl[!, c]
+    end
+    return nothing
+end
+
+## As `_zone_col`, but an error naming `fname` when none is present.
+function _zone_need(tbl::DataFrame, fname::AbstractString, names::Symbol...)
+    v = _zone_col(tbl, names...)
+    v === nothing && error("$fname: the table needs one of the columns " *
+                           "$(names).")
+    return v
+end
+
+## Patch indices from a column holding either the index or the patch label.
+function _zone_patch_index(col, patch_labels)
+    return map(col) do p
+        p isa Integer && return Int(p)
+        i = findfirst(==(String(p)), String.(patch_labels))
+        i === nothing && error("zone table: patch `$p` is not one of " *
+                               "$(patch_labels).")
+        return i
+    end
+end
+
+## The per-zone columns a zone summary table carries, under either the
+## [`zone_summary_table`](@ref) names (`label`, `median`, `lo90`, `lo50`)
+## or the zone forecast tables' (`zone`, `central_estimate`, `lower_90`,
+## `lower_60`). `patch` may be the index or the label. `rows` are the zone
+## rows, leaving out the "Patch total" rows those tables append; `inner`
+## names the thick bar's level, the 50% interval when present and the 60%
+## otherwise.
+function _zone_table_columns(tbl::DataFrame, fname::AbstractString;
+        patch_labels = PROVINCE_LABELS)
+    need(names...) = _zone_need(tbl, fname, names...)
+    label = String.(need(:label, :zone))
+    lo_in = _zone_col(tbl, :lo50, :lower_60)
+    hi_in = _zone_col(tbl, :hi50, :upper_60)
+    inner = :lo50 in propertynames(tbl) ? "50%" :
+            :lower_60 in propertynames(tbl) ? "60%" : ""
+    return (; label,
+        patch = _zone_patch_index(need(:patch), patch_labels),
+        median = need(:median, :central_estimate),
+        lo90 = need(:lo90, :lower_90), hi90 = need(:hi90, :upper_90),
+        lo_inner = lo_in, hi_inner = hi_in, inner,
+        observed = _zone_col(tbl, :observed),
+        rows = findall(!=("Patch total"), label))
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Summarise per-zone draws into one row per zone: `label`, `patch`, the
+`median`, the 90% (`lo90`, `hi90`) and 50% (`lo50`, `hi50`) intervals, and
+`observed` when given. This is the table [`plot_zone_forecast`](@ref) and
+[`plot_zone_comparison`](@ref) draw, for any cut-off quantity.
+"""
+function zone_summary_table(draws::AbstractVector{<:AbstractVector},
+        zone_labels::AbstractVector, zone_patch::AbstractVector{<:Integer};
+        observed = nothing)
+    q(v, p) = quantile(Float64.(v), p)
+    tbl = DataFrame(label = String.(zone_labels), patch = Int.(zone_patch),
+        median = [median(Float64.(v)) for v in draws],
+        lo90 = [q(v, 0.05) for v in draws], hi90 = [q(v, 0.95) for v in draws],
+        lo50 = [q(v, 0.25) for v in draws], hi50 = [q(v, 0.75) for v in draws])
+    observed === nothing || (tbl.observed = collect(observed))
+    return tbl
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One-week-ahead forecast by health zone for the `top` zones by forecast
+median, grouped by patch: each zone's median as a dot over its 90% (thin)
+and, when the table carries it, 50% (thick) interval, in the patch's
+colour, with the observed value as a hollow diamond when an `observed`
+column is present (the frozen validation).
+
+`tbl` is a [`zone_summary_table`](@ref) (`label`, `patch`, `median`,
+`lo90`, `hi90`, optionally `lo50`, `hi50` and `observed`) or a zone
+forecast table in the report's layout (`zone`, `patch` as the patch label,
+`central_estimate`, `lower_90`, `upper_90`, optionally `lower_60`,
+`upper_60` and `observed`; its "Patch total" rows are left out). The draws
+method builds the first from per-zone draw vectors.
+"""
+function plot_zone_forecast(tbl::DataFrame; top::Integer = 15,
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        patch_colours = _ZONE_PATCH_COLOURS,
+        xlabel::AbstractString = "New confirmed cases over the week",
+        title::AbstractString = "One-week-ahead forecast by health zone")
+    t = _zone_table_columns(tbl, "plot_zone_forecast"; patch_labels)
+    sel = t.rows[_zone_selection(t.median[t.rows], t.patch[t.rows], top)]
+    ns = length(sel)
+    ys = Float64.(ns:-1:1)
+    fig = Figure(; size = (640, 28 * ns + 170))
+    ax = Axis(fig[1, 1]; xlabel, yticks = (ys, t.label[sel]))
+    for (k, i) in enumerate(sel)
+        colour = patch_colours[mod1(t.patch[i], length(patch_colours))]
+        _draw_zone_interval!(ax, ys[k], t.lo90[i], t.hi90[i],
+            t.lo_inner === nothing ? nothing : t.lo_inner[i],
+            t.hi_inner === nothing ? nothing : t.hi_inner[i], t.median[i],
+            colour)
+    end
+    if t.observed !== nothing
+        keep = [k for (k, i) in enumerate(sel) if !ismissing(t.observed[i])]
+        scatter!(ax, Float64[t.observed[sel[k]] for k in keep], ys[keep];
+            marker = :diamond, color = :white, strokecolor = :black,
+            strokewidth = 1.5, markersize = 12)
+    end
+    ## Read against zero, with room for a marker sitting on it.
+    xmax = max(1.0, maximum(t.hi90[sel]),
+        t.observed === nothing ? 0.0 :
+        maximum(Float64.(skipmissing(t.observed[sel])); init = 0.0))
+    CairoMakie.xlims!(ax, -0.02 * xmax, 1.04 * xmax)
+    CairoMakie.ylims!(ax, 0.4, ns + 0.6)
+    extra = t.observed === nothing ? () :
+            ((
+        CairoMakie.MarkerElement(; marker = :diamond, color = :white,
+            strokecolor = :black, strokewidth = 1.5, markersize = 12),
+        "Observed"),)
+    _patch_legend!(fig, (2, 1), t.patch[sel], patch_labels, patch_colours;
+        extra)
+    inner = isempty(t.inner) ? "" : " and $(t.inner) (thick)"
+    CairoMakie.Label(fig[3, 1],
+        "Dots are the forecast median, bars the 90% (thin)$(inner) " *
+        "credible intervals, coloured by the zone's patch.";
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+function plot_zone_forecast(draws::AbstractVector{<:AbstractVector},
+        zone_labels::AbstractVector, zone_patch::AbstractVector{<:Integer};
+        observed = nothing, kwargs...)
+    tbl = zone_summary_table(draws, zone_labels, zone_patch; observed)
+    return plot_zone_forecast(tbl; kwargs...)
+end
+
+## Marker shapes telling the series of a comparison apart, in series order.
+const _ZONE_SERIES_MARKERS = [:circle, :diamond, :utriangle, :rect, :star5]
+
+"""
+$(TYPEDSIGNATURES)
+
+Per-zone cut-off posteriors compared across fits: one row per zone for the
+`top` zones by the `rank_by`-th series' median, grouped by patch, with each
+series drawn at a small vertical offset as its 90% (thin) and, where the
+table carries it, 50% (thick) interval in the patch's colour, topped by a
+median marker whose shape names the series. `series` pairs each fit's name
+with its table, in either layout [`plot_zone_forecast`](@ref) accepts. A
+`reference_line` (one for a reproduction number) is drawn dashed.
+"""
+function plot_zone_comparison(series::AbstractVector{<:Pair};
+        top::Integer = 15, rank_by::Integer = 1,
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        patch_colours = _ZONE_PATCH_COLOURS, reference_line = nothing,
+        xlabel::AbstractString = "Posterior at the cut-off",
+        title::AbstractString = "Per-zone posteriors compared across fits")
+    isempty(series) && error("plot_zone_comparison: no series given.")
+    ns = length(series)
+    ns <= length(_ZONE_SERIES_MARKERS) || error(
+        "plot_zone_comparison: at most $(length(_ZONE_SERIES_MARKERS)) " *
+        "series can be told apart by marker.")
+    tables = [_zone_table_columns(last(s), "plot_zone_comparison";
+                  patch_labels) for s in series]
+    lead = tables[rank_by]
+    sel = lead.rows[_zone_selection(lead.median[lead.rows],
+        lead.patch[lead.rows], top)]
+    labels = lead.label[sel]
+    nz = length(sel)
+    ys = Float64.(nz:-1:1)
+    ## Each series sits at its own offset within the row, the first on top.
+    offsets = ns == 1 ? [0.0] : range(0.28, -0.28; length = ns)
+    fig = Figure(; size = (680, 32 * nz + 190))
+    ax = Axis(fig[1, 1]; xlabel, yticks = (ys, labels))
+    reference_line === nothing ||
+        vlines!(ax, [Float64(reference_line)]; color = (:grey, 0.8),
+            linestyle = :dash, linewidth = 2)
+    for (k, t) in enumerate(tables)
+        rows = Dict(t.label[i] => i for i in t.rows)
+        for (j, lab) in enumerate(labels)
+            i = get(rows, lab, nothing)
+            i === nothing && continue
+            y = ys[j] + offsets[k]
+            colour = patch_colours[mod1(t.patch[i], length(patch_colours))]
+            lines!(ax, [t.lo90[i], t.hi90[i]], [y, y];
+                color = (colour, 0.4), linewidth = 2)
+            t.lo_inner === nothing ||
+                lines!(ax, [t.lo_inner[i], t.hi_inner[i]], [y, y];
+                    color = (colour, 0.75), linewidth = 5)
+            scatter!(ax, [Float64(t.median[i])], [y]; color = colour,
+                marker = _ZONE_SERIES_MARKERS[k], strokecolor = :black,
+                strokewidth = 1, markersize = 10)
+        end
+    end
+    CairoMakie.ylims!(ax, 0.4, nz + 0.6)
+    extra = [(
+                 CairoMakie.MarkerElement(; marker = _ZONE_SERIES_MARKERS[k],
+                     color = :grey40, strokecolor = :black, strokewidth = 1,
+                     markersize = 10),
+                 String(first(series[k]))) for k in 1:ns]
+    _patch_legend!(fig, (2, 1), lead.patch[sel], patch_labels, patch_colours;
+        extra)
+    inner = isempty(lead.inner) ? "" : " and $(lead.inner) (thick)"
+    CairoMakie.Label(fig[3, 1],
+        "Bars are the 90% (thin)$(inner) credible intervals, coloured by " *
+        "the zone's patch; the marker shape names the fit and sits on its " *
+        "median.";
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1], title; fontsize = 16, font = :bold)
+    return fig
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Dot plot ranking the health zones by the probability that their
+reproduction number at the cut-off exceeds one. The left panel is that
+probability, the right the reproduction number's median and 90% interval,
+one row per zone, sorted by the probability and coloured by patch. A zone
+whose `walking` flag is false carries a level rather than its own
+reproduction-number walk and is drawn hollow in grey, since its estimate is
+the patch's rather than its own.
+
+`overview` has one row per zone with `label` (or `zone`), `patch` (the
+index of the zone's patch, or its label), `rt_median`, `rt_lo90`,
+`rt_hi90` and `p_rt_above_one` (or `p_R_above_1`), and optionally
+`walking`. A zone whose probability is `NaN`, below the reporting floor,
+is left out.
+"""
+function plot_zone_ranking(overview::DataFrame;
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        patch_colours = _ZONE_PATCH_COLOURS, max_zones = nothing,
+        title::AbstractString = "Health zones ranked by the probability " *
+                                "of growth")
+    need(names...) = _zone_need(overview, "plot_zone_ranking", names...)
+    label = String.(need(:label, :zone))
+    patch = _zone_patch_index(need(:patch), patch_labels)
+    rt_median = need(:rt_median)
+    rt_lo90 = need(:rt_lo90)
+    rt_hi90 = need(:rt_hi90)
+    prob = need(:p_rt_above_one, :p_R_above_1)
+    walking = something(_zone_col(overview, :walking), trues(length(label)))
+    ## A zone below the reporting floor has no estimate and is left out.
+    rows = findall(i -> !isnan(prob[i]) && !isnan(rt_median[i]),
+        eachindex(label))
+    order = rows[sortperm(collect(zip(prob[rows], rt_median[rows]));
+        rev = true)]
+    max_zones === nothing || (order = order[1:min(max_zones, length(order))])
+    ns = length(order)
+    ys = Float64.(ns:-1:1)
+    colour(i) = walking[i] ?
+                patch_colours[mod1(patch[i], length(patch_colours))] : :grey55
+    fig = Figure(; size = (760, 26 * ns + 170))
+    ax1 = Axis(fig[1, 1]; xlabel = "P(R > 1)", yticks = (ys, label[order]))
+    ax2 = Axis(fig[1, 2]; xlabel = "Reproduction number at the cut-off")
+    CairoMakie.linkyaxes!(ax1, ax2)
+    CairoMakie.hideydecorations!(ax2; grid = false)
+    vlines!(ax1, [0.5]; color = (:grey, 0.8), linestyle = :dash, linewidth = 1)
+    vlines!(ax2, [1.0]; color = (:grey, 0.8), linestyle = :dash, linewidth = 2)
+    for (k, i) in enumerate(order)
+        c = colour(i)
+        face = walking[i] ? c : :white
+        scatter!(ax1, [Float64(prob[i])], [ys[k]];
+            color = face, strokecolor = c, strokewidth = 1.5, markersize = 10)
+        lines!(ax2, [rt_lo90[i], rt_hi90[i]], [ys[k], ys[k]];
+            color = (c, 0.6), linewidth = 2)
+        scatter!(ax2, [Float64(rt_median[i])], [ys[k]];
+            color = face, strokecolor = c, strokewidth = 1.5, markersize = 9)
+    end
+    CairoMakie.xlims!(ax1, -0.02, 1.02)
+    CairoMakie.xlims!(ax2, 0, nothing)
+    CairoMakie.ylims!(ax1, 0.4, ns + 0.6)
+    CairoMakie.colsize!(fig.layout, 1, CairoMakie.Relative(0.4))
+    extra = all(walking[order]) ? () :
+            ((
+        CairoMakie.MarkerElement(; marker = :circle, color = :white,
+            strokecolor = :grey55, strokewidth = 1.5, markersize = 10),
+        "Level only (no walk)"),)
+    _patch_legend!(fig, (2, 1:2), patch[order], patch_labels,
+        patch_colours; extra)
+    CairoMakie.Label(fig[3, 1:2],
+        "Left: posterior probability that the zone's reproduction number " *
+        "exceeds one. Right: its median and 90% credible interval. Hollow " *
+        "grey markers are zones carrying a level rather than their own walk.";
+        fontsize = 12, word_wrap = true, padding = (0, 0, 0, 6))
+    CairoMakie.Label(fig[0, 1:2], title; fontsize = 16, font = :bold)
     return fig
 end

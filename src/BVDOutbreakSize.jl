@@ -27,6 +27,7 @@ using StatsFuns: logit, logistic, loggamma
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
+import JSON
 using CairoMakie: Figure, Axis, hist!, density!, vlines!, hlines!, vspan!,
                   lines!, scatter!, band!, linesegments!, scatterlines!
 
@@ -73,6 +74,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        plot_infections_patches, plot_imports_patches,
        plot_patch_summary,
        plot_province_composition_ppc,
+       ZONE_MAP_PROVINCES, zone_key, zone_geojson_path,
+       load_health_zones_geojson,
+       plot_zone_map, plot_zone_map_panels, plot_rt_zones,
+       plot_zone_shares, plot_zone_forecast, plot_zone_ranking,
+       plot_zone_comparison, zone_summary_table,
        reconstruct_rt, reconstruct_patch_rt, reconstruct_onset_hazard,
        onset_nowcast_draws, plot_onset_nowcast_grid,
        predict_no_onward_deaths, plot_no_onward_deaths,
