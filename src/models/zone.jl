@@ -7,10 +7,10 @@
 # plain functions the model and the render both call, define the Turing
 # model (`bvd_zone`) and fit it (`fit_zone`).
 
-## Truncation lags of the stage-1 delay PMFs the zone model reuses. They
-## mirror the defaults of `patch_infection_model` (generation interval,
-## incubation) and `lab_delay_model` (receipt), so the posterior-mean PMFs
-## built here are discretised exactly as the parent fit discretised them.
+## Truncation lags of the stage-1 delay PMFs, the defaults of
+## `patch_infection_model` (generation interval, incubation) and
+## `lab_delay_model` (receipt), so the PMFs built here are discretised as
+## the parent fit discretised them.
 const ZONE_GI_NMAX = cdf_nmax(Gamma(2.71, 5.65))
 const ZONE_INCUBATION_NMAX = cdf_nmax(lognormal_meansd(6.3, 3.5))
 const ZONE_RECEIPT_NMAX = cdf_nmax(lognormal_meansd(4.5, 4.0))
@@ -38,8 +38,8 @@ $(TYPEDSIGNATURES)
 Initial zone shares at the grid start: a within-patch softmax of the
 centred standard-normal draws `z_w` at a fixed `scale`,
 `w_z = exp(scale (z_z − mean_p z)) / Σ_p`. The centring removes the flat
-direction of the softmax, so the prior is proper on the shares. Returns a
-vector over the zones, summing to one within every patch range.
+direction of the softmax. Returns a vector over the zones, summing to one
+within every patch range.
 """
 function zone_initial_shares(z_w::AbstractVector,
         patch_ranges::AbstractVector{<:UnitRange}, scale::Real)
@@ -126,9 +126,8 @@ $(TYPEDSIGNATURES)
 The linear map from knot values to the days `t0 … n`, as an `(n_days ×
 n_knots)` weight matrix `W` with `δ_daily = W δ_knotsᵀ`, so the
 interpolation of every zone is one matrix product. Each column is
-[`interpolate_knots`](@ref) applied to a unit vector. The model takes the
-product rather than interpolating zone by zone because the reverse pass
-over the per-day loop costs far more.
+[`interpolate_knots`](@ref) applied to a unit vector. The reverse pass
+over a per-day interpolation loop costs far more than the product.
 """
 function zone_interpolation_weights(knots::AbstractVector{<:Integer},
         t0::Integer, n::Integer)
@@ -257,9 +256,8 @@ pre-`t0` force (`force_pre`, from [`zone_fixed_terms`](@ref)):
 
 `δ_daily` is `(n_days × n_zones)`, the interpolation weights
 ([`zone_interpolation_weights`](@ref)) times the knots, `w0` the initial
-shares and `I_bar` the fixed patch infections. Only the
-share denominator is floored, so a patch with almost no infections keeps
-its initial split rather than collapsing to uniform.
+shares and `I_bar` the fixed patch infections. Only the share denominator
+is floored.
 
 With `kernel` (an `(n_zones × n_zones)` matrix, column-stochastic within
 each patch and zero across patches) and per-patch `ε`, a fraction of each
@@ -334,11 +332,11 @@ end
 $(TYPEDSIGNATURES)
 
 Bin the daily expected reports `(n_days × n_zones)` of
-[`zone_forward_daily`](@ref) into the vintage windows `(d_{v−1}, d_v]` given by
-the grid days `days`, the first window opening on day one. Days before the
-grid start `t0` contribute the initial share times the patch's pre-`t0`
-accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)). Returns the
-`(n_zones × n_vintages)` expected increments.
+[`zone_forward_daily`](@ref) into the vintage windows `(d_{v−1}, d_v]`
+given by the grid days `days`, the first window opening on day one. Days
+before the grid start `t0` contribute the initial share times the patch's
+pre-`t0` accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)).
+Returns the `(n_zones × n_vintages)` expected increments.
 """
 function zone_report_increments(reports::AbstractMatrix, w0::AbstractVector,
         patch_ranges::AbstractVector{<:UnitRange},
@@ -411,10 +409,8 @@ patch `cell_patch[c]` at vintage `cell_vintage[c]` with allocated total
 `cell_total[c]`, the observed zone counts in `counts` `(n_zones ×
 n_vintages)` follow a Dirichlet-multinomial with concentration `κ π`,
 where `π` is the modelled expected reports `C` of that patch's zones
-normalised within the patch. `cell_const[c]` is the count-only part of the
-mass, `log N! − Σ log y!`, precomputed since it carries no parameter. A
-zero count contributes nothing to the sum over zones, so those terms are
-skipped.
+normalised within the patch. `cell_const[c]` is the parameter-free part
+of the mass, `log N! − Σ log y!`.
 """
 function zone_composition_logpdf(counts::AbstractMatrix{<:Integer},
         C::AbstractMatrix, cell_patch::AbstractVector{<:Integer},
@@ -466,8 +462,7 @@ One forward pass of the zone model from its fixed data `zd` (the
 `ε` (`nothing` when mixing is off): the daily deviations (the
 interpolation weights times the knots), the share renewal and the binned
 expected reports (the delay operator times the infections plus the
-pre-`t0` rows). This is the function the model evaluates and the render
-re-runs per draw, so the two never diverge. Returns
+pre-`t0` rows). Called by the model and, per draw, by the render. Returns
 `(; shares, forces, infections, reports, increments)`.
 """
 function zone_forward(zd, δ_knots::AbstractMatrix, w0::AbstractVector,
@@ -517,8 +512,7 @@ function _zone_cumulative_infections(infections::AbstractMatrix,
 end
 
 ## Implied zone reproduction number on grid row `j`, `I_z / Λ_z`, `NaN` where
-## the zone's cumulative infections are below `floor` (the ratio of two
-## near-zero numbers says nothing there).
+## the zone's cumulative infections are below `floor`.
 function _zone_rt_at(infections::AbstractMatrix, forces::AbstractMatrix,
         cum::AbstractVector, j::Integer, floor::Real)
     Tp = promote_type(eltype(infections), eltype(forces))
@@ -623,8 +617,7 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     z_drift ~ product_distribution(
         fill(offset_prior, max(zd.n_walking * (K - 1), 1)))
     ρ ~ rho_prior
-    ## The mixing fractions are sampled only when the kernel is used; against
-    ## `mixing = false` they would be prior-only dimensions.
+    ## Sampled only when used, or they would be prior-only dimensions.
     if mixing
         ε_mix ~ product_distribution(fill(mixing_prior, np))
     else
@@ -813,9 +806,8 @@ increment its cumulative, and the allocated patch total their sum. Cells
 with a zero allocated total are dropped here, so the model scores only
 positive totals. The walking set is the zones whose cumulative confirmed
 count at the cut-off is at least `walk_threshold`, in patches with at least
-two such zones (a single walking zone's centred innovations would vanish).
-The grid starts `lead_days` before the first vintage and carries weekly
-knots ([`knot_days`](@ref)) to the cut-off.
+two such zones. The grid starts `lead_days` before the first vintage and
+carries weekly knots ([`knot_days`](@ref)) to the cut-off.
 
 `zones` is the metadata table of [`load_health_zones`](@ref), read from the
 package data by default, for labels and, with mixing, populations and
@@ -1023,7 +1015,7 @@ The constrained start is the data-informed point of the specification
 (`δ = 0`, the initial shares from the observed first-vintage cumulative,
 `σ_L = 0.2`, `σ_δ = 0.05`, `h = 42`, `ρ = 0.05`, and `ε = 0.01` with
 mixing), built through a `VarInfo`, linked, then jittered per chain with
-`N(0, jitter²)` noise so the chains do not share one start. Returns
+`N(0, jitter²)` noise. Returns
 `(; inits, x0, logp)`, the `InitFromVector` strategies, the unjittered
 unconstrained vector and each chain's initial log joint density.
 """

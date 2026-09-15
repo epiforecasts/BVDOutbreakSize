@@ -499,7 +499,7 @@ end
 ] begin
     using BVDOutbreakSize: bvd_zone
     using Turing: sample, Prior
-    using DataFrames: DataFrame, nrow
+    using DataFrames: DataFrame, nrow, names
     using Dates: Day
     import FlexiChains
 
@@ -567,6 +567,40 @@ end
         @test all(sum(cd.predictive[z][i, v] for z in zs) == N for i in 1:8)
         @test all(sum(cd.expected[z][i, v] for z in zs) ≈ 1 for i in 1:8)
     end
+    cdc = zone_composition_draws(chn, inputs; cumulative = true)
+    for zs in inputs.patch_ranges, i in 1:8
+
+        @test cdc.predictive[zs[1]][i, :] == cumsum(cd.predictive[zs[1]][i, :])
+        v = length(inputs.days)
+        @test sum(cdc.predictive_share[z][i, v] for z in zs) ≈ 1
+        @test sum(cdc.expected[z][i, v] for z in zs) ≈ 1
+        @test sum(cdc.observed[z, v] for z in zs) ≈ 1
+    end
+    cal = zone_composition_calibration(chn, inputs)
+    @test names(cal) == ["Stream", "Vintages", "Bias", "50% coverage",
+        "90% coverage"]
+    @test nrow(cal) == 3 && cal.Stream[end] == "All zones"
+    @test all(0 .<= cal[!, "90% coverage"] .<= 1)
+    ## Paired with a parent whose draws all equal the cut's mean trajectory
+    ## (to round-off), the reproduction number is the unpaired one, and at
+    ## the cut-off the chain's own wherever the chain reports it in every
+    ## draw. The floor is decided per zone, so a reported zone carries every
+    ## draw.
+    rt = reconstruct_zone_rt(chn, inputs)
+    rt_paired = reconstruct_zone_rt(chn, inputs; parent_chain = syn.chain)
+    R_chain = [collect(v) for v in vec(collect(chn[:R_T_zone]))]
+    same(a, b) = all(isequal.(isnan.(a), isnan.(b))) &&
+                 isapprox(filter(!isnan, a), filter(!isnan, b); rtol = 1e-8)
+    for z in 1:syn.nz
+        @test same(rt[z], rt_paired[z])
+        col = rt[z][:, end]
+        @test all(isnan, col) || !any(isnan, col)
+        r = [R_chain[i][z] for i in 1:8]
+        any(isnan, r) && continue
+        @test col ≈ r rtol = 1e-8
+    end
+    ov_paired = zone_overview_table(chn, inputs; parent_chain = syn.chain)
+    @test same(ov_paired.rt_median, ov.rt_median)
     ppc = zone_composition_ppc(chn, inputs; top = 3, prior_chain = chn)
     @test all(0 .<= ppc.observed_share .<= 1)
     @test all(ppc.lower_90 .<= ppc.median .<= ppc.upper_90)
