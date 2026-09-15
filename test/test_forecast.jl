@@ -1065,3 +1065,58 @@ end
         made_date = made, n_patches = 3)
     @test Set(cases_only.stream) == Set(["confirmed cases"])
 end
+
+## The single-stream composers must expose the same cumulative-trajectory
+## aliases `bvd_joint` does. Without one, `forecast_stream` falls back to
+## inverting the stream's cumulative total under exponential growth, which
+## collapses towards zero as the fitted growth rate reaches zero, and the
+## individual fits then project below the joint and below the data they are
+## scored against.
+@testitem "single-stream fits carry their stream's own trajectory" tags=[
+    :slow
+] begin
+    using Turing: sample, Prior
+    import FlexiChains
+    using BVDOutbreakSize: cases_only_model, deaths_only_model,
+                           confirmed_only_model, confirmed_deaths_only_model,
+                           _STREAM_SPEC, _daily_at_cutoff_any
+
+    n = 40
+    draws = 20
+    fits = (
+        (:reported_cases,
+            cases_only_model(n, 905;
+                reported_history = (; days = [20, 30, 40],
+                    counts = [340, 516, 905]))),
+        (:suspected_deaths,
+            deaths_only_model(n, 246;
+                deaths_history = (; days = [20, 40], counts = [120, 246]))),
+        (:confirmed_cases,
+            confirmed_only_model(n, 210;
+                confirmed_history = (; days = [20, 30, 40],
+                    counts = [40, 120, 210]),
+                lab_history = (; days = [20, 30, 40],
+                    counts = [300, 700, 1200]))),
+        (:confirmed_deaths,
+            confirmed_deaths_only_model(n, 17, 246;
+                deaths_history = (; days = [20, 40], counts = [120, 246]),
+                confirmed_deaths_history = (; days = [20, 40],
+                    counts = [8, 17]))))
+
+    for (stream, model) in fits
+        chn = sample(model, Prior(), draws;
+            chain_type = FlexiChains.VNChain, progress = false)
+        key = only(_STREAM_SPEC[stream].trajectory)
+        traj = [collect(v) for v in vec(collect(chn[key]))]
+        @test length(traj) == draws
+        @test all(t -> length(t) == n, traj)
+        ## A cumulative count never turns back on itself.
+        @test all(t -> all(diff(t) .>= -1e-8), traj)
+        ## So the cut-off daily rate the horizon is projected from is read
+        ## off the chain rather than inverted from the cumulative total.
+        daily = _daily_at_cutoff_any(chn, _STREAM_SPEC[stream].trajectory)
+        @test !isnothing(daily)
+        @test length(daily) == draws
+        @test all(isfinite, daily)
+    end
+end
