@@ -1,7 +1,6 @@
-## Smoke tests for the health-zone figures. Each builds its figure from
-## small synthetic inputs and checks the layout it promises, without
-## comparing pixels. The map tests read a three-zone geojson written to a
-## temporary file, so they do not depend on the packaged polygons.
+## Smoke tests for the health-zone figures on small synthetic inputs,
+## checking the layout each promises. The map tests read a synthetic
+## geojson written to a temporary file.
 
 @testsnippet ZoneGeojson begin
     using CairoMakie
@@ -50,8 +49,8 @@ end
                            _zone_table
     path = write_zone_geojson()
     zones = load_health_zones_geojson(path; provinces = ["P", "Q"])
-    ## One record per zone. The province outside the filter is dropped;
-    ## the empty `zone` property falls back to the folded label.
+    ## The province outside the filter is dropped; the empty `zone`
+    ## property falls back to the folded label.
     @test [z.zone for z in zones] == ["alpha", "beta_two", "gamma", "delta"]
     @test zones[2].label == "Beta Two"
     @test [z.province for z in zones] == ["P", "P", "P", "Q"]
@@ -139,8 +138,6 @@ end
     using CairoMakie: Makie as Mk
     using BVDOutbreakSize: plot_zone_map, load_health_zones_geojson,
                            zone_geojson_path
-    ## The packaged polygons ship with the zone data; a checkout without
-    ## them skips this rather than failing on the synthetic-geojson tests.
     if isfile(zone_geojson_path())
         zones = load_health_zones_geojson()
         keys = [z.zone for z in zones]
@@ -237,6 +234,18 @@ end
         @test count(p -> p isa Mk.Scatter, ax.scene.plots) == 1
         @test ax.limits[][2][1] == 0
     end
+    ## A prior band spanning the unit interval adds one band and a dashed
+    ## median without lifting the upper limit.
+    prior = [rand(rng, nd, nv) for _ in 1:nz]
+    pfig = plot_zone_shares(shares, obs, dates, ["A", "B", "C", "D", "E"];
+        zone_patch = [1, 1, 1, 2, 2], top = 3, pred_draws = shares,
+        prior_draws = prior, tick_step = 14)
+    pax = first(x for x in pfig.content if x isa Mk.Axis)
+    @test count(p -> p isa Mk.Band, pax.scene.plots) == 7
+    @test count(p -> p isa Mk.Lines, pax.scene.plots) == 3
+    @test pax.limits[][2][2] < 0.9
+    pleg = first(x for x in pfig.content if x isa Mk.Legend)
+    @test any(e -> e.label[] == "Prior predictive", pleg.entrygroups[][1][2])
     plain = plot_zone_shares(shares, obs, dates, ["A", "B", "C", "D", "E"])
     pax = first(x for x in plain.content if x isa Mk.Axis)
     @test count(p -> p isa Mk.Band, pax.scene.plots) == 3
