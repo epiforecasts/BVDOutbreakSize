@@ -11,7 +11,7 @@ TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
 Base64 = "1"
-CSV = "0.10"
+CSV = "0.10, 1.0"
 Chain = "0.6, 1"
 DataFrames = "1.6"
 DataFramesMeta = "0.15"
