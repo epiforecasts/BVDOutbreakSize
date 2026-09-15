@@ -13,9 +13,9 @@ counts attached per zone) and the zone keys in the
   key, WorldPop population, polygon centroid and the shapefile's zscode.
 - ``data/health_zones.geojson``: the map features of the seven affected
   provinces, geometry rounded to four decimals and simplified with
-  Douglas-Peucker at 0.005 degrees, properties reduced to ``zone`` (our
-  key, empty for a zone with no confirmed case), ``label``, ``province``
-  and ``zscode``.
+  Douglas-Peucker at 0.005 degrees (less for a small ring, so a city zone
+  keeps its shape), properties reduced to ``zone`` (our key, empty for a
+  zone with no confirmed case), ``label``, ``province`` and ``zscode``.
 
 Every zone key must match a feature; the script exits non-zero listing
 any that do not. Spelling differences between the SitRep names and the
@@ -72,6 +72,9 @@ LABELS = {
 
 DECIMALS = 4
 TOLERANCE = 0.005
+## A ring's tolerance is capped at this fraction of the square root of its
+## area, so a small urban zone is not flattened to a few vertices.
+RELATIVE_TOLERANCE = 0.05
 
 
 def fold(name):
@@ -190,7 +193,9 @@ def simplify(geometry):
     for poly in polygons(geometry):
         rings = []
         for ring in poly:
-            r = round_ring(simplify_ring(ring, TOLERANCE))
+            a, _, _ = ring_area_centroid(ring)
+            tol = min(TOLERANCE, RELATIVE_TOLERANCE * math.sqrt(abs(a)))
+            r = round_ring(simplify_ring(ring, tol))
             if len(r) >= 4:
                 rings.append(r)
         if rings:
