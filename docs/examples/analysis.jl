@@ -2565,9 +2565,7 @@ cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
 cumulative_traj_fig #hide
 
 # The national count above is the sum of the four patches' renewal equations.
-# The table below gives each province's cumulative infections, its share of the national total, its reproduction number at the cut-off and its case ascertainment relative to the national average, each as a median with a 90% credible interval.
-# The reproduction number and the relative ascertainment are read together.
-# The case composition identifies only their product, so a province with a low reproduction number and high case-finding looks much like one with the reverse, and it is the per-province deaths that tilt the balance between them.
+# The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
 
 #md # ```@raw html
 #md # <details><summary>Cross-province overview table</summary>
@@ -2580,35 +2578,6 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 #md # ```
 
 province_overview_table #hide
-
-# The figure below puts every province on the same 30/60/90% credible-interval layout as the national tables, one panel per quantity, and adds the log-Rt deviation from the trend, its walk scale, and the contrast against Ituri.
-# Each panel carries its own y-axis, so the provinces are compared within a panel rather than across panels.
-# Dashed rules mark the reference value each quantity is read against.
-# The same numbers are in the table below it, which is folded away because seven quantities over four provinces is 28 rows.
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary figure</summary>
-#md # ```
-
-province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-province_detail_fig #hide
-
-#md # ```@raw html
-#md # <details><summary>Per-province summary table</summary>
-#md # ```
-
-province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
-
-province_detail_table #hide
-
-#md # ```@raw html
-#md # </details>
-#md # ```
 
 # The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
 # Each panel carries its own y-axis, because the provinces differ by orders of magnitude, so the panels are read for shape and timing and the table above for size.
@@ -2792,6 +2761,33 @@ province_rt_fig = plot_rt_patches(chn_joint;
 #md # ```
 
 province_rt_fig #hide
+
+# The figure below gives each province's estimates, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
+# The same numbers are in the table below it.
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary figure</summary>
+#md # ```
+
+province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_detail_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary table</summary>
+#md # ```
+
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+
+province_detail_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # The spread of those deviations is the spatial diagnostic.
 # Near zero the provinces share one temporal shape for the reproduction number.
