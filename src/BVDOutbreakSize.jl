@@ -165,7 +165,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        zone_overview_table,
        zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,
        zone_forecast_scores, zone_composition_ppc, zone_composition_draws,
-       plot_zone_composition_ppc,
+       zone_composition_calibration, plot_zone_composition_ppc,
        zone_diagnostics_table, zone_sampler_diagnostics
 
 include("docstrings.jl")

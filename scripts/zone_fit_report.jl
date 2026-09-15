@@ -506,11 +506,15 @@ end
 
 function stage_e(chn)
     log_line("stage e: ranking")
-    ov = zone_overview_table(chn, INPUTS)
+    ov = zone_overview_table(chn, INPUTS; parent_chain = PARENT)
     shown = ov[:, [:zone, :patch, :cases, :share, :R_T, :p_R_above_1,
         :delta_T, :walking]]
-    body = "<h3>Zones ranked by P(R_T &gt; 1)</h3>" *
-           html_table(shown; digits = 2)
+    body = """
+    <p>The reproduction number pairs each zone draw with a random parent
+    draw, so its interval carries the patch uncertainty; a level-only
+    zone's is its patch's.</p>
+    <h3>Zones ranked by P(R_T &gt; 1)</h3>$(html_table(shown; digits = 2))
+    """
     keep = findall(isfinite, ov.rt_median)
     if isdefined(BVDOutbreakSize, :plot_zone_ranking)
         ranking = DataFrame(label = ov.zone[keep],
@@ -528,7 +532,8 @@ function stage_e(chn)
         ## The geojson keys a zone without the manifest's province prefix.
         zone_map_keys = [String(last(split(k, "."; limit = 2)))
                          for k in INPUTS.zone_keys]
-        rt = [filter(isfinite, r) for r in _zone_draws(chn, :R_T_zone, NZ)]
+        rt = [filter(isfinite, m[:, INPUTS.n])
+              for m in reconstruct_zone_rt(chn, INPUTS; parent_chain = PARENT)]
         zs = findall(!isempty, rt)
         fig = BVDOutbreakSize.plot_zone_map([median(rt[z]) for z in zs],
             zone_map_keys[zs]; lower = [quantile(rt[z], 0.05) for z in zs],
