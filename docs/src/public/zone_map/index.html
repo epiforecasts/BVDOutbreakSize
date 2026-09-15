@@ -180,7 +180,7 @@ Nothing else is fetched.
     { max: 1.6, c: "#e34948", l: "1.3 to 1.6" },
     { max: Infinity, c: "#a8302f", l: "1.6 and above" }
   ];
-  var NODATA = { c: "nodata", l: "no confirmed cases" };
+  var NODATA = { c: "nodata", l: "no estimate" };
   // The neutral midpoint and the no-data fill come from the theme.
   function paint(c) { return c === "neutral" || c === "nodata" ? cssVar("--" + c) : c; }
 
@@ -190,6 +190,9 @@ Nothing else is fetched.
       kind: "diverging", fmt: fmt2,
       value: function (r) { return r.R_T_median; },
       text: function (r) {
+        if (!num(r.R_T_median)) {
+          return "No reproduction number estimate (too few infections)";
+        }
         return "Reproduction number " + fmt2(r.R_T_median) +
           " (90% interval " + fmt2(r.R_T_lower) + " to " +
           fmt2(r.R_T_upper) + ")";
@@ -223,12 +226,23 @@ Nothing else is fetched.
     }
   };
 
-  function fmt0(x) { return isFinite(x) ? Math.round(x).toLocaleString("en-GB") : "–"; }
-  function fmt2(x) { return isFinite(x) ? x.toFixed(2) : "–"; }
+  // An empty CSV cell is null, never zero: the global isFinite would
+  // coerce "" to 0, so every numeric check goes through this.
+  function num(x) { return typeof x === "number" && isFinite(x); }
+  function fmt0(x) { return num(x) ? Math.round(x).toLocaleString("en-GB") : "–"; }
+  function fmt2(x) { return num(x) ? x.toFixed(2) : "–"; }
   // Counts under ten keep one decimal, so small forecasts stay distinct.
-  function fmtN(x) { return !isFinite(x) ? "–" : x < 10 ? x.toFixed(1) : fmt0(x); }
+  function fmtN(x) { return !num(x) ? "–" : x < 10 ? x.toFixed(1) : fmt0(x); }
   function fmtPct(x) {
-    return isFinite(x) ? (100 * x).toFixed(x < 0.1 ? 1 : 0) + "%" : "–";
+    return num(x) ? (100 * x).toFixed(x < 0.1 ? 1 : 0) + "%" : "–";
+  }
+  // Province keys arrive snake_case (nord_kivu); show them as Nord-Kivu.
+  function provName(s) {
+    s = String(s || "");
+    if (!/^[a-z0-9_]+$/.test(s)) { return s; }
+    return s.split("_").map(function (w) {
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    }).join("-");
   }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
@@ -263,7 +277,7 @@ Nothing else is fetched.
       head.forEach(function (h, j) {
         var v = r[j] === undefined ? "" : r[j];
         var n = Number(v);
-        o[h] = v !== "" && !isNaN(n) ? n : v;
+        o[h] = v === "" ? null : !isNaN(n) ? n : v;
       });
       return o;
     });
@@ -280,7 +294,7 @@ Nothing else is fetched.
   // Five quantile classes on the zones with an estimate, rounded to two
   // significant figures and deduplicated so the legend reads cleanly.
   function sequentialBins(values, f) {
-    var s = values.filter(isFinite).sort(function (a, b) { return a - b; });
+    var s = values.filter(num).sort(function (a, b) { return a - b; });
     if (!s.length) { return []; }
     var cuts = [0.2, 0.4, 0.6, 0.8].map(function (p) { return nice(quantile(s, p)); });
     cuts = cuts.filter(function (c, i) { return i === 0 || c > cuts[i - 1]; });
@@ -295,7 +309,7 @@ Nothing else is fetched.
     return bins;
   }
   function pick(bins, v) {
-    if (!isFinite(v)) { return NODATA; }
+    if (!num(v)) { return NODATA; }
     for (var i = 0; i < bins.length; i++) { if (v < bins[i].max) { return bins[i]; } }
     return bins[bins.length - 1];
   }
@@ -335,7 +349,7 @@ Nothing else is fetched.
     var p = f.properties || {}, r = featureRow(f);
     var name = p.label || p.nom || "Unknown zone";
     var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
-      "<div class=\"tip-s\">" + esc(p.province || "") + "</div>";
+      "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
     if (!r) { return s + "<div class=\"tip-s\">No confirmed cases reported.</div>"; }
     return s + "<div>" + esc(METRICS[metric].text(r)) + "</div>";
   }
@@ -343,7 +357,7 @@ Nothing else is fetched.
     var p = f.properties || {}, r = featureRow(f);
     var name = p.label || p.nom || "Unknown zone";
     var s = "<div class=\"tip-h\">" + esc(name) + "</div>" +
-      "<div class=\"tip-s\">" + esc(p.province || "") + "</div>";
+      "<div class=\"tip-s\">" + esc(provName(p.province)) + "</div>";
     if (!r) { return s + "<div>No confirmed cases reported.</div>"; }
     return s + ["R_T", "forecast", "cases", "share"].map(function (k) {
       return "<div>" + esc(METRICS[k].text(r)) + ".</div>";
@@ -370,7 +384,12 @@ Nothing else is fetched.
   function renderTable() {
     var m = METRICS[metric], t = document.getElementById("table");
     if (t.hidden) { return; }
-    var sorted = rows.slice().sort(function (a, b) { return m.value(b) - m.value(a); });
+    var sorted = rows.slice().sort(function (a, b) {
+      var x = m.value(a), y = m.value(b);
+      if (!num(x)) { return num(y) ? 1 : 0; }
+      if (!num(y)) { return -1; }
+      return y - x;
+    });
     var extra = { R_T: "90% interval", forecast: "90% interval",
                   cases: "Deaths", share: "Patch" };
     t.innerHTML = "<table><thead><tr><th>Zone</th><th>Province</th>" +
@@ -384,7 +403,8 @@ Nothing else is fetched.
         }
         if (metric === "cases") { iv = fmt0(r.deaths); }
         if (metric === "share") { iv = esc(r.patch); }
-        return "<tr><td>" + esc(r.label || r.zone) + "</td><td>" + esc(r.province) +
+        return "<tr><td>" + esc(r.label || r.zone) + "</td><td>" +
+          esc(provName(r.province)) +
           "</td><td class=\"num\">" + m.fmt(m.value(r)) + "</td><td class=\"num\">" +
           iv + "</td></tr>";
       }).join("") + "</tbody></table>";
@@ -416,7 +436,7 @@ Nothing else is fetched.
       var a = acc[prov];
       L.tooltip({ permanent: true, direction: "center", className: "prov-label",
                   interactive: false })
-        .setLatLng([a.lat / a.n, a.lng / a.n]).setContent(prov).addTo(map);
+        .setLatLng([a.lat / a.n, a.lng / a.n]).setContent(provName(prov)).addTo(map);
     });
   }
 
