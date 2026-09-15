@@ -112,18 +112,30 @@ tasks:
   fit:
     desc: >
       Run and cache a single model fit by id (BVD_FIT_ID), matching one CI
-      matrix job. List ids with `julia --project=docs docs/fits/list.jl`.
-      Example: BVD_FIT_ID=deaths task fit.
+      matrix job. List ids with `julia --project=docs docs/fits/list.jl`
+      (BVD_FIT_STAGE=dependent lists the fits melded from a cached parent,
+      which must be fitted first). Example: BVD_FIT_ID=deaths task fit.
     cmds:
       - julia --project=docs docs/fits/one.jl {{.CLI_ARGS}}
 
   fit-all:
     desc: >
-      Fit and cache every model in one parallel pass, then `task docs` renders
-      from the cache without refitting. Canonical local full build:
-      `task fit-all && task docs`.
+      Fit and cache every model, then `task docs` renders from the cache
+      without refitting. Two parallel passes: the base fits, then the
+      dependent fits melded from a cached parent (the health-zone fits from
+      the joints). Canonical local full build: `task fit-all && task docs`.
     cmds:
       - julia --project=docs docs/fits/all.jl {{.CLI_ARGS}}
+
+  fit-dependent:
+    desc: >
+      Fit and cache only the dependent fits, those melded from a cached
+      parent (the health-zone `local` from `joint`, `local_frozen_validation`
+      from `frozen_validation`). The parents must already be cached; a
+      missing one is an error, not a refit.
+    cmds:
+      - BVD_FIT_STAGE=dependent julia --project=docs docs/fits/all.jl
+        {{.CLI_ARGS}}
 
   format:
     desc: Run JuliaFormatter (SciML style) over src/, test/, docs/, scripts/.

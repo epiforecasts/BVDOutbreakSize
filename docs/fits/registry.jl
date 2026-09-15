@@ -1,9 +1,13 @@
 # Registry of the expensive model fits in the analysis report. Each fit is
-# defined once here as an `(id, kind, thunk)` entry, so it can be run and
-# cached independently — one per CI matrix job, or an HPC task — and the
+# defined once here as an `(id, kind, needs, thunk)` entry, so it can be run
+# and cached independently — one per CI matrix job, or an HPC task — and the
 # docs build then loads the chains through the content-addressed cache
 # instead of refitting them inline. `build_fit_specs` mirrors the model
 # calls in `docs/examples/analysis.jl`; keep the two in step.
+#
+# `needs` lists the ids a fit is initialised from: empty for a base fit,
+# the parent id for a dependent fit, which runs in a second stage once its
+# parent is cached (`base_fit_specs`, `dependent_fit_specs`).
 
 include(joinpath(@__DIR__, "cache.jl"))
 
@@ -21,6 +25,7 @@ const FIT_SOURCE_FILES = [
     joinpath(_PKG, "src", "models", "priors.jl"),
     joinpath(_PKG, "src", "models", "observations.jl"),
     joinpath(_PKG, "src", "models", "joint.jl"),
+    joinpath(_PKG, "src", "models", "zone.jl"),
     joinpath(_PKG, "src", "renewal.jl"),
     joinpath(_PKG, "src", "sampling.jl"),
     joinpath(_PKG, "src", "constants.jl"),
@@ -64,6 +69,25 @@ end
 "Content-addressed cache key for fit `id` at the given sampler settings."
 function fit_key(id; samples::Integer = 500, chains::Integer = 2)
     string(id, "__", fit_content_hash(; samples, chains))
+end
+
+"""
+    fit_cache_dir() -> String
+
+The fit cache directory: `BVD_FIT_CACHE` when set, else `logs/fit_cache`
+under the package root. A relative override is resolved against the package
+root, not the working directory, because Literate runs a page from
+`docs/src`.
+"""
+function fit_cache_dir()
+    c = strip(get(ENV, "BVD_FIT_CACHE", ""))
+    if isempty(c)
+        joinpath(_PKG, "logs", "fit_cache")
+    elseif isabspath(c)
+        String(c)
+    else
+        joinpath(_PKG, c)
+    end
 end
 
 ## Canonical fit-setup values, so `analysis.jl`, `fit_one.jl` and this registry
@@ -110,12 +134,21 @@ end
 
 """
     build_fit_specs(obs; breakpoint, frozen_cutoffs, validation_cutoff,
-                    run_sensitivity, samples = 500, chains = 2)
+                    run_sensitivity, samples = 500, chains = 2,
+                    zone_fitter = nothing, cache_dir = fit_cache_dir())
 
-Ordered list of the report's fits as `(; id, kind, thunk)` named tuples. `kind`
-is `:chain` for the headline joint and single-stream fits or `:frozen` for the
-frozen/validation joints (whose thunk returns `(; cutoff, o, chn)`). The
-sensitivity re-fits are appended only when `run_sensitivity` is true.
+Ordered list of the report's fits as `(; id, kind, needs, thunk)` named
+tuples. `kind` is `:chain` for the headline joint and single-stream fits or
+`:frozen` for the frozen/validation joints (whose thunk returns
+`(; cutoff, o, chn)`). `needs` names the fits a thunk loads from `cache_dir`
+before running: empty for a base fit, the parent id for the health-zone fits
+`local` (from `joint`) and `local_frozen_validation` (from
+`frozen_validation`). A dependent thunk loads its parent strictly; a missing
+parent is an error, not a refit. `zone_fitter` fits a zone model from a
+parent chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the
+thunk runs. The sensitivity re-fits, including the zone variants
+`local_mixing`, `local_deaths`, `local_parent_low` and
+`local_parent_high`, are appended only when `run_sensitivity` is true.
 """
 ## Sampler settings for the headline and its spatial control.
 ##
@@ -159,6 +192,24 @@ joint_samples(default::Integer) = parse(Int,
 joint_warmup(default::Integer) = parse(Int,
     get(ENV, "BVD_JOINT_WARMUP", string(default)))
 
+## Sampler settings for the health-zone fits. `BVD_ZONE_SAMPLES` and
+## `BVD_ZONE_WARMUP` override the draw and adaptation counts.
+zone_samples(default::Integer) = parse(Int,
+    get(ENV, "BVD_ZONE_SAMPLES", string(default)))
+zone_warmup(default::Integer) = parse(Int,
+    get(ENV, "BVD_ZONE_WARMUP", string(default)))
+zone_target_accept() = 0.8
+zone_max_depth() = 8
+
+## Looked up when a dependent thunk runs, so the registry builds without
+## `fit_zone` and tests can inject a double through `zone_fitter`.
+function default_zone_fitter()
+    isdefined(BVDOutbreakSize, :fit_zone) ||
+        error("BVDOutbreakSize.fit_zone is not defined: the health-zone " *
+              "model (src/models/zone.jl) is needed to run a dependent fit")
+    return BVDOutbreakSize.fit_zone
+end
+
 function build_fit_specs(obs;
         breakpoint = default_breakpoint(obs),
         frozen_cutoffs = default_frozen_cutoffs(),
@@ -166,7 +217,9 @@ function build_fit_specs(obs;
         validation_cutoff = default_validation_cutoff(obs),
         run_sensitivity = run_sensitivity_env(),
         samples::Integer = 500,
-        chains::Integer = 2)
+        chains::Integer = 2,
+        zone_fitter = nothing,
+        cache_dir::AbstractString = fit_cache_dir())
 
     ## A joint fit at the headline settings to the data frozen at `cutoff_date`.
     ## `patches` turns the spatial structure on for this frozen fit. Only the
@@ -420,7 +473,7 @@ function build_fit_specs(obs;
         ## composition terms), so there is one model rather than two. The
         ## headline runs it over the three affected provinces.
         (; id = "joint",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
                     obs.reported_cases, obs.exports_deaths,
@@ -443,7 +496,7 @@ function build_fit_specs(obs;
         ## test/test_patch_model.jl pins the size of that. It runs at the headline's draw
         ## count, not the matrix one, so the comparison is like for like.
         (; id = "sens_no_patches",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 bvd_joint(obs.n, obs.exported_cases, obs.total_deaths,
                     obs.reported_cases, obs.exports_deaths,
@@ -454,7 +507,7 @@ function build_fit_specs(obs;
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
         (; id = "exports",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 exports_joint_only_model(obs.n, obs.exported_cases,
                     obs.exports_deaths;
@@ -464,7 +517,7 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 check_model = false, callback = fit_callback("exports"))),
         (; id = "deaths",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 deaths_only_model(obs.n, obs.total_deaths;
                     deaths_history = obs.deaths_history,
@@ -474,7 +527,7 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("deaths"))),
         (; id = "cases",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 cases_only_model(obs.n, obs.reported_cases;
                     reported_history = obs.reported_history,
@@ -483,7 +536,7 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("cases"))),
         (; id = "confirmed",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 confirmed_only_model(obs.n, obs.confirmed_cases;
                     confirmed_history = obs.confirmed_history,
@@ -496,7 +549,7 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed"))),
         (; id = "confirmed_deaths",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 confirmed_deaths_only_model(obs.n, obs.confirmed_deaths,
                     obs.total_deaths;
@@ -509,7 +562,7 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("confirmed_deaths"))),
         (; id = "treatment",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 treatment_only_model(obs.n;
                     isolation_history = obs.isolation_history,
@@ -528,14 +581,14 @@ function build_fit_specs(obs;
                 samples = samples, chains = chains,
                 callback = fit_callback("treatment"))),
         (; id = "onsets",
-            kind = :chain,
+            kind = :chain, needs = String[],
             thunk = () -> nuts_sample(
                 onsets_only_model(obs.n;
                     onset_curve_history = obs.onset_curve_history,
                     breakpoint = breakpoint);
                 samples = samples, chains = chains,
                 callback = fit_callback("onsets"))),
-        (; id = "frozen_validation", kind = :frozen,
+        (; id = "frozen_validation", kind = :frozen, needs = String[],
             thunk = () -> fit_frozen_joint(validation_cutoff;
                 patches = true))
     ]
@@ -548,31 +601,141 @@ function build_fit_specs(obs;
     ## "recovered".
     for sid in validation_stream_ids(obs)
         push!(specs,
-            (; id = "frozen_validation_$sid", kind = :frozen,
+            (; id = "frozen_validation_$sid", kind = :frozen, needs = String[],
                 thunk = () -> fit_frozen_stream(sid, validation_cutoff)))
     end
     for c in frozen_cutoffs
-        push!(specs, (; id = "frozen_$c", kind = :frozen,
+        push!(specs, (; id = "frozen_$c", kind = :frozen, needs = String[],
             thunk = () -> fit_frozen_joint(c)))
     end
     ## Chamla's 8 June anchor, kept out of the McCabe-matched `frozen_cutoffs`;
     ## the estimate-evolution overlay pulls it in explicitly.
     push!(specs,
-        (; id = "frozen_$chamla_cutoff", kind = :frozen,
+        (; id = "frozen_$chamla_cutoff", kind = :frozen, needs = String[],
             thunk = () -> fit_frozen_joint(chamla_cutoff)))
     if run_sensitivity
         push!(specs,
-            (; id = "sens_community_delay", kind = :chain,
+            (; id = "sens_community_delay", kind = :chain, needs = String[],
                 thunk = () -> refit_joint_variant(deaths = deaths_community_delay)),
-            (; id = "sens_exp_growth_clock", kind = :chain,
+            (; id = "sens_exp_growth_clock", kind = :chain, needs = String[],
                 thunk = () -> refit_joint_variant(
                     tmrca_days = tmrca_days_alt, tmrca_days_sd = 16.0)))
+    end
+
+    ## The health-zone fits meld from a cached joint chain. The parent is
+    ## loaded strictly: a missing parent is an error, not a refit.
+    function load_parent(parent_id)
+        parent = specs[findfirst(s -> s.id == parent_id, specs)]
+        return fit_or_load(fit_key(parent_id), parent.thunk;
+            cache_dir = cache_dir, strict = true)
+    end
+    ## `variant` carries the zone model's own switches (`mixing`, `deaths`,
+    ## `parent_summary`) for the sensitivity re-fits below.
+    function fit_zone_from(parent_chn, o, name; variant...)
+        fitter = zone_fitter === nothing ? default_zone_fitter() : zone_fitter
+        return fitter(parent_chn, o;
+            samples = zone_samples(600), chains = chains,
+            n_adapts = zone_warmup(400),
+            target_accept = zone_target_accept(),
+            max_depth = zone_max_depth(),
+            callback = fit_callback(name), variant...)
+    end
+    push!(specs,
+        ## The health-zone fit on the current data, melded from the headline.
+        (; id = "local", kind = :chain, needs = ["joint"],
+            thunk = () -> fit_zone_from(load_parent("joint"), obs, "local")),
+        ## The same fit melded from the validation joint, on the observations
+        ## that joint was fitted to, returned in the frozen shape.
+        (; id = "local_frozen_validation", kind = :frozen,
+            needs = ["frozen_validation"],
+            thunk = () -> begin
+                parent = load_parent("frozen_validation")
+                chn = fit_zone_from(parent.chn, parent.o,
+                    "local_frozen_validation")
+                (; cutoff = parent.cutoff, o = parent.o, chn)
+            end))
+    ## Zone-model sensitivity re-fits, each one switch away from `local`:
+    ## between-zone mixing on, the zone deaths stream on, and the parent
+    ## summary taken from a low or high draw rather than the mean.
+    if run_sensitivity
+        for (id, variant) in (
+            ("local_mixing", (; mixing = true)),
+            ("local_deaths", (; deaths = true)),
+            ("local_parent_low", (; parent_summary = :draw_low)),
+            ("local_parent_high", (; parent_summary = :draw_high)))
+            push!(specs,
+                (; id, kind = :chain, needs = ["joint"],
+                    thunk = () -> fit_zone_from(load_parent("joint"), obs, id;
+                        variant...)))
+        end
+    end
+    validate_fit_specs(specs)
+    return specs
+end
+
+"""
+    validate_fit_specs(specs)
+
+Check that every id in a spec's `needs` names a spec listed earlier. Throws
+otherwise.
+"""
+function validate_fit_specs(specs)
+    seen = Set{String}()
+    for s in specs
+        for parent in s.needs
+            parent in seen || error("fit '$(s.id)' needs '$parent', which " *
+                  "is not listed before it in the registry")
+        end
+        push!(seen, s.id)
     end
     return specs
 end
 
-"Ordered fit ids for the current data and sensitivity setting."
-function fit_ids(
-        obs = load_observations(); run_sensitivity = run_sensitivity_env())
-    [s.id for s in build_fit_specs(obs; run_sensitivity)]
+"The specs with no `needs`: the first stage, run before anything else."
+base_fit_specs(specs) = [s for s in specs if isempty(s.needs)]
+"The specs that need a cached parent: the second stage."
+dependent_fit_specs(specs) = [s for s in specs if !isempty(s.needs)]
+
+const FIT_STAGES = (:all, :base, :dependent)
+
+"""
+    fit_stage_env(default) -> Symbol
+
+The fit stage named by `BVD_FIT_STAGE` (`all`, `base` or `dependent`), or
+`default` when unset.
+"""
+function fit_stage_env(default::Symbol)
+    raw = lowercase(strip(get(ENV, "BVD_FIT_STAGE", "")))
+    isempty(raw) && return default
+    stage = Symbol(raw)
+    stage in FIT_STAGES ||
+        error("BVD_FIT_STAGE=$raw; expected one of " *
+              join(FIT_STAGES, ", "))
+    return stage
+end
+
+"The specs in `stage` (`:all`, `:base` or `:dependent`), in registry order."
+function stage_fit_specs(specs, stage::Symbol)
+    stage === :all && return specs
+    stage === :base && return base_fit_specs(specs)
+    stage === :dependent && return dependent_fit_specs(specs)
+    error("unknown fit stage $stage; expected one of " *
+          join(FIT_STAGES, ", "))
+end
+
+"Ordered fit ids for the current data, sensitivity setting and `stage`."
+function fit_ids(obs = load_observations();
+        run_sensitivity = run_sensitivity_env(), stage::Symbol = :all)
+    specs = build_fit_specs(obs; run_sensitivity)
+    [s.id for s in stage_fit_specs(specs, stage)]
+end
+"Ids of the base fits, those with no parent."
+function base_fit_ids(obs = load_observations();
+        run_sensitivity = run_sensitivity_env())
+    fit_ids(obs; run_sensitivity, stage = :base)
+end
+"Ids of the dependent fits, those melded from a cached parent."
+function dependent_fit_ids(obs = load_observations();
+        run_sensitivity = run_sensitivity_env())
+    fit_ids(obs; run_sensitivity, stage = :dependent)
 end
