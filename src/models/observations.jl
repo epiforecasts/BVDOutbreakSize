@@ -747,12 +747,21 @@ late_days, late_increments, late_analysed, late_start)` of grid
 day-indices and per-window counts. `late_analysed[i]` is the observed 24h
 analysed denominator for late day `i` (0 when none was published). The
 observed and late groups are empty when no laboratory history is present
-and every confirmed vintage becomes an early window. Pure integer
-bookkeeping on the observed data, so it carries no gradient.
+and every confirmed vintage becomes an early window.
+
+`early_start` and `late_start` are grid days only where their own day list
+is non-empty. A group with no windows returns `0`, which is not a grid day:
+with no window to bin, the pinning edge is never read. Read either as a day
+without checking its day list first and the index is invalid.
+
+Pure integer bookkeeping on the observed data, so it carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]),
         confirmed_break_days = Int[])
+    ## Both starts are the no-window sentinel `0` rather than a grid day:
+    ## there is no first confirmed vintage to pin to, and with both day
+    ## lists empty neither edge is ever binned.
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
@@ -1493,8 +1502,9 @@ Three pieces:
     background, tied to the case background by `cfr_bg` (see
     [`deaths_model`](@ref) and [`background_cfr_model`](@ref)), keeps
     `q_death` below one.
-  - Assay positivity. `p = s · q_death + (1 − spec)(1 − q_death)` with PCR
-    sensitivity `s` ([`test_sensitivity_model`](@ref)) and specificity
+  - Assay positivity. `p = s_test · q_death + (1 − spec)(1 − q_death)` with
+    PCR sensitivity `s_test`, named as [`confirmed_cases_model`](@ref)
+    names it ([`test_sensitivity_model`](@ref)), and specificity
     `spec` ([`test_specificity_model`](@ref)), the same form as the
     confirmed-case positivity, drawn from the same priors as separate
     death-stream parameters.
@@ -1530,7 +1540,7 @@ positivity and the expected confirmed-death count.
         specificity = test_specificity_model())
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
-    s = sens_state.s_test
+    s_test = sens_state.s_test
     spec = spec_state.spec
     n = length(deaths_daily)
 
@@ -1544,21 +1554,24 @@ positivity and the expected confirmed-death count.
     ## and a reassignment would box them.
     _widened = eltype(susp_death_raw) === Any
     susp_death = _widened ?
-                 convert(Vector{typeof(s)}, susp_death_raw) : susp_death_raw
+                 convert(Vector{typeof(s_test)}, susp_death_raw) :
+                 susp_death_raw
     bvd_death = _widened ?
-                convert(Vector{typeof(s)}, bvd_death_raw) : bvd_death_raw
+                convert(Vector{typeof(s_test)}, bvd_death_raw) :
+                bvd_death_raw
 
     ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
-    ## tested-positive probability p = s·q + (1 − spec)(1 − q).
-    lo = eps(typeof(s))
-    hi = one(s) - lo
+    ## tested-positive probability p = s_test·q + (1 − spec)(1 − q).
+    lo = eps(typeof(s_test))
+    hi = one(s_test) - lo
     q_death_daily = map(eachindex(susp_death)) do t
         den = susp_death[t]
-        ratio = den > lo ? bvd_death[t] / den : one(s)
-        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
+        ratio = den > lo ? bvd_death[t] / den : one(s_test)
+        clamp(isfinite(ratio) ? ratio : one(s_test), lo, hi)
     end
-    p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
-                                        (one(s) .- q_death_daily)
+    p_pos_daily = s_test .* q_death_daily .+
+                  (one(s_test) - spec) .*
+                  (one(s_test) .- q_death_daily)
 
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
@@ -1619,7 +1632,7 @@ positivity and the expected confirmed-death count.
     q_death := q_death_daily[n]
     p_death_conf := p_pos_daily[n]
 
-    return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
+    return (; τ_death, scaling = sc, s_test, spec, q_death, p_death_conf,
         confirmed_death_daily, expected_confirmed_deaths)
 end
 
