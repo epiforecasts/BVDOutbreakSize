@@ -1130,8 +1130,7 @@ screened contacts enter the laboratory denominator without being counted
 as suspects reported, so the ratio can exceed one.
 
 `κ ~ LogNormal(0, 0.25)` has median 1 and a 90% range of about 0.66 to
-1.51, matching [`death_testing_scaling_model`](@ref). It is centred on no
-effect, so the data must ask for a ratio away from one. Returns `(; κ)`.
+1.51, matching [`death_testing_scaling_model`](@ref).
 """
 @model function specimen_intensity_model(;
         intensity_prior = LogNormal(0.0, 0.25))
