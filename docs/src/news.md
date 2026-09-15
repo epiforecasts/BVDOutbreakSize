@@ -35,7 +35,8 @@ Only forward density evaluations are used, so the guard costs milliseconds again
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
-The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed; it now states the thinned discharge flow and the confirmation-dependent abscond survival.
+The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
+It now states the thinned discharge flow and the confirmation-dependent abscond survival.
 `seed_at_renewal_start`, `abscond_thinned` and `abscond_thinned_flow` carried docstrings several times the length of their bodies, much of it arguing against the alternatives rather than describing the contract.
 
 - The full test cell no longer times out.

@@ -1149,12 +1149,12 @@ cfr_prior_fig #hide
 # \text{deaths}_s = \sum_{t \le s} \text{CFR}_{\text{iso}}\, A_{\text{bvd},t}\,
 #     f_{\text{death},\,s-t}\, S_{t,\,s-t},
 # \qquad
-# S_{t,d} = \prod_{j < d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{29}
+# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{29}
 # ```
 #
 # and likewise for recoveries and rule-outs.
 # The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
-# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
+# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
 # Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 # One inflow and one set of outcome timings therefore generate the bed stock, the discharge flows and the demand together.
 # The occupancy accumulates admissions over the stay, so it is a smooth integral of the infection signal.
