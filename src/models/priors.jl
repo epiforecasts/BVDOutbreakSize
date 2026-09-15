@@ -884,23 +884,30 @@ posterior mode that breaks convergence) and keeps the series smooth (so a
 death background scaled from it carries no steps). Knots run only over
 the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
-knot spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily
-series (zero before `onset`).
+knot spacing.
+
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk multiplies,
+not the level over the window: the log-deviation is pinned to zero on the
+first knot, so it anchors the window's start and the innovations carry the
+series from there. The half-normal shrinks that anchor toward zero, which is
+what stops the background out-explaining the outbreak signal, and the scale is
+wide enough not to truncate the anchor the suspected-case data support. Pass
+`baseline_prior` to override.
+
+Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
+before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
-        baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
     ## Weekly knots over the window, linearly interpolated to the daily grid
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal baseline on the natural scale, the same informative prior
-    ## as the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
-    ## background level tightly (a lognormal/log-scale level has a heavy right
-    ## tail the background/outbreak-size degeneracy exploits to run away), so
-    ## the background cannot blow up to explain the suspected stream.
+    ## Half-normal rather than lognormal: a log-scale level has a heavy right
+    ## tail the background/outbreak-size degeneracy exploits to run away.
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
