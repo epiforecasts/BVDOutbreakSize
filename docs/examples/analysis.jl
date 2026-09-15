@@ -47,7 +47,7 @@
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
 #   McCabe et al. [mccabe2026](@cite) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.* A single import grows through an unobserved cryptic exponential phase before the renewal process takes over.
-#   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a wide prior on the doubling count.
+#   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a prior on the number of cryptic generations.
 #   The established reproduction number is derived forward from that growth rate.
 #   The genetic time to the most recent common ancestor floors the cryptic duration from below.
 #   McCabe et al. fix the start from a single seed.
@@ -580,16 +580,16 @@ MarkdownTable(vintage_table) #hide
 # I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
 # ```
 #
-# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase, doubling $m$ times before sustained transmission was established.
-# The cryptic phase grows the seed to $2^m$ infections at the renewal start, the day the renewal takes over, over a duration $m\,\tau$ with $\tau$ the doubling time.
+# From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
+# The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a wide prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
+# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(5,\ 4), \qquad
-# \tau = \frac{\log 2}{r}, \qquad
-# T_{\text{cryptic}} = m\,\tau. \tag{8}
+# m \sim \mathrm{Normal}^{+}(4,\ 1.2), \qquad
+# T_{\text{cryptic}} = m\,G, \qquad
+# C_T = e^{r T_{\text{cryptic}}}. \tag{8}
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs.
@@ -630,7 +630,8 @@ MarkdownTable(vintage_table) #hide
 #md # ```@eval
 #md # using BVDOutbreakSize, CodeTracking, Markdown
 #md # Markdown.parse(string("```julia\n",
-#md #     (@code_string BVDOutbreakSize.exponential_growth_model()), "\n```"))
+#md #     (@code_string BVDOutbreakSize.exponential_growth_model(Float64[])),
+#md #     "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -684,13 +685,13 @@ MarkdownTable(vintage_table) #hide
 # \tau_{\text{obs}} = n - \text{renewal start}. \tag{11}
 # ```
 #
-# The grid days before the renewal start are filled by the cryptic exponential curve at rate $r$ ending at $2^m$.
+# The grid days before the renewal start are filled by the cryptic exponential curve at rate $r$ ending at $C_T$.
 # This gives the recursion a full generation interval of history.
 # The renewal then grows the trajectory forward under the time-varying reproduction number.
 # The total outbreak age is the cryptic duration plus the observed window:
 #
 # ```math
-# T = m\,\tau + \tau_{\text{obs}}. \tag{12}
+# T = m\,G + \tau_{\text{obs}}. \tag{12}
 # ```
 #
 # Cumulative infections are the running sum of the daily infection series.

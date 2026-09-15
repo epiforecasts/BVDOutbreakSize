@@ -91,7 +91,7 @@ There are three layers.
 
 **Building-block submodels**, one per parameter family, each owning its own priors:
 
-- `exponential_growth_model` samples the doubling time `τ` and the doubling-time multiplier `m = T/τ`, not `τ` and `T` directly, to break the `C(T) = exp(rT)` ridge.
+- `exponential_growth_model` samples the growth rate `r` and the generation count `m`, not `r` and `T` directly, to break the `C(T) = exp(rT)` ridge.
 - `onset_to_death_model` is the gamma onset-to-death delay, built by convolving two atomic `gamma_delay_model` delays (onset→admission, admission→death) rather than fitting the onset→death delay directly.
 - `cfr_model` is the case-fatality ratio.
 - `surveillance_dispersion_model` samples on the `1/√k` scale.

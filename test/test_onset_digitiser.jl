@@ -127,9 +127,11 @@ end
     ## a systematic offset, so none of them can be a misread tick. (115->116
     ## and 116->117 both prefer shift +1, the first same-direction
     ## consecutive pair this stream has seen, but two instances do not
-    ## establish a systematic offset.)
+    ## establish a systematic offset. 119->120 prefers shift -1 and
+    ## 120->121 prefers shift +1, again opposite directions.)
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
-        "102" => "103", "112" => "113", "115" => "116", "116" => "117")
+        "102" => "103", "112" => "113", "115" => "116", "116" => "117",
+        "119" => "120", "120" => "121")
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]

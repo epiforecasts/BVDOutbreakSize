@@ -760,3 +760,167 @@ end
     @test all(p_bvd .>= p_base .- 1e-9)
     @test all(0 .<= p_bvd .<= 1)
 end
+
+@testitem "abscond_thinned leaves a PMF alone at zero hazard" begin
+    using BVDOutbreakSize: abscond_thinned
+
+    pmf = [0.5, 0.3, 0.15, 0.05]
+    @test abscond_thinned(pmf, 0.0) == pmf
+    @test sum(abscond_thinned(pmf, 0.0)) ≈ 1.0
+end
+
+@testitem "abscond_thinned discounts by cohort age, not calendar day" begin
+    using BVDOutbreakSize: abscond_thinned
+
+    pmf = [0.25, 0.25, 0.25, 0.25]
+    κ = 0.1
+    out = abscond_thinned(pmf, κ)
+    ## Day `d` of a stay carries `(1 - κ)^d`, so the discount compounds with
+    ## time in care and not with position on the grid.
+    @test out ≈ [0.25 * (1 - κ)^d for d in 0:3]
+    @test out[1] == pmf[1]
+    @test issorted(out; rev = true)
+    ## The mass removed is the abscond share, so what remains is what leaves
+    ## clinically.
+    @test sum(out) < 1.0
+end
+
+@testitem "abscond_thinned_flow nests the simpler schedules" begin
+    using BVDOutbreakSize: abscond_thinned_flow, abscond_thinned, convolve_delay
+
+    n = 40
+    adm = [10.0 + t for t in 1:n]
+    pmf = [0.4, 0.3, 0.2, 0.1]
+    ## No absconding is the plain convolution.
+    @test abscond_thinned_flow(adm, pmf, 0.0, fill(0.2, n)) ≈
+          convolve_delay(adm, pmf)
+    ## Nothing is ever confirmed, so every day of every stay is at risk and the
+    ## flat cohort-age thinning is recovered. The admission day carries no
+    ## hazard in either form.
+    @test abscond_thinned_flow(adm, pmf, 0.05, zeros(n)) ≈
+          convolve_delay(adm, abscond_thinned(pmf, 0.05))
+end
+
+@testitem "abscond_thinned_flow stops the hazard at confirmation" begin
+    using BVDOutbreakSize: abscond_thinned_flow
+
+    n = 30
+    adm = zeros(n)
+    adm[1] = 100.0
+    pmf = fill(0.1, 10)
+    ## A cohort confirmed immediately never absconds, so its whole schedule is
+    ## discharged clinically. A cohort never confirmed loses the abscond share.
+    certain = abscond_thinned_flow(adm, pmf, 0.1, ones(n))
+    never = abscond_thinned_flow(adm, pmf, 0.1, zeros(n))
+    @test sum(certain) ≈ 100.0
+    @test sum(never) < 100.0
+    ## A partial hazard sits between the two, and higher confirmation always
+    ## leaves more of the cohort to the clinical exits.
+    mids = [sum(abscond_thinned_flow(adm, pmf, 0.1, fill(h, n)))
+            for h in (0.0, 0.1, 0.3, 0.6, 1.0)]
+    @test issorted(mids)
+end
+
+@testitem "clinical exits and absconds partition the admitted cohorts" begin
+    ## The conservation claim behind the thinning: over a horizon long enough
+    ## for every cohort to resolve, deaths plus recoveries plus the BVD share of
+    ## absconds account for `A_bvd`, and rule-outs plus the background share
+    ## account for `A_bg`, leaving no stock behind.
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay,
+                           discretise_censored, abscond_thinned,
+                           abscond_thinned_flow
+    using Distributions: Gamma
+
+    n = 400
+    A_bvd = [60.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    A_bg = [90.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    mk(m, s) = discretise_censored(Gamma((m / s)^2, s^2 / m), 60)
+    pd, pr, pro = mk(9.0, 5.0), mk(14.0, 6.0), mk(4.0, 2.0)
+    admitted = sum(A_bvd) + sum(A_bg)
+
+    ## With nothing ever confirmed the whole stay is at abscond risk, which is
+    ## what the schedules assume, so the partition closes exactly.
+    for κ in (0.0, 0.0063, 0.02, 0.05)
+        conf = zeros(n)
+        dd = abscond_thinned_flow(0.44 .* A_bvd, pd, κ, conf)
+        rr = abscond_thinned_flow(0.56 .* A_bvd, pr, κ, conf)
+        ro = convolve_delay(A_bg, abscond_thinned(pro, κ))
+        acc = accumulate_occupancy(A_bvd, A_bg, dd, rr, ro, κ, conf)
+        @test sum(dd) + sum(rr) + sum(ro) + sum(acc.abscond) ≈ admitted
+        @test acc.demand[end] < 1e-8
+    end
+
+    ## Under a positive confirmation hazard the balance charges `κ` against its
+    ## aggregate suspect stock rather than the per-cohort unconfirmed survival
+    ## the schedules carry, so a small residual remains. At the fitted abscond
+    ## rate it is well under a tenth of a per cent of admissions.
+    conf = fill(0.18, n)
+    dd = abscond_thinned_flow(0.44 .* A_bvd, pd, 0.0063, conf)
+    rr = abscond_thinned_flow(0.56 .* A_bvd, pr, 0.0063, conf)
+    ro = convolve_delay(A_bg, abscond_thinned(pro, 0.0063))
+    acc = accumulate_occupancy(A_bvd, A_bg, dd, rr, ro, 0.0063, conf)
+    total = sum(dd) + sum(rr) + sum(ro) + sum(acc.abscond)
+    @test abs(admitted - total) / admitted < 1e-3
+    ## A flat cohort-age thinning leaves a residual an order of magnitude
+    ## larger, and strands it as occupancy that never clears.
+    fd = convolve_delay(0.44 .* A_bvd, abscond_thinned(pd, 0.0063))
+    fr = convolve_delay(0.56 .* A_bvd, abscond_thinned(pr, 0.0063))
+    facc = accumulate_occupancy(A_bvd, A_bg, fd, fr, ro, 0.0063, conf)
+    flat = sum(fd) + sum(fr) + sum(ro) + sum(facc.abscond)
+    @test abs(admitted - flat) > 10 * abs(admitted - total)
+    @test facc.demand[end] > 10 * acc.demand[end]
+end
+
+@testitem "thinning keeps the occupied stock off zero as absconding rises" begin
+    ## The pathology the thinning removes: with an unthinned schedule the
+    ## running balance is drained below zero on a declining tail and clipped,
+    ## which flattens the likelihood. With it, the stock stays positive at
+    ## every abscond rate.
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay,
+                           discretise_censored, abscond_thinned,
+                           abscond_thinned_flow
+    using Distributions: Gamma
+
+    n = 210
+    A_bvd = [60.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    A_bg = [90.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    mk(m, s) = discretise_censored(Gamma((m / s)^2, s^2 / m), 60)
+    pd, pr, pro = mk(9.0, 5.0), mk(14.0, 6.0), mk(4.0, 2.0)
+    conf = fill(0.18, n)
+
+    for κ in (0.0, 0.0063, 0.02, 0.05, 0.1)
+        acc = accumulate_occupancy(A_bvd, A_bg,
+            abscond_thinned_flow(0.44 .* A_bvd, pd, κ, conf),
+            abscond_thinned_flow(0.56 .* A_bvd, pr, κ, conf),
+            convolve_delay(A_bg, abscond_thinned(pro, κ)), κ, conf)
+        window = findall(t -> A_bvd[t] + A_bg[t] > 0.5, 1:n)
+        @test all(acc.demand[t] > 1e-9 for t in window)
+        @test all(acc.O_conf .<= acc.O_bvd .+ 1e-8)
+        @test all(acc.O_susp .>= -1e-8)
+    end
+end
+
+@testitem "an unthinned schedule does drain the stock to zero" begin
+    ## The control for the item above: without thinning, the same inputs floor
+    ## the stock on a declining tail, and more days floor as the abscond rate
+    ## rises.
+    using BVDOutbreakSize: accumulate_occupancy, convolve_delay,
+                           discretise_censored
+    using Distributions: Gamma
+
+    n = 210
+    A_bvd = [60.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    A_bg = [90.0 * exp(-0.5 * ((t - 90) / 35)^2) for t in 1:n]
+    mk(m, s) = discretise_censored(Gamma((m / s)^2, s^2 / m), 60)
+    deaths = convolve_delay(0.44 .* A_bvd, mk(9.0, 5.0))
+    recover = convolve_delay(0.56 .* A_bvd, mk(14.0, 6.0))
+    ruleout = convolve_delay(A_bg, mk(4.0, 2.0))
+    conf = fill(0.18, n)
+
+    floored(κ) = count(<=(1e-12),
+        accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, κ,
+            conf).demand)
+
+    @test floored(0.0) < floored(0.02)
+    @test floored(0.02) <= floored(0.1)
+end
