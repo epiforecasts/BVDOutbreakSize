@@ -39,6 +39,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
       # Resolve and precompile the ONE environment every job uses (fitting and
       # rendering). Downstream jobs restore this depot cache and the pinned
       # manifest below, so precompilation is shared AND the fit and render jobs
@@ -100,6 +102,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
           # All matrix jobs share the one env cache (warmed by `list`), so cache
           # it once rather than per-id: per-id copies otherwise overflow the
           # 10 GB repo cache budget and evict the content-addressed fit chains.
@@ -171,6 +175,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
           # Restore the one env cache warmed by `list` (and reused by `fit`)
           # rather than keying per-page. Without this the matrix `page` value
           # enters the cache key, so each render misses the shared depot and
@@ -274,6 +280,8 @@ jobs:
       - uses: julia-actions/cache@v3
         with:
           cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
       - name: Pin the resolved manifest
         uses: actions/download-artifact@v8
         with:

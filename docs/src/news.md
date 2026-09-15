@@ -67,6 +67,10 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 - The seeding docstrings now describe the model they document.
 `seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
+- The Windows test cell no longer restores a depot it cannot load from.
+`cancel-in-progress` killed a `main` Windows cell part way through `Pkg`'s package installs, and `julia-actions/cache`'s `save-always` default saved that depot as the newest cache for the Windows restore key.
+`ColorVectorSpace` came back from it as a directory without its source, and `Pkg` skips downloading any package whose source path merely exists, so every later Windows job failed to precompile and saved the same depot again.
+The depot cache is now written only by jobs that finished, and the test workflow's cache key is bumped once to drop the depots saved before that.
 
 - Citations render as author-year links again.
 DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
