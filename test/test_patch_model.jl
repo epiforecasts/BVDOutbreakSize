@@ -1457,6 +1457,7 @@ end
         "sud_kivu" => (; days = [1, 2, 3], counts = [5, 9, 7]),
         "tshopo" => (; days = [1, 2, 3], counts = [1, 2, 6]),
         "bas_uele" => (; days = [1, 2, 3], counts = [0, 0, 1]),
+        "sud_ubangi" => (; days = [1, 2, 3], counts = [0, 0, 0]),
         "ituri" => (; days = [1, 2, 3], counts = [10, 20, 30]),
         "nord_kivu" => (; days = [1, 2, 3], counts = [2, 4, 6]),
         "haut_uele" => (; days = [1, 2, 3], counts = [0, 1, 2]))

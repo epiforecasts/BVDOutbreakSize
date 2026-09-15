@@ -8,15 +8,16 @@
 #   Répartition des cas et décès confirmés par province touchée
 #
 #    Province     Nouveaux cas(24h)   Cas confirmés   Décès   Létalité   Zones
-#    Ituri                       47            5 508   2 501     45,4%   28/36
-#    Nord-Kivu                   46            1 139     725     63,7%   16/34
-#    Haut-Uélé                    6              264     110     41,7%    6/13
-#    Tshopo                       0               24       9     37,5%    7/23
+#    Ituri                       44            5 615   2 559     45,6%   28/36
+#    Nord-Kivu                   37            1 269     786     61,9%   16/34
+#    Haut-Uélé                    3              279     115     41,2%    6/13
+#    Tshopo                       3               28      10     35,7%    7/23
 #    Sud-Kivu                     0                3       1     33,3%    1/34
-#    Bas Uélé                     0                4       3     75,0%    3/11
-#    Total                       99            6 942   3 349     48,2%  61/151
+#    Bas-Uélé                     0                5       3     60,0%    3/11
+#    Sud Ubangi                   0                1       1    100,0%    1/16
+#    Total                       87            7 200   3 475     48,3%  62/167
 #
-# The table grew from three provinces in four columns to six provinces in
+# The table grew from three provinces in four columns to seven provinces in
 # six, and the column order has changed at least once (the new-cases column
 # moved from last to first). So the parse is layout-independent: on a
 # province row it finds the first field after the province name holding a
@@ -78,12 +79,13 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = ["ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele"]
+    "bas_uele", "sud_ubangi"]
 ## Keyed on the folded name with every separator collapsed to one space, so
 ## "Bas Uélé", "Bas-Uélé" and "BAS UELE" all land on the same province.
 const NAMES = Dict("ituri" => "ituri", "nord kivu" => "nord_kivu",
     "sud kivu" => "sud_kivu", "haut uele" => "haut_uele",
-    "tshopo" => "tshopo", "bas uele" => "bas_uele")
+    "tshopo" => "tshopo", "bas uele" => "bas_uele",
+    "sud ubangi" => "sud_ubangi")
 
 fold(s) = lowercase(Base.Unicode.normalize(String(s); stripmark = true))
 

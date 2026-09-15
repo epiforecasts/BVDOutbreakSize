@@ -61,21 +61,24 @@ const SITREP_CSV = joinpath(ROOT, "data", "insp_sitrep_scanned.csv")
 
 ## Provinces in patch order: the first is the primary (origin) patch.
 const PROVINCES = ["ituri", "nord_kivu", "sud_kivu", "haut_uele", "tshopo",
-    "bas_uele"]
+    "bas_uele", "sud_ubangi"]
 ## A bullet names its province then a colon. The names are matched on the
 ## folded text, so the hyphen/space and accent variants all collapse here.
 const ENTRY = Regex("^[^0-9a-z]*(ituri|nord[ -]?kivu|sud[ -]?kivu|" *
-                    "haut[ -]?uele|tshopo|bas[ -]?uele)\\s*:+")
+                    "haut[ -]?uele|tshopo|bas[ -]?uele|" *
+                    "sud[ -]?ubangi)\\s*:+")
 const KEYS = Dict("ituri" => "ituri", "nordkivu" => "nord_kivu",
     "sudkivu" => "sud_kivu", "hautuele" => "haut_uele",
-    "tshopo" => "tshopo", "basuele" => "bas_uele")
+    "tshopo" => "tshopo", "basuele" => "bas_uele",
+    "sudubangi" => "sud_ubangi")
 ## Folded spellings of each province, to spot a sentence that has moved on
 ## to another province.
 const NAMES = Dict("ituri" => "ituri", "nord-kivu" => "nord_kivu",
     "nord kivu" => "nord_kivu", "sud-kivu" => "sud_kivu",
     "sud kivu" => "sud_kivu", "haut-uele" => "haut_uele",
     "haut uele" => "haut_uele", "tshopo" => "tshopo",
-    "bas-uele" => "bas_uele", "bas uele" => "bas_uele")
+    "bas-uele" => "bas_uele", "bas uele" => "bas_uele",
+    "sud-ubangi" => "sud_ubangi", "sud ubangi" => "sud_ubangi")
 
 ## A batch of samples goes by several names.
 const SAMPLES = "(?:echantillons?|swabs?|prelevements?)"
@@ -362,17 +365,18 @@ function main()
     bad = setdiff(checkable, keep)
 
     println("Per-province laboratory throughput (Laboratoire section)\n")
-    @printf("%11s %4s %6s %6s %6s %6s %6s %6s %7s %9s  %s\n", "date", "sr",
-        "IT", "NK", "SK", "HU", "TS", "BU", "sum", "national", "check")
-    println("-"^88)
+    @printf("%11s %4s %6s %6s %6s %6s %6s %6s %6s %7s %9s  %s\n", "date",
+        "sr", "IT", "NK", "SK", "HU", "TS", "BU", "SU", "sum", "national",
+        "check")
+    println("-"^95)
     for d in checkable
         g = scanned[d]
         a = [haskey(g, p) ? g[p][1] : 0 for p in PROVINCES]
         s = analysed(g)
         n = nat[d]
         note = s == n ? "match" : @sprintf("DIFF %+d", s - n)
-        @printf("%11s %4d %6d %6d %6d %6d %6d %6d %7d %9d  %s\n", d, srs[d],
-            a[1], a[2], a[3], a[4], a[5], a[6], s, n, note)
+        @printf("%11s %4d %6d %6d %6d %6d %6d %6d %6d %7d %9d  %s\n", d,
+            srs[d], a[1], a[2], a[3], a[4], a[5], a[6], a[7], s, n, note)
     end
 
     if !isempty(noentries)

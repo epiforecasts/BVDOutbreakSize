@@ -228,7 +228,7 @@ order they first appear. These key the per-province blocks of
 the two relate.
 """
 const PROVINCE_SOURCE_NAMES = ["ituri", "nord_kivu", "sud_kivu",
-    "haut_uele", "tshopo", "bas_uele"]
+    "haut_uele", "tshopo", "bas_uele", "sud_ubangi"]
 
 """
     PROVINCE_SOURCE_POPULATIONS
@@ -238,24 +238,24 @@ order: 2019 figures from the Democratic Republic of the Congo's Institut
 National de la Statistique, *Annuaire statistique RDC 2020* (March 2021),
 as tabulated at
 <https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
-(accessed 12 September 2026).
+(accessed 15 September 2026).
 
-One source for all six rather than the best figure for each. Only the
+One source for all seven rather than the best figure for each. Only the
 relative sizes enter the model, through the importation kernel and the
 per-capita testing covariate, so consistency between provinces matters more
 than the accuracy of any one of them.
 """
 const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
-    2_046_000, 2_582_000, 1_250_000]
+    2_046_000, 2_582_000, 1_250_000, 2_755_000]
 
 """
     PROVINCE_SOURCE_CAPITALS
 
 Latitude and longitude of each province's capital in
 [`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
-degrees north and east: Bunia, Goma, Bukavu, Isiro, Kisangani and Buta.
-Coordinates from GeoNames (<https://www.geonames.org>), the source for the
-distance term in [`province_importation_kernel`](@ref).
+degrees north and east: Bunia, Goma, Bukavu, Isiro, Kisangani, Buta and
+Gemena. Coordinates from GeoNames (<https://www.geonames.org>), the source
+for the distance term in [`province_importation_kernel`](@ref).
 
 The capital stands in for the province. That is coarse, but it is the level
 the data are reported at, and the provinces are far enough apart that the
@@ -268,7 +268,8 @@ const PROVINCE_SOURCE_CAPITALS = [
     (-2.50000, 28.86667),   # Bukavu, Sud-Kivu
     (2.77374, 27.61674),    # Isiro, Haut-Uele
     (0.51528, 25.19099),    # Kisangani, Tshopo
-    (2.78594, 24.73876)     # Buta, Bas-Uele
+    (2.78594, 24.73876),    # Buta, Bas-Uele
+    (3.25651, 19.77234)     # Gemena, Sud-Ubangi
 ]
 
 """
@@ -282,12 +283,12 @@ the reference for the Uganda export propensities in
 
 Three provinces are patches in their own right and the rest are pooled into
 `other`. Ituri, Nord-Kivu and Haut-Uele carry signal: at the cut-off they
-hold 5508, 1139 and 264 confirmed cases. Sud-Kivu, Tshopo and Bas-Uele hold
-3, 24 and 4 between them, and Sud-Kivu has reported no new confirmed case
-since 26 May. Giving each of those its own reproduction number and its own
-ascertainment would sample dimensions nothing informs, and their estimates
-would be the deviation prior read back. Pooled they are one weak patch,
-which is what they are.
+hold 5615, 1269 and 279 confirmed cases. Sud-Kivu, Tshopo, Bas-Uele and
+Sud-Ubangi hold 3, 28, 5 and 1 between them, and Sud-Kivu has reported no
+new confirmed case since 26 May. Giving each of those its own reproduction
+number and its own ascertainment would sample dimensions nothing informs,
+and their estimates would be the deviation prior read back. Pooled they are
+one weak patch, which is what they are.
 """
 const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
 
@@ -312,7 +313,7 @@ const PROVINCE_MEMBERS = Dict(
     "ituri" => ["ituri"],
     "nord_kivu" => ["nord_kivu"],
     "haut_uele" => ["haut_uele"],
-    "other" => ["sud_kivu", "tshopo", "bas_uele"])
+    "other" => ["sud_kivu", "tshopo", "bas_uele", "sud_ubangi"])
 
 ## Index of each patch's member provinces in `PROVINCE_SOURCE_NAMES`, built
 ## once so the pooled population and capital below, and the pooled increments
@@ -341,9 +342,9 @@ pooled patch takes the population-weighted mean of its members' capitals.
 
 A weighted mean rather than a member's capital, because the pooled patch is
 a stand-in for several places at once and the kernel asks where its
-population is. The pooled patch here spans Bukavu, Kisangani and Buta, so
-its point sits between them and its distance to the epicentre is a weighted
-compromise rather than any one province's.
+population is. The pooled patch here spans Bukavu, Kisangani, Buta and
+Gemena, so its point sits between them and its distance to the epicentre is
+a weighted compromise rather than any one province's.
 """
 const PROVINCE_CAPITALS = [(
                                sum(PROVINCE_SOURCE_POPULATIONS[i] *
