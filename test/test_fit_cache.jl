@@ -158,3 +158,151 @@ end
         @test sid in ids
     end
 end
+
+@testitem "dependent fits follow their parents in the registry" tags=[
+    :quality
+] begin
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    obs = load_observations()
+    specs = build_fit_specs(obs; run_sensitivity = true)
+
+    ## Every parent a spec names is listed before it.
+    seen = String[]
+    for s in specs
+        @test s.needs isa Vector{String}
+        for parent in s.needs
+            @test parent in seen
+        end
+        push!(seen, s.id)
+    end
+    @test validate_fit_specs(specs) === specs
+    @test_throws Exception validate_fit_specs([
+        (; id = "child", needs = ["parent"]),
+        (; id = "parent", needs = String[])])
+
+    ## The health-zone fits are the dependent stage and nothing else is.
+    base = base_fit_ids(obs; run_sensitivity = true)
+    dependent = dependent_fit_ids(obs; run_sensitivity = true)
+    @test dependent == ["local", "local_frozen_validation", "local_mixing",
+        "local_deaths", "local_parent_low", "local_parent_high"]
+    @test dependent_fit_ids(obs; run_sensitivity = false) ==
+          ["local", "local_frozen_validation"]
+    @test "joint" in base
+    @test "frozen_validation" in base
+    @test isempty(intersect(base, dependent))
+    @test sort(vcat(base, dependent)) ==
+          sort(fit_ids(obs; run_sensitivity = true))
+    @test fit_ids(obs; run_sensitivity = true, stage = :base) == base
+    @test fit_ids(obs; run_sensitivity = true, stage = :dependent) ==
+          dependent
+    @test_throws Exception fit_ids(obs; stage = :nonsense)
+
+    ## `BVD_FIT_STAGE` picks the stage for list.jl and all.jl.
+    withenv("BVD_FIT_STAGE" => nothing) do
+        @test fit_stage_env(:base) === :base
+        @test fit_stage_env(:all) === :all
+    end
+    withenv("BVD_FIT_STAGE" => "dependent") do
+        @test fit_stage_env(:base) === :dependent
+    end
+    withenv("BVD_FIT_STAGE" => "later") do
+        @test_throws Exception fit_stage_env(:base)
+    end
+end
+
+@testitem "dependent thunks load their parent from the cache" tags=[
+    :quality
+] begin
+    using Dates: Date
+
+    include(joinpath(@__DIR__, "..", "docs", "fits", "registry.jl"))
+
+    obs = load_observations()
+    dir = mktempdir()
+    calls = Any[]
+    ## A stand-in for `BVDOutbreakSize.fit_zone`, recording what it was
+    ## handed and returning a fake chain.
+    fake_zone = (parent, o; kwargs...) -> begin
+        push!(calls, (; parent, o, kwargs...))
+        (; zone = "chain", from = parent)
+    end
+    specs = build_fit_specs(obs; run_sensitivity = true,
+        zone_fitter = fake_zone, cache_dir = dir)
+    spec(id) = specs[findfirst(s -> s.id == id, specs)]
+
+    withenv("BVD_FIT_LOG" => "none", "BVD_ZONE_SAMPLES" => nothing,
+        "BVD_ZONE_WARMUP" => nothing) do
+        ## A missing parent is an error, not a refit: the zone fitter must
+        ## not run.
+        @test_throws Exception spec("local").thunk()
+        @test_throws Exception spec("local_frozen_validation").thunk()
+        @test isempty(calls)
+
+        ## A fake headline under the joint's own key reaches the zone fitter
+        ## with the current observations and the zone sampler settings.
+        fake_joint = (; payload = "joint chain")
+        fit_or_load(fit_key("joint"), () -> fake_joint; cache_dir = dir)
+        r = spec("local").thunk()
+        @test r == (; zone = "chain", from = fake_joint)
+        @test length(calls) == 1
+        c = calls[1]
+        @test c.parent == fake_joint
+        @test c.o === obs
+        @test c.samples == 600
+        @test c.n_adapts == 400
+        @test c.target_accept == 0.8
+        @test c.max_depth == 8
+        @test c.chains == 2
+        @test c.callback === nothing
+
+        ## The draw counts follow the zone overrides.
+        withenv("BVD_ZONE_SAMPLES" => "50", "BVD_ZONE_WARMUP" => "25") do
+            spec("local").thunk()
+        end
+        @test calls[2].samples == 50
+        @test calls[2].n_adapts == 25
+
+        ## The frozen dependent melds from the frozen parent's chain on that
+        ## parent's observations and returns the `(; cutoff, o, chn)` shape.
+        frozen_o = (; n = 42, cutoff = Date(2026, 9, 1))
+        fake_frozen = (; cutoff = frozen_o.cutoff, o = frozen_o,
+            chn = (; payload = "frozen chain"))
+        fit_or_load(fit_key("frozen_validation"), () -> fake_frozen;
+            cache_dir = dir)
+        f = spec("local_frozen_validation").thunk()
+        @test keys(f) == (:cutoff, :o, :chn)
+        @test f.cutoff == frozen_o.cutoff
+        @test f.o == frozen_o
+        @test f.chn == (; zone = "chain", from = fake_frozen.chn)
+        @test calls[3].parent == fake_frozen.chn
+        @test calls[3].o == frozen_o
+
+        ## Each zone sensitivity variant melds from the same joint and adds
+        ## exactly its own switch to the zone fitter's keywords.
+        variants = (("local_mixing", :mixing, true),
+            ("local_deaths", :deaths, true),
+            ("local_parent_low", :parent_summary, :draw_low),
+            ("local_parent_high", :parent_summary, :draw_high))
+        for (id, key, value) in variants
+            spec(id).thunk()
+            c = calls[end]
+            @test c.parent == fake_joint
+            @test c.o === obs
+            @test getproperty(c, key) == value
+            @test c.samples == 600
+        end
+        @test !haskey(calls[1], :mixing)
+        @test !haskey(calls[1], :parent_summary)
+    end
+
+    ## Without an injected fitter the package function is looked up when the
+    ## thunk runs.
+    lazy = build_fit_specs(obs; run_sensitivity = false, cache_dir = dir)
+    @test any(s -> s.id == "local", lazy)
+    if !isdefined(BVDOutbreakSize, :fit_zone)
+        @test_throws Exception default_zone_fitter()
+    else
+        @test default_zone_fitter() === BVDOutbreakSize.fit_zone
+    end
+end
