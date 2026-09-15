@@ -4136,6 +4136,8 @@ forecast_flows_fig #hide
 #md # <details><summary>Province forecast split</summary>
 #md # ```
 
+province_forecast_fig = plot_province_forecast(chn_joint, forecast;
+    n_patches = N_PATCHES);
 province_forecast = province_forecast_table(chn_joint, forecast;
     n_patches = N_PATCHES);
 
@@ -4143,7 +4145,7 @@ province_forecast = province_forecast_table(chn_joint, forecast;
 #md # </details>
 #md # ```
 
-province_forecast #hide
+province_forecast_fig #hide
 
 # ### Symptom-onset nowcast and forecast results
 #
@@ -4338,6 +4340,13 @@ forecast_runs = [(h,
                  for h in forecast_horizons]
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
+
+## The per-province split of the same forecasts, in the `forecast.csv`
+## schema plus the province each row is a share of, so a release records the
+## provincial forecast it made alongside the national one.
+CSV.write(joinpath(output_dir, "province_forecast.csv"),
+    province_forecast_archive(chn_joint, forecast_runs;
+        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5));
 
 ## The same one- to four-week-ahead forecast made from each FROZEN joint
 ## re-fit (the McCabe-matched cut-offs, the Chamla anchor and the one-week-back
