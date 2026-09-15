@@ -54,6 +54,10 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 - The seeding docstrings now describe the model they document.
 `seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
+- The docs and test environments no longer warn about the SHA compat entry on every resolve.
+`SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
+Both environments now read `SHA = "0.7.0, 1"`.
+
 ## v1.18.0
 
 Changes since v1.17.0
