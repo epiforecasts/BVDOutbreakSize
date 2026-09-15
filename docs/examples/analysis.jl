@@ -37,12 +37,14 @@
 #md #
 # **Latent process and parameters**
 #
-# - *Discrete-time renewal model.* The whole model runs on a daily grid.
-#   Infections follow the discrete renewal equation $I_t = R_t \sum_{s \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval PMF, and every delay is applied as a discrete convolution.
+# - *Discrete-time meta-population renewal model.* The whole model runs on a daily grid.
+#   Each province follows the discrete renewal equation $I_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s} g_s$, where $g$ is the discretised generation-interval PMF, and the provinces are coupled by importation.
+#   National incidence is their sum, and every delay is applied as a discrete convolution.
 #   McCabe et al. [mccabe2026](@cite) use continuous-time closed forms.
-# - *Time-varying reproduction number.* $R_t$ is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
+# - *Time-varying reproduction number.* The trend $R^{\text{trend}}_t$ the provinces pool toward is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
 #   It then follows a weekly Gaussian random walk on the log scale, interpolated within weeks.
 #   A logistic outbreak-response ramp of about three weeks starts from that report.
+#   Each province's reproduction number is that trend plus a mean-reverting deviation, and the deviations sum to zero.
 #   McCabe et al. use one constant exponential growth rate.
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
 #   McCabe et al. [mccabe2026](@cite) fix each and report a set of scenarios.
@@ -2580,7 +2582,6 @@ province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
 province_overview_table #hide
 
 # The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
-# Each panel carries its own y-axis, because the provinces differ by orders of magnitude, so the panels are read for shape and timing and the table above for size.
 
 #md # ```@raw html
 #md # <details><summary>Modelled infections by province</summary>
@@ -2741,7 +2742,7 @@ rt_fig #hide
 # The same trajectory by province is below, one panel per province with the national trajectory in grey behind it.
 # The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
 # A panel tracking grey says that province moves with the national trajectory.
-# Sud-Kivu has reported no new confirmed case since 26 May, so its panel is carried by the deviation prior rather than by data and its width is not a measurement.
+# The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
 
 #md # ```@raw html
 #md # <details><summary>Reproduction number by province</summary>
@@ -2793,7 +2794,7 @@ province_detail_table #hide
 # Near zero the provinces share one temporal shape for the reproduction number.
 # The prior admits real divergence, with a 31% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
 # The cross-province correlation is reported for completeness.
-# With three provinces and one carrying almost no signal it is not identified, and it tracks its prior.
+# With four patches and the pooled one carrying almost no signal it is not identified, and it tracks its prior.
 
 #md # ```@raw html
 #md # <details><summary>Spatial hyperparameter summary table</summary>
