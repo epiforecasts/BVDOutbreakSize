@@ -216,16 +216,15 @@ cut-off-referenced size `e^{r(T + τ_obs)} e^{-rτ_obs}` would put `r` into the
 seed and the renewal growth in opposing directions, so the two would cancel
 for a fixed realised size and leave a flat ridge along which `R0` could
 slide freely. Referenced to the origin they compound instead: a larger `r`
-raises both the seed and `R0`, which the observed size then penalises
-rather than absorbs.
+raises both the seed and `R0`, which the observed size then penalises rather
+than absorbs.
 
-`r` therefore enters the seed magnitude. That is the price of `m` meaning
-generations: an origin date and a daily incidence at that origin cannot both
-be fixed without the growth rate connecting them. Counting `m` in doublings
-instead buys an `r`-free magnitude `2^m`, but at the cost of an elapsed time
-`m log2 / r` that confounds the origin date with the doubling time. The
-argument is `C_T_prior`, returned unchanged and kept as a named helper for
-the seeding call site.
+`r` therefore enters the seed magnitude, which is unavoidable here: an origin
+date and a daily incidence at that origin cannot both be fixed without the
+growth rate connecting them.
+
+The argument is `C_T_prior`, returned unchanged and kept as a named helper
+for the seeding call site.
 """
 @inline function seed_at_renewal_start(C_T_prior)
     return C_T_prior

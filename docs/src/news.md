@@ -12,16 +12,12 @@ each push to `main` also republishes the rendered analysis and the
 
 - `m` counts transmission generations rather than doublings (#672).
 `m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
-Counting doublings made the elapsed cryptic time `m · log2 / r`, which ties the origin date to the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
-A belief about when the outbreak began then changes meaning as the fit moves, and the prior on `m` is not a prior on the origin.
-Counting generations makes the elapsed time `T = m · G`, with `G` the mean generation interval, which does not depend on `r`: the same index death is 4.1 generations at either doubling time.
-The seed is the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin, so the origin date and the seed share one growth rate.
-`exponential_growth_model` now takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
-The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the 4.1 generations the field-epi index death implies and spread so the 90% prior origin runs from late November 2025 to early March 2026, bracketing that death.
-Its 99th percentile seed is a few hundred infections per day against a fitted outbreak of order ten thousand in total.
-The earlier `truncated(Normal(5, 4); lower = 0)` reached 22,722 infections per day at its 99th percentile, so a prior on one day exceeded the whole fitted outbreak.
-The trade-off is that `r` now enters the seed magnitude, which the doubling parameterisation kept out of it.
-An origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
 The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
 It does not fix initialisation, so `ViablePrior` is retained.
 
@@ -43,9 +39,8 @@ Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
 Both offsets are now scored on one set of prior draws, which isolates the shift itself: the difference is exactly 200 on every seed tested, and the tolerance is 1.
 
-- Three docstrings that describe a model that no longer exists.
-`seed_at_renewal_start` called the seed "the cumulative infection count reached by the analytic cryptic phase", where the code means the daily incidence *on* the renewal-start day; the cryptic total is larger by roughly `1/(1 - e^{-r})`, so reconciling code to comment would shift `m` by several generations.
-`m_prior_centre` and `M_PRIOR_BASE_DATE` still carry the integral-era reading (`m ≈ 9`, "`C_T = 2^m` is the cumulative infection count") while `M_PRIOR_BASE` is now 3.0, and `exponential_growth_model`'s docstring invites passing `m_prior_centre` into a renewal fit — where an advancing integral centre would give a seed of order half a million per day.
+- The seeding docstrings now describe the model they document.
+`seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
 ## v1.18.0
 

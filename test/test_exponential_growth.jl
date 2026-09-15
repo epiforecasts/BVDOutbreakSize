@@ -36,8 +36,7 @@
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r; T = m·G (cryptic duration), C_T = exp(r·T) hold
-    ## draw-by-draw.
+    ## τ = log(2)/r, T = m·G and C_T = exp(r·T) hold draw-by-draw.
     @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
     @test all(isapprox.(G, G_true; rtol = 1e-8))
     @test all(isapprox.(T, m .* G_true; rtol = 1e-8))
@@ -69,11 +68,9 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 4.05, SD near 1.18 (truncated Normal(4, 1.2); lower 0):
-    ## `m` counts the cryptic generations, so the spread is elicited against
-    ## the origin date rather than against outbreak totals.
-    @test 3.6 < mean(m) < 4.5
-    @test 0.9 < std(m) < 1.5
+    ## Centre near 4.00, SD near 1.20 (truncated Normal(4, 1.2); lower 0).
+    @test 3.9 < mean(m) < 4.1
+    @test 1.1 < std(m) < 1.3
     ## The growth rate is centred on the BEAST X 11.7-day doubling
     ## (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
@@ -128,7 +125,7 @@ end
     @test all(isfinite, T) && all(isfinite, C_T) && all(C_T .> 0)
     ## Total age T = m·G + τ_obs is prior-dominated by the m prior and
     ## ≥ τ_obs by construction (the cryptic phase adds m·G ≥ 0).
-    @test std(T) > 4.0
+    @test std(T) > 12.0
     @test all(T .>= τ_obs)
     @test mean(T) > τ_obs    # origin sits before the renewal start (cryptic)
     ## Elapsed cryptic time is `m` generation intervals, set by the sampled

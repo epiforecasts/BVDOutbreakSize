@@ -270,34 +270,24 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(4, 1.2); lower = 0)` counts the generations between
-the index infection and the renewal start. The origin therefore sits `T = m · G`
-days before the renewal start, with `G` the mean generation interval, and the
-cryptic phase grows one infection per day at the origin to `C_T = exp(r · T)`
-per day at the renewal start. The seed is a daily incidence, carried forward
-at the same `r` the genetic prior sets, so the cryptic phase and the
-established renewal share one growth rate.
+`m ~ truncated(Normal(4, 1.2); lower = 0)` counts the transmission generations
+between the index infection and the renewal start, so the origin sits
+`T = m · G` days back, with `G` the mean generation interval, and the cryptic
+phase grows one infection per day there to `C_T = exp(r · T)` per day at the
+renewal start.
 
-Generations rather than doublings, because a belief about the origin has to
-survive the growth rate. Elapsed time is `m · G` and `G` does not depend on
-`r`, so a prior on `m` is a prior on the origin date. Counting doublings
-instead makes the elapsed time `m · log2 / r`, which confounds the origin
-with the doubling time: the traced 25 January 2026 index death, 63 days
-before the renewal start, is 5.4 doublings at the prior median doubling of
-11.7 days and 3.2 at the posterior's 19.9, but 4.1 generations at either.
-
-The centre is that 4.1. Field work in Mongbwalu traced a sustained
+The centre is 4 generations: field work in Mongbwalu traced a sustained
 transmission chain back to a death on 25 January 2026 (kupferschmidt2026),
-and the genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak
-age consistent with an origin that early.
+63 days before the renewal start, which is four generation intervals. The
+genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak age
+consistent with an origin that early.
 
-The spread is elicited against the origin date and checked in seed units.
-SD 1.2 puts the 90% prior origin between late November 2025 and early March
-2026, which brackets the field-epi first death, and its 99th percentile seed
-is a few hundred infections per day against a fitted outbreak of order ten
-thousand in total. The genetic term is flat above about five generations,
-contributing 1.66 nats in total and essentially all of it below four, so a
-wider upper tail carries no genetic support.
+The spread is elicited against the origin date and checked in seed units. SD
+1.2 puts the 90% prior origin between late December 2025 and late February
+2026, which brackets that death, and its 99th percentile seed at about 500
+infections per day against a fitted outbreak of order ten thousand in total.
+The genetic term is flat above about five generations, contributing 1.66 nats
+in total and essentially all of it below four.
 
 In the renewal, `C_T` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
