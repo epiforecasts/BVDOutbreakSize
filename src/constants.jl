@@ -177,9 +177,9 @@ the analytic cryptic phase hands off to the recursion) sits after the
 genetic TMRCA day. Placing the renewal start a 14-day lead after the TMRCA,
 rather than exactly on it, leaves the observed span
 `τ_obs = n − renewal_start` strictly shorter than `tmrca_days`, so the
-genetic censored bound on the total age `T = m·τ + τ_obs` stays informative:
+genetic censored bound on the total age `T = m·G + τ_obs` stays informative:
 it pulls the origin to sit at or before the MRCA, bounding the cryptic
-duration `m·τ` from below. The lead accounts for the TMRCA's own
+duration `m·G` from below. The lead accounts for the TMRCA's own
 molecular-clock uncertainty before sustained transmission is treated as
 confidently established.
 """
@@ -486,9 +486,9 @@ const ITURI_DAILY_TRAVEL_SD = 200
 """
     CHAMLA_CONFIRMED_CENTRAL
 
-Central-scenario cumulative laboratory-confirmed case projection of Chamla et
-al. [chamla2026](@cite) (WHO Regional Office for Africa, Lancet Infectious
-Diseases, 2026), as `(date, median, lower_90, upper_90)` tuples from their
+Central-scenario cumulative laboratory-confirmed case projection of
+[chamla2026](@citet) (WHO Regional Office for Africa, Lancet Infectious
+Diseases), as `(date, median, lower_90, upper_90)` tuples from their
 Table 1 (mean accepted `R₀ = 1.71`). Their stochastic SEIRD ensemble is
 calibrated by simulation filtering to 598 cumulative confirmed cases on 8 June
 2026, with the reporting fraction fixed at 1.0, so these are projected
@@ -511,7 +511,7 @@ const CHAMLA_CONFIRMED_CENTRAL = [
 """
     CHAMLA_CONFIRMED_W12
 
-Chamla et al. [chamla2026](@cite) week-12 (24 June 2026) cumulative
+[chamla2026](@citet) week-12 (24 June 2026) cumulative
 confirmed-case projection under their three transmissibility scenarios, as
 `(scenario, median, lower_90, upper_90)` tuples (low `R₀ = 1.42`, central
 `R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to

@@ -1,7 +1,6 @@
 ## Smoke tests for fit_diagnostics and diagnostics_table. A tiny model
 ## is fitted with NUTS (two chains) so the chain carries the R-hat,
-## bulk-ESS and numerical-error (divergence) information the helpers
-## read.
+## ESS and numerical-error (divergence) information the helpers read.
 
 @testitem "fit_diagnostics summarises rhat, ess and divergences" tags=[
     :slow
@@ -22,6 +21,7 @@
     @test isfinite(d.max_rhat)
     @test d.max_rhat > 0
     @test d.min_ess_bulk > 0
+    @test d.min_ess_tail > 0
     @test d.n_divergent >= 0
 end
 

@@ -25,7 +25,7 @@
 #
 # ## Origins of this work
 #
-# This work began as a replication of the McCabe et al. [mccabe2026](@cite) report.
+# This work began as a replication of the [mccabe2026](@citet) report.
 # It has since evolved into a real-time joint Bayesian estimate of the current outbreak size.
 # The model is a discrete-time renewal process with a time-varying reproduction number, fitted to more of the available data streams than the original.
 # The points below summarise how it now differs from the report.
@@ -40,14 +40,14 @@
 # - *Discrete-time meta-population renewal model.* The whole model runs on a daily grid.
 #   Each province follows the discrete renewal equation $I_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s} g_s$, where $g$ is the discretised generation-interval PMF, and the provinces are coupled by importation.
 #   National incidence is their sum, and every delay is applied as a discrete convolution.
-#   McCabe et al. [mccabe2026](@cite) use continuous-time closed forms.
+#   [mccabe2026](@citet) use continuous-time closed forms.
 # - *Time-varying reproduction number.* The trend $R^{\text{trend}}_t$ the provinces pool toward is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
 #   It then follows a weekly Gaussian random walk on the log scale, interpolated within weeks.
 #   A logistic outbreak-response ramp of about three weeks starts from that report.
 #   Each province's reproduction number is that trend plus a mean-reverting deviation, and the deviations sum to zero.
 #   McCabe et al. use one constant exponential growth rate.
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
-#   McCabe et al. [mccabe2026](@cite) fix each and report a set of scenarios.
+#   [mccabe2026](@citet) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.* A single import grows through an unobserved cryptic exponential phase before the renewal process takes over.
 #   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a prior on the number of cryptic generations.
 #   The established reproduction number is derived forward from that growth rate.
@@ -56,23 +56,23 @@
 #
 # **Delays and convolutions**
 #
-# - *Delays re-estimated with uncertainty.* McCabe et al. [mccabe2026](@cite) take the onset-to-death delay from the Isiro 2012 point estimate of Rosello et al. [rosello2015](@cite).
+# - *Delays re-estimated with uncertainty.* [mccabe2026](@citet) take the onset-to-death delay from the Isiro 2012 point estimate of [rosello2015](@citet).
 #   We instead use a Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite) that re-estimates the delay with uncertainty.
 #   We sample every other delay (generation interval, incubation period, onset-to-report, onset-to-confirmation and onset-to-hospitalisation abroad) from a prior centred on published Ebola estimates.
 #   Each is discretised with double interval censoring [charniga2024](@cite), so the delay uncertainty propagates.
 #
 # **Likelihoods and data streams**
 #
-# - *More streams fitted.* McCabe et al. [mccabe2026](@cite) fit the Uganda export cases and deaths.
+# - *More streams fitted.* [mccabe2026](@citet) fit the Uganda export cases and deaths.
 #   We add the DRC suspected cases, the laboratory-confirmed cases, the confirmed deaths and the deaths among the Uganda exports.
 # - *Per-vintage time-series fitting.* The DRC streams are fitted on the incidence scale, as the between-vintage increments across successive sitreps (the first vintage being the cumulative count to that date).
 #   This sharpens $R_t$.
 #   McCabe et al. condition on a single cumulative total.
 # - *Ascertainment estimated.* We jointly estimate the outbreak size and the fraction of cases each surveillance system reports.
 #   McCabe et al. have no ascertainment component.
-# - *Comparison against published scenarios.* The model is set beside the McCabe et al. [mccabe2026](@cite) scenario estimates as an external sense-check, matched in time at the cut-off each scenario was computed.
+# - *Comparison against published scenarios.* The model is set beside the [mccabe2026](@citet) scenario estimates as an external sense-check, matched in time at the cut-off each scenario was computed.
 #   The cumulative infection count, the running sum of the daily infections, is the headline quantity reported separately.
-#   A forward projection from a frozen fit is also set against the Chamla et al. [chamla2026](@cite) confirmed-case projection and the data observed since.
+#   A forward projection from a frozen fit is also set against the [chamla2026](@citet) confirmed-case projection and the data observed since.
 #
 # **Extensions**
 #
@@ -122,7 +122,7 @@
 #
 # **Implementation**
 #
-# - *LLM-driven reimplementation.* The model code, priors and analysis were drafted by a language model from the McCabe et al. [mccabe2026](@cite) report and the companion delay reanalysis.
+# - *LLM-driven reimplementation.* The model code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report and the companion delay reanalysis.
 #   It was then reviewed and revised.
 #   It has not been independently replicated against the authors' code.
 #md #
@@ -167,7 +167,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # We extracted these figures from the written situation-report PDFs (archived by INRB-UMIE [inrb_umie_2026](@cite)) using a language model, with a second pass to re-read them, rather than the published per-zone CSVs.
 # The zone sums in the CSVs are inconsistent with the national headline totals because they drop counts not yet attributed to a zone, so they understate the national totals.
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
-# The cross-border traveller volume and source population come from McCabe et al. [mccabe2026](@cite).
+# The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -539,10 +539,11 @@ MarkdownTable(vintage_table) #hide
 # The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
+# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March.
+# The traced 25 January death then sits near the 87th percentile: it is the earliest chain the field work reached, which bounds the origin rather than dating it.
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(4,\ 1.2), \qquad
+# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
 # C_T = e^{r T_{\text{cryptic}}}. \tag{10}
 # ```
@@ -620,7 +621,7 @@ MarkdownTable(vintage_table) #hide
 # The TMRCA is a lower bound on the outbreak age.
 # Adding sequences, or more geographically representative ones, can only push the TMRCA earlier, never later.
 # This is because the sampled tree is almost entirely from Bunia.
-# Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+# Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of [ferguson2026](@citet).
 #
 # We treat the TMRCA day as a right-censored, noisy reading of the total outbreak age $T$ (the cryptic duration plus the observed window, defined in the infection process below):
 #
@@ -1314,6 +1315,22 @@ cfr_prior_fig #hide
 #
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
 # The stay lives entirely in the discharge flows, each an admission stream convolved with its outcome density.
+#
+# Absconding competes with the clinical exits rather than adding to them.
+# The length-of-stay densities integrate to one, so the clinical schedules alone already account for every admitted patient, and an unthinned schedule plus an abscond outflow discharges more than was admitted.
+# Each discharge flow is therefore thinned by the abscond survival over the stay, written here for deaths,
+#
+# ```math
+# \text{deaths}_s = \sum_{t \le s} \text{CFR}_{\text{iso}}\, A_{\text{bvd},t}\,
+#     f_{\text{death},\,s-t}\, S_{t,\,s-t},
+# \qquad
+# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{37}
+# ```
+#
+# and likewise for recoveries and rule-outs.
+# The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
+# Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
+# Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
 # One inflow and one set of outcome timings therefore generate the bed stock, the discharge flows and the demand together.
 # The occupancy accumulates admissions over the stay, so it is a smooth integral of the infection signal.
 # A high, sustained bed stock informs the reproduction number.
@@ -1327,7 +1344,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}\bigl(\mathrm{logit}\,\text{CFR}
-#     + \beta_{\text{iso}}\bigr), \tag{37}
+#     + \beta_{\text{iso}}\bigr), \tag{38}
 # ```
 #
 # identified by the in-care death flow relative to admissions and occupancy.
@@ -1344,7 +1361,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # O_{\text{conf},t} = \sum_{u \le t} A_{\text{bvd},u}\,
-#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{38}
+#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{39}
 # ```
 #
 # with $F_{\text{conf}}$ the cumulative confirmation probability of a cohort
@@ -1387,7 +1404,7 @@ cfr_prior_fig #hide
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{39}
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{40}
 # ```
 #
 # with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds), all sharing the treatment dispersion $k_{\text{iso}}$.
@@ -1451,7 +1468,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{40}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{41}
 # ```
 
 #md # ```@raw html
@@ -1497,7 +1514,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{41}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{42}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a Binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
@@ -1526,7 +1543,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{42}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{43}
 # ```
 #
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
@@ -1536,7 +1553,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{43}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{44}
 # ```
 
 #md # ```@raw html
@@ -1613,7 +1630,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{44}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{45}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the case volume $v^{\text{c}}_t$, so $\text{cd}_t$ is zero before the first confirmed-case vintage.
@@ -1726,7 +1743,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export intensity:
 #
 # ```math
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{45}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{46}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
@@ -1741,7 +1758,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{46}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{47}
 # ```
 
 #md # ```@raw html
@@ -1792,7 +1809,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{47}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{48}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a per-day Poisson, the same dated-event likelihood the exports use, with a zero term before the first death day $\delta_1$:
@@ -1802,7 +1819,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{48}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{49}
 # ```
 
 #md # ```@raw html
@@ -1833,7 +1850,7 @@ cfr_prior_fig #hide
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{49}
+# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{50}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
@@ -1844,7 +1861,7 @@ cfr_prior_fig #hide
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
-# \tag{50}
+# \tag{51}
 # ```
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
@@ -1859,7 +1876,7 @@ cfr_prior_fig #hide
 # \qquad
 # F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
-#     + \beta + \omega_u\bigr). \tag{51}
+#     + \beta + \omega_u\bigr). \tag{52}
 # ```
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
@@ -1876,7 +1893,7 @@ cfr_prior_fig #hide
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
 #     \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),\
-#     \sigma_u,\ \nu{=}4\Bigr). \tag{52}
+#     \sigma_u,\ \nu{=}4\Bigr). \tag{53}
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
@@ -1965,7 +1982,7 @@ cfr_prior_fig #hide
 # ```math
 # y_{p,i} \sim \mathrm{BetaBinomial}\Bigl(
 #     N_i - \sum_{q < p} y_{q,i},\;
-#     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{53}
+#     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{54}
 # ```
 #
 # $\rho$ is one overdispersion shared across patches and vintages, absorbing the extra-Binomial variation in how cases are attributed to provinces, such as reporting lags between the provincial and national tables and reassignment of cases between health zones.
@@ -2232,7 +2249,7 @@ diagnostics_table( #hide
 # That naive ratio is biased low in real time.
 # A case confirmed close to the cut-off has not yet had time to die, so it enters the denominator before it can enter the numerator.
 #
-# We report a delay-corrected confirmed CFR that debiases the real-time ratio following [nishiura2009](@cite).
+# We report a delay-corrected confirmed CFR that debiases the real-time ratio following [nishiura2009](@citet).
 # The denominator is shrunk from all confirmed cases to those expected to have had their death confirmed by the cut-off.
 # Each day of confirmed-case incidence is weighted by the probability that a case confirmed that day, if it is going to die, has had its death confirmed by the cut-off:
 #
@@ -2240,7 +2257,7 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{54}
+#         \Pr(X_d - X_c \le T - t)}, \tag{55}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
@@ -2348,7 +2365,7 @@ diagnostics_table( #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{55}
+#     \tag{56}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
@@ -2371,14 +2388,14 @@ diagnostics_table( #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{56}
+# \end{cases} \tag{57}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{57}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{58}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2389,7 +2406,7 @@ diagnostics_table( #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{58}
+#     \tag{59}
 # ```
 #
 # so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$, and the interval widens with the square root of the horizon.

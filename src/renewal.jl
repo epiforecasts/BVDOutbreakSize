@@ -182,49 +182,35 @@ function seed_infections(I0, r, len::Integer)
 end
 
 """
-Renewal-start seed magnitude for the two-phase renewal: the daily
-infection incidence the analytic cryptic phase reaches ON the
-renewal-start day.
+Renewal-start seed magnitude for the two-phase renewal: the daily infection
+incidence the analytic cryptic phase reaches on the renewal-start day.
 
-It is an incidence, not a cumulative count. The cryptic total accumulated
-over the `renewal_start` grid days is larger by
-`(1 - e^{-r·len}) / (1 - e^{-r})`, which runs about 16 to 23 across the
-prior-to-posterior range of the doubling time. Reading the seed as
-cumulative, and "correcting" the code to match, would shift `m` by roughly
-`log(16 to 23) / (r · G)` generations.
+It is an incidence, not a cumulative count. The cryptic total over the
+`renewal_start` grid days is larger by more than an order of magnitude, so
+reading the seed as cumulative and "correcting" the code to match would shift
+`m` by several generations.
 
-The renewal is two-phase: an analytic exponential cryptic phase from
-the origin to the renewal start (≈ the genetic TMRCA day, off the renewal
-grid), then the renewal recursion on `[renewal_start, cut-off]`. The
-generation count `m` counts the transmission generations during the cryptic
-phase (origin → renewal start), which places the origin `T = m · G` days
-back, with `G` the mean generation interval. Growing a single daily
-infection at the origin forward over that span at the cryptic rate `r`
-gives
+The cryptic phase runs from the origin to the renewal start (≈ the genetic
+TMRCA day, off the renewal grid), spanning `T = m · G` days for `m` generations
+at mean generation interval `G`. A single daily infection at the origin grows
+over it at the cryptic rate `r` to
 
 ```math
-\\text{seed\\_at\\_renewal\\_start} = C_T = e^{r T} = e^{r m G},
+\\text{seed\\_at\\_renewal\\_start} = C_T = e^{r T},
 ```
 
-a daily incidence at the renewal start. The renewal then grows it forward
-over the observation window under the time-varying `R_t`, so the realised
-cut-off size stays data-driven through `R_t` while the prior fixes only the
-renewal-start scale.
+which the renewal grows forward under `R_t`, so the realised cut-off size stays
+data-driven while the prior fixes only the renewal-start scale.
 
-The magnitude is referenced to the origin, not to the cut-off. A
-cut-off-referenced size `e^{r(T + τ_obs)} e^{-rτ_obs}` would put `r` into the
-seed and the renewal growth in opposing directions, so the two would cancel
-for a fixed realised size and leave a flat ridge along which `R0` could
-slide freely. Referenced to the origin they compound instead: a larger `r`
-raises both the seed and `R0`, which the observed size then penalises rather
-than absorbs.
+The magnitude is referenced to the origin, not the cut-off. A cut-off-referenced
+size would put `r` into the seed and the renewal growth in opposing directions,
+cancelling for a fixed realised size and leaving a flat ridge along which `R0`
+could slide. Referenced to the origin they compound instead, so `r` does enter
+the seed: an origin date and an incidence at that origin cannot both be fixed
+without the growth rate connecting them.
 
-`r` therefore enters the seed magnitude, which is unavoidable here: an origin
-date and a daily incidence at that origin cannot both be fixed without the
-growth rate connecting them.
-
-The argument is `C_T_prior`, returned unchanged and kept as a named helper
-for the seeding call site.
+The argument is `C_T_prior`, returned unchanged and kept as a named helper for
+the seeding call site.
 """
 @inline function seed_at_renewal_start(C_T_prior)
     return C_T_prior

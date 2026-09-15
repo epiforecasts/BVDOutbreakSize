@@ -45,3 +45,8 @@ updates:
       # versions. Dependabot would try to pin it to a specific version in
       # test/ and docs/ Project.toml that breaks LTS resolution. Skip it.
       - dependency-name: "Statistics"
+      # DocumenterCitations 1.5 renders citations as a raw `CitationSiteNode`
+      # struct under DocumenterVitepress, which has no writer method for it.
+      # Skip 1.5 and later until Vitepress handles the node.
+      - dependency-name: "DocumenterCitations"
+        versions: [">=1.5"]

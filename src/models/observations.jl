@@ -1843,20 +1843,14 @@ Length-of-stay PMF thinned by survival against absconding over cohort age:
 clinically rather than by absconding, so it is a sub-probability schedule
 rather than a PMF.
 
-[`accumulate_occupancy`](@ref) removes an abscond flow from the occupied
-stock. The clinical schedules are convolutions of past admissions and,
-unthinned, already account for the whole admitted mass, so the two together
-discharge more than was admitted, and the `max(., 0)` guards in the balance
-clip the excess and floor the occupancy. Thinning the schedule by the same
-hazard makes absconding a competing risk, so deaths, recoveries and absconds
-partition each cohort. `κ = 0` returns the PMF unchanged.
+Thinning makes absconding a competing risk against the clinical exits, which
+[`accumulate_occupancy`](@ref) needs: unthinned, the schedules already account
+for the whole admitted mass and the abscond flow removes it a second time.
+`κ = 0` returns the PMF unchanged.
 
-This form applies the abscond hazard on every day of a stay, which is right
-for the rule-out schedule: a background admission is never confirmed, so it
-is at risk of absconding for its whole stay. True-case admissions are
-confirmed at a positive hazard and the balance exposes only the suspect
-sub-stock to absconding, so their schedules take
-[`abscond_thinned_flow`](@ref) instead.
+The hazard applies on every day of a stay, which is right for the rule-out
+schedule, since a background admission is never confirmed and so is at risk
+throughout. True-case schedules take [`abscond_thinned_flow`](@ref) instead.
 """
 function abscond_thinned(pmf::AbstractVector, κ::Real)
     T = promote_type(eltype(pmf), typeof(κ))
@@ -1870,26 +1864,14 @@ $(TYPEDSIGNATURES)
 Clinical discharge flow from `adm` on the length-of-stay schedule `pmf`, with
 absconding competing only while a cohort is still unconfirmed.
 
-[`accumulate_occupancy`](@ref) takes its abscond flow as `κ` times the
-*suspect* sub-stock, so a confirmed patient cannot abscond. Thinning a true-case
-schedule by `(1 - κ)^d` ([`abscond_thinned`](@ref)) therefore discounts days the
-balance never charges, and the schedules under-discharge by a margin that grows
-with the confirmation hazard: the stock never empties and carries a phantom
-residual occupancy for the rest of the grid.
-
-Each admission day is walked forward instead, carrying two survivals: `U`, the
-probability still unconfirmed, which decays by `1 - conf_hazard` each day, and
-the abscond survival, which decays by `1 - κ U` and so stops decaying once a
-cohort is confirmed. With `P` the clinical survival, a cohort admitted on day
-`t` contributes `pmf[d+1] * S_ab(d)` to day `t+d`. Absconds are charged on the
-stock carried in from the previous day, so a cohort's admission day carries no
-abscond hazard.
-
-Clinical exits and absconds then partition each cohort up to a residual, because
-the balance charges `κ` against its own aggregate suspect stock rather than
-against the per-cohort unconfirmed survival tracked here. At the fitted abscond
-rate the residual is about 0.01% of admissions and rises to 0.4% at `κ = 0.05`,
-against 1.8% and 9.4% for a flat `(1 - κ)^d` thinning.
+[`accumulate_occupancy`](@ref) charges its abscond flow against the suspect
+sub-stock, so a confirmed patient cannot abscond. Each admission day is walked
+forward carrying two survivals: `U`, the probability still unconfirmed, which
+decays by `1 - conf_hazard` each day, and the abscond survival, which decays by
+`1 - κ U` and so stops decaying once a cohort is confirmed. A cohort admitted
+on day `t` contributes `pmf[d+1] * S(t, d)` to day `t + d`. Absconds are charged
+on the stock carried in from the previous day, so a cohort's admission day
+carries no abscond hazard.
 
 A `conf_hazard` of zero recovers [`abscond_thinned`](@ref) convolved with `adm`,
 and `κ = 0` recovers the plain [`convolve_delay`](@ref).
