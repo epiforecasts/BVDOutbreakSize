@@ -258,7 +258,12 @@ function load_observations(
     ##    integration. An integration reattaches cases and deaths and so adds
     ##    to both, while a transfer moves both down. Listing one de-anchors
     ##    the positivity denominator with no backlog to absorb, and the step
-    ##    that should take the backlog is centred at or below zero.
+    ##    that should take the backlog is centred at or below zero. Measured
+    ##    on `confirmed_only_model` at 500 draws x 2 chains: 94 divergences
+    ##    and a min bulk ESS of 15, against 20 and 522 with no break day
+    ##    declared, and the cut-off infection count inflated 14% as the fit
+    ##    books the artefact as incidence. Pinning the step at a published
+    ##    discrepancy gives 22 divergences and 477 ESS.
     ##
     ## 2. A date matching no vintage in the history. It does nothing at all,
     ##    and the `gross` check cannot fire because there is no increment to

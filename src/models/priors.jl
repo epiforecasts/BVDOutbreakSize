@@ -1098,7 +1098,9 @@ passive-surveillance streams are data-rich, so each stream's dispersion is
 strongly informed and the non-centred form
 `inv_sqrt_k_s = exp(μ_log + τ z_s)` funnels, with
 `z_s = (log_isk_s − μ_log)/τ` diverging as `τ → 0` and stretching NUTS
-trajectories. Pass `centred = false` for the non-centred form, the better
+trajectories. On the joint, centring removes that funnel: worst dispersion
+bulk-ESS 102 → 156, divergences 5 → 2, and about 10% faster wall-clock at a
+150×2 fit. Pass `centred = false` for the non-centred form, the better
 choice when the streams are data-poor and prior-dominated. The population
 mean is centred on the shared `1/sqrt(k)` prior of
 [`surveillance_dispersion_model`](@ref) (`exp(μ_log)` near 0.6), and the
