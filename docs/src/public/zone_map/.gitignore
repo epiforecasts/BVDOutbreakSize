@@ -1,0 +1,5 @@
+# Runtime inputs staged here by docs/make.jl at build time; never commit them.
+zone_estimates.csv
+health_zones.geojson
+# The root .gitignore drops every *.html; the map page itself is source.
+!index.html
