@@ -1434,9 +1434,10 @@ its own `R_t`.
 
 ### Seeding
 
-The outbreak began in Ituri, so the primary patch carries the whole cryptic
-seed, growing at the sampled molecular-clock rate `r` over the cryptic
-window to reach `seed_at_renewal_start(C_T)` at the renewal start. The
+The outbreak is assumed to have begun in Ituri, so the primary patch carries
+the whole cryptic seed, growing at the sampled molecular-clock rate `r` over
+the cryptic window to reach `seed_at_renewal_start(C_T)` at the renewal
+start. The
 secondary patches start empty and are seeded by importation from it, so a
 province's arrival is a consequence of the kernel and of `ε` rather than a
 parameter. The first-appearance dates carry real information about how fast
@@ -1507,8 +1508,9 @@ the others, which is what the imports figure on the analysis page draws.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0_total = seed_at_renewal_start(growth_state.C_T)
-    ## The outbreak began in Ituri, so the primary patch takes the whole
-    ## cryptic seed and the others are seeded by importation from it. An
+    ## The outbreak is assumed to have begun in Ituri, so the primary patch
+    ## takes the whole cryptic seed and the others are seeded by importation
+    ## from it. An
     ## all-zero kernel leaves a secondary patch no route to infections at
     ## all, so the uncoupled path keeps the sampled fractions. With one patch
     ## there is nothing to seed and the fraction would be a prior-only

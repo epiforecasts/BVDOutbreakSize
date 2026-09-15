@@ -16,7 +16,8 @@ not the one v1 published.
 ### Model
 
 - The headline joint model is a meta-population over four patches: Ituri,
-Nord-Kivu, Haut-Uele, and one pooling Sud-Kivu, Tshopo and Bas-Uele (#412, #664).
+Nord-Kivu, Haut-Uele, and one pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi
+(#412, #664).
 One renewal equation per patch, coupled by importation, with every national
 stream fitted against the summed patches.
 `n_patches = 1` collapses it onto the single-population model, which is fitted
