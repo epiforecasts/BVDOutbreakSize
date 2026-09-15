@@ -1472,7 +1472,9 @@ scales and the correlation matrix.
     δ_patch = zeros(Tp, n_patches, n)
     Rt_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
-        δ_daily = interpolate_knots(δ_knots[p, :], days, n)
+        ## A view, not a copy: `interpolate_knots` only reads its knots, and
+        ## the copy put one `getindex` per knot on the gradient tape.
+        δ_daily = interpolate_knots(view(δ_knots, p, :), days, n)
         for t in 1:n
             δ_patch[p, t] = δ_daily[t]
             Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
