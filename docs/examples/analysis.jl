@@ -2080,7 +2080,7 @@ cfr_prior_fig #hide
 # ```
 #
 # with $\bar\xi$ the posterior mean of $\xi$ under the joint model.
-# The zone likelihood is a composition within each patch, so the cut changes the posterior of $\psi$ only through the shape of the patch trajectory across a generation interval.
+# The zone likelihood is a composition within each patch, so it is scale-free in the patch infections.
 # The patch uncertainty re-enters every reported zone infection count, reproduction number and forecast by pairing each zone draw with a joint-model draw chosen at random.
 #
 # The fixed inputs are $\bar I_{p,t}$, the exponential of the posterior mean of $\log I_{p,t}$ on every grid day, $\bar g$, the posterior-mean generation-interval distribution, and $\bar f$, the posterior-mean delay from infection to a confirmed report.
@@ -2113,7 +2113,7 @@ cfr_prior_fig #hide
 # ```
 #
 # with $I_{z,t} = \bar I_{p,t}\, w_{z,t_0}$ on the days before the grid start.
-# No zone carries its own seed.
+# The shares of a patch sum to one on every day.
 # The deviation is a weekly-knot process by analogy with the patch deviations of Equation (6), interpolated linearly between knots.
 # Its first knot is a centred level and later knots revert toward zero with a retention $\phi_{\text{z}}$ set by a shared half-life $h_{\text{z}}$ in days:
 #
@@ -2134,8 +2134,6 @@ cfr_prior_fig #hide
 # $W_p$ is the set of walking zones of patch $p$, those with at least 30 cumulative confirmed cases at the cut-off in a patch with at least two such zones, and $\bar z^\delta_{W_p,k}$ is the mean of the innovations over that set.
 # Only walking zones carry innovations.
 # Every other zone decays along the mean path $\phi_{\text{z}}^{k-1}\,\delta_{z,1}$ from its level.
-# These priors are our own choice.
-# The prior stationary spread of the weekly walk is about 0.2 on the log scale.
 #
 # The expected confirmed reports of a zone in the window of vintage $v$ carry its infections through $\bar f$, and the observed increments of each patch and vintage follow a Dirichlet-multinomial on the allocated total:
 #
@@ -2168,9 +2166,9 @@ cfr_prior_fig #hide
 # We assume the generation interval and the infection-to-report delay are the patch posterior means.
 # Importation into a patch is allocated to its zones in proportion to their current shares.
 # There is no mixing between the zones of a patch.
-# The increments are consecutive-vintage differences clamped at zero, so a reclassification of cases between zones is lost.
-# The walking set depends on the data, so a fit at an earlier cut-off can carry a different set of walking zones.
-# The zone deaths are not used: the reports' unallocated death row holds in-care deaths awaiting a zone, 17% of Ituri's deaths at the 12 September report, so the allocated deaths are not missing at random.
+# The increments are consecutive-vintage differences clamped at zero.
+# The walking set depends on the data and can differ between fits at different cut-offs.
+# The zone deaths are not used, since the reports' unallocated death row holds in-care deaths awaiting a zone, 17% of Ituri's deaths at the 12 September report.
 # The mixing, the deaths and the choice of a low or high patch draw in place of the mean are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
 
 #md # ```@raw html
@@ -4539,7 +4537,7 @@ zone_ppc_fig #hide
 zone_ppc_cum_fig #hide
 
 # The calibration table scores the per-vintage composition the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch: the mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
-# Most zone-vintage cells hold no case, so the coverage sits above nominal.
+# Most zone-vintage cells hold no case and the coverage sits above nominal.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition calibration</summary>
@@ -4589,7 +4587,7 @@ MarkdownTable(zone_forecast_display) #hide
 # The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity and the divergences.
 # Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
 # The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
-# The walking rows are the ones to read, since a level-only zone's reproduction number varies across draws only through its level.
+# The walking rows are the ones to read.
 
 #md # ```@raw html
 #md # <details><summary>Zone fit diagnostics</summary>
