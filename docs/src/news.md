@@ -16,10 +16,18 @@ Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin 
 Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
 The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
 `exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
-The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
+The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
 `r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
 The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
 It does not fix initialisation, so `ViablePrior` is retained.
+
+- Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
+A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
+`docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
+It goes to the job summary and to the job log.
+A cache hit records that the fit was reused rather than refitted.
+`fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
 
 ### Fixed
 
@@ -33,6 +41,12 @@ Taking the batch maximum would also clear the tail, but it keeps roughly the top
 Rejecting the worse half clears a tail that is a few per cent of prior mass while leaving the start a genuine prior draw conditional on the floor.
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
+
+- Citations read as prose rather than as a numeric-style reference list.
+Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)".
+They use `@citet`, which renders the name once, as does one site that cited without naming the author.
+The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
+`docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
 
 - The full test cell no longer times out.
 `Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
@@ -58,6 +72,21 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
 Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.
 The docs environment now caps `DocumenterCitations` below 1.5, and dependabot skips that bump until the Vitepress writer handles the node.
+- The non-BVD background anchor prior no longer truncates the level the data support.
+`background_walk_model`'s `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 per day.
+Under that prior the joint posterior for `λ_mu` ran about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
+The registry fits on this change are what say where the anchor settles once the ceiling is lifted.
+The SD is now 20, which puts the same posterior interval between the 58th and 87th percentiles.
+It stays a half-normal shrinking toward zero, so the background still cannot out-explain the outbreak signal on its own, and the pooling SD on the walk is unchanged.
+`λ_mu` anchors the start of the window rather than the level over it: the log-deviation is pinned to zero on the first knot, so the innovations carry the series from there.
+It is the post-ramp level exactly only at `σ_rw = 0`, since by the day the onset ramp completes the walk already carries part of its first innovation.
+The fitted background is far above it well before the cut-off, so this scale is not comparable to a mid-window level.
+The suspected-death background is the case background carried through the onset-to-death delay and scaled by a background CFR, so it widens by the same factor.
+The anchor is one of three prior-posterior conflicts the fitted background shows, alongside `σ_bg` near the top of its own prior and every innovation sharing a sign.
+Those together are the signature of a zero-mean walk carrying a systematic trend, which a wider anchor does not address.
+- The docs and test environments no longer warn about the SHA compat entry on every resolve.
+`SHA = "0.7.0"` excluded the version of the standard library shipped with Julia, so Pkg ignored the entry and logged the mismatch on each run.
+Both environments now read `SHA = "0.7.0, 1"`.
 
 ## v1.18.0
 

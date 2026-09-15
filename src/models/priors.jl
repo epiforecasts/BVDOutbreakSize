@@ -101,7 +101,7 @@ renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 end
 
 """
-Wilson–Hilferty [wilson1931](@cite) approximation to the continuous
+[wilson1931](@citet) approximation to the continuous
 median of a `Gamma` as a function of its `mean` and `sd`:
 `median ≈ mean·(1 − sd²/(9·mean²))³`.
 Smooth in the mean and SD with no quantile inversion, so it enters a
@@ -270,24 +270,22 @@ established renewal share one growth source, and the established
 reproduction number is consistent with the genetic growth under our
 generation interval rather than pinned by a separate `R0` prior.
 
-`m ~ truncated(Normal(4, 1.2); lower = 0)` counts the transmission generations
-between the index infection and the renewal start, so the origin sits
-`T = m · G` days back, with `G` the mean generation interval, and the cryptic
-phase grows one infection per day there to `C_T = exp(r · T)` per day at the
-renewal start.
+`m ~ truncated(Normal(2.75, 1.2); lower = 0)` counts the transmission
+generations between the index infection and the renewal start, so the origin
+sits `T = m · G` days back, with `G` the mean generation interval, and the
+cryptic phase grows one infection per day there to `C_T = exp(r · T)` per day
+at the renewal start.
 
-The centre is 4 generations: field work in Mongbwalu traced a sustained
-transmission chain back to a death on 25 January 2026 (kupferschmidt2026),
-63 days before the renewal start, which is four generation intervals. The
-genetic TMRCA (mbalaplacide2026) is a lower bound on the outbreak age
-consistent with an origin that early.
+The centre puts the origin in mid-February 2026, 2.75 generation intervals
+before the renewal start. The 90% prior origin runs mid-January to mid-March,
+so the traced 25 January 2026 index death (kupferschmidt2026) sits at about
+the 87th percentile rather than at the centre: it is the earliest chain field
+work reached, which bounds the origin rather than dating it. The genetic TMRCA
+(mbalaplacide2026) is a lower bound consistent with an origin that early.
 
-The spread is elicited against the origin date and checked in seed units. SD
-1.2 puts the 90% prior origin between late December 2025 and late February
-2026, which brackets that death, and its 99th percentile seed at about 500
-infections per day against a fitted outbreak of order ten thousand in total.
-The genetic term is flat above about five generations, contributing 1.66 nats
-in total and essentially all of it below four.
+The 99th percentile seed is about 150 infections per day, against a fitted
+outbreak of order ten thousand in total. The genetic term is flat above about
+five generations, contributing 1.66 nats in total.
 
 In the renewal, `C_T` is the prior seed at the renewal start, which the
 renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
@@ -298,7 +296,7 @@ per day. Returns `(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(g::AbstractVector;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
-        m_prior = truncated(Normal(4.0, 1.2); lower = 0))
+        m_prior = truncated(Normal(2.75, 1.2); lower = 0))
     r ~ r_prior
     m ~ m_prior
     ## Mean generation interval, the unit `m` is counted in. `g` is indexed
@@ -886,23 +884,30 @@ posterior mode that breaks convergence) and keeps the series smooth (so a
 death background scaled from it carries no steps). Knots run only over
 the surveillance window `[onset, n]`, so the number of innovations is
 small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
-knot spacing. Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily
-series (zero before `onset`).
+knot spacing.
+
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk multiplies,
+not the level over the window: the log-deviation is pinned to zero on the
+first knot, so it anchors the window's start and the innovations carry the
+series from there. The half-normal shrinks that anchor toward zero, which is
+what stops the background out-explaining the outbreak signal, and the scale is
+wide enough not to truncate the anchor the suspected-case data support. Pass
+`baseline_prior` to override.
+
+Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
+before `onset`).
 """
 @model function background_walk_model(n::Integer, σ_rw::Real;
         onset::Integer = 1, onset_ramp::Integer = 7, week::Integer = 7,
-        baseline_prior = truncated(Normal(0.0, 8.0); lower = 0))
+        baseline_prior = truncated(Normal(0.0, 20.0); lower = 0))
     t0 = clamp(Int(onset), 1, n)
     nw = n - t0 + 1
     ## Weekly knots over the window, linearly interpolated to the daily grid
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal baseline on the natural scale, the same informative prior
-    ## as the scalar `λ_bg` ([`test_positivity_model`](@ref)). It bounds the
-    ## background level tightly (a lognormal/log-scale level has a heavy right
-    ## tail the background/outbreak-size degeneracy exploits to run away), so
-    ## the background cannot blow up to explain the suspected stream.
+    ## Half-normal rather than lognormal: a log-scale level has a heavy right
+    ## tail the background/outbreak-size degeneracy exploits to run away.
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
     ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
