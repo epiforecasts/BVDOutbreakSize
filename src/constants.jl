@@ -59,29 +59,30 @@ const REPORT_SCENARIOS = [
     REPORT_SCENARIOS_CI
 
 Published McCabe et al. scenario estimates with their reported 95%
-confidence intervals, for three vintages: the 18 May 2026 report
+confidence intervals, for three vintages. The 18 May 2026 report
 [mccabe2026](@cite), the 20 May 2026 update [mccabe2026update](@cite) and
-the peer-reviewed Lancet Infectious Diseases publication
-[mccabe2026lancet](@cite), whose inputs are as of 27 May 2026. Each entry
-is a `(date, label, mean, lower, upper)` tuple, where `date` is that
-vintage's own cut-off date. Method 1 (geographic spread from exported
-cases and travel volume) is unchanged between the two Imperial reports,
-so it is recorded once under the 20 May vintage. Method 2
-(back-calculation from deaths) differs between the vintages: the 18 May
-report used 88 deaths and CFR 24/30/40%, the 20 May update used 131
-deaths and the corrected CFR 26/33/40%. Confidence intervals are exact
+the Lancet Infectious Diseases publication [mccabe2026lancet](@cite),
+whose inputs are as of 27 May 2026. Each entry is a
+`(date, label, mean, lower, upper)` tuple, where `date` is that vintage's
+own cut-off date.
+
+Method 1 (geographic spread from exported cases and travel volume) is
+unchanged between the two Imperial reports, so it is recorded once under
+the 20 May vintage. Method 2 (back-calculation from deaths) differs. The
+18 May report used 88 deaths and CFR 24/30/40%, the 20 May update 131
+deaths and CFR 26/33/40%. Confidence intervals are exact
 negative-binomial (Method 1) and Poisson likelihood-profile (Method 2),
 as reported in Tables 1 and 2 of each report.
 
 The 27 May Lancet vintage uses 240 deaths and three Uganda imports, and
 varies the epidemic doubling time `T_d` (7/10/14 d) for both methods
-rather than the earlier geographic window `w` / onset-to-death `τ`. Its
+rather than the earlier geographic window `w` and onset-to-death `τ`. Its
 back-calculation fixes the onset-to-death gamma (mean 11.37 d, SD 5.41)
-and assumes 30% of deaths are attributable to Ebola. The published paper
-swaps the method numbers (its "method 1" is the back-calculation and its
-"method 2" the geographic spread). This package keeps its own convention
-(M1 = geographic spread, negative-binomial CIs; M2 = back-calculation,
-Poisson CIs), confirmed by the paper's reported CI types.
+and assumes 30% of deaths are attributable to Ebola. The paper swaps the
+method numbers, so its "method 1" is the back-calculation. This package
+keeps its own convention (M1 geographic spread with negative-binomial
+CIs, M2 back-calculation with Poisson CIs), confirmed by the paper's
+reported CI types.
 """
 const REPORT_SCENARIOS_CI = [
     ## Method 1 (geographic spread): identical across both reports.
@@ -137,12 +138,10 @@ const REPORT_SCENARIOS_CI = [
 """
     M_PRIOR_BASE_DATE
 
-Base date for the integral-model doubling-count prior centre: McCabe et
+Base date for the integral-model doubling-count prior centre. McCabe et
 al.'s first report (18 May 2026), whose Method 2 central scenario of 501
 cases gives `m ≈ log2(501) ≈ 9` when `2^m` is the cumulative case total.
-Used only by [`m_prior_centre`](@ref), which serves the v1.3.0 integral
-backfill.
-
+Used only by [`m_prior_centre`](@ref), which serves the integral backfill.
 """
 const M_PRIOR_BASE_DATE = "2026-05-18"
 
@@ -150,38 +149,36 @@ const M_PRIOR_BASE_DATE = "2026-05-18"
     M_PRIOR_DOUBLING_DAYS
 
 Median doubling time (days) for the size and growth priors, from the
-BEAST X analysis (mbalaplacide2026, Exponential growth model,
-11.7 d, 95% HPD 6.8-17.5). The doubling-count prior centre
-advances by one doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to
-the cut-off.
+BEAST X analysis (mbalaplacide2026, exponential growth model, 11.7 d,
+95% HPD 6.8-17.5). The doubling-count prior centre advances by one
+doubling per `M_PRIOR_DOUBLING_DAYS` of elapsed time to the cut-off.
 """
 const M_PRIOR_DOUBLING_DAYS = 11.7
 
 """
     M_PRIOR_BASE
 
-Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing doubling-count
-prior centre used by the backfill fits via [`m_prior_centre`](@ref):
+Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing
+doubling-count prior used by the backfill fits via
+[`m_prior_centre`](@ref), so that
 `m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
 The main fit's `m` prior centre is set directly in
-[`exponential_growth_model`](@ref), from field intelligence and genetic
-evidence, and counts transmission generations rather than doublings.
+[`exponential_growth_model`](@ref) and counts transmission generations
+rather than doublings.
 """
 const M_PRIOR_BASE = 3.0
 
 """
     RENEWAL_START_LEAD
 
-Days the renewal start (the day the reproduction-number walk starts, where
-the analytic cryptic phase hands off to the recursion) sits after the
-genetic TMRCA day. Placing the renewal start a 14-day lead after the TMRCA,
-rather than exactly on it, leaves the observed span
-`τ_obs = n − renewal_start` strictly shorter than `tmrca_days`, so the
-genetic censored bound on the total age `T = m·G + τ_obs` stays informative:
-it pulls the origin to sit at or before the MRCA, bounding the cryptic
-duration `m·G` from below. The lead accounts for the TMRCA's own
-molecular-clock uncertainty before sustained transmission is treated as
-confidently established.
+Days the renewal start sits after the genetic TMRCA day. The renewal
+start is where the analytic cryptic phase hands off to the recursion.
+Placing it a lead after the TMRCA rather than exactly on it leaves the
+observed span `τ_obs = n − renewal_start` strictly shorter than
+`tmrca_days`, so the genetic censored bound on the total age
+`T = m·G + τ_obs` stays informative and bounds the cryptic duration `m·G`
+from below. The lead also allows for the TMRCA's own molecular-clock
+uncertainty.
 """
 const RENEWAL_START_LEAD = 14
 
@@ -202,11 +199,9 @@ const RT_WALK_LEAD = 28
 
 Time scale in days of the logistic ramp over which the outbreak-response
 intervention takes effect on `R_t`, centred on the `breakpoint`
-([`sigmoid_ramp`](@ref)). A ramped rather than instantaneous step: the
-response damps transmission over weeks, not on a single day. This constant
-is the single source of truth for the ramp, referenced by both the model
-(the `rt_walk_model` prior and `sigmoid_ramp`) and every `reconstruct_rt`
-caller that rebuilds the daily `R_t` from the chain, so the reconstruction
+([`sigmoid_ramp`](@ref)). Ramped rather than an instantaneous step,
+because the response damps transmission over weeks. Both the model and
+every `reconstruct_rt` caller read this constant, so a reconstruction
 cannot drift from the value the model fitted.
 """
 const RT_INTERVENTION_RAMP = 21.0
@@ -234,7 +229,7 @@ const PROVINCE_SOURCE_NAMES = ["ituri", "nord_kivu", "sud_kivu",
     PROVINCE_SOURCE_POPULATIONS
 
 Resident population of each province in [`PROVINCE_SOURCE_NAMES`](@ref)
-order: 2019 figures from the Democratic Republic of the Congo's Institut
+order. 2019 figures from the Democratic Republic of the Congo's Institut
 National de la Statistique, *Annuaire statistique RDC 2020* (March 2021),
 as tabulated at
 <https://en.wikipedia.org/wiki/Provinces_of_the_Democratic_Republic_of_the_Congo>
@@ -242,8 +237,8 @@ as tabulated at
 
 One source for all seven rather than the best figure for each. Only the
 relative sizes enter the model, through the importation kernel and the
-per-capita testing covariate, so consistency between provinces matters more
-than the accuracy of any one of them.
+per-capita testing covariate, so consistency between provinces matters
+more than the accuracy of any one of them.
 """
 const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
     2_046_000, 2_582_000, 1_250_000, 2_755_000]
@@ -252,15 +247,16 @@ const PROVINCE_SOURCE_POPULATIONS = [4_008_000, 7_574_000, 6_565_000,
     PROVINCE_SOURCE_CAPITALS
 
 Latitude and longitude of each province's capital in
-[`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in decimal
-degrees north and east: Bunia, Goma, Bukavu, Isiro, Kisangani, Buta and
-Gemena. Coordinates from GeoNames (<https://www.geonames.org>), the source
-for the distance term in [`province_importation_kernel`](@ref).
+[`PROVINCE_SOURCE_NAMES`](@ref) order, as `(latitude, longitude)` in
+decimal degrees north and east. Bunia, Goma, Bukavu, Isiro, Kisangani,
+Buta and Gemena. Coordinates from GeoNames (<https://www.geonames.org>),
+the source for the distance term in
+[`province_importation_kernel`](@ref).
 
-The capital stands in for the province. That is coarse, but it is the level
-the data are reported at, and the provinces are far enough apart that the
-ordering of the distances between them does not depend on the choice of
-point within each one.
+The capital stands in for the province. That is coarse, but it is the
+level the data are reported at, and the provinces are far enough apart
+that the ordering of the distances between them does not depend on the
+choice of point within each one.
 """
 const PROVINCE_SOURCE_CAPITALS = [
     (1.56667, 30.25000),    # Bunia, Ituri
@@ -275,20 +271,17 @@ const PROVINCE_SOURCE_CAPITALS = [
 """
     PROVINCE_NAMES
 
-The patches of the meta-population model, in patch order. The first entry is
-the primary patch: the origin of the outbreak, the reference for the
-per-patch reproduction-number deviations in [`patch_rt_model`](@ref), and
-the reference for the Uganda export propensities in
-[`province_export_pressure_model`](@ref).
+The patches of the meta-population model, in patch order. The first entry
+is the primary patch. It is the origin of the outbreak, the reference for
+the per-patch reproduction-number deviations in
+[`patch_rt_model`](@ref), and the reference for the Uganda export
+propensities in [`province_export_pressure_model`](@ref).
 
-Three provinces are patches in their own right and the rest are pooled into
-`other`. Ituri, Nord-Kivu and Haut-Uele carry signal: at the cut-off they
-hold 5615, 1269 and 279 confirmed cases. Sud-Kivu, Tshopo, Bas-Uele and
-Sud-Ubangi hold 3, 28, 5 and 1 between them, and Sud-Kivu has reported no
-new confirmed case since 26 May. Giving each of those its own reproduction
-number and its own ascertainment would sample dimensions nothing informs,
-and their estimates would be the deviation prior read back. Pooled they are
-one weak patch, which is what they are.
+Ituri, Nord-Kivu and Haut-Uele carry enough confirmed cases to be patches
+in their own right. The rest hold a few dozen between them and are pooled
+into `other`. Giving each of those its own reproduction number and
+ascertainment would sample dimensions nothing informs, and their
+estimates would be the deviation prior read back.
 """
 const PROVINCE_NAMES = ["ituri", "nord_kivu", "haut_uele", "other"]
 
@@ -358,11 +351,11 @@ const PROVINCE_CAPITALS = [(
 """
     PROVINCE_DISTANCE_DECAY
 
-Exponent on the distance term of [`province_importation_kernel`](@ref). One
-is the conventional gravity value, and it is fixed rather than sampled: the
-importation intensity it scales is already weakly identified against the
-secondary provinces' seeds, so a second free parameter on the same term
-would not be determined by anything.
+Exponent on the distance term of [`province_importation_kernel`](@ref).
+One is the conventional gravity value. It is fixed rather than sampled
+because the importation intensity it scales is already weakly identified
+against the secondary provinces' seeds, so a second free parameter on the
+same term would not be determined by anything.
 """
 const PROVINCE_DISTANCE_DECAY = 1.0
 
@@ -408,8 +401,9 @@ zero (no self-importation). The overall intensity is carried by the sampled
 `ε` in [`patch_infection_model`](@ref), so only the relative structure
 matters here.
 
-This is a gravity kernel: travel from `q` to `p` scales with the destination
-population and falls with the distance between the two capitals,
+This is a gravity kernel. Travel from `q` to `p` scales with the
+destination population and falls with the distance between the two
+capitals,
 
 ```math
 K_{p,q} \\propto \\frac{N_p}{d_{p,q}^{\\gamma}},
@@ -420,18 +414,18 @@ with `γ` fixed at [`PROVINCE_DISTANCE_DECAY`](@ref) and `d` from
 recover the population-only kernel.
 
 Each column is scaled so that its off-diagonal entries sum to `1 - N_q/N`,
-the share of the country that is not `q` itself. That is what the kernel
-summed to before the distance term was added, so the distance changes where
-a province's exported transmission lands without changing how much of it
-leaves. `ε` keeps its meaning, and every column's off-diagonal sum stays
-below one at any `ε` in `[0, 1]`, which is what stops a province exporting
-more transmission than it generates.
+the share of the country that is not `q` itself. The distance term then
+changes where a province's exported transmission lands without changing
+how much of it leaves. Every column's off-diagonal sum stays below one at
+any `ε` in `[0, 1]`, which stops a province exporting more transmission
+than it generates.
 
 There is no origin-destination or mobility data for this outbreak, so the
-kernel is still a structural assumption rather than a measurement, and `ε`
-is weakly identified against the secondary-patch seeds (both can raise a
-secondary province's early incidence). Treat the split between imported and
-locally-seeded infections as poorly determined even though their sum is not.
+kernel is a structural assumption rather than a measurement, and `ε` is
+weakly identified against the secondary-patch seeds, since both can raise
+a secondary province's early incidence. Treat the split between imported
+and locally-seeded infections as poorly determined even though their sum
+is not.
 """
 function province_importation_kernel(
         pops::AbstractVector = PROVINCE_POPULATIONS;
@@ -490,13 +484,13 @@ Central-scenario cumulative laboratory-confirmed case projection of
 [chamla2026](@citet) (WHO Regional Office for Africa, Lancet Infectious
 Diseases), as `(date, median, lower_90, upper_90)` tuples from their
 Table 1 (mean accepted `R₀ = 1.71`). Their stochastic SEIRD ensemble is
-calibrated by simulation filtering to 598 cumulative confirmed cases on 8 June
-2026, with the reporting fraction fixed at 1.0, so these are projected
-confirmed cases (a floor on the true size) rather than the
-ascertainment-corrected cumulative cases that this package's `C_T` and McCabe
-et al. estimate. The 8/10 June row is their calibration anchor. The dates
-from 24 June on are forward projections. The bounds are 90% prediction
-intervals.
+calibrated by simulation filtering to 598 cumulative confirmed cases on
+8 June 2026, with the reporting fraction fixed at 1.0. These are
+therefore projected confirmed cases, a floor on the true size, rather
+than the ascertainment-corrected cumulative cases that this package's
+`C_T` and McCabe et al. estimate. The 8/10 June row is their calibration
+anchor and the dates from 24 June on are forward projections. The bounds
+are 90% prediction intervals.
 """
 const CHAMLA_CONFIRMED_CENTRAL = [
     ("2026-05-18", 294, 212, 375),
@@ -511,15 +505,15 @@ const CHAMLA_CONFIRMED_CENTRAL = [
 """
     CHAMLA_CONFIRMED_W12
 
-[chamla2026](@citet) week-12 (24 June 2026) cumulative
-confirmed-case projection under their three transmissibility scenarios, as
+[chamla2026](@citet) week-12 (24 June 2026) cumulative confirmed-case
+projection under their three transmissibility scenarios, as
 `(scenario, median, lower_90, upper_90)` tuples (low `R₀ = 1.42`, central
 `R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to
 this analysis's current cut-off, so the scenario spread sits beside the
 observed confirmed count and our matched-date projection. The bounds are
 90% prediction intervals. The same estimand caveat as
-[`CHAMLA_CONFIRMED_CENTRAL`](@ref) applies: these are confirmed cases, not
-ascertainment-corrected total cases.
+[`CHAMLA_CONFIRMED_CENTRAL`](@ref) applies. These are confirmed cases,
+not ascertainment-corrected total cases.
 """
 const CHAMLA_CONFIRMED_W12 = [
     ("Chamla low (R₀=1.42)", 870, 641, 1133),

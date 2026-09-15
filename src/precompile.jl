@@ -1,19 +1,16 @@
-# Precompile the expensive first-call work so a fresh process does not pay it
-# on its first fit. The dominant cost is Mooncake building the reverse rule
-# for `bvd_joint` the first time it differentiates the model (minutes).
-# Compiling a single log-density gradient of a synthetic full-stream joint
-# here bakes those rules into the package precompile cache. CI persists that
-# cache (julia-actions/cache), so a build skips the compile. The Mooncake
-# rules are keyed by method signature, not data size, so a 40-day synthetic
-# fit compiles what the full-size fits reuse. The synthetic joint mirrors
-# the report's headline call, so every precompilable stream's rule is
-# covered. The gradient path (not a NUTS fit) is the exact expensive
-# operation and avoids sampler-adaptation fragility at tiny sizes.
+# Precompile the expensive first-call work so a fresh process does not pay
+# it on its first fit. The dominant cost is Mooncake building the reverse
+# rule for `bvd_joint` the first time it differentiates the model, which
+# takes minutes. Compiling a single log-density gradient of a synthetic
+# full-stream joint here bakes those rules into the package precompile
+# cache, which CI persists. The rules are keyed by method signature rather
+# than data size, so a 40-day synthetic fit compiles what the full-size fits
+# reuse. The gradient path rather than a NUTS fit is the expensive operation
+# and avoids sampler-adaptation fragility at tiny sizes.
 #
-# Opt-in: the workload makes package precompilation slow (it runs the joint
-# Mooncake compile), so it is off by default, for quick local iteration.
-# A package preference switches it on. The report build enables it through
-# `docs/LocalPreferences.toml`. Enable it for another environment with
+# Off by default, since the workload makes package precompilation slow. A
+# package preference switches it on, which the report build sets through
+# `docs/LocalPreferences.toml`. Enable it elsewhere with
 #   using Preferences
 #   set_preferences!(BVDOutbreakSize, "precompile_workload" => true)
 # Changing the preference triggers one recompilation.
@@ -25,14 +22,13 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
 
 @static if @load_preference("precompile_workload", false)
     @setup_workload begin
-        ## Small synthetic data for the streams the report's joint scores, so
-        ## the reverse rule is compiled (days are 1-based into an n = 40 grid,
-        ## ascending; counts positive). The isolation/bed stream and the
-        ## genetic-seeding TMRCA are left out on purpose: both score a
-        ## `Distributions.censored` distribution whose Mooncake rule `eval`s
-        ## into the `Mooncake` module, and that cannot run during
-        ## precompilation. Those two rules compile on the report's first fit
-        ## instead. Everything else is cached here.
+        ## Small synthetic data for the streams the report's joint scores.
+        ## Days are 1-based into an n = 40 grid, ascending, and counts are
+        ## positive. The isolation/bed stream and the genetic-seeding TMRCA
+        ## are left out deliberately. Both score a `Distributions.censored`
+        ## distribution whose Mooncake rule `eval`s into the `Mooncake`
+        ## module, which cannot run during precompilation, so those two rules
+        ## compile on the report's first fit instead.
         dh = (; days = [13, 18, 40], counts = [10, 14, 18])
         rh = (; days = [13, 18, 40], counts = [340, 516, 905])
         ch = (; days = [13, 18, 40], counts = [9, 17, 27])
@@ -42,11 +38,11 @@ using Turing.DynamicPPL: link, VarInfo, getlogjoint, LogDensityFunction
         sdh = (; days = [18, 40], counts = [20, 30])
         sddh = (; days = [18, 40], counts = [2, 3])
         rch = (; days = [18, 40], counts = [4, 7])
-        ## Onset-reporting-triangle stream: a couple of synthetic increment
+        ## Onset-reporting-triangle stream. A couple of synthetic increment
         ## cells so `increments[i] ~ safe_studentt(...)` in
-        ## `onset_reporting_model` actually runs (an empty history makes
-        ## that loop a no-op, and Mooncake never builds a reverse rule for a
-        ## branch it never executes; see `onset_reporting_model`).
+        ## `onset_reporting_model` actually runs. An empty history makes that
+        ## loop a no-op, and Mooncake never builds a reverse rule for a
+        ## branch it never executes.
         och = (; onset_days = [10, 12], report_days = [18, 40],
             prev_report_days = [0, 18], increments = [4, 6])
         @compile_workload begin

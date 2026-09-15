@@ -12,10 +12,10 @@ Generic delay submodel parameterised by mean and SD, discretised to a
 daily PMF over lags `0 … nmax` by double interval censoring of a
 moment-matched LogNormal (see [`lognormal_meansd`](@ref) and
 [`discretise_censored`](@ref)). The LogNormal CDF differentiates cleanly
-under Mooncake, so this is the AD-safe discretisation route for every
-delay in the renewal convolutions. The mean and SD carry
-weakly-informative priors, so the delay is estimated rather than fixed.
-Returns `(; pmf, dist, mean, sd)`.
+under Mooncake, so this is the AD-safe discretisation route for every delay
+in the renewal convolutions. The mean and SD carry weakly-informative
+priors, so the delay is estimated rather than fixed. Returns
+`(; pmf, dist, mean, sd)`.
 """
 @model function censored_delay_model(nmax::Integer; mean_prior, sd_prior)
     delay_mean ~ mean_prior
@@ -26,18 +26,15 @@ Returns `(; pmf, dist, mean, sd)`.
 end
 
 """
-Generation-interval submodel. Samples a Gamma shape `α` and scale `θ`,
-parameterised directly from the source's reported generation-time
-distribution rather than moment-matching a LogNormal from mean/SD priors.
-The source is the Ebola virus disease serial interval as a generation-time
+Generation-interval submodel, on the Gamma shape `α` and scale `θ`. The
+source is the Ebola virus disease serial interval as a generation-time
 proxy (mean 15.3 d, SD 9.3 d; WHO Ebola Response Team 2014, NEJM), which
-maps once to a Gamma shape `α ≈ 2.71` and scale `θ ≈ 5.65`
-(`α = (mean/sd)²`, `θ = sd²/mean`). The priors are centred on those values:
+maps once to `α ≈ 2.71` and `θ ≈ 5.65` (`α = (mean/sd)²`,
+`θ = sd²/mean`). The priors are centred there,
 `α ~ Normal⁺(2.71, 0.7)` and `θ ~ Normal⁺(5.65, 1.5)`, lower-truncated to
 keep the Gamma well defined. The SDs propagate the source's reported
-uncertainty (the NEJM serial-interval mean carries a 95% CI of 13.0–17.6 d,
-an SD on the mean of ≈1.17 d), not a self-assigned spread. Gamma
-shape/scale differentiate cleanly under Mooncake, so this is AD-stable.
+uncertainty, the NEJM serial-interval mean carrying a 95% CI of
+13.0–17.6 d, an SD on the mean of ≈1.17 d.
 
 Discretised through the same double-interval-censoring route as the other
 delays ([`discretise_censored`](@ref)). The lag-0 bin is dropped and the
@@ -61,12 +58,11 @@ end
 Natural-parameter Gamma delay submodel. Samples a Gamma shape `α` and
 scale `θ` directly from the priors, builds `Gamma(α, θ)`, and discretises
 to a daily PMF over lags `0 … nmax` by double interval censoring
-([`discretise_censored`](@ref)), keeping the lag-0 bin (an onset-to-event
-delay can be same-day, unlike the generation interval). This carries a
-line-list delay reanalysis through on its natural parameters with the
-reported posterior uncertainty, rather than moment-matching a LogNormal
-from mean/SD priors. Gamma shape/scale differentiate cleanly under
-Mooncake. Returns `(; pmf, dist, mean, sd, alpha, theta)`.
+([`discretise_censored`](@ref)), keeping the lag-0 bin, since an
+onset-to-event delay can be same-day unlike the generation interval. This
+carries a line-list delay reanalysis through on its natural parameters with
+the reported posterior uncertainty. Returns
+`(; pmf, dist, mean, sd, alpha, theta)`.
 """
 @model function gamma_delay_model(nmax::Integer; alpha_prior, theta_prior)
     α ~ alpha_prior
@@ -80,10 +76,9 @@ end
 Onset-to-death delay as the convolution of two natural-parameter Gamma
 atomic delays, onset→admission (`oa`) and admission→death (`ad`), each
 sampled through [`gamma_delay_model`](@ref) and combined by convolving
-their PMFs. This matches the companion line-list reanalysis, which fits
-the atomic components and convolves them rather than fitting onset→death
-directly, so no moment-matching is needed: each atomic delay keeps its
-own Gamma shape and scale prior with the reanalysis's reported
+their PMFs. This matches the companion line-list reanalysis, which fits the
+atomic components rather than onset→death directly, so each atomic delay
+keeps its own Gamma shape and scale prior with the reanalysis's reported
 uncertainty. The convolved PMF is truncated back to lags `0 … nmax` and
 renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 """
@@ -158,48 +153,37 @@ end
 Weekly piecewise-linear log-scale reproduction number over `n` days, with
 a smooth intervention ramp. Knots sit at weekly spacing
 ([`knot_days`](@ref)) and follow a Gaussian random walk in non-centred
-cumulative-sum form: standard-normal innovations are scaled by `sigma_rw`
+cumulative-sum form, with standard-normal innovations scaled by `sigma_rw`
 and accumulated, avoiding the funnel geometry of the centred recursion.
 Daily log-`R_t` is the linear interpolation between knots
 ([`interpolate_knots`](@ref)). An intervention at `breakpoint` (e.g. the
 first WHO situation report) adds a sampled effect `intervention_effect`
-shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp`
-(default 21 days, roughly the time a response takes to bite), so
-transmission changes gradually rather than instantly. `breakpoint =
-missing` drops the term. `Rt = exp.(log_Rt)`.
+shaped by a logistic ramp ([`sigmoid_ramp`](@ref)) of scale `ramp` (default
+21 days, roughly the time a response takes to bite), so transmission
+changes gradually rather than instantly. `breakpoint = missing` drops the
+term. `Rt = exp.(log_Rt)`.
 
-The walk base `log_R0` is not sampled here. It is passed in as a derived
-quantity: the first reproduction number is derived forward from the sampled
-growth rate `r` and the generation interval through Euler–Lotka
-(`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)). The prior therefore
-sits on the growth rate (see [`exponential_growth_model`](@ref)), grounded
-on the BEAST X molecular-clock doubling time (mbalaplacide2026). The
-established reproduction number is whatever that growth implies under our
-generation interval, rather than a separately asserted `R0` prior. The
-genetic report gives `R0 ≈ 1.31–1.55` under its own generation interval.
-Deriving `R0` forward from the shared growth rate under our generation
-interval is the consistent thing to do. This single growth source pins both
-the established reproduction number (the walk base at the genetic bound)
-and, through the renewal seeding, the cryptic exponential phase, so the
-outbreak has one growth source. The grid days before the renewal start are
-filled by the analytic cryptic exponential and so are unused by the walk.
-The walk clamps to `R0` before its first knot.
+The walk base `log_R0` is not sampled here. It is passed in, derived
+forward from the sampled growth rate `r` and the generation interval
+through Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)),
+so the prior sits on the growth rate instead (see
+[`exponential_growth_model`](@ref)). That single growth source pins both
+the established reproduction number and, through the renewal seeding, the
+cryptic exponential phase. The grid days before the renewal start are
+filled by the analytic cryptic exponential and are unused by the walk,
+which clamps to `R0` before its first knot.
 
 The random-walk step SD prior is a half-normal SD 0.1, so the weekly
 log-`R_t` is unlikely to change by more than about 20% (two SD ≈ 0.2) from
-one week to the next. The walk starts at the first situation report
-(`rt_start`), so every knot sits in the observed window and `R_t` bends to
-a slowdown or acceleration over the sitreps rather than drifting over the
-unobserved pre-report stretch.
+one week to the next. The walk starts at `rt_start`, so every knot sits in
+the observed window rather than drifting over the unobserved pre-report
+stretch.
 
 The intervention effect is constrained non-positive
-(`truncated(Normal(0, 0.4); upper = 0)`): a declared WHO response (case
+(`truncated(Normal(0, 0.4); upper = 0)`). A declared WHO response (case
 finding, isolation, vaccination) can only reduce transmission or leave it
-unchanged, so the ramp's effect on log-`R_t` is bounded at or below zero.
-The half-normal admits anything from no effect (mode) to a substantial
-decline. The breakpoint sits only around 11 days before the cut-off and
-the ramp runs three weeks, so the response damps `R_t` only partially by
-the cut-off.
+unchanged. The half-normal admits anything from no effect (mode) to a
+substantial decline.
 
 Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
 """
@@ -212,14 +196,9 @@ Returns `(; Rt, log_R, days, sigma_rw, log_R0, intervention_effect)`.
         effect_prior = truncated(Normal(0, 0.4); upper = 0))
     days = knot_days(n; week, start = rt_start)
     nb = length(days)
-    ## The established `R0` at the genetic bound is the base the random walk
-    ## grows from. It is derived (forward Euler–Lotka from the sampled growth
-    ## rate) and passed in, not sampled here. It is tracked as a deterministic
-    ## so the walk base stays available on the chain. The days before the
-    ## renewal start (`rt_start`) are filled by the analytic cryptic
-    ## exponential in `infection_model`, so the walk values there are unused.
-    ## The interpolation clamps to `log_R0` before the first knot, which is
-    ## harmless.
+    ## The established `R0` at the genetic bound is the base the walk grows
+    ## from. It is derived and passed in, not sampled here, and tracked as a
+    ## deterministic so it stays available on the chain.
     log_R0 := log_R0_base
     sigma_rw ~ sigma_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
@@ -236,9 +215,9 @@ end
 
 """
 Molecular-clock growth-and-size prior for the renewal cryptic phase.
-Samples the exponential growth rate `r` directly (the primary
-epidemiological assumption, placed on the genetic doubling time) and the
-generation count `m`, then exposes
+Samples the exponential growth rate `r` (the primary epidemiological
+assumption, placed on the genetic doubling time) and the generation count
+`m`, then exposes
 
 ```math
 \\tau = \\log 2 / r,\\qquad T_\\text{cryptic} = m\\,G,
@@ -246,53 +225,48 @@ generation count `m`, then exposes
 ```
 
 as deterministics, with `G` the mean generation interval. `T = m·G` is the
-cryptic-phase duration (origin → renewal start): `m` counts the transmission
-generations during the cryptic phase, and a single import grows over them to
-a daily incidence `C_T` at the renewal start. The composer
-([`infection_model`](@ref)) adds the observation span
+cryptic-phase duration (origin → renewal start). `m` counts the
+transmission generations during the cryptic phase, and a single import
+grows over them to a daily incidence `C_T` at the renewal start. The
+composer ([`infection_model`](@ref)) adds the observation span
 `τ_obs = n − renewal_start` to get the total outbreak age
 `T_total = m·G + τ_obs`, which carries the genetic seeding bound
 ([`genetic_seeding_model`](@ref)).
 
-The growth rate carries the prior `r ~ LogNormal(log(log2 /
-M_PRIOR_DOUBLING_DAYS), 0.40)`, with median doubling time (11.7 d)
-matching the BEAST X estimate (mbalaplacide2026, Exponential growth
-model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than the ≈0.24 that
-HPD implies. The HPD is conditional on a single-rate coalescent, the
-assumption the field epidemiology contradicts (kupferschmidt2026). An
-independent reanalysis puts the doubling time at 15.2–24.5 d
-(cuomodannenburg2026). The induced doubling-time prior is
-`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first
-reproduction number is then derived forward from this `r` and our generation
-interval through Euler–Lotka (`R0 = r_to_R0(r, g)` in
-[`infection_model`](@ref)), so the cryptic exponential phase and the
-established renewal share one growth source, and the established
-reproduction number is consistent with the genetic growth under our
-generation interval rather than pinned by a separate `R0` prior.
+The growth rate carries the prior
+`r ~ LogNormal(log(log2 / M_PRIOR_DOUBLING_DAYS), 0.40)`, with median
+doubling time (11.7 d) matching the BEAST X estimate (mbalaplacide2026,
+exponential growth model, 95% HPD 6.8–17.5). The log-SD 0.40 is wider than
+the ≈0.24 that HPD implies, because the HPD is conditional on a
+single-rate coalescent, which the field epidemiology contradicts
+(kupferschmidt2026), and an independent reanalysis puts the doubling time
+at 15.2–24.5 d (cuomodannenburg2026). The induced doubling-time prior is
+`LogNormal(log 11.7, 0.40)`, 5.3–25.6 d at 95%. The first reproduction
+number is derived forward from this `r` and our generation interval through
+Euler–Lotka (`R0 = r_to_R0(r, g)` in [`infection_model`](@ref)), so the
+cryptic exponential phase and the established renewal share one growth
+source.
 
 `m ~ truncated(Normal(2.75, 1.2); lower = 0)` counts the transmission
-generations between the index infection and the renewal start, so the origin
-sits `T = m · G` days back, with `G` the mean generation interval, and the
-cryptic phase grows one infection per day there to `C_T = exp(r · T)` per day
-at the renewal start.
+generations between the index infection and the renewal start, so the
+origin sits `T = m · G` days back and the cryptic phase grows one infection
+per day there to `C_T = exp(r · T)` per day at the renewal start.
 
 The centre puts the origin in mid-February 2026, 2.75 generation intervals
-before the renewal start. The 90% prior origin runs mid-January to mid-March,
-so the traced 25 January 2026 index death (kupferschmidt2026) sits at about
-the 87th percentile rather than at the centre: it is the earliest chain field
-work reached, which bounds the origin rather than dating it. The genetic TMRCA
-(mbalaplacide2026) is a lower bound consistent with an origin that early.
-
-The 99th percentile seed is about 150 infections per day, against a fitted
-outbreak of order ten thousand in total. The genetic term is flat above about
-five generations, contributing 1.66 nats in total.
+before the renewal start. The 90% prior origin runs mid-January to
+mid-March, so the traced 25 January 2026 index death (kupferschmidt2026)
+sits at about the 87th percentile rather than at the centre. It is the
+earliest chain field work reached, which bounds the origin rather than
+dating it. The genetic TMRCA (mbalaplacide2026) is a lower bound consistent
+with an origin that early. The 99th percentile seed is about 150 infections
+per day, against a fitted outbreak of order ten thousand in total.
 
 In the renewal, `C_T` is the prior seed at the renewal start, which the
-renewal recursion grows forward under `R_t`. Pass `m_prior` to override.
-Do not pass a centre from [`m_prior_centre`](@ref): that helper is for the v1.3.0
-integral backfill, where `2^m` is the cut-off cumulative case total, and
-its advancing centre would give a renewal seed of order half a million
-per day. Returns `(; τ, r, m, T, C_T, G)`.
+renewal recursion grows forward under `R_t`. Pass `m_prior` to override. Do
+not pass a centre from [`m_prior_centre`](@ref), which is scaled for the
+backfill parameterisation where `2^m` is the cut-off cumulative case total
+and would give a renewal seed of order half a million per day. Returns
+`(; τ, r, m, T, C_T, G)`.
 """
 @model function exponential_growth_model(g::AbstractVector;
         r_prior = LogNormal(log(log(2) / M_PRIOR_DOUBLING_DAYS), 0.40),
@@ -328,58 +302,48 @@ end
 Generating infection process for the two-phase renewal seeding. Samples
 the generation interval and the cryptic exponential growth rate `r` (the
 prior sits on `r`, the molecular-clock growth, in
-[`exponential_growth_model`](@ref)), then derives the established
-reproduction number `R0` (= the first `R_t`) forward from that `r` and the
-generation interval through Euler–Lotka (`R0 = r_to_R0(r, g)`) and passes
-`log R0` as the walk base to the reproduction-number submodel. The
-cryptic phase and the established renewal share one growth source, the
-sampled growth rate `r`, rather than the cryptic phase carrying a
-separate clock-rate prior or the walk asserting a separate `R0` prior.
+[`exponential_growth_model`](@ref)), derives the established reproduction
+number `R0` (= the first `R_t`) forward from that `r` and the generation
+interval through Euler–Lotka (`R0 = r_to_R0(r, g)`), and passes `log R0` as
+the walk base to the reproduction-number submodel. The cryptic phase and
+the established renewal therefore share one growth source.
 
 The renewal runs only over the observation window
-`[renewal_start, cut-off]`, where `renewal_start` is the genetic-TMRCA
-grid day `rt_start` (the day the reproduction-number walk starts, before
-which `R_t` is held flat). The cryptic exponential phase from the origin to
-the renewal start is analytic and off the renewal grid except for the
-days needed as recursion history. The seed at the renewal start is the daily
+`[renewal_start, cut-off]`, where `renewal_start` is the genetic-TMRCA grid
+day `rt_start` (the day the reproduction-number walk starts, before which
+`R_t` is held flat). The cryptic exponential phase from the origin to the
+renewal start is analytic and off the renewal grid except for the days
+needed as recursion history. The seed at the renewal start is the daily
 incidence the cryptic phase reaches, `C_T = e^{r·m·G}`
 ([`seed_at_renewal_start`](@ref)), where `m` counts the transmission
 generations during the cryptic phase. The magnitude is referenced to the
 origin, so a larger `r` raises both the seed and the derived `R0` and the
 two compound. A cut-off-referenced seed `C_T e^{−r·τ_obs}` would instead put
-`r` into the seed and the renewal growth in opposing directions, cancelling
-for a fixed realised size and opening a flat ridge along which `R0` slides
-to 1. The grid days `1 … renewal_start` before the renewal start are filled
-smoothly by the cryptic exponential curve at rate `r` ending at `C_T`
-([`seed_infections`](@ref)), giving the recursion a full generation interval
-of differentiable history. The renewal recursion
+`r` into the seed and the renewal growth in opposing directions, opening a
+flat ridge along which `R0` slides to 1. The grid days
+`1 … renewal_start` are filled smoothly by the cryptic exponential curve at
+rate `r` ending at `C_T` ([`seed_infections`](@ref)), giving the recursion a
+full generation interval of differentiable history. The renewal recursion
 ([`renewal_infections`](@ref)) then grows the trajectory over
 `renewal_start+1 … n` under the time-varying `R_t`.
 
 The total outbreak age is `T = m·τ + τ_obs` (cryptic duration plus the
-observation span `τ_obs = n − renewal_start`). The genetic seeding bound
-is applied to this total `T` at the composer. The renewal start sits a
-small lead after the genetic TMRCA day, past the TMRCA uncertainty where
-sustained transmission is confident, so `τ_obs = n − renewal_start <
-tmrca_days` and the censored bound
-`tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays informative:
-it pulls the origin to sit at or before the MRCA, so the cryptic duration
-`m·τ` cannot be too short. The genetic bound therefore defines the
-cryptic-phase length through `T`.
+observation span `τ_obs = n − renewal_start`). The genetic seeding bound is
+applied to this total `T` at the composer. The renewal start sits a small
+lead after the genetic TMRCA day, past the TMRCA uncertainty where
+sustained transmission is confident, so `τ_obs < tmrca_days` and the
+censored bound `tmrca ~ censored(Normal(T, sd); upper = tmrca_days)` stays
+informative. It pulls the origin to sit at or before the MRCA, so the
+cryptic duration `m·τ` cannot be too short.
 
 The realised cut-off size is `C_T = cumulative[n]`. The `breakpoint` is
-forwarded to the reproduction-number submodel. Exposes the daily
-infections and cumulative sum, the total prior outbreak age `T`, cryptic
-generation count `m`, doubling time `τ` and prior size scale `C_T_prior`,
-the realised
-cut-off size `C_T`, the established reproduction number `R0` and its
-implied cryptic rate `r0` (with `doubling_time_initial`), the current
-growth `r`/`doubling_time` derived from the cut-off reproduction number
-`Rt[n]` through forward Euler–Lotka (so `r` is sign-consistent with
-`R_T := Rt[n]` by construction), and the diagnostic-only `seeding_age`.
-Returns `(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ,
-R0, r0, r, doubling_time_initial, T, C_T, C_T_prior, doubling_time,
-seeding_age)`.
+forwarded to the reproduction-number submodel. Returns
+`(; infections, cumulative, Rt, g, seed_at_renewal_start, m, τ, R0, r0, r,
+doubling_time_initial, T, C_T, C_T_prior, doubling_time, seeding_age)`,
+where `r`/`doubling_time` are the current growth derived from the cut-off
+reproduction number `Rt[n]` through forward Euler–Lotka (so `r` is
+sign-consistent with `R_T := Rt[n]` by construction), `r0` the cryptic rate
+implied by `R0`, and `seeding_age` is diagnostic only.
 """
 @model function infection_model(n::Integer;
         breakpoint::Union{Missing, Real} = missing,
@@ -391,30 +355,25 @@ seeding_age)`.
         gi_nmax::Integer = cdf_nmax(Gamma(2.71, 5.65)))
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
-    ## One growth source: the prior is on the cryptic exponential growth rate
-    ## `r` (sampled in `growth`), and the established reproduction number
-    ## `R0` (= the walk base, the first `R_t`) is derived forward from that
-    ## `r` and the generation interval through Euler–Lotka. The cryptic
-    ## phase and the established renewal therefore share `r`.
+    ## One growth source. The prior is on the cryptic exponential growth rate
+    ## `r`, and the established reproduction number `R0` (the walk base) is
+    ## derived forward from it through Euler–Lotka.
     growth_state ~ to_submodel(growth(g))
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
     ## The random walk's first knot sits at `rt_walk_start`, decoupled from
-    ## the renewal start `rt_start`: the renewal seeds and grows from the
-    ## genetic-TMRCA renewal start, but `R_t` is held flat at `R0` until
-    ## `rt_walk_start` (the first situation report). Before any case or death
-    ## surveillance the dynamics are unidentified, so a free walk there only
-    ## adds unsupported drift. `rt_walk_start` defaults to `rt_start`, the
-    ## walk-from-renewal-start case.
+    ## the renewal start. The renewal seeds and grows from the genetic-TMRCA
+    ## renewal start, but `R_t` is held flat at `R0` until the first
+    ## situation report, because before any case or death surveillance the
+    ## dynamics are unidentified and a free walk there only adds unsupported
+    ## drift. `rt_walk_start` defaults to `rt_start`.
     rt_state ~ to_submodel(rt(n, log(R0); breakpoint, rt_start = rt_walk_start))
     Rt = rt_state.Rt
-    ## renewal_start = genetic-TMRCA grid day (`rt_start`). The observation
-    ## span is τ_obs = n − renewal_start. The renewal-start seed is the daily
-    ## incidence `C_T = exp(r·T)` reached after the cryptic phase's `m`
-    ## generations.
-    ## Fill grid days 1…renewal_start with the cryptic exponential curve at
-    ## rate `r` ending at that seed (a full GI of history),
-    ## then run the renewal forward from renewal_start+1.
+    ## The renewal-start seed is the daily incidence `C_T = exp(r·T)` reached
+    ## after the cryptic phase's `m` generations. Grid days
+    ## `1…renewal_start` are filled with the cryptic exponential curve at
+    ## rate `r` ending at that seed, a full generation interval of history,
+    ## and the renewal then runs forward from `renewal_start+1`.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0 = seed_at_renewal_start(growth_state.C_T)
@@ -424,15 +383,12 @@ seeding_age)`.
     ## Total outbreak age: cryptic duration (m generations) plus the span.
     T_total = growth_state.T + τ_obs
     ## Current growth rate at the cut-off, derived from the cut-off
-    ## reproduction number `Rt[n]` and the generation interval through forward
-    ## Euler–Lotka (the inverse of the `r_to_R0` that derives `R0` from the
-    ## clock growth above). This makes the reported current growth rate
-    ## consistent with `R_T := Rt[n]` by construction: `r < 0` iff `R_T < 1`.
-    ## The realised last-two-days slope `log I[n] − log I[n-1]` is not used
-    ## for this: the intervention ramp depresses the final renewal step
-    ## (`I[n] < I[n-1]` while `Rt[n] ≥ 1`), so that slope can disagree in
-    ## sign with `R_T` at the cut-off, an end-of-trajectory edge artifact
-    ## rather than the instantaneous growth.
+    ## reproduction number `Rt[n]` and the generation interval through
+    ## forward Euler–Lotka, the inverse of the `r_to_R0` above. This makes
+    ## the reported growth rate consistent with `R_T := Rt[n]` by
+    ## construction, so `r < 0` iff `R_T < 1`. The realised last-two-days
+    ## slope is not used: the intervention ramp depresses the final renewal
+    ## step, so that slope can disagree in sign with `R_T`.
     r = euler_lotka_r(@inbounds(Rt[n]), g)
     return (; infections, cumulative, Rt, g, seed_at_renewal_start = seed0,
         m = growth_state.m, τ = growth_state.τ, R0, r0 = r_clock, r,
@@ -443,18 +399,16 @@ seeding_age)`.
 end
 
 """
-Onset-incidence submodel: convolve the renewal infections with the
-sampled incubation-period PMF to get daily symptom-onset incidence.
-Computed once per draw and reused by every downstream observation stream,
-so the staging infections → onsets → each observed event is explicit. The
-incubation delay submodel is injected. The incubation period cannot be
-fitted from the BDBV line list (no exposure dates), so the line-list
-reanalysis recommends the MacNeil et al. (2010) Bundibugyo estimate from
-the 2007 Uganda outbreak: mean 6.3 d (95% CI 5.2-7.3, n = 24). The mean
-prior `Normal(6.3, 0.54)` reproduces MacNeil's reported 95% CI (SD = CI
-half-width / 1.96). MacNeil give no interval on the spread, so the SD
-prior is a weakly-informative modelling choice centred on the
-CV-implied spread (≈ 3.5 d). Returns
+Onset-incidence submodel. Convolves the renewal infections with the sampled
+incubation-period PMF to get daily symptom-onset incidence, computed once
+per draw and reused by every downstream observation stream. The incubation
+delay submodel is injected. The incubation period cannot be fitted from the
+BDBV line list (no exposure dates), so it follows the MacNeil et al. (2010)
+Bundibugyo estimate from the 2007 Uganda outbreak, mean 6.3 d (95% CI
+5.2-7.3, n = 24). The mean prior `Normal(6.3, 0.54)` reproduces that 95% CI
+(SD = CI half-width / 1.96). MacNeil give no interval on the spread, so the
+SD prior is a weakly-informative choice centred on the CV-implied spread
+(≈ 3.5 d). Returns
 `(; onsets, incubation_pmf, incubation_mean, incubation_sd)`.
 """
 @model function onset_incidence_model(infections::AbstractVector;
@@ -472,9 +426,9 @@ end
 
 """
 One-sided molecular-clock seeding bound on the outbreak age `T` (see
-[`infection_model`](@ref)). The TMRCA is treated as a right-censored,
-noisy reading of the seeding time, so deeper or wider sampling only pushes
-it older. The likelihood contributes `P(read ≥ tmrca_days)`. Passing
+[`infection_model`](@ref)). The TMRCA is treated as a right-censored, noisy
+reading of the seeding time, so deeper or wider sampling only pushes it
+older. The likelihood contributes `P(read ≥ tmrca_days)`.
 `tmrca_days = missing` makes the submodel a no-op.
 """
 @model function genetic_seeding_model(T::Real,
@@ -518,16 +472,15 @@ not be a true BVD death. This submodel samples the per-day non-BVD
 background death rate `λ_bg_death`. Its cumulative contribution over the
 grid is `λ_bg_death · n`.
 
-The default `truncated(Normal(0, 0.25); lower = 0)` is deliberately
-informative, mirroring the case background: deaths are far fewer than
-suspected cases (≈ 246 suspected deaths vs ≈ 1077 suspected cases at the
-last stable suspected vintages), so the background rate is scaled down
-accordingly. With SD 0.25 the median background is ≈ 0.17/day (a modest
-minority of the suspected-death total over the grid) while still
-admitting a genuine non-BVD signal. The background is degenerate with
-outbreak size, so a diffuse prior would let it absorb arbitrarily many
-suspected deaths. Pass `lambda_prior` to override. Returns
-`(; λ_bg_death)`.
+The default `truncated(Normal(0, 0.25); lower = 0)` is informative,
+mirroring the case background. Deaths are far fewer than suspected cases
+(≈ 246 suspected deaths against ≈ 1077 suspected cases at the last stable
+vintages), so the background rate is scaled down accordingly. With SD 0.25
+the median background is ≈ 0.17/day, a modest minority of the
+suspected-death total over the grid, while still admitting a genuine
+non-BVD signal. The background is degenerate with outbreak size, so a
+diffuse prior would let it absorb arbitrarily many suspected deaths. Pass
+`lambda_prior` to override. Returns `(; λ_bg_death)`.
 """
 @model function death_background_model(;
         lambda_prior = truncated(Normal(0.0, 0.25); lower = 0))
@@ -536,25 +489,23 @@ suspected deaths. Pass `lambda_prior` to override. Returns
 end
 
 """
-Ascertainment of the suspected-death stream ([`deaths_model`](@ref)): the
+Ascertainment of the suspected-death stream ([`deaths_model`](@ref)), the
 fraction `p_death` of true BVD deaths that enter the INSP suspected-death
-count by the cut-off. The suspected-death definition is symptomatic-then-
-deceased, so a fatal BVD infection only counts once the death is reported,
-and not every BVD death is captured. The expected BVD suspected deaths are
-therefore `p_death · CFR` of the onset-to-death-convolved infections, the
-death analogue of the suspected-case ascertainment `p_drc`
+count by the cut-off. The suspected-death definition is
+symptomatic-then-deceased, so a fatal BVD infection only counts once the
+death is reported, and not every BVD death is captured. The expected BVD
+suspected deaths are `p_death · CFR` of the onset-to-death-convolved
+infections, the death analogue of the suspected-case ascertainment `p_drc`
 ([`pooled_ascertainment_model`](@ref)).
 
-The default `Normal(logit(0.9), 0.5)` on the logit scale is deliberately
-informative and centred on a high ascertainment: a death is a salient event
-in an Ebola response and is reported more reliably than a living suspected
-case (`p_drc ≈ 0.75`). The SD 0.5 gives a 90% prior interval of roughly
-0.80–0.95, admitting moderate under-ascertainment without letting the death
-stream slide to an implausibly low capture. `p_death` is weakly identified
-on its own (it trades off with the CFR for the suspected-death level), so it
-leans on this prior. The export-death stream and the CFR prior pin the CFR
-separately. Pass `ascertainment_prior` to override. Returns
-`(; p_death, logit_p_death)`.
+The default `Normal(logit(0.9), 0.5)` on the logit scale is informative and
+centred on a high ascertainment, since a death is a salient event in an
+Ebola response and is reported more reliably than a living suspected case
+(`p_drc ≈ 0.75`). The SD 0.5 gives a 90% prior interval of roughly
+0.80–0.95. `p_death` is weakly identified on its own, trading off with the
+CFR for the suspected-death level, so it leans on this prior. The
+export-death stream and the CFR prior pin the CFR separately. Pass
+`ascertainment_prior` to override. Returns `(; p_death, logit_p_death)`.
 """
 @model function death_ascertainment_model(;
         ascertainment_prior = Normal(logit(0.9), 0.5))
@@ -565,25 +516,21 @@ end
 
 """
 Background case-fatality ratio `cfr_bg` for the non-BVD suspected-death
-background ([`deaths_model`](@ref)). The renewal joint ties the non-BVD
-suspected-death background to the (already identified) non-BVD
-suspected-case background `λ_bg` ([`test_positivity_model`](@ref)) rather
-than giving deaths a free, outbreak-size-degenerate background rate of
-their own: the per-day background suspected deaths are `cfr_bg · λ_bg_v`,
-a background CFR applied to the per-day non-BVD suspected-case rate. A
-non-BVD suspected case (other severe febrile or haemorrhagic illness that
-meets the suspect definition) carries its own fatality risk, and
-`cfr_bg` is the share of that background pool that is reported as a
-suspected death.
+background ([`deaths_model`](@ref)). The per-day background suspected
+deaths are `cfr_bg · λ_bg_v`, a background CFR applied to the per-day
+non-BVD suspected-case rate ([`test_positivity_model`](@ref)). A non-BVD
+suspected case (other severe febrile or haemorrhagic illness that meets the
+suspect definition) carries its own fatality risk, and `cfr_bg` is the
+share of that background pool reported as a suspected death.
 
-Tying the death background to the case background removes the degeneracy that
-keeps a free `λ_bg_death` switched off: the case background is pinned by the
-laboratory positivity link, so scaling it by `cfr_bg` gives the death
-background a level and time profile without a second free rate competing with
-outbreak size. The default `Beta(2, 6)` (mean ≈ 0.25, 90% ≈ 0.05–0.52) is
-weakly informative and centred below the BVD CFR (non-BVD suspect illness is
-on average less lethal than BVD). Pass `cfr_prior` to override. Returns
-`(; cfr_bg)`.
+Tying the death background to the case background rather than giving deaths
+a free rate of their own removes the degeneracy that keeps a free
+`λ_bg_death` switched off. The case background is pinned by the laboratory
+positivity link, so scaling it by `cfr_bg` gives the death background a
+level and time profile without a second free rate competing with outbreak
+size. The default `Beta(2, 6)` (mean ≈ 0.25, 90% ≈ 0.05–0.52) is weakly
+informative and centred below the BVD CFR, since non-BVD suspect illness is
+on average less lethal. Pass `cfr_prior` to override. Returns `(; cfr_bg)`.
 """
 @model function background_cfr_model(; cfr_prior = Beta(2.0, 6.0))
     cfr_bg ~ cfr_prior
@@ -604,19 +551,14 @@ streams. Samples
 The default `λ_bg` prior is a half-normal
 `truncated(Normal(0, 1.0); lower = 0)`. Its total contribution to the
 expected suspected-case count over the grid is `λ_bg · T`, with `T` the
-seeding-to-cut-off span. The prior is deliberately informative because
-`λ_bg` is degenerate with outbreak size (the per-vintage reported mean
-mixes the `p_drc`-scaled BVD increment with `λ_bg · Δt`), so a diffuse
-prior lets the background absorb arbitrarily many suspected cases and
-resolve at the high end where the deaths and exports streams pin `C_T`.
-A background-noise process must not be able to explain more suspected
-cases than were ever reported. With SD 1.0 the median background is
-≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest minority of the
-≈ 1077 suspected cases observed by the last stable suspected-case vintage
-while still admitting a genuine non-BVD signal. A wider SD (e.g. SD 5)
-left a second posterior mode in which the background explains the
-majority of suspected cases (positivity ≈ 0.2, background ≈ 2.3× the
-observed total). Pass
+seeding-to-cut-off span. The prior is informative because `λ_bg` is
+degenerate with outbreak size (the per-vintage reported mean mixes the
+`p_drc`-scaled BVD increment with `λ_bg · Δt`), and a diffuse prior lets the
+background absorb arbitrarily many suspected cases and opens a second
+posterior mode in which it explains the majority of them. With SD 1.0 the
+median background is ≈ 0.67/day and the 95% prior bound ≈ 2.0/day, a modest
+minority of the ≈ 1077 suspected cases observed by the last stable
+suspected-case vintage while still admitting a genuine non-BVD signal. Pass
 `lambda_prior` to override. `τ_test` defaults to `Beta(5, 2)`
 (mean ≈ 0.71).
 
@@ -644,7 +586,7 @@ since triage admits the sicker patients and BVD presents more severely.
 
 The default `Beta(2, 2)` is weakly informative on `(0, 1)` with mean ½ and
 no mass piled at the bounds. `p_iso` is partially confounded with the
-length-of-stay mean for the occupancy level (Little's law: mean occupancy
+length-of-stay mean for the occupancy level (Little's law, mean occupancy
 ≈ `p_iso · admissions · (E[LOS] + 1)`), so the length-of-stay prior carries
 the duration and `p_iso` absorbs the admission/retention fraction. The
 length-of-stay also sets the lag and smoothing of occupancy relative to the
@@ -669,11 +611,9 @@ the admitted. The non-negative truncation keeps a BVD suspect at least as
 likely to be admitted as a rule-out.
 
 The isolation stream observes only total occupancy, so the skew is weakly
-identified from it alone. Its effect is to enrich the long-stay BVD
-component of demand, which the occupancy persistence informs only mildly,
-so the half-normal `truncated(Normal(0, 0.75); lower = 0)` carries most of
-the weight (`δ_iso = 0` recovers a shared admission rate). Pass
-`logodds_prior` to override. Returns `(; δ_iso)`.
+identified and the half-normal `truncated(Normal(0, 0.75); lower = 0)`
+carries most of the weight. `δ_iso = 0` recovers a shared admission rate.
+Pass `logodds_prior` to override. Returns `(; δ_iso)`.
 """
 @model function isolation_severity_model(;
         logodds_prior = truncated(Normal(0.0, 0.75); lower = 0))
@@ -690,16 +630,15 @@ occupancy catching up as capacity is expanded), so the modelled occupancy is
 the demand passed through a soft cap at `capacity` rather than tracking
 demand directly.
 
-The default `LogNormal(log 450, 0.42)` is weakly informative and positive by
-construction (no truncation boundary), with median 450 and a ≈0.44
-coefficient of variation, centred on the bed count implied by the reported
-occupancy rates (the "Taux d'occupation" gives `capacity = occupancy /
-rate ≈ 400–452` over 9–13 June). The capacity is identified by the
-implied-capacity series the isolation submodel fits, so the prior only
-has to bracket it. A single national capacity is a limitation: it
-averages over a growing capacity and cannot represent local saturation
-(one province full while another has slack, see
-[`bed_capacity_walk_model`](@ref) for the time-varying form). Pass
+The default `LogNormal(log 450, 0.42)` is weakly informative and positive
+by construction, with median 450 and a ≈0.44 coefficient of variation,
+centred on the bed count implied by the reported occupancy rates (the
+"Taux d'occupation" gives `capacity = occupancy / rate ≈ 400–452` over
+9–13 June). The capacity is identified by the implied-capacity series the
+isolation submodel fits, so the prior only has to bracket it. A single
+national capacity averages over a growing capacity and cannot represent
+local saturation, one province full while another has slack. See
+[`bed_capacity_walk_model`](@ref) for the time-varying form. Pass
 `capacity_prior` to override. Returns `(; capacity)`.
 """
 @model function bed_capacity_model(;
@@ -718,9 +657,9 @@ treatment centres opening), so the walk tracks the growth a single scalar
 capacity ([`bed_capacity_model`](@ref)) cannot.
 
 The walk is a non-centred cumulative log-deviation from a baseline bed
-count `C0` on weekly knots, linearly interpolated to the daily grid (the
-same parameterisation as the reproduction-number and background walks):
-with knot values `\\log C` and knot days `d`,
+count `C0` on weekly knots, linearly interpolated to the daily grid, the
+same parameterisation as the reproduction-number and background walks. With
+knot values `\\log C` and knot days `d`,
 `C(t) = C0 · exp(\\text{interp}(σ_cap · cumsum(z)))` with `z ~ Normal(0, 1)`
 per knot and a tight innovation SD `σ_cap`, keeping capacity a gentle
 drift rather than per-day jumps. Knots need far fewer innovations than a
@@ -731,15 +670,14 @@ scale and the whole capacity `log C(t) = log C0 + walk` is fully
 log-scale. The implied-capacity series the isolation submodel fits pins
 `C(t)` on the days a rate is published.
 
-Knots run only from `start`, the first day with occupancy or capacity
-data. Capacity is flat at `C0` before it. Off-window capacity carries no
-likelihood, so walking it adds unidentified innovations that leave the
-posterior poorly conditioned, and `start` keeps the knots to the days the
-data speaks to. Pass `start = 1` for knots over the whole grid, or `week`
-to change the knot spacing. A single national capacity remains a
-limitation: it cannot represent local saturation, one province full
-while another has slack. Pass `baseline_prior` / `innovation_prior` to
-override. Returns `(; C, C0, σ_cap)` with `C` a length-`n` vector.
+Knots run only from `start`, the first day with occupancy or capacity data,
+and capacity is flat at `C0` before it. Off-window capacity carries no
+likelihood, so walking it there would add unidentified innovations. Pass
+`start = 1` for knots over the whole grid, or `week` to change the knot
+spacing. A single national capacity cannot represent local saturation, one
+province full while another has slack. Pass
+`baseline_prior` / `innovation_prior` to override. Returns
+`(; C, C0, σ_cap)` with `C` a length-`n` vector.
 """
 @model function bed_capacity_walk_model(n::Integer; start::Integer = 1,
         week::Integer = 7,
@@ -750,10 +688,10 @@ override. Returns `(; C, C0, σ_cap)` with `C` a length-`n` vector.
     s = clamp(Int(start), 1, n)
     days = knot_days(n; week = week, start = s)
     nb = length(days)
-    ## Non-negative innovations, so capacity is non-decreasing: beds are added
-    ## over the response and are not taken away, so `C(t)` cannot drop below an
-    ## already-reached level. This also keeps the effective ceiling from
-    ## jittering down into the observed occupancy.
+    ## Non-negative innovations, so capacity is non-decreasing. Beds are
+    ## added over the response and not taken away, so `C(t)` cannot drop
+    ## below an already-reached level, and the effective ceiling cannot
+    ## jitter down into the observed occupancy.
     z ~ product_distribution(fill(truncated(Normal(0, 1); lower = 0),
         max(nb - 1, 1)))
     steps = σ_cap .* z[1:max(nb - 1, 0)]
@@ -779,14 +717,12 @@ p_\\text{recover} = \\operatorname{logistic}\\!\\bigl(
 ```
 
 with `δ_rec ~ Normal(0, 0.5)` centred at zero, so the default recovery
-fraction is exactly `1 − CFR` and the data move it only as far as they
-support. The offset keeps `p_recover` in `(0, 1)` without a hard clamp and
-lets the confirmed-population survival differ modestly from the CFR
-complement. `p_recover` is partially confounded with the
+fraction is exactly `1 − CFR`. The offset keeps `p_recover` in `(0, 1)`
+without a hard clamp. `p_recover` is partially confounded with the
 confirmation-to-recovery delay for the count of recoveries observed by the
-cut-off (a long delay right-censors recoveries that have not yet resolved),
-so the delay carries the timing and `p_recover` the eventual survival
-fraction. Pass `offset_prior` to override. Returns
+cut-off, since a long delay right-censors recoveries that have not yet
+resolved, so the delay carries the timing and `p_recover` the eventual
+survival fraction. Pass `offset_prior` to override. Returns
 `(; p_recover, recovery_offset)`.
 """
 @model function recovery_probability_model(CFR::Real;
@@ -818,14 +754,13 @@ log-normal deviation from this baseline,
 ```
 
 with `σ_bg` the pooling SD, passed in rather than sampled here so the
-suspected-case and suspected-death streams can share one pooling SD. See
+suspected-case and suspected-death streams share one. See
 [`background_pooling_model`](@ref), which samples it once at the composer
-level. The deviation is multiplicative so the per-vintage rate stays
+level. The deviation is multiplicative, so the per-vintage rate stays
 positive without a clamp and `σ_bg → 0` recovers the scalar baseline
-exactly (every `λ_v = λ_mu`). Each stream still samples its own baseline
-`λ_mu` and per-vintage deviations `z`. `nv` is the number of vintage
-windows. Returns `(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of
-per-vintage rates.
+exactly. Each stream still samples its own baseline `λ_mu` and per-vintage
+deviations `z`. `nv` is the number of vintage windows. Returns
+`(; λ, λ_mu, σ_bg, z)` with `λ` a length-`nv` vector of per-vintage rates.
 """
 @model function background_re_model(nv::Integer, σ_bg::Real;
         baseline_prior = truncated(Normal(0.0, 1.0); lower = 0))
@@ -841,13 +776,12 @@ Shared pooling SD `σ_bg` for the per-vintage background random effect
 ([`background_re_model`](@ref)). Sampled once at the composer level and
 passed to both the suspected-case and suspected-death backgrounds, so the
 two streams share one time-variation scale rather than each estimating its
-own from few vintages. The prior is a tight half-normal
-`truncated(Normal(0, 0.3); lower = 0)`, deliberately small: the background
-is degenerate with outbreak size, so a wide random effect would let
-individual windows absorb arbitrary suspected counts and re-open the
-second posterior mode in which the background explains the majority of
-suspected cases. Regularising `σ_bg` toward zero keeps the time variation
-a perturbation of the informative scalar baselines. Returns `(; σ_bg)`.
+own from few vintages. The prior is a tight half-normal. The background is
+degenerate with outbreak size, so a wide random effect would let individual
+windows absorb arbitrary suspected counts and re-open the posterior mode in
+which the background explains the majority of suspected cases.
+Regularising `σ_bg` toward zero keeps the time variation a perturbation of
+the informative scalar baselines. Returns `(; σ_bg)`.
 """
 @model function background_pooling_model(;
         pooling_prior = truncated(Normal(0.0, 0.1); lower = 0))
@@ -861,13 +795,12 @@ surveillance window, the alternative to the per-vintage step random
 effect ([`background_re_model`](@ref)). The log-rate follows a
 non-centred random walk on weekly knots and is linearly interpolated to
 the daily grid, the same parameterisation as the reproduction-number walk
-([`rt_walk_model`](@ref)): the background is a slow drift, so a knot per
+([`rt_walk_model`](@ref)). The background is a slow drift, so a knot per
 `week` carries the time variation with far fewer innovations than a daily
-walk, avoiding the high-dimensional funnel a daily walk over a long
-window opens. The series is gated to zero before the surveillance
-`onset` (the non-BVD background does not exist before surveillance
-began) and ramps in over the first `onset_ramp` days of the window. With
-knot values `\\log\\lambda` and knot days `d`,
+walk. The series is gated to zero before the surveillance `onset`, since
+the non-BVD background does not exist before surveillance began, and ramps
+in over the first `onset_ramp` days of the window. With knot values
+`\\log\\lambda` and knot days `d`,
 
 ```math
 \\log \\lambda_d = \\log \\lambda_0 + \\sigma_{rw} \\sum_{s < d} z_s,
@@ -875,24 +808,22 @@ knot values `\\log\\lambda` and knot days `d`,
 \\qquad \\lambda_t = 0 \\ \\text{for}\\ t < \\text{onset}.
 ```
 
-`σ_rw` (passed in, shared across the suspected-case and suspected-death
-streams via [`background_pooling_model`](@ref)) is the per-knot innovation
-SD on the log scale. A tight prior keeps the background close to constant
-(a gentle drift, not week-to-week jumps), which regularises the
-background/outbreak-size degeneracy (closing the high-background second
-posterior mode that breaks convergence) and keeps the series smooth (so a
-death background scaled from it carries no steps). Knots run only over
-the surveillance window `[onset, n]`, so the number of innovations is
-small. `onset ≤ 1` runs it over the whole grid. Pass `week` to change the
-knot spacing.
+`σ_rw` is the per-knot innovation SD on the log scale, passed in and shared
+across the suspected-case and suspected-death streams via
+[`background_pooling_model`](@ref). A tight prior keeps the background
+close to constant, which regularises the background/outbreak-size
+degeneracy and keeps the series smooth, so a death background scaled from
+it carries no steps. Knots run only over the surveillance window
+`[onset, n]`, so the number of innovations is small. `onset ≤ 1` runs it
+over the whole grid. Pass `week` to change the knot spacing.
 
-`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk multiplies,
-not the level over the window: the log-deviation is pinned to zero on the
-first knot, so it anchors the window's start and the innovations carry the
-series from there. The half-normal shrinks that anchor toward zero, which is
-what stops the background out-explaining the outbreak signal, and the scale is
-wide enough not to truncate the anchor the suspected-case data support. Pass
-`baseline_prior` to override.
+`λ_mu ~ truncated(Normal(0, 20); lower = 0)` is the scale the walk
+multiplies, not the level over the window. The log-deviation is pinned to
+zero on the first knot, so `λ_mu` anchors the window's start and the
+innovations carry the series from there. The half-normal shrinks that
+anchor toward zero, which stops the background out-explaining the outbreak
+signal, and the scale is wide enough not to truncate the anchor the
+suspected-case data support. Pass `baseline_prior` to override.
 
 Returns `(; λ, λ_mu, σ_bg)` with `λ` the length-`n` daily series (zero
 before `onset`).
@@ -906,25 +837,22 @@ before `onset`).
     ## (see [`knot_days`](@ref) and [`interpolate_knots`](@ref)).
     days = knot_days(n; week = week, start = t0)
     nb = length(days)
-    ## Half-normal rather than lognormal: a log-scale level has a heavy right
+    ## Half-normal rather than lognormal. A log-scale level has a heavy right
     ## tail the background/outbreak-size degeneracy exploits to run away.
     λ_mu ~ baseline_prior
     z ~ product_distribution(fill(Normal(0, 1), max(nb - 1, 1)))
-    ## Smooth multiplicative deviation: a non-centred cumulative (random-walk)
-    ## log-deviation from the baseline, anchored at the baseline on the first
-    ## knot. A tight `σ_rw` keeps the walk a gentle drift around the bounded
-    ## baseline. Interpolated to daily so a death background scaled from it is
-    ## smooth.
+    ## Smooth multiplicative deviation, a non-centred cumulative log-deviation
+    ## from the baseline, anchored there on the first knot. Interpolated to
+    ## daily so a death background scaled from it is smooth.
     steps = σ_rw .* z[1:max(nb - 1, 0)]
     log_knots = vcat(zero(σ_rw), cumsum(steps))
     walk = interpolate_knots(log_knots, days, n)[t0:n]
     λ_window = λ_mu .* exp.(walk)
     ## Linear onset ramp `0 → 1` over the first `onset_ramp` days of the
-    ## window, so the gated background grows in from zero instead of stepping
-    ## straight to `λ_mu` at the surveillance boundary (which would put a
-    ## one-day jump into the suspected-death trajectory scaled from it). The
-    ## ramp reaches 1 within the window. `onset_ramp ≤ 1` gives a hard onset
-    ## (a step to `λ_mu`).
+    ## window, so the gated background grows in from zero rather than stepping
+    ## straight to `λ_mu` at the surveillance boundary and putting a one-day
+    ## jump into the suspected-death trajectory scaled from it.
+    ## `onset_ramp ≤ 1` gives a hard onset.
     rr = clamp(Int(onset_ramp), 1, nw)
     ramp = [min(i, rr) / rr for i in 1:nw]
     λ_window = ramp .* λ_window
@@ -937,16 +865,15 @@ end
 Confirmation-process sensitivity prior. `Beta(38, 2)` centres near a mean
 of 0.95 with a tight spread. Confirmation runs on the altona RealStar
 Filovirus Screen RT-PCR [rieger2016](@cite), which detects Bundibugyo
-virus at 11–67 RNA copies per reaction. The Zaire-specific GeneXpert
-Ebola assay does not reliably detect Bundibugyo
+virus at 11–67 RNA copies per reaction. The Zaire-specific GeneXpert Ebola
+assay does not reliably detect Bundibugyo
 [cepheid_xpert_ebola_ifu, pinsky2015, semper2016](@cite). A single assay
 draw is sensitive to about 0.85, but a suspect is confirmed or ruled out
-through repeat control tests rather than one PCR, so the effective
-process sensitivity is higher (two controls give about 0.98) and
-`Beta(38, 2)` credits that process. Under the severe-first backlog the
-first vintage's analysed batch is near-pure BVD (`q ≈ 1`), so the v1
-positivity ≈ `s` identifies the sensitivity from the early data. Returns
-`(; s_test)`.
+through repeat control tests rather than one PCR, so the effective process
+sensitivity is higher (two controls give about 0.98). Under the
+severe-first backlog the first vintage's analysed batch is near-pure BVD
+(`q ≈ 1`), so the v1 positivity ≈ `s` identifies the sensitivity from the
+early data. Returns `(; s_test)`.
 """
 @model function test_sensitivity_model(;
         sensitivity_prior = Beta(38.0, 2.0))
@@ -960,7 +887,7 @@ and 95% interval ≈ 0.91–0.998, a high-but-imperfect specificity reflecting
 that a small fraction of non-BVD specimens test positive (cross-reaction,
 contamination, low-level false positives). Used by the composition-linked
 confirmed-case positivity so the tested-positive probability is
-`p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share: the
+`p = s · q + (1 − spec)(1 − q)` with `q` the tested BVD share. The
 false-positive term `(1 − spec)(1 − q)` makes the confirmed counts respond
 to the non-BVD share `1 − q`, so the laboratory data identify the
 background `λ_bg` rather than only the BVD signal. Returns `(; spec)`.
@@ -974,20 +901,17 @@ end
 Confirmed-positives overdispersion prior. The confirmed positives in each
 laboratory window are scored as an overdispersed `BetaBinomial` of the
 observed analysed denominator (see [`safe_betabinomial`](@ref) and
-[`confirmed_cases_model`](@ref)) rather than a plain `Binomial`, because
-the per-window positivity `p_pos` is a smooth pooled / composition-linked
-curve that does not capture the day-to-day laboratory batching and
-within-window positivity heterogeneity the confirmed counts carry. A
+[`confirmed_cases_model`](@ref)). The per-window positivity `p_pos` is a
+smooth curve that does not capture the day-to-day laboratory batching and
+within-window positivity heterogeneity the confirmed counts carry, and a
 plain `Binomial` on denominators of several hundred specimens gives
-predictive intervals far too tight, so the confirmed stream is
-systematically under-covered. The intra-window correlation
+predictive intervals far too tight. The intra-window correlation
 `ρ ∈ (0, 1)` inflates the window variance to
 `n·p·(1 − p)·(1 + (n − 1)·ρ)`, with `ρ → 0` recovering the `Binomial`.
 The default `Beta(1, 24)` (mean ≈ 0.04, 90% ≈ 0.002–0.12) is weakly
-informative: it favours a small overdispersion and shrinks toward the
-`Binomial` when the data support it, while a single scalar identified
-across the laboratory windows lets the confirmed positives themselves
-set the spread. Returns `(; ρ)`.
+informative and shrinks toward the `Binomial` when the data support it. One
+scalar is identified across the laboratory windows, so the confirmed
+positives themselves set the spread. Returns `(; ρ)`.
 """
 @model function confirmed_overdispersion_model(;
         overdispersion_prior = Beta(1.0, 24.0))
@@ -1004,11 +928,10 @@ renewal onsets. The mean and SD carry weakly-informative priors centred
 on a short turnaround with a heavy right tail allowing for specimen
 shipment to a confirmatory lab. No per-sample outbreak data grounds this
 delay, so the likelihood does not identify the turnaround mean or SD. The
-priors are therefore kept tight around the documented turnaround belief
-(mean ≈ 4.5 d, SD ≈ 4 d) rather than wide, since a wide prior on an
-unidentified nuisance delay only makes the sampler wander it (it was the
-worst-mixing quantity in the joint, dragging the confirmation PMFs convolved
-from it). Returns `(; pmf, dist, mean, sd)`.
+priors are kept tight around the documented turnaround belief (mean
+≈ 4.5 d, SD ≈ 4 d), since a wide prior on an unidentified nuisance delay
+only makes the sampler wander it, dragging the confirmation PMFs convolved
+from it. Returns `(; pmf, dist, mean, sd)`.
 """
 @model function lab_delay_model(
         nmax::Integer = cdf_nmax(lognormal_meansd(4.5, 4.0));
@@ -1029,13 +952,13 @@ non-centred deviations `z_q` scaled by the pooling SD `σ_q`, so a window
 with little data is shrunk toward the baseline while a window with a
 strong signal can depart from it. `σ_q → 0` recovers a single shared
 positivity. The baseline prior is centred on the cut-off cumulative
-positivity (≈ 0.28, i.e. 210 / 755 on the 28 May data) on the logit
+positivity (≈ 0.28, that is 210 / 755 on the 28 May data) on the logit
 scale. Conditioning on the observed denominator and giving the positivity
 its own random effect decouples the confirmed counts from the
-multiplicative ascertainment ridge (`p_drc · s_test · τ_test`) that
-basin-split the joint, so the outbreak size is pinned by the deaths and
-exports streams rather than forced through the laboratory positivity.
-Returns `(; p_pos, q_mu, σ_q)` with `p_pos` a length-`nv` vector.
+multiplicative ascertainment ridge `p_drc · s_test · τ_test`, so the
+outbreak size is pinned by the deaths and exports streams rather than
+forced through the laboratory positivity. Returns `(; p_pos, q_mu, σ_q)`
+with `p_pos` a length-`nv` vector.
 """
 @model function confirmed_positivity_model(nv::Integer;
         baseline_prior = Normal(logit(0.28), 0.7),
@@ -1062,23 +985,22 @@ that decays as testing widens:
     + \\delta_0\\, e^{-c_v / \\text{decay}},
 ```
 
-with `c_v` the cumulative analysed volume at window `v` (the testing
-clock). The lab over-tests BVD early (severe cases are triaged first and
-are more likely BVD), the enrichment `δ₀·e^{−c/decay}` relaxing toward zero
-as testing widens, at which point the tested share equals the pool
+with `c_v` the cumulative analysed volume at window `v`, the testing clock.
+The lab over-tests BVD early, since severe cases are triaged first and are
+more likely BVD, and the enrichment `δ₀·e^{−c/decay}` relaxes toward zero as
+testing widens, at which point the tested share equals the pool
 composition. This ties positivity to the background `λ_bg`, so the
-confirmed/positivity data identify the non-BVD background rather than it
-being absorbed by a free per-window random effect, correcting the model's
-treatment of suspected cases as a large overestimate of true BVD.
+confirmed and positivity data identify the non-BVD background rather than
+it being absorbed by a free per-window random effect.
 
-`δ₀` is the early severity log-odds enrichment of BVD. Lower-truncated at 0
+`δ₀` is the early severity log-odds enrichment of BVD, lower-truncated at 0
 because severity triage upsamples BVD, never down. The default
-`truncated(Normal(1.5, 0.75); lower = 0)` is deliberately moderate /
-bounded: even severity-triaged testing cannot be near-pure BVD (other
-haemorrhagic / severe febrile illness is also triaged), so for a pool
-composition `φ ≈ 0.4` the early tested share is `logistic(logit(0.4) +
-1.5) ≈ 0.75`. `decay_scale` is the relaxation timescale on the analysed-
-volume clock. Pass `logodds_prior` / `decay_prior` to override. Used by
+`truncated(Normal(1.5, 0.75); lower = 0)` is moderate and bounded, since
+even severity-triaged testing cannot be near-pure BVD (other haemorrhagic
+or severe febrile illness is also triaged). For a pool composition
+`φ ≈ 0.4` the early tested share is `logistic(logit(0.4) + 1.5) ≈ 0.75`.
+`decay_scale` is the relaxation timescale on the analysed-volume clock.
+Pass `logodds_prior` / `decay_prior` to override. Used by
 [`confirmed_cases_model`](@ref) in composition mode. Returns
 `(; δ0, decay_scale)`.
 """
@@ -1092,13 +1014,14 @@ end
 
 """
 Death testing fraction `τ_death`, the fallback for the death-only composer
-([`confirmed_deaths_only_model`](@ref)), which has no case stream to set the
-death testing volume from. It thins the suspected deaths to a death "analysed"
-volume at the case testing rate, drawing `τ_death` from the same prior as the
-case testing fraction (`Beta(5, 2)`, mean ≈ 0.71). The full joint instead
-scales the modelled case analysed volume (see [`confirmed_deaths_model`](@ref)
-and [`death_testing_scaling_model`](@ref)) and does not draw this submodel.
-Pass `fraction_prior` to override. Returns `(; τ_death)`.
+([`confirmed_deaths_only_model`](@ref)), which has no case stream to set
+the death testing volume from. It thins the suspected deaths to a death
+"analysed" volume at the case testing rate, drawing `τ_death` from the same
+prior as the case testing fraction (`Beta(5, 2)`, mean ≈ 0.71). The full
+joint instead scales the modelled case analysed volume (see
+[`confirmed_deaths_model`](@ref) and [`death_testing_scaling_model`](@ref))
+and does not draw this submodel. Pass `fraction_prior` to override. Returns
+`(; τ_death)`.
 """
 @model function death_testing_fraction_model(; fraction_prior = Beta(5.0, 2.0))
     τ_death ~ fraction_prior
@@ -1107,15 +1030,15 @@ end
 
 """
 Death testing-intensity scaling for the confirmed-death volume in the joint
-([`confirmed_deaths_model`](@ref)). The death analysed volume is the modelled
-case analysed volume carried at the per-day suspected death-to-case ratio,
-times this scaling. That ratio already carries the suspect-pool severity and
-the suspected-death level, so the scaling is the per-suspect testing-intensity
-difference between deaths and living suspects alone. No death-testing data
-grounds it, so it is a tight log-normal centred on one (`LogNormal(0, 0.25)`,
-median 1, 90% ≈ 0.66–1.51): deaths are tested at the case intensity unless the
-confirmed-death counts pull the scaling off one. Pass `scaling_prior` to
-override. Returns `(; scaling)`.
+([`confirmed_deaths_model`](@ref)). The death analysed volume is the
+modelled case analysed volume carried at the per-day suspected
+death-to-case ratio, times this scaling. That ratio already carries the
+suspect-pool severity and the suspected-death level, so the scaling is the
+per-suspect testing-intensity difference between deaths and living suspects
+alone. No death-testing data grounds it, so it is a tight log-normal
+centred on one (`LogNormal(0, 0.25)`, median 1, 90% ≈ 0.66–1.51). Deaths
+are tested at the case intensity unless the confirmed-death counts pull the
+scaling off one. Pass `scaling_prior` to override. Returns `(; scaling)`.
 """
 @model function death_testing_scaling_model(;
         scaling_prior = LogNormal(0.0, 0.25))
@@ -1162,27 +1085,26 @@ Partially-pooled negative-binomial dispersions for the `n_streams`
 passive-surveillance count streams in the joint model (suspected cases,
 suspected deaths, confirmed cases and confirmed deaths). Each stream draws
 its own dispersion from a shared population, so heterogeneous streams (a
-handful of deaths versus hundreds of suspects versus a daily laboratory
-volume) no longer share one global `k` that the dominant stream pulls
-around, while the sparse streams still borrow strength through the common
+handful of deaths against hundreds of suspects against a daily laboratory
+volume) do not share one global `k` that the dominant stream pulls around,
+while the sparse streams still borrow strength through the common
 hyper-parameters rather than going noisy on a fully independent draw.
 
-The pooling is on the `log(1/sqrt(k))` scale: a population mean `μ_log`, a
-pooling SD `τ`, and per-stream deviations, with `k_s = 1 / inv_sqrt_k_s^2`. The
-default is the **centred** form, `log(1/sqrt(k))_s ~ Normal(μ_log, τ)` drawn
-directly: the passive-surveillance streams are data-rich (hundreds of
-suspected/confirmed counts), so each stream's dispersion is strongly informed,
-and the non-centred form `inv_sqrt_k_s = exp(μ_log + τ z_s)` then funnels
-(`z_s = (log_isk_s − μ_log)/τ` diverges as `τ → 0`), stretching NUTS
-trajectories. On the joint, centring removes that funnel — worst dispersion
-bulk-ESS ≈ 102 → 156, divergences 5 → 2 and ~10% faster wall-clock at a 150×2
-fit — for the same posterior over `k`. Pass `centred = false` for the
-non-centred form, which is the better choice when the streams are data-poor and
-prior-dominated. The population mean is centred on the shared `1/sqrt(k)` prior
-of [`surveillance_dispersion_model`](@ref) (`exp(μ_log)` near 0.6), and the
+The pooling is on the `log(1/sqrt(k))` scale, with a population mean
+`μ_log`, a pooling SD `τ`, and per-stream deviations, and
+`k_s = 1 / inv_sqrt_k_s^2`. The default is the centred form,
+`log(1/sqrt(k))_s ~ Normal(μ_log, τ)` drawn directly. The
+passive-surveillance streams are data-rich, so each stream's dispersion is
+strongly informed and the non-centred form
+`inv_sqrt_k_s = exp(μ_log + τ z_s)` funnels, with
+`z_s = (log_isk_s − μ_log)/τ` diverging as `τ → 0` and stretching NUTS
+trajectories. Pass `centred = false` for the non-centred form, the better
+choice when the streams are data-poor and prior-dominated. The population
+mean is centred on the shared `1/sqrt(k)` prior of
+[`surveillance_dispersion_model`](@ref) (`exp(μ_log)` near 0.6), and the
 half-normal `τ` keeps the per-stream dispersions close unless the data pull
-them apart (`τ = 0` collapses every stream to the population value, the
-shared-`k` model). Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with `k` a
+them apart. `τ = 0` collapses every stream to the population value, the
+shared-`k` model. Returns `(; k, inv_sqrt_k, k_pop, μ_log, τ)` with `k` a
 length-`n_streams` vector.
 """
 @model function pooled_dispersion_model(n_streams::Integer;
@@ -1209,12 +1131,12 @@ end
 
 """
 Independent ascertainment fractions for the DRC and Uganda surveillance
-systems. The two countries run different surveillance systems — DRC
-passive community surveillance and Uganda point-of-entry / hospital
-detection — so each ascertainment fraction has its own logit-scale prior
-with no shared parameter. An alternative to the composer-default
-[`pooled_ascertainment_model`](@ref) for sensitivity analyses that do
-not share strength between the two systems.
+systems. The two countries run different systems, DRC passive community
+surveillance and Uganda point-of-entry or hospital detection, so each
+ascertainment fraction has its own logit-scale prior with no shared
+parameter. An alternative to the composer-default
+[`pooled_ascertainment_model`](@ref) for sensitivity analyses that do not
+share strength between the two systems.
 
 Both fractions default to a logit-Normal prior centred on a reporting
 fraction of 0.75 with SD 0.6 (95% support roughly 0.48–0.91), reflecting
@@ -1283,70 +1205,47 @@ daily grid.
 
 ### A common trend, not independent walks
 
-`μ(t)` is the existing national weekly-knot walk ([`rt_walk_model`](@ref)),
-kept intact: the national streams see exactly the `Rt` process the headline
-model fits, and it is the target the provinces pool toward.
-
-That pooling target is the point. An unstructured multivariate walk, one
-free `log Rt` trajectory per province, correlated through an LKJ prior and
-no common trend, is strictly more flexible, but it shrinks the wrong way.
-`LKJ(η)` has density proportional to `det(Ω)^(η-1)`, maximised at `Ω = I`,
-so `η = 2` mildly favours independent provincial walks. The provinces are
-not equally observed: over the fitted window Nord-Kivu contributes 74
+`μ(t)` is the national weekly-knot walk ([`rt_walk_model`](@ref)), kept
+intact, so the national streams see exactly the `Rt` process the headline
+model fits and it is the target the provinces pool toward. The provinces
+are not equally observed: over the fitted window Nord-Kivu contributes 74
 laboratory positives and Sud-Kivu contributes none at all. Shrinking toward
-independence estimates their `Rt` almost entirely from that, while shrinking
-toward a common trend lets them borrow strength from Ituri and deviate only
-where the data insist. For a meta-population under one national response,
-partial pooling toward a shared trend is the right inductive bias.
-
-Writing the model this way costs nothing in generality: with `μ(t)` present,
-the deviation covariance `Σ` is still free, so the cross-patch correlation is
-learned rather than assumed. This is a multivariate-normal random walk, it
-just carries a common factor rather than leaving the correlation structure to
-carry it.
+a common trend lets them borrow strength from Ituri and deviate only where
+the data insist. With `μ(t)` present the deviation covariance `Σ` is still
+free, so the cross-patch correlation is learned rather than assumed.
 
 ### Sum-to-zero, not a reference patch
 
 The deviations are centred at every knot, so no province is privileged.
-Fixing `δ_1 ≡ 0` instead (reference coding) would also identify the model,
-but it forces the primary patch to have no idiosyncratic deviation at all —
-Ituri would BE the national trend by construction while the other provinces
-carry their own noise. That asymmetry is an artefact of the identifiability
-fix, not epidemiology.
-
-Centring introduces one redundant coordinate per knot (the mean of the raw
-innovations, which the likelihood never sees). It is drawn from its proper
-prior and is Gaussian and well-conditioned, so it costs a few cheap sampled
-dimensions rather than a posterior ridge.
+Fixing `δ_1 ≡ 0` would also identify the model, but it forces the primary
+patch to have no idiosyncratic deviation at all. Centring introduces one
+redundant coordinate per knot (the mean of the raw innovations, which the
+likelihood never sees), drawn from its proper prior and well-conditioned,
+so it costs a few cheap sampled dimensions rather than a posterior ridge.
 
 ### What the data can and cannot identify here
 
 The composition of the confirmed cases identifies the contrast between
 provinces. With three patches that is essentially one number, the Ituri /
 Nord-Kivu contrast, since Sud-Kivu carries no signal. Expect `Ω` to be
-largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation prior
-rather than by data; that is honest, and it is why `Σ` is given a proper
-shrinkage prior rather than a flat one.
+largely prior-driven and Sud-Kivu's `Rt` to be pinned by the deviation
+prior rather than by data, which is why `Σ` is given a proper shrinkage
+prior rather than a flat one.
 
-`σ_δ → 0` recovers a common `Rt` shape shared by every province (a fixed
-ratio between them). It is a special case of this model, not an assumption
-baked into it: whether the provinces are really moving together is
-estimated. `σ_δ` is therefore the headline spatial diagnostic, a posterior
-pushed away from zero is direct evidence that provincial `Rt` trajectories
-are separating, which is exactly what a response concentrated on the Ituri
-epicentre would produce.
+`σ_δ → 0` recovers a common `Rt` shape shared by every province, a fixed
+ratio between them. It is a special case of this model rather than an
+assumption baked into it. `σ_δ` is therefore the headline spatial
+diagnostic, and a posterior pushed away from zero is evidence that
+provincial `Rt` trajectories are separating, which is what a response
+concentrated on the Ituri epicentre would produce.
 
 ### Mean reversion, not a random walk
 
 The deviations mean-revert to zero rather than random-walk. A random walk
-has no mean: its forecast expectation is wherever it last was and its
-forecast variance grows without bound, so a province that happens to sit
-above the national trend at the last vintage is projected to stay above it
-for ever, with the gap as likely to widen as to close. That is not what we
-believe once the data run out, and it matters here, because the per-province
-vintages stop well before the cut-off.
-
-The knots therefore follow
+has no mean, so a province that happens to sit above the national trend at
+the last vintage is projected to stay above it for ever with the gap as
+likely to widen as to close. That matters here because the per-province
+vintages stop well before the cut-off. The knots therefore follow
 
 ```math
 \\boldsymbol{\\delta}(t_k) = \\phi\\, \\boldsymbol{\\delta}(t_{k-1})
@@ -1354,12 +1253,11 @@ The knots therefore follow
 \\phi = 2^{-\\text{week} / h},
 ```
 
-with `h` the half-life of a provincial divergence in days, sampled, so a
+with `h` the sampled half-life of a provincial divergence in days, so a
 province with persistent divergence can still show one. The innovations are
-centred at every knot as before and `φ` is one shared scalar, so the
-sum-to-zero constraint survives exactly. A half-life far longer than the
-window recovers the random walk, which makes the old model a special case of
-this one rather than a rival to it.
+centred at every knot and `φ` is one shared scalar, so the sum-to-zero
+constraint survives exactly. A half-life far longer than the window
+recovers the random walk.
 
 Returns the Rt matrix `(n_patches × n)`, the national trend, the full
 deviation trajectory `δ_patch` `(n_patches × n)`, the per-patch deviation
@@ -1377,17 +1275,14 @@ scales and the correlation matrix.
         region_halflife_prior = LogNormal(log(42), 0.6),
         lkj_prior = LKJCholesky(max(n_patches, 2), 2.0),
         region_offset_prior = Normal(0, 1))
-    ## Common national trend: the existing single-patch walk, unchanged.
+    ## Common national trend, the single-patch walk unchanged.
     ## `rt_walk_start` maps to `rt_start` in the inner model, matching the
-    ## convention in [`infection_model`](@ref).
-    ##
-    ## prefixed (no `false`), so the walk's parameters reach the chain as
+    ## convention in [`infection_model`](@ref). Attached prefixed (no
+    ## `false`), so the walk's parameters reach the chain as
     ## `rt_state.sigma_rw`, `rt_state.log_R0`, `rt_state.z` and
-    ## `rt_state.intervention_effect`, the names the single-population model
-    ## used and that the analysis and sensitivity pages read. Attaching it
-    ## unprefixed surfaces them bare, which is invisible to the model tests
-    ## and to a parameter count (the same parameters are still sampled) but
-    ## fails at render time on a KeyError.
+    ## `rt_state.intervention_effect`, the names the analysis and sensitivity
+    ## pages read. Attaching it unprefixed surfaces them bare and fails at
+    ## render time on a KeyError.
     rt_state ~ to_submodel(
         rt(n, log_R0_base; breakpoint, rt_start = rt_walk_start))
     Rt_national = rt_state.Rt
@@ -1396,13 +1291,12 @@ scales and the correlation matrix.
     ## both processes are described at the same resolution.
     days = knot_days(n; week, start = rt_walk_start)
     nb = length(days)
-    ## Single patch: the deviations are sum-to-zero across the patches, so with
-    ## one patch delta is identically zero and the patch Rt is the national
-    ## walk. None of the deviation machinery is then identified, sampling it
-    ## would add prior-only dimensions the likelihood never touches. Skip it
-    ## entirely, so `n_patches = 1` collapses this model exactly onto the
-    ## single-population one. This is the switch that turns the patch structure
-    ## off.
+    ## Single patch. The deviations are sum-to-zero across the patches, so
+    ## with one patch delta is identically zero and the patch Rt is the
+    ## national walk. Sampling the deviation machinery would then add
+    ## prior-only dimensions the likelihood never touches, so it is skipped
+    ## entirely and `n_patches = 1` collapses this model exactly onto the
+    ## single-population one.
     if n_patches == 1
         Tp1 = eltype(Rt_national)
         δ_patch1 = zeros(Tp1, 1, n)
@@ -1423,17 +1317,15 @@ scales and the correlation matrix.
     ## decomposition never lands on the AD tape.
     σ_level ~ region_sd_prior
     σ_δ ~ product_distribution(fill(region_drift_sd_prior, n_patches))
-    ## Mean reversion. The deviations are an AR(1) toward zero on the knots
-    ## rather than a random walk, parameterised by the half-life of a
-    ## provincial divergence in days, which is the elicitable quantity. The
-    ## per-knot retention is `phi = 2^(-week / halflife)`, so a half-life far
-    ## longer than the window recovers the random walk and a short one pulls
-    ## each province back to the national trend between knots.
-    ##
-    ## One half-life shared across provinces, not one each. The retention
-    ## multiplies the whole deviation vector, so a shared scalar keeps the
-    ## sum-to-zero constraint exactly: a centred vector scaled by a scalar is
-    ## still centred. A per-province retention would not.
+    ## Mean reversion. The deviations are an AR(1) toward zero on the knots,
+    ## parameterised by the half-life of a provincial divergence in days,
+    ## which is the elicitable quantity. The per-knot retention is
+    ## `phi = 2^(-week / halflife)`, so a half-life far longer than the
+    ## window recovers the random walk and a short one pulls each province
+    ## back to the national trend between knots. One half-life is shared
+    ## across provinces, not one each: the retention multiplies the whole
+    ## deviation vector, and a centred vector scaled by a scalar is still
+    ## centred, so the sum-to-zero constraint survives exactly.
     δ_halflife ~ region_halflife_prior
     φ = exp2(-week / δ_halflife)
     Ω_L ~ lkj_prior
@@ -1528,52 +1420,47 @@ The default `importation_kernel` is the gravity kernel of
 [`province_importation_kernel`](@ref), a fixed weighting by destination
 population, so the provinces are coupled and the intensity `ε` is sampled.
 There is no mobility or origin-destination data for this outbreak, so the
-kernel is a structural assumption, and `ε` is weakly identified against
-the secondary-patch seeds: both raise a secondary province's early
+kernel is a structural assumption, and `ε` is weakly identified against the
+secondary-patch seeds, since both raise a secondary province's early
 incidence. Read `ε` as the scale of coupling the data will tolerate rather
 than as a measured flow.
 
 Passing an all-zero kernel uncouples the provinces. `ε` is then not
-sampled, since against a zero kernel it would be a dimension the
-likelihood never touches, and each secondary patch is explained by its own
-seed and its own `R_t`.
+sampled, since against a zero kernel it would be a dimension the likelihood
+never touches, and each secondary patch is explained by its own seed and
+its own `R_t`.
 
 ### Seeding
 
 The outbreak began in Ituri, so the primary patch carries the whole cryptic
-seed: growth at the sampled molecular-clock rate `r` over the cryptic window,
-reaching `seed_at_renewal_start(C_T)` at the renewal start. The secondary
-patches start empty and are seeded by importation from it.
-
-That makes a province's arrival a consequence of the kernel and of `ε`
-rather than a parameter. The first-appearance dates carry real information
-about how fast the outbreak spread between provinces, and a free seed
-fraction per province absorbs exactly that information: both a larger seed
-and a stronger coupling raise a secondary province's early incidence, so the
-two cannot be told apart. Dropping the fractions leaves one interpretable
-quantity where there were `n_patches` confounded ones.
+seed, growing at the sampled molecular-clock rate `r` over the cryptic
+window to reach `seed_at_renewal_start(C_T)` at the renewal start. The
+secondary patches start empty and are seeded by importation from it, so a
+province's arrival is a consequence of the kernel and of `ε` rather than a
+parameter. The first-appearance dates carry real information about how fast
+the outbreak spread between provinces, and a free seed fraction per
+province would absorb exactly that, since both a larger seed and a stronger
+coupling raise a secondary province's early incidence.
 
 An all-zero kernel leaves a secondary patch no route to infections at all,
-so the uncoupled path keeps the sampled fractions
-(`seed_fraction_prior`, a `LogNormal` on the fraction of the primary seed).
-They partition the national cryptic seed rather than adding to it, so
-`2^m` stays the country's cryptic size for any patch count and `C_T` stays
-comparable across them.
+so the uncoupled path keeps the sampled fractions (`seed_fraction_prior`, a
+`LogNormal` on the fraction of the primary seed). They partition the
+national cryptic seed rather than adding to it, so `2^m` stays the
+country's cryptic size for any patch count and `C_T` stays comparable
+across them.
 
 ### Returns
 
 The per-patch state, plus the national aggregates the observation models
 and the headline summaries consume: `infections_total`, `cumulative_total`,
 and `C_T` (the national cut-off cumulative). `R_T`, `r`, `T` and
-`doubling_time` mirror [`infection_model`](@ref) so a patch chain carries the
-same headline quantities as a single-patch one. `R_T` is the
-incidence-weighted aggregate reproduction number at the cut-off, obtained by
-inverting the renewal equation on the summed infections
-([`implied_national_Rt_at`](@ref)). Only the cut-off day is computed: the
-whole implied trajectory was surfaced once and nothing read it, so it cost a
-gradient over `n` days and a vector per draw in the chain for nothing.
-`importation_matrix` is the daily infections each province received from the
-others, which is what the imports figure on the analysis page draws.
+`doubling_time` mirror [`infection_model`](@ref) so a patch chain carries
+the same headline quantities as a single-patch one. `R_T` is the
+incidence-weighted aggregate reproduction number at the cut-off, obtained
+by inverting the renewal equation on the summed infections
+([`implied_national_Rt_at`](@ref)) on the cut-off day alone.
+`importation_matrix` is the daily infections each province received from
+the others, which is what the imports figure on the analysis page draws.
 """
 @model function patch_infection_model(n::Integer, n_patches::Integer;
         breakpoint::Union{Missing, Real} = missing,
@@ -1596,10 +1483,9 @@ others, which is what the imports figure on the analysis page draws.
     ## 1. Shared generation interval.
     gi_state ~ to_submodel(gi(gi_nmax))
     g = gi_state.g
-    ## 2. One growth source, as in [`infection_model`](@ref): the prior is on
+    ## 2. One growth source, as in [`infection_model`](@ref). The prior is on
     ##    the cryptic growth rate `r`, and the established `R0` (the walk
-    ##    base) is derived forward from `r` and the generation interval
-    ##    through Euler-Lotka.
+    ##    base) is derived forward from it through Euler-Lotka.
     growth_state ~ to_submodel(growth(g))
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
@@ -1610,23 +1496,18 @@ others, which is what the imports figure on the analysis page draws.
     δ_patch = rt_state.δ_patch
     ## 4. Per-patch seeds. The primary patch takes the cryptic exponential.
     ##    Each secondary patch takes a fraction of that seed, which is the
-    ##    scale the data speak to: with importation off, the relative seed
+    ##    scale the data speak to. With importation off the relative seed
     ##    sets the level of the provincial case split, leaving `δ_p` to be
     ##    identified by its time trend. An absolute seed prior pinned far
     ##    below the primary's `2^m` would force `δ_p` to absorb the whole
     ##    level difference, making the reported provincial Rt gap an artefact
-    ##    of the seed prior (see the docstring).
+    ##    of the seed prior.
     renewal_start = clamp(rt_start, 1, n)
     τ_obs = n - renewal_start
     seed0_total = seed_at_renewal_start(growth_state.C_T)
     ## The outbreak began in Ituri, so the primary patch takes the whole
-    ## cryptic seed and the others are seeded by importation from it. When a
-    ## province first carries infections is then a consequence of the kernel
-    ## and the coupling intensity, which is what the first-appearance dates
-    ## speak to, rather than a free fraction that does the same job and
-    ## trades off against `ε`.
-    ##
-    ## An all-zero kernel leaves a secondary patch no route to infections at
+    ## cryptic seed and the others are seeded by importation from it. An
+    ## all-zero kernel leaves a secondary patch no route to infections at
     ## all, so the uncoupled path keeps the sampled fractions. With one patch
     ## there is nothing to seed and the fraction would be a prior-only
     ## dimension either way.
@@ -1641,14 +1522,10 @@ others, which is what the imports figure on the analysis page draws.
         eltype(seed_fraction), typeof(float(seed0_total)))
     ## The fractions partition the national cryptic seed, they do not add to
     ## it. `growth_state.C_T` is `2^m`, and the `m` prior is elicited as a
-    ## national quantity (the Mongbwalu transmission chain and the genetic
-    ## TMRCA), so it is the size of the whole cryptic phase. Giving the primary
-    ## patch all of `2^m` and then bolting `f_p 2^m` on per secondary would
-    ## make the national initial condition `2^m (1 + Σf)`, growing with the
-    ## patch count, and silently redefine `2^m` as Ituri's cryptic size rather
-    ## than the country's. Dividing through by `(1 + Σf)` keeps the national
-    ## seed at `2^m` for any number of patches, so `C_T` stays comparable
-    ## across `n_patches` and the genetic prior keeps its meaning.
+    ## national quantity, so it is the size of the whole cryptic phase.
+    ## Dividing through by `(1 + Σf)` keeps the national seed at `2^m` for any
+    ## number of patches, so `C_T` stays comparable across `n_patches` and the
+    ## genetic prior keeps its meaning.
     seed_shares = zeros(Tp, n_patches)
     if isempty(seed_fraction)
         seed_shares[1] = one(Tp)
@@ -1672,20 +1549,16 @@ others, which is what the imports figure on the analysis page draws.
     end
     ## 5. Importation intensity: one level per origin, partially pooled, and
     ##    a common change at detection on the ramp the reproduction number
-    ##    already uses. Only sampled when the kernel couples the patches
-    ##    (against an all-zero kernel it would be a prior-only dimension).
-    ##
+    ##    already uses. Only sampled when the kernel couples the patches,
+    ##    since against an all-zero kernel it would be a prior-only dimension.
     ##    Per origin because the provinces do not export alike and the kernel
     ##    only carries size and distance. Pooled because the small provinces
-    ##    export too little for their own level to be identified: `σ_ε → 0`
-    ##    recovers one shared intensity, and a province the data say nothing
-    ##    about sits at the pooled mean. The deviations are centred, so
-    ##    `ε_bar` stays the overall level, as with the provincial `R_t` and
-    ##    ascertainment contrasts.
-    ##
-    ##    Time-varying because the outbreak being known changes movement: the
-    ##    provinces that arrive either side of the breakpoint are what
-    ##    separates `β_ε`.
+    ##    export too little for their own level to be identified, so
+    ##    `σ_ε → 0` recovers one shared intensity and a province the data say
+    ##    nothing about sits at the pooled mean. The deviations are centred,
+    ##    so `ε_bar` stays the overall level. Time-varying because the
+    ##    outbreak being known changes movement, and the provinces that arrive
+    ##    either side of the breakpoint are what separates `β_ε`.
     ε_matrix = zeros(Tp, n_patches, n)
     if coupled
         ε_bar ~ importation_epsilon_prior
@@ -1711,7 +1584,7 @@ others, which is what the imports figure on the analysis page draws.
     ## 6. Multi-patch renewal. Each province runs its own renewal at its own
     ##    reproduction number and the national trajectory is their sum. There
     ##    is no separate national process and nothing rescales the patches to
-    ##    match one: `mu(t)` is a central trend the provinces pool toward, and
+    ##    match one. `mu(t)` is a central trend the provinces pool toward, and
     ##    the reproduction number the country actually ran at is read back off
     ##    the summed infections in step 9.
     renewal_state = patch_infections(Rt_matrix, g, seeds_matrix,
@@ -1739,7 +1612,7 @@ others, which is what the imports figure on the analysis page draws.
     end
     ## 9. Aggregate reproduction number. Inverting the renewal equation on
     ##    the summed infections gives the incidence-weighted mean of the
-    ##    patch `Rt`s: with `I_{p,t} = R_{p,t} · force_{p,t}`, summing over
+    ##    patch `Rt`s. With `I_{p,t} = R_{p,t} · force_{p,t}`, summing over
     ##    patches gives `I_t / Σ_p force_{p,t} = Σ_p R_{p,t} force_{p,t} /
     ##    Σ_p force_{p,t}`. This is the `Rt` that reproduces the national
     ##    trajectory, so it is the one the headline `R_T` reports. Only the
@@ -1771,19 +1644,17 @@ end
 """
 Relative export propensity of each province into Uganda, partially pooled.
 
-The Uganda export streams are driven by one province's infections. Ituri is
-the reference, at one, because the traveller volume and the source population
-[`exports_model`](@ref) carries are Ituri's: the point-of-entry counts were
-collected there. Every other province is measured against it, as the chance
-that one of its infections is detected crossing into Uganda relative to one
-of Ituri's.
+Ituri is the reference, at one, because the traveller volume and the source
+population [`exports_model`](@ref) carries are Ituri's, the point-of-entry
+counts having been collected there. Every other province is measured
+against it, as the chance that one of its infections is detected crossing
+into Uganda relative to one of Ituri's.
 
 The secondary weights are drawn from a common log-normal whose location and
-spread are both sampled, so they pool toward each other rather than toward a
-fixed number, and `tau -> 0` makes them one shared weight. The default
-location prior has a median of 15% of Ituri's propensity with a 90% interval
-of roughly 3% to 80%, which spans "Nord-Kivu exports meaningfully" and
-"nothing but Ituri exports" without asserting either.
+spread are both sampled, so they pool toward each other rather than toward
+a fixed number, and `tau -> 0` makes them one shared weight. The default
+location prior has a median of 15% of Ituri's propensity with a 90%
+interval of roughly 3% to 80%.
 
 ### What the data can say
 
@@ -1792,9 +1663,7 @@ streams over the whole window, three exported cases and one exported death,
 and the weights enter only through the summed exporting infections. Expect
 the posterior to track the prior. Read it as what the model assumes rather
 than as an estimate, and read the difference it makes to the provincial
-incidence split rather than the weight itself: with Ituri alone exporting,
-the export stream constrains Ituri's incidence, and with the weights on it
-constrains a mixture.
+incidence split rather than the weight itself.
 
 Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
 """
@@ -1803,8 +1672,7 @@ Returns `(; weights, pooling_sd, location)`, with `weights[1] = 1`.
         pooling_sd_prior = truncated(Normal(0, 0.5); lower = 0),
         offset_prior = Normal(0, 1))
     ## One province has nothing to pool with and no secondary weight to
-    ## sample, so the reference weight alone is returned and no dimension the
-    ## likelihood never touches is added.
+    ## sample, so only the reference weight is returned.
     if n_patches <= 1
         return (; weights = ones(Float64, max(n_patches, 1)),
             pooling_sd = 0.0, location = 0.0)

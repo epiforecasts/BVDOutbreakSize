@@ -24,9 +24,9 @@ end
 const _DERIVED_FROM = Dict{Symbol, Tuple{Symbol, Function}}(
     :doubling_time => (:r, doubling_time))
 
-## Interval endpoints for one reported quantity. `summary_table` is exported,
-## so a caller may pass a chain carrying a derived quantity without the
-## parameter it is derived from; fall back to its own draws there.
+## Interval endpoints for one reported quantity. A caller may pass a chain
+## carrying a derived quantity without the parameter it is derived from, so
+## fall back to its own draws there.
 function _summary_for(chn, p::Symbol)
     haskey(_DERIVED_FROM, p) ||
         return posterior_summary(_scalar_draws(chn, p))
@@ -39,11 +39,9 @@ function _summary_for(chn, p::Symbol)
     return map(f, posterior_summary(src_draws))
 end
 
-## Draws of a scalar quantity. A vector-valued deterministic (one entry per
-## patch, or a daily trajectory) reaches here as a vector of vectors, and
-## `quantile` then fails deep inside with a cryptic `isfinite(::Vector)`
-## MethodError at render time. Say what is actually wrong: the summary table
-## is for scalars, and a per-patch quantity belongs in `patch_summary_table`.
+## Draws of a scalar quantity. A vector-valued deterministic reaches here as
+## a vector of vectors, and `quantile` then fails with a cryptic
+## `isfinite(::Vector)` MethodError, so check and name the real problem.
 function _scalar_draws(chn, p::Symbol)
     d = _draws(chn, p)
     eltype(d) <: Number || error(
@@ -53,9 +51,8 @@ function _scalar_draws(chn, p::Symbol)
     return d
 end
 
-## Human-readable headers for the displayed summary tables. Internal
-## column keys stay machine-friendly. This maps them to nice labels at
-## the point each table is returned.
+## Display headers for the summary tables. Internal column keys stay
+## machine-friendly and are mapped here as each table is returned.
 const _PRETTY_COLS = Dict(
     "quantity" => "Quantity",
     "province" => "Province",
@@ -80,18 +77,17 @@ _prettify(df::DataFrame) = rename(df, [n => get(_PRETTY_COLS, n, n) for n in nam
 """
 `DataFrame` with one row per posterior parameter and the columns
 `Quantity, Lower 90%, Lower 60%, Lower 30%, Upper 30%, Upper 60%,
-Upper 90%` giving the lower and upper endpoints of the equal-tailed
-30%, 60% and 90% credible intervals.
+Upper 90%` giving the endpoints of the equal-tailed 30%, 60% and 90%
+credible intervals.
 
-`doubling_time` is reported as the image of `r`'s interval rather than
-from its own draws, because it is unbounded at zero growth; see
-`_DERIVED_FROM`. Its row therefore runs from the fastest decline through
-the zero-growth pole to the fastest growth, and is not sorted by value.
+`doubling_time` is reported as the image of `r`'s interval rather than from
+its own draws, because it is unbounded at zero growth. Its row runs from the
+fastest decline through the zero-growth pole to the fastest growth, and is
+not sorted by value.
 
-`labels` is an optional map from the raw chain symbol to a clean display
-name (e.g. `Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the
-`Quantity` column only. The model's variable names are unchanged. Symbols
-absent from the map keep their raw name.
+`labels` maps a raw chain symbol to a display name (e.g.
+`Symbol("rt_state.sigma_rw") => "Rt step size"`), applied to the `Quantity`
+column only. Symbols absent from the map keep their raw name.
 """
 function summary_table(chn, params::AbstractVector{Symbol};
         digits::Integer = 2,
@@ -119,25 +115,21 @@ end
 
 ## --- Markdown rendering --------------------------------------------------
 
-# A float carrying its full Float64 expansion stretches a column to
-# eighteen digits for no gain. Values at or above one keep their magnitude
-# and lose the tail; values below one keep their leading digits, so a small
-# score does not round away to zero.
+# Trim a float to a readable column width. Values at or above one keep their
+# magnitude and lose the tail. Values below one keep their leading digits, so
+# a small score does not round away to zero.
 _md_round(x::AbstractFloat) = abs(x) < 1 ? round(x; sigdigits = 3) :
                               round(x; digits = 3)
 
-# Format one cell for a markdown table: integer-valued floats print without
-# a trailing `.0` so count columns read as whole numbers, other floats are
-# rounded to a readable width, and a literal `|` in a string is escaped so
-# it cannot split the row.
+# Format one cell for a markdown table. Integer-valued floats print without a
+# trailing `.0`, and a literal `|` is escaped so it cannot split the row.
 _md_cell(x::Real) = isinteger(x) ? string(Integer(x)) : string(x)
 _md_cell(x::AbstractFloat) = isinteger(x) ? string(Integer(x)) :
                              string(_md_round(x))
 _md_cell(x) = replace(string(x), "|" => "\\|")
 
-# Right-align numeric columns so the digits line up under each other, and
-# left-align everything else. `Bool` is a `Real` but reads as a label
-# rather than a quantity, so it stays left.
+# Right-align numeric columns and left-align everything else. `Bool` is a
+# `Real` but reads as a label rather than a quantity, so it stays left.
 function _md_align(col)
     eltype(col) <: Union{Missing, Bool} ? "---" :
     eltype(col) <: Union{Missing, Real} ? "---:" : "---"
@@ -145,10 +137,9 @@ end
 
 """
 GitHub-flavoured markdown table for a `DataFrame`, one header row from the
-column names and one body row per data row. Used to persist a rendered
-summary table to disk so a static documentation page can embed it without
-re-running the fit, and by [`MarkdownTable`](@ref) to put a table on a
-Literate page.
+column names and one body row per data row. Used to persist a rendered table
+to disk so a static page can embed it without re-running the fit, and by
+[`MarkdownTable`](@ref) to put a table on a Literate page.
 """
 function markdown_table(df::DataFrame)
     cols = names(df)
@@ -164,20 +155,17 @@ end
 A table for a Literate page to render as a table rather than as a block of
 printed output. Display it as the last expression of a chunk.
 
-Literate chooses a chunk result's output format by what the value is
-showable as, taking `text/html` before `text/markdown`. A `DataFrame` is
-html-showable, so a bare one goes out as a `@raw html` block, and
-Documenter compiles a regex from each raw block's own text to relocate its
-lines, which fails once the block passes PCRE's ~64KB compiled-pattern
-limit. Several of the scoring tables grow with every release and cross it.
-This wrapper is showable as markdown and not as html, so the table goes
-out as an ordinary markdown table: no raw block, no size limit, and a
-table on the page rather than the fixed-width block of printed output a
-plain-text rendering leaves behind.
+Literate picks a chunk's output format from what the value is showable as,
+taking `text/html` before `text/markdown`. A bare `DataFrame` is
+html-showable, so it goes out as a `@raw html` block, and Documenter compiles
+a regex from each raw block's own text, which fails once the block passes
+PCRE's ~64KB compiled-pattern limit. Several of the scoring tables cross it.
+This wrapper is showable as markdown and not as html, so the table goes out
+as an ordinary markdown table.
 
-A `DataFrame` is rendered by [`markdown_table`](@ref). Anything else is
-taken through its own markdown rendering, or its plain-text one where it
-has none, so a page can pass either a table or a placeholder message.
+A `DataFrame` is rendered by [`markdown_table`](@ref). Anything else is taken
+through its own markdown rendering, or its plain-text one where it has none,
+so a page can pass either a table or a placeholder message.
 """
 struct MarkdownTable
     text::String
@@ -200,11 +188,10 @@ Base.show(io::IO, ::MIME"text/markdown", t::MarkdownTable) = print(io, t.text)
 
 ## --- Fit diagnostics ----------------------------------------------------
 
-# Derived daily latent trajectories carried only for the figures. Their
-# early cryptic-phase entries are near-degenerate deterministic functions
-# of the seed, so their R-hat / ESS would dominate the headline fit
-# summary without reflecting genuine sampler mixing. Excluded from the
-# convergence pool. The sampled vectors (random-walk innovations) stay in.
+# Derived daily latent trajectories carried only for the figures. Their early
+# cryptic-phase entries are near-degenerate functions of the seed, so their
+# R-hat / ESS would dominate the headline fit summary without reflecting
+# sampler mixing. The sampled random-walk innovations stay in.
 const _DIAGNOSTIC_EXCLUDE = (
     "cumulative_infections", "cumulative_onsets", "cumulative_expected_deaths")
 
@@ -230,7 +217,6 @@ function _scalar_stats(summary; exclude = _DIAGNOSTIC_EXCLUDE)
     return out
 end
 
-# Number of divergent NUTS transitions recorded in the chain.
 function _num_divergences(chn)
     for e in FlexiChains.extras(chn)
         e.name === :numerical_error || continue
@@ -290,27 +276,25 @@ function streams_table(streams::Pair{String, <:AbstractVector}...;
 end
 
 """
-Per-date posterior summary of the latent symptom-onset trajectory, the
-"symptomatic cases" curve plotted to show the outbreak over time. One row
-per grid day from `seeding` (grid day 1) to the cut-off (grid day `n`),
-giving the equal-tailed 30%, 60% and 90% credible intervals (the same
-intervals as [`summary_table`](@ref) and [`streams_table`](@ref)) of both
+Per-date posterior summary of the latent symptom-onset trajectory, one row
+per grid day from `seeding` (grid day 1) to the cut-off (grid day `n`).
+Each row gives the equal-tailed 30%, 60% and 90% credible intervals of both
 the daily new symptom onsets and the cumulative symptom onsets to that date.
-The chain must carry the vector deterministic `cumulative_onsets` (one
-trajectory per draw), as the joint fit does.
+The chain must carry the vector deterministic `cumulative_onsets`, one
+trajectory per draw, as the joint fit does.
 
 Columns: `date`, then for each of `new_onsets` and `cumulative_onsets` the
 six endpoints `_lower_90, _lower_60, _lower_30, _upper_30, _upper_60,
 _upper_90`.
 """
 function onsets_over_time(chn; n::Integer, seeding::Date)
-    ## Per-draw cumulative-onset trajectories (the plotted ribbons), then the
-    ## per-draw daily new onsets: the first grid day carries the seed
-    ## cumulative, later days the day-on-day increment.
+    ## Per-draw cumulative trajectories, then the per-draw daily new onsets.
+    ## The first grid day carries the seed cumulative, later days the
+    ## day-on-day increment.
     cumulative = [collect(v) for v in vec(collect(chn[:cumulative_onsets]))]
     daily = [vcat(c[1], diff(c)) for c in cumulative]
-    ## Prefix a `posterior_summary` NamedTuple's fields with the quantity name
-    ## so each day's row carries both onset series side by side.
+    ## Prefix the interval fields with the quantity name so each day's row
+    ## carries both onset series side by side.
     function _bounds(prefix, xs)
         s = posterior_summary(xs)
         cols = (Symbol(prefix, "_lower_90"), Symbol(prefix, "_lower_60"),
@@ -361,11 +345,11 @@ observation, the bias is
 
 ``1 - 2\\,(n_{lt} + n_{eq}/2)/m``
 
-over the `m` draws. It lies in ``[-1, 1]``: negative when the predictive
-distribution sits below the observation (under-prediction), positive when
-it sits above (over-prediction), and zero when the observation falls at the
-predictive median. The equal-count term handles ties in count data so a
-mass of draws exactly at the observation does not bias the score.
+over the `m` draws. It lies in ``[-1, 1]``. Negative means the predictive
+distribution sits below the observation (under-prediction), positive that it
+sits above, and zero that the observation falls at the predictive median. The
+equal-count term handles ties in count data, so a mass of draws exactly at
+the observation does not bias the score.
 """
 function bias_sample(observed::Real, predicted::AbstractVector{<:Real})
     m = length(predicted)
@@ -384,10 +368,9 @@ function _covered(observed::Real, predicted::AbstractVector{<:Real}, level::Real
 end
 
 # Per-vintage conditional predictive samples for one PPC panel, mirroring
-# `plot_vintage_conditional_ppc`: each cumulative-stream draw at vintage `v`
-# is the observed previous cumulative plus the drawn increment (baseline
-# zero for a `cumulative = false` daily panel), and the matching observed
-# value is the cumulative (or daily) count at that vintage. Returns
+# `plot_vintage_conditional_ppc`. Each cumulative-stream draw at vintage `v`
+# is the observed previous cumulative plus the drawn increment, with a zero
+# baseline for a `cumulative = false` daily panel. Returns
 # `(samples, observed)` with `samples[v]` the draw vector at vintage `v`.
 function _panel_conditional(panel)
     observed = float.(panel.observed)
@@ -409,12 +392,10 @@ stream the conditional predictive at every vintage is scored against the
 observed count, and the per-vintage scores are averaged into one row.
 
 Columns: `stream`, the number of scored vintages `n`, the mean forecast
-`bias` (see [`bias_sample`](@ref): negative means the stream is
-under-predicted, positive means over-predicted), and the empirical
-`coverage_50`/`coverage_90`: the fraction of vintages whose observed count
+`bias` from [`bias_sample`](@ref), and the empirical
+`coverage_50`/`coverage_90`, the fraction of vintages whose observed count
 falls inside the central 50% and 90% predictive intervals. A well-calibrated
-stream has bias near zero and coverage near its nominal level. Departures
-flag the streams the joint fit reproduces less well.
+stream has bias near zero and coverage near its nominal level.
 """
 function stream_calibration(panels::AbstractVector)
     rows = map(panels) do panel
@@ -451,8 +432,7 @@ end
 
 ## Median and 90% credible interval as one cell, `median (lower–upper)`. The
 ## cross-province overview puts several quantities side by side, so it trades
-## the six-column interval layout for one column per quantity; the per-province
-## tables below keep the full layout.
+## the six-column interval layout for one column per quantity.
 function _median_ci(draws; digits::Integer = 2)
     fmt(x) = digits <= 0 ? string(round(Int, x)) : string(round(x; digits))
     return string(fmt(median(draws)), " (", fmt(quantile(draws, 0.05)), "–",
@@ -464,16 +444,13 @@ Cross-province overview for the patch model: one row per province and one
 column per quantity, each a median with a 90% credible interval. Reads the
 reproduction number at the cut-off, cumulative infections, the province's
 share of national infections, and its case ascertainment relative to the
-national average.
-
-This is the scannable comparison across provinces. The per-province detail,
-with the full 30/60/90% intervals and the deviation parameters, is in
-[`patch_summary_table`](@ref).
+national average. The per-province detail, with the full 30/60/90% intervals
+and the deviation parameters, is in [`patch_summary_table`](@ref).
 
 The infection share is computed per draw before summarising, so its interval
 carries the correlation between provinces rather than dividing two
 independently summarised numbers. Ascertainment and the reproduction number
-must be read together: the case composition identifies only their product,
+must be read together. The case composition identifies only their product,
 and it is the per-province deaths that tilt the balance between them.
 """
 function patch_overview_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
@@ -515,9 +492,7 @@ from the common national trend. Each is reported as the same 90/60/30%
 credible intervals [`summary_table`](@ref) uses.
 
 Pass `patch` to restrict the table to a single province, by index or by
-label. The `Patch` column is then dropped, since it would repeat one value:
-this is how the analysis reports one table per province rather than one
-table of every province stacked together.
+label. The `Patch` column is then dropped, since it would repeat one value.
 
 The deviations are sum-to-zero contrasts around the national trend (see
 [`patch_rt_model`](@ref)), so `δ` is read relative to the national average
@@ -560,16 +535,12 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
     R_T = per_patch(:R_T_patch)
     inf_T = per_patch(:infections_T_patch)
     δ = per_patch(:delta_patch)
-    ## Case ascertainment and the Rt contrast against the primary patch are the
-    ## two quantities that must be read together. The case composition
-    ## identifies only their product, and it is the per-province deaths that
-    ## tilt the balance between them. Reporting one without the other invites
-    ## a low provincial Rt to be read as epidemiology when it is case-finding.
+    ## Absent on a chain fitted without the per-province compositions.
     asc = _has_key(chn, :province_ascertainment) ?
           per_patch(:province_ascertainment) : nothing
-    ## The deviation-walk scale is per patch, so it belongs here rather than in
-    ## a table of scalar hyperparameters. Near zero means that province's Rt
-    ## tracks the national trend; away from zero it is pulling away from it.
+    ## The deviation-walk scale is per patch, so it belongs here rather than
+    ## with the scalar hyperparameters. Near zero means that province's Rt
+    ## tracks the national trend.
     drift = _has_key(chn, :region_drift_sd) ?
             per_patch(:region_drift_sd) : nothing
     contrast = _has_key(chn, :log_rt_contrast) ?
@@ -601,8 +572,7 @@ function patch_summary_table(chn, n_patches::Integer = length(PROVINCE_NAMES);
         end
     end
     ## A single-province table would repeat one patch name down every row, so
-    ## drop the column: the province belongs in the surrounding heading.
-    ## `_prettify` handles the remaining column names.
+    ## drop the column. The province belongs in the surrounding heading.
     patch === nothing ? _prettify(rename(df, :patch => "Patch")) :
     _prettify(select(df, Not(:patch)))
 end
@@ -636,9 +606,8 @@ except the observed ratio, which is a count:
 The death composition identifies only the product of the lethality and the
 death-confirmation contrasts, so their split is set by their priors. The
 lethality prior is the looser of the two, so a provincial excess of deaths
-over cases is read first as lethality. A chain fitted before the per-province
-ratio existed carries no `CFR_patch`, and the structural column then falls
-back to the national ratio in every row.
+over cases is read first as lethality. A chain carrying no `CFR_patch` falls
+back to the national ratio in the structural column.
 
 `province_cases` and `province_deaths` are the observed per-province
 confirmed case and death totals over the fitted window, in the order of
@@ -658,8 +627,8 @@ function province_cfr_table(chn, res;
                 _per_patch(chn, :province_death_ascertainment, np) :
                 [ones(length(case_asc[1])) for _ in 1:np]
     ## Per-province lethality contrast, and the per-province structural ratio
-    ## it implies. Both absent on a chain fitted before the per-province ratio
-    ## existed, which then reports the national ratio in every row.
+    ## it implies. Both absent on a chain that reports the national ratio in
+    ## every row.
     sev = _has_key(chn, :province_cfr_relative) ?
           _per_patch(chn, :province_cfr_relative, np) :
           [ones(length(case_asc[1])) for _ in 1:np]
@@ -682,9 +651,8 @@ function province_cfr_table(chn, res;
                 string(pct(province_deaths[p] / province_cases[p]), "%") : "—"
         ## The delay correction is national, so the province enters only
         ## through the ratio of its relative death confirmation to its
-        ## relative case ascertainment. Both are sum-to-zero on the log
-        ## scale, so the provinces' corrected ratios sit around the national
-        ## one rather than all above or all below it.
+        ## relative case ascertainment. Both are sum-to-zero on the log scale,
+        ## so the corrected ratios sit around the national one.
         scale = ((sev[p] .* death_asc[p]) ./ case_asc[p])[mask]
         struc_p = cfr_patch === nothing ? structural :
                   filter(isfinite, cfr_patch[p])
@@ -705,11 +673,10 @@ const _PROVINCE_FORECAST_STREAMS = (
 ## Per-province forecast draws from one [`forecast_reported`](@ref) result:
 ## the national draw times that province's modelled share at the most recent
 ## spatial vintage, multiplied draw by draw so the split carries the
-## correlation between the two factors rather than treating them as
-## independent. Returns one `(stream_label, province, draws)` entry per
-## province and per stream the forecast carries, provinces outer. Shared by
-## the province forecast table, figure and release archive, so all three
-## read one split.
+## correlation between the two factors. Returns one
+## `(stream_label, province, draws)` entry per province and per stream the
+## forecast carries, provinces outer. Shared by the province forecast table,
+## figure and release archive, so all three read one split.
 function _province_forecast_draws(chn, fc, np::Integer,
         patch_labels::AbstractVector)
     _has_key(chn, :province_shares) || error(
@@ -740,11 +707,10 @@ content is drawn by [`plot_province_forecast`](@ref) and archived for
 scoring by [`province_forecast_archive`](@ref).
 
 Each province's count is the national draw times that province's modelled
-share at the most recent spatial vintage. The split is therefore held at its
-current value over the week rather than projected forward: the provincial
+share at the most recent spatial vintage. The split is held at its current
+value over the week rather than projected forward. The provincial
 compositions are fitted only where the spatial tables report, so a province
-whose share is moving is not tracked past the last vintage. Forecasting the
-provinces in their own right is issue #668.
+whose share is moving is not tracked past the last vintage.
 """
 function province_forecast_table(chn, fc;
         n_patches::Integer = length(PROVINCE_NAMES),
@@ -775,11 +741,9 @@ the target date and at the forecast origin, so the truth is their difference.
 
 Each province's forecast is the national draw times that province's modelled
 share at the frozen fit's most recent spatial vintage. The two factors are
-multiplied draw by draw, so the interval carries their correlation rather
-than treating a province's share as independent of the national total. The
-share itself is held over the horizon, which is the assumption the width does
-not express: a province whose share is moving is scored as though it were
-not.
+multiplied draw by draw, so the interval carries their correlation. The share
+itself is held over the horizon, which the width does not express. A province
+whose share is moving is scored as though it were not.
 
 Reports the median and 90% predictive interval, the observed count, and
 whether the observation fell inside the interval, one row per province and

@@ -12,15 +12,14 @@ default_adtype() = AutoMooncake(; config = Mooncake.Config())
 
 Enzyme reverse-mode AD type, an opt-in alternative to the default
 [`default_adtype`](@ref) (Mooncake). Defined by the package's Enzyme
-weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`). Calling it
-without `Enzyme` loaded raises a `MethodError`. Load `Enzyme` to activate
-the extension. The `SpecialFunctions.gamma` `EnzymeRule` that the Beta and
-NegativeBinomial normalising constants reach is supplied by
-CensoredDistributions' own Enzyme extension. Enzyme differentiates the
-single-stream composers and matches Mooncake. Differentiating the full
-joint is platform-dependent (it can hit an upstream Enzyme/LLVM compile
-failure on some systems, see `test/test_enzyme.jl`), so Mooncake remains
-the package default for fitting.
+weak-dependency extension (`ext/BVDOutbreakSizeEnzymeExt.jl`), so calling
+it without `Enzyme` loaded raises a `MethodError`. The
+`SpecialFunctions.gamma` `EnzymeRule` that the Beta and NegativeBinomial
+normalising constants reach comes from CensoredDistributions' own Enzyme
+extension. Enzyme differentiates the single-stream composers and matches
+Mooncake. Differentiating the full joint is platform-dependent and can hit
+an upstream Enzyme/LLVM compile failure, so Mooncake remains the package
+default for fitting.
 """
 function enzyme_adtype end
 
@@ -220,28 +219,20 @@ median. The default `init` of [`nuts_sample`](@ref).
 
 `InitFromPrior` draws each parameter from its own prior independently. The
 joint model's product prior is dispersed enough that a sizeable minority of
-those draws put the whole latent trajectory somewhere the data score
-hundreds of thousands of log units below the posterior. NUTS does not
-recover from such a point. Dual averaging shrinks the step size towards
-zero instead of moving, and the chain then crawls in place at its starting
-value for the entire run. Nothing diverges, so the failure is silent, and
-it surfaces only as a split R-hat pinned near its ceiling once a healthy
-chain is compared against the frozen one.
+those draws put the whole latent trajectory hundreds of thousands of log
+units below the posterior. NUTS does not recover from such a point. Dual
+averaging shrinks the step size towards zero instead of moving and the
+chain crawls in place for the entire run. Nothing diverges, so the failure
+surfaces only as a split R-hat pinned near its ceiling.
 
-Each chain independently draws `attempts` candidates and starts at the
-first whose log joint density is at or above that batch's median. Taking
-the batch maximum would also clear the tail, but an argmax is an order
-statistic of the joint density rather than a draw from the prior: it keeps
-roughly the top eighth of the prior by density, so it concentrates the
-starting points and reduces R-hat's own between-chain contrast for a
-reason unrelated to mixing. That matters because R-hat is the diagnostic
-this guard is judged by, and with `attempts = 8` and `chains = 2` the
-effect is not negligible. On the joint model 8.0% of prior draws land
-more than 100,000 log units below the best of 200; both rules clear that
-tail completely, but the median rule keeps 2.4 times the dispersion (sd
-of the starting log joint 9,026 against 3,782). Only forward density
-evaluations are used, so the guard costs milliseconds against a fit
-measured in hours.
+The median rather than the batch maximum, because an argmax is an order
+statistic of the joint density rather than a draw from the prior. It keeps
+roughly the top eighth of the prior by density, concentrating the starting
+points and reducing the between-chain contrast R-hat is built on for a
+reason unrelated to mixing. Both rules clear the tail, and the median rule
+keeps more than twice the dispersion of starting log joints. Only forward
+density evaluations are used, so the guard costs milliseconds against a
+fit measured in hours.
 
 $(TYPEDFIELDS)
 """
@@ -258,20 +249,16 @@ end
 """
 $(TYPEDSIGNATURES)
 
-One starting point for `model` under [`ViablePrior`](@ref) semantics: the
+One starting point for `model` under [`ViablePrior`](@ref) semantics. The
 first of `attempts` independent prior draws whose log joint density is at
 or above that batch's median, returned as an initialisation strategy.
-Falls back to `InitFromPrior()` when no attempt
-gives a finite log density, or when the chosen draw cannot be wrapped as
-an initial vector for `ldf` (e.g. a model whose dimension varies between
-prior draws, since both the draw and `ldf` each come from their own fresh
-evaluation of `model`), so a model this guard cannot evaluate still
-samples exactly as before.
+Falls back to `InitFromPrior()` when no attempt gives a finite log
+density, or when the chosen draw cannot be wrapped as an initial vector
+for `ldf`, so a model this guard cannot evaluate still samples as before.
 
-`ldf` defaults to a fresh `LogDensityFunction(model)`, but
-[`nuts_sample`](@ref) builds one `LogDensityFunction` and passes it to
-every chain's call instead: construction re-evaluates `model`, so
-building it fresh per chain is not part of the guard's advertised
+`ldf` defaults to a fresh `LogDensityFunction(model)`.
+[`nuts_sample`](@ref) instead builds one and passes it to every chain,
+since construction re-evaluates `model` and so is not part of the guard's
 forward-evaluation-only cost.
 """
 function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
@@ -288,11 +275,9 @@ function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
         push!(logps, logp)
     end
     isempty(draws) && return InitFromPrior()
-    ## The FIRST draw at or above the batch median, not the batch argmax.
-    ## An argmax keeps roughly the top eighth of the prior by density, which
-    ## shrinks the between-chain dispersion split R-hat is built on. Both
-    ## rules clear the unrecoverable tail; rejecting only the worse half
-    ## leaves the start a genuine prior draw conditional on the floor.
+    ## The first draw at or above the batch median, not the batch argmax.
+    ## Rejecting only the worse half leaves the start a genuine prior draw
+    ## conditional on the floor.
     idx = findfirst(>=(median(logps)), logps)
     try
         return InitFromVector(draws[idx], ldf)
@@ -303,39 +288,30 @@ function viable_prior_init(rng::AbstractRNG, model; attempts::Integer = 8,
 end
 
 """
-NUTS on `model`, parallel chains via `MCMCThreads`. Chains
-initialise from the prior, each screening eight draws and taking the first
-at or above their median log joint density ([`ViablePrior`](@ref)), which
-keeps the sampler off the prior tail no chain recovers from without
-concentrating the starts. Pass `init = Turing.DynamicPPL.InitFromPrior()` for
-unguarded prior initialisation, or `init =
-Turing.DynamicPPL.InitFromUniform()` to fall back to unconstrained
-uniform initialisation.
+NUTS on `model`, parallel chains via `MCMCThreads`. Chains initialise from
+the prior, each screening eight draws and taking the first at or above
+their median log joint density ([`ViablePrior`](@ref)), which keeps the
+sampler off the prior tail no chain recovers from without concentrating
+the starts. Pass `init = Turing.DynamicPPL.InitFromPrior()` for unguarded
+prior initialisation, or `init = Turing.DynamicPPL.InitFromUniform()` for
+unconstrained uniform initialisation.
 
-`target_accept` defaults to 0.85. The integral model needs 0.95 to keep
-the multimodal small-outbreak geometry from diverging, but the renewal
-joint conditions the confirmed counts on the observed analysed
-denominator (removing the multiplicative ascertainment ridge) and samples
-the random-walk and ascertainment blocks in non-centred form, so the
-posterior geometry is benign (the sanity fit converges with ≈1 divergence).
-A lower target acceptance shortens the average NUTS trajectory, cutting
-leapfrog steps (and so gradient evaluations) per iteration, so 0.85 trims
-the per-iteration gradient cost while staying above the conventional 0.8
-floor. Raise it back toward 0.9–0.99 if a model variant reintroduces
-divergences. The default
-is two chains (500 post-warmup draws each, 1000 total) rather than four
-shorter ones, mirroring the integral model. This trades some effective
-sample size for a shorter sampling wall-clock.
+`target_accept` defaults to 0.85. The renewal joint conditions the
+confirmed counts on the observed analysed denominator and samples the
+random-walk and ascertainment blocks in non-centred form, so its geometry
+is benign. A lower target acceptance shortens the average NUTS trajectory
+and so the gradient evaluations per iteration, while staying above the
+conventional 0.8 floor. Raise it towards 0.9-0.99 if a model variant
+reintroduces divergences. The default is two chains of 500 post-warmup
+draws, trading some effective sample size for a shorter wall-clock.
 
 `check_model = false` disables Turing's pre-sampling model check, which
 rejects any model with a sampled discrete variable even when its value
-feeds nothing downstream. The per-vintage DRC streams are now scored as
-observed `~` data, so a composer conditioning on them passes the check
-with the default `check_model = true`. The escape is needed only by
-[`exports_deaths_only_model`](@ref), which runs the exports submodel in
-predictive mode (`exported_cases ~ Poisson` with a `missing` count) purely
-for the export onsets, leaving a sampled discrete `Poisson` draw. The
-continuous parameters are unaffected.
+feeds nothing downstream. Only [`exports_deaths_only_model`](@ref) needs
+the escape. It runs the exports submodel in predictive mode
+(`exported_cases ~ Poisson` with a `missing` count) purely for the export
+onsets, leaving a sampled discrete `Poisson` draw. The continuous
+parameters are unaffected.
 
 Pass `callback` to stream live fit progress (iteration, log-density,
 divergences) instead of waiting for the whole fit. Use
@@ -348,9 +324,8 @@ when non-`nothing`. Any additional `kwargs` are passed through to
 `n_adapts` sets the NUTS warmup length (step-size and mass-matrix
 adaptation), run in addition to `samples` and discarded by default. It
 defaults to `min(200, samples ÷ 2)`, capping the per-fit warmup below
-Turing's default of `min(1000, samples ÷ 2)` to speed the report build.
-At the default `samples = 500` the cap gives 200 (below `samples ÷ 2 =
-250`); it tightens further only when a caller drops `samples` below 400.
+Turing's own default to speed the report build. The cap binds until a
+caller drops `samples` below 400.
 
 A callback fires only on the samples that are kept, and NUTS discards
 its adaptation phase by default, so warmup is silent. Set
@@ -377,10 +352,10 @@ function nuts_sample(model;
         kwargs...)
     rng = MersenneTwister(seed)
     ## Each chain draws and screens its own starting point, so the chains
-    ## stay independent and over-dispersed; any other strategy is shared
-    ## across chains exactly as `sample` would use it. The LogDensityFunction
-    ## is built once and shared across chains: construction re-evaluates
-    ## `model`, so rebuilding it per chain would not be the free forward-only
+    ## stay independent and over-dispersed. Any other strategy is shared
+    ## across chains exactly as `sample` would use it. The
+    ## `LogDensityFunction` is built once, since construction re-evaluates
+    ## `model` and rebuilding it per chain would not be the forward-only
     ## cost the guard advertises.
     inits = if init isa ViablePrior
         ldf = LogDensityFunction(model)
@@ -409,16 +384,14 @@ end
 """
     fit_parallel(thunks; chains = 2)
 
-Run independent model fits (each a zero-argument `thunk` returning a chain)
-with model-level parallelism bounded by the available threads. At most
-`Threads.nthreads() ÷ chains` fits run at once (so each fit keeps `chains`
-threads for its own chains), clamped to the number of fits. This is
-self-limiting and CI-safe: with two threads (e.g. CI's
-`JULIA_NUM_THREADS=2`, the default `chains`) it runs the fits sequentially,
-identical to a plain loop and with the same peak memory. On a many-core
-machine with more threads it fans the fits out (eight threads → four fits at
-once). Each fit seeds its own RNG, so the results do not depend on the
-schedule. Returns the chains in input order.
+Run independent model fits, each a zero-argument `thunk` returning a
+chain, with model-level parallelism bounded by the available threads. At
+most `Threads.nthreads() ÷ chains` fits run at once, so each fit keeps
+`chains` threads for its own chains, clamped to the number of fits. With
+two threads it runs the fits sequentially, identical to a plain loop and
+with the same peak memory. On a many-core machine it fans them out. Each
+fit seeds its own RNG, so the results do not depend on the schedule.
+Returns the chains in input order.
 """
 function fit_parallel(thunks::AbstractVector; chains::Integer = 2)
     n = length(thunks)
