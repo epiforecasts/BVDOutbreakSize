@@ -137,9 +137,12 @@ const REPORT_SCENARIOS_CI = [
 """
     M_PRIOR_BASE_DATE
 
-Base date for the doubling-count prior centre: McCabe et al.'s first
-report (18 May 2026), whose Method 2 central scenario of 501 cases implies
-`m ≈ log2(501) ≈ 9`. Used by [`m_prior_centre`](@ref).
+Base date for the integral-model doubling-count prior centre: McCabe et
+al.'s first report (18 May 2026), whose Method 2 central scenario of 501
+cases gives `m ≈ log2(501) ≈ 9` when `2^m` is the cumulative case total.
+Used only by [`m_prior_centre`](@ref), which serves the v1.3.0 integral
+backfill.
+
 """
 const M_PRIOR_BASE_DATE = "2026-05-18"
 
@@ -160,13 +163,9 @@ const M_PRIOR_DOUBLING_DAYS = 11.7
 Base centre (at [`M_PRIOR_BASE_DATE`](@ref)) for the advancing doubling-count
 prior centre used by the backfill fits via [`m_prior_centre`](@ref):
 `m_0 = M_PRIOR_BASE + (as_of − M_PRIOR_BASE_DATE) / M_PRIOR_DOUBLING_DAYS`.
-The doubling count `m` counts only the cryptic-phase doublings (the origin to
-the renewal-process start): the cryptic duration is `m·τ` and the total
-outbreak age is `T = m·τ + τ_obs`, with `τ_obs` the observed window. The
-genetic seeding bound pulls the lower tail of the outbreak age to sit at or
-before the most recent common ancestor. The main fit's `m` prior centre is
-set directly in [`exponential_growth_model`](@ref), from field intelligence
-and genetic evidence.
+The main fit's `m` prior centre is set directly in
+[`exponential_growth_model`](@ref), from field intelligence and genetic
+evidence, and counts transmission generations rather than doublings.
 """
 const M_PRIOR_BASE = 3.0
 

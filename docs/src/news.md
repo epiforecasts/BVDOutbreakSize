@@ -8,6 +8,19 @@ each push to `main` also republishes the rendered analysis and the
 
 ## Unreleased
 
+### Changed
+
+- `m` counts transmission generations rather than doublings (#672).
+`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
+Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
+It does not fix initialisation, so `ViablePrior` is retained.
+
 ### Fixed
 
 - NUTS chains no longer start on the prior tail they cannot recover from (#671).
@@ -21,6 +34,14 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The full test cell no longer times out.
+`Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
+It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.
+Those items do not vary by platform or Julia version, so they now run once in their own `Quality` job and every matrix cell runs `skip_quality`.
+The two filters are exact complements, so the suite is still covered in full.
+The two now run in parallel, and the cell that was timing out drops to the ~53 minutes its `skip_quality` twin takes.
+The quality half is the faster-growing one, at roughly 72 minutes on 9 September and at least 97 by 14 September, so it has the less comfortable margin against the ceiling and is the half to watch.
+
 - The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
 `test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
 The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
@@ -28,14 +49,10 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 
 - The analysed volume is no longer capped below the modelled suspect inflow.
 `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
-The receipt PMF sums to one and `convolve_delay` only loses mass, so with `τ_test` a probability the modelled analysed volume could never exceed the modelled suspect inflow.
-The reported data cross that ceiling: over the window where both streams are observed the analysed-to-suspect ratio is above one on 28 of 56 days, with a monthly ratio of 0.93 in June, 1.01 in July and 1.50 over 1-5 August.
-Specimens are not persons — repeat exclusion testing, confirmatory second samples and post-mortem swabs all count — so a ratio above one is ordinary.
-Nothing could absorb it: `bg_daily` enters both sides of that ratio identically, so the background cannot change it, and the bias was booked as noise through a dispersion shared across both streams.
-`specimen_intensity_model` adds a scalar specimens-per-suspect factor `κ ~ LogNormal(0, 0.25)` multiplying only the analysed volume.
-`τ_test` keeps its meaning as a probability, which it must: it is also the in-care confirmation hazard and the onset stream's ascertainment anchor, and repeat testing moves those in the opposite direction.
-`bvd_joint` enables it; `confirmed_only_model` does not, because `τ_test` reaches that composer's likelihood only through the `κ · τ_test` product, which is not identified.
-Only that product is identified by the analysed data in any case, so the split rests on the two priors.
+- Absconding no longer discharges patients the clinical exits have already discharged.
+`accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
+- The seeding docstrings now describe the model they document.
+`seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
 ## v1.18.0
 

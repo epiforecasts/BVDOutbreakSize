@@ -1835,6 +1835,90 @@ positivity and the expected confirmed-death count.
 end
 
 """
+$(TYPEDSIGNATURES)
+
+Length-of-stay PMF thinned by survival against absconding over cohort age:
+`pmf[d+1] * (1 - κ)^d`. It sums to the fraction of a cohort that leaves
+clinically rather than by absconding, so it is a sub-probability schedule
+rather than a PMF.
+
+[`accumulate_occupancy`](@ref) removes an abscond flow from the occupied
+stock. The clinical schedules are convolutions of past admissions and,
+unthinned, already account for the whole admitted mass, so the two together
+discharge more than was admitted, and the `max(., 0)` guards in the balance
+clip the excess and floor the occupancy. Thinning the schedule by the same
+hazard makes absconding a competing risk, so deaths, recoveries and absconds
+partition each cohort. `κ = 0` returns the PMF unchanged.
+
+This form applies the abscond hazard on every day of a stay, which is right
+for the rule-out schedule: a background admission is never confirmed, so it
+is at risk of absconding for its whole stay. True-case admissions are
+confirmed at a positive hazard and the balance exposes only the suspect
+sub-stock to absconding, so their schedules take
+[`abscond_thinned_flow`](@ref) instead.
+"""
+function abscond_thinned(pmf::AbstractVector, κ::Real)
+    T = promote_type(eltype(pmf), typeof(κ))
+    surv = one(T) - κ
+    return T[pmf[i] * surv^(i - 1) for i in eachindex(pmf)]
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Clinical discharge flow from `adm` on the length-of-stay schedule `pmf`, with
+absconding competing only while a cohort is still unconfirmed.
+
+[`accumulate_occupancy`](@ref) takes its abscond flow as `κ` times the
+*suspect* sub-stock, so a confirmed patient cannot abscond. Thinning a true-case
+schedule by `(1 - κ)^d` ([`abscond_thinned`](@ref)) therefore discounts days the
+balance never charges, and the schedules under-discharge by a margin that grows
+with the confirmation hazard: the stock never empties and carries a phantom
+residual occupancy for the rest of the grid.
+
+Each admission day is walked forward instead, carrying two survivals: `U`, the
+probability still unconfirmed, which decays by `1 - conf_hazard` each day, and
+the abscond survival, which decays by `1 - κ U` and so stops decaying once a
+cohort is confirmed. With `P` the clinical survival, a cohort admitted on day
+`t` contributes `pmf[d+1] * S_ab(d)` to day `t+d`. Absconds are charged on the
+stock carried in from the previous day, so a cohort's admission day carries no
+abscond hazard.
+
+Clinical exits and absconds then partition each cohort up to a residual, because
+the balance charges `κ` against its own aggregate suspect stock rather than
+against the per-cohort unconfirmed survival tracked here. At the fitted abscond
+rate the residual is about 0.01% of admissions and rises to 0.4% at `κ = 0.05`,
+against 1.8% and 9.4% for a flat `(1 - κ)^d` thinning.
+
+A `conf_hazard` of zero recovers [`abscond_thinned`](@ref) convolved with `adm`,
+and `κ = 0` recovers the plain [`convolve_delay`](@ref).
+"""
+function abscond_thinned_flow(adm::AbstractVector, pmf::AbstractVector,
+        κ::Real, conf_hazard::AbstractVector)
+    n = length(adm)
+    T = promote_type(eltype(adm), eltype(pmf), typeof(κ), eltype(conf_hazard))
+    out = zeros(T, n)
+    one_T = one(T)
+    nmax = length(pmf)
+    @inbounds for t in 1:n
+        a = adm[t]
+        iszero(a) && continue
+        dmax = min(nmax - 1, n - t)
+        ## Admission day: the cohort is not yet in the stock the balance
+        ## charges absconds against, so it faces no abscond hazard.
+        out[t] += a * pmf[1]
+        surv = one_T
+        unconf = one_T
+        for d in 1:dmax
+            unconf *= one_T - conf_hazard[t + d - 1]
+            surv *= one_T - κ * unconf
+            out[t + d] += a * pmf[d + 1] * surv
+        end
+    end
+    return out
+end
+
+"""
     accumulate_occupancy(A_bvd, A_bg, deaths, recover, ruleout, κ, conf_hazard)
 
 Treatment-centre occupancy built as a forward day-by-day running balance of
@@ -2296,13 +2380,6 @@ series for forecasting and replication.
         A_bg = convert(Vector{eltype(C)}, A_bg)
     end
 
-    ## Label-independent clinical discharge events. Deaths and recoveries split
-    ## `A_bvd` by `CFR_iso`. Rule-outs discharge `A_bg`.
-    dpmf = death_los_state.pmf
-    rpmf = recovery_los_state.pmf
-    deaths_daily = convolve_delay(CFR_iso .* A_bvd, dpmf)
-    recover_daily = convolve_delay((one(CFR_iso) - CFR_iso) .* A_bvd, rpmf)
-    ruleout_daily = convolve_delay(A_bg, ruleout_los_state.pmf)
     admit_daily = A_bvd .+ A_bg
 
     ## Community confirmation hazard `τ_test · p_pos` borrowed from the lab
@@ -2332,6 +2409,28 @@ series for forecasting and replication.
     end
     ρ_conf = exp(incare_confirm_log)
     conf_hazard = ρ_conf .* borrowed_hazard
+
+    ## Label-independent clinical discharge events. Deaths and recoveries split
+    ## `A_bvd` by `CFR_iso`. Rule-outs discharge `A_bg`. Each schedule is thinned
+    ## by the abscond survival so absconding competes with the clinical exits
+    ## instead of adding to them. True cases stop being at risk once confirmed,
+    ## so theirs carry the confirmation hazard ([`abscond_thinned_flow`](@ref));
+    ## background admissions are never confirmed, so a flat cohort-age thinning
+    ## is exact for the rule-outs ([`abscond_thinned`](@ref)).
+    deaths_daily = abscond_thinned_flow(CFR_iso .* A_bvd,
+        death_los_state.pmf, κ, conf_hazard)
+    recover_daily = abscond_thinned_flow((one(CFR_iso) - CFR_iso) .* A_bvd,
+        recovery_los_state.pmf, κ, conf_hazard)
+    ruleout_daily = convolve_delay(A_bg,
+        abscond_thinned(ruleout_los_state.pmf, κ))
+    ## Still-in-a-bed survival for the two-clock confirmed sub-stock below.
+    ## `two_clock_confirmed` takes one schedule for every cohort, so it cannot
+    ## carry the admission-day-dependent abscond survival the flows above use.
+    ## The flat cohort-age thinning is the closest single schedule to it: it
+    ## over-discounts by the confirmed share, which is second order against the
+    ## confirmation hazard the sub-stock is built from.
+    dpmf = abscond_thinned(death_los_state.pmf, κ)
+    rpmf = abscond_thinned(recovery_los_state.pmf, κ)
 
     ## Forward running-balance occupancy: total demand and the BVD/non-case
     ## stocks. The scored abscond flow is recomputed below off the two-clock
