@@ -10,8 +10,9 @@ using ADTypes: AutoMooncake
 using Mooncake: Mooncake
 using ChainRulesCore: ChainRulesCore
 using Turing: @model, @addlogprob!, MCMCThreads, NUTS, sample, to_submodel
-using Turing.DynamicPPL: InitFromPrior, InitFromVector, LogDensityFunction,
-                         VarInfo, getlogjoint
+using Turing.DynamicPPL: InitFromPrior, InitFromVector, InitFromParams,
+                         LogDensityFunction, VarInfo, getlogjoint, link
+using LogDensityProblems: LogDensityProblems
 import AbstractMCMC
 import FlexiChains
 using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
@@ -21,7 +22,7 @@ using Distributions: Distribution, pdf, cdf, Poisson,
                      LogNormal, Beta, LKJCholesky,
                      Gamma, TDist, truncated, censored, product_distribution
 using CensoredDistributions: double_interval_censored
-using StatsFuns: logit, logistic
+using StatsFuns: logit, logistic, loggamma
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
@@ -147,7 +148,10 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        implied_national_Rt, implied_national_Rt_at,
        patch_rt_model, patch_infection_model,
        province_export_pressure_model,
-       province_composition_model
+       province_composition_model,
+# health-zone model
+       bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
+       zone_share_renewal, dirichlet_multinomial_logpdf
 
 include("docstrings.jl")
 include("constants.jl")
@@ -164,6 +168,7 @@ include("plots.jl")
 include("models/priors.jl")
 include("models/observations.jl")
 include("models/joint.jl")
+include("models/zone.jl")
 include("precompile.jl")
 
 end # module
