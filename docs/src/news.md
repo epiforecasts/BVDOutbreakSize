@@ -78,6 +78,19 @@ renewal with importation, the national read-back, the gravity kernel and the
 per-origin intensity.
 - The sensitivity page scores the one-week-ahead forecast by province (#668).
 
+### Changed
+
+- `m` counts transmission generations rather than doublings (#672).
+`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
+Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
+It does not fix initialisation, so `ViablePrior` is retained.
+
 ### Fixed
 
 - The posterior predictive is generated from the model that was fitted (#412).
@@ -92,8 +105,19 @@ batch's median log joint density.
 A chain starting far into the tail never arrives, and nothing diverges, so the
 failure was silent.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
+- The quality items run once in their own job rather than on every matrix cell.
+They do not vary by platform or Julia version, and carrying them on top of the
+whole suite took the Linux cell past its 150-minute ceiling.
+
 - The occupancy-offset forecast test scores both offsets on one set of prior
 draws rather than comparing two independent samples.
+
+- The analysed volume is no longer capped below the modelled suspect inflow.
+`confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
+- Absconding no longer discharges patients the clinical exits have already discharged.
+`accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
+- The seeding docstrings now describe the model they document.
+`seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
 ## v1.18.0
 
