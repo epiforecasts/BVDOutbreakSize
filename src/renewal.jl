@@ -642,21 +642,43 @@ Rt from the aggregated infection count. The first day is set to zero (no
 prior infections to divide by). Days where the force of infection is zero
 (no prior infections) also return zero. AD-transparent under Mooncake
 (only arithmetic and `@inbounds` loops).
+
+A model that needs the reproduction number on one day only should call
+[`implied_national_Rt_at`](@ref), which this is the trajectory form of: the
+whole trajectory costs `n` times the arithmetic and every day of it lands on
+the gradient tape.
 """
 function implied_national_Rt(infections_total::AbstractVector,
         g::AbstractVector)
     n = length(infections_total)
     Tp = promote_type(eltype(infections_total), eltype(g))
     Rt = zeros(Tp, n)
-    @inbounds for t in 2:n
-        force = zero(Tp)
-        kmax = min(t - 1, length(g))
-        for s in 1:kmax
-            force += infections_total[t - s] * g[s]
-        end
-        if force > zero(Tp)
-            Rt[t] = safe_rate(infections_total[t]) / force
-        end
+    for t in 2:n
+        Rt[t] = implied_national_Rt_at(infections_total, g, t)
     end
     return Rt
+end
+
+"""
+    implied_national_Rt_at(infections_total, g, t)
+
+The implied national reproduction number on a single day `t`, the one entry
+[`implied_national_Rt`](@ref) would put at index `t`. Day one and any day whose
+force of infection is zero give zero, as they do there.
+
+This exists because the renewal model reports the aggregate reproduction number
+at the cut-off and nothing else: building the whole trajectory to read its last
+entry puts `n` divisions and `n` force sums on the gradient tape for one number.
+"""
+function implied_national_Rt_at(infections_total::AbstractVector,
+        g::AbstractVector, t::Integer)
+    Tp = promote_type(eltype(infections_total), eltype(g))
+    t <= 1 && return zero(Tp)
+    force = zero(Tp)
+    kmax = min(t - 1, length(g))
+    @inbounds for s in 1:kmax
+        force += infections_total[t - s] * g[s]
+    end
+    force > zero(Tp) || return zero(Tp)
+    return @inbounds(safe_rate(infections_total[t])) / force
 end

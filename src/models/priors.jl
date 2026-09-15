@@ -1472,7 +1472,9 @@ scales and the correlation matrix.
     δ_patch = zeros(Tp, n_patches, n)
     Rt_matrix = zeros(Tp, n_patches, n)
     @inbounds for p in 1:n_patches
-        δ_daily = interpolate_knots(δ_knots[p, :], days, n)
+        ## A view, not a copy: `interpolate_knots` only reads its knots, and
+        ## the copy put one `getindex` per knot on the gradient tape.
+        δ_daily = interpolate_knots(view(δ_knots, p, :), days, n)
         for t in 1:n
             δ_patch[p, t] = δ_daily[t]
             Rt_matrix[p, t] = exp(log_Rt_national[t] + δ_daily[t])
@@ -1557,11 +1559,14 @@ comparable across them.
 
 The per-patch state, plus the national aggregates the observation models
 and the headline summaries consume: `infections_total`, `cumulative_total`,
-`C_T` (the national cut-off cumulative), and `Rt_national_implied`, the
-incidence-weighted aggregate reproduction number obtained by inverting the
-renewal equation on the summed infections ([`implied_national_Rt`](@ref)).
-`R_T`, `r`, `T` and `doubling_time` mirror [`infection_model`](@ref) so a
-patch chain carries the same headline quantities as a single-patch one.
+and `C_T` (the national cut-off cumulative). `R_T`, `r`, `T` and
+`doubling_time` mirror [`infection_model`](@ref) so a patch chain carries the
+same headline quantities as a single-patch one. `R_T` is the
+incidence-weighted aggregate reproduction number at the cut-off, obtained by
+inverting the renewal equation on the summed infections
+([`implied_national_Rt_at`](@ref)). Only the cut-off day is computed: the
+whole implied trajectory was surfaced once and nothing read it, so it cost a
+gradient over `n` days and a vector per draw in the chain for nothing.
 `importation_matrix` is the daily infections each province received from the
 others, which is what the imports figure on the analysis page draws.
 """
@@ -1732,9 +1737,9 @@ others, which is what the imports figure on the analysis page draws.
     ##    patch `Rt`s: with `I_{p,t} = R_{p,t} · force_{p,t}`, summing over
     ##    patches gives `I_t / Σ_p force_{p,t} = Σ_p R_{p,t} force_{p,t} /
     ##    Σ_p force_{p,t}`. This is the `Rt` that reproduces the national
-    ##    trajectory, so it is the one the headline `R_T` reports.
-    Rt_national_implied = implied_national_Rt(infections_total, g)
-    R_T = @inbounds(Rt_national_implied[n])
+    ##    trajectory, so it is the one the headline `R_T` reports. Only the
+    ##    cut-off day is inverted, since that is the only day reported.
+    R_T = implied_national_Rt_at(infections_total, g, n)
     ## 10. Headline quantities, mirroring [`infection_model`](@ref) so a
     ##     patch chain summarises exactly like a single-patch one.
     r = euler_lotka_r(R_T, g)
@@ -1749,7 +1754,7 @@ others, which is what the imports figure on the analysis page draws.
         Ω = rt_state.Ω,
         infections_total, cumulative_total,
         Rt_national = rt_state.Rt_national,
-        Rt_national_implied, g, R0, r0 = r_clock, r, R_T,
+        g, R0, r0 = r_clock, r, R_T,
         m = growth_state.m, τ = growth_state.τ,
         T = T_total, C_T = @inbounds(cumulative_total[n]),
         doubling_time = doubling_time(r),

@@ -1116,8 +1116,9 @@ reproduction number implied by the summed patch infections.
     ## renewal equation on the summed infections, which is the
     ## force-of-infection-weighted mean of the provincial `Rt`s. With one
     ## patch it is the walk itself.
+    ## The cut-off day alone, not the whole implied trajectory: only this
+    ## day is reported.
     R_T := patch_state.R_T
-    Rt_national_implied := patch_state.Rt_national_implied
     expected_infections_T := @inbounds(patch_state.infections_total[n])
     CFR := deaths_state.CFR
     ## Per-patch quantities, as vector deterministics (one entry per patch).
