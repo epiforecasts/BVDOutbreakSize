@@ -542,7 +542,7 @@ MarkdownTable(vintage_table) #hide
 # The TMRCA is a lower bound on the outbreak age.
 # Adding sequences, or more geographically representative ones, can only push the TMRCA earlier, never later.
 # This is because the sampled tree is almost entirely from Bunia.
-# Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of N. Ferguson [ferguson2026](@cite).
+# Using the genetic TMRCA as a one-sided seeding bound rather than a point estimate follows a suggestion of [ferguson2026](@citet).
 #
 # We treat the TMRCA day as a right-censored, noisy reading of the total outbreak age $T$ (the cryptic duration plus the observed window, defined in the infection process below):
 #

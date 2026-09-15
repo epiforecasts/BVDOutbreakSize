@@ -35,7 +35,8 @@ Only forward density evaluations are used, so the guard costs milliseconds again
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
 - Citations read as prose rather than as a numeric-style reference list.
-Fourteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)"; they now use `@citet`, which renders the name once.
+Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)".
+They use `@citet`, which renders the name once, as does one site that cited without naming the author.
 The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
 `docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
 

@@ -101,7 +101,7 @@ renormalised. Returns `(; pmf, mean, sd, oa_mean, ad_mean)`.
 end
 
 """
-Wilson–Hilferty [wilson1931](@cite) approximation to the continuous
+[wilson1931](@citet) approximation to the continuous
 median of a `Gamma` as a function of its `mean` and `sd`:
 `median ≈ mean·(1 − sd²/(9·mean²))³`.
 Smooth in the mean and SD with no quantile inversion, so it enters a
