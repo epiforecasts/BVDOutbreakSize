@@ -41,6 +41,12 @@ logs/
 
 *.html
 
+# Runtime inputs the docs build stages next to the health-zone map page;
+# the page itself is source, so exempt it from the *.html rule above.
+/docs/src/public/zone_map/zone_estimates.csv
+/docs/src/public/zone_map/health_zones.geojson
+!/docs/src/public/zone_map/index.html
+
 # Transient docs build logs captured at the repo root
 /docs_build*.log
 .pi-subagents/

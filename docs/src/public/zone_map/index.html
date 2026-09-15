@@ -56,7 +56,8 @@ Nothing else is fetched.
   .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
   .switch input:checked + span { color: var(--ink); font-weight: 600; }
   .switch label:has(input:checked) {
-    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
   }
   .switch label:has(input:focus-visible) { outline: 2px solid var(--accent); }
   button.plain {
@@ -139,7 +140,10 @@ Nothing else is fetched.
   var root = document.documentElement;
   function syncTheme() {
     var forced = params.get("theme");
-    if (forced === "light" || forced === "dark") { root.dataset.theme = forced; return; }
+    if (forced === "light" || forced === "dark") {
+      root.dataset.theme = forced;
+      return;
+    }
     try {
       if (window.parent === window) { return; }
       var cls = window.parent.document.documentElement.classList;
@@ -149,8 +153,11 @@ Nothing else is fetched.
   syncTheme();
   try {
     if (window.parent !== window) {
-      new MutationObserver(function () { syncTheme(); if (window.__recolour) { window.__recolour(); } }).observe(
-        window.parent.document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      new MutationObserver(function () {
+        syncTheme();
+        if (window.__recolour) { window.__recolour(); }
+      }).observe(window.parent.document.documentElement,
+                 { attributes: true, attributeFilter: ["class"] });
     }
   } catch (e) { /* cross-origin parent */ }
   function cssVar(name) {
@@ -184,7 +191,8 @@ Nothing else is fetched.
       value: function (r) { return r.R_T_median; },
       text: function (r) {
         return "Reproduction number " + fmt2(r.R_T_median) +
-          " (90% interval " + fmt2(r.R_T_lower) + " to " + fmt2(r.R_T_upper) + ")";
+          " (90% interval " + fmt2(r.R_T_lower) + " to " +
+          fmt2(r.R_T_upper) + ")";
       }
     },
     forecast: {
@@ -193,7 +201,8 @@ Nothing else is fetched.
       value: function (r) { return r.forecast_median; },
       text: function (r) {
         return "Confirmed cases over the next 7 days " + fmtN(r.forecast_median) +
-          " (90% interval " + fmtN(r.forecast_lower) + " to " + fmtN(r.forecast_upper) + ")";
+          " (90% interval " + fmtN(r.forecast_lower) + " to " +
+          fmtN(r.forecast_upper) + ")";
       }
     },
     cases: {
@@ -218,7 +227,9 @@ Nothing else is fetched.
   function fmt2(x) { return isFinite(x) ? x.toFixed(2) : "–"; }
   // Counts under ten keep one decimal, so small forecasts stay distinct.
   function fmtN(x) { return !isFinite(x) ? "–" : x < 10 ? x.toFixed(1) : fmt0(x); }
-  function fmtPct(x) { return isFinite(x) ? (100 * x).toFixed(x < 0.1 ? 1 : 0) + "%" : "–"; }
+  function fmtPct(x) {
+    return isFinite(x) ? (100 * x).toFixed(x < 0.1 ? 1 : 0) + "%" : "–";
+  }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[ch];
@@ -275,10 +286,12 @@ Nothing else is fetched.
     cuts = cuts.filter(function (c, i) { return i === 0 || c > cuts[i - 1]; });
     var bins = [], lo = null;
     cuts.forEach(function (c, i) {
-      bins.push({ max: c, c: BLUES[i], l: lo === null ? "below " + f(c) : f(lo) + " to " + f(c) });
+      bins.push({ max: c, c: BLUES[i],
+                  l: lo === null ? "below " + f(c) : f(lo) + " to " + f(c) });
       lo = c;
     });
-    bins.push({ max: Infinity, c: BLUES[bins.length], l: (lo === null ? "all" : f(lo) + " and above") });
+    bins.push({ max: Infinity, c: BLUES[bins.length],
+                l: lo === null ? "all" : f(lo) + " and above" });
     return bins;
   }
   function pick(bins, v) {
@@ -289,7 +302,8 @@ Nothing else is fetched.
 
   var map = L.map("map", { zoomSnap: 0.25, attributionControl: true });
   map.attributionControl.setPrefix(false);
-  map.attributionControl.addAttribution("Health-zone boundaries: DRC health zones, simplified");
+  map.attributionControl.addAttribution(
+    "Health-zone boundaries: DRC health zones, simplified");
   var legend = L.control({ position: "bottomleft" });
   legend.onAdd = function () {
     var d = L.DomUtil.create("div", "legend");
@@ -302,7 +316,8 @@ Nothing else is fetched.
   // Deep links: `?metric=R_T|forecast|cases|share` and `?table=1`.
   if (METRICS[params.get("metric")]) {
     metric = params.get("metric");
-    document.querySelector("input[name=metric][value=" + metric + "]").checked = true;
+    document.querySelector("input[name=metric][value=" + metric + "]")
+      .checked = true;
   }
 
   function featureRow(f) {
@@ -347,8 +362,8 @@ Nothing else is fetched.
     var d = legend.getContainer();
     d.innerHTML = "<div class=\"t\">" + esc(m.legend) + "</div>" +
       bins.concat([NODATA]).map(function (b) {
-        return "<div class=\"row\"><span class=\"sw\" style=\"background:" + paint(b.c) +
-          "\"></span><span>" + esc(b.l) + "</span></div>";
+        return "<div class=\"row\"><span class=\"sw\" style=\"background:" +
+          paint(b.c) + "\"></span><span>" + esc(b.l) + "</span></div>";
       }).join("");
     renderTable();
   }
@@ -356,13 +371,17 @@ Nothing else is fetched.
     var m = METRICS[metric], t = document.getElementById("table");
     if (t.hidden) { return; }
     var sorted = rows.slice().sort(function (a, b) { return m.value(b) - m.value(a); });
-    var extra = { R_T: "90% interval", forecast: "90% interval", cases: "Deaths", share: "Patch" };
+    var extra = { R_T: "90% interval", forecast: "90% interval",
+                  cases: "Deaths", share: "Patch" };
     t.innerHTML = "<table><thead><tr><th>Zone</th><th>Province</th>" +
-      "<th class=\"num\">" + esc(m.title) + "</th><th class=\"num\">" + extra[metric] + "</th>" +
+      "<th class=\"num\">" + esc(m.title) + "</th>" +
+      "<th class=\"num\">" + extra[metric] + "</th>" +
       "</tr></thead><tbody>" + sorted.map(function (r) {
         var iv = "";
         if (metric === "R_T") { iv = fmt2(r.R_T_lower) + " to " + fmt2(r.R_T_upper); }
-        if (metric === "forecast") { iv = fmtN(r.forecast_lower) + " to " + fmtN(r.forecast_upper); }
+        if (metric === "forecast") {
+          iv = fmtN(r.forecast_lower) + " to " + fmtN(r.forecast_upper);
+        }
         if (metric === "cases") { iv = fmt0(r.deaths); }
         if (metric === "share") { iv = esc(r.patch); }
         return "<tr><td>" + esc(r.label || r.zone) + "</td><td>" + esc(r.province) +
@@ -377,7 +396,8 @@ Nothing else is fetched.
   function toggleTable() {
     var t = document.getElementById("table");
     t.hidden = !t.hidden;
-    document.getElementById("toggle-table").setAttribute("aria-pressed", String(!t.hidden));
+    document.getElementById("toggle-table")
+      .setAttribute("aria-pressed", String(!t.hidden));
     renderTable();
   }
   document.getElementById("toggle-table").addEventListener("click", toggleTable);
@@ -409,7 +429,10 @@ Nothing else is fetched.
           { sticky: true, className: "zone-tip", opacity: 1 });
         l.bindPopup(function () { return popupHTML(f); });
         l.on({
-          mouseover: function () { l.setStyle({ weight: 2, color: "#333" }); l.bringToFront(); },
+          mouseover: function () {
+            l.setStyle({ weight: 2, color: "#333" });
+            l.bringToFront();
+          },
           mouseout: function () { layer.resetStyle(l); }
         });
       }
