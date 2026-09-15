@@ -143,7 +143,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        province_distance_matrix, province_importation_kernel,
        province_increment_matrix,
        patch_infections, importation_from_kernel,
-       implied_national_Rt,
+       implied_national_Rt, implied_national_Rt_at,
        patch_rt_model, patch_infection_model,
        province_export_pressure_model,
        province_composition_model
