@@ -1590,7 +1590,7 @@ others, which is what the imports figure on the analysis page draws.
     ##    the cryptic growth rate `r`, and the established `R0` (the walk
     ##    base) is derived forward from `r` and the generation interval
     ##    through Euler-Lotka.
-    growth_state ~ to_submodel(growth())
+    growth_state ~ to_submodel(growth(g))
     r_clock = growth_state.r
     R0 = r_to_R0(r_clock, g)
     ## 3. Per-patch Rt: national trend plus per-patch deviations.
