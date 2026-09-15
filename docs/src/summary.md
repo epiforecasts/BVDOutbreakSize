@@ -107,7 +107,8 @@ The one-week-ahead confirmed-case forecast for the fifteen zones with the larges
 
 ![One-week-ahead forecast by health zone](summary_assets/zone_forecast.png)
 
-The zone ranking, the composition check and the validation against last week's observed split are in the [health-zone estimates](analysis.md#Health-zone-estimates) of the analysis, and the same estimates are on the interactive map below.
+The zone ranking and the composition check are in the [health-zone estimates](analysis.md#Health-zone-estimates) of the analysis, and the validation against last week's observed split is in the [zone forecast validation](sensitivity.md#Forecast-by-health-zone) of the sensitivity page.
+The same estimates are on the interactive map below.
 
 ## Health-zone map
 

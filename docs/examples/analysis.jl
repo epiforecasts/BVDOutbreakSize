@@ -2290,17 +2290,10 @@ prior_zone_table #hide
 # The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
 # The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
 # Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
-<<<<<<< HEAD
-||||||| parent of 3472e982 (docs(report): place the zone methods and results within the page flow)
-# We fit the joint model and each single-stream model so the per-stream posteriors over the outbreak size can be compared with the joint.
-=======
-# We fit the joint model and each single-stream model so the per-stream posteriors over the outbreak size can be compared with the joint.
 #
 # The zone stage samples with the same NUTS and Mooncake on a diagonal metric: two chains, 600 draws each after 400 adaptation steps, a target acceptance probability of 0.8 and a maximum tree depth of 8.
 # Each chain starts from a data-informed point rather than the prior: deviations at zero, initial shares from the observed cumulative zone shares at the first vintage with a pseudo-count of half a case, and the scales at $\sigma_L = 0.2$, $\sigma_\delta = 0.05$, $h_{\text{z}} = 42$ and $\rho = 0.05$.
 # Each chain's start is jittered with normal noise of standard deviation 0.1 in the unconstrained space.
-# A zone with hundreds of cases at a share near zero puts a random prior start far below the posterior, where step-size adaptation stalls, and the data-informed start avoids that.
->>>>>>> 3472e982 (docs(report): place the zone methods and results within the page flow)
 
 # #### Fit diagnostics
 #
@@ -4437,7 +4430,7 @@ zone_map_fig = plot_zone_map_panels(
 zone_map_fig #hide
 
 # The panels below trace the reproduction number of the twelve zones with most confirmed cases, each against its patch's own implied reproduction number in grey.
-# ZONE_RT_PROSE
+# The Ituri zones follow their patch's decline from May and the Nord-Kivu zones its rise since August, and the deviations show where a zone departs from its patch.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
@@ -4475,7 +4468,7 @@ zone_rt_fig #hide
 
 # The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
 # A zone below the walking threshold carries a level rather than its own walk, so its estimate is the patch's scaled by a prior-driven factor, and it is drawn hollow.
-# ZONE_RANKING_PROSE
+# The walking zones of Nord-Kivu head the walking zones' ranking and the large Ituri zones sit near one, so the probability of growth separates the patches more than the zones within them.
 
 #md # ```@raw html
 #md # <details><summary>Zone ranking</summary>
@@ -4530,7 +4523,7 @@ MarkdownTable(zone_overview_display) #hide
 # The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's overdispersed allocation at that vintage's allocated total, and is where the points should fall.
 # The coloured ribbon inside it is the expected share alone.
 # The second figure is the same check on the cumulative allocation, each zone's share of its patch's cumulative allocated cases at every vintage, which is the running total the reports print.
-# ZONE_PPC_PROSE
+# The observed points fall inside the grey band in the large Ituri and Nord-Kivu zones, and a zone with a handful of cases per vintage has an observed share that jumps between zero and one inside a band that spans the same range.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition predictive checks</summary>
@@ -4566,7 +4559,7 @@ zone_ppc_fig #hide
 zone_ppc_cum_fig #hide
 
 # The calibration table scores the per-vintage composition the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch: the mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
-# ZONE_CALIBRATION_PROSE
+# Most zone-vintage cells hold no case, and the predictive allocation covers an empty cell whatever the share, so the coverage sits above nominal and the bias is read from the patches with many cases.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition calibration</summary>
@@ -4588,7 +4581,7 @@ zone_calibration_table #hide
 # The figure and table below split the one-week-ahead confirmed-case forecast across the health zones, for the fifteen zones with the largest forecast medians.
 # Each zone's count is the national forecast draw times its patch's share times its projected share of the patch, so the patch totals in the table are the province forecast above.
 # The same split made from the one-week-back validation fit is scored against the zone tables observed since in the [zone forecast validation](@ref "Forecast by health zone") of the sensitivity page.
-# ZONE_FORECAST_PROSE
+# The patch totals follow the province forecast, with Ituri the largest and the pooled patch a handful of cases.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead zone forecast</summary>
@@ -4616,7 +4609,7 @@ MarkdownTable(zone_forecast_display) #hide
 # The table gives the sampler diagnostics of the two zone fits: the worst R-hat and smallest effective sample sizes over every stored quantity and the divergences.
 # Per chain it gives the fraction of iterations at the tree-depth cap, the energy fraction of missing information and the adapted step size.
 # The per-zone R-hat and effective sample sizes of the cut-off reproduction number, share and deviation are in the fold.
-# ZONE_DIAG_PROSE
+# A level-only zone's reproduction number varies across draws only through its decayed level, so its R-hat and effective sample size are not meaningful and the walking rows are the ones to read.
 
 #md # ```@raw html
 #md # <details><summary>Zone fit diagnostics</summary>
@@ -4642,7 +4635,7 @@ zone_sampler_table = DataFrame([let d = zone_sampler_diagnostics(chn)
     ("health zones (frozen)",
     frozen_local.chn))]);
 zone_diagnostics = let d = zone_diagnostics_table(chn_local, zone_inputs)
-    for c in names(d)[2:end]
+    for c in names(d)[3:end]
         d[!, c] = round.(d[!, c]; digits = startswith(c, "rhat") ? 3 : 0)
     end
     d
