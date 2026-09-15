@@ -73,6 +73,25 @@ end
     @test g[3:end] == v[3:end] && all(g[1:2] .== 0)
 end
 
+@testitem "background_walk_model default baseline is a half-normal SD 20" tags=[
+    :slow
+] begin
+    using Turing: sample, Prior
+    using Random: MersenneTwister
+    using Statistics: mean
+    using BVDOutbreakSize: background_walk_model
+
+    ## Default `truncated(Normal(0, 20); lower = 0)` on the window anchor: fold
+    ## the half-normal back to its untruncated SD via E|X| = σ√(2/π). Wide
+    ## enough that the joint posterior for `λ_mu` sits inside it rather than
+    ## against its upper tail.
+    chn = sample(MersenneTwister(20260604), background_walk_model(40, 0.03),
+        Prior(), 40_000; progress = false)
+    λ_mu = vec(Array(chn[:λ_mu]))
+    @test isapprox(mean(λ_mu) * sqrt(pi / 2), 20.0; atol = 1.0)
+    @test all(>=(0), λ_mu)
+end
+
 @testitem "background_walk_model edge cases (ungated, single day)" begin
     using BVDOutbreakSize: background_walk_model
     using Turing: returned

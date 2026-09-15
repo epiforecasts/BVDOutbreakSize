@@ -68,9 +68,9 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 4.00, SD near 1.20 (truncated Normal(4, 1.2); lower 0).
-    @test 3.9 < mean(m) < 4.1
-    @test 1.1 < std(m) < 1.3
+    ## Centre near 2.79, SD near 1.16 (truncated Normal(2.75, 1.2); lower 0).
+    @test 2.7 < mean(m) < 2.9
+    @test 1.06 < std(m) < 1.26
     ## The growth rate is centred on the BEAST X 11.7-day doubling
     ## (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
