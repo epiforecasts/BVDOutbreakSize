@@ -284,6 +284,11 @@ function importation_from_kernel(K::AbstractMatrix, I_prev::AbstractVector,
     return imp
 end
 
+## Importation intensity of origin `q` on day `t`. A scalar applies to every
+## origin and every day; a matrix carries one level per origin over time.
+@inline _eps(e::Real, q::Integer, t::Integer) = e
+@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
+
 """
     patch_infections(Rt_matrix, g, seeds_matrix, importation_kernel, epsilon)
 
@@ -345,11 +350,6 @@ closures that capture mutated variables, or other constructs that would
 obscure Mooncake's AD reverse pass. The importation is computed inline
 in each day's patch loop (no closure allocation).
 """
-## Importation intensity of origin `q` on day `t`. A scalar applies to every
-## origin and every day; a matrix carries one level per origin over time.
-@inline _eps(e::Real, q::Integer, t::Integer) = e
-@inline _eps(e::AbstractMatrix, q::Integer, t::Integer) = @inbounds e[q, t]
-
 function patch_infections(Rt_matrix::AbstractMatrix, g::AbstractVector,
         seeds_matrix::AbstractMatrix, importation_kernel::AbstractMatrix,
         epsilon::Union{Real, AbstractMatrix})
