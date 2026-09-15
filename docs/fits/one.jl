@@ -8,11 +8,15 @@
 # Set `BVD_FIT_CACHE` to choose the cache directory (default `logs/fit_cache`),
 # `BVD_REFIT=all` to ignore an existing cache entry, and `BVD_FIT_DRYRUN=1` to
 # print the id and key without fitting (a cheap check that the id resolves).
+#
+# The fit's convergence diagnostics and headline posteriors are printed, and
+# appended to the GitHub Actions job summary when `GITHUB_STEP_SUMMARY` is set.
 using Pkg: Pkg
 Pkg.instantiate()
 
 using BVDOutbreakSize
 include(joinpath(@__DIR__, "registry.jl"))
+include(joinpath(@__DIR__, "summary.jl"))
 
 const ID = strip(get(ENV, "BVD_FIT_ID", ""))
 const CACHE = get(ENV, "BVD_FIT_CACHE",
@@ -36,6 +40,9 @@ key = fit_key(ID)
 if DRYRUN
     println(key)
 else
-    fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
+    result = fit_or_load(key, specs[i].thunk; cache_dir = CACHE, refit = REFIT)
     @info "cached" id=ID key=key
+    ## Keys are rebuilt before the diagnostics read them: a chain that came
+    ## back from the cache was serialised by another FlexiChains version.
+    write_fit_summary(ID, repair_chain_keys(result))
 end

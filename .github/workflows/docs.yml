@@ -134,6 +134,13 @@ jobs:
         run: |
           julia --project=docs -e 'using Pkg; Pkg.instantiate()'
           julia --project=docs docs/fits/one.jl
+      # `one.jl` writes the fit's diagnostics to the job summary itself. A
+      # cache hit skips it, so say so rather than leaving the job blank.
+      - name: Note the cached fit
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          echo '### Fit `${{ matrix.id }}`: cache hit, not refitted' \
+            >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         with:
           name: fit-${{ matrix.id }}
