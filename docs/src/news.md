@@ -8,6 +8,19 @@ each push to `main` also republishes the rendered analysis and the
 
 ## Unreleased
 
+### Changed
+
+- `m` counts transmission generations rather than doublings (#672).
+`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
+Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
+It does not fix initialisation, so `ViablePrior` is retained.
+
 ### Fixed
 
 - NUTS chains no longer start on the prior tail they cannot recover from (#671).
@@ -21,6 +34,14 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The full test cell no longer times out.
+`Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
+It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.
+Those items do not vary by platform or Julia version, so they now run once in their own `Quality` job and every matrix cell runs `skip_quality`.
+The two filters are exact complements, so the suite is still covered in full.
+The two now run in parallel, and the cell that was timing out drops to the ~53 minutes its `skip_quality` twin takes.
+The quality half is the faster-growing one, at roughly 72 minutes on 9 September and at least 97 by 14 September, so it has the less comfortable margin against the ceiling and is the half to watch.
+
 - The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
 `test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
 The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
@@ -28,15 +49,8 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 
 - Absconding no longer discharges patients the clinical exits have already discharged.
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
-Both length-of-stay PMFs sum to one, so the clinical schedules alone account for every admitted patient and the abscond flow removes mass a second time.
-The schedules are convolutions of past admissions, so they keep removing cohort mass that absconds have already taken, and in a cohort's tail the scheduled discharge exceeds the remaining stock.
-The `max(., 0)` guards then clip it to exactly zero, which floors the modelled occupancy rate and flattens the likelihood.
-Each schedule is now thinned by the abscond survival over cohort age, so absconding competes with the clinical exits instead of adding to them.
-Cohort age rather than calendar day is what makes it a competing risk: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
-The balance exposes only the suspect sub-stock to absconding, so a confirmed patient cannot abscond and the true-case schedules carry the confirmation hazard alongside the abscond one, stopping the discount once a cohort is confirmed.
-Discounting every day of a true-case stay instead leaves the schedules under-discharging by 1.8% of admissions at the fitted abscond rate, stranding occupancy that never clears; carrying the confirmation hazard brings that to 0.01%.
-Background admissions are never confirmed, so the rule-out schedule keeps the flat cohort-age thinning, which is exact for it.
-`κ = 0` leaves every schedule unchanged.
+- The seeding docstrings now describe the model they document.
+`seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
 ## v1.18.0
 

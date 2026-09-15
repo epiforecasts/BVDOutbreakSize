@@ -1,11 +1,12 @@
 ## Tests for the molecular-clock growth-and-size prior and the two-phase
 ## renewal-start seeding it drives in `infection_model`. The growth
 ## submodel samples the cryptic rate `r` (the prior sits on the genetic
-## doubling time) along with the doubling count `m`, so the cryptic duration
-## `m·τ` is prior-dominated; the established `R0` is derived forward from `r`
-## in `infection_model`. The renewal-start seed magnitude is `2^m` directly
-## (no back-scaling), and the total age `T = m·τ + τ_obs` carries the genetic
-## bound while the renewal sets the realized size.
+## doubling time) along with the generation count `m`, so the cryptic
+## duration `T = m·G` is prior-dominated and does not depend on `r`; the
+## established `R0` is derived forward from `r` in `infection_model`. The
+## renewal-start seed is the daily incidence `C_T = exp(r·T)` reached at the
+## end of the cryptic phase, and the total age `T + τ_obs` carries the
+## genetic bound while the renewal sets the realized size.
 
 @testitem "exponential_growth_model: deterministics T, C_T, τ" begin
     using Turing: @model, to_submodel, sample, Prior
@@ -13,10 +14,14 @@
     using BVDOutbreakSize: exponential_growth_model
 
     ## `r` is sampled (the growth-rate prior), along with `m`.
-    ## `to_submodel(x, false)` re-exposes `r`, `m` and the `:=` (`τ`, `T`,
-    ## `C_T`) names at the parent.
+    ## `to_submodel(x, false)` re-exposes `r`, `m` and the `:=` (`τ`, `G`,
+    ## `T`, `C_T`) names at the parent.
+    gi = [0.02, 0.08, 0.16, 0.22, 0.20, 0.15, 0.10, 0.07]
+    gi = gi ./ sum(gi)
+    G_true = sum(i * gi[i] for i in eachindex(gi))
+
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(), false)
+        st ~ to_submodel(exponential_growth_model(gi), false)
         return st
     end
 
@@ -25,15 +30,21 @@
     T = vec(Array(chn[:T]))
     C_T = vec(Array(chn[:C_T]))
     τ = vec(Array(chn[:τ]))
+    G = vec(Array(chn[:G]))
     m = vec(Array(chn[:m]))
     r = vec(Array(chn[:r]))
 
     @test all(isfinite, T) && all(T .> 0)
     @test all(isfinite, C_T) && all(C_T .> 0)
-    ## τ = log(2)/r; T = m·τ (cryptic duration), C_T = 2^m hold draw-by-draw.
+    ## τ = log(2)/r, T = m·G and C_T = exp(r·T) hold draw-by-draw.
     @test all(isapprox.(τ, log(2) ./ r; rtol = 1e-8))
-    @test all(isapprox.(T, m .* τ; rtol = 1e-8))
-    @test all(isapprox.(C_T, 2.0 .^ m; rtol = 1e-8))
+    @test all(isapprox.(G, G_true; rtol = 1e-8))
+    @test all(isapprox.(T, m .* G_true; rtol = 1e-8))
+    @test all(isapprox.(C_T, exp.(r .* T); rtol = 1e-8))
+    ## The point of counting generations: elapsed time per generation is the
+    ## generation interval, so it is the same for every draw regardless of the
+    ## growth rate. Counting doublings would make it log(2)/r and vary.
+    @test all(isapprox.(T ./ m, G_true; rtol = 1e-8))
 end
 
 @testitem "exponential_growth_model: r and m priors are wide" begin
@@ -42,8 +53,12 @@ end
     import FlexiChains
     using BVDOutbreakSize: exponential_growth_model
 
+    gi = [0.02, 0.08, 0.16, 0.22, 0.20, 0.15, 0.10, 0.07]
+    gi = gi ./ sum(gi)
+    G_true = sum(i * gi[i] for i in eachindex(gi))
+
     @model function _wrap()
-        st ~ to_submodel(exponential_growth_model(), false)
+        st ~ to_submodel(exponential_growth_model(gi), false)
         return st
     end
 
@@ -53,11 +68,9 @@ end
     T = vec(Array(chn[:T]))
     r = vec(Array(chn[:r]))
 
-    ## Centre near 5.8, SD near 3.4 (truncated Normal(5, 4); lower 0): `m`
-    ## counts only the cryptic doublings. The prior is deliberately wide so
-    ## the cryptic duration stays uncertain.
-    @test 5.3 < mean(m) < 6.3
-    @test 3.0 < std(m) < 3.8
+    ## Centre near 4.00, SD near 1.20 (truncated Normal(4, 1.2); lower 0).
+    @test 3.9 < mean(m) < 4.1
+    @test 1.1 < std(m) < 1.3
     ## The growth rate is centred on the BEAST X 11.7-day doubling
     ## (r ≈ 0.059).
     @test 0.05 < mean(r) < 0.08
@@ -74,8 +87,10 @@ end
     τ = log(2) ./ r
     @test 4.9 < quantile(τ, 0.025) < 5.8
     @test 23.6 < quantile(τ, 0.975) < 27.8
-    ## The induced cryptic duration T = m·τ is correspondingly wide.
-    @test std(T) > 30.0
+    ## The cryptic duration T = m·G is `m`'s own spread scaled by the fixed
+    ## generation interval, and carries none of `r`'s.
+    @test isapprox(std(T), std(m) * G_true; rtol = 1e-8)
+    @test std(T) > 4.0
 end
 
 @testitem "infection_model: two-phase renewal-start seeding" tags=[:slow] begin
@@ -95,6 +110,7 @@ end
         m := st.m
         sa := st.seed_at_renewal_start
         r0 := st.r0
+        G := sum(i * st.g[i] for i in eachindex(st.g))
         return st
     end
 
@@ -103,17 +119,23 @@ end
     C_T = vec(Array(chn[:C_T]))
     sa = vec(Array(chn[:sa]))
     m = vec(Array(chn[:m]))
+    r0 = vec(Array(chn[:r0]))
+    G = vec(Array(chn[:G]))
 
     @test all(isfinite, T) && all(isfinite, C_T) && all(C_T .> 0)
-    ## Total age T = m·τ + τ_obs is wide (prior-dominated by the m prior)
-    ## and ≥ τ_obs by construction (the cryptic phase adds m·τ ≥ 0).
-    @test std(T) > 20.0
+    ## Total age T = m·G + τ_obs is prior-dominated by the m prior and
+    ## ≥ τ_obs by construction (the cryptic phase adds m·G ≥ 0).
+    @test std(T) > 12.0
     @test all(T .>= τ_obs)
     @test mean(T) > τ_obs    # origin sits before the renewal start (cryptic)
-    ## The renewal-start seed magnitude is `2^m` directly, r-independent (no
-    ## back-scaling): keeps the single R0 out of the seed magnitude.
+    ## Elapsed cryptic time is `m` generation intervals, set by the sampled
+    ## generation interval alone. Counting doublings instead would make it
+    ## log(2)/r and tie the origin date to the growth rate.
+    @test all(isapprox.(T .- τ_obs, m .* G; rtol = 1e-6))
+    ## The renewal-start seed is the daily incidence the cryptic phase reaches,
+    ## `exp(r·m·G)`, so the origin date and the seed share one growth rate.
     @test all(sa .> 0)
-    @test all(isapprox.(sa, 2.0 .^ m; rtol = 1e-6))
+    @test all(isapprox.(sa, exp.(r0 .* (T .- τ_obs)); rtol = 1e-6))
 end
 
 @testitem "infection_model: rt_walk_start holds Rt flat before the walk" begin
