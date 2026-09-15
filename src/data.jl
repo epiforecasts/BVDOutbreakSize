@@ -240,6 +240,32 @@ function load_observations(
         return result
     end
 
+    ## Per-zone history from a TOML block with one shared `dates` array and
+    ## one dotted `province.zone` array per series (`zone_confirmed_history`
+    ## and `zone_death_history`). Returns a Dict keyed province → zone, each
+    ## zone in the same (; days, counts) shape as history(); `unallocated`
+    ## is the report's own row of counts not yet attributed to a zone and
+    ## is kept as a zone of that name. Empty when the block is absent.
+    function zone_history(key)
+        ZoneHistory = @NamedTuple{days::Vector{Int}, counts::Vector{Int}}
+        result = Dict{String, Dict{String, ZoneHistory}}()
+        !haskey(raw, key) && return result
+        block = raw[key]
+        !haskey(block, "dates") && return result
+        keep = [Date(String(d)) <= cutoff for d in block["dates"]]
+        idx = Int[_index(d) for d in block["dates"][keep]]
+        ord = sortperm(idx)
+        for prov in sort!([k for k in keys(block) if block[k] isa AbstractDict])
+            zones = Dict{String, ZoneHistory}()
+            for (zone, vals) in block[prov]
+                v = Int.(vals[keep])
+                zones[String(zone)] = (; days = idx[ord], counts = v[ord])
+            end
+            result[prov] = zones
+        end
+        return result
+    end
+
     reported_history = history("reported_case_history")
     confirmed_history = history("confirmed_case_history")
     confirmed_deaths_history = history("confirmed_death_history")
@@ -438,6 +464,8 @@ function load_observations(
         province_confirmed_history = province_history("province_confirmed_history"),
         province_death_history = province_history("province_death_history"),
         province_lab_daily_history = province_history("province_lab_daily_history"),
+        zone_confirmed_history = zone_history("zone_confirmed_history"),
+        zone_death_history = zone_history("zone_death_history"),
         tmrca_days = _gap(raw["genetic_tmrca"]["date"]),
         who_first_sitrep_days)
 end
@@ -500,6 +528,103 @@ function province_increment_matrix(province_history,
         increments[p, :] = max.(diff(vcat(0, pooled)), 0)
     end
     return (; days, increments)
+end
+
+"""
+    zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS)
+
+Reshape the per-health-zone cumulative histories loaded by
+[`load_observations`](@ref) into one increment matrix per patch, the
+within-patch analogue of [`province_increment_matrix`](@ref).
+
+Each patch pools the source provinces `members` gives it (a name with no
+entry is its own province), and its matrix has one row per zone of those
+provinces, the `unallocated` rows left out, and one column per vintage.
+Every zone must be reported on the same vintage days, which the tables
+guarantee by sharing one `dates` array; a mismatch is an error rather
+than a silent reshape. Increments are the differences of consecutive
+cumulative counts, the first from zero, clamped at zero as for the
+provinces since a zone's cumulative can fall when cases are reattributed.
+
+Returns a vector with one named tuple per patch: `patch` (its name),
+`zones` (a vector of `(province, zone)` key pairs in row order), `days`,
+`increments` (the `(n_zones × n_vintages)` matrix) and `totals` (the
+column sums, the allocated count each vintage's composition conditions
+on). A patch none of whose provinces has zone data gets an empty matrix.
+An empty `zone_history` returns an empty vector.
+"""
+function zone_increment_matrix(zone_history, patch_names::AbstractVector,
+        members::AbstractDict = PROVINCE_MEMBERS)
+    out = @NamedTuple{patch::String, zones::Vector{Tuple{String, String}},
+        days::Vector{Int}, increments::Matrix{Int}, totals::Vector{Int}}[]
+    isempty(zone_history) && return out
+    days = nothing
+    for nm in patch_names
+        keys_ = Tuple{String, String}[]
+        for prov in get(members, nm, [nm])
+            haskey(zone_history, prov) || continue
+            for zone in sort!(collect(keys(zone_history[prov])))
+                zone == "unallocated" && continue
+                push!(keys_, (prov, zone))
+            end
+        end
+        if isempty(keys_)
+            push!(out,
+                (; patch = String(nm), zones = keys_, days = Int[],
+                    increments = Matrix{Int}(undef, 0, 0), totals = Int[]))
+            continue
+        end
+        for (prov, zone) in keys_
+            h = zone_history[prov][zone]
+            days === nothing && (days = h.days)
+            h.days == days || error(
+                "zone `$(prov).$(zone)` is reported on different vintage " *
+                "days to `$(keys_[1][1]).$(keys_[1][2])`; the zone " *
+                "composition needs every zone on the same vintages.")
+        end
+        inc = Matrix{Int}(undef, length(keys_), length(days))
+        for (i, (prov, zone)) in enumerate(keys_)
+            c = zone_history[prov][zone].counts
+            inc[i, :] = max.(diff(vcat(0, c)), 0)
+        end
+        push!(out,
+            (; patch = String(nm), zones = keys_, days = copy(days),
+                increments = inc, totals = vec(sum(inc; dims = 1))))
+    end
+    return out
+end
+
+"""
+    load_health_zones(path = data/health_zones.csv)
+
+Read the health-zone metadata table: one named tuple per zone with the
+manifest key `zone`, the display `label`, the `province` key, the
+WorldPop `population`, the polygon centroid `lat` and `lon` in decimal
+degrees, and the DHIS2 `zscode` from the health-zone shapefile. Rows are
+in patch order then alphabetical by key. The file is written by
+`scripts/build_health_zones.py`; see `data/README.md` for its sources.
+"""
+function load_health_zones(
+        path::AbstractString = joinpath(@__DIR__, "..", "data",
+        "health_zones.csv"))
+    Row = @NamedTuple{zone::String, label::String, province::String,
+        population::Int, lat::Float64, lon::Float64, zscode::String}
+    rows = Row[]
+    lines = readlines(path)
+    header = split(lines[1], ',')
+    header == ["zone", "label", "province", "population", "lat", "lon",
+        "zscode"] || error("unexpected header in $(path): $(header)")
+    for line in lines[2:end]
+        isempty(strip(line)) && continue
+        f = split(line, ',')
+        length(f) == 7 || error("expected 7 fields in $(path): $(line)")
+        push!(rows,
+            (; zone = String(f[1]), label = String(f[2]),
+                province = String(f[3]), population = parse(Int, f[4]),
+                lat = parse(Float64, f[5]), lon = parse(Float64, f[6]),
+                zscode = String(f[7])))
+    end
+    return rows
 end
 
 """
