@@ -1119,6 +1119,26 @@ override. Returns `(; scaling)`.
 end
 
 """
+Specimens analysed per suspect sampled.
+
+[`confirmed_cases_model`](@ref) scales the laboratory volume by this factor
+as well as by `τ_test`. `τ_test` is a probability and the receipt kernel
+conserves mass, so it alone bounds the modelled analysed volume below the
+modelled suspect inflow. Specimens are not persons: a suspect can yield
+several through repeat exclusion testing, and swabbed community deaths and
+screened contacts enter the laboratory denominator without being counted
+as suspects reported, so the ratio can exceed one.
+
+`κ ~ LogNormal(0, 0.25)` has median 1 and a 90% range of about 0.66 to
+1.51, matching [`death_testing_scaling_model`](@ref).
+"""
+@model function specimen_intensity_model(;
+        intensity_prior = LogNormal(0.0, 0.25))
+    κ ~ intensity_prior
+    return (; κ)
+end
+
+"""
 Shared negative-binomial dispersion `k` for the passive-surveillance
 streams (suspected deaths, reported cases and confirmed cases). Sampled on
 the `1/sqrt(k)` scale with a weakly-informative half-normal prior

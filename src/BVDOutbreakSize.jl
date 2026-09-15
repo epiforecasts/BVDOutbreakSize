@@ -104,6 +104,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        confirmed_positivity_model, confirmed_overdispersion_model,
        severity_enrichment_model,
        death_testing_fraction_model, death_testing_scaling_model,
+       specimen_intensity_model,
        surveillance_dispersion_model, pooled_dispersion_model,
        independent_ascertainment_model, pooled_ascertainment_model,
 # observation models
