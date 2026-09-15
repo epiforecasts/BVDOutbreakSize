@@ -16,7 +16,8 @@ Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin 
 Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
 The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
 `exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
-The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generation intervals between that index death and the renewal start, with a 90% prior origin between late December 2025 and late February 2026 and a 99th-percentile seed of about 500 infections per day.
+The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
+The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
 `r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
 The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
 It does not fix initialisation, so `ViablePrior` is retained.

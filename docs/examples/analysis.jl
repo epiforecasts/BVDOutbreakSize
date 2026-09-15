@@ -481,10 +481,11 @@ MarkdownTable(vintage_table) #hide
 # The origin therefore sits $T_{\text{cryptic}} = m\,G$ days before the renewal start, with $G$ the mean generation interval, and the cryptic phase grows one infection per day at the origin to $C_T = e^{r T_{\text{cryptic}}}$ per day at the renewal start, the day the renewal takes over.
 # Field epidemiology in Mongbwalu traced a sustained transmission chain back to a death on 25 January 2026, and identified more than 500 suspected cases between mid-January and mid-May [kupferschmidt2026](@cite).
 # The genetic TMRCA [mbalaplacide2026](@cite) is a lower bound on the outbreak age that is consistent with, but does not by itself fix, an origin that early.
-# We place a prior on $m$ centred so that the implied origin sits at the end of January, at the documented first deaths:
+# We place a prior on $m$ centred so that the implied origin sits in mid-February, with 90% of its mass between mid-January and mid-March.
+# The traced 25 January death then sits near the 87th percentile: it is the earliest chain the field work reached, which bounds the origin rather than dating it.
 #
 # ```math
-# m \sim \mathrm{Normal}^{+}(4,\ 1.2), \qquad
+# m \sim \mathrm{Normal}^{+}(2.75,\ 1.2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
 # C_T = e^{r T_{\text{cryptic}}}. \tag{8}
 # ```

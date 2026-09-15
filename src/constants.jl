@@ -177,9 +177,9 @@ the analytic cryptic phase hands off to the recursion) sits after the
 genetic TMRCA day. Placing the renewal start a 14-day lead after the TMRCA,
 rather than exactly on it, leaves the observed span
 `τ_obs = n − renewal_start` strictly shorter than `tmrca_days`, so the
-genetic censored bound on the total age `T = m·τ + τ_obs` stays informative:
+genetic censored bound on the total age `T = m·G + τ_obs` stays informative:
 it pulls the origin to sit at or before the MRCA, bounding the cryptic
-duration `m·τ` from below. The lead accounts for the TMRCA's own
+duration `m·G` from below. The lead accounts for the TMRCA's own
 molecular-clock uncertainty before sustained transmission is treated as
 confidently established.
 """
