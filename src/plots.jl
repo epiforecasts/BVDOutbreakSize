@@ -1290,7 +1290,7 @@ vector of `(date, ...)` tuples with `date` an ISO string: `external` and `ours`
 are `(date, central, lower, upper)`, `observed` is `(date, value)`. The dates
 share one calendar x-axis, so the two projections read directly against what
 the outbreak actually did. Used to set our forward projection beside the
-Chamla et al. [chamla2026](@cite) confirmed-case projection.
+[chamla2026](@citet) confirmed-case projection.
 """
 function plot_projection_comparison(;
         external::AbstractVector,

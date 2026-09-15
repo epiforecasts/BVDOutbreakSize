@@ -1174,7 +1174,7 @@ frozen_streams_table = streams_table(
 
 # ## Comparison with Chamla et al.
 #
-# A second group, Chamla et al. [chamla2026](@cite) at the World Health Organization Regional Office for Africa, published a stochastic compartmental model of the same outbreak on 25 June 2026.
+# A second group, [chamla2026](@citet) at the World Health Organization Regional Office for Africa, published a stochastic compartmental model of the same outbreak on 25 June 2026.
 # Their model is a discrete-time susceptible-exposed-infectious-recovered-dead ensemble, recalibrated by simulation filtering to the laboratory-confirmed case series and anchored on the 598 confirmed cases reported by 8 June.
 # It is then run forward to project the confirmed-case trajectory under a low, central and high transmissibility scenario.
 #
