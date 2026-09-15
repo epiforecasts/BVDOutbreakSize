@@ -34,6 +34,11 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- Citations read as prose rather than as a numeric-style reference list.
+Fourteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)"; they now use `@citet`, which renders the name once.
+The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
+`docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
+
 - The full test cell no longer times out.
 `Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
 It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.

@@ -263,7 +263,7 @@ const CHAMLA_CONFIRMED_CENTRAL = [
 """
     CHAMLA_CONFIRMED_W12
 
-Chamla et al. [chamla2026](@cite) week-12 (24 June 2026) cumulative
+[chamla2026](@citet) week-12 (24 June 2026) cumulative
 confirmed-case projection under their three transmissibility scenarios, as
 `(scenario, median, lower_90, upper_90)` tuples (low `R₀ = 1.42`, central
 `R₀ = 1.71`, high `R₀ = 2.08`). Week 12 is the forward horizon closest to

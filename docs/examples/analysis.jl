@@ -25,7 +25,7 @@
 #
 # ## Origins of this work
 #
-# This work began as a replication of the McCabe et al. [mccabe2026](@cite) report.
+# This work began as a replication of the [mccabe2026](@citet) report.
 # It has since evolved into a real-time joint Bayesian estimate of the current outbreak size.
 # The model is a discrete-time renewal process with a time-varying reproduction number, fitted to more of the available data streams than the original.
 # The points below summarise how it now differs from the report.
@@ -39,13 +39,13 @@
 #
 # - *Discrete-time renewal model.* The whole model runs on a daily grid.
 #   Infections follow the discrete renewal equation $I_t = R_t \sum_{s \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval PMF, and every delay is applied as a discrete convolution.
-#   McCabe et al. [mccabe2026](@cite) use continuous-time closed forms.
+#   [mccabe2026](@citet) use continuous-time closed forms.
 # - *Time-varying reproduction number.* $R_t$ is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
 #   It then follows a weekly Gaussian random walk on the log scale, interpolated within weeks.
 #   A logistic outbreak-response ramp of about three weeks starts from that report.
 #   McCabe et al. use one constant exponential growth rate.
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
-#   McCabe et al. [mccabe2026](@cite) fix each and report a set of scenarios.
+#   [mccabe2026](@citet) fix each and report a set of scenarios.
 # - *Two-phase seeding with a wide, genetically-floored outbreak age.* A single import grows through an unobserved cryptic exponential phase before the renewal process takes over.
 #   Growth follows the rate the genetic estimate informs, reaching a magnitude set by a prior on the number of cryptic generations.
 #   The established reproduction number is derived forward from that growth rate.
@@ -54,23 +54,23 @@
 #
 # **Delays and convolutions**
 #
-# - *Delays re-estimated with uncertainty.* McCabe et al. [mccabe2026](@cite) take the onset-to-death delay from the Isiro 2012 point estimate of Rosello et al. [rosello2015](@cite).
+# - *Delays re-estimated with uncertainty.* [mccabe2026](@citet) take the onset-to-death delay from the Isiro 2012 point estimate of [rosello2015](@citet).
 #   We instead use a Bayesian reanalysis of the same line list [bdbv_linelist_analysis_2026](@cite) that re-estimates the delay with uncertainty.
 #   We sample every other delay (generation interval, incubation period, onset-to-report, onset-to-confirmation and onset-to-hospitalisation abroad) from a prior centred on published Ebola estimates.
 #   Each is discretised with double interval censoring [charniga2024](@cite), so the delay uncertainty propagates.
 #
 # **Likelihoods and data streams**
 #
-# - *More streams fitted.* McCabe et al. [mccabe2026](@cite) fit the Uganda export cases and deaths.
+# - *More streams fitted.* [mccabe2026](@citet) fit the Uganda export cases and deaths.
 #   We add the DRC suspected cases, the laboratory-confirmed cases, the confirmed deaths and the deaths among the Uganda exports.
 # - *Per-vintage time-series fitting.* The DRC streams are fitted on the incidence scale, as the between-vintage increments across successive sitreps (the first vintage being the cumulative count to that date).
 #   This sharpens $R_t$.
 #   McCabe et al. condition on a single cumulative total.
 # - *Ascertainment estimated.* We jointly estimate the outbreak size and the fraction of cases each surveillance system reports.
 #   McCabe et al. have no ascertainment component.
-# - *Comparison against published scenarios.* The model is set beside the McCabe et al. [mccabe2026](@cite) scenario estimates as an external sense-check, matched in time at the cut-off each scenario was computed.
+# - *Comparison against published scenarios.* The model is set beside the [mccabe2026](@citet) scenario estimates as an external sense-check, matched in time at the cut-off each scenario was computed.
 #   The cumulative infection count, the running sum of the daily infections, is the headline quantity reported separately.
-#   A forward projection from a frozen fit is also set against the Chamla et al. [chamla2026](@cite) confirmed-case projection and the data observed since.
+#   A forward projection from a frozen fit is also set against the [chamla2026](@citet) confirmed-case projection and the data observed since.
 #
 # **Extensions**
 #
@@ -120,7 +120,7 @@
 #
 # **Implementation**
 #
-# - *LLM-driven reimplementation.* The model code, priors and analysis were drafted by a language model from the McCabe et al. [mccabe2026](@cite) report and the companion delay reanalysis.
+# - *LLM-driven reimplementation.* The model code, priors and analysis were drafted by a language model from the [mccabe2026](@citet) report and the companion delay reanalysis.
 #   It was then reviewed and revised.
 #   It has not been independently replicated against the authors' code.
 #md #
@@ -165,7 +165,7 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # We extracted these figures from the written situation-report PDFs (archived by INRB-UMIE [inrb_umie_2026](@cite)) using a language model, with a second pass to re-read them, rather than the published per-zone CSVs.
 # The zone sums in the CSVs are inconsistent with the national headline totals because they drop counts not yet attributed to a zone, so they understate the national totals.
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
-# The cross-border traveller volume and source population come from McCabe et al. [mccabe2026](@cite).
+# The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
@@ -1947,7 +1947,7 @@ diagnostics_table( #hide
 # That naive ratio is biased low in real time.
 # A case confirmed close to the cut-off has not yet had time to die, so it enters the denominator before it can enter the numerator.
 #
-# We report a delay-corrected confirmed CFR that debiases the real-time ratio following [nishiura2009](@cite).
+# We report a delay-corrected confirmed CFR that debiases the real-time ratio following [nishiura2009](@citet).
 # The denominator is shrunk from all confirmed cases to those expected to have had their death confirmed by the cut-off.
 # Each day of confirmed-case incidence is weighted by the probability that a case confirmed that day, if it is going to die, has had its death confirmed by the cut-off:
 #
