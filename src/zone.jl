@@ -158,10 +158,14 @@ function _zone_extended_data(inputs; horizon::Integer = 7, week::Integer = 7,
     end
     fixed = zone_fixed_terms(I_ext, zd.g, zd.f, zd.t0)
     days = vcat(n, n .+ (1:horizon))
+    nd = n + horizon - zd.t0 + 1
     return merge(zd,
         (; I_bar = I_ext, n = n + horizon, days,
             fixed.force_pre, fixed.report_pre, fixed.report_pre_cum,
-            fixed.infections_pre))
+            fixed.infections_pre,
+            report_matrix = zone_delay_operator(zd.f, nd),
+            report_pre_rows = zone_report_pre_rows(fixed.report_pre,
+                inputs.patch_of_zone, zd.t0, n + horizon)))
 end
 
 ## Daily deviations over `t0 … n + horizon` for one draw: the knots
@@ -169,7 +173,7 @@ end
 function _zone_extended_deviations(st, inputs; horizon::Integer = 7,
         week::Integer = 7)
     zd = inputs.model_data
-    base = zone_interpolate_knots(st.δ_knots, zd.knots, zd.t0, zd.n)
+    base = zd.interp * transpose(st.δ_knots)
     nd, nz = size(base)
     out = zeros(Float64, nd + horizon, nz)
     out[1:nd, :] .= base
