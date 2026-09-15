@@ -42,6 +42,19 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_province_tableau1.jl {{.CLI_ARGS}}
 
+  zone-tableau2:
+    desc: >
+      Regenerate the [zone_confirmed_history] and [zone_death_history]
+      blocks for data/observations.toml by scanning Tableau 2 of the INSP
+      situation reports (per-health-zone confirmed cases and deaths within
+      each province). Fails unless the zone rows plus the unallocated row
+      sum exactly to the committed province_confirmed_history and
+      province_death_history on every date; a vintage whose zone rows do
+      not sum to its own printed province row is reported and left out.
+      Needs the PDFs (`task download-sitreps`) and pdftotext.
+    cmds:
+      - julia --project=scripts scripts/scan_zone_tableau2.jl {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for
