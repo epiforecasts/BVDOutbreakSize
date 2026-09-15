@@ -46,6 +46,18 @@ jobs:
         with:
           version: ${{ matrix.julia-version }}
       - uses: julia-actions/cache@v3
+        with:
+          # Only a job that finished may write the depot cache.
+          # `cancel-in-progress` kills cells mid-`Pkg` install and the default
+          # `save-always: true` then snapshots that depot as the newest cache
+          # for the restore key. Pkg skips downloading any package whose source
+          # path merely exists, so a package directory restored from such a
+          # snapshot without its contents is never repaired and precompilation
+          # fails on a missing source file. The failing job saves the same
+          # depot again, so the state does not heal on its own.
+          save-always: false
+          # Bumped once to drop the Windows depots saved before that rule.
+          key-prefix: '2026-09-15'
       - uses: julia-actions/julia-runtest@v1
         with:
           # macOS is the portability cell and the slowest runner: give it
@@ -66,6 +78,8 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/cache@v3
+        with:
+          save-always: false
       - uses: julia-actions/julia-runtest@v1
         with:
           test_args: 'quality_only'
@@ -79,6 +93,8 @@ jobs:
         with:
           version: '1.11'
       - uses: julia-actions/cache@v3
+        with:
+          save-always: false
       - uses: julia-actions/julia-downgrade-compat@v2.7.0
         with:
           # Mooncake skipped: DynamicPPLMooncakeExt fails to precompile
