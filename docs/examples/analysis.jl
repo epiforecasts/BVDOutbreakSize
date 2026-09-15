@@ -4129,8 +4129,7 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 forecast_flows_fig #hide
 
 # The forecast split by province is below, for the two streams the spatial tables report.
-# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week rather than projected forward.
-# A province whose share is moving is not tracked past the last vintage, and forecasting the provinces in their own right is [#668](https://github.com/epiforecasts/BVDOutbreakSize/issues/668).
+# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week.
 
 #md # ```@raw html
 #md # <details><summary>Province forecast split</summary>
