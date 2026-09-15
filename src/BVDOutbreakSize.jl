@@ -20,7 +20,8 @@ using DocStringExtensions: @template, DOCSTRING, EXPORTS, IMPORTS, TYPEDEF,
 using Distributions: Distribution, pdf, cdf, Poisson,
                      NegativeBinomial, BetaBinomial, Normal,
                      LogNormal, Beta, LKJCholesky,
-                     Gamma, TDist, truncated, censored, product_distribution
+                     Gamma, TDist, truncated, censored, product_distribution,
+                     DirichletMultinomial
 using CensoredDistributions: double_interval_censored
 using StatsFuns: logit, logistic, loggamma
 import CairoMakie
@@ -154,9 +155,11 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
        zone_share_renewal, dirichlet_multinomial_logpdf,
        reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
-       zone_forecast_shares, zone_forecast_archive, zone_overview_table,
+       zone_forecast_shares, zone_forecast_draws, zone_forecast_archive,
+       zone_overview_table,
        zone_forecast_table, zone_forecast_truth, zone_forecast_vs_truth,
-       zone_forecast_scores, zone_composition_ppc,
+       zone_forecast_scores, zone_composition_ppc, zone_composition_draws,
+       plot_zone_composition_ppc,
        zone_diagnostics_table, zone_sampler_diagnostics
 
 include("docstrings.jl")

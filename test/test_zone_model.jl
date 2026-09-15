@@ -510,7 +510,13 @@ end
         progress = false)
     ov = zone_overview_table(chn, inputs)
     @test nrow(ov) == syn.nz
-    @test issorted([isnan(x) ? -Inf : x for x in ov.p_R_above_1]; rev = true)
+    @test issorted(
+        [(w ? 2.0 : 0.0) + (isnan(x) ? -1.0 : x)
+         for (w, x) in zip(ov.walking, ov.p_R_above_1)];
+        rev = true)
+    @test all(
+        z -> isnan(ov.rt_median[z]) ||
+             ov.rt_lo90[z] <= ov.rt_median[z] <= ov.rt_hi90[z], 1:syn.nz)
     @test Set(ov.zone) == Set(inputs.zone_labels)
     ## A stand-in national forecast and parent with a province split.
     nd1 = 30
@@ -520,6 +526,10 @@ end
             [[0.8 0.8; 0.2 0.2] for _ in 1:nd1], nd1, 1)))
     ft = zone_forecast_table(chn, parent, fc, inputs)
     @test nrow(ft) == syn.nz + 2
+    @test all(ft.lower_90 .<= ft.median .<= ft.upper_90)
+    fd = zone_forecast_draws(chn, parent, fc, inputs)
+    @test length(fd.zones) == syn.nz && length(fd.patches) == 2
+    @test all(sum(fd.zones[z] for z in 1:5) .≈ fd.patches[1])
     ## Zone forecasts sum to the patch total draw by draw, so the patch rows
     ## carry the national split exactly.
     tot = ft[ft.zone .== "Patch total", :]
@@ -541,15 +551,29 @@ end
     vt = zone_forecast_vs_truth(chn, parent, fc, inputs; truth)
     @test nrow(vt) == syn.nz + 2
     @test all(vt.observed[vt.zone .!= "Patch total"] .== 3)
+    @test all(vt.lower_90 .<= vt.lower_50 .<= vt.upper_50 .<= vt.upper_90)
     sc = zone_forecast_scores(chn, parent, fc, inputs; truth)
     @test Set(sc.method) ==
           Set(["zone model", "share persistence", "naive persistence"])
     @test all(isfinite, sc.log_score)
     @test nrow(sc) == 6
-    ppc = zone_composition_ppc(chn, inputs; top = 3)
+    cd = zone_composition_draws(chn, inputs)
+    @test length(cd.expected) == syn.nz
+    @test size(cd.expected[1]) == (8, length(inputs.days))
+    for v in eachindex(inputs.days), zs in inputs.patch_ranges
+
+        N = sum(syn.counts[zs, v])
+        N > 0 || continue
+        @test all(sum(cd.predictive[z][i, v] for z in zs) == N for i in 1:8)
+        @test all(sum(cd.expected[z][i, v] for z in zs) ≈ 1 for i in 1:8)
+    end
+    ppc = zone_composition_ppc(chn, inputs; top = 3, prior_chain = chn)
     @test all(0 .<= ppc.observed_share .<= 1)
     @test all(ppc.lower_90 .<= ppc.median .<= ppc.upper_90)
+    @test ppc.prior_median == ppc.median
     @test length(unique(ppc.zone)) <= 6
+    figs = plot_zone_composition_ppc(chn, inputs; prior_chain = chn, top = 2)
+    @test length(figs) == 2
     arch = zone_forecast_archive(chn, parent, [(7, fc)], inputs;
         made_date = made, thin = 5)
     @test Set(propertynames(arch)) == Set([:made_date, :horizon, :target_date,
@@ -586,7 +610,7 @@ end
 ] setup=[ZoneSynthetic] begin
     using BVDOutbreakSize: bvd_zone
     using Statistics: median
-    using DataFrames: nrow
+    using DataFrames: nrow, names
 
     syn=zone_synthetic()
     chn=fit_zone(syn.chain, syn.obs; samples = 150, chains = 2,
@@ -605,7 +629,9 @@ end
     end
     diag=zone_diagnostics_table(chn, inputs)
     @test nrow(diag) == nz
-    sd=zone_sampler_diagnostics(chn; max_depth = 8)
+    @test "walking" in names(diag)
+    sd=zone_sampler_diagnostics(chn, inputs; max_depth = 8)
     @test 0 <= sd.depth_cap_fraction[1] <= 1
     @test length(sd.ebfmi) == 2
+    @test isfinite(sd.max_rhat_R_T_walking)
 end

@@ -219,13 +219,19 @@ function zone_forecast_shares(chn, inputs; horizon::Integer = 7)
     return out
 end
 
-## Per-zone forecast draws of new confirmed cases over `horizon` days from
-## one `forecast_reported` result `fc`: the national draw times the patch
-## share at the parent's last spatial vintage (the same stage-1 draw, as
-## `province_forecast_archive` pairs them) times a random stage-2 draw's
-## projected zone share. Returns `(; zones, patches)`, one draw vector per
-## zone and the patch totals per patch.
-function _zone_forecast_draws(chn, parent_chain, fc, inputs;
+"""
+$(TYPEDSIGNATURES)
+
+Per-zone forecast draws of new confirmed cases over `horizon` days from
+one [`forecast_reported`](@ref) result `fc`: the national draw times the
+patch share at the parent's last spatial vintage (the same stage-1 draw,
+as [`province_forecast_archive`](@ref) pairs them) times a random stage-2
+draw's projected zone share ([`zone_forecast_shares`](@ref), passed as
+`shares` to reuse one projection). Returns `(; zones, patches)`, one draw
+vector per zone in the order of `inputs.zone_keys` and the patch totals
+per patch.
+"""
+function zone_forecast_draws(chn, parent_chain, fc, inputs;
         horizon::Integer = 7, rng::AbstractRNG = MersenneTwister(20260518),
         shares = zone_forecast_shares(chn, inputs; horizon))
     :confirmed_new in propertynames(fc) || error(
@@ -276,7 +282,7 @@ function zone_forecast_archive(chn, parent_chain, fcs, inputs;
         1 <= hh <= horizon || continue
         :confirmed_new in propertynames(fc) || continue
         target = made_date + Day(hh)
-        draws = _zone_forecast_draws(chn, parent_chain, fc, inputs;
+        draws = zone_forecast_draws(chn, parent_chain, fc, inputs;
             horizon = hh, rng, shares)
         for z in eachindex(inputs.zone_keys)
             vals = draws.zones[z]
@@ -303,9 +309,14 @@ One row per health zone: its patch, the confirmed cases to date, the share
 of its patch's infections at the cut-off with a 90% interval, the implied
 reproduction number at the cut-off with its 90% interval and the posterior
 probability that it exceeds one, the log-transmission deviation at the
-cut-off and whether the zone carries a time-varying deviation. Sorted by
-the probability that the reproduction number exceeds one; zones below the
-reporting floor (no finite `R_T_zone`) sort last.
+cut-off and whether the zone carries a time-varying deviation. The
+reproduction number is also given numerically as `rt_median`, `rt_lo90`
+and `rt_hi90` (`NaN` below the reporting floor), the probability unrounded
+as `p_rt_above_one`, and the patch as its index `patch_index`. Walking
+zones sort first, by the probability that the reproduction number exceeds
+one. A level-only zone's reproduction number is its patch's value scaled
+by a prior-driven level, so those follow in the same order, and zones
+below the reporting floor (no finite `R_T_zone`) sort last.
 """
 function zone_overview_table(chn, inputs; digits::Integer = 2)
     nz = length(inputs.zone_keys)
@@ -322,12 +333,18 @@ function zone_overview_table(chn, inputs; digits::Integer = 2)
                 cases = inputs.cumulative[z],
                 share = _median_ci(100 .* share[z]; digits = 1),
                 R_T = isempty(r) ? "" : _median_ci(r; digits),
+                rt_median = isempty(r) ? NaN : median(r),
+                rt_lo90 = isempty(r) ? NaN : quantile(r, 0.05),
+                rt_hi90 = isempty(r) ? NaN : quantile(r, 0.95),
                 p_R_above_1 = isnan(p_above) ? NaN : round(p_above; digits),
+                p_rt_above_one = p_above,
+                patch_index = inputs.patch_of_zone[z],
                 delta_T = round(median(δ[z]); digits),
                 walking = inputs.walking[z]))
     end
     order = sortperm(
-        [isnan(r.p_R_above_1) ? -Inf : r.p_R_above_1
+        [(r.walking ? 2.0 : 0.0) +
+         (isnan(r.p_R_above_1) ? -1.0 : r.p_R_above_1)
          for r in rows]; rev = true)
     return DataFrame(rows[order])
 end
@@ -337,17 +354,18 @@ $(TYPEDSIGNATURES)
 
 Per-zone one-week-ahead new confirmed cases from a
 [`forecast_reported`](@ref) result `fc` made from `parent_chain`, as the
-90/60/30% intervals the other forecast tables report, one row per zone,
+median and the 90/60/30% intervals the other forecast tables report, one
+row per zone,
 with a patch-total row per patch. Values are built as
 [`zone_forecast_archive`](@ref) builds them.
 """
 function zone_forecast_table(chn, parent_chain, fc, inputs;
         horizon::Integer = 7, digits::Integer = 0,
         rng::AbstractRNG = MersenneTwister(20260518))
-    draws = _zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng)
+    draws = zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng)
     row(label, patch, v) = begin
         s = posterior_summary(v)
-        (zone = label, patch = patch,
+        (zone = label, patch = patch, median = round(median(v); digits),
             lower_90 = round(s.lo90; digits), lower_60 = round(s.lo60; digits),
             lower_30 = round(s.lo30; digits), upper_30 = round(s.hi30; digits),
             upper_60 = round(s.hi60; digits), upper_90 = round(s.hi90; digits))
@@ -401,20 +419,22 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Per-zone forecast against what was observed: the median and 90% interval
-of the one-week zone forecast ([`zone_forecast_table`](@ref)), the
+Per-zone forecast against what was observed: the median, 50% and 90%
+intervals of the one-week zone forecast ([`zone_forecast_table`](@ref)), the
 observed count from `truth` ([`zone_forecast_truth`](@ref)) and whether it
 fell inside the interval, one row per zone plus a patch-total row.
 """
 function zone_forecast_vs_truth(chn, parent_chain, fc, inputs;
         truth::AbstractVector, horizon::Integer = 7, digits::Integer = 0,
         rng::AbstractRNG = MersenneTwister(20260518))
-    draws = _zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng)
+    draws = zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng)
     row(label, patch, v, obs) = begin
         s = posterior_summary(v)
         (zone = label, patch = patch,
             central_estimate = round(median(v); digits),
             lower_90 = round(s.lo90; digits),
+            lower_50 = round(quantile(v, 0.25); digits),
+            upper_50 = round(quantile(v, 0.75); digits),
             upper_90 = round(s.hi90; digits),
             observed = obs,
             within_90 = ismissing(obs) ? missing : s.lo90 <= obs <= s.hi90)
@@ -488,7 +508,7 @@ function zone_forecast_scores(chn, parent_chain, fc, inputs;
         k_baseline::Real = 5.0,
         rng::AbstractRNG = MersenneTwister(20260518))
     shares = zone_forecast_shares(chn, inputs; horizon)
-    draws = _zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng,
+    draws = zone_forecast_draws(chn, parent_chain, fc, inputs; horizon, rng,
         shares)
     recent = _zone_recent_counts(inputs; window)
     rows = NamedTuple[]
@@ -535,55 +555,194 @@ function _zone_nb_draws(rng::AbstractRNG, k::Real, μ::Real, m::Integer)
     return Float64[rand(rng, d) for _ in 1:m]
 end
 
+## Modelled share of each zone in its patch's allocated total per vintage
+## for every draw of a chain, `(ndraws × n_zones × n_vintages)`.
+function _zone_modelled_shares(chn, inputs)
+    zd = inputs.model_data
+    states = _zone_states(chn, inputs)
+    nz = length(inputs.zone_keys)
+    nv = length(inputs.days)
+    out = zeros(Float64, length(states), nz, nv)
+    for (i, st) in enumerate(states)
+        inc = zone_forward(zd, st.δ_knots, st.w0, st.ε).increments
+        for zs in inputs.patch_ranges, v in 1:nv
+
+            isempty(zs) && continue
+            tot = max(sum(safe_rate(inc[z, v]) for z in zs), floatmin())
+            for z in zs
+                out[i, z, v] = safe_rate(inc[z, v]) / tot
+            end
+        end
+    end
+    return out
+end
+
+## The `top` zones by cumulative cases in each patch, patch by patch.
+function _zone_largest(inputs, top::Integer)
+    out = Int[]
+    for zs in inputs.patch_ranges
+        order = sort(collect(zs); by = z -> -inputs.cumulative[z])
+        append!(out, order[1:min(top, length(order))])
+    end
+    return out
+end
+
 """
 $(TYPEDSIGNATURES)
 
 Composition posterior predictive check: the observed and modelled share of
 each patch's allocated confirmed cases per vintage, for the `top` zones
 with most cases to date in each patch. The modelled share is the median
-and 90% interval over draws of the expected increments
-([`zone_forward`](@ref)) normalised within the patch. Returns a long
-`DataFrame` with columns `patch`, `zone`, `date`, `day`, `observed`,
-`observed_share`, `total`, `lower_90`, `median` and `upper_90`; vintages
-whose allocated patch total is zero are omitted.
+and 90% interval over draws of the expected increments normalised within
+the patch. With `prior_chain` (draws from the model prior, `sample(model,
+Prior(), n)`) the same summaries of the prior predictive are added as
+`prior_lower_90`, `prior_median` and `prior_upper_90`, so the movement
+from prior to posterior is in the table. Returns a long `DataFrame` with
+columns `patch`, `zone`, `date`, `day`, `observed`, `observed_share`,
+`total`, `lower_90`, `median` and `upper_90`; vintages whose allocated
+patch total is zero are omitted.
 """
-function zone_composition_ppc(chn, inputs; top::Integer = 10)
-    zd = inputs.model_data
-    states = _zone_states(chn, inputs)
-    nz = length(inputs.zone_keys)
-    nv = length(inputs.days)
-    ndraws = length(states)
-    modelled = zeros(Float64, ndraws, nz, nv)
-    for (i, st) in enumerate(states)
-        inc = zone_forward(zd, st.δ_knots, st.w0, st.ε).increments
-        for (p, zs) in enumerate(inputs.patch_ranges), v in 1:nv
+function zone_composition_ppc(chn, inputs; top::Integer = 10,
+        prior_chain = nothing)
+    post = _zone_modelled_shares(chn, inputs)
+    prior = prior_chain === nothing ? nothing :
+            _zone_modelled_shares(prior_chain, inputs)
+    rows = NamedTuple[]
+    for z in _zone_largest(inputs, top), v in eachindex(inputs.days)
+
+        p = inputs.patch_of_zone[z]
+        zs = inputs.patch_ranges[p]
+        N = sum(@view inputs.counts[zs, v])
+        N > 0 || continue
+        m = view(post, :, z, v)
+        row = (patch = inputs.patch_labels[p], zone = inputs.zone_labels[z],
+            date = inputs.dates[v], day = inputs.days[v],
+            observed = inputs.counts[z, v],
+            observed_share = inputs.counts[z, v] / N, total = N,
+            lower_90 = quantile(m, 0.05), median = median(m),
+            upper_90 = quantile(m, 0.95))
+        if prior !== nothing
+            q = view(prior, :, z, v)
+            row = merge(row,
+                (; prior_lower_90 = quantile(q, 0.05),
+                    prior_median = median(q),
+                    prior_upper_90 = quantile(q, 0.95)))
+        end
+        push!(rows, row)
+    end
+    return DataFrame(rows)
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+One figure per patch of the composition check: for the `top` zones with
+most cases, the share band of `chn` (5–95% and 25–75%, named `label` in
+the title), the prior predictive band from `prior_chain` when given, and
+the observed share per vintage as points. Returns a vector of figures in
+patch order, one per patch with zones.
+"""
+function plot_zone_composition_ppc(chn, inputs; prior_chain = nothing,
+        top::Integer = 6, ncols::Integer = 3,
+        label::AbstractString = "posterior predictive")
+    post = _zone_modelled_shares(chn, inputs)
+    prior = prior_chain === nothing ? nothing :
+            _zone_modelled_shares(prior_chain, inputs)
+    x = Float64[date2epochdays(d) for d in inputs.dates]
+    figs = Figure[]
+    for (p, zs) in enumerate(inputs.patch_ranges)
+        isempty(zs) && continue
+        zones = sort(collect(zs); by = z -> -inputs.cumulative[z])
+        zones = zones[1:min(top, length(zones))]
+        nrows = cld(length(zones), ncols)
+        fig = Figure(; size = (360 * ncols, 240 * nrows + 60))
+        for (k, z) in enumerate(zones)
+            r = cld(k, ncols)
+            c = k - (r - 1) * ncols
+            ax = Axis(fig[r, c]; title = inputs.zone_labels[z],
+                xlabel = "Date", ylabel = "Share of patch cases",
+                xticklabelrotation = pi / 6)
+            _share_bands!(ax, x, prior, z, :grey50)
+            _share_bands!(ax, x, post, z, :steelblue)
+            obs = [let N = sum(@view inputs.counts[zs, v])
+                       N > 0 ? inputs.counts[z, v] / N : NaN
+                   end
+                   for v in eachindex(inputs.days)]
+            keep = .!isnan.(obs)
+            scatter!(ax, x[keep], obs[keep]; color = :black, markersize = 5)
+        end
+        _date_ticks!(fig, nrows, ncols, length(zones), x)
+        CairoMakie.Label(fig[0, 1:ncols],
+            inputs.patch_labels[p] * ": observed (points) and " * label *
+            " (blue)" * (prior === nothing ? "" : ", prior predictive (grey)") *
+            " zone shares"; fontsize = 14, font = :bold)
+        push!(figs, fig)
+    end
+    return figs
+end
+
+## 5–95% and 25–75% bands of `shares[:, z, :]` over the vintages.
+function _share_bands!(ax, x, shares, z, colour)
+    shares === nothing && return nothing
+    q(f) = [f(view(shares, :, z, v)) for v in 1:size(shares, 3)]
+    band!(ax, x, q(v -> quantile(v, 0.05)), q(v -> quantile(v, 0.95));
+        color = (colour, 0.2))
+    band!(ax, x, q(v -> quantile(v, 0.25)), q(v -> quantile(v, 0.75));
+        color = (colour, 0.35))
+    lines!(ax, x, q(median); color = colour)
+    return nothing
+end
+
+## Date tick labels on every axis of a grid of `n` panels.
+function _date_ticks!(fig, nrows, ncols, n, x)
+    lo, hi = floor(Int, minimum(x)), ceil(Int, maximum(x))
+    ticks = collect(lo:14:hi)
+    labels = [string(epochdays2date(t)) for t in ticks]
+    for k in 1:n
+        r = cld(k, ncols)
+        c = k - (r - 1) * ncols
+        ax = fig.content[k]
+        ax isa Axis || continue
+        ax.xticks = (ticks, labels)
+    end
+    return nothing
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Per-draw composition draws for the posterior predictive check: for every
+zone an `(ndraws × n_vintages)` matrix of the modelled expected share of
+its patch's allocated total (`expected`) and one of predictive counts
+(`predictive`), the latter drawn per draw and vintage from the
+Dirichlet-multinomial on the observed allocated total at that draw's
+`ρ`. Vintages whose allocated patch total is zero hold `NaN` shares and
+zero counts. Returns `(; expected, predictive)`, each a vector over the
+zones in chain order.
+"""
+function zone_composition_draws(chn, inputs;
+        rng::AbstractRNG = MersenneTwister(20260518))
+    shares = _zone_modelled_shares(chn, inputs)
+    ρs = _draws(chn, :composition_rho_zone)
+    ndraws, nz, nv = size(shares)
+    expected = [fill(NaN, ndraws, nv) for _ in 1:nz]
+    predictive = [zeros(Int, ndraws, nv) for _ in 1:nz]
+    for i in 1:ndraws
+        κ = (1 - ρs[i]) / ρs[i]
+        for zs in inputs.patch_ranges, v in 1:nv
 
             isempty(zs) && continue
-            tot = max(sum(safe_rate(inc[z, v]) for z in zs), floatmin())
-            for z in zs
-                modelled[i, z, v] = safe_rate(inc[z, v]) / tot
+            N = sum(@view inputs.counts[zs, v])
+            N > 0 || continue
+            π = shares[i, zs, v]
+            y = rand(rng, DirichletMultinomial(N, κ .* π))
+            for (k, z) in enumerate(zs)
+                expected[z][i, v] = π[k]
+                predictive[z][i, v] = y[k]
             end
         end
     end
-    rows = NamedTuple[]
-    for (p, zs) in enumerate(inputs.patch_ranges)
-        isempty(zs) && continue
-        order = sort(collect(zs); by = z -> -inputs.cumulative[z])
-        for z in order[1:min(top, length(order))], v in 1:nv
-
-            N = sum(@view inputs.counts[zs, v])
-            N > 0 || continue
-            m = view(modelled, :, z, v)
-            push!(rows,
-                (patch = inputs.patch_labels[p], zone = inputs.zone_labels[z],
-                    date = inputs.dates[v], day = inputs.days[v],
-                    observed = inputs.counts[z, v],
-                    observed_share = inputs.counts[z, v] / N, total = N,
-                    lower_90 = quantile(m, 0.05), median = median(m),
-                    upper_90 = quantile(m, 0.95)))
-        end
-    end
-    return DataFrame(rows)
+    return (; expected, predictive)
 end
 
 ## Per-element diagnostic values of a vector deterministic from a
@@ -613,9 +772,14 @@ $(TYPEDSIGNATURES)
 Split R-hat and bulk and tail effective sample sizes of the cut-off
 quantities of every zone: the reproduction number `R_T_zone`, the share
 `share_T_zone` and the deviation `delta_T_zone`. One row per zone, in
-chain order, with the zone's label and key when `inputs` is given. A
-quantity that is constant or undefined in every draw (a zone below the
-reporting floor) shows `NaN`.
+chain order, with the zone's label when `inputs` is given. A quantity
+that is constant or undefined in every draw (a zone below the reporting
+floor) shows `NaN`. A level-only zone's `R_T_zone` is its patch's implied
+reproduction number scaled by a level that decays to nothing over the
+window, so it varies across draws only at round-off and its R-hat is
+meaningless; read the `R_T` columns for the walking zones (the `walking`
+column when `inputs` is given), and see
+[`zone_sampler_diagnostics`](@ref) for the summary that leaves those out.
 """
 function zone_diagnostics_table(chn, inputs = nothing)
     nz = if inputs === nothing
@@ -628,6 +792,7 @@ function zone_diagnostics_table(chn, inputs = nothing)
     tail = FlexiChains.ess(chn; kind = :tail)
     df = DataFrame(zone = inputs === nothing ? string.(1:nz) :
                           inputs.zone_labels)
+    inputs === nothing || (df[!, "walking"] = collect(inputs.walking))
     for key in (:R_T_zone, :share_T_zone, :delta_T_zone)
         stem = replace(string(key), "_zone" => "")
         df[!, "rhat_$(stem)"] = _zone_summary_vector(rhat, key, nz)
@@ -644,18 +809,38 @@ Sampler-level diagnostics of a zone chain: the number of divergent
 transitions, the fraction of iterations that hit the tree-depth cap
 `max_depth`, the energy Bayesian fraction of missing information (E-BFMI)
 per chain and the adapted step size per chain, plus the worst R-hat and
-smallest effective sample sizes over every stored quantity
-([`fit_diagnostics`](@ref)).
+smallest effective sample sizes over the stored quantities as
+[`fit_diagnostics`](@ref) computes them, except that `R_T_zone` is left
+out of that pool: a level-only zone's value is degenerate (see
+[`zone_diagnostics_table`](@ref)). With `inputs` the walking zones'
+`R_T_zone` R-hat is reported separately as `max_rhat_R_T_walking`.
 """
-function zone_sampler_diagnostics(chn; max_depth::Integer = 8)
+function zone_sampler_diagnostics(chn, inputs = nothing;
+        max_depth::Integer = 8)
     depth = _zone_stat(chn, :tree_depth)
     energy = _zone_stat(chn, :hamiltonian_energy)
     steps = _zone_stat(chn, :step_size)
     per_chain(m, f) = m === nothing ? Float64[] :
                       [f(view(m, :, c)) for c in 1:size(m, 2)]
     ebfmi(E) = sum(abs2, diff(E)) / max(sum(abs2, E .- mean(E)), floatmin())
-    base = fit_diagnostics(chn)
-    return (; base...,
+    exclude = (_DIAGNOSTIC_EXCLUDE..., "R_T_zone")
+    finite(v) = filter(isfinite, v)
+    rhats = finite(_scalar_stats(FlexiChains.rhat(chn); exclude))
+    bulk = finite(_scalar_stats(FlexiChains.ess(chn; kind = :bulk); exclude))
+    tail = finite(_scalar_stats(FlexiChains.ess(chn; kind = :tail); exclude))
+    base = (max_rhat = isempty(rhats) ? NaN : maximum(rhats),
+        min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
+        min_ess_tail = isempty(tail) ? NaN : minimum(tail),
+        n_divergent = _num_divergences(chn))
+    walking_rt = if inputs === nothing
+        NaN
+    else
+        nz = length(inputs.zone_keys)
+        r = _zone_summary_vector(FlexiChains.rhat(chn), :R_T_zone, nz)
+        v = finite(r[collect(inputs.walking)])
+        isempty(v) ? NaN : maximum(v)
+    end
+    return (; base..., max_rhat_R_T_walking = walking_rt,
         depth_cap_fraction = per_chain(depth, x -> mean(x .>= max_depth)),
         ebfmi = per_chain(energy, ebfmi),
         step_size = per_chain(steps, x -> x[end]))
