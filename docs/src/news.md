@@ -68,6 +68,10 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 - The seeding docstrings now describe the model they document.
 `seed_at_renewal_start` called the seed a cumulative infection count where the code means the daily incidence on the renewal-start day, and `m_prior_centre`, `M_PRIOR_BASE` and `M_PRIOR_BASE_DATE` are consistent about serving the v1.3.0 integral backfill rather than the renewal fit.
 
+- Citations render as author-year links again.
+DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
+Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.
+The docs environment now caps `DocumenterCitations` below 1.5, and dependabot skips that bump until the Vitepress writer handles the node.
 - The non-BVD background anchor prior no longer truncates the level the data support.
 `background_walk_model`'s `λ_mu` carried a half-normal SD of 8, whose 95th percentile is 15.7 per day.
 Under that prior the joint posterior for `λ_mu` ran about 16 to 30, so the whole of it sat above that percentile and the prior, not the suspected-case data, set the anchor.
