@@ -1,13 +1,12 @@
 # Forecast-scoring primitives, following scoringutils conventions
-# (https://epiforecasts.io/scoringutils/): score a single observation
+# (https://epiforecasts.io/scoringutils/). Score a single observation
 # against a predictive sample using proper scoring rules. Reuses the
 # `bias_sample` and `_covered` helpers defined in summaries.jl.
 #
-# The overall, by-horizon and by-release summaries near the end of the
-# file aggregate a scored table into report-ready rows, one per stream and
-# fit (pooled, by horizon, or by release), each relative skill a ratio of
-# aggregate mean scores over a matched set of forecasts rather than a mean
-# of per-forecast ratios.
+# The summaries near the end of the file aggregate a scored table into
+# report-ready rows, one per stream and fit. Each relative skill is a ratio
+# of aggregate mean scores over a matched set of forecasts rather than a
+# mean of per-forecast ratios.
 
 ## Continuous ranked probability score of an ensemble `samples` at a point
 ## observation `obs`, from the energy form `CRPS = E|X - obs| - ½ E|X - X'|`
@@ -39,13 +38,11 @@ function crps_sample(obs::Real, samples::AbstractVector{<:Real})
 end
 
 """
-CRPS on the log scale: both `obs` and every element of `samples` are
-`log1p`-transformed before scoring, i.e.
-`crps_sample(log1p(obs), log1p.(samples))`. It is not the logarithm of
-[`crps_sample`](@ref). Log-scale scoring downweights
-the influence of large counts, appropriate when forecast accuracy
-matters proportionally rather than in absolute terms (e.g. case
-counts spanning orders of magnitude).
+CRPS on the log scale. Both `obs` and every element of `samples` are
+`log1p`-transformed before scoring, so this is
+`crps_sample(log1p(obs), log1p.(samples))` and not the logarithm of
+[`crps_sample`](@ref). Log-scale scoring downweights large counts, which
+suits accuracy that matters proportionally rather than in absolute terms.
 """
 function log_crps_sample(obs::Real, samples::AbstractVector{<:Real})
     return crps_sample(log1p(obs), log1p.(samples))
@@ -58,18 +55,15 @@ underprediction)`, following the convention scoringutils uses for the
 weighted interval score, applied here to an ensemble's own order
 statistics rather than a fixed set of quantiles.
 
-`dispersion` is the ensemble's spread on its own terms: pair the `i`-th
-smallest and `i`-th largest draw as a central interval and sum each
-pair's width, weighted so the sum matches the CRPS the ensemble would
-score against its own median, the best location it could be scored
-against. `overprediction` and `underprediction` are the extra cost of
-scoring against `obs` rather than that best case, split by which side of
-each pair `obs` falls on: `overprediction` when a pair sits entirely
-above `obs` (the ensemble reads too high), `underprediction` when a pair
-sits entirely below it (the ensemble reads too low). All three are
-non-negative and sum exactly to [`crps_sample`](@ref) at the same `obs`
-and `samples`, since the construction is an exact re-partition of the
-same order-statistic sum `crps_sample` evaluates, not an approximation.
+`dispersion` is the ensemble's spread on its own terms. Pair the `i`-th
+smallest and `i`-th largest draw as a central interval and sum each pair's
+width, weighted so the sum matches the CRPS the ensemble would score
+against its own median. `overprediction` and `underprediction` are the
+extra cost of scoring against `obs` rather than that best case, split by
+which side of each pair `obs` falls on. All three are non-negative and sum
+exactly to [`crps_sample`](@ref) at the same `obs` and `samples`, being an
+exact re-partition of the same order-statistic sum rather than an
+approximation.
 
 With no draws (`isempty(samples)`), every component is `NaN`.
 """
@@ -154,12 +148,11 @@ function is_results_release(tag::AbstractString)
            !isnothing(match(_MAIN_RELEASE, tag))
 end
 
-## Rank one results release within its day: tagged releases above main
-## builds, then the later timestamp, then the higher version or run number
-## so releases sharing a timestamp still order deterministically. Returns
-## `nothing` for a tag that is not a results release. The version and run
-## number are only ever compared against their own kind, since the leading
-## flag separates the two.
+## Rank one results release within its day. Tagged releases sort above
+## main builds, then the later timestamp, then the higher version or run
+## number so releases sharing a timestamp still order deterministically.
+## Returns `nothing` for a tag that is not a results release. The leading
+## flag keeps version and run number from being compared with each other.
 function _release_key(tag::AbstractString, created)
     m = match(_VERSION_RELEASE, tag)
     isnothing(m) || return (1, created, VersionNumber(m[1]))
@@ -179,16 +172,12 @@ main-build releases (`results-<run number>`, published by every push to
 
 Days are cut-off days, not creation days, because a release's forecast is
 a function of the data it saw. Two releases sharing a cut-off carry the
-same forecast however far apart they were published: the report re-renders
-whenever `main` moves, so the same data is republished under a new tag.
-Grouping on the creation timestamp would keep both and score that forecast
-twice.
+same forecast however far apart they were published, so grouping on the
+creation timestamp would score that forecast twice.
 
-Within a day a tagged release is preferred, which also settles the case of
-a version tag and the `main` push of one commit publishing at the same
-instant. Failing that the newest build of the day is kept. Releases
-sharing a timestamp are separated by version or run number, keeping the
-selection deterministic.
+Within a day a tagged release is preferred, then the newest build of the
+day. Releases sharing a timestamp are separated by version or run number,
+keeping the selection deterministic.
 
 Returns the selected tags, newest cut-off first.
 """
@@ -209,12 +198,11 @@ function select_daily_releases(entries)
     return first.(picks)
 end
 
-## Match `dfa` and `dfb` on `(release, horizon)`, the identity of one scored
-## forecast target: the same release, at the same horizon within it, is
-## always the same target window. Returns the two frames cut down to the
-## keys they share, aligned row for row, so a mean taken over either side
-## is a mean over the identical set of forecasts. Assumes at most one row
-## per key in each frame, true of any single-fit subset of a scored table.
+## Match `dfa` and `dfb` on `(release, horizon)`, which identifies one
+## scored forecast target. Returns the two frames cut down to the keys they
+## share, aligned row for row, so a mean taken over either side is a mean
+## over the identical set of forecasts. Assumes at most one row per key in
+## each frame, true of any single-fit subset of a scored table.
 function _matched_scores(dfa::DataFrame, dfb::DataFrame)
     ia = Dict{Tuple{String, Int}, Int}()
     for i in 1:size(dfa, 1)
@@ -233,8 +221,7 @@ end
 
 ## A ratio of two aggregate mean scores, `missing` rather than `Inf` or
 ## `NaN` when the denominator is not a finite non-zero number or the ratio
-## itself is not finite (the numerical guard every skill aggregate needs:
-## no aggregate may ever publish a non-finite value).
+## itself is not finite. No aggregate may publish a non-finite value.
 function _safe_ratio(num::Real, den::Real; digits::Int = 2)
     (isfinite(den) && den != 0) || return missing
     r = num / den
@@ -253,19 +240,17 @@ function _individual_fit_id(scores::DataFrame, stream, joint_fit,
     return length(ids) == 1 ? ids[1] : missing
 end
 
-## Aggregate score stats for one `fit` of `stream`, restricted to `mask` (a
+## Aggregate score stats for one `fit` of `stream`, restricted to `mask`, a
 ## `BitVector` over `scores`' rows already narrowed to the stream and,
-## depending on which table is being built, a single horizon or made
-## date). `nothing` when `fit` has no forecast in `mask` matched against
-## its stream's baseline, so the caller can drop the row entirely.
+## depending on which table is being built, a single horizon or made date.
+## `nothing` when `fit` has no forecast in `mask` matched against its
+## stream's baseline, so the caller can drop the row entirely.
 ##
 ## Every relative skill is the ratio of the two aggregate mean scores over
-## the matched set of forecasts both the fit and its comparator scored
-## (R25): a mean taken over one set of forecasts is never divided by a
-## mean taken over another, and `_safe_ratio` keeps the result finite. The
-## individual-fit columns use their own matched set against the stream's
-## individual fit and are only ever populated on the joint fit's row of a
-## stream that has one.
+## the matched set of forecasts both the fit and its comparator scored, so
+## a mean over one set of forecasts is never divided by a mean over
+## another. The individual-fit columns use their own matched set and are
+## only populated on the joint fit's row of a stream that has one.
 function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
         joint_fit, baseline_fit)
     fit_grp = scores[mask .& (scores.fit .== fit), :]
@@ -277,10 +262,9 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
 
     crps = mean(mfit.crps)
     log_crps = mean(mfit.log_crps)
-    ## The baseline's and the individual fit's own mean CRPS are only ever
-    ## intermediate: they feed the ratios below and are not published as
-    ## columns themselves (R25 keeps the table to the ratios a reader
-    ## compares against one, not the absolute scores behind them).
+    ## The baseline's and the individual fit's own mean CRPS are
+    ## intermediate. They feed the ratios below and are not published as
+    ## columns themselves.
     crps_baseline = mean(mbase.crps)
     log_crps_baseline = mean(mbase.log_crps)
 
@@ -315,10 +299,10 @@ function _stream_fit_stats(scores::DataFrame, stream, fit, mask;
 end
 
 ## Column schema shared by the three score summaries below, `key_cols`
-## first, the metric columns in the order the report shows them. An empty
-## and a populated frame from the same builder always carry identical
-## column names, order and types, so the report renders before any
-## release carries a forecast.
+## first, then the metric columns in the order the report shows them. An
+## empty and a populated frame from the same builder carry identical column
+## names, order and types, so the report renders before any release carries
+## a forecast.
 function _score_summary_schema(key_cols::NamedTuple)
     metrics = (;
         n = Int[], crps = Float64[],
@@ -335,14 +319,12 @@ end
 
 """
 One row per `(stream, fit)`, pooled over every horizon and release in
-`scores` (a `data/forecast_scores.csv`-shaped table, as written by
-`scripts/score_releases.jl`), baseline rows excluded. This is the headline
-scoring table: `n`, the mean CRPS and log-scale CRPS, the CRPS
-decomposition (dispersion, overprediction, underprediction), the 50% and
-90% coverage and bias, the relative skill against the stream's persistence
-baseline on both scales, and, on the joint row of a stream that has an
-individual single-stream fit, the relative skill against that fit on both
-scales.
+`scores`, a `data/forecast_scores.csv`-shaped table, baseline rows
+excluded. The headline scoring table. Carries `n`, the mean CRPS and
+log-scale CRPS, the CRPS decomposition, the 50% and 90% coverage and bias,
+the relative skill against the stream's persistence baseline on both
+scales, and, on the joint row of a stream with an individual single-stream
+fit, the relative skill against that fit.
 
 Every relative skill is the ratio of the two aggregate mean scores over the
 matched set of forecasts both sides scored, not a mean of per-forecast
@@ -403,8 +385,7 @@ end
 """
 The same columns as [`forecast_score_overview`](@ref), one row per
 `(stream, fit, made_date)`, averaged across horizons rather than pooled
-over releases too, baseline rows excluded, so the by-release detail table
-stays compact.
+over releases too, baseline rows excluded.
 """
 function forecast_score_by_release(scores::DataFrame;
         joint_fit = JOINT_FIT, baseline_fit = BASELINE_FIT)
@@ -448,25 +429,19 @@ end
 """
 `table` (from [`forecast_score_overview`](@ref),
 [`forecast_score_by_horizon`](@ref) or [`forecast_score_by_release`](@ref))
-with its `fit` column dropped, for a table whose `fit` column is
-single-valued by construction rather than merely by the data currently on
-hand: the frozen-fit evaluation, which scores the current joint model
-alone at past cut-offs, is the only such table in this report.
+with its `fit` column dropped. Only for a table whose `fit` column is
+single-valued by construction rather than by the data currently on hand.
+The frozen-fit evaluation, which scores the current joint model alone at
+past cut-offs, is the only such table in this report.
 
-Every other column (`crps`, `dispersion`, `overprediction`,
-`underprediction`, `coverage_50`, `coverage_90`, …) is left untouched. This
-drops one column and nothing else. `table` is returned with `fit` still
+Every other column is left untouched. `table` is returned with `fit` still
 present when it is empty, since an empty table carries no evidence either
 way. State which model a de-columned table refers to in the surrounding
 prose, so the table stays self-describing once the column is gone.
 
-Errors when `table`'s `fit` column carries more than one distinct value,
-rather than silently dropping it: a column that vanishes only when it
-happens to be constant and reappears once a second model is scored is
-worse than a constant column that never varies, so this is only safe to
-call on a table whose single-fit shape is structural (as the frozen
-evaluation's is), never on a table that could legitimately grow a second
-model later.
+Errors when `table`'s `fit` column carries more than one distinct value. A
+column that vanishes only when it happens to be constant, and reappears
+once a second model is scored, is worse than one that never varies.
 """
 function drop_degenerate_fit_column(table::DataFrame)
     isempty(table.fit) && return table
@@ -479,13 +454,12 @@ function drop_degenerate_fit_column(table::DataFrame)
 end
 
 ## Role of a forecast within a stream: the persistence baseline, the joint
-## model or the stream's own individual single-stream fit. Deriving the
-## role from the fit id folds recovered's missing individual into a
-## baseline-versus-joint comparison without a per-stream label, and keeps a
-## figure's colour stable across streams whichever single-stream fit
-## produced the individual row. A frozen row takes the joint role, being
-## the joint model re-fit at a past cut-off. Every other id is a per-stream
-## fit spec, an open-ended set, so it falls through to the individual role.
+## model or the stream's own single-stream fit. Deriving the role from the
+## fit id keeps a figure's colour stable across streams whichever
+## single-stream fit produced the individual row. A frozen row takes the
+## joint role, being the joint model re-fit at a past cut-off. Every other
+## id is a per-stream fit spec, an open-ended set, so it falls through to
+## the individual role.
 function _fit_role(fit)
     fit == BASELINE_FIT && return "baseline"
     (fit == JOINT_FIT || fit == FROZEN_FIT) && return "joint"
@@ -505,11 +479,9 @@ own single-stream fit, whatever its id. `"baseline"` selects the
 persistence baseline, which the three summaries above exclude, so it is
 only ever non-empty on a table that kept it.
 
-Use this to render one table per role, so a table headed as the joint
-model's carries the joint model's rows alone and each stream's individual
-fit is tabulated in its own section. A figure comparing the roles against
-each other reads the unfiltered table instead. Column names, order and
-types are unchanged, as is the order of the rows that survive.
+Use this to render one table per role. A figure comparing the roles
+against each other reads the unfiltered table instead. Column names, order
+and types are unchanged, as is the order of the rows that survive.
 
 Errors on an unknown `role` rather than returning a zero-row table, since
 a misspelt role and a role with nothing scored are otherwise

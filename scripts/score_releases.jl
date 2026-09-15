@@ -84,6 +84,21 @@
 # with, which `forecast_reported` adds to the projected level so the
 # projection and the reported truth are on one scale.
 #
+# A release that carries the per-province forecast archive
+# (`province_forecast.csv`, see `province_forecast_archive` in
+# `src/forecast.jl`) is scored province by province too, into
+# `data/province_forecast_scores.csv`. Each row's national stream label and
+# its own `province` column are composed into one label,
+# `"<stream> [<patch>]"`, so the provincial forecasts run through the same
+# grouping, persistence baseline and aggregation as the national ones. A
+# patch's truth is its member provinces' cumulative counts
+# (`PROVINCE_MEMBERS`) summed vintage by vintage, read from the same
+# `observations.toml`. Releases published before the asset existed carry
+# none, which is a quiet skip. A window holding a harmonisation-break day is
+# not scored for a province at all: the printed 24h count the national
+# correction subtracts is national only, so splitting it across provinces
+# would invent a number.
+#
 # Each release's `stream_estimates.csv`, when present, also feeds the
 # per-fit `data/rt_by_release_by_stream.csv`,
 # `data/size_by_release_by_stream.csv` and `data/r0_by_release_by_stream.csv`
@@ -129,6 +144,7 @@ const DEFAULT_REPO = "epiforecasts/BVDOutbreakSize"
 const FORECAST_ASSET = "forecast.csv"
 const FROZEN_FORECAST_ASSET = "forecast_frozen.csv"
 const STREAM_FORECAST_ASSET = "stream_forecasts.csv"
+const PROVINCE_FORECAST_ASSET = "province_forecast.csv"
 const STREAM_ESTIMATES_ASSET = "stream_estimates.csv"
 const DRAWS_ASSET = "posterior_draws.csv"
 const OBS_ASSET = "observations.toml"
@@ -352,12 +368,70 @@ const STREAM_HISTORY = Dict(
 ## `dated_event_bins` in `src/models/observations.jl`.
 const STREAM_ASSEMBLED = Dict("exports" => :incident)
 
-## Whether this script has a truth source for `stream`, i.e. it is either a
-## named history or an assembled one. An archived label that is neither
-## (schema drift, a future stream) has no truth and is skipped, never
-## scored against a wrong one.
+## The national streams the per-province archive splits, mapped to the
+## manifest's per-province cumulative histories (a `Dict` from source
+## province name to a `(; days, counts)` history). The archive labels its
+## rows with the national stream and carries the patch in its own `province`
+## column, so these are the labels a composed per-province label is built on.
+const PROVINCE_STREAM_HISTORY = Dict(
+    "confirmed cases" => :province_confirmed_history,
+    "confirmed deaths" => :province_death_history)
+
+## The scored label for one `(stream, province)` pair of the per-province
+## archive: the national label with the patch key in square brackets. One
+## label per pair lets a province forecast run through the grouping, the
+## persistence baseline and the aggregation unchanged. No national label
+## carries brackets, so a composed label can never collide with one.
+province_stream_label(stream, province) = string(stream, " [", province, "]")
+
+## `(; stream, province)` for a composed per-province label, `nothing` for
+## every other label. A bracketed label naming a stream the archive does not
+## split, or a patch `PROVINCE_MEMBERS` does not know, is not one of these:
+## it has no truth source and is dropped like any other unmapped label.
+function parse_province_stream(label)
+    m = match(r"^(.*) \[([^\[\]]+)\]$", label)
+    isnothing(m) && return nothing
+    haskey(PROVINCE_STREAM_HISTORY, m[1]) || return nothing
+    haskey(PROVINCE_MEMBERS, m[2]) || return nothing
+    return (; stream = String(m[1]), province = String(m[2]))
+end
+
+## The `(; days, counts)` cumulative history of one patch: its member
+## provinces' counts summed vintage by vintage, the same pooling
+## `province_increment_matrix` does for the composition likelihood. Summing
+## the cumulative counts before differencing keeps a downward revision in one
+## member from being read as a fall while another member rises.
+##
+## Every member must be reported on the same vintage days, which the pooling
+## needs and which a mismatch breaks silently, so a mismatch is an error as
+## it is in `src/data.jl`. A manifest carrying no per-province block, or one
+## missing a member of the patch, has no history for it: an empty one, which
+## leaves the patch unscored rather than scored against a partial pool.
+function province_stream_history(obs, stream, province)
+    field = PROVINCE_STREAM_HISTORY[stream]
+    empty = (; days = Int[], counts = Int[])
+    hasproperty(obs, field) || return empty
+    hists = getproperty(obs, field)
+    members = PROVINCE_MEMBERS[province]
+    all(m -> haskey(hists, m), members) || return empty
+    hs = [hists[m] for m in members]
+    days = hs[1].days
+    for (m, h) in zip(members, hs)
+        h.days == days || error(
+            "province `$m` is reported on different vintage days to " *
+            "`$(first(members))`; a patch pools its members vintage by " *
+            "vintage.")
+    end
+    return (; days, counts = reduce(.+, (collect(h.counts) for h in hs)))
+end
+
+## Whether this script has a truth source for `stream`, i.e. it is a named
+## history, an assembled one, or a composed per-province label. An archived
+## label that is none of those (schema drift, a future stream) has no truth
+## and is skipped, never scored against a wrong one.
 function has_stream_truth(stream)
-    haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream)
+    haskey(STREAM_HISTORY, stream) || haskey(STREAM_ASSEMBLED, stream) ||
+        !isnothing(parse_province_stream(stream))
 end
 
 ## The `(; days, counts)` cumulative history a stream is scored against and
@@ -365,6 +439,11 @@ end
 ## another shape. Errors on a stream with no truth source; callers guard
 ## with `has_stream_truth` first.
 function stream_history(obs, stream)
+    p = parse_province_stream(stream)
+    if !isnothing(p)
+        return (province_stream_history(obs, p.stream, p.province),
+            :incident)
+    end
     if haskey(STREAM_ASSEMBLED, stream)
         stream == "exports" || error("no assembler for stream '$stream'")
         d = obs.export_case_days
@@ -502,6 +581,35 @@ function break_correction(obs, grid_date, stream, from_date, to_date)
     return total
 end
 
+## Dates of the confirmed streams' harmonisation-break days, empty for an
+## `obs` carrying no declaration. Both confirmed streams share one list of
+## days; only the printed 24h count each step is split by differs between
+## them.
+function confirmed_break_dates(obs, grid_date)
+    hasproperty(obs, :confirmed_break_days) || return Date[]
+    return Date[grid_date(d) for d in obs.confirmed_break_days]
+end
+
+## Whether `(from_date, to_date]` holds a harmonisation-break day for a
+## per-province stream. False for every national stream, which corrects such
+## a window instead (see `break_correction`).
+##
+## The correction is the net vintage step less the printed 24h count, and
+## both are published nationally only. No per-province split of a break day's
+## backfill exists, so there is nothing to subtract province by province, and
+## apportioning the national correction across provinces would invent one. A
+## province window holding a break day is therefore dropped, the way a level
+## stream's window holding a reclassification is dropped (see
+## `spans_occupancy_break`): an unscored window is a gap, a window scored
+## against a base integration is a wrong number.
+function spans_confirmed_break(obs, grid_date, stream, from_date, to_date)
+    isnothing(parse_province_stream(stream)) && return false
+    for d in confirmed_break_dates(obs, grid_date)
+        from_date < d <= to_date && return true
+    end
+    return false
+end
+
 ## The streams whose reported series carries the isolation occupancy's own
 ## reclassification-break days (`[occupancy_break_dates]` in
 ## `observations.toml`, see `src/data.jl`): every level stream, since each is
@@ -574,12 +682,18 @@ end
 ## as transmission rather than transmission plus a base integration (issue
 ## #511). Every other stream is unaffected: `break_correction` is zero for
 ## them.
+##
+## A per-province stream returns `:spans_break` for a window holding one of
+## those days instead, since the correction is published nationally only (see
+## `spans_confirmed_break`).
 function truth_at(obs, grid_date, stream, made_date, target_date)
     target_date > obs.cutoff && return :not_yet_observed
     target_date > stream_coverage_end(obs, grid_date, stream) &&
         return :stopped_reporting
     made_date < stream_coverage_start(obs, grid_date, stream) &&
         return :not_yet_reporting
+    spans_confirmed_break(obs, grid_date, stream, made_date, target_date) &&
+        return :spans_break
     h, kind = stream_history(obs, stream)
     kind == :level && return Float64(cum_at(h, target_date, grid_date))
     return window_total_at(obs, grid_date, stream, h, target_date,
@@ -642,8 +756,12 @@ end
 ##
 ## Vintages whose window opens before the stream began reporting are skipped,
 ## since their total saturates at the whole cumulative rather than measuring a
-## window. The occupancy reclassification days need no handling here: they
-## belong to the level streams, which take the `_history_diffs` pool instead.
+## window. So is a per-province vintage whose window holds a
+## harmonisation-break day, which is not a day of the walk and cannot be
+## corrected province by province (see `spans_confirmed_break`), so the
+## baseline reads the same days the truth does. The occupancy reclassification
+## days need no handling here: they belong to the level streams, which take
+## the `_history_diffs` pool instead.
 function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
     out = Float64[]
     covered = stream_coverage_start(obs, grid_date, stream)
@@ -653,6 +771,8 @@ function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
         date = grid_date(d)
         date > made_date && break
         date - Day(horizon) < covered && continue
+        spans_confirmed_break(
+            obs, grid_date, stream, date - Day(horizon), date) && continue
         total = window_total_at(obs, grid_date, stream, hist, date, horizon)
         gap = isnothing(prev_date) ? 0 : Dates.value(date - prev_date)
         gap > 0 && push!(out, (total - prev_total) / sqrt(gap))
@@ -908,6 +1028,14 @@ end
 ## world has not reached yet, the other is a stream that stopped being
 ## updated before the target, whose unmoved cumulative total is not an
 ## observed zero (see `truth_at`, `stream_coverage_end`).
+##
+## An archive carrying a `province` column (`province_forecast.csv`) is the
+## per-province split of the national streams. Each row's label is composed
+## from the two columns (`province_stream_label`), so every patch is scored
+## as its own stream against its own pooled truth and its own persistence
+## baseline. Groups whose window holds a harmonisation-break day are dropped
+## (counted in `.spans_break`), since that day's backfill is published
+## nationally only (see `spans_confirmed_break`).
 function score_release(tag, forecast_path, obs, grid_date;
         default_fit = JOINT_FIT, vintage_obs_path = nothing)
     header, rows = read_simple_csv(forecast_path)
@@ -917,6 +1045,7 @@ function score_release(tag, forecast_path, obs, grid_date;
     str_i = col(header, "stream")
     val_i = col(header, "value")
     fit_i = findfirst(==("fit"), header)
+    prov_i = findfirst(==("province"), header)
 
     ## Group rows by (made_date, horizon, target_date, stream) and fit; a
     ## plain `Dict` keeps this independent of DataFrame group-by quirks. A
@@ -930,7 +1059,8 @@ function score_release(tag, forecast_path, obs, grid_date;
     unknown = 0
     seen_unknown = Set{String}()
     for r in rows
-        stream = r[str_i]
+        stream = isnothing(prov_i) ? r[str_i] :
+                 province_stream_label(r[str_i], r[prov_i])
         if !has_stream_truth(stream)
             unknown += 1
             push!(seen_unknown, stream)
@@ -951,6 +1081,7 @@ function score_release(tag, forecast_path, obs, grid_date;
     stopped = 0
     unstarted = 0
     no_baseline = 0
+    spans_break = 0
     for (key, byfit) in groups
         made_date, horizon, target_date, stream = key
         truth = truth_at(obs, grid_date, stream, made_date, target_date)
@@ -962,6 +1093,9 @@ function score_release(tag, forecast_path, obs, grid_date;
             continue
         elseif truth === :not_yet_reporting
             unstarted += length(byfit)
+            continue
+        elseif truth === :spans_break
+            spans_break += length(byfit)
             continue
         end
         for fit in sort(collect(keys(byfit)))
@@ -989,7 +1123,21 @@ function score_release(tag, forecast_path, obs, grid_date;
             no_baseline += 1
         end
     end
-    return (; rows = out, overlay, skipped, stopped, unstarted, no_baseline)
+    return (; rows = out, overlay, skipped, stopped, unstarted, no_baseline,
+        spans_break)
+end
+
+## Score one release's per-province forecast archive, or `nothing` when the
+## release does not carry one.
+##
+## Every release published before the archive existed carries no
+## `province_forecast.csv`, so an absent asset is the ordinary case and a
+## quiet skip, the same way the frozen archive's absence is. `forecast_path`
+## is `nothing` exactly when `fetch_asset` found nothing to download.
+function score_province_release(tag, forecast_path, obs, grid_date;
+        vintage_obs_path = nothing)
+    isnothing(forecast_path) && return nothing
+    return score_release(tag, forecast_path, obs, grid_date; vintage_obs_path)
 end
 
 # ----------------------------------------------------------------------
@@ -1166,6 +1314,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     ## never enter the cross-release baseline pool the main tables summarise.
     frozen_score_rows = NamedTuple[]
     frozen_overlay_rows = NamedTuple[]
+    ## Per-province scores go to their own table too: a province label is not
+    ## a national stream, so pooling the two would mix a share of a national
+    ## forecast in with the forecast it is a share of.
+    province_score_rows = NamedTuple[]
     rt_rows = NamedTuple[]
     r0_rows = NamedTuple[]
     ## One accumulator per per-stream estimate table, keyed by its filename.
@@ -1183,6 +1335,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     n_no_baseline = 0
     n_frozen_no_baseline = 0
     n_failed_reconstruction = 0
+    n_province_scored = 0
+    n_province_no_asset = 0
+    n_province_breaks = 0
+    n_province_no_baseline = 0
 
     ## Assets live under one temp tree for the whole run, so a release's
     ## `observations.toml` fetched for the selection is still there when its
@@ -1239,7 +1395,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## declared global to update the bindings above rather than shadow them.
         global n_scored, n_no_forecast, n_backfilled, n_no_rt, n_frozen_scored,
         n_stopped, n_frozen_stopped, n_unstarted, n_frozen_unstarted,
-        n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction
+        n_no_baseline, n_frozen_no_baseline, n_failed_reconstruction,
+        n_province_scored, n_province_no_asset, n_province_breaks,
+        n_province_no_baseline
 
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
@@ -1375,6 +1533,36 @@ if abspath(PROGRAM_FILE) == @__FILE__
             end
         end
 
+        ## The per-province split of the same release's forecast, scored
+        ## province by province into its own table. Absent on every release
+        ## published before the asset existed, a clean skip.
+        province_path = fetch_asset(
+            repo, tag, PROVINCE_FORECAST_ASSET, tagdir(tag))
+        ## Counted off the asset itself, not off a `nothing` result, so a
+        ## release whose scoring threw is not logged as one that never
+        ## carried the archive.
+        isnothing(province_path) && (n_province_no_asset += 1)
+        presult = try
+            score_province_release(tag, province_path, obs, grid_date;
+                vintage_obs_path = tag_obs_path)
+        catch e
+            @warn "skipping $tag province forecast scoring" exception=e
+            nothing
+        end
+        if !isnothing(presult)
+            append!(province_score_rows, presult.rows)
+            n_province_scored += 1
+            n_province_breaks += presult.spans_break
+            n_province_no_baseline += presult.no_baseline
+            presult.spans_break > 0 && @info string(
+                tag, " (province): skipped ", presult.spans_break,
+                " group(s) whose window holds a harmonisation-break day")
+            presult.no_baseline > 0 && @info string(
+                tag, " (province): drew no baseline for ",
+                presult.no_baseline, " group(s) whose baseline window ",
+                "opens before their province's first vintage")
+        end
+
         draws_path = fetch_asset(repo, tag, DRAWS_ASSET, tagdir(tag))
         r = try
             rt_row(tag, draws_path, cutoffs[tag])
@@ -1432,6 +1620,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
     println("Drew no baseline for $n_no_baseline group(s) whose baseline " *
             "window opened before their stream's first vintage " *
             "($n_frozen_no_baseline in the frozen tables).")
+    println("Scored per-province forecasts for $n_province_scored/" *
+            "$(length(tags)) releases ($n_province_no_asset without the " *
+            "asset), dropping $n_province_breaks group(s) whose window " *
+            "holds a harmonisation-break day and drawing no baseline for " *
+            "$n_province_no_baseline.")
     println("R_T summary for $(length(rt_rows))/$(length(tags)) releases " *
             "($n_no_rt without an R_T posterior).")
 
@@ -1568,6 +1761,36 @@ if abspath(PROGRAM_FILE) == @__FILE__
             :lo90 => frozen_overlay.lo90, :hi90 => frozen_overlay.hi90])
     println("Wrote $(nrow(frozen_scores)) frozen-fit scores over " *
             "$n_frozen_scored release(s) to data/forecast_scores_frozen.csv")
+
+    ## `data/province_forecast_scores.csv`: the per-province forecasts scored
+    ## the same way, in the same schema as the national table, with each
+    ## row's `stream` the composed `"<stream> [<patch>]"` label. Kept apart
+    ## from the national table so a province's share never pools with the
+    ## national total it is a share of. Written even when empty (header
+    ## only), since the docs build reads it.
+    province_scores = _score_frame(province_score_rows)
+    province_base = rel_to_baseline_columns(province_scores)
+    write_simple_csv(
+        joinpath(@__DIR__, "..", "data", "province_forecast_scores.csv"),
+        [:release => province_scores.release,
+            :made_date => string.(province_scores.made_date),
+            :stream => province_scores.stream,
+            :horizon => province_scores.horizon,
+            :target_date => string.(province_scores.target_date),
+            :fit => province_scores.fit,
+            :crps => province_scores.crps,
+            :log_crps => province_scores.log_crps,
+            :dispersion => province_scores.dispersion,
+            :overprediction => province_scores.overprediction,
+            :underprediction => province_scores.underprediction,
+            :coverage_50 => province_scores.coverage_50,
+            :coverage_90 => province_scores.coverage_90,
+            :bias => province_scores.bias,
+            :n_samples => province_scores.n_samples,
+            :log_rel_to_baseline => rel_to_baseline_cell.(province_base)])
+    println("Wrote $(nrow(province_scores)) per-province scores over " *
+            "$n_province_scored release(s) to " *
+            "data/province_forecast_scores.csv")
 
     ## `data/rt_by_release.csv`: mirrors `data/released_estimates.csv`.
     rt = if isempty(rt_rows)

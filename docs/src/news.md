@@ -10,8 +10,43 @@ each push to `main` also republishes the rendered analysis and the
 
 Changes since v1.18.0
 
-### Changed
+A major version: the headline model becomes spatial, so its parameter set is
+not the one v1 published.
 
+### Model
+
+- The headline joint model is a meta-population over four patches: Ituri,
+Nord-Kivu, Haut-Uele, and one pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi
+(#412, #664).
+One renewal equation per patch, coupled by importation, with every national
+stream fitted against the summed patches.
+`n_patches = 1` collapses it onto the single-population model, which is fitted
+as the `sens_no_patches` control.
+- Provincial reproduction numbers are the national weekly-knot walk plus
+deviations that sum to zero, correlated across provinces and mean-reverting on
+a sampled half-life (#665).
+The national reproduction number is read back off the summed infections, so it
+is the force-weighted mean of the provincial values rather than the trend they
+pool toward.
+- The split is identified by the confirmed deaths.
+Only the product of a province's incidence and its case-finding is observed,
+and the case-fatality ratio and death confirmation are national, so the death
+shares identify incidence and the case shares leave ascertainment as the
+residual.
+Both are scored as compositions conditional on the national total.
+- Each province has its own case-fatality ratio, partially pooled, alongside a
+death confirmation pooled far more tightly, so a provincial excess of deaths
+over cases reads first as lethality (#667).
+- Provinces are coupled by a gravity kernel: destination population over
+distance between provincial capitals, with each origin's total outflow held at
+the population-only value (#666).
+- The importation intensity is per origin, partially pooled, and changes at
+detection on the ramp the reproduction number already uses.
+- Ituri carries the whole cryptic seed and the other provinces are seeded by
+importation from it, so when a province first carries infections follows from
+the kernel rather than from a fitted fraction.
+- The headline and its control run at 900 draws with 400 adaptation steps and a
+target acceptance of 0.80, measured against the fit job's 350-minute budget.
 - `m` counts transmission generations rather than doublings (#672).
 `m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
 Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
@@ -24,6 +59,41 @@ The traced 25 January index death then sits near the 87th percentile rather than
 The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
 It does not fix initialisation, so `ViablePrior` is retained.
 
+### Data
+
+- The province scans reach the current situation report: confirmed cases and
+deaths over 75 vintages ending 9 September, against 21 ending 9 July, and the
+laboratory series over 72 (#664).
+The scans are gated on the province rows summing exactly to the national totals
+on every date.
+- Added per-province confirmed cases and deaths from Tableau 1, and per-province
+laboratory throughput from section 4.3, as `[province_confirmed_history]`,
+`[province_death_history]` and `[province_lab_daily_history]` (#412).
+- The longer series narrows the signal that identifies provincial
+ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
+scans stopped in July, and provincial test positivity has converged.
+
+### Report
+
+- Province-level results sit alongside the national ones rather than in a
+section of their own (#412).
+- Added the reproduction number, modelled infections and imported infections by
+province over time, posterior predictive checks on both compositions, and a
+per-province summary figure.
+- The summary reports each province's infections, reproduction number and
+case-fatality ratio, and the diagnostics table carries the no-patch control.
+- The methods section carries the model's maths: the seeding, the renewal with
+importation, the national read-back, the gravity kernel and the per-origin
+intensity.
+- The provincial forecast is a figure alongside the national ones, and each
+run writes `output/province_forecast.csv` so a release records the split it
+forecast.
+The sensitivity page scores the one-week-ahead forecast by province (#668).
+`scripts/score_releases.jl` scores that archive across releases against a
+persistence baseline, into `data/province_forecast_scores.csv`, and the
+sensitivity page tabulates it.
+- The summary dashboard carries modelled infections by province and the
+per-province summary alongside the national figures.
 - Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
 A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
 `docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
@@ -31,19 +101,30 @@ It goes to the job summary and to the job log.
 A cache hit records that the fit was reused rather than refitted.
 `fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
 
+### Performance
+
+- The province composition no longer boxes the locals its likelihood closure
+captures (#412).
+
 ### Fixed
 
-- NUTS chains no longer start on the prior tail they cannot recover from (#671).
-`nuts_sample` initialised every chain with an independent prior draw.
-A sizeable minority of the joint model's prior draws put the latent trajectory where the data score it hundreds of thousands of log units below the posterior, and a chain starting there never arrives: dual averaging shrinks the step size towards zero and the chain crawls in place for the whole run.
-Nothing diverges, so the failure is silent and shows only as a split R-hat pinned near its two-chain ceiling.
-Which chains are affected turns on the random number stream, so any change to the model's variable structure re-rolls it and a fit that converges today can fail tomorrow on unchanged code.
-The new default, `ViablePrior`, has each chain screen eight independent prior draws and start at the first whose initial log joint density is at or above that batch's median.
-Taking the batch maximum would also clear the tail, but it keeps roughly the top eighth of the prior by density and so shrinks the between-chain dispersion split R-hat is built on.
-Rejecting the worse half clears a tail that is a few per cent of prior mass while leaving the start a genuine prior draw conditional on the floor.
-Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
+- The posterior predictive is generated from the model that was fitted (#412).
+`pp_joint` built `bvd_joint` without the patch arguments, so `n_patches` took
+its default of one and every stream's predictive replayed a four-patch chain
+through a single well-mixed population.
+Every stream driven by BVD cases came out short by the difference, while the
+background-driven ones were unaffected.
+- NUTS chains no longer start on a prior tail they cannot recover from (#671).
+Each chain screens eight prior draws and starts at the first at or above that
+batch's median log joint density.
+A chain starting far into the tail never arrives, and nothing diverges, so the
+failure was silent.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
-
+- The quality items run once in their own job rather than on every matrix cell.
+They do not vary by platform or Julia version, and carrying them on top of the
+whole suite took the Linux cell past its 150-minute ceiling.
+- The occupancy-offset forecast test scores both offsets on one set of prior
+draws rather than comparing two independent samples.
 - The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
 The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
 It now states the thinned discharge flow and the confirmation-dependent abscond survival.
@@ -53,22 +134,11 @@ Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe
 They use `@citet`, which renders the name once, as does one site that cited without naming the author.
 The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
 `docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
-
-- The full test cell no longer times out.
-`Julia 1 - ubuntu-latest` was the only matrix cell running the `:quality` items (Aqua, JET, ExplicitImports, formatting, docstring format, doctests and the fit-cache checks) on top of the whole suite.
-It took 116 minutes on 9 September, grew past the job's 150-minute ceiling, and has been cancelled on every `main` run since 14 September, which reports as a failed check on every branch.
-Those items do not vary by platform or Julia version, so they now run once in their own `Quality` job and every matrix cell runs `skip_quality`.
-The two filters are exact complements, so the suite is still covered in full.
-The two now run in parallel, and the cell that was timing out drops to the ~53 minutes its `skip_quality` twin takes.
-The quality half is the faster-growing one, at roughly 72 minutes on 9 September and at least 97 by 14 September, so it has the less comfortable margin against the ceiling and is the half to watch.
-
-- The occupancy-offset forecast test no longer compares two independent Monte Carlo samples.
-`test_forecast.jl`'s "forecast_stream beds carry the occupancy offset too" drew a separate 400-draw prior sample for each offset and asserted their medians differ by 200 within 25.
-The difference of two independent medians has a Monte Carlo SD of about 12, so `atol = 25` is 2.1 SD and the item fails in a few per cent of runs; `Manifest.toml` is untracked, so each CI run re-resolves and re-rolls.
-Both offsets are now scored on one set of prior draws, which isolates the shift itself: the difference is exactly 200 on every seed tested, and the tolerance is 1.
-
-- The analysed volume is no longer capped below the modelled suspect inflow.
+- The analysed volume is no longer capped below the modelled suspect inflow (#677).
 `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
+`τ_test` is a probability and the receipt kernel conserves mass, so that product could not exceed the suspect inflow.
+A sampled specimens-per-suspect factor `κ ~ LogNormal(0, 0.25)` now scales it, tracked as `specimens_per_suspect`.
+Repeat exclusion testing and swabbed community deaths put more specimens through the laboratory than suspects reported.
 - Absconding no longer discharges patients the clinical exits have already discharged.
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 - The seeding docstrings now describe the model they document.
@@ -77,7 +147,6 @@ Both offsets are now scored on one set of prior draws, which isolates the shift 
 `cancel-in-progress` killed a `main` Windows cell part way through `Pkg`'s package installs, and `julia-actions/cache`'s `save-always` default saved that depot as the newest cache for the Windows restore key.
 `ColorVectorSpace` came back from it as a directory without its source, and `Pkg` skips downloading any package whose source path merely exists, so every later Windows job failed to precompile and saved the same depot again.
 The depot cache is now written only by jobs that finished, and the test workflow's cache key is bumped once to drop the depots saved before that.
-
 - Citations render as author-year links again.
 DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
 Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.

@@ -1,23 +1,20 @@
 # Delay-corrected confirmed case-fatality ratio. The naive confirmed CFR,
 # cumulative confirmed deaths over cumulative confirmed cases, is biased low
 # in real time because recently-confirmed cases have not yet had time to die.
-# We debias it by shrinking the denominator to the confirmed cases expected
-# to have had a fatal outcome confirmed by the cut-off, using the residual
-# delay between a confirmed case and its confirmed death (the onset-to-death-
-# confirmation lag minus the onset-to-confirmation lag). The correction
-# (Nishiura et al. 2009) is computed per posterior draw on the model's own
-# confirmed-case trajectory and sampled delays, so it propagates the joint
-# uncertainty. It sits alongside the structural (infection-based) CFR the
-# model already reports, which is harder to identify because case and death
-# ascertainment differ.
+# The denominator is shrunk to the confirmed cases expected to have had a
+# fatal outcome confirmed by the cut-off, using the residual delay between a
+# confirmed case and its confirmed death. The correction (Nishiura et al.
+# 2009) is computed per posterior draw on the model's own confirmed-case
+# trajectory and sampled delays, so it propagates the joint uncertainty. It
+# sits alongside the structural, infection-based CFR the model reports.
 
 # Probability a case confirmed `δ` days before the cut-off has, if fatal,
-# had its death confirmed by the cut-off: `P(X_d − X_c ≤ δ)`. The onset-to-
+# had its death confirmed by the cut-off, `P(X_d − X_c ≤ δ)`. The onset-to-
 # death-confirmation lag `X_d ~ Kd` and the onset-to-confirmation lag
-# `X_c ~ Kc` are assumed independent, computed as `Σ_xc Kc[xc] · Fd(xc + δ)`
-# from the onset-to-death-confirmation CDF `Fd` (cumulative `Kd`). `δ` may be
-# negative (a case confirmed after the cut-off horizon contributes no resolved
-# outcome), in which case `Fd` is read at a negative lag and returns zero.
+# `X_c ~ Kc` are assumed independent, so this is `Σ_xc Kc[xc] · Fd(xc + δ)`
+# from the onset-to-death-confirmation CDF `Fd` (cumulative `Kd`). A negative
+# `δ` reads `Fd` at a negative lag and returns zero, so a case confirmed
+# after the cut-off horizon contributes no resolved outcome.
 function _residual_outcome_cdf(Kc::AbstractVector, Fd::AbstractVector, δ::Integer)
     Ld = length(Fd)
     acc = 0.0
@@ -82,7 +79,7 @@ cumulative confirmed deaths give the corrected ratio
 ([`delay_corrected_cfr`](@ref)).
 
 `obs_confirmed` and `obs_confirmed_deaths` are the observed cumulative
-laboratory-confirmed cases and confirmed deaths at the cut-off, used for the
+laboratory-confirmed cases and confirmed deaths at the cut-off, for the
 naive observed confirmed ratio.
 
 Returns a `NamedTuple` with the per-draw vectors `corrected` (delay-corrected
@@ -124,11 +121,11 @@ end
 
 """
 One-row `DataFrame` summarising the confirmed-CFR comparison from a
-[`delay_corrected_confirmed_cfr`](@ref) result `res`: the median and
-equal-tailed 90% credible interval of the delay-corrected confirmed CFR and
-the structural (infection-based) CFR, the median uncorrected modelled
-confirmed ratio, and the naive observed confirmed ratio. Percentages rounded
-to `digits` decimal places.
+[`delay_corrected_confirmed_cfr`](@ref) result `res`. Carries the median
+and equal-tailed 90% credible interval of the delay-corrected confirmed CFR
+and the structural CFR, the median uncorrected modelled confirmed ratio,
+and the naive observed confirmed ratio. Percentages rounded to `digits`
+decimal places.
 """
 function confirmed_cfr_table(res; digits::Integer = 1)
     pct(x) = round(100 * x; digits)

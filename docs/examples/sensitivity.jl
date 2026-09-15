@@ -1,6 +1,5 @@
 # # Sensitivity and comparison analyses
 #
-# This page continues the [main analysis](analysis.md) from the one-week-ahead forecast onward: forecast validation, forecast scoring across releases, the reproduction number by release, the outbreak size each data stream implies alone, how the estimate has evolved across releases, comparisons with McCabe et al. and Chamla et al., and the delay and tree-prior sensitivity re-fits.
 # It renders from the same fitted chains as the main analysis, loaded through the shared setup, so no model is re-fit here beyond the frozen re-fits and the optional sensitivity re-fits below.
 
 #md # ```@raw html
@@ -21,15 +20,11 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # How last week's forecast held up against the data since observed, using the frozen re-fit and one-week projection defined in [forecast-versus-frozen evaluation](@ref "Forecast-versus-frozen evaluation").
 # Only the streams the situation reports are still updating are validated here.
 # A stream that has stopped being reported carries a cumulative total that repeats its last reported value, so there is no observation for the past week to score against.
-# The scoring tables further down withhold such a window for the same reason.
-# The projections for those streams are shown separately below.
 # The frozen fit also conditions on the isolation beds, so the projected bed occupancy is scored against the beds held a week later.
 # The bed validation is weak at a one-week-back freeze.
 # The reported occupancy rate starts only on 9 June, so the capacity has no implied-capacity anchor and rides its random walk back to the freeze date.
-# This widens the projected bed interval.
 # Like the scores further down, the confirmed new-count rows here take out any retrospective harmonisation step the week contained.
 # Such a step reattaches records notified earlier, so it is not something the forecast was predicting.
-# A validation week containing no harmonisation day carries no correction, and the rows then read as the raw window counts.
 # The cumulative rows are scored against the published total, harmonisation included.
 
 #md # ```@raw html
@@ -182,9 +177,7 @@ MarkdownTable(validation_table) #hide
 
 # The observation panels histogram the one-week-ahead forecast made from the frozen fit: a cumulative and a new-count panel for each still-reported count stream the forecast carries.
 # The 90% predictive interval is shaded, and the count observed by the current cut-off is a dashed black rule.
-# Each stream draws only when the forecast carries its column and the observation covers the target date, so a fit observing fewer streams shows fewer panels.
 # Where a stream has its own individual (single-stream) fit, that fit's forecast from the same frozen cut-off is overlaid as a dotted density alongside the joint's histogram.
-# Recovered has no individual fit and draws the joint alone.
 
 #md # ```@raw html
 #md # <details><summary>Forecast-versus-observed plot</summary>
@@ -244,11 +237,55 @@ validation_latent_fig = plot_forecast_vs_truth_latent(
 
 validation_latent_fig #hide
 
+# ### Forecast by province
+#
+# The one-week-ahead forecast split by province, scored against what each province went on to report.
+# Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
+# The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
+# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
+
+#md # ```@raw html
+#md # <details><summary>Province forecast against observed</summary>
+#md # ```
+
+## Per-province cumulative confirmed cases and deaths at the frozen cut-off
+## and at the current one, so the truth for the week is their difference.
+## Read off the same increment matrices the compositions are scored on, so
+## the clamped revision is treated identically on both sides.
+province_truth = let
+    cur_c = province_increment_matrix(obs.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    cur_d = province_increment_matrix(obs.province_death_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_c = province_increment_matrix(
+        frozen_lastweek.o.province_confirmed_history,
+        PROVINCE_NAMES, N_PATCHES)
+    froz_d = province_increment_matrix(
+        frozen_lastweek.o.province_death_history, PROVINCE_NAMES, N_PATCHES)
+    (; observed = vec(sum(cur_c.increments; dims = 2)),
+        baseline = vec(sum(froz_c.increments; dims = 2)),
+        death_observed = vec(sum(cur_d.increments; dims = 2)),
+        death_baseline = vec(sum(froz_d.increments; dims = 2)))
+end
+
+province_validation_table = province_forecast_vs_truth(
+    frozen_lastweek.chn, validation_forecast;
+    observed = province_truth.observed,
+    baseline = province_truth.baseline,
+    death_observed = province_truth.death_observed,
+    death_baseline = province_truth.death_baseline,
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_validation_table) #hide
+
 # ### Streams no longer reported
 #
 # The situation reports have stopped updating some of the streams the model fits, listed with the date each was last reported below.
 # The panels show what the frozen fit projected for those streams over the same week, without an observed rule, since the count they would be scored against has not moved since the stream stopped.
-# These are the model's projections rather than a validation of them.
 
 #md # ```@raw html
 #md # <details><summary>Forecast for the streams no longer reported</summary>
@@ -286,24 +323,19 @@ validation_stopped_fig #hide
 #
 # Every release's saved one- to four-week-ahead forecast is scored against the data observed since, against a persistence baseline and, where one exists, the stream's own individual fit as well as the joint.
 # The tables in this section are the joint model's, one row per stream.
-# Each stream's individual fit is scored the same way and tabulated in [Individual fits against the baseline](@ref "Individual fits against the baseline") below, so a fit appears in one table rather than two.
 # See [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline") for how the scores, the relative skill and the baseline are built.
 # Recovered has no individual fit of its own, so its comparison is the baseline against the joint only.
 # Reported cases and suspected deaths stopped being updated by the situation reports partway through the outbreak, and exports' confirmed-detection series is anchored to an earlier cut-off.
 # Exports therefore contributes no scored forecast, and reported cases and suspected deaths each rest on exactly one matched forecast, a single window rather than a settled sample.
 #
 # Only a minority of the daily releases examined contribute a row to the table below, each a reconstruction of an earlier model version rather than the current fit.
-# The table below is therefore not a verdict on the current fit.
 # One reconstruction is dropped from scoring entirely: its chain forecasts a near-zero median at every horizon and stream, with the upper predictive tail occasionally reaching five- and six-digit values.
 # This is the signature of a chain that failed to sample properly rather than a genuine forecast, so the scoring script flags and excludes it.
 # Only the newest few releases carry the current model's own individual-stream forecasts, and the backfilled reconstructions carry none at all.
-# The comparison against each stream's individual fit therefore rests on those releases alone, filling in one horizon at a time as their targets resolve.
 # Every row also rests on one to a handful of matched forecasts, shown as its own count rather than rounded away.
-# A ratio here should therefore be read as an early signal rather than a settled result.
 #
 # The symptom-onset stream is scored on the new reported count each vintage adds rather than on its level, because every vintage rereads the whole figure.
 # Its printed total therefore moves with the scan error as well as with late reporting.
-# It appears only from the release that first carried it.
 # Its intervals are dominated by that scan error rather than by epidemic uncertainty, so read its skill against the baseline rather than its coverage.
 
 #md # ```@raw html
@@ -363,20 +395,15 @@ joint_score_by_release_table = select_fit_role(
 
 # The headline pools every horizon and release into one row per stream for the joint model: the mean CRPS and its decomposition, coverage, bias, and the relative skill against the persistence baseline, on both the natural and the log scale.
 # Each row also carries relative skill against the stream's own individual fit where one exists.
-# Column definitions are in [forecast scoring against a persistence baseline](@ref "Forecast scoring against a persistence baseline").
 
 MarkdownTable(joint_score_overview_table) #hide
 
 # The same relative skill against the baseline, by horizon: one panel per stream, one series per fit role, on a log-scaled skill axis with the reference line at one.
-# This is the one place the two roles are drawn against each other, so it carries each stream's individual fit alongside the joint.
-# A fit that beats the baseline on average but not at every cut-off is visible as a series that crosses the line rather than sitting under it throughout.
 
 forecast_relative_skill_fig = plot_forecast_relative_skill(
     forecast_score_by_horizon_table);
 
 forecast_relative_skill_fig #hide
-
-# The same columns as a table for the joint model, broken out by horizon, and again broken out by release and averaged across horizons, are behind the two dropdowns below.
 
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
@@ -415,6 +442,51 @@ forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
 #md # ```
 
 forecast_overlay_fig #hide
+
+# ### Forecast by province across releases
+#
+# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the province forecast scores</summary>
+#md # ```
+
+province_scores_df = _release_data("province_forecast_scores.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, crps = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
+        bias = Float64, n_samples = Int,
+        log_rel_to_baseline = Float64))
+## The joint patch model is the only model that forecasts the provinces, so
+## there is no individual single-stream fit to compare against and `fit` is
+## single-valued by construction. Both are dropped rather than rendered as
+## columns that cannot vary.
+##
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
+province_score_overview_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(forecast_score_overview(province_scores_df)))
+province_score_by_horizon_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(
+    forecast_score_by_horizon(province_scores_df)));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_score_overview_display) #hide
+
+#md # ```@raw html
+#md # <details><summary>Province scores by horizon</summary>
+#md # ```
+
+MarkdownTable(province_score_by_horizon_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ## Frozen-fit forecast evaluation
 #
@@ -468,9 +540,6 @@ frozen_score_by_release_display = drop_degenerate_fit_column(
 #md # </details>
 #md # ```
 
-# The headline frozen table pools one row per stream across cut-offs and horizons, scored against the persistence baseline on both scales, with the CRPS decomposition, coverage and bias columns described above.
-# There is no model column, since only one model is scored.
-
 MarkdownTable(frozen_score_overview_display) #hide
 
 # The same relative skill against the baseline, by horizon, for the frozen cut-offs.
@@ -479,8 +548,6 @@ frozen_relative_skill_fig = plot_forecast_relative_skill(
     frozen_score_by_horizon_table);
 
 frozen_relative_skill_fig #hide
-
-# The same columns as a table, broken out by horizon, and again broken out by frozen cut-off, are behind the two dropdowns below.
 
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
@@ -504,7 +571,6 @@ MarkdownTable(frozen_score_by_release_display) #hide
 
 # The frozen forecasts made at each cut-off against the value observed since, one panel per stream and horizon, the observed value in black.
 # Each panel carries the frozen forecast and the persistence baseline, coloured as in the cross-release overlay above, and the x-axis is the cut-off each forecast was made from.
-# The same per-panel axis crop and overflow marker applies here.
 
 #md # ```@raw html
 #md # <details><summary>Frozen-fit forecasts-versus-now overlay</summary>
@@ -534,9 +600,6 @@ frozen_overlay_fig #hide
 # ## Individual fits against the baseline
 #
 # This section carries the same cross-release forecast scoring as [Forecast scoring across releases](@ref "Forecast scoring across releases") above, for each stream's own individual fit rather than the joint, against the same persistence baseline.
-# Recovered has no individual fit, so it does not appear here.
-# These are the individual-fit rows of the same scored forecasts, not a separate computation.
-# Only the newest few releases carry an individual-stream forecast, so these tables cover those releases alone rather than the outbreak's history.
 
 #md # ```@raw html
 #md # <details><summary>Individual-fit rows of the cross-release scores</summary>
@@ -570,8 +633,6 @@ individual_relative_skill_fig = plot_forecast_relative_skill(
 
 individual_relative_skill_fig #hide
 
-# The same columns as a table, broken out by horizon, and again broken out by release, are behind the two dropdowns below.
-
 #md # ```@raw html
 #md # <details><summary>Scores by horizon</summary>
 #md # ```
@@ -594,7 +655,6 @@ MarkdownTable(individual_score_by_release_table) #hide
 
 # ## Outbreak size estimated by each data stream
 #
-# Each data stream constrains the latent outbreak size differently.
 # The table below puts the posteriors over the infection count side by side, the single-stream fits and the joint, to show what each stream implies alone and what the joint adds.
 
 #md # ```@raw html
@@ -970,7 +1030,6 @@ rt_stream_fig #hide
 # Released estimates are blue and the current model frozen at earlier cut-offs is red, each a median with nested 30/60/90% interval bars.
 # The current fit sits behind both as a flat band, and $R_0 = 1$ is marked.
 # Releases only began publishing this quantity recently, so the short blue history reflects that rather than any failed release.
-# The frozen series carries the comparison meanwhile.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release with frozen re-fits and the current-fit band</summary>
@@ -1033,7 +1092,6 @@ r0_evolution_fig #hide
 # Panels share a calendar axis and a y range, and $R_0 = 1$ is marked.
 # Each release is a median with nested 30/60/90% interval bars.
 # Every fit the report runs on its own also carries a current-model reference band.
-# Panels fill in from the first release that publishes this quantity per dataset, so a fit with nothing saved yet is left out rather than drawn empty.
 
 #md # ```@raw html
 #md # <details><summary>Basic reproduction number per release by fit</summary>
@@ -1088,7 +1146,6 @@ r0_stream_fig #hide
 
 # ## Comparison with McCabe et al.
 #
-# Our model is a discrete-time renewal model with a time-varying reproduction number and every data stream fitted jointly.
 # McCabe et al. published their estimates as scenarios at fixed situation-report cut-offs, each scenario carrying a 95% confidence interval.
 # We show all three, the 18 May report, the 20 May update and the 27 May Lancet publication, as one panel each, with their intervals kept.
 # Within a panel each method and scenario family is a single line, carrying its sweep over the nuisance assumptions: the case-fatality ratio, the geographic window and the doubling time.
@@ -1098,7 +1155,6 @@ r0_stream_fig #hide
 # McCabe's scenarios estimate cumulative cases at their report dates, though their report is not fully explicit about whether this is symptomatic cases or all infections.
 # We take the like-for-like quantity to be our cumulative symptom onsets on the same dates, not the latent infections (which include the not-yet-symptomatic) or our current cut-off total.
 # We read our value off the joint fit's cumulative-onset trajectory at the grid day for each report date, and show it with its credible interval.
-# Each scenario sits beside our estimate for the date it was made: the 18 May report against our 18 May value, the 20 May update against our 20 May value, and the 27 May Lancet publication against our 27 May value.
 
 #md # ```@raw html
 #md # <details><summary>McCabe scenarios with uncertainty against our estimates</summary>
@@ -1150,7 +1206,6 @@ matched_comparison_fig = plot_scenario_comparison(REPORT_SCENARIOS_CI;
 
 matched_comparison_fig #hide
 
-# The McCabe scenarios are outbreak-size estimates, the same quantity our renewal model and the released integral model report.
 # Their 95% confidence intervals come from exact negative-binomial counts for the geographic-spread method and a Poisson likelihood profile for the back-calculation from deaths.
 
 #md # ```@raw html
@@ -1180,13 +1235,11 @@ frozen_streams_table = streams_table(
 #
 # Their published quantity is the cumulative confirmed-case count, with the reporting fraction held at one, so it does not adjust for the cases that are infected but never laboratory-confirmed.
 # This is a different quantity from the cumulative cases this analysis and McCabe et al. estimate, which include the unconfirmed and unascertained.
-# It therefore sits below them: a floor on the true size rather than an estimate of it.
 # The like-for-like comparison is therefore against our own confirmed-case projection, not against our cumulative infection count.
 #
 # We compare forward projections rather than refitting to their assumptions.
 # We take our fit frozen at 8 June, the exact date of their confirmed-case calibration anchor.
 # We roll its confirmed-case stream forward to the dates Chamla report, using the same machinery as the one-week-ahead forecast.
-# Setting our projection, their projection and the confirmed cases observed since on one timeline shows how each projection has held up against the data.
 
 #md # ```@raw html
 #md # <details><summary>Project the 8 June fit forward and assemble the Chamla comparison</summary>
@@ -1258,7 +1311,6 @@ chamla_projection_fig = plot_projection_comparison(;
 chamla_projection_fig #hide
 
 # By 24 June their central scenario projected just under a thousand confirmed cases, and their low and high scenarios ranged from roughly 870 to 1360.
-# The figure below sets that week-12 scenario spread beside our 8 June projection for the same date and the confirmed count observed by the cut-off, so each reads against their three scenarios at a glance.
 
 #md # ```@raw html
 #md # <details><summary>Week-12 (24 June) scenario spread against ours and observed</summary>
@@ -1284,8 +1336,6 @@ chamla_w12_fig = plot_estimate_comparison(chamla_w12_rows;
 #md # ```
 
 chamla_w12_fig #hide
-
-# The matched-date numbers behind these figures are in the dropdown below, with the observed column taken to the 23 June cut-off.
 
 #md # ```@raw html
 #md # <details><summary>Matched-date projection numbers (10 and 24 June)</summary>
@@ -1315,12 +1365,10 @@ MarkdownTable(chamla_comparison_table) #hide
 #md # ```
 
 # Beyond the comparison window their central scenario continues to roughly 8200 confirmed cases by mid-September, with the high scenario far higher.
-# Those longer projections are not set against data here.
 
 # ## Reproduction number behind the projection
 #
 # The forward projection above is carried by the reproduction-number trajectory our 8 June fit estimated, a quantity we report in its own right rather than as a comparison.
-# The figure shows that trajectory, the time-varying reproduction number from the renewal walk with its credible intervals, as the fit saw it at 8 June.
 # It declines over the weeks leading to the cut-off, and that decline is what bends the projected trajectory away from sustained early growth.
 
 #md # ```@raw html
@@ -1348,6 +1396,123 @@ chamla_rt_fig = plot_rt(chamla_anchor.chn;
 #md # ```
 
 chamla_rt_fig #hide
+
+# ## Spatial structure sensitivity
+#
+# The headline runs the model over the three affected provinces.
+# Reducing it to a single province collapses it onto one well-mixed
+# population, which is the model the earlier releases used.
+# The spatial section of the analysis page describes what the provinces add.
+#
+# Splitting the country into provinces adds no national data, so the national
+# outbreak size should not move far either way.
+# The two are not identical by construction: the provinces run free and the
+# country grows at the force-weighted mean of their reproduction numbers,
+# which sits above the central trend they pool toward. That gap is second
+# order in the deviation scale.
+# A large gap between the two posteriors below would therefore point at the
+# deviation priors rather than at the data, and the headline should not be
+# read from the meta-population fit until such a gap is explained.
+
+spatial_sensitivity_table = streams_table(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population (n_patches = 1)" => posterior_C_no_patches);
+spatial_sensitivity_table
+
+#md # ```@raw html
+#md # <details><summary>Spatial-structure density overlay</summary>
+#md # ```
+
+spatial_sensitivity_fig = plot_density_overlay(
+    "Meta-population (headline)" => posterior_C_joint,
+    "Single population" => posterior_C_no_patches;
+    xlabel = "Cumulative infections");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_sensitivity_fig #hide
+
+# The size is the gate, but it is not the only quantity the spatial structure could move.
+# The three figures below set the national reproduction number, the case-fatality ratio and the reproduction number at the cut-off from the two fits against each other.
+# Each is a national quantity that both models estimate, so the two posteriors should sit on top of each other.
+# In the trajectory figure they do, closely enough that the grey reference is hidden behind the coloured band for most of the window.
+# The table after them gives the same quantities as numbers, which is where the agreement is read rather than eyeballed.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures</summary>
+#md # ```
+
+spatial_rt_fig = plot_rt_streams(
+    [(; label = "Single population (n_patches = 1)",
+        chn = chn_no_patches, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n), colour = :steelblue)];
+    joint = (; chn = chn_joint, rt_start = _rt_start_plot,
+        rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot,
+            obs.n)),
+    n = obs.n, breakpoint = _BREAKPOINT,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    display_start = _rt_start_plot, ncols = 1,
+    title = "National reproduction number under both structures",
+    reference_label = "the meta-population headline",
+    panel_label = "the single-population fit");
+
+spatial_cfr_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:CFR])),
+    "Single population" => vec(Array(chn_no_patches[:CFR]));
+    xlabel = "Case-fatality ratio");
+
+spatial_rt_density_fig = plot_density_overlay(
+    "Meta-population (headline)" => vec(Array(chn_joint[:R_T])),
+    "Single population" => vec(Array(chn_no_patches[:R_T]));
+    xlabel = "Reproduction number at the cut-off");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_rt_fig #hide
+
+spatial_cfr_fig #hide
+
+spatial_rt_density_fig #hide
+
+# The table gathers the same three quantities as credible intervals, alongside the outbreak start date the two fits imply.
+
+#md # ```@raw html
+#md # <details><summary>National quantities under both structures, as a table</summary>
+#md # ```
+
+## One row per national quantity, one column per structure, each cell a
+## median with a 90% credible interval. Built here rather than by stacking
+## two `summary_table` calls, so the two structures sit side by side and the
+## reader compares along a row.
+spatial_quantities_table = let
+    ## A count rounded to zero decimals still prints a trailing ".0", so
+    ## whole-number quantities go through `Int`.
+    fmt(x, d) = d <= 0 ? string(round(Int, x)) : string(round(x; digits = d))
+    cell(v, d) = string(fmt(quantile(v, 0.5), d), " (",
+        fmt(quantile(v, 0.05), d), "–", fmt(quantile(v, 0.95), d), ")")
+    rows = [("Cumulative infections", :C_T, 0),
+        ("Reproduction number at the cut-off", :R_T, 2),
+        ("Case-fatality ratio", :CFR, 2),
+        ("Outbreak age (days)", :T, 0),
+        ("Latest growth rate (per day)", :r, 3)]
+    DataFrame("Quantity" => [r[1] for r in rows],
+        "Meta-population (headline)" => [cell(
+             vec(Array(chn_joint[r[2]])), r[3])
+         for r in rows],
+        "Single population" => [cell(vec(Array(chn_no_patches[r[2]])), r[3])
+                                for r in rows])
+end;
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_quantities_table #hide
 
 # ## Delay sensitivity
 #

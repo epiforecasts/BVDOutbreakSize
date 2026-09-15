@@ -633,7 +633,7 @@ end
 @testitem "load_onset_curve: the archive scores no negative previous delay" begin
     ## Guards the committed CSV against the shape above: a vintage whose
     ## printed window runs past its predecessor's report date.
-    using BVDOutbreakSize: load_onset_curve
+    using BVDOutbreakSize: BVDOutbreakSize, load_onset_curve
     using Dates: Date
 
     path = joinpath(pkgdir(BVDOutbreakSize), "data",

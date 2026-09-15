@@ -28,7 +28,6 @@
 # This work began as a replication of the [mccabe2026](@citet) report.
 # It has since evolved into a real-time joint Bayesian estimate of the current outbreak size.
 # The model is a discrete-time renewal process with a time-varying reproduction number, fitted to more of the available data streams than the original.
-# The points below summarise how it now differs from the report.
 # The Methods section carries the full treatment, and the later [comparison with McCabe et al.](@ref "Comparison with McCabe et al.") sets the current estimates against theirs.
 #
 #md # ```@raw html
@@ -37,12 +36,14 @@
 #md #
 # **Latent process and parameters**
 #
-# - *Discrete-time renewal model.* The whole model runs on a daily grid.
-#   Infections follow the discrete renewal equation $I_t = R_t \sum_{s \ge 1} I_{t-s} g_s$, where $g$ is the discretised generation-interval PMF, and every delay is applied as a discrete convolution.
+# - *Discrete-time meta-population renewal model.* The whole model runs on a daily grid.
+#   Each province follows the discrete renewal equation $I_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s} g_s$, where $g$ is the discretised generation-interval PMF, and the provinces are coupled by importation.
+#   National incidence is their sum, and every delay is applied as a discrete convolution.
 #   [mccabe2026](@citet) use continuous-time closed forms.
-# - *Time-varying reproduction number.* $R_t$ is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
+# - *Time-varying reproduction number.* The trend $R^{\text{trend}}_t$ the provinces pool toward is held flat at the established $R_0$ until the first WHO situation report (18 May 2026).
 #   It then follows a weekly Gaussian random walk on the log scale, interpolated within weeks.
 #   A logistic outbreak-response ramp of about three weeks starts from that report.
+#   Each province's reproduction number is that trend plus a mean-reverting deviation, and the deviations sum to zero.
 #   McCabe et al. use one constant exponential growth rate.
 # - *Joint posterior rather than scenario estimates.* The reproduction number, case-fatality ratio, all delays, traveller volume and surveillance dispersion have priors and are sampled together.
 #   [mccabe2026](@citet) fix each and report a set of scenarios.
@@ -95,10 +96,9 @@
 #   The data do little to move them, so these posteriors largely track their priors.
 #   We fit the between-report increments, so the trajectory informs the change in the reproduction number over the window.
 #   It is uninformative about the delays, the surveillance dispersion or the reporting fractions on their own.
-# - *Only report-date totals, no epidemiological dating.* We have no counts by symptom onset or any other epidemiologically relevant date, only cumulative totals at the report date.
-#   The timing of the underlying epidemic is therefore weakly identified, and we recover it only through the assumed delays.
-# - *Fitted to aggregate counts.* The DRC data are situation-report totals of suspected cases and deaths, laboratory-confirmed cases and deaths, and specimens received and analysed.
-#   The Uganda data are three export cases with one death.
+# - *Almost every count is report-dated.* The digitised onset curve is the only series carrying symptom-onset dates, and it covers confirmed cases from SitRep 059 onward.
+#   Everything else is a total at the report date, so the epidemic's timing is recovered mainly through the assumed delays.
+# - *Fitted to aggregate counts.* The DRC data are national and per-province situation-report totals, and the Uganda data are three export cases with one death.
 #   We do not have a line list or information on case definitions or reporting completeness.
 #   The laboratory testing series gives partial information on testing capacity, but it is incomplete and stops at the cut-off.
 #   Every estimate is a model-based extrapolation under strong assumptions, not a measurement.
@@ -110,9 +110,13 @@
 #
 # **Model assumptions and design**
 #
-# - *Inherits McCabe et al.'s epidemiological assumptions.* A single zoonotic seed, an assumed generation interval, no spatial structure beyond the Ituri / Nord Kivu split, and no depletion of susceptibles.
+# - *Inherits McCabe et al.'s epidemiological assumptions.* A single zoonotic seed, an assumed generation interval, and no depletion of susceptibles.
 #   The onset-to-death delay is grounded on Isiro 2012 and the genetic seeding bound on an external clock rate.
 #   Neither propagates cross-outbreak or clock uncertainty.
+# - *Importation structure is assumed, not measured.* There is no mobility or origin-destination data for this outbreak, so the gravity kernel is a structural assumption.
+#   Its intensity is weakly identified against the secondary provinces' seeds, since both raise a province's early incidence.
+# - *Four patches, not the full provincial detail.* Ituri, Nord-Kivu and Haut-Uele are modelled individually and every other affected province is pooled into a fourth patch, which takes the population-weighted mean of its members' capitals.
+#   Transmission within a patch is well mixed, so spread inside a province is not represented.
 # - *Intervention ramp is weakly identified.* With only a few sitreps straddling it, the ramp effect and the pre-ramp reproduction number are not well separated.
 # - *Single national bed capacity.* The treatment-centre model carries one national bed capacity and one national demand, so it cannot represent local saturation.
 #   On 13 June Ituri was at 93.9% occupancy while Sud-Kivu was at 21.9%.
@@ -167,6 +171,8 @@ include(joinpath(pkgdir(BVDOutbreakSize), "docs", "examples", "_setup.jl"))
 # The Uganda data are the cases and the one death exported across the border, taken from the WHO situation reports and Disease Outbreak News [who_don_2026_602](@cite).
 # The cross-border traveller volume and source population come from [mccabe2026](@citet).
 # The source population is fixed, and the traveller volume is given a Normal prior around the McCabe et al. figure.
+# Province populations are 2019 figures from the DRC's Institut National de la Statistique, *Annuaire statistique RDC 2020*, one source for all seven provinces rather than the best figure for each, since only the relative sizes enter the model.
+# Provincial capital coordinates, which set the distances in the importation kernel, come from GeoNames.
 #
 # From SitRep 059 (12 July) the analytique-format situation reports also carry a raster figure of confirmed cases by symptom-onset date, split alive/deceased ("courbe épidémique par date de début des symptômes").
 # It has no accompanying data table, so we digitise it directly from the figure.
@@ -258,7 +264,6 @@ observations_table = DataFrame(
 MarkdownTable(observations_table) #hide
 
 # The per-date cumulative history of the DRC situation-report streams, the national totals at each report date.
-# The model fits the between-report increments of these series, so a single date reduces to the cut-off total.
 # Each stream's source is recorded alongside the observation data itself.
 # Two columns are the exception.
 # The new-suspect column is a per-day count, not a cumulative total, fitted directly as a daily incidence.
@@ -325,14 +330,14 @@ MarkdownTable(vintage_table) #hide
 # #### Model overview
 #
 # We model a single outbreak seeded by a zoonotic introduction on a daily grid from a seeding date to the cut-off (day $n$).
-# The generating infection process produces daily infection incidence via the discrete renewal equation
+# The country is split into four patches, one each for Ituri, Nord-Kivu and Haut-Uele and a fourth pooling Sud-Kivu, Tshopo, Bas-Uele and Sud Ubangi.
+# Each patch runs its own discrete renewal equation at its own reproduction number, and the patches are coupled by importation.
+# National infection incidence is the sum over the patches.
+# Every national stream is fitted against that sum.
+# The patch reproduction numbers share one weekly trend and deviate from it, so a province with little data stays near the trend and one with data can separate from it.
+# The situation reports' per-province tables are exact partitions of the national totals, so they enter as composition likelihoods carrying the spatial split alone.
+# Setting the patch count to one collapses the model onto a single well-mixed population.
 #
-# ```math
-# I_t = R_t \sum_{s = 1}^{L} I_{t-s}\, g_s, \tag{1}
-# ```
-#
-# where $g$ is the discretised probability mass function (PMF) of the generation interval, indexed from lag 1 so an infectee is always infected strictly after its infector, and $R_t$ is the per-day reproduction number.
-# A PMF gives the probability assigned to each whole-day lag.
 # We never observe infections directly.
 # Each data stream observes a thinned, delayed or transformed view of the same latent incidence.
 # This is the class of time-varying renewal model used in EpiNow2 [epinow2](@cite), with the streams fitted jointly here rather than in a pipeline.
@@ -349,7 +354,7 @@ MarkdownTable(vintage_table) #hide
 #
 # | Parameter | Exports | Deaths | Cases | Analysed | Confirmed | Conf. deaths | Export deaths |
 # |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-# | Reproduction number $R_t$ | ● | ● | ● | ● | ● | ● | ● |
+# | Reproduction number $R_{p,t}$ | ● | ● | ● | ● | ● | ● | ● |
 # | Generation interval | ● | ● | ● | ● | ● | ● | ● |
 # | Incubation period | ● | ● | ● | ● | ● | ● | ● |
 # | Seed $I_0$ | ● | ● | ● | ● | ● | ● | ● |
@@ -375,20 +380,26 @@ MarkdownTable(vintage_table) #hide
 
 # #### Infections
 #
-# The infection process combines several components.
-# These are: the reproduction number, the generation interval that drives the renewal, the seeding that sets the initial infection count, the genetic bound on the outbreak age, the growth rate that fills the unobserved cryptic phase, and the renewal construction that grows the seed forward to the cut-off.
-# Each is described in a subsection below.
-#
 # ##### Reproduction number
 #
-# The reproduction number is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
-# It is then assumed to follow a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
-# The month-long lead lets $R_t$ start moving before the first report, since transmission may already have turned before the outbreak was formally reported.
+# Each patch has its own daily reproduction number.
+# It is a shared trend $R^{\text{trend}}_t$ plus a patch deviation $\delta_{p,t}$, with the deviations summing to zero across patches on every day:
+#
+# ```math
+# \log R_{p,t} = \log R^{\text{trend}}_t + \delta_{p,t}, \qquad
+# \sum_p \delta_{p,t} = 0. \tag{1}
+# ```
+#
+# The country's reproduction number is read off the summed infections in the
+# infection process below.
+#
+# The trend is held flat at the established reproduction number $R_0$ until a month before the first WHO situation report.
+# It then follows a non-centred Gaussian random walk on the log scale with weekly knots to the cut-off.
 # The walk start is floored at the renewal start.
 # The walk starts from $R_0$ at its first knot:
 #
 # ```math
-# \log R_k = \log R_0 + \sigma_{\text{rw}}
+# \log R^{\text{trend}}_k = \log R_0 + \sigma_{\text{rw}}
 #            \sum_{j=1}^{k} z_j, \quad
 # z_j \sim \mathrm{Normal}(0, 1), \qquad
 # \sigma_{\text{rw}} \sim \mathrm{Normal}^{+}(0,\ 0.1). \tag{2}
@@ -401,15 +412,15 @@ MarkdownTable(vintage_table) #hide
 # R_0 = \left( \sum_{s \ge 1} g_s\, e^{-r s} \right)^{-1}. \tag{3}
 # ```
 #
-# The step-size prior keeps weekly changes in the reproduction number moderate.
-# We set the half-normal on $\sigma_{\text{rw}}$ so that the reproduction number is unlikely to change by more than about 20% from one week to the next: two standard deviations of the weekly log-step is around $0.20$.
+# We set the half-normal on $\sigma_{\text{rw}}$ so that the trend is unlikely to change by more than about 20% from one week to the next: two standard deviations of the weekly log-step is around $0.20$.
 #
-# Daily $\log R_t$ is the linear interpolation between the weekly knots, so the reproduction number varies piecewise linearly within each week.
+# Daily $\log R^{\text{trend}}_t$ is the linear interpolation between the weekly knots.
 # Before the first knot it is held flat at $R_0$ (the interpolation clamps below the first knot rather than extrapolating):
 #
 # ```math
-# \log R_t = \log R_k +
-#     \frac{t - d_k}{d_{k+1} - d_k}\,(\log R_{k+1} - \log R_k),
+# \log R^{\text{trend}}_t = \log R^{\text{trend}}_k +
+#     \frac{t - d_k}{d_{k+1} - d_k}\,
+#     (\log R^{\text{trend}}_{k+1} - \log R^{\text{trend}}_k),
 # \qquad d_k \le t \le d_{k+1}, \tag{4}
 # ```
 #
@@ -419,11 +430,48 @@ MarkdownTable(vintage_table) #hide
 # The effect is therefore constrained to be non-positive:
 #
 # ```math
-# \log R_t \mathrel{+}= \delta \cdot
-#     \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right),
+# \log R^{\text{trend}}_t \mathrel{+}= \beta_R\, S(t), \qquad
+# S(t) = \mathrm{logistic}\!\left(\frac{t - t_{\text{bp}}}{21}\right),
 # \qquad
-# \delta \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
+# \beta_R \sim \mathrm{Normal}^{-}(0,\ 0.4). \tag{5}
 # ```
+#
+# The deviations live on the trend's weekly knots $k = 1, \dots, K$.
+# They are correlated across patches, they revert toward zero, and they are centred at every knot so that no patch is privileged:
+#
+# ```math
+# \delta_{p,1} = \sigma_{\text{lvl}} (Lz)_p
+#     - \overline{\sigma_{\text{lvl}} (Lz)},
+# \qquad
+# \delta_{p,k} = \phi\, \delta_{p,k-1}
+#   + \bigl(\sigma_{\delta,p} (Lz_k)_p
+#     - \overline{\sigma_{\delta}(Lz_k)}\bigr), \tag{6}
+# ```
+#
+# ```math
+# \sigma_{\text{lvl}} \sim \mathrm{Normal}^{+}(0,\ 0.15), \qquad
+# \sigma_{\delta,p} \sim \mathrm{Normal}^{+}(0,\ 0.05), \qquad
+# h \sim \mathrm{LogNormal}(\log 42,\ 0.6), \qquad
+# \Omega \sim \mathrm{LKJ}(2), \tag{7}
+# ```
+#
+# with $z, z_k \sim \mathrm{Normal}(0, 1)$ per patch, $\Omega = LL^{\top}$ the cross-patch correlation and $\phi = 2^{-7/h}$ the per-knot retention set by $h$, the half-life in days of a patch's divergence from the trend.
+# Daily $\delta_{p,t}$ is the interpolation of the knot series, as for the trend.
+#
+
+#md # ```@raw html
+#md # <details><summary>Submodel: patch_rt_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.patch_rt_model(7, 4, 0.0)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: rt_walk_model</summary>
@@ -448,10 +496,11 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha \sim \mathrm{Normal}^{+}(2.71,\ 0.70), \qquad
-# \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{6}
+# \theta \sim \mathrm{Normal}^{+}(5.65,\ 1.50). \tag{8}
 # ```
 #
 # The Gamma is discretised through the same double-interval-censoring route as every delay, described with the first epidemiological process model below.
+# That gives a probability mass function (PMF) $g_s$, the probability assigned to each whole-day lag.
 # The lag-0 bin is dropped and the remainder renormalised, so the generation interval starts at one day and an infectee is infected strictly after its infector.
 
 #md # ```@raw html
@@ -474,7 +523,7 @@ MarkdownTable(vintage_table) #hide
 # The initial infection count $I_0$ on the last day of the seeding window has a prior centred on a single seed:
 #
 # ```math
-# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{7}
+# I_0 \sim \mathrm{Normal}^{+}(0.1,\ 0.1). \tag{9}
 # ```
 #
 # From that seed we assume the outbreak grew deterministically through an unobserved cryptic exponential phase lasting $m$ transmission generations before sustained transmission was established.
@@ -487,7 +536,7 @@ MarkdownTable(vintage_table) #hide
 # ```math
 # m \sim \mathrm{Normal}^{+}(2.75,\ 1.2), \qquad
 # T_{\text{cryptic}} = m\,G, \qquad
-# C_T = e^{r T_{\text{cryptic}}}. \tag{8}
+# C_T = e^{r T_{\text{cryptic}}}. \tag{10}
 # ```
 #
 # The growth rate $r$ carries the prior the genetic source informs.
@@ -499,13 +548,21 @@ MarkdownTable(vintage_table) #hide
 # Our 95% interval on the doubling time is 5.3--25.6 d, which contains both ranges:
 #
 # ```math
-# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{9}
+# r \sim \mathrm{LogNormal}\!\left(\log\tfrac{\log 2}{11.7},\ 0.40\right). \tag{11}
 # ```
 #
 # This single growth rate fills the cryptic phase and, through the forward Euler–Lotka derivation above, sets the established reproduction number.
-# The cryptic phase and the renewal therefore share one growth source.
 # The genetic report's own established reproduction number of about $1.31$ to $1.55$ uses its own generation interval.
-# Deriving $R_0$ forward from the shared growth rate under our generation interval is the consistent choice.
+#
+# The outbreak is assumed to have begun in Ituri, so the primary patch carries the whole cryptic seed and the others start empty:
+#
+# ```math
+# I_{1,j} = C_T\, e^{r (j - L)}, \qquad
+# I_{p,j} = 0 \;\; (p \ge 2), \qquad j \le L, \tag{12}
+# ```
+#
+# with $L$ the renewal start.
+# When a secondary patch first carries infections then follows from the kernel and the coupling intensity of the mixing subsection below.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: seed_model</summary>
@@ -551,7 +608,7 @@ MarkdownTable(vintage_table) #hide
 # \text{tmrca}_{\text{days}} \sim
 #   \mathrm{censored}\!\bigl(\mathrm{Normal}(T,\ \sigma);\
 #   \text{upper} = \text{tmrca}_{\text{days}}\bigr),
-# \qquad \sigma = 16\ \text{d}. \tag{10}
+# \qquad \sigma = 16\ \text{d}. \tag{13}
 # ```
 #
 # The renewal starts on the grid day on which the renewal recursion begins and sustained transmission is treated as established.
@@ -574,28 +631,102 @@ MarkdownTable(vintage_table) #hide
 #md # </details>
 #md # ```
 
+# ##### Mixing and importation
+#
+# We model connectivity between provinces as a gravity kernel, proportional to destination population and inverse to the distance between provincial capitals.
+# A pooled province takes the population-weighted mean of its members' capitals.
+# Each origin column is scaled so that the share of its transmission that leaves is the population share of the rest of the country, $1 - N_q / N$:
+#
+# ```math
+# K_{p,q} = \Bigl(1 - \frac{N_q}{N}\Bigr)
+#           \frac{N_p\, d_{pq}^{-1}}{\sum_{r \ne q} N_r\, d_{rq}^{-1}},
+# \qquad K_{q,q} = 0. \tag{14}
+# ```
+#
+# The intensity is one level per origin, partially pooled, and it changes at detection on the logistic ramp $S(t)$ the reproduction number uses:
+#
+# ```math
+# \varepsilon_{q,t} = \min\!\Bigl(
+#     \bar\varepsilon\, \exp\bigl(\sigma_\varepsilon (z_q - \bar z)\bigr)\,
+#     \exp\bigl(\beta_\varepsilon S(t)\bigr),\ 1 \Bigr), \tag{15}
+# ```
+#
+# ```math
+# \bar\varepsilon \sim \mathrm{Beta}(1,\ 100), \qquad
+# \sigma_\varepsilon \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# \beta_\varepsilon \sim \mathrm{Normal}(0,\ 0.5), \qquad
+# z_q \sim \mathrm{Normal}(0, 1). \tag{16}
+# ```
+#
+
+#md # ```@raw html
+#md # <details><summary>Submodel: province_importation_kernel</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.province_importation_kernel(
+#md #         [4.0e6, 7.6e6])), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # ##### Infection process
 #
 # The renewal start and observed window from the genetic bound above are
 #
 # ```math
 # \text{renewal start} = n - \text{tmrca}_{\text{days}} + 14, \qquad
-# \tau_{\text{obs}} = n - \text{renewal start}. \tag{11}
+# \tau_{\text{obs}} = n - \text{renewal start}. \tag{17}
 # ```
 #
-# The grid days before the renewal start are filled by the cryptic exponential curve at rate $r$ ending at $C_T$.
+# The grid days before the renewal start are filled by the cryptic exponential seeds above.
 # This gives the recursion a full generation interval of history.
-# The renewal then grows the trajectory forward under the time-varying reproduction number.
+# Each patch then runs its own renewal forward at its own reproduction number, and importation relocates a share of each day's new infections:
+#
+# ```math
+# G_{p,t} = R_{p,t} \sum_{s \ge 1} I_{p,t-s}\, g_s, \qquad
+# I_{p,t} = \Bigl(1 - \varepsilon_{p,t} \sum_{q \ne p} K_{q,p}\Bigr) G_{p,t}
+#           + \sum_{q \ne p} \varepsilon_{q,t} K_{p,q}\, G_{q,t}. \tag{18}
+# ```
+#
+# National infections are the patch sum, and the national reproduction number is read off that sum by inverting the renewal equation:
+#
+# ```math
+# I_t = \sum_p I_{p,t}, \qquad
+# R^{\text{nat}}_t = \frac{I_t}{\sum_{s \ge 1} I_{t-s}\, g_s}. \tag{19}
+# ```
+#
+# $R^{\text{nat}}_t$ is what the headline $R_T$ reports.
+# It sits above the trend $R^{\text{trend}}_t$, because the deviations are centred unweighted while the sum weights each patch by its share of the force, and the faster patch keeps gaining share.
+#
+# Cumulative infections are the running sum of the daily national series.
+# The cumulative infection count at the cut-off is the headline outbreak size.
 # The total outbreak age is the cryptic duration plus the observed window:
 #
 # ```math
-# T = m\,G + \tau_{\text{obs}}. \tag{12}
+# T = m\,G + \tau_{\text{obs}}. \tag{20}
 # ```
 #
-# Cumulative infections are the running sum of the daily infection series.
-# The cumulative infection count at the cut-off is the headline outbreak size.
-# The current growth rate is the exponential growth implied by the cut-off reproduction number and the generation interval through forward Euler–Lotka, so it is sign-consistent with that number by construction.
+# The current growth rate is the exponential growth implied by the cut-off reproduction number and the generation interval through forward Euler–Lotka.
 # The current doubling time is $\log 2$ divided by that rate.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: patch_infection_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.patch_infection_model(40, 4)), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 #md # ```@raw html
 #md # <details><summary>Submodel: infection_model</summary>
@@ -614,19 +745,17 @@ MarkdownTable(vintage_table) #hide
 # #### Epidemiological process models
 #
 # We model each observed stream as a delayed and thinned view of the daily onset incidence.
-# This section gives the delays that map infections to onsets and onsets to each observed endpoint, and the case-fatality ratio that maps onsets to deaths.
-# The incubation period comes first, then the onset-to-report delay (also used for export detection), the onset-to-death delay and the report-to-receipt delay, then the case-fatality ratio.
 #
 # ##### Incubation period
 #
-# Infections are convolved with the incubation-period PMF to give daily symptom-onset incidence, computed once and consumed by every downstream observation stream.
+# Each patch's infections are convolved with the incubation-period PMF to give its daily symptom-onset incidence.
 # We use the Bundibugyo virus incubation-period estimate from the 2007 Uganda outbreak (mean 6.3 d, 95% CI 5.2-7.3, $n = 24$; [macneil2010](@cite)).
 # The mean prior reproduces that 95% CI.
 # The source reports no interval on the spread, so the SD prior is our own choice:
 #
 # ```math
 # \mu_{\text{inc}} \sim \mathrm{Normal}^{+}(6.3,\ 0.54), \qquad
-# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{13}
+# \sigma_{\text{inc}} \sim \mathrm{Normal}^{+}(3.5,\ 0.8). \tag{21}
 # ```
 #
 # Every delay is discretised to a daily PMF over lags $0,\dots,n_{\max}$ by double interval censoring [charniga2024](@cite).
@@ -636,14 +765,13 @@ MarkdownTable(vintage_table) #hide
 # The LogNormal and Gamma CDFs both differentiate cleanly under the reverse-mode automatic differentiation.
 # The maximum lag $n_{\max}$ is not hand-set.
 # For each delay it is the 98th percentile of the prior-centre distribution, computed once outside the model.
-# Every delay therefore captures a consistent 98% of its mass before the truncated PMF is renormalised.
 #
 # Both the primary event (the onset, say) and the secondary event (the report) are observed only to the day, so the discretisation censors both.
 # The primary event is taken uniform over its day and the secondary event is interval-censored to its day, giving the daily PMF
 #
 # ```math
 # f_s = \int_0^1 \big[\, F(s + 1 - u) - F(s - u) \,\big]\, \mathrm{d}u,
-# \qquad F = \text{the delay CDF}, \tag{14}
+# \qquad F = \text{the delay CDF}, \tag{22}
 # ```
 #
 # which is then renormalised over lags $0,\dots,n_{\max}$.
@@ -688,7 +816,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{rep}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
-# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{15}
+# \theta_{\text{rep}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{23}
 # ```
 #
 # We do not use the reanalysis onset-to-notification delay, a near-exponential Gamma with mean about 20 d.
@@ -706,7 +834,7 @@ MarkdownTable(vintage_table) #hide
 # \alpha_{\text{oa}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \quad
 # \theta_{\text{oa}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20), \\
 # \alpha_{\text{ad}} \sim \mathrm{Normal}^{+}(2.15,\ 0.60), \quad
-# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{16}
+# \theta_{\text{ad}} \sim \mathrm{Normal}^{+}(3.91,\ 1.38). \tag{24}
 # ```
 #
 # and the onset-to-death PMF is the convolution of the two discretised components (implied mean about 13 d).
@@ -719,7 +847,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \alpha_{\text{det}} \sim \mathrm{Normal}^{+}(1.18,\ 0.28), \qquad
-# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{17}
+# \theta_{\text{det}} \sim \mathrm{Normal}^{+}(3.69,\ 1.20). \tag{25}
 # ```
 #
 # It drives the exports streams.
@@ -732,7 +860,7 @@ MarkdownTable(vintage_table) #hide
 #
 # ```math
 # \mu_{\text{rec}} \sim \mathrm{Normal}^{+}(4.5,\ 1.0), \qquad
-# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{18}
+# \sigma_{\text{rec}} \sim \mathrm{Normal}^{+}(4.0,\ 0.75). \tag{26}
 # ```
 #
 # It drives the laboratory analysed-specimen volume.
@@ -745,7 +873,7 @@ MarkdownTable(vintage_table) #hide
 # Based on this we use a prior of
 #
 # ```math
-# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{19}
+# \mathrm{CFR} \sim \mathrm{Beta}(6.6,\ 13.4), \tag{27}
 # ```
 #
 # with mean $0.33$ and $95\%$ interval roughly $0.15$-$0.54$.
@@ -775,14 +903,11 @@ cfr_prior_fig #hide
 # Each observation submodel takes the shared daily onset incidence, convolves it with a sampled onset-to-event delay, and scales it by the relevant ascertainment, case-fatality ratio or positivity factor.
 # It then reads the modelled count off the daily series at each vintage day.
 # Likelihoods score the between-vintage increments.
-# The surveillance streams come first, then the geographic-spread exports.
 #
 # ##### Shared observation submodels
 #
 # Several parameters are assumed shared across the streams: the surveillance dispersion, the ascertainment fractions, the laboratory testing priors and the traveller volume.
 # We assume the passive-surveillance count datasets are overdispersed and share a common dispersion.
-# We also assume the laboratory testing priors are shared between the suspected-case and laboratory streams.
-# More detail is given in the subsections below.
 #
 # ###### Surveillance dispersion
 #
@@ -793,7 +918,7 @@ cfr_prior_fig #hide
 # \log\!\bigl(1/\sqrt{k_s}\bigr) = \mu + \tau\, z_s, \quad
 # z_s \sim \mathrm{Normal}(0, 1), \qquad
 # \mu \sim \mathrm{Normal}(\log 0.6,\ 0.33), \quad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{20}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.6), \tag{28}
 # ```
 #
 # so $k_s = 1/\exp(\mu + \tau z_s)^2$ per stream, with $\tau$ setting the pooling ($\tau = 0$ collapses to one shared dispersion).
@@ -823,17 +948,15 @@ cfr_prior_fig #hide
 # ```math
 # \mu \sim \mathrm{Normal}(\mathrm{logit}(0.75),\ 1),
 # \qquad
-# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{21}
+# \tau \sim \mathrm{Normal}^{+}(0,\ 0.5), \tag{29}
 # ```
 #
 # ```math
 # \mathrm{logit}(p_{\text{DRC}}) \sim \mathrm{Normal}(\mu,\ \tau),
 # \qquad
-# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{22}
+# \mathrm{logit}(p_{\text{Uganda}}) \sim \mathrm{Normal}(\mu,\ \tau). \tag{30}
 # ```
 #
-# The cases likelihood uses $p_{\text{DRC}}$.
-# The two Uganda-side likelihoods use $p_{\text{Uganda}}$.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: pooled_ascertainment_model</summary>
@@ -875,7 +998,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # \delta_0 \sim \mathrm{Normal}^{+}(1.5,\ 0.75), \qquad
-# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{23}
+# \text{scaling} \sim \mathrm{LogNormal}(0,\ 0.25). \tag{31}
 # ```
 #
 # The non-BVD background rate $\lambda_{\text{bg}}$ enters the suspected-case stream and is described with it below.
@@ -1006,7 +1129,7 @@ cfr_prior_fig #hide
 # The source population is kept fixed (census):
 #
 # ```math
-# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{24}
+# N_{\text{travel}} \sim \mathrm{Normal}^{+}(1871,\ 200). \tag{32}
 # ```
 
 #md # ```@raw html
@@ -1067,7 +1190,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cases},i} - Y_{\text{cases},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{25}
+#     \sum_{t = d_{i-1}+1}^{d_i} c_t,\ k\Bigr). \tag{33}
 # ```
 #
 # From SitRep 013 (27 May) INSP reclassifies suspects, so the national cumulative suspected total falls.
@@ -1116,7 +1239,7 @@ cfr_prior_fig #hide
 # ```math
 # A_{\text{bvd},t} = p_{\text{iso,bvd}}\,p_{\text{DRC}}\,\text{bvd}_t,
 # \qquad
-# A_{\text{bg},t} = p_{\text{iso}}\,\lambda_{\text{bg},t}, \tag{26}
+# A_{\text{bg},t} = p_{\text{iso}}\,\lambda_{\text{bg},t}, \tag{34}
 # ```
 #
 # each carried through a short suspected-to-admission delay that captures triage, transport and the wait for a bed.
@@ -1129,14 +1252,14 @@ cfr_prior_fig #hide
 # The abscond outflow drains the suspected pool at a small daily fraction $\kappa$ of the previous day's suspected occupancy,
 #
 # ```math
-# \text{absconds}_t = \kappa\, O_{\text{susp},t-1}, \tag{27}
+# \text{absconds}_t = \kappa\, O_{\text{susp},t-1}, \tag{35}
 # ```
 #
 # so the total bed demand is the forward balance
 #
 # ```math
 # D_t = D_{t-1} + A_t - \text{deaths}_t - \text{recoveries}_t
-#       - \text{rule-outs}_t - \text{absconds}_t, \tag{28}
+#       - \text{rule-outs}_t - \text{absconds}_t, \tag{36}
 # ```
 #
 # with $A = A_{\text{bvd}} + A_{\text{bg}}$.
@@ -1150,30 +1273,26 @@ cfr_prior_fig #hide
 # \text{deaths}_s = \sum_{t \le s} \text{CFR}_{\text{iso}}\, A_{\text{bvd},t}\,
 #     f_{\text{death},\,s-t}\, S_{t,\,s-t},
 # \qquad
-# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{29}
+# S_{t,d} = \prod_{j = 1}^{d}\bigl(1 - \kappa\, U_{t,j}\bigr), \tag{37}
 # ```
 #
 # and likewise for recoveries and rule-outs.
 # The discount runs on stay-day rather than calendar day: a patient resident ten days faces ten days of abscond hazard, not one for every day of the grid.
 # Only the suspected pool absconds, so $U_{t,j} = \prod_{u<j}(1 - h_{\text{conf},\,t+u})$ is the probability a cohort admitted on day $t$ is still unconfirmed at stay-day $j$, with $h_{\text{conf}}$ the in-care confirmation hazard, and the discount stops once a cohort is confirmed.
 # Background admissions are never confirmed, so $U \equiv 1$ there and the rule-out schedule thins by $(1-\kappa)^d$.
-# One inflow and one set of outcome timings therefore generate the bed stock, the discharge flows and the demand together.
-# The occupancy accumulates admissions over the stay, so it is a smooth integral of the infection signal.
-# A high, sustained bed stock informs the reproduction number.
 # Anything in the occupancy that is not infection, such as an overnight reclassification of who is counted, is modelled rather than left to bend the transmission estimate.
 #
 # In-care deaths combine the two labels.
 # A true case who dies before its test returns is a suspected death, and one who dies after is a confirmed death.
 # The report records the two together.
 # The death flow is therefore the in-care fatality applied to the BVD inflow over the admission-to-death stay, scored against the combined deaths directly and never gated by confirmation.
-# The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the infection case-fatality ratio,
+# The in-care fatality is a sampled log-odds modifier $\beta_{\text{iso}}$ on the infection case-fatality ratio:
 #
 # ```math
 # \text{CFR}_{\text{iso}} = \mathrm{logit}^{-1}\bigl(\mathrm{logit}\,\text{CFR}
-#     + \beta_{\text{iso}}\bigr), \tag{30}
+#     + \beta_{\text{iso}}\bigr), \tag{38}
 # ```
 #
-# identified by the in-care death flow relative to admissions and occupancy.
 # It is a fatality conditional on admission rather than a causal treatment effect, sitting below the infection case-fatality ratio where care lowers mortality.
 # It is reported with $\beta_{\text{iso}}$ and the overall length of stay (the death/recovery mixture mean).
 #
@@ -1187,7 +1306,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # O_{\text{conf},t} = \sum_{u \le t} A_{\text{bvd},u}\,
-#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{31}
+#     F_{\text{conf}}(u, t)\, S_{\text{clin}}(t - u), \tag{39}
 # ```
 #
 # with $F_{\text{conf}}$ the cumulative confirmation probability of a cohort
@@ -1207,11 +1326,9 @@ cfr_prior_fig #hide
 # ```
 #
 # the probability an admitted case is still in a bed after $d$ days, the discharge-complement of the death/recovery mixture built from the same admission-to-death and admission-to-recovery stays the discharge flows use.
-# Because $\sum_{u \le t} A_{\text{bvd},u}\, S_{\text{clin}}(t - u)$ reconstructs the occupied true-case stock, the confirmed-and-present cohort is a subset of it and $O_{\text{conf}} \le O_{\text{bvd}} \le D$ holds by construction.
 #
 # Cohort tracking is needed because deaths and recoveries are observed combined across the two labels, so the data do not say which departing patients had already been confirmed.
 # Carrying the confirmation and stay clocks separately excludes cases that die before their test returns from the confirmed pool.
-# A single pool-average discharge rate would over-attribute such deaths to the confirmed pool.
 # The suspected sub-stock is the remainder $O_{\text{susp},t} = D_t - O_{\text{conf},t}$, holding the not-yet-confirmed BVD occupancy together with the non-case occupancy awaiting rule-out.
 # The abscond outflow drains this suspected stock at the daily fraction $\kappa$.
 # Recoveries among the confirmed (the published recovery total) are the confirmed subset of recoveries and are modelled as a separate confirmed-recovery stream (below).
@@ -1230,12 +1347,11 @@ cfr_prior_fig #hide
 # O_j \sim \mathrm{censored}\bigl(\mathrm{NegBinomial}(D_{t_j},\ k_{\text{iso}});\
 #     \text{upper} = C^{\text{cap}}_j\bigr),
 # \qquad
-# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{32}
+# F_j \sim \mathrm{NegBinomial}(\mu^{F}_{t_j},\ k_{\text{iso}}), \tag{40}
 # ```
 #
 # with each flow mean $\mu^{F}_t$ the matching modelled event series (the admissions, the in-care deaths, the rule-outs and the absconds), all sharing the treatment dispersion $k_{\text{iso}}$.
 # The implied capacity is carried by a NegBinomial of its own.
-# Occupancy below capacity identifies the demand directly.
 # Demand above a saturated capacity is only partially identified, since the occupancy reveals that demand was at least the beds filled but not how much more.
 # The bed shortfall above capacity is therefore informed by the demand model and its priors rather than measured.
 # Bed demand is the uncapped diagnostic, and the model exposes the cut-off occupancy, the cut-off bed demand (the need under unconstrained supply), their difference (the bed shortfall) and the utilisation.
@@ -1280,7 +1396,6 @@ cfr_prior_fig #hide
 # A fatal BVD infection enters the suspected-death count only when ascertained.
 # The BVD deaths therefore carry a death ascertainment $p_{\text{death}}$, the death analogue of the case ascertainment $p_{\text{DRC}}$, with an informative prior centred high (a death is more reliably reported than a living suspect).
 # The non-BVD background suspected deaths are a background CFR $\mathrm{cfr}_{\text{bg}}$ applied to the per-day non-BVD suspected-case background $\lambda_{\text{bg},t}$, lagged by the same onset-to-death delay so a background death follows its background case.
-# The death background tracks the identified case background rather than a second free, outbreak-size-degenerate rate.
 # The daily death series is
 #
 # ```math
@@ -1294,7 +1409,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{deaths},i} - Y_{\text{deaths},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{33}
+#     \sum_{t = d_{i-1}+1}^{d_i} m_t,\ k\Bigr). \tag{41}
 # ```
 
 #md # ```@raw html
@@ -1327,24 +1442,21 @@ cfr_prior_fig #hide
 # $\varrho$ exceeds one because repeat exclusion testing, swabbed community deaths and screened contacts all put specimens into the laboratory denominator without adding a reported suspect.
 #
 # This analysed volume is gated to zero before the testing onset.
-# No specimens are analysed before the laboratory existed, so $v_t$ does not accrue over the pre-surveillance cryptic phase.
-# Modelling a pre-testing volume would both invent capacity and roll it into the first laboratory and early-confirmed bins, over-predicting the early confirmed counts.
 # The first confirmed vintage is treated as the baseline and the early confirmed increments are scored from it.
 # The suspected-case count itself is not gated, as those cases did accumulate over the cryptic phase.
 #
-# This construction, a specimens-per-suspect factor times a testing fraction times the suspected pipeline carried to laboratory receipt, gives the modelled case analysed volume that the confirmed deaths reuse.
-# The death volume scales it at the per-day suspected death-to-case ratio (described in the confirmed deaths section below).
+# The death volume scales the modelled case analysed volume at the per-day suspected death-to-case ratio (described in the confirmed deaths section below).
 # The two therefore share the laboratory capacity onset.
 #
 # The per-vintage increments are scored against the cumulative analysed series with a NegBinomial sharing the dispersion $k$:
 #
 # ```math
 # Y_{\text{ana},i} - Y_{\text{ana},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{34}
+#     \sum_{t = d_{i-1}+1}^{d_i} v_t,\ k\Bigr). \tag{42}
 # ```
 #
 # The confirmed positives in each laboratory window $v$ are scored as a Binomial of the observed specimens-analysed denominator $A_v$ with a per-window tested-positive probability $p_{\text{pos},v}$.
-# Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead, so the fitted volume and the proxy denominator are the same quantity.
+# Where no analysed count is observed (the early and unanchored windows), the modelled volume $v_t$ is the denominator instead.
 # We tie that probability to the composition of the tested pool, so the confirmed data help identify the non-BVD background.
 # The suspect-pool composition $\varphi_v$ is the BVD share among the specimens analysed in the window, carried through the same delay as the volume so composition and volume share one clock:
 #
@@ -1361,7 +1473,6 @@ cfr_prior_fig #hide
 #     \delta_0\, e^{-c_v / \text{decay}}\bigr).
 # ```
 #
-# A truly BVD specimen then tests positive with the sensitivity $s$, and a non-BVD specimen with the false-positive rate $1 - \mathrm{spec}$.
 # The false-positive term therefore carries the non-BVD share, and the laboratory data identify the background:
 #
 # ```math
@@ -1369,7 +1480,7 @@ cfr_prior_fig #hide
 # ```
 #
 # ```math
-# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{35}
+# C_v \sim \mathrm{Binomial}(A_v,\ p_{\text{pos},v}), \tag{43}
 # ```
 #
 # with $c_v$ the cumulative modelled laboratory volume at window $v$, the clock on which the enrichment decays.
@@ -1379,7 +1490,7 @@ cfr_prior_fig #hide
 #
 # ```math
 # C_v^{\text{no-denom}} \sim
-#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{36}
+#     \mathrm{NegBinomial}(p_{\text{pos},v}\, V_v,\ k). \tag{44}
 # ```
 
 #md # ```@raw html
@@ -1415,7 +1526,6 @@ cfr_prior_fig #hide
 # ##### Confirmed deaths
 #
 # The confirmed deaths mirror the confirmed-case laboratory pipeline.
-# The confirmed cases fit a modelled analysed-specimen volume and score the positives as that volume times a composition-linked positivity.
 # The death side has no published analysed denominator, so we build the death analogue of that volume and score the confirmed-death increments as NegBinomial counts of it.
 #
 # Deaths are tested out of the same laboratory as cases, so the death analysed volume tracks the modelled case analysed volume $v^{\text{c}}_t$ at the per-day suspected death-to-case ratio, times a testing-intensity scaling,
@@ -1443,7 +1553,7 @@ cfr_prior_fig #hide
 # p_t = s\,q_{\text{death},t} + (1-\mathrm{spec})(1-q_{\text{death},t}).
 # ```
 #
-# The false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the confirmed deaths respond to the non-BVD death share, the same structural link the confirmed cases use.
+# The false-positive term $(1-\mathrm{spec})(1-q_{\text{death}})$ makes the confirmed deaths respond to the non-BVD death share.
 # The death background (the background CFR applied to the case background, lagged by the onset-to-death delay) keeps the composition below one.
 # The daily confirmed deaths are the positivity times the death analysed volume,
 #
@@ -1456,11 +1566,10 @@ cfr_prior_fig #hide
 #
 # ```math
 # Y_{\text{cd},i} - Y_{\text{cd},i-1} \sim \mathrm{NegBinomial}\!\Bigl(
-#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{37}
+#     \sum_{t = d_{i-1}+1}^{d_i} \text{cd}_t,\ k\Bigr). \tag{45}
 # ```
 #
 # The death analysed volume inherits the laboratory capacity onset from the case volume $v^{\text{c}}_t$, so $\text{cd}_t$ is zero before the first confirmed-case vintage.
-# No deaths are confirmed before the laboratory existed.
 
 #md # ```@raw html
 #md # <details><summary>Submodel: confirmed_deaths_model</summary>
@@ -1528,17 +1637,32 @@ cfr_prior_fig #hide
 # The exports stream is travel-gated, so the at-risk clock runs from infection.
 # An infected person travels to Uganda at the daily per-capita travel rate $q = N_{\text{travel}} / N_{\text{source}}$ and stays at risk of being exported and detected only until the infection-to-detection delay has elapsed.
 # The daily at-risk export prevalence is the infections still infected and not yet detected, scaled by the Uganda ascertainment and the travel rate.
-# The infection-to-detection delay is the onset-to-hospitalisation delay convolved with the incubation period, so the survival clock runs from infection.
-# Write the cumulative infections as
+# The infection-to-detection delay is the onset-to-hospitalisation delay convolved with the incubation period.
+#
+# The traveller volume and source population are Ituri's, since the point-of-entry counts were collected there.
+# Each other province contributes to the export stream in proportion to a sampled weight relative to Ituri:
 #
 # ```math
-# C_t = \sum_{u \le t} I_u.
+# I^{\text{exp}}_t = \sum_p w_p\, I_{p,t}, \qquad w_1 = 1, \qquad
+# w_p = \exp(\mu_w + \tau_w z_p) \;\; (p \ge 2),
+# ```
+#
+# ```math
+# \mu_w \sim \mathrm{Normal}(\log 0.15,\ 1), \qquad
+# \tau_w \sim \mathrm{Normal}^{+}(0,\ 0.5), \qquad
+# z_p \sim \mathrm{Normal}(0, 1).
+# ```
+#
+# Write the cumulative export-weighted infections as
+#
+# ```math
+# C_t = \sum_{u \le t} I^{\text{exp}}_u.
 # ```
 #
 # The infections that have completed the detection delay are
 #
 # ```math
-# \text{det}_t = \sum_{s \ge 0} I_{t-s}\,
+# \text{det}_t = \sum_{s \ge 0} I^{\text{exp}}_{t-s}\,
 #     (f_{\text{inc}} * f_{\text{det}})_s.
 # ```
 #
@@ -1551,7 +1675,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export intensity:
 #
 # ```math
-# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{38}
+# \Lambda(t) = \sum_{u \le t} \lambda_u. \tag{46}
 # ```
 #
 # We model outbound travel only, not return, so this term would overestimate the infections on its own.
@@ -1566,7 +1690,7 @@ cfr_prior_fig #hide
 # Y_{\text{exports},i} \sim
 #     \mathrm{Poisson}\!\bigl(\Lambda(d_i) - \Lambda(d_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{39}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda(d_1 - 1)\bigr). \tag{47}
 # ```
 
 #md # ```@raw html
@@ -1578,6 +1702,20 @@ cfr_prior_fig #hide
 #md # Markdown.parse(string("```julia\n",
 #md #     (@code_string BVDOutbreakSize.exports_model(
 #md #         missing, Float64[], 0.25; incubation_pmf = Float64[])), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+#md # ```@raw html
+#md # <details><summary>Submodel: province_export_pressure_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.province_export_pressure_model(4)), "\n```"))
 #md # ```
 
 #md # ```@raw html
@@ -1603,7 +1741,7 @@ cfr_prior_fig #hide
 # Its running sum is the cumulative export-death intensity:
 #
 # ```math
-# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{40}
+# \Lambda_d(t) = \sum_{u \le t} \mu_u. \tag{48}
 # ```
 #
 # Each dated Uganda export death is scored at its reported date with a per-day Poisson, the same dated-event likelihood the exports use, with a zero term before the first death day $\delta_1$:
@@ -1613,7 +1751,7 @@ cfr_prior_fig #hide
 #     \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_i)
 #     - \Lambda_d(\delta_{i-1})\bigr),
 # \qquad
-# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{41}
+# 0 \sim \mathrm{Poisson}\!\bigl(\Lambda_d(\delta_1 - 1)\bigr). \tag{49}
 # ```
 
 #md # ```@raw html
@@ -1644,7 +1782,7 @@ cfr_prior_fig #hide
 # ```math
 # \eta_0 \sim \mathrm{Normal}(\mathrm{logit}(0.13),\ 0.7), \qquad
 # \sigma_{h0} \sim \mathrm{Normal}^{+}(0,\ 1), \qquad
-# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{42}
+# \mathrm{logit}\,h_0(d) = \eta_0 + \sigma_{h0}\,z_{h0,d}. \tag{50}
 # ```
 #
 # A calendar-time effect indexed on the report day $u + d$ then modifies that hazard.
@@ -1655,7 +1793,7 @@ cfr_prior_fig #hide
 # \gamma_t = \mathrm{interp}\Bigl(\sigma_\gamma \sum_{s < k} z_{\gamma,s}\Bigr),
 # \qquad
 # h(d, t) = \mathrm{logistic}\bigl(\mathrm{logit}\,h_0(d) + \gamma_t\bigr).
-# \tag{43}
+# \tag{51}
 # ```
 #
 # The cumulative reported proportion of onset date $u$'s eventual cases, reported within $\delta$ days, is the survival product of the daily hazards along that onset date's diagonal.
@@ -1670,7 +1808,7 @@ cfr_prior_fig #hide
 # \qquad
 # F(u, \delta) = \alpha(u)\, G(u, \delta), \qquad
 # \alpha(u) = \mathrm{logistic}\bigl(\mathrm{logit}\,\mathrm{anchor}(u)
-#     + \beta + \omega_u\bigr). \tag{44}
+#     + \beta + \omega_u\bigr). \tag{52}
 # ```
 #
 # $G(u, D-1) = 1$, so the delay distribution is proper rather than an asymptote that drifts with the hazard level, and $\delta < 0$ is right truncation.
@@ -1687,7 +1825,7 @@ cfr_prior_fig #hide
 # ```math
 # y_u \sim \mathrm{Student}\text{-}t\Bigl(
 #     \mathrm{onsets}_u\bigl(F(u, R_s{-}u) - F(u, R_{s-1}{-}u)\bigr),\
-#     \sigma_u,\ \nu{=}4\Bigr). \tag{45}
+#     \sigma_u,\ \nu{=}4\Bigr). \tag{53}
 # ```
 #
 # The likelihood admits a negative increment, but $F$ is non-decreasing in $\delta$, so the modelled increment is bounded below at zero.
@@ -1744,14 +1882,85 @@ cfr_prior_fig #hide
 #md # </details>
 #md # ```
 
+# ##### Province compositions
+#
+# The situation reports' spatial tables give per-province confirmed cases and confirmed deaths at shared vintages.
+# At every vintage the provinces sum exactly to the national total the matching stream above already scores.
+# The likelihood factorises accordingly and only the conditional term is scored here, with the vintage total conditioned on:
+#
+# ```math
+# P(y_1, \dots, y_P) = P(N)\; P(y_1, \dots, y_P \mid N),
+# \qquad N = \sum_p y_p.
+# ```
+#
+# The modelled per-patch confirmed increments carry each patch's onsets through the report-to-receipt delay $f_{\text{rec}}$ and the assay sensitivity $s$ of the national confirmed stream, binned to the vintage days.
+# The death increments use the onset-to-death delay convolved with the same receipt delay.
+# Write those modelled increments $\lambda_{p,i}$ for patch $p$ at vintage $i$.
+# Each patch's expected share weights them by a relative case ascertainment $a_p$, and on the death side also by a relative severity $\kappa_p$:
+#
+# ```math
+# \pi_{p,i} = \frac{a_p\, \kappa_p\, \lambda_{p,i}}
+#     {\sum_q a_q\, \kappa_q\, \lambda_{q,i}}, \qquad
+# \log a_p = \tau_a (z_p - \bar z), \qquad
+# \log \kappa_p = \tau_\kappa (z^{\kappa}_p - \bar z^{\kappa}),
+# ```
+#
+# with $z, z^{\kappa} \sim \mathrm{Normal}(0, 1)$ per patch.
+# Each vintage is then allocated across the patches by stick-breaking, the last patch taking the remainder:
+#
+# ```math
+# y_{p,i} \sim \mathrm{BetaBinomial}\Bigl(
+#     N_i - \sum_{q < p} y_{q,i},\;
+#     \frac{\pi_{p,i}}{\sum_{q \ge p} \pi_{q,i}},\; \rho \Bigr). \tag{54}
+# ```
+#
+# $\rho$ is one overdispersion shared across patches and vintages, absorbing the extra-Binomial variation in how cases are attributed to provinces, such as reporting lags between the provincial and national tables and reassignment of cases between health zones.
+# At $\rho \to 0$ the allocation is Multinomial.
+# The priors are
+#
+# ```math
+# \rho \sim \mathrm{Normal}^{+}(0,\ 0.1)\ \text{on}\ [0, 1], \qquad
+# \tau_a \sim \mathrm{Normal}^{+}(0,\ 0.3), \qquad
+# \tau^{\text{d}}_a \sim \mathrm{Normal}^{+}(0,\ 0.1), \qquad
+# \tau_\kappa \sim \mathrm{Normal}^{+}(0,\ 0.3),
+# ```
+#
+# where $\tau_a$ is the case composition's ascertainment spread, and $\tau^{\text{d}}_a$ and $\tau_\kappa$ are the death composition's death-ascertainment and case-fatality spreads.
+# The case composition carries no severity term.
+#
+# The two compositions identify different things.
+# A patch's confirmed case share is the product of its incidence and its case-finding, and a composition sees only the product.
+# The case-fatality ratio and the death-confirmation probability belong to the virus and to a national laboratory, so they cancel from the normalised death shares and leave each patch weighted by its delay-convolved incidence alone.
+# The deaths therefore pin the incidence split, and the cases identify the relative case ascertainment as the residual.
+# Within the death composition only the product $a_p \kappa_p$ is identified.
+# The tight prior on $\tau^{\text{d}}_a$ against the loose one on $\tau_\kappa$ is what reads a provincial excess of deaths over cases first as lethality.
+# The per-province vintages stop before the cut-off, so the last stretch of the window is national data only.
+
+#md # ```@raw html
+#md # <details><summary>Submodel: province_composition_model</summary>
+#md # ```
+
+#md # ```@eval
+#md # using BVDOutbreakSize, CodeTracking, Markdown
+#md # Markdown.parse(string("```julia\n",
+#md #     (@code_string BVDOutbreakSize.province_composition_model(
+#md #         missing, zeros(2, 2))), "\n```"))
+#md # ```
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
 # #### Joint model
 #
-# The joint model runs the generating infection process once, stages it to daily onset incidence, and routes the shared onsets into every observation stream.
+# The joint model runs the patch infection process once, stages each patch to daily symptom-onset incidence, and routes the summed onsets into every national observation stream.
 # It samples a single dispersion $k$ and the pooled ascertainment fractions, threading $p_{\text{DRC}}$ to the suspected-case, laboratory and confirmed-death likelihoods and $p_{\text{Uganda}}$ to the two Uganda-side likelihoods.
+# The two province compositions are scored alongside the national streams, and the Uganda streams take the export-weighted patch sum.
 # It also adds the genetic seeding bound on the outbreak age.
 # Each observation stream argument may be dropped, so the same model structure generates prior- and posterior-predictive draws.
+# With the patch count at one the same composer is the single-population model, with no deviations, no importation and no composition terms.
 #
-# The symptom-onset reporting triangle is threaded in the same way, as a standard stream rather than an opt-in one.
+# The symptom-onset reporting triangle is threaded in the same way, as a standard stream.
 # The onset-curve input defaults to an empty history, so a missing input file degrades to a no-op rather than an error.
 # The production path fits it every time alongside the other streams.
 #
@@ -1919,9 +2128,11 @@ prior_pair_fig #hide
 # #### Fitting the models
 #
 # We sample with NUTS [hoffman2014nuts](@cite) and Mooncake [mooncake_jl](@cite) reverse-mode automatic differentiation.
-# We run two chains of 1000 post-warmup draws each after 1000 warmup adaptation steps, at a target acceptance probability of 0.85.
-# Chains initialise from the prior.
-# We fit the joint model and each single-stream model so the per-stream posteriors over the outbreak size can be compared with the joint.
+# Chains initialise from the prior and run at a maximum tree depth of 10.
+# Every fit runs two chains.
+# The single-stream and frozen fits take 500 post-warmup draws per chain after 200 adaptation steps, at a target acceptance probability of 0.85.
+# The headline meta-population joint and the single-population control take 1000 draws per chain after the same 200 adaptation steps, at a target acceptance probability of 0.90.
+# Both halves of the spatial comparison use the same settings, so a difference between them is the spatial structure and not the sampler.
 
 # #### Fit diagnostics
 #
@@ -1933,6 +2144,7 @@ prior_pair_fig #hide
 
 diagnostics_table( #hide
     "joint" => chn_joint, #hide
+    "joint, no patches" => chn_no_patches, #hide
     "exports" => chn_exports, #hide
     "deaths (DRC)" => chn_deaths, #hide
     "cases (DRC)" => chn_cases, #hide
@@ -1972,12 +2184,11 @@ diagnostics_table( #hide
 # \mathrm{cCFR}_{\text{corr}}(T) =
 #   \frac{D_{\text{conf}}(T)}
 #        {\sum_{t} c_{\text{conf}}(t)\,
-#         \Pr(X_d - X_c \le T - t)}, \tag{46}
+#         \Pr(X_d - X_c \le T - t)}, \tag{55}
 # ```
 #
 # with $D_{\text{conf}}(T)$ the cumulative confirmed deaths, $c_{\text{conf}}(t)$ the modelled daily confirmed-case incidence, and $X_d - X_c$ the residual delay between a confirmed case and its confirmed death.
 # $X_d$ is the onset-to-death-confirmation lag (onset-to-death convolved with the report-to-receipt laboratory delay), and $X_c$ is the onset-to-confirmation lag (onset-to-report convolved with the same laboratory delay).
-# The common receipt delay therefore cancels in the mean, and the residual centres on onset-to-death minus onset-to-report.
 # Both lags and the confirmed trajectories are taken per posterior draw from the joint fit, so the corrected ratio carries the joint uncertainty.
 # As the outbreak matures and recent incidence resolves, the correction shrinks and the corrected ratio approaches the eventual confirmed CFR.
 # It is the confirmed-case counterpart of the structural CFR, anchored in the confirmed counts rather than the latent infections.
@@ -2030,7 +2241,6 @@ diagnostics_table( #hide
 #
 # Onsets past the cut-off are projected under the same evolving growth-rate path the other streams use.
 # The calendar-time effect $\gamma$ is held flat at its last fitted value across the horizon.
-# This is the assumption any nowcast makes about reporting behaviour continuing.
 #
 # We score the sum of the two terms, the increment the triangle should add over the horizon, rather than its cumulative level.
 # Every vintage rereads the whole figure, so the printed total moves with the roughly 4% per-scan level error as well as with genuine late reporting.
@@ -2080,18 +2290,16 @@ diagnostics_table( #hide
 # ```math
 # \mathrm{RS}_{A/B} =
 #     \frac{\overline{\mathrm{CRPS}}_{A}}{\overline{\mathrm{CRPS}}_{B}},
-#     \tag{47}
+#     \tag{56}
 # ```
 #
 # each mean taken over the forecasts both fits scored, so a comparator that happens to score zero on one forecast cannot send the ratio to infinity.
-# A value below one beats the comparator.
 #
 # The count streams are running cumulative totals, so each is scored on its increment over the forecast window rather than on the level it reaches.
 # Bed occupancy is a level and is scored as one.
 # A stream is scored only where its own reporting covers the window, from the day it was first reported to the day it was last updated.
 # Outside that period, a cumulative total that has not moved is the absence of a series rather than an observed zero.
 # On the two confirmed streams, a reported step that is mostly a retrospective integration of harmonised provincial records has that backfill removed from both the target and the baseline.
-# Such a window is therefore scored on transmission rather than on transmission plus an integration.
 #
 # Each forecast is also compared against a persistence baseline built from the same stream.
 # Write the vintages recorded by the day the forecast was made as dates $d_1 < \dots < d_m$ carrying cumulative values $Y_1, \dots, Y_m$.
@@ -2103,14 +2311,14 @@ diagnostics_table( #hide
 # \begin{cases}
 #   Y(t_0), & \text{occupancy}, \\
 #   \max\bigl\{Y(t_0) - Y(t_0 - h),\ 0\bigr\}, & \text{counts},
-# \end{cases} \tag{48}
+# \end{cases} \tag{57}
 # ```
 #
 # and takes its spread from the record's own first differences, each rescaled to a one-day step and entered with both signs,
 #
 # ```math
 # S = \Bigl\{ \pm \frac{Y_i - Y_{i-1}}{\sqrt{d_i - d_{i-1}}}
-#     \ :\ i = 2, \dots, m \Bigr\}. \tag{49}
+#     \ :\ i = 2, \dots, m \Bigr\}. \tag{58}
 # ```
 #
 # Under a driftless walk of per-day variance $\sigma^2$, a change over $w$ days has variance $w \sigma^2$.
@@ -2121,10 +2329,10 @@ diagnostics_table( #hide
 # ```math
 # \tilde{Y} = \max\Bigl\{ \mu + \sum_{j=1}^{h} \varepsilon_j,\ 0 \Bigr\},
 # \qquad \varepsilon_j \overset{\text{iid}}{\sim} \mathrm{Uniform}(S),
-#     \tag{50}
+#     \tag{59}
 # ```
 #
-# so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$, and the interval widens with the square root of the horizon.
+# so before the floor it has mean $\mu$ and variance $h \sigma^2$ for $\sigma^2 = |S|^{-1} \sum_{s \in S} s^2$,.
 # This follows the COVID-19 Forecast Hub baseline, except that the centre for a count stream pools the whole window rather than the single most recent increment.
 # This is because these vintages are sparse and irregularly spaced.
 # Fewer than three recorded differences leaves no usable pool and the baseline falls back to a Poisson draw around the centre.
@@ -2184,6 +2392,20 @@ summary_ranges = let
         "30% ", round(Int, s.lo30), "–", round(Int, s.hi30),
         ", 60% ", round(Int, s.lo60), "–", round(Int, s.hi60),
         ", 90% ", round(Int, s.lo90), "–", round(Int, s.hi90))
+    ## Per-province cumulative infections, read off the patch deterministic
+    ## one draw at a time so the provinces stay coupled draw for draw.
+    C_patch = [collect(v) for v in vec(collect(chn_joint[:C_T_patch]))]
+    sprov = [posterior_summary([v[p] for v in C_patch])
+             for p in 1:N_PATCHES]
+    ## The same draws give each province's reproduction number at the cut-off
+    ## and its case-fatality ratio, so the three read coupled draw for draw.
+    Rt_patch_draws = [collect(v) for v in vec(collect(chn_joint[:R_T_patch]))]
+    sprov_rt = [posterior_summary([v[p] for v in Rt_patch_draws])
+                for p in 1:N_PATCHES]
+    cfr_patch_draws = [collect(v)
+                       for v in vec(collect(chn_joint[:CFR_patch]))]
+    sprov_cfr = [posterior_summary([100 * v[p] for v in cfr_patch_draws])
+                 for p in 1:N_PATCHES]
     ints_f(s,
         d) = string(
         "30% ", round(s.lo30; digits = d), "–", round(s.hi30; digits = d),
@@ -2224,6 +2446,15 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
+    - **By province, infections to date:**
+    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
+            for p in 1:N_PATCHES], "\n"))
+    - **By province, reproduction number at the cut-off:**
+    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
+            for p in 1:N_PATCHES], "\n"))
+    - **By province, case-fatality ratio:**
+    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
+            for p in 1:N_PATCHES], "\n"))
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
@@ -2242,7 +2473,6 @@ summary_ranges #hide
 
 # ### Joint model estimates
 #
-# This section reports the joint posterior over the cumulative infection count to date, fitting every data stream together.
 
 #md # ```@raw html
 #md # <details><summary>Cumulative infection count summary table</summary>
@@ -2273,6 +2503,59 @@ cumulative_traj_fig = plot_cumulative_trajectories(chn_joint;
 
 cumulative_traj_fig #hide
 
+# The national count above is the sum of the four patches' renewal equations.
+# The reproduction number and the relative case ascertainment are identified only as a product, and the per-province deaths break the tie.
+
+#md # ```@raw html
+#md # <details><summary>Cross-province overview table</summary>
+#md # ```
+
+province_overview_table = patch_overview_table(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_overview_table #hide
+
+# The figure below shows the modelled infections behind those totals, daily on the top row and cumulative on the bottom.
+
+#md # ```@raw html
+#md # <details><summary>Modelled infections by province</summary>
+#md # ```
+
+province_infections_fig = plot_infections_patches(chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_infections_fig #hide
+
+# The provinces are coupled by a gravity kernel weighted by destination population, described in the [mixing and importation](@ref "Mixing and importation") Methods section, with its intensity estimated.
+# Every arrival is debited from its origin the same day, so the figure reads as where infection occurred rather than as extra infection.
+# The distances between the patch capitals are 379 km from Bunia to Goma, 322 km from Bunia to Isiro and 206 km from Goma to the pooled patch's centre, so most of what leaves Nord-Kivu lands in the pooled patch.
+
+#md # ```@raw html
+#md # <details><summary>Importation intensity and imports by province</summary>
+#md # ```
+
+importation_table = summary_table(chn_joint, [:importation_epsilon];
+    digits = 4,
+    labels = Dict(:importation_epsilon => "Importation intensity"));
+
+province_imports_fig = plot_imports_patches(chn_joint;
+    n = obs.n, seeding = obs.seeding, n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+importation_table #hide
+
+province_imports_fig #hide
+
 # The cumulative infection count is set by the reproduction number trajectory and the outbreak age.
 # The left panel below shows the posterior for the outbreak start date.
 # The right panel shows the joint posterior of the outbreak age and the early doubling time.
@@ -2292,7 +2575,6 @@ start_date_fig #hide
 
 # The table below reports credible intervals on the infection-process parameters: the growth rate and doubling time, the reproduction number, the outbreak age, the case-fatality ratio and the cumulative infection count.
 # The pair plot beside it shows their joint posterior, with the prior overlaid so the data's contribution to each marginal is visible.
-# Later tables and pair plots in this section follow the same convention without restating it.
 
 #md # ```@raw html
 #md # <details><summary>Infection-parameter summary table</summary>
@@ -2392,6 +2674,79 @@ rt_fig = plot_rt(chn_joint;
 
 rt_fig #hide
 
+# The same trajectory by province is below, one panel per province with the national trajectory in grey behind it.
+# The deviations sum to zero, so the grey band is the incidence-weighted middle of the panels rather than any one province.
+# A panel tracking grey says that province moves with the national trajectory.
+# The pooled patch holds almost no confirmed cases, so its panel is carried by the deviation prior and its width is not a measurement.
+
+#md # ```@raw html
+#md # <details><summary>Reproduction number by province</summary>
+#md # ```
+
+province_rt_fig = plot_rt_patches(chn_joint;
+    n = obs.n, breakpoint = _BREAKPOINT,
+    n_patches = N_PATCHES,
+    rt_start = _rt_start_plot,
+    rt_walk_start = clamp(_BREAKPOINT - RT_WALK_LEAD, _rt_start_plot, obs.n),
+    display_start = _rt_start_plot,
+    as_of_date = string(obs.cutoff), seeding = obs.seeding,
+    ramp = RT_INTERVENTION_RAMP);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_rt_fig #hide
+
+# The figure below gives each province's estimates, including its log-Rt deviation from the trend, the deviation's walk scale and the contrast against Ituri.
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary figure</summary>
+#md # ```
+
+province_detail_fig = plot_patch_summary(chn_joint, N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_detail_fig #hide
+
+#md # ```@raw html
+#md # <details><summary>Per-province summary table</summary>
+#md # ```
+
+province_detail_table = patch_summary_table(chn_joint, N_PATCHES);
+
+province_detail_table #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+# The spread of those deviations is the spatial diagnostic.
+# The prior admits real divergence, with a 31% prior probability that the Ituri to Nord-Kivu ratio moves by more than 25% over the window, so a shrunken posterior is a finding rather than an artefact of the prior.
+# With four patches and the pooled one carrying almost no signal the cross-province correlation is not identified, and it tracks its prior.
+
+#md # ```@raw html
+#md # <details><summary>Spatial hyperparameter summary table</summary>
+#md # ```
+
+spatial_hyper_table = summary_table(chn_joint,
+    [:region_sd, :region_halflife, :region_corr_primary_secondary,
+        :province_ascertainment_sd];
+    digits = 3,
+    labels = Dict(:region_sd => "Rt deviation spread",
+        :region_halflife => "Rt deviation half-life (days)",
+        :region_corr_primary_secondary => "Ituri-N.Kivu Rt correlation",
+        :province_ascertainment_sd => "Ascertainment spread"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+spatial_hyper_table #hide
+
 # The table reports the posterior of the response effect on the reproduction number as a multiplier, where a value below one is the factor by which the response lowers the reproduction number once the scale-up completes.
 
 #md # ```@raw html
@@ -2417,7 +2772,6 @@ intervention_table #hide
 # The onset-to-death delay is the convolution of two atomic Gamma delays, onset-to-admission and admission-to-death, each with its own shape and scale.
 # The report-to-receipt delay is sampled by its mean and standard deviation.
 # The length-of-stay delays are also shown: the isolation-bed BVD treatment stay (prior: the line-list admission-to-death delay), the non-BVD rule-out stay (prior: the report-to-receipt turnaround), and the confirmation-to-recovery delay.
-# The table and pair plot below cover these delays.
 
 #md # ```@raw html
 #md # <details><summary>Observation-delay summary table</summary>
@@ -2480,7 +2834,6 @@ obs_delay_pair_fig #hide
 # $k$ is the population-level dispersion, $k_{\text{cases}}$, $k_{\text{deaths}}$, $k_{\text{confirmed}}$ and $k_{\text{confirmed deaths}}$ the per-stream values for the four DRC count streams, and a pooling spread completes the group.
 # The isolation and recovered streams add the proportion of suspects admitted to a bed and the recovery probability among confirmed cases.
 # Their dispersions ($k_{\text{iso}}$, $k_{\text{rec}}$) are drawn from the same pooled population as the length-of-stay delays above.
-# The table and pair plot below cover these parameters.
 
 #md # ```@raw html
 #md # <details><summary>Surveillance-parameter summary table</summary>
@@ -2539,7 +2892,6 @@ surveillance_pair_fig #hide
 #
 # The surveillance group is checked first, split by whether a stream was still being reported at the cut-off.
 # A stream counts as still reporting when its last situation-report vintage falls within a week of the cut-off.
-# Each group is shown twice, as cumulative trajectories and then as per-vintage incidence.
 # Every panel runs over its own reporting dates with the observed series overlaid, and its date axis is labelled about once a week.
 
 # #### Streams still reporting
@@ -2625,7 +2977,20 @@ pp_joint = predict(
         background_re = true,
         confirmed_positivity_link = :composition,
         genetic = genetic_seeding_model,
-        tmrca_days = obs.tmrca_days),
+        tmrca_days = obs.tmrca_days,
+        ## The generator must be the model that was fitted. `n_patches`
+        ## defaults to one, so leaving these out regenerates every stream
+        ## from a single well-mixed population while the chain carries a
+        ## four-patch fit: the draws still apply, the latent trajectory they
+        ## are replayed through does not, and every stream driven by BVD
+        ## cases comes out short by the difference. The province grids are
+        ## kept with `missing` increments, like the onset triangle above, so
+        ## `predict` resamples the compositions over the real cells.
+        n_patches = N_PATCHES,
+        province_increments = missing,
+        province_days = province_cases.days,
+        province_death_increments = missing,
+        province_death_days = province_deaths.days),
     chn_joint);
 
 ## `predict` stores each stream's per-vintage increments as one
@@ -2980,8 +3345,7 @@ joint_vintage_incidence_stopped_fig #hide
 
 stream_calibration_table = stream_calibration(vintage_panels);
 
-# The calibration plot reads the table at a glance.
-# The left panel marks each stream's empirical 50% and 90% coverage against dashed reference lines at the nominal levels.
+# The calibration plot's left panel marks each stream's empirical 50% and 90% coverage against dashed reference lines at the nominal levels.
 # The right panel marks the mean forecast bias against a dashed line at zero.
 
 #md # ```@raw html
@@ -3040,6 +3404,43 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
+# #### Province compositions
+#
+# The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
+# The panels below show that modelled share at every spatial vintage against the observed one.
+# Each panel carries two bands.
+# The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's own overdispersed allocation at that vintage's observed total.
+# The overdispersion is what absorbs reporting lags between the provincial and national tables and the reassignment of cases between health zones.
+# The observed points should fall inside it.
+# The coloured ribbon inside the grey band is the expected share alone, which is the modelled centre the points scatter around.
+# A point outside the grey band is a vintage the composition does not reproduce, and points consistently to one side of the coloured ribbon are a province the model splits wrongly on average.
+# Each panel starts at zero and takes its own upper limit, because the shares differ by orders of magnitude.
+# The vintages stop before the cut-off, so the panels end earlier than the national posterior predictive checks above.
+
+#md # ```@raw html
+#md # <details><summary>Province composition posterior predictive checks</summary>
+#md # ```
+
+province_case_ppc_fig = plot_province_composition_ppc(chn_joint;
+    share_key = :province_shares,
+    obs_increments = province_cases.increments,
+    days = province_cases.days, seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Confirmed case share by province");
+
+province_death_ppc_fig = plot_province_composition_ppc(chn_joint;
+    share_key = :province_death_shares,
+    obs_increments = province_deaths.increments,
+    days = province_deaths.days, seeding = obs.seeding, n_patches = N_PATCHES,
+    title = "Confirmed death share by province");
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_case_ppc_fig #hide
+
+province_death_ppc_fig #hide
+
 # ### Symptom-onset reporting delay and ascertainment
 #
 # The table reports the onset-report hazard's hyperparameters and two derived quantities.
@@ -3047,7 +3448,6 @@ joint_ppc_fig #hide
 # The first comes from the delay hazard and the second from the ascertainment level anchored on the confirmed pipeline, so they are separate estimates (see the [symptom-onset reporting delay](@ref "Symptom-onset reporting delay") Methods section).
 # The ascertainment offset is the row to read first, since it is the triangle's departure from the confirmed pipeline's own ascertainment and its prior is centred on no departure at all.
 # The scale slack row is a diagnostic, and a posterior on its lower bound of one says the fit would like a tighter likelihood than the figures can support.
-# The table and pair plot below cover these parameters.
 
 #md # ```@raw html
 #md # <details><summary>Reconstruct the onset-report hazard and calendar walk</summary>
@@ -3465,7 +3865,6 @@ no_onward_fig #hide
 # The delay-corrected confirmed CFR, defined in the [delay-corrected confirmed CFR](@ref "Delay-corrected confirmed case-fatality ratio") Methods section, is set against the structural (infection-based) CFR and the naive confirmed ratio.
 # The corrected ratio debiases the naive confirmed ratio for the real-time delay between a case being confirmed and a death being confirmed.
 # The structural CFR is the onset-level estimate the joint model fits.
-# Reading the three together separates the real-time delay bias (naive versus corrected) from the case/death ascertainment difference (corrected versus structural).
 
 #md # ```@raw html
 #md # <details><summary>Compute the confirmed-CFR comparison</summary>
@@ -3519,6 +3918,47 @@ confirmed_cfr_fig = plot_confirmed_cfr(confirmed_cfr);
 
 confirmed_cfr_fig #hide
 
+# The same three ratios by province are below.
+# Each province has its own case-fatality ratio, partially pooled toward the national value, and its own death confirmation, pooled far more tightly.
+# The delay-corrected ratio is the national corrected ratio scaled by a province's lethality and death confirmation over its case ascertainment, which is what varies by province once the delays are corrected for.
+# The structural ratio is the national ratio times that province's lethality contrast.
+#
+# The death composition identifies only the product of the lethality and death-confirmation contrasts, so their split is set by their priors rather than by the data.
+# The lethality prior is the looser of the two, so a provincial excess of deaths over cases is read first as lethality and only marginally as death-finding.
+# The spread of the lethality contrast is reported below against its prior, so a posterior that has not moved can be read as the prior's rather than as a finding.
+# The two spreads are on the same log scale, so their sizes are comparable directly.
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality spread</summary>
+#md # ```
+
+province_cfr_spread = summary_table(chn_joint,
+    [:province_cfr_sd, :province_death_ascertainment_sd];
+    digits = 3,
+    labels = Dict(:province_cfr_sd => "Lethality spread",
+        :province_death_ascertainment_sd => "Death-confirmation spread"));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr_spread #hide
+
+#md # ```@raw html
+#md # <details><summary>Province case-fatality table</summary>
+#md # ```
+
+province_cfr = province_cfr_table(chn_joint, confirmed_cfr;
+    province_cases = vec(sum(province_cases.increments; dims = 2)),
+    province_deaths = vec(sum(province_deaths.increments; dims = 2)),
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_cfr #hide
+
 # ### One-week-ahead forecast results
 #
 # The table and figures below give the cumulative and new expected counts by $T + 7$ from the no-change projection defined in the [one-week-ahead forecast](@ref "One-week-ahead forecast") Methods section.
@@ -3553,7 +3993,6 @@ forecast_summary #hide
 #md # </details>
 #md # ```
 
-# The figures below show the coming week at a glance, split into the latent quantities and the observations.
 # The latent figure shows the new infections, symptom onsets and deaths over the horizon, with the reproduction number left to keep evolving across it.
 
 #md # ```@raw html
@@ -3602,7 +4041,6 @@ forecast_beds_fig = plot_forecast_beds(forecast);
 forecast_beds_fig #hide
 
 # The flow figure projects the daily isolation/treatment flows a week ahead: new admissions, in-care deaths and rule-outs, each grown from its cut-off daily rate and replicated through the isolation dispersion.
-# These are the daily-flow counterparts of the bed-stock forecast above.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead treatment-flow forecast plot</summary>
@@ -3616,13 +4054,29 @@ forecast_flows_fig = plot_forecast_flows(forecast);
 
 forecast_flows_fig #hide
 
+# The forecast split by province is below, for the two streams the spatial tables report.
+# Each province's count is the national draw times that province's modelled share at the most recent spatial vintage, so the split is held at its current value over the week.
+
+#md # ```@raw html
+#md # <details><summary>Province forecast split</summary>
+#md # ```
+
+province_forecast_fig = plot_province_forecast(chn_joint, forecast;
+    n_patches = N_PATCHES);
+province_forecast = province_forecast_table(chn_joint, forecast;
+    n_patches = N_PATCHES);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+province_forecast_fig #hide
+
 # ### Symptom-onset nowcast and forecast results
 #
 # The table below gives the onset stream's projection, built as described in the [symptom-onset nowcast and forecast](@ref "Symptom-onset nowcast and forecast") Methods section.
-# The table reads top to bottom as the nowcast first and the forecast second.
 # The two halves must not be added together: the first three rows are the state of the outbreak at the cut-off, the next three the coming week.
 #
-# One row deserves care.
 # "Onsets not yet reported at T" is not a backlog that will all arrive, because ascertainment does not reach one.
 # The row holds two things together: the reporting backlog, and the cases surveillance will never confirm.
 # The "reports this week of onsets before T" row is the part of it the coming week should actually clear.
@@ -3733,7 +4187,6 @@ onset_forecast_fig #hide
 # The tables above are written to an output directory at the repo root so they can be archived and shared.
 # On every push to the main branch a GitHub Actions workflow regenerates these files and publishes them as a GitHub Release, downloadable from the repository's releases page (<https://github.com/epiforecasts/BVDOutbreakSize/releases>).
 # The release bundles the summary tables, a thinned set of posterior draws, the latent symptom-onset ("symptomatic cases") trajectory over time, the one- to four-week-ahead forecasts of the observed streams, and a copy of the input data manifest.
-# Each release therefore records the forecast it made for later scoring, and the exact data that produced its results.
 
 #md # ```@raw html
 #md # <details><summary>Write outputs to output/</summary>
@@ -3809,6 +4262,13 @@ forecast_runs = [(h,
                  for h in forecast_horizons]
 CSV.write(joinpath(output_dir, "forecast.csv"),
     forecast_archive(forecast_runs; made_date = obs.cutoff, thin = 5));
+
+## The per-province split of the same forecasts, in the `forecast.csv`
+## schema plus the province each row is a share of, so a release records the
+## provincial forecast it made alongside the national one.
+CSV.write(joinpath(output_dir, "province_forecast.csv"),
+    province_forecast_archive(chn_joint, forecast_runs;
+        made_date = obs.cutoff, n_patches = N_PATCHES, thin = 5));
 
 ## The same one- to four-week-ahead forecast made from each FROZEN joint
 ## re-fit (the McCabe-matched cut-offs, the Chamla anchor and the one-week-back
@@ -4003,7 +4463,7 @@ CSV.write(joinpath(output_dir, "onsets_over_time.csv"),
 # ### Summary-page assets
 #
 # The one-page [Summary dashboard](@ref) reuses the results computed above rather than re-fitting.
-# Here we save its headline text, headline tables and the four figures it shows (reproduction number, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
+# Here we save its headline text, headline tables and the figures it shows (reproduction number nationally and by province, the reproduction number each data stream implies on its own, infections over time, and modelled versus observed reported cases) into `docs/src/summary_assets/`.
 # The static dashboard page embeds them after this build step has run.
 
 #md # ```@raw html
@@ -4014,11 +4474,17 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t), the R(t) each data stream implies on its own,
-## latent infections over time, and the modelled versus observed reported
-## cases. All are produced in the Results sections above; here we just write
-## them out at the dashboard size.
+## Figures: estimated R(t) nationally and by province, infections by
+## province, the per-province summary, the R(t) each data stream implies on
+## its own, latent infections over time, and the modelled versus observed
+## reported cases. All are produced in the Results sections above; here we
+## just write them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "infections_provinces.png"),
+    province_infections_fig)
+CairoMakie.save(joinpath(dashboard_dir, "provinces_summary.png"),
+    province_detail_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 ## The report splits the surveillance panels by whether the stream was
@@ -4051,6 +4517,12 @@ open(joinpath(dashboard_dir, "headline_counts.md"), "w") do io
 end
 open(joinpath(dashboard_dir, "headline_rates.md"), "w") do io
     print(io, markdown_table(dashboard_rates))
+end
+
+## Province table: the cross-province overview from the Results section,
+## which is the by-province counterpart of the two headline tables above.
+open(joinpath(dashboard_dir, "provinces.md"), "w") do io
+    print(io, markdown_table(province_overview_table))
 end
 
 ## The data cut-off the dashboard reports as of, written as a plain date.
