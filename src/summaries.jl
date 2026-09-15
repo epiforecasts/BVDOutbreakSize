@@ -692,11 +692,50 @@ function province_cfr_table(chn, res;
     return df
 end
 
+## Streams the per-province split covers, as the forecast column and the
+## stream label. The label is the one `forecast_archive` gives the national
+## stream, so a province row names the stream it is a share of, and the
+## tables and figure build their headings from it.
+const _PROVINCE_FORECAST_STREAMS = (
+    (:confirmed_new, "confirmed cases"),
+    (:confirmed_deaths_new, "confirmed deaths"))
+
+## Per-province forecast draws from one [`forecast_reported`](@ref) result:
+## the national draw times that province's modelled share at the most recent
+## spatial vintage, multiplied draw by draw so the split carries the
+## correlation between the two factors rather than treating them as
+## independent. Returns one `(stream_label, province, draws)` entry per
+## province and per stream the forecast carries, provinces outer. Shared by
+## the province forecast table, figure and release archive, so all three
+## read one split.
+function _province_forecast_draws(chn, fc, np::Integer,
+        patch_labels::AbstractVector)
+    _has_key(chn, :province_shares) || error(
+        "chain carries no `province_shares`; it was not sampled from " *
+        "`bvd_joint` with the per-province compositions on.")
+    case_share = _per_patch_last_share(chn, :province_shares, np)
+    death_share = _has_key(chn, :province_death_shares) ?
+                  _per_patch_last_share(chn, :province_death_shares, np) :
+                  case_share
+    cols = propertynames(fc)
+    out = Tuple{String, String, Vector{Float64}}[]
+    for p in 1:np, (col, label) in _PROVINCE_FORECAST_STREAMS
+
+        col in cols || continue
+        v = float.(fc[!, col])
+        share = col === :confirmed_new ? case_share : death_share
+        push!(out, (label, patch_labels[p], v .* share[p][1:length(v)]))
+    end
+    return out
+end
+
 """
 Per-province split of the one-week-ahead national forecast `fc` from
 [`forecast_reported`](@ref): the new confirmed cases and confirmed deaths
 expected in each province over the week to `T + 7`, as the same 90/60/30%
-credible intervals [`forecast_table`](@ref) reports nationally.
+credible intervals [`forecast_table`](@ref) reports nationally. The same
+content is drawn by [`plot_province_forecast`](@ref) and archived for
+scoring by [`province_forecast_archive`](@ref).
 
 Each province's count is the national draw times that province's modelled
 share at the most recent spatial vintage. The split is therefore held at its
@@ -710,37 +749,18 @@ function province_forecast_table(chn, fc;
         patch_labels::AbstractVector = PROVINCE_LABELS,
         digits::Integer = 0)
     np = min(n_patches, length(patch_labels))
-    _has_key(chn, :province_shares) || error(
-        "chain carries no `province_shares`; it was not sampled from " *
-        "`bvd_joint` with the per-province compositions on.")
-    case_share = _per_patch_last_share(chn, :province_shares, np)
-    death_share = _has_key(chn, :province_death_shares) ?
-                  _per_patch_last_share(chn, :province_death_shares, np) :
-                  case_share
-    cols = propertynames(fc)
     rows = NamedTuple[]
-    function add!(label, province, draws)
+    for (label, province, draws) in _province_forecast_draws(
+        chn, fc, np, patch_labels)
         s = posterior_summary(draws)
         push!(rows,
-            (province = province, quantity = label,
+            (province = province, quantity = "New $(label) by T+7",
                 lower_90 = round(s.lo90; digits),
                 lower_60 = round(s.lo60; digits),
                 lower_30 = round(s.lo30; digits),
                 upper_30 = round(s.hi30; digits),
                 upper_60 = round(s.hi60; digits),
                 upper_90 = round(s.hi90; digits)))
-    end
-    for p in 1:np
-        if :confirmed_new in cols
-            v = fc[!, :confirmed_new]
-            add!("New confirmed cases by T+7", patch_labels[p],
-                v .* case_share[p][1:length(v)])
-        end
-        if :confirmed_deaths_new in cols
-            v = fc[!, :confirmed_deaths_new]
-            add!("New confirmed deaths by T+7", patch_labels[p],
-                v .* death_share[p][1:length(v)])
-        end
     end
     return _prettify(DataFrame(rows))
 end

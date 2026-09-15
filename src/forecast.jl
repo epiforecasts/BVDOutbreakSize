@@ -792,6 +792,55 @@ function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
 end
 
 """
+    province_forecast_archive(chn, fcs; made_date, thin = 1) -> DataFrame
+
+Long-format archive of the per-province split of one or more
+[`forecast_reported`](@ref) results made from a single cut-off, in the
+[`forecast_archive`](@ref) schema plus a `province` column. `chn` is the
+patch chain the forecasts were made from, `fcs` an iterable of
+`(horizon, fc)` pairs and `made_date` the cut-off `Date`. Returns one row
+per `(province, stream, horizon, draw)` with columns `made_date`,
+`horizon`, `target_date`, `province`, `stream`, `draw` and `value`.
+
+The two incident streams the spatial tables report are archived, under the
+same `confirmed cases` and `confirmed deaths` labels `forecast_archive`
+gives the national streams each row is a share of. `province` is the patch
+key from [`PROVINCE_NAMES`](@ref), which [`PROVINCE_MEMBERS`](@ref) maps to
+the source provinces a patch pools, so a scorer can build each patch's truth
+from the per-province histories in the same release's `observations.toml`.
+
+Each province's value is the national draw times that province's modelled
+share at the most recent spatial vintage, multiplied draw by draw so the
+archived draws carry the correlation between the two factors. The share is
+held over the horizon rather than projected forward, so a province whose
+share is moving is archived as though it were not, and the longer the
+horizon the stronger that assumption. `thin` keeps every `thin`-th draw so
+the archive stays compact as a release asset.
+"""
+function province_forecast_archive(chn, fcs; made_date::Date,
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_NAMES,
+        thin::Integer = 1)
+    np = min(n_patches, length(patch_labels))
+    out = DataFrame(made_date = Date[], horizon = Int[], target_date = Date[],
+        province = String[], stream = String[], draw = Int[],
+        value = Float64[])
+    for (horizon, fc) in fcs
+        h = Int(horizon)
+        target = made_date + Day(h)
+        for (label, province, vals) in _province_forecast_draws(
+            chn, fc, np, patch_labels)
+            for (d, i) in enumerate(1:thin:length(vals))
+                push!(out,
+                    (made_date, h, target, province, label, d,
+                        Float64(vals[i])))
+            end
+        end
+    end
+    return out
+end
+
+"""
 Summarise a [`forecast_reported`](@ref) result into a `DataFrame` with
 one row per confirmed stream (laboratory-confirmed cases and confirmed
 deaths) and quantity (cumulative total by the cut-off plus the horizon, or
