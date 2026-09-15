@@ -2081,7 +2081,7 @@ cfr_prior_fig #hide
 #
 # with $\bar\xi$ the posterior mean of $\xi$ under the joint model.
 # The zone likelihood is a composition within each patch, so it is scale-free in the patch infections and the cut changes the posterior of $\psi$ only through the shape of the patch trajectory across a generation interval.
-# The patch uncertainty re-enters every reported zone infection count and forecast by pairing each zone draw with a joint-model draw chosen at random.
+# The patch uncertainty re-enters every reported zone infection count, reproduction number and forecast by pairing each zone draw with a joint-model draw chosen at random.
 #
 # The fixed inputs are $\bar I_{p,t}$, the exponential of the posterior mean of $\log I_{p,t}$ on every grid day, $\bar g$, the posterior-mean generation-interval distribution, and $\bar f$, the posterior-mean delay from infection to a confirmed report.
 # $\bar f$ is the incubation period convolved with the report-to-receipt delay, the delay the province composition applies to onsets moved back to infections.
@@ -2165,7 +2165,7 @@ cfr_prior_fig #hide
 # Its force-weighted mean over the zones of a patch is the patch's own implied reproduction number, $\bar I_{p,t} / \sum_{s \ge 1} \bar g_s\, \bar I_{p,t-s}$, which includes importation and so can differ from $R_{p,t}$ of Equation (18).
 # Without mixing it equals that patch value times $e^{\delta_{z,t}}$ over the force-weighted mean of the same factor, so $\delta_{z,t}$ is the log deviation of local transmission from the patch.
 # It is reported only once the zone's cumulative infections reach ten, since the ratio of two near-zero numbers carries no information.
-# For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
+# For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level, so its interval is the patch's own.
 # The ranking in the results therefore orders zones by the posterior probability that it exceeds one rather than by its point estimate, and marks those zones.
 #
 # The zone stage rests on assumptions the patch model does not make.
@@ -4377,7 +4377,7 @@ onset_forecast_fig #hide
 # The maps below show the reproduction number at the cut-off, the forecast confirmed cases over the coming week and the confirmed cases to date, zone by zone.
 # On the reproduction-number map a zone whose 90% interval straddles one is washed towards white, so a strong colour marks a direction the data support.
 # Zones with no confirmed case, or too few infections for a reproduction number, are grey.
-# ZONE_MAP_PROSE
+# Nord-Kivu's zones sit above one and Ituri's near it, and the coming week's cases concentrate in the zones that hold the cases to date.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -4386,24 +4386,26 @@ onset_forecast_fig #hide
 ## The geojson keys a zone without the province prefix the manifest carries.
 zone_map_keys = [String(last(split(k, "."; limit = 2)))
                  for k in zone_inputs.zone_keys];
-## Per-zone draws of the cut-off quantities, one vector per draw on the chain.
-_zone_per_zone(key) =
-    let vs = vec(collect(chn_local[key]))
-        [Float64[v[z] for v in vs] for z in eachindex(zone_map_keys)]
-    end
-zone_RT = _zone_per_zone(:R_T_zone);
-zone_share_T = _zone_per_zone(:share_T_zone);
-## A zone's reproduction number is reported only in the draws where its
-## cumulative infections reach the floor; the rest are undefined.
-zone_RT_finite = [filter(isfinite, r) for r in zone_RT];
+## Daily zone reproduction numbers over the zone grid, each zone draw
+## paired with a joint draw so the patch uncertainty is carried, and the
+## cut-off values the map and ranking read. A zone's reproduction number
+## is reported only in the draws where its cumulative infections reach
+## the floor; the rest are undefined.
+zone_rt_traj = reconstruct_zone_rt(chn_local, zone_inputs;
+    parent_chain = chn_joint);
+zone_RT_finite = [filter(isfinite, m[:, obs.n]) for m in zone_rt_traj];
 zone_RT_reported = findall(!isempty, zone_RT_finite);
+zone_share_T = let vs = vec(collect(chn_local[:share_T_zone]))
+    [Float64[v[z] for v in vs] for z in eachindex(zone_map_keys)]
+end;
 _zq(v, p) = quantile(v, p)
 ## The one-week zone forecast, split from the headline forecast above.
 zone_fc_draws = zone_forecast_draws(chn_local, chn_joint, forecast,
     zone_inputs);
 zone_forecast_summary = zone_forecast_table(chn_local, chn_joint, forecast,
     zone_inputs);
-zone_overview = zone_overview_table(chn_local, zone_inputs);
+zone_overview = zone_overview_table(chn_local, zone_inputs;
+    parent_chain = chn_joint);
 
 zone_map_fig = plot_zone_map_panels(
     [
@@ -4436,12 +4438,10 @@ zone_map_fig #hide
 #md # <details><summary>Zone reproduction-number trajectories</summary>
 #md # ```
 
-## Daily zone trajectories over the zone grid, and each patch's implied
-## reproduction number from the joint draws with the same generation
-## interval the zone stage fixes, so the grey reference is the quantity the
-## zone values average to.
+## Each patch's implied reproduction number from the joint draws with the
+## same generation interval the zone stage fixes, so the grey reference is
+## the quantity the zone values average to.
 zone_grid = zone_inputs.t0:obs.n
-zone_rt_traj = reconstruct_zone_rt(chn_local, zone_inputs);
 _patch_infection_draws = vec(collect(chn_joint[:infections_patch]));
 patch_implied_rt = [let m = Matrix{Float64}(undef,
                             length(_patch_infection_draws), obs.n)
@@ -4474,19 +4474,7 @@ zone_rt_fig #hide
 #md # <details><summary>Zone ranking</summary>
 #md # ```
 
-## The overview keyed the way the ranking figure reads it: a patch index
-## rather than its label, and only the zones with a reported reproduction
-## number.
-zone_ranking = let ov = zone_overview
-    keep = findall(isfinite, ov.rt_median)
-    DataFrame(label = ov.zone[keep],
-        patch = [findfirst(==(l), zone_inputs.patch_labels)
-                 for l in ov.patch[keep]],
-        rt_median = ov.rt_median[keep], rt_lo90 = ov.rt_lo90[keep],
-        rt_hi90 = ov.rt_hi90[keep], p_rt_above_one = ov.p_R_above_1[keep],
-        walking = ov.walking[keep])
-end
-zone_ranking_fig = plot_zone_ranking(zone_ranking;
+zone_ranking_fig = plot_zone_ranking(zone_overview;
     patch_labels = zone_inputs.patch_labels);
 ## The overview as displayed: the interval strings, without the numeric
 ## columns the figure reads.
@@ -4523,7 +4511,9 @@ MarkdownTable(zone_overview_display) #hide
 # The grey band is the posterior predictive interval on the observed share, built by pushing every posterior draw's expected shares back through the composition's overdispersed allocation at that vintage's allocated total, and is where the points should fall.
 # The coloured ribbon inside it is the expected share alone.
 # The second figure is the same check on the cumulative allocation, each zone's share of its patch's cumulative allocated cases at every vintage, which is the running total the reports print.
+# The prior band spans most of each panel, so the posterior ribbon is set by the zone tables rather than by the prior.
 # The observed points fall inside the grey band in the large Ituri and Nord-Kivu zones, and a zone with a handful of cases per vintage has an observed share that jumps between zero and one inside a band that spans the same range.
+# On the cumulative view the pooled patch's first cases, all in Miti-Murhesa, sit above the band, since that zone carries a level rather than a walk and its share is fitted to the whole window.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition predictive checks</summary>
