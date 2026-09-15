@@ -968,9 +968,10 @@ end
 ##   pooled vector cannot be reached ahead of a stream's scalar, and
 ##   `forecast_stream` guards on the resolved length as a backstop.
 ## - `trajectory`: the stream's cumulative trajectory, whose last increment
-##   is the cut-off daily rate. Only the joint exposes any (as un-prefixed
-##   `:=` aliases). An empty list means the daily rate is always inferred
-##   from the cut-off cumulative instead.
+##   is the cut-off daily rate. The joint and the stream's own single-stream
+##   composer expose it under the same un-prefixed `:=` name, so one entry
+##   serves both. An empty list means neither fit carries one and the daily
+##   rate is inferred from the cut-off cumulative instead.
 ## - `kind`: `:cumulative` streams report a total accrued to the cut-off, so
 ##   the forecast is the new count over the horizon. `:level` streams report
 ##   a prevalence, so the forecast is the level at the horizon.
