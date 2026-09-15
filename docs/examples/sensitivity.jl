@@ -242,6 +242,7 @@ validation_latent_fig #hide
 # The one-week-ahead forecast split by province, scored against what each province went on to report.
 # Each province's forecast is the national draw times its modelled share at the frozen fit's most recent spatial vintage, multiplied draw by draw so the interval carries the correlation between the two rather than treating a province's share as independent of the national total.
 # The share is held over the horizon, which is the assumption the width does not express: a province whose share is moving is scored as though it were not.
+# Every release's archived split is scored against what has since been observed in [Forecast by province across releases](@ref "Forecast by province across releases").
 
 #md # ```@raw html
 #md # <details><summary>Province forecast against observed</summary>
@@ -441,6 +442,51 @@ forecast_overlay_fig = plot_forecast_overlay(forecast_overlay_df);
 #md # ```
 
 forecast_overlay_fig #hide
+
+# ### Forecast by province across releases
+#
+# The archived provincial split of each release's forecast, scored against what each province went on to report, with a window holding a harmonisation-break day left unscored because that day's backfill is published for the country and not by province.
+
+#md # ```@raw html
+#md # <details><summary>Load and summarise the province forecast scores</summary>
+#md # ```
+
+province_scores_df = _release_data("province_forecast_scores.csv",
+    (; release = String, made_date = Date, stream = String, horizon = Int,
+        target_date = Date, fit = String, crps = Float64,
+        log_crps = Float64, dispersion = Float64, overprediction = Float64,
+        underprediction = Float64, coverage_50 = Float64,
+        coverage_90 = Float64,
+        bias = Float64, n_samples = Int,
+        log_rel_to_baseline = Float64))
+## The joint patch model is the only model that forecasts the provinces, so
+## there is no individual single-stream fit to compare against and `fit` is
+## single-valued by construction. Both are dropped rather than rendered as
+## columns that cannot vary.
+##
+## See the comment above `joint_score_by_release_table`'s assignment for why
+## this setup chunk's last statement needs a trailing `;`.
+province_score_overview_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(forecast_score_overview(province_scores_df)))
+province_score_by_horizon_display = drop_degenerate_fit_column(
+    drop_individual_fit_columns(
+    forecast_score_by_horizon(province_scores_df)));
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+MarkdownTable(province_score_overview_display) #hide
+
+#md # ```@raw html
+#md # <details><summary>Province scores by horizon</summary>
+#md # ```
+
+MarkdownTable(province_score_by_horizon_display) #hide
+
+#md # ```@raw html
+#md # </details>
+#md # ```
 
 # ## Frozen-fit forecast evaluation
 #

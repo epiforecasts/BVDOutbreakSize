@@ -51,7 +51,7 @@ const FIT_DATA_EXCLUDE = ("released_estimates.csv",
     "forecast_scores.csv", "forecast_scores_frozen.csv",
     "forecast_overlay.csv", "forecast_overlay_frozen.csv",
     "rt_by_release_by_stream.csv", "size_by_release_by_stream.csv",
-    "r0_by_release_by_stream.csv")
+    "r0_by_release_by_stream.csv", "province_forecast_scores.csv")
 
 "Content hash of the fit-relevant source, data and sampler settings."
 function fit_content_hash(; samples::Integer = 500, chains::Integer = 2)

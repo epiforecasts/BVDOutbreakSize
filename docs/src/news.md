@@ -89,6 +89,9 @@ intensity.
 run writes `output/province_forecast.csv` so a release records the split it
 forecast.
 The sensitivity page scores the one-week-ahead forecast by province (#668).
+`scripts/score_releases.jl` scores that archive across releases against a
+persistence baseline, into `data/province_forecast_scores.csv`, and the
+sensitivity page tabulates it.
 - The summary dashboard carries modelled infections by province and the
 per-province summary alongside the national figures.
 - Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
