@@ -6,10 +6,12 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v2.0.0
+
+Changes since v1.18.0
 
 A major version: the headline model becomes spatial, so its parameter set is
-not the one v2 published.
+not the one v1 published.
 
 ### Model
 
@@ -43,7 +45,18 @@ detection on the ramp the reproduction number already uses.
 importation from it, so when a province first carries infections follows from
 the kernel rather than from a fitted fraction.
 - The headline and its control run at 900 draws with 400 adaptation steps and a
-target acceptance of 0.85, measured against the fit job's 350-minute budget.
+target acceptance of 0.80, measured against the fit job's 350-minute budget.
+- `m` counts transmission generations rather than doublings (#672).
+`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
+Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
+Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
+The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
+`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
+The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
+The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
+`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
+The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
+It does not fix initialisation, so `ViablePrior` is retained.
 
 ### Data
 
@@ -59,11 +72,6 @@ laboratory throughput from section 4.3, as `[province_confirmed_history]`,
 ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
 scans stopped in July, and provincial test positivity has converged.
 
-### Performance
-
-- The province composition no longer boxes the locals its likelihood closure
-captures (#412).
-
 ### Report
 
 - Province-level results sit alongside the national ones rather than in a
@@ -73,10 +81,26 @@ province over time, posterior predictive checks on both compositions, and a
 per-province summary figure.
 - The summary reports each province's infections, reproduction number and
 case-fatality ratio, and the diagnostics table carries the no-patch control.
-- The methods section carries the model's maths: the seeding partition, the
-renewal with importation, the national read-back, the gravity kernel and the
-per-origin intensity.
-- The sensitivity page scores the one-week-ahead forecast by province (#668).
+- The methods section carries the model's maths: the seeding, the renewal with
+importation, the national read-back, the gravity kernel and the per-origin
+intensity.
+- The provincial forecast is a figure alongside the national ones, and each
+run writes `output/province_forecast.csv` so a release records the split it
+forecast.
+The sensitivity page scores the one-week-ahead forecast by province (#668).
+- The summary dashboard carries modelled infections by province and the
+per-province summary alongside the national figures.
+- Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
+A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
+`docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
+It goes to the job summary and to the job log.
+A cache hit records that the fit was reused rather than refitted.
+`fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
+
+### Performance
+
+- The province composition no longer boxes the locals its likelihood closure
+captures (#412).
 
 ### Fixed
 
@@ -86,34 +110,6 @@ its default of one and every stream's predictive replayed a four-patch chain
 through a single well-mixed population.
 Every stream driven by BVD cases came out short by the difference, while the
 background-driven ones were unaffected.
-
-## v2.0.0
-
-Changes since v1.18.0
-
-### Changed
-
-- `m` counts transmission generations rather than doublings (#672).
-`m` sets where the outbreak started, and the renewal needs a daily infection incidence to seed from.
-Counting doublings made the elapsed cryptic time `m · log2 / r`, so the origin date moved with the growth rate: the traced 25 January 2026 index death, 63 days before the renewal start, is 5.4 doublings at the prior median doubling of 11.7 days and 3.2 at the posterior's 19.9.
-Counting generations makes it `T = m · G`, with `G` the mean generation interval, which does not depend on `r`.
-The seed is then the daily incidence the cryptic phase reaches over that span, `C_T = exp(r · T)`, grown from one infection per day at the origin.
-`exponential_growth_model` takes the generation-interval PMF and exposes `G` alongside `τ`, `T` and `C_T`.
-The prior is `truncated(Normal(2.75, 1.2); lower = 0)`, which puts the origin in mid-February 2026 with 90% of its mass between mid-January and mid-March, and a 99th-percentile seed of about 150 infections per day.
-The traced 25 January index death then sits near the 87th percentile rather than at the centre: it is the earliest chain the field work reached, so it bounds the origin rather than dating it.
-`r` now enters the seed magnitude, which the doubling parameterisation kept out of it: an origin date and a daily incidence at that origin cannot both be fixed without the growth rate connecting them.
-The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
-It does not fix initialisation, so `ViablePrior` is retained.
-
-- Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
-A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
-`docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
-It goes to the job summary and to the job log.
-A cache hit records that the fit was reused rather than refitted.
-`fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
-
-### Fixed
-
 - NUTS chains no longer start on a prior tail they cannot recover from (#671).
 Each chain screens eight prior draws and starts at the first at or above that
 batch's median log joint density.
@@ -134,9 +130,11 @@ Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe
 They use `@citet`, which renders the name once, as does one site that cited without naming the author.
 The month is dropped from the situation-report and preprint entries, where it showed inline and told a reader nothing, and the INSP situation reports cite as `INSP` rather than a 110-character pair of institution names, with the full names kept in the bibliography note.
 `docs/src/references.md` is untracked, since `make.jl` regenerates it on every build and `.gitignore` already lists it.
-
-- The analysed volume is no longer capped below the modelled suspect inflow.
+- The analysed volume is no longer capped below the modelled suspect inflow (#677).
 `confirmed_cases_model` built the laboratory volume as `τ_test · convolve_delay(suspected_daily, receipt_pmf)`.
+`τ_test` is a probability and the receipt kernel conserves mass, so that product could not exceed the suspect inflow.
+A sampled specimens-per-suspect factor `κ ~ LogNormal(0, 0.25)` now scales it, tracked as `specimens_per_suspect`.
+Repeat exclusion testing and swabbed community deaths put more specimens through the laboratory than suspects reported.
 - Absconding no longer discharges patients the clinical exits have already discharged.
 `accumulate_occupancy` subtracts an abscond outflow from the occupied stock, while deaths and recoveries split `A_bvd` by `CFR_iso` and `1 - CFR_iso` and rule-outs take the whole of `A_bg`.
 - The seeding docstrings now describe the model they document.
@@ -145,7 +143,6 @@ The month is dropped from the situation-report and preprint entries, where it sh
 `cancel-in-progress` killed a `main` Windows cell part way through `Pkg`'s package installs, and `julia-actions/cache`'s `save-always` default saved that depot as the newest cache for the Windows restore key.
 `ColorVectorSpace` came back from it as a directory without its source, and `Pkg` skips downloading any package whose source path merely exists, so every later Windows job failed to precompile and saved the same depot again.
 The depot cache is now written only by jobs that finished, and the test workflow's cache key is bumped once to drop the depots saved before that.
-
 - Citations render as author-year links again.
 DocumenterCitations 1.5 wraps each expanded citation in a `CitationSiteNode`, and the Vitepress writer has no method for it, so its catch-all printed the struct and dropped the link.
 Every citation on the built site read `(DocumenterCitations.CitationSiteNode("mccabe2026-cite-1"))`, and the surrounding paragraph was split around it.
