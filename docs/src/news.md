@@ -6,7 +6,9 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
-## Unreleased
+## v2.0.0
+
+Changes since v1.18.0
 
 ### Changed
 
@@ -42,6 +44,10 @@ Rejecting the worse half clears a tail that is a few per cent of prior mass whil
 Only forward density evaluations are used, so the guard costs milliseconds against a fit measured in hours.
 Pass `init = Turing.DynamicPPL.InitFromPrior()` for the old behaviour.
 
+- The analysis report carries the abscond competing-risk maths, and the seeding docstrings are cut back to what they document.
+The occupancy section described the bed balance as unthinned clinical schedules plus an abscond outflow, which is the double-count the competing-risk thinning removed.
+It now states the thinned discharge flow and the confirmation-dependent abscond survival.
+`seed_at_renewal_start`, `abscond_thinned` and `abscond_thinned_flow` carried docstrings several times the length of their bodies, much of it arguing against the alternatives rather than describing the contract.
 - Citations read as prose rather than as a numeric-style reference list.
 Sixteen sites wrote the author name and then cited it, so `McCabe et al. [mccabe2026](@cite)` rendered "McCabe et al. (McCabe and others, May 2026)".
 They use `@citet`, which renders the name once, as does one site that cited without naming the author.
