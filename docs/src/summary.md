@@ -95,6 +95,20 @@ Agreement between the streams supports the joint estimate; disagreement shows wh
 
 ![Reproduction number implied by each data stream](summary_assets/rt_streams.png)
 
+## Health zones
+
+Each patch's infections split across its health zones, conditional on the province model.
+The maps colour each affected zone by its reproduction number at the cut-off, its forecast confirmed cases over the coming week and its confirmed cases to date.
+A zone whose reproduction-number interval straddles one is washed towards white, and a zone with too few infections for an estimate is grey.
+
+![Health zones at the cut-off](summary_assets/zone_rt_map.png)
+
+The one-week-ahead confirmed-case forecast for the fifteen zones with the largest medians, each the national forecast times the zone's projected share.
+
+![One-week-ahead forecast by health zone](summary_assets/zone_forecast.png)
+
+The zone ranking, the composition check and the validation against last week's observed split are in the [health-zone estimates](analysis.md#Health-zone-estimates) of the analysis, and the same estimates are on the interactive map below.
+
 ## Health-zone map
 
 Each affected health zone coloured by its current reproduction number, with the seven-day confirmed-case forecast, the confirmed cases to date and the zone's share of its patch's infections available from the switcher.
