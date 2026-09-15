@@ -55,6 +55,23 @@ tasks:
     cmds:
       - julia --project=scripts scripts/scan_zone_tableau2.jl {{.CLI_ARGS}}
 
+  confirm-zone-data:
+    desc: >
+      Cross-check the [zone_confirmed_history] and [zone_death_history]
+      blocks against the INRB-UMIE per-zone cumulative CSVs and list every
+      disagreement. The mirror is a second transcription, not a gate, so
+      this always exits zero; see data/README.md for the known artefacts.
+    cmds:
+      - julia --project=scripts scripts/confirm_zone_data.jl {{.CLI_ARGS}}
+
+  health-zones:
+    desc: >
+      Rebuild data/health_zones.csv and data/health_zones.geojson from the
+      INRB-UMIE health-zone GeoJSON (pass its path). Python standard library
+      only.
+    cmds:
+      - python3 scripts/build_health_zones.py {{.CLI_ARGS}}
+
   province-lab-data:
     desc: >
       Regenerate the [province_lab_daily_history] block for

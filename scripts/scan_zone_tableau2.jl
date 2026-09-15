@@ -32,7 +32,7 @@
 #   cumulative columns, so it has nothing this script can read.
 # - 088-121: as 059-083, with an "A ventiler *" row of confirmed deaths in
 #   the province's treatment centres not yet attributed to a zone (its
-#   cases cell prints NA). Tshopo has a zone named Tshopo from SitRep 108.
+#   cases cell prints NA). Tshopo has a zone named Tshopo from SitRep 091.
 #
 # The parse is layout-independent in the same way as
 # scan_province_tableau1.jl: on every row it finds the first field holding

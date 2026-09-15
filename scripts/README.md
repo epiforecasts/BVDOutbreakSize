@@ -14,9 +14,13 @@ See `data/README.md` for the full data-update procedure, including the manual tr
 | `check_new_sitreps.jl` | Lists INSP SitReps not yet in `data/insp_sitrep_scanned.csv`. Exits non-zero if any are missing. |
 | `download_sitreps.jl` | Downloads the INSP SitRep PDFs into `data/sitrep_pdfs/` (git-ignored). Also `task download-sitreps`. |
 | `confirm_insp_data.jl` | Cross-checks the scanned confirmed-case and confirmed-death totals against the INRB-UMIE mirror, and reports the dates each source carries alone. Also `task confirm-data`. |
+| `scan_zone_tableau2.jl` | Scans Tableau 2 of the PDFs (per-health-zone confirmed cases and deaths within each province) into the `[zone_confirmed_history]` and `[zone_death_history]` blocks, admitting a vintage only when its zone rows partition the committed province cumulatives. Also `task zone-tableau2`. |
+| `confirm_zone_data.jl` | Cross-checks the two zone blocks against the INRB-UMIE mirror's per-zone CSVs and lists every disagreement. Also `task confirm-zone-data`. |
+| `build_health_zones.py` | Writes `data/health_zones.csv` and `data/health_zones.geojson` from the INRB-UMIE health-zone GeoJSON (Python standard library only; pass the GeoJSON path). Also `task health-zones`. |
 | `refresh_releases.jl` | Pulls each tagged results release's headline estimate into `data/released_estimates.csv`. Also `task refresh-releases`. |
 
 `check_new_sitreps.jl`, `download_sitreps.jl` and `confirm_insp_data.jl` need no Julia packages beyond `Downloads`.
+`scan_zone_tableau2.jl` and `confirm_zone_data.jl` need only `TOML`, `Printf` and `Downloads`.
 `refresh_releases.jl` also needs the `gh` CLI, authenticated against the repo.
 
 ### Onset-curve digitiser
