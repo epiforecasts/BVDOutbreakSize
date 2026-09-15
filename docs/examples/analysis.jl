@@ -4552,12 +4552,17 @@ dashboard_dir = joinpath(
     pkgdir(BVDOutbreakSize), "docs", "src", "summary_assets")
 mkpath(dashboard_dir)
 
-## Figures: estimated R(t), the R(t) each data stream implies on its own,
-## latent infections over time, and the modelled versus observed reported
-## cases. All are produced in the Results sections above; here we just write
-## them out at the dashboard size.
+## Figures: estimated R(t) nationally and by province, infections by
+## province, the per-province summary, the R(t) each data stream implies on
+## its own, latent infections over time, and the modelled versus observed
+## reported cases. All are produced in the Results sections above; here we
+## just write them out at the dashboard size.
 CairoMakie.save(joinpath(dashboard_dir, "rt.png"), rt_fig)
 CairoMakie.save(joinpath(dashboard_dir, "rt_provinces.png"), province_rt_fig)
+CairoMakie.save(joinpath(dashboard_dir, "infections_provinces.png"),
+    province_infections_fig)
+CairoMakie.save(joinpath(dashboard_dir, "provinces_summary.png"),
+    province_detail_fig)
 CairoMakie.save(joinpath(dashboard_dir, "infections.png"),
     cumulative_traj_fig)
 ## The report splits the surveillance panels by whether the stream was

@@ -145,13 +145,13 @@ sensitivity re-fits are appended only when `run_sensitivity` is true.
 ## control 137, against the job's 350-minute cap. The patch fit costs about
 ## twice the control while its gradient costs only about a fifth more, so the
 ## excess is trajectory length rather than gradient cost, which is what the
-## acceptance target buys back. Dropping it to 0.85 lengthens the step and
+## acceptance target buys back. Dropping it to 0.80 lengthens the step and
 ## shortens the trajectories, and the time that frees goes into adaptation,
 ## where the shortfall actually is: the bulk effective sample size was 25.
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
 ## override all three without editing this file.
 joint_target_accept() = parse(Float64,
-    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.85"))
+    get(ENV, "BVD_JOINT_TARGET_ACCEPT", "0.80"))
 joint_samples(default::Integer) = parse(Int,
     get(ENV, "BVD_JOINT_SAMPLES", string(default)))
 ## `nuts_sample` caps its own default at 200 adaptation steps, which is where

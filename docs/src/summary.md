@@ -66,6 +66,15 @@ A panel tracking grey says that province moves with the national trend.
 
 ![Estimated reproduction number over time by province](summary_assets/rt_provinces.png)
 
+## Provinces
+
+Modelled infections by province, and each province's size, reproduction
+number and relative case ascertainment.
+
+![Modelled infections over time by province](summary_assets/infections_provinces.png)
+
+![Per-province summary](summary_assets/provinces_summary.png)
+
 ## Infections over time
 
 Modelled cumulative infections, symptom onsets and deaths.
