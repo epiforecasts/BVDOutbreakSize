@@ -224,8 +224,8 @@ function _num_divergences(chn)
 end
 
 """
-NUTS fit-quality summary for one chain: the worst (maximum) R-hat and
-the smallest bulk effective sample size across parameters, and the
+NUTS fit-quality summary for one chain: the worst (maximum) R-hat, the
+smallest bulk and tail effective sample sizes across parameters, and the
 number of divergent transitions.
 """
 function fit_diagnostics(chn)
@@ -233,9 +233,11 @@ function fit_diagnostics(chn)
     ## undefined R-hat / ESS (NaN) that would otherwise mask the worst
     ## genuine value across the sampled parameters.
     rhats = filter(isfinite, _scalar_stats(FlexiChains.rhat(chn)))
-    esses = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :bulk)))
+    bulk = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :bulk)))
+    tail = filter(isfinite, _scalar_stats(FlexiChains.ess(chn; kind = :tail)))
     return (max_rhat = isempty(rhats) ? NaN : maximum(rhats),
-        min_ess_bulk = isempty(esses) ? NaN : minimum(esses),
+        min_ess_bulk = isempty(bulk) ? NaN : minimum(bulk),
+        min_ess_tail = isempty(tail) ? NaN : minimum(tail),
         n_divergent = _num_divergences(chn))
 end
 

@@ -21,6 +21,13 @@ The prior is `truncated(Normal(4, 1.2); lower = 0)`, centred on the four generat
 The magnitude is referenced to the origin rather than the cut-off, so a larger `r` raises both the seed and `R0` and the two compound, rather than cancelling into the flat `R0` ridge a cut-off-referenced seed would open.
 It does not fix initialisation, so `ViablePrior` is retained.
 
+- Each fit job reports its convergence diagnostics to the GitHub Actions run summary.
+A per-fit matrix job said nothing about the chain it produced, so whether a fit had converged only surfaced once the whole report was rendered.
+`docs/fits/one.jl` now writes the worst R-hat, the smallest bulk and tail effective sample sizes, the divergence count, and the median and 90% credible interval of the outbreak size and the reproduction number.
+It goes to the job summary and to the job log.
+A cache hit records that the fit was reused rather than refitted.
+`fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
+
 ### Fixed
 
 - NUTS chains no longer start on the prior tail they cannot recover from (#671).
