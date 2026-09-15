@@ -1,13 +1,15 @@
 name: Documenter
 
 # The report is fanned out across CI runners instead of built in one ~5h job
-# that hit GitHub's 6h cap. `list` enumerates the fits, `fit` runs them one per
-# matrix job (content-addressed, so unchanged fits are cache hits), `render`
-# executes the two literate pages (analysis, sensitivity) from the cached
-# chains in parallel, and `combine` assembles and deploys the Vitepress site
-# and publishes the results release. Everything the jobs run lives in Julia
-# entry points (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the
-# same build runs locally with `task docs`.
+# that hit GitHub's 6h cap. `list` enumerates the fits, `fit` runs the base
+# fits one per matrix job (content-addressed, so unchanged fits are cache
+# hits), `fit_dependent` then runs the fits initialised from a cached parent
+# (the health-zone fits, melded from the joints), `render` executes the two
+# literate pages (analysis, sensitivity) from the cached chains in parallel,
+# and `combine` assembles and deploys the Vitepress site and publishes the
+# results release. Everything the jobs run lives in Julia entry points
+# (`docs/fits/one.jl`, `docs/execute.jl`, `docs/make.jl`), so the same build
+# runs locally with `task docs`.
 
 on:
   push:
@@ -24,13 +26,14 @@ concurrency:
 
 jobs:
   # Resolve and precompile the single shared environment once, list the fit
-  # ids, and pin the manifest. On a tag build the two sensitivity re-fits are
-  # included; on main/PR builds they are skipped.
+  # ids by stage, and pin the manifest. On a tag build the two sensitivity
+  # re-fits are included; on main/PR builds they are skipped.
   list:
     name: Resolve env and list fits
     runs-on: ubuntu-latest
     outputs:
       ids: ${{ steps.ids.outputs.ids }}
+      dependent_ids: ${{ steps.ids.outputs.dependent_ids }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -55,10 +58,15 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
             Pkg.precompile()'
+      # `ids` is the base stage (fits that start from the prior);
+      # `dependent_ids` the fits initialised from a cached parent, run by
+      # `fit_dependent` once the base stage has finished.
       - id: ids
         env:
           BVD_RUN_SENSITIVITY: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
-        run: echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "ids=$(julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
+          echo "dependent_ids=$(BVD_FIT_STAGE=dependent julia --project=docs docs/fits/list.jl)" >> "$GITHUB_OUTPUT"
       # Pin the resolved manifest for every downstream job so none re-resolves
       # (which would invalidate the shared compiled cache and could resolve a
       # different chains-library version than the fits were written with).
@@ -152,12 +160,96 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
+  # The second fit stage: one job per fit initialised from a cached parent
+  # (the health-zone `local` from `joint`, `local_frozen_validation` from
+  # `frozen_validation`). The parent chains come from the base stage's
+  # artifacts; a dependent thunk loads its parent strictly, so a missing
+  # parent is an error, not a refit. GitHub caps each job, not the run, so
+  # this stage has its own budget after the ~3h headline.
+  fit_dependent:
+    name: Fit ${{ matrix.id }}
+    needs: [list, fit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        id: ${{ fromJSON(needs.list.outputs.dependent_ids) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+        with:
+          cache-name: docs-env
+          # Only a job that finished may write the depot cache; see test.yml.
+          save-always: false
+          # Share the one env cache warmed by `list`; see `fit`.
+          include-matrix: false
+      # Content-addressed cache of the dependent fit, keyed like the base
+      # fits, so a change that refits the parent refits this too.
+      - name: Restore fit cache
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: logs/fit_cache
+          key: >-
+            fit-${{ matrix.id }}-${{ hashFiles(
+              'src/models/**', 'src/renewal.jl', 'src/sampling.jl',
+              'src/constants.jl', 'src/data.jl', 'src/onset_curve.jl',
+              'docs/fits/registry.jl', 'data/**') }}
+      - name: Pin the resolved manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: .
+      # The parent chains from the base stage, only needed on a miss.
+      - name: Collect the headline joint
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: fit-joint
+          path: logs/fit_cache
+      - name: Collect the frozen validation joint
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: fit-frozen_validation
+          path: logs/fit_cache
+      - name: Fit ${{ matrix.id }}
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          BVD_FIT_ID: ${{ matrix.id }}
+          BVD_FIT_CACHE: logs/fit_cache
+          JULIA_NUM_THREADS: '4'
+          BVD_FIT_LOG: none
+        run: |
+          julia --project=docs -e 'using Pkg; Pkg.instantiate()'
+          julia --project=docs docs/fits/one.jl
+      # Drop the parent chains so the artifact and the post-job cache save
+      # carry only the dependent fit.
+      - name: Drop the parent chains
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rm -f logs/fit_cache/joint__*.jls logs/fit_cache/frozen_validation__*.jls
+      - name: Note the cached fit
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          echo '### Fit `${{ matrix.id }}`: cache hit, not refitted' \
+            >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: fit-${{ matrix.id }}
+          path: logs/fit_cache/*.jls
+          if-no-files-found: error
+          retention-days: 3
+
   # Execute each literate page from the cached fits, in parallel. Each render
   # loads the chains it needs (no refitting) and emits its markdown, figures
   # and its half of the shared output/ and summary_assets/.
   render:
     name: Render ${{ matrix.page }}
-    needs: fit
+    needs: [fit, fit_dependent]
     runs-on: ubuntu-latest
     # From cached fits and the pinned manifest (no re-resolve or recompile —
     # `list` did that once), the render is plots/PPCs only. Split across two
