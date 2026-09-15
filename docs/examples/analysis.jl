@@ -2164,7 +2164,7 @@ cfr_prior_fig #hide
 #
 # Its force-weighted mean over the zones of a patch is the patch's own implied reproduction number, $\bar I_{p,t} / \sum_{s \ge 1} \bar g_s\, \bar I_{p,t-s}$, which includes importation and so can differ from $R_{p,t}$ of Equation (18).
 # Without mixing it equals that patch value times $e^{\delta_{z,t}}$ over the force-weighted mean of the same factor, so $\delta_{z,t}$ is the log deviation of local transmission from the patch.
-# It is reported only once the zone's cumulative infections reach ten, since the ratio of two near-zero numbers carries no information.
+# It is reported only from the day the zone's cumulative infections reach ten in the median draw, since the ratio of two near-zero numbers carries no information.
 # For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level, so its interval is the patch's own.
 # The ranking in the results therefore orders zones by the posterior probability that it exceeds one rather than by its point estimate, and marks those zones.
 #
@@ -4468,7 +4468,8 @@ zone_rt_fig #hide
 
 # The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
 # A zone below the walking threshold carries a level rather than its own walk, so its estimate is the patch's scaled by a prior-driven factor, and it is drawn hollow.
-# The walking zones of Nord-Kivu head the walking zones' ranking and the large Ituri zones sit near one, so the probability of growth separates the patches more than the zones within them.
+# The level-only zones of Nord-Kivu carry their patch's value and so head the ranking.
+# Among the walking zones Nord-Kivu's lead and the large Ituri zones sit near one, so the probability of growth separates the patches more than the zones within them.
 
 #md # ```@raw html
 #md # <details><summary>Zone ranking</summary>
