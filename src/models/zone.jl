@@ -123,21 +123,63 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Interpolate the deviation knots `(n_zones × n_knots)` placed on grid days
-`knots` onto the days `t0 … n`, returning an `(n_days × n_zones)` matrix
-with `n_days = n − t0 + 1`. Linear between knots and flat outside them, as
-[`interpolate_knots`](@ref).
+The linear map from knot values to the days `t0 … n`, as an `(n_days ×
+n_knots)` weight matrix `W` with `δ_daily = W δ_knotsᵀ`, so the
+interpolation of every zone is one matrix product. Each column is
+[`interpolate_knots`](@ref) applied to a unit vector. The model takes the
+product rather than interpolating zone by zone because the reverse pass
+over the per-day loop costs far more.
 """
-function zone_interpolate_knots(δ_knots::AbstractMatrix,
-        knots::AbstractVector{<:Integer}, t0::Integer, n::Integer)
-    nz = size(δ_knots, 1)
+function zone_interpolation_weights(knots::AbstractVector{<:Integer},
+        t0::Integer, n::Integer)
+    nb = length(knots)
     nd = n - t0 + 1
-    out = zeros(eltype(δ_knots), nd, nz)
-    @inbounds for z in 1:nz
-        daily = interpolate_knots(view(δ_knots, z, :), knots, n)
+    W = zeros(Float64, nd, nb)
+    unit = zeros(Float64, nb)
+    for k in 1:nb
+        fill!(unit, 0.0)
+        unit[k] = 1.0
+        daily = interpolate_knots(unit, knots, n)
         for j in 1:nd
-            out[j, z] = daily[t0 + j - 1]
+            W[j, k] = daily[t0 + j - 1]
         end
+    end
+    return W
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The delay convolution over the days `t0 … n` as an `(n_days × n_days)`
+lower-triangular Toeplitz matrix `F` with `F[j, j − s] = f_s` (lag 0 on
+the diagonal), so the convolution of every zone's infections is one
+matrix product `F I`. The days before `t0` enter separately through
+[`zone_report_pre_rows`](@ref).
+"""
+function zone_delay_operator(f::AbstractVector, nd::Integer)
+    F = zeros(Float64, nd, nd)
+    for j in 1:nd, s in 0:min(length(f) - 1, j - 1)
+
+        F[j, j - s] = f[s + 1]
+    end
+    return F
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+The pre-`t0` reporting term of each zone's patch on the days `t0 … n`, as
+an `(n_days × n_zones)` matrix so that a zone's daily reports are
+`F I[:, z] + w_z(t_0) pre[:, z]`. `report_pre` is the `(n_patches × n)`
+term of [`zone_fixed_terms`](@ref).
+"""
+function zone_report_pre_rows(report_pre::AbstractMatrix,
+        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, n::Integer)
+    nd = n - t0 + 1
+    out = zeros(Float64, nd, length(patch_of_zone))
+    for (z, p) in enumerate(patch_of_zone), j in 1:nd
+
+        out[j, z] = report_pre[p, t0 + j - 1]
     end
     return out
 end
@@ -213,8 +255,9 @@ pre-`t0` force (`force_pre`, from [`zone_fixed_terms`](@ref)):
 \\qquad I_z(t) = Ī_p(t)\\, w_z(t).
 ```
 
-`δ_daily` is `(n_days × n_zones)` from [`zone_interpolate_knots`](@ref),
-`w0` the initial shares and `I_bar` the fixed patch infections. Only the
+`δ_daily` is `(n_days × n_zones)`, the interpolation weights
+([`zone_interpolation_weights`](@ref)) times the knots, `w0` the initial
+shares and `I_bar` the fixed patch infections. Only the
 share denominator is floored, so a patch with almost no infections keeps
 its initial split rather than collapsing to uniform.
 
@@ -290,43 +333,8 @@ end
 """
 $(TYPEDSIGNATURES)
 
-Daily expected confirmed reports per zone over the days `t0 … n`, the zone
-infections `(n_days × n_zones)` carried through the infection-to-report
-PMF `f` (lag 0), plus the initial share times the patch's pre-`t0`
-contribution (`report_pre`, from [`zone_fixed_terms`](@ref)). Returns an
-`(n_days × n_zones)` matrix.
-"""
-function zone_reports(infections::AbstractMatrix, f::AbstractVector,
-        w0::AbstractVector, patch_ranges::AbstractVector{<:UnitRange},
-        t0::Integer, report_pre::AbstractMatrix)
-    nd, nz = size(infections)
-    Tp = promote_type(eltype(infections), eltype(f), eltype(w0),
-        eltype(report_pre))
-    r = zeros(Tp, nd, nz)
-    F = length(f)
-    @inbounds for j in 1:nd
-        t = t0 + j - 1
-        smax = min(F - 1, j - 1)
-        for p in eachindex(patch_ranges)
-            zs = patch_ranges[p]
-            rp = report_pre[p, t]
-            for z in zs
-                acc = w0[z] * rp
-                for s in 0:smax
-                    acc += f[s + 1] * infections[j - s, z]
-                end
-                r[j, z] = acc
-            end
-        end
-    end
-    return r
-end
-
-"""
-$(TYPEDSIGNATURES)
-
-Bin the daily expected reports `(n_days × n_zones)` from
-[`zone_reports`](@ref) into the vintage windows `(d_{v−1}, d_v]` given by
+Bin the daily expected reports `(n_days × n_zones)` of
+[`zone_forward_daily`](@ref) into the vintage windows `(d_{v−1}, d_v]` given by
 the grid days `days`, the first window opening on day one. Days before the
 grid start `t0` contribute the initial share times the patch's pre-`t0`
 accrual (`report_pre_cum`, from [`zone_fixed_terms`](@ref)). Returns the
@@ -455,14 +463,16 @@ $(TYPEDSIGNATURES)
 One forward pass of the zone model from its fixed data `zd` (the
 `model_data` of [`zone_fit_inputs`](@ref)) and a draw's deviation knots
 `(n_zones × n_knots)`, initial shares `w0` and per-patch mixing fractions
-`ε` (`nothing` when mixing is off): the daily deviations, the share
-renewal and the binned expected reports. This is the function the model
-evaluates and the render re-runs per draw, so the two never diverge.
-Returns `(; shares, forces, infections, reports, increments)`.
+`ε` (`nothing` when mixing is off): the daily deviations (the
+interpolation weights times the knots), the share renewal and the binned
+expected reports (the delay operator times the infections plus the
+pre-`t0` rows). This is the function the model evaluates and the render
+re-runs per draw, so the two never diverge. Returns
+`(; shares, forces, infections, reports, increments)`.
 """
 function zone_forward(zd, δ_knots::AbstractMatrix, w0::AbstractVector,
         ε::Union{Nothing, AbstractVector})
-    δ_daily = zone_interpolate_knots(δ_knots, zd.knots, zd.t0, zd.n)
+    δ_daily = zd.interp * transpose(δ_knots)
     return zone_forward_daily(zd, δ_daily, w0, ε)
 end
 
@@ -478,8 +488,8 @@ function zone_forward_daily(zd, δ_daily::AbstractMatrix, w0::AbstractVector,
     kernel = ε === nothing ? nothing : zd.mixing_kernel
     st = zone_share_renewal(zd.I_bar, zd.g, δ_daily, w0, zd.patch_ranges,
         zd.t0, zd.force_pre; kernel, ε)
-    reports = zone_reports(st.infections, zd.f, w0, zd.patch_ranges,
-        zd.t0, zd.report_pre)
+    reports = zd.report_matrix * st.infections .+
+              zd.report_pre_rows .* transpose(w0)
     increments = zone_report_increments(reports, w0, zd.patch_ranges,
         zd.days, zd.t0, zd.report_pre_cum)
     return (; st.shares, st.forces, st.infections, reports, increments)
@@ -564,7 +574,8 @@ Each block is one `~` over a `product_distribution`.
 
 The share renewal [`zone_share_renewal`](@ref) gives each zone's
 infections as its share of the fixed patch infections, the delay
-[`zone_reports`](@ref) and binning [`zone_report_increments`](@ref) give
+operator ([`zone_delay_operator`](@ref)) and binning
+([`zone_report_increments`](@ref)) give
 the expected confirmed reports per vintage window, and the observed zone
 increments of each patch and vintage follow a Dirichlet-multinomial on the
 allocated total with concentration `κ π`
@@ -631,8 +642,8 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     if deaths
         ## One composition of the cumulative allocated deaths at the last
         ## vintage, through the death-confirmation delay.
-        death_daily = zone_reports(fw.infections, zd.death_pmf, w0,
-            zd.patch_ranges, zd.t0, zd.death_pre)
+        death_daily = zd.death_matrix * fw.infections .+
+                      zd.death_pre_rows .* transpose(w0)
         D = zone_report_increments(death_daily, w0, zd.patch_ranges,
             zd.death_days, zd.t0, zd.death_pre_cum)
         @addlogprob! zone_composition_logpdf(zd.death_counts, D,
@@ -906,6 +917,11 @@ function zone_fit_inputs(parent_chain, obs;
     t0 = clamp(days[1] - lead_days, 1, n)
     knots = knot_days(n; week, start = t0)
     fixed = zone_fixed_terms(I_bar, parent.g, parent.f, t0)
+    nd = n - t0 + 1
+    interp = zone_interpolation_weights(knots, t0, n)
+    report_matrix = zone_delay_operator(parent.f, nd)
+    report_pre_rows = zone_report_pre_rows(fixed.report_pre, patch_of_zone,
+        t0, n)
     ## Optional death composition: cumulative allocated deaths at the last
     ## vintage, zones absent from the death table counting zero.
     death_history = hasproperty(obs, :zone_death_history) ?
@@ -926,6 +942,9 @@ function zone_fit_inputs(parent_chain, obs;
     end
     death_pmf = isempty(parent.death_pmf) ? [1.0] : parent.death_pmf
     death_fixed = zone_fixed_terms(I_bar, parent.g, death_pmf, t0)
+    death_matrix = zone_delay_operator(death_pmf, nd)
+    death_pre_rows = zone_report_pre_rows(death_fixed.report_pre,
+        patch_of_zone, t0, n)
     ## Within-patch mixing kernel, when the metadata covers every zone.
     mixing_kernel = _zone_mixing_kernel_or_zeros(zones, zone_province,
         zone_names, patch_ranges)
@@ -942,12 +961,14 @@ function zone_fit_inputs(parent_chain, obs;
         days, I_bar, g = parent.g, f = parent.f, patch_ranges, knots, t0, n,
         walking = collect(walking), walk_index, n_walking,
         fixed.force_pre, fixed.report_pre, fixed.report_pre_cum,
-        fixed.infections_pre, mixing_kernel,
+        fixed.infections_pre, mixing_kernel, interp, report_matrix,
+        report_pre_rows,
         death_counts, death_cell_patch,
         death_cell_vintage = ones(Int, length(death_cell_patch)),
         death_cell_total, death_cell_const, death_days = [n],
         death_pmf, death_pre = death_fixed.report_pre,
-        death_pre_cum = death_fixed.report_pre_cum)
+        death_pre_cum = death_fixed.report_pre_cum, death_matrix,
+        death_pre_rows)
     dates = [obs.seeding + Day(d - 1) for d in days]
     return (; model_data, zone_keys, zone_labels = labels, zone_province,
         zone_names, patch_of_zone, patch_ranges,

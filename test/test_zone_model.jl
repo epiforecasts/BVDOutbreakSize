@@ -10,10 +10,11 @@
 @testsnippet ZoneSynthetic begin
     using BVDOutbreakSize
     using BVDOutbreakSize: zone_initial_shares, zone_deviation_knots,
-                           zone_interpolate_knots, zone_fixed_terms,
-                           zone_reports, zone_report_increments,
+                           zone_fixed_terms, zone_report_increments,
                            zone_forward, discretise_censored,
-                           lognormal_meansd, convolve_pmf, knot_days
+                           lognormal_meansd, convolve_pmf, knot_days,
+                           zone_interpolation_weights, zone_delay_operator,
+                           zone_report_pre_rows
     using Dates: Date, Day
     using Distributions: Gamma, Multinomial
     using Random: Xoshiro
@@ -65,9 +66,14 @@
         δ_knots = zone_deviation_knots(z_level, z_drift, σ_level, σ_δ, φ,
             patch_ranges, walking, walk_index, n_walking, K)
         fixed = zone_fixed_terms(I_bar, g, f, t0)
+        patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
         zd = (; I_bar, g, f, patch_ranges, knots, t0, n, days,
             fixed.force_pre, fixed.report_pre, fixed.report_pre_cum,
-            fixed.infections_pre, mixing_kernel = zeros(nz, nz))
+            fixed.infections_pre, mixing_kernel = zeros(nz, nz),
+            interp = zone_interpolation_weights(knots, t0, n),
+            report_matrix = zone_delay_operator(f, n - t0 + 1),
+            report_pre_rows = zone_report_pre_rows(fixed.report_pre,
+                patch_of_zone, t0, n))
         fw = zone_forward(zd, δ_knots, w0, nothing)
         ## Observed counts: each vintage's allocated total is the rounded
         ## modelled patch total, split multinomially at the modelled shares.
@@ -109,6 +115,7 @@
                 fill(4.0, ndraw, 1),
             :C_T => fill(sum(I_bar), ndraw, 1))
         truth = (; z_w, w0, δ_knots, z_level, z_drift, σ_level, σ_δ, φ,
+            δ_daily = zd.interp * transpose(δ_knots),
             walking, shares = fw.shares, increments = fw.increments,
             infections = fw.infections, forces = fw.forces)
         return (; obs, chain, truth, I_bar, g, f, patch_ranges, days, t0,
@@ -174,8 +181,7 @@ end
 @testitem "zone share renewal: conservation and the pre-t0 shortcut" setup=[
     ZoneSynthetic
 ] begin
-    using BVDOutbreakSize: zone_share_renewal, zone_fixed_terms,
-                           zone_interpolate_knots
+    using BVDOutbreakSize: zone_share_renewal, zone_fixed_terms
 
     syn = zone_synthetic()
     I_bar, g = syn.I_bar, syn.g
@@ -183,7 +189,7 @@ end
     t0 = syn.t0
     nd = n - t0 + 1
     w0 = syn.truth.w0
-    δ_daily = zone_interpolate_knots(syn.truth.δ_knots, syn.knots, t0, n)
+    δ_daily = syn.truth.δ_daily
     fixed = zone_fixed_terms(I_bar, g, syn.f, t0)
     st = zone_share_renewal(I_bar, g, δ_daily, w0, syn.patch_ranges, t0,
         fixed.force_pre)
@@ -209,17 +215,55 @@ end
     end
 end
 
+@testitem "zone operators: matrix forms equal the loops" setup=[
+    ZoneSynthetic
+] begin
+    using BVDOutbreakSize: zone_share_renewal, interpolate_knots
+
+    syn = zone_synthetic()
+    zd = zone_inputs(syn).model_data
+    δk = syn.truth.δ_knots
+    t0, n = zd.t0, zd.n
+    nd = n - t0 + 1
+    ## The interpolation weights reproduce the per-zone knot interpolation.
+    δd = zd.interp * transpose(δk)
+    for z in 1:syn.nz
+        ref = interpolate_knots(δk[z, :], zd.knots, n)[t0:n]
+        @test δd[:, z] ≈ ref rtol = 1e-12
+    end
+    ## The delay operator plus the pre-t0 rows reproduce the convolution,
+    ## with the days before t0 held at the initial share.
+    w0 = syn.truth.w0
+    st = zone_share_renewal(zd.I_bar, zd.g, δd, w0, zd.patch_ranges, t0,
+        zd.force_pre)
+    r_op = zd.report_matrix * st.infections .+
+           zd.report_pre_rows .* transpose(w0)
+    for (p, zs) in enumerate(zd.patch_ranges), z in zs, j in 1:7:nd
+        t = t0 + j - 1
+        explicit = 0.0
+        for s in 0:min(length(zd.f) - 1, t - 1)
+            I_past = t - s < t0 ? w0[z] * zd.I_bar[p, t - s] :
+                     st.infections[j - s, z]
+            explicit += zd.f[s + 1] * I_past
+        end
+        @test r_op[j, z] ≈ explicit rtol = 1e-10
+    end
+    ## The model's forward pass matches the generator's increments.
+    fw = zone_forward(zd, δk, w0, nothing)
+    @test fw.increments ≈ syn.truth.increments rtol = 1e-10
+end
+
 @testitem "zone Rt: the force-weighted mean is the implied patch Rt" setup=[
     ZoneSynthetic
 ] begin
     using BVDOutbreakSize: zone_share_renewal, zone_fixed_terms,
-                           zone_interpolate_knots, implied_national_Rt_at
+                           implied_national_Rt_at
 
     syn = zone_synthetic()
     I_bar, g = syn.I_bar, syn.g
     np, n = size(I_bar)
     t0 = syn.t0
-    δ_daily = zone_interpolate_knots(syn.truth.δ_knots, syn.knots, t0, n)
+    δ_daily = syn.truth.δ_daily
     fixed = zone_fixed_terms(I_bar, g, syn.f, t0)
     st = zone_share_renewal(I_bar, g, δ_daily, syn.truth.w0,
         syn.patch_ranges, t0, fixed.force_pre)
