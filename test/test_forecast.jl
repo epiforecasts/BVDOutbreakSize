@@ -930,6 +930,7 @@ end
     using Turing: @model, sample, Prior
     using Distributions: Normal, truncated
     using Statistics: median
+    using Random: MersenneTwister
     import FlexiChains
     using BVDOutbreakSize: forecast_reported
 
@@ -952,9 +953,16 @@ end
         var"treatment_state.occupancy_break" := offset
         return nothing
     end
+    ## Every offset is scored on one set of prior draws. The offset is a
+    ## deterministic `:=` quantity, so passing the same seeded RNG to each
+    ## `sample` call pairs the draws and isolates the shift itself.
+    ## `forecast_reported` seeds its own replicate stream, so once the draws
+    ## are paired the runs differ by the offset alone and the medians below
+    ## are exact rather than Monte Carlo estimates.
     _fc(offset) = forecast_reported(
-        sample(_forecast_offset_test(offset), Prior(), 400;
-            chain_type = FlexiChains.VNChain, progress = false);
+        sample(MersenneTwister(20260520), _forecast_offset_test(offset),
+            Prior(), 400; chain_type = FlexiChains.VNChain,
+            progress = false);
         horizon = 7, obs_cases = 905, obs_deaths = 18)
 
     plain = _fc(0.0)
@@ -970,9 +978,9 @@ end
     @test all(iszero, shifted.bed_shortfall)
     ## The demand is the latent need and is untouched by the offset; only the
     ## reported occupancy moves, and by the offset.
-    @test median(plain.bed_demand) ≈ median(shifted.bed_demand) atol=25
+    @test median(plain.bed_demand) ≈ median(shifted.bed_demand) atol=1
     @test median(plain.isolation_level) - median(shifted.isolation_level) ≈
-          200 atol=25
+          200 atol=1
     ## A reclassification cannot push the reported stock below zero, and the
     ## capacity still binds from above.
     @test all(shifted.isolation_level .>= 0)
