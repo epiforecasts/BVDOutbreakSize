@@ -357,6 +357,7 @@ function main()
     srs = Dict{String, Int}()
     unreadable = Tuple{Int, String}[]
     duplicates = String[]
+    with_pdf = Set{Int}()
 
     for path in sort(filter(f -> endswith(f, ".pdf"),
         readdir(PDF_DIR; join = true)))
@@ -364,6 +365,7 @@ function main()
         m === nothing && continue
         sr = parse(Int, m[1])
         haskey(dates, sr) || continue
+        push!(with_pdf, sr)
 
         text = read(`pdftotext -layout $path -`, String)
         rows, prov, total, why = scan_tableau2(text)
@@ -479,6 +481,15 @@ function main()
         for (sr, why) in later
             @printf("  %3d  %s\n", sr, why)
         end
+    end
+    ## A sitrep the CSV lists but the archive has no PDF for is absent from
+    ## the blocks without any other trace, so it is named here.
+    no_pdf = sort(setdiff(collect(keys(dates)), with_pdf))
+    if !isempty(no_pdf)
+        println(
+            "\nSitreps in $(basename(SITREP_CSV)) with no PDF under " *
+            "$(PDF_DIR) (not scanned): ",
+            join((@sprintf("%03d", x) for x in no_pdf), ", "))
     end
     if !isempty(duplicates)
         println(
