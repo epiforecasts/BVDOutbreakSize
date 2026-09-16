@@ -4587,24 +4587,19 @@ MarkdownTable(zone_forecast_display) #hide
 #md # ```
 
 _zone_per_chain(v) = join(string.(round.(v; sigdigits = 3)), " / ")
-zone_sampler_table = DataFrame([let d = zone_sampler_diagnostics(chn)
-                                    (fit = label,
-                                        max_rhat = round(d.max_rhat; digits = 3),
-                                        min_ess_bulk = round(d.min_ess_bulk;
-                                            digits = 0),
-                                        min_ess_tail = round(d.min_ess_tail;
-                                            digits = 0),
-                                        divergences = d.n_divergent,
-                                        depth_cap = _zone_per_chain(
-                                            d.depth_cap_fraction),
-                                        ebfmi = _zone_per_chain(d.ebfmi),
-                                        step_size = _zone_per_chain(
-                                            d.step_size))
-                                end
-                                for (label, chn) in (
-    ("health zones", chn_local),
-    ("health zones (frozen)",
-    frozen_local.chn))]);
+function _zone_sampler_row(label, chn)
+    d = zone_sampler_diagnostics(chn)
+    (fit = label, max_rhat = round(d.max_rhat; digits = 3),
+        min_ess_bulk = round(d.min_ess_bulk; digits = 0),
+        min_ess_tail = round(d.min_ess_tail; digits = 0),
+        divergences = d.n_divergent,
+        depth_cap = _zone_per_chain(d.depth_cap_fraction),
+        ebfmi = _zone_per_chain(d.ebfmi),
+        step_size = _zone_per_chain(d.step_size))
+end
+zone_sampler_table = DataFrame([
+    _zone_sampler_row("health zones", chn_local),
+    _zone_sampler_row("health zones (frozen)", frozen_local.chn)]);
 zone_diagnostics = let d = zone_diagnostics_table(chn_local, zone_inputs)
     for c in names(d)[3:end]
         d[!, c] = round.(d[!, c]; digits = startswith(c, "rhat") ? 3 : 0)
