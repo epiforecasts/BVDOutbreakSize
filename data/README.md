@@ -182,6 +182,7 @@ SitReps 059 to 083 add the 24h columns to the right of the Létalité.
 SitReps 088 to 121 add an `A ventiler` row of deaths in the province's treatment centres not yet attributed to a zone, with `NA` in its cases cell.
 SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no zone table, and 087 prints the 24h flow with no cumulative columns.
 None of those four is scanned.
+SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
 
 The unallocated row is the report's own count of cases and deaths it has not attributed to a zone.
 It is worded `Autres ZS (données non ventilées)` (018 to 032, 94 cases and 10 deaths throughout), `Autres zones non encore identifiées` (034 to 058, 17 cases), `Non identifiées` (059 to 068, 17 cases) and `A ventiler` (088 onward, deaths only).
