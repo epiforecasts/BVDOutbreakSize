@@ -2091,6 +2091,7 @@ cfr_prior_fig #hide
 # A zone's increment $y_{z,v}$ at vintage $v$ is the difference of its cumulative count from the previous vintage, clamped at zero, and the first vintage's increment is its cumulative count.
 # The allocated patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ excludes the report's unallocated row.
 # A patch and vintage with no allocated cases is not scored.
+# The composition check pushes each posterior draw's expected shares through the allocation at that vintage's observed total, and the prior draws through the same allocation for a prior predictive band.
 # The zone grid starts on day $t_0$, 42 days before the first zone vintage, and carries weekly knots $k = 1, \dots, K$ from there to the cut-off.
 #
 # Each zone's infections are its share $w_{z,t}$ of its patch's fixed infections.
@@ -2161,14 +2162,14 @@ cfr_prior_fig #hide
 # $\delta_{z,t}$ is the log deviation of the zone's transmission from its patch.
 # It is reported only from the day the zone's cumulative infections reach ten in the median draw.
 # For a zone below the walking threshold the reproduction number is the patch value scaled by a prior-driven level.
-# The results rank zones by the posterior probability that it exceeds one and mark those zones.
+# The results rank zones by the posterior probability that the reproduction number exceeds one.
 #
 # We assume the generation interval and the infection-to-report delay are the patch posterior means.
 # Importation into a patch is allocated to its zones in proportion to their current shares.
 # There is no mixing between the zones of a patch.
 # The increments are consecutive-vintage differences clamped at zero.
 # The walking set depends on the data and can differ between fits at different cut-offs.
-# The zone deaths are not used, since the reports' unallocated death row holds in-care deaths awaiting a zone, 17% of Ituri's deaths at the 12 September report.
+# The zone deaths are not used, since the reports' unallocated death row holds in-care deaths awaiting a zone.
 # The mixing, the deaths and the choice of a low or high patch draw in place of the mean are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
 
 #md # ```@raw html
@@ -4363,7 +4364,7 @@ onset_forecast_fig #hide
 # The maps below show, for the [health-zone model](@ref "Health-zone model"), the reproduction number at the cut-off, the forecast confirmed cases over the coming week and the confirmed cases to date, zone by zone.
 # On the reproduction-number map a zone whose 90% interval straddles one is washed towards white.
 # Zones with no confirmed case, or too few infections for a reproduction number, are grey.
-# Nord-Kivu's zones are estimated above one and Ituri's near it, and the coming week's cases are expected in the zones that hold the cases to date.
+# The three maps share the zone boundaries, so a zone's forecast can be read against its reproduction number and its cases to date.
 
 #md # ```@raw html
 #md # <details><summary>Health-zone post-processing</summary>
@@ -4418,7 +4419,7 @@ zone_map_fig = plot_zone_map_panels(
 zone_map_fig #hide
 
 # The panels below trace the reproduction number of the twelve zones with most confirmed cases, each against its patch's own implied reproduction number in grey.
-# The Ituri zones follow their patch's decline from May and the Nord-Kivu zones its rise since August.
+# Where a zone's line departs from the grey patch line, the gap is the zone's fitted deviation from its patch.
 
 #md # ```@raw html
 #md # <details><summary>Zone reproduction-number trajectories</summary>
@@ -4453,9 +4454,7 @@ zone_rt_fig = plot_rt_zones(
 zone_rt_fig #hide
 
 # The ranking below orders the zones by the posterior probability that their reproduction number exceeds one.
-# A zone below the walking threshold is drawn hollow.
-# The level-only zones of Nord-Kivu carry their patch's value and head the ranking.
-# Among the walking zones Nord-Kivu's lead and the large Ituri zones sit near one.
+# A zone below the walking threshold is drawn hollow, since its estimate comes from its patch rather than its own data.
 
 #md # ```@raw html
 #md # <details><summary>Zone ranking</summary>
@@ -4493,15 +4492,10 @@ MarkdownTable(zone_overview_display) #hide
 #
 # The composition check draws replicated zone allocations from the fitted zone model and compares them to the observed ones, as the [province compositions](@ref province-compositions-results) check does one level up.
 # The panels show, for the zones with the largest observed shares, the modelled share of the patch's confirmed cases at each vintage against the observed one.
-# Each panel carries three bands.
-# The tan band is the prior predictive share.
-# The grey band is the posterior predictive interval on the observed share, from every posterior draw's expected shares pushed through the composition's allocation at that vintage's total.
-# The coloured ribbon inside it is the expected share.
+# Each panel carries three bands: the tan prior predictive share, the grey posterior predictive interval on the observed share, and the coloured ribbon of the expected share inside it.
+# The observed points should fall inside the grey band.
+# A zone with a handful of cases per vintage has an observed share that jumps between zero and one, and its band spans the same range.
 # The second figure is the same check on the cumulative allocation, each zone's share of its patch's cumulative allocated cases at every vintage.
-# The prior band spans most of each panel and the posterior ribbon is set by the zone tables.
-# The observed points fall inside the grey band in the large Ituri and Nord-Kivu zones.
-# A zone with a handful of cases per vintage has an observed share that jumps between zero and one inside a band of the same range.
-# On the cumulative view the pooled patch's first cases, all in Miti-Murhesa, sit above the band.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition predictive checks</summary>
@@ -4537,7 +4531,7 @@ zone_ppc_fig #hide
 zone_ppc_cum_fig #hide
 
 # The calibration table scores the per-vintage composition the way the [stream calibration](@ref "Stream calibration") scores the national streams, over every zone and vintage of each patch: the mean bias of the predictive allocation and the fractions of observed zone counts inside the central 50% and 90% predictive intervals.
-# Most zone-vintage cells hold no case and the coverage sits above nominal.
+# A cell with no case is covered by any interval that includes zero, so the coverage is read with the share of empty cells in mind.
 
 #md # ```@raw html
 #md # <details><summary>Zone composition calibration</summary>
@@ -4559,7 +4553,6 @@ zone_calibration_table #hide
 # The figure and table below split the one-week-ahead confirmed-case forecast across the health zones, for the fifteen zones with the largest forecast medians.
 # The patch totals in the table are the province forecast above.
 # The same split made from the one-week-back validation fit is scored against the zone tables observed since in the [zone forecast validation](@ref "Forecast by health zone") of the sensitivity page.
-# Ituri carries the largest total and the pooled patch a handful of cases.
 
 #md # ```@raw html
 #md # <details><summary>One-week-ahead zone forecast</summary>
