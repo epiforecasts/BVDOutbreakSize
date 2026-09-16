@@ -3580,7 +3580,7 @@ joint_ppc_fig = plot_posterior_predictive(
 
 joint_ppc_fig #hide
 
-# #### Province compositions
+# #### [Province compositions](@id province-compositions-results)
 #
 # The per-province confirmed cases and deaths are fitted as compositions conditional on the national total, so what the model predicts is each province's share rather than its count.
 # The panels below show that modelled share at every spatial vintage against the observed one.
@@ -4491,7 +4491,7 @@ MarkdownTable(zone_overview_display) #hide
 
 # #### Health-zone composition check
 #
-# The composition check draws replicated zone allocations from the fitted zone model and compares them to the observed ones, as the [province compositions](@ref "Province compositions") check does one level up.
+# The composition check draws replicated zone allocations from the fitted zone model and compares them to the observed ones, as the [province compositions](@ref province-compositions-results) check does one level up.
 # The panels show, for the zones with the largest observed shares, the modelled share of the patch's confirmed cases at each vintage against the observed one.
 # Each panel carries three bands.
 # The tan band is the prior predictive share.
