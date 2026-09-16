@@ -72,7 +72,7 @@ laboratory throughput from section 4.3, as `[province_confirmed_history]`,
 - The longer series narrows the signal that identifies provincial
 ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
 scans stopped in July, and provincial test positivity has converged.
-- The daily new-suspect series resumes from 7 August, adding 37 days to 12
+- The daily new-suspect series resumes from 7 August, adding 38 days to 13
 September after a freeze at 5 August (#708).
 The situation reports' alert-validation table is the pre-084 Tableau 3
 transposed, and its validated-suspect columns reproduce the old table's own
