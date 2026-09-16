@@ -749,19 +749,27 @@ analysed denominator for late day `i` (0 when none was published). The
 observed and late groups are empty when no laboratory history is present
 and every confirmed vintage becomes an early window.
 
-`early_start` and `late_start` are grid days only where their own day list
-is non-empty. A group with no windows returns `0`, which is not a grid day:
-with no window to bin, the pinning edge is never read. Read either as a day
-without checking its day list first and the index is invalid.
+`early_start` and `late_start` are grid days on every path but two. An empty
+`confirmed_history` returns `0` for both, and a `confirmed_history` with no
+`lab_history` returns `0` for `late_start` alone. Those two are the shortcut
+returns, and `0` there is a sentinel rather than a day. Elsewhere each is a
+real day whether or not its own window list is empty, since `early_start` is
+the first confirmed vintage and `late_start` the last laboratory day,
+neither of which depends on how many windows fell out.
+
+An empty group's start is still read: [`confirmed_cases_model`](@ref) passes
+it to [`bin_increments`](@ref) as a one-element edge list. The single bin
+that comes back is dropped, so the value cannot reach the likelihood, but a
+caller reading the sentinel as a grid day would index on `0`.
 
 Pure integer bookkeeping on the observed data, so it carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]),
         confirmed_break_days = Int[])
-    ## Both starts are the no-window sentinel `0` rather than a grid day:
-    ## there is no first confirmed vintage to pin to, and with both day
-    ## lists empty neither edge is ever binned.
+    ## Both starts are the sentinel `0` rather than a grid day. With no
+    ## confirmed vintage there is no first one to pin to, and the bin this
+    ## edge produces downstream is dropped before it reaches the likelihood.
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
