@@ -128,10 +128,16 @@ end
     ## and 116->117 both prefer shift +1, the first same-direction
     ## consecutive pair this stream has seen, but two instances do not
     ## establish a systematic offset. 119->120 prefers shift -1 and
-    ## 120->121 prefers shift +1, again opposite directions.)
+    ## 120->121 prefers shift +1, again opposite directions. 121->122 is a
+    ## new shape again: full-range prefers shift +1 (1085 against 1108 at 0
+    ## and 1119 at -1) while the stable region prefers shift -1 (895 against
+    ## 930 at 0 and 931 at +1) - the two ranges disagree with each other, not
+    ## just with shift 0, and every value is within a few percent of the
+    ## others, consistent with this stream's own digitisation noise rather
+    ## than a misread tick.)
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
-        "119" => "120", "120" => "121")
+        "119" => "120", "120" => "121", "121" => "122")
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]
