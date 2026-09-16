@@ -127,6 +127,17 @@
         return zone_fit_inputs(syn.chain, syn.obs; zones, walk_threshold,
             patch_names = ["a", "b"], patch_labels = ["A", "B"], kwargs...)
     end
+
+    ## Health-zone metadata rows covering every synthetic zone, for the
+    ## mixing kernel.
+    function zone_metadata(syn)
+        pairs = [("a", "z$i") for i in 1:5]
+        append!(pairs, [("b", "y$i") for i in 1:3])
+        return [(; zone = nm, label = uppercase(nm), province = prov,
+                    population = 10_000 * i, lat = 0.1 * i, lon = 0.2 * i,
+                    zscode = string(i))
+                for (i, (prov, nm)) in enumerate(pairs)]
+    end
 end
 
 @testitem "dirichlet_multinomial_logpdf: matches Distributions" begin
@@ -627,6 +638,324 @@ end
         :province, :zone, :stream, :draw, :value])
     @test nrow(arch) == syn.nz * length(1:5:nd1)
     @test all(arch.target_date .== made + Day(7))
+end
+
+@testitem "zone_report_increments: the explicit window sums" setup=[
+    ZoneSynthetic
+] begin
+    syn = zone_synthetic()
+    t0, nz = syn.t0, syn.nz
+    n = size(syn.I_bar, 2)
+    nd = n - t0 + 1
+    fixed = zone_fixed_terms(syn.I_bar, syn.g, syn.f, t0)
+    reports = rand(Xoshiro(2), nd, nz)
+    w0 = syn.truth.w0
+    patch_of_zone = [p for (p, zs) in enumerate(syn.patch_ranges) for _ in zs]
+    ## Each window `(d_{v−1}, d_v]` sums the pre-`t0` patch term at the
+    ## initial share and the zone's own daily reports from `t0`.
+    explicit(days, v) = begin
+        lo = v == 1 ? 1 : days[v - 1] + 1
+        hi = days[v]
+        [let p = patch_of_zone[z]
+             w0[z] * sum((fixed.report_pre[p, t] for t in lo:hi if t < t0);
+                 init = 0.0) +
+             sum((reports[t - t0 + 1, z] for t in lo:hi if t >= t0);
+                 init = 0.0)
+         end
+         for z in 1:nz]
+    end
+    ## The fit's windows (the first opens before `t0`), windows entirely
+    ## before `t0`, and windows that open after it.
+    for days in (syn.days, [t0 - 10, t0 - 3, t0 + 5, n], [t0 + 3, t0 + 20, n])
+        C = zone_report_increments(reports, w0, syn.patch_ranges, days, t0,
+            fixed.report_pre_cum)
+        @test size(C) == (nz, length(days))
+        for v in eachindex(days)
+            @test C[:, v] ≈ explicit(days, v) rtol = 1e-12
+        end
+    end
+end
+
+@testitem "zone_parent_inputs: a draw at the C_T tails" setup=[
+    ZoneSynthetic
+] begin
+    using Statistics: mean
+
+    syn = zone_synthetic()
+    ## Four draws at different scales of the truth, so `C_T` orders them.
+    scales = [0.5, 1.0, 2.0, 1.5]
+    chain = copy(syn.chain)
+    chain[:infections_patch] = reshape([s .* vec(syn.I_bar) for s in scales],
+        4, 1)
+    chain[:C_T] = reshape(scales .* sum(syn.I_bar), 4, 1)
+    low = zone_parent_inputs(chain; parent_summary = :draw_low)
+    high = zone_parent_inputs(chain; parent_summary = :draw_high)
+    @test low.draw == 1
+    @test high.draw == 3
+    @test exp.(low.log_infections) ≈ 0.5 .* vec(syn.I_bar) rtol = 1e-10
+    @test exp.(high.log_infections) ≈ 2.0 .* vec(syn.I_bar) rtol = 1e-10
+    ## The mean is the geometric mean over draws, and carries no draw.
+    avg = zone_parent_inputs(chain)
+    @test avg.draw === nothing
+    @test exp.(avg.log_infections) ≈
+          exp(mean(log.(scales))) .* vec(syn.I_bar) rtol = 1e-10
+    ## The PMFs are identical across draws here, so they agree.
+    @test low.g ≈ avg.g && high.f ≈ avg.f
+    ## The inputs carry the draw and its infections.
+    inputs = zone_fit_inputs(chain, syn.obs; parent_summary = :draw_low,
+        zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"])
+    @test inputs.parent_draw == 1
+    @test inputs.parent_summary == :draw_low
+    @test inputs.model_data.I_bar ≈ 0.5 .* syn.I_bar rtol = 1e-10
+    @test_throws ErrorException zone_parent_inputs(chain;
+        parent_summary = :median)
+end
+
+@testitem "zone_fit_inputs: refuses inconsistent inputs" setup=[
+    ZoneSynthetic
+] begin
+    syn = zone_synthetic()
+    kw = (; zones = nothing, patch_names = ["a", "b"],
+        patch_labels = ["A", "B"])
+    ## Observations without zone tables.
+    bare = (; n = syn.obs.n, seeding = syn.obs.seeding,
+        cutoff = syn.obs.cutoff)
+    @test_throws ErrorException zone_fit_inputs(syn.chain, bare; kw...)
+    ## A parent without the patch structure or a delay it needs.
+    for key in (:infections_patch, Symbol("gi_state.α"))
+        chain = copy(syn.chain)
+        delete!(chain, key)
+        @test_throws ErrorException zone_fit_inputs(chain, syn.obs; kw...)
+    end
+    ## A parent fitted to a shorter cut-off.
+    chain = copy(syn.chain)
+    chain[:infections_patch] = reshape(
+        [vec(syn.I_bar[:, 1:(end - 5)]) for _ in 1:4], 4, 1)
+    @test_throws ErrorException zone_fit_inputs(chain, syn.obs; kw...)
+    ## Patches on different vintage days.
+    hist = deepcopy(syn.obs.zone_confirmed_history)
+    for (nm, h) in hist["b"]
+        hist["b"][nm] = (; days = h.days .- 1, counts = h.counts)
+    end
+    obs = merge(syn.obs, (; zone_confirmed_history = hist))
+    @test_throws ErrorException zone_fit_inputs(syn.chain, obs; kw...)
+    ## No zones at all.
+    empty = merge(syn.obs,
+        (; zone_confirmed_history = Dict{String, Dict{String, NamedTuple}}()))
+    @test_throws ErrorException zone_fit_inputs(syn.chain, empty; kw...)
+end
+
+@testitem "bvd_zone: mixing redistributes force within the patch" setup=[
+    ZoneSynthetic
+] begin
+    using BVDOutbreakSize: bvd_zone, _zone_mixing_kernel, _zone_states
+    using Turing: sample, Prior
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn; zones = zone_metadata(syn))
+    zd = inputs.model_data
+    K = zd.mixing_kernel
+    ## Column-stochastic within each patch and zero across patches.
+    for (p, zs) in enumerate(inputs.patch_ranges), q in zs
+
+        @test sum(K[zs, q]) ≈ 1 rtol = 1e-12
+        @test all(iszero, K[setdiff(1:syn.nz, zs), q])
+    end
+    @test K == _zone_mixing_kernel([10_000.0 * i for i in 1:syn.nz],
+        [(0.1 * i, 0.2 * i) for i in 1:syn.nz], inputs.patch_ranges)
+    chn = sample(bvd_zone(zd; mixing = true), Prior(), 6;
+        chain_type = FlexiChains.VNChain, progress = false)
+    eps = [collect(v) for v in vec(collect(chn[:mixing_epsilon_zone]))]
+    @test all(v -> length(v) == 2 && all(0 .< v .< 1), eps)
+    ## The states read the fractions, and the mixed shares still sum to one
+    ## within each patch but differ from the unmixed ones.
+    states = _zone_states(chn, inputs)
+    for (i, st) in enumerate(states)
+        @test st.ε == eps[i]
+        mixed = zone_forward(zd, st.δ_knots, st.w0, st.ε).shares
+        plain = zone_forward(zd, st.δ_knots, st.w0, nothing).shares
+        for zs in inputs.patch_ranges
+            @test all(sum(mixed[:, zs]; dims = 2) .≈ 1)
+        end
+        @test !(mixed ≈ plain)
+    end
+    ## Without metadata for every zone the kernel is zero and the fit
+    ## refuses to mix.
+    @test all(iszero, zone_inputs(syn).model_data.mixing_kernel)
+    @test_throws ErrorException fit_zone(syn.chain, syn.obs; mixing = true,
+        zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"])
+end
+
+@testitem "bvd_zone: deaths add one cumulative composition term" setup=[
+    ZoneSynthetic
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_composition_logpdf, _zone_kappa
+    using Turing: DynamicPPL
+
+    syn = zone_synthetic()
+    ## Cumulative allocated deaths per zone, a tenth of the confirmed.
+    deaths = Dict{String, Dict{String, NamedTuple}}()
+    for (prov, zones) in syn.obs.zone_confirmed_history
+        deaths[prov] = Dict{String, NamedTuple}()
+        for (nm, h) in zones
+            deaths[prov][nm] = (; days = copy(h.days),
+                counts = cld.(h.counts, 10))
+        end
+    end
+    obs = merge(syn.obs, (; zone_death_history = deaths))
+    inputs = zone_fit_inputs(syn.chain, obs; zones = nothing,
+        patch_names = ["a", "b"], patch_labels = ["A", "B"])
+    zd = inputs.model_data
+    @test vec(zd.death_counts) == cld.(inputs.cumulative, 10)
+    @test zd.death_cell_patch == [1, 2]
+    @test zd.death_days == [inputs.n]
+    truth = syn.truth
+    params = (; z_w = truth.z_w, σ_level = truth.σ_level,
+        z_level = truth.z_level, δ_halflife = 42.0, σ_δ = truth.σ_δ,
+        z_drift = truth.z_drift, ρ = 0.05)
+    loglik(m) = DynamicPPL.loglikelihood(m,
+        DynamicPPL.VarInfo(Xoshiro(1), m, DynamicPPL.InitFromParams(params)))
+    base = loglik(bvd_zone(zd))
+    with = loglik(bvd_zone(zd; deaths = true))
+    @test isfinite(with)
+    ## The difference is the death composition at the same forward pass.
+    fw = zone_forward(zd, truth.δ_knots, truth.w0, nothing)
+    daily = zd.death_matrix * fw.infections .+
+            zd.death_pre_rows .* transpose(truth.w0)
+    D = zone_report_increments(daily, truth.w0, zd.patch_ranges,
+        zd.death_days, zd.t0, zd.death_pre_cum)
+    extra = zone_composition_logpdf(zd.death_counts, D, zd.death_cell_patch,
+        zd.death_cell_vintage, zd.death_cell_total, zd.death_cell_const,
+        zd.patch_ranges, _zone_kappa(0.05))
+    @test with - base ≈ extra rtol = 1e-8
+    ## Without allocated zone deaths the fit refuses the variant.
+    @test_throws ErrorException fit_zone(syn.chain, syn.obs; deaths = true,
+        zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"])
+end
+
+@testitem "zone_initial_params: shape, jitter and a finite start" setup=[
+    ZoneSynthetic
+] begin
+    using BVDOutbreakSize: bvd_zone, zone_initial_params, nuts_sample
+    using Turing: DynamicPPL
+    using LogDensityProblems: logdensity
+    import FlexiChains
+    using Turing: sample, Prior
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    zd = inputs.model_data
+    K = length(zd.knots)
+    model = bvd_zone(zd)
+    dim = 2 * syn.nz + zd.n_walking * (K - 1) + 4
+    st = zone_initial_params(model, inputs; chains = 3, jitter = 0.1)
+    @test length(st.x0) == dim
+    @test all(isfinite, st.x0)
+    @test length(st.inits) == 3 && length(st.logp) == 3
+    @test all(isfinite, st.logp)
+    @test length(unique(st.logp)) == 3
+    ## Without jitter every chain starts at the specification's point.
+    st0 = zone_initial_params(model, inputs; chains = 2, jitter = 0.0)
+    @test st0.logp[1] == st0.logp[2]
+    vi = DynamicPPL.link(DynamicPPL.VarInfo(model), model)
+    ldf = DynamicPPL.LogDensityFunction(model, DynamicPPL.getlogjoint, vi)
+    @test logdensity(ldf, st.x0) ≈ st0.logp[1]
+    ## Mixing adds one fraction per patch.
+    stm = zone_initial_params(bvd_zone(zd; mixing = true), inputs;
+        mixing = true)
+    @test length(stm.x0) == dim + 2
+    ## With no walking zone the innovation block is absent from the model
+    ## and the start.
+    inputs0 = zone_inputs(syn; walk_threshold = 10^6)
+    zd0 = inputs0.model_data
+    @test zd0.n_walking == 0
+    model0 = bvd_zone(zd0)
+    st_level = zone_initial_params(model0, inputs0)
+    @test length(st_level.x0) == 2 * syn.nz + 4
+    chn0 = sample(model0, Prior(), 3; chain_type = FlexiChains.VNChain,
+        progress = false)
+    @test !any(p -> string(p) == "z_drift", FlexiChains.parameters(chn0))
+    @test all(v -> length(v) == syn.nz, vec(collect(chn0[:delta_T_zone])))
+    ## The sampler wants one strategy per chain.
+    @test_throws ArgumentError nuts_sample(model; chains = 2,
+        init = st.inits[1:1])
+end
+
+@testitem "zone diagnostics: tables from a short chain" setup=[
+    ZoneSynthetic
+] begin
+    using BVDOutbreakSize: bvd_zone
+    using Turing: sample, Prior, MCMCSerial
+    using DataFrames: nrow, names
+    import FlexiChains
+
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    chn = sample(bvd_zone(inputs.model_data), Prior(), MCMCSerial(), 10, 2;
+        chain_type = FlexiChains.VNChain, progress = false)
+    diag = zone_diagnostics_table(chn, inputs)
+    @test nrow(diag) == syn.nz
+    @test diag.zone == inputs.zone_labels
+    @test diag.walking == inputs.walking
+    for stem in ("R_T", "share_T", "delta_T"), stat in ("rhat", "ess_bulk",
+            "ess_tail")
+
+        @test "$(stat)_$(stem)" in names(diag)
+    end
+    @test all(isfinite, diag.rhat_share_T)
+    @test all(>(0), diag.ess_bulk_share_T)
+    ## Without inputs the zones are numbered and the walking column absent.
+    bare = zone_diagnostics_table(chn)
+    @test bare.zone == string.(1:syn.nz)
+    @test !("walking" in names(bare))
+    @test bare.rhat_share_T == diag.rhat_share_T
+    ## Sampler statistics are absent from a prior chain, so the per-chain
+    ## fields are empty and the divergences zero.
+    sd = zone_sampler_diagnostics(chn, inputs)
+    @test isfinite(sd.max_rhat)
+    @test sd.min_ess_bulk > 0 && sd.min_ess_tail > 0
+    @test sd.n_divergent == 0
+    @test isempty(sd.depth_cap_fraction) && isempty(sd.ebfmi) &&
+          isempty(sd.step_size)
+    @test sd.max_rhat_R_T_walking isa Float64
+    @test isnan(zone_sampler_diagnostics(chn).max_rhat_R_T_walking)
+end
+
+@testitem "zone_forecast_truth: needs a vintage on the target date" setup=[
+    ZoneSynthetic
+] begin
+    syn = zone_synthetic()
+    inputs = zone_inputs(syn)
+    made = inputs.cutoff
+    with_days(extra) = begin
+        hist = deepcopy(syn.obs.zone_confirmed_history)
+        for (prov, zones) in hist, (nm, h) in zones
+
+            for d in extra
+                push!(h.days, inputs.n + d)
+                push!(h.counts, h.counts[end] + 1)
+            end
+        end
+        merge(syn.obs, (; zone_confirmed_history = hist))
+    end
+    ## A vintage past the target alone, or one either side of it, would
+    ## count a different window, so the truth is missing.
+    @test all(ismissing, zone_forecast_truth(with_days([9]), inputs;
+        made_date = made))
+    @test all(ismissing, zone_forecast_truth(with_days([5, 9]), inputs;
+        made_date = made))
+    ## A vintage on the target date gives the count since the cut-off.
+    truth = zone_forecast_truth(with_days([5, 7, 9]), inputs;
+        made_date = made)
+    @test all(==(2), truth)
+    @test all(==(1), zone_forecast_truth(with_days([5, 7, 9]), inputs;
+        made_date = made, horizon = 5))
+    ## A zone absent from the later history is missing; the rest score.
+    obs = with_days([7])
+    delete!(obs.zone_confirmed_history["b"], "y3")
+    truth = zone_forecast_truth(obs, inputs; made_date = made)
+    @test ismissing(truth[end]) && all(==(1), truth[1:(end - 1)])
 end
 
 @testitem "AD gradient: bvd_zone differentiates (Mooncake)" tags=[:ad] setup=[
