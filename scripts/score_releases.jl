@@ -1,112 +1,26 @@
 #!/usr/bin/env julia
 #
-# Score every past release's saved one-week-ahead forecasts against the
-# now-observed data, plus a persistence baseline, and write tidy score
-# tables to `data/forecast_scores.csv`. Each score row also carries a
-# log-CRPS relative skill to the persistence baseline,
-# `log_rel_to_baseline`; the comparison against a stream's individual
-# fit is computed at aggregation time, not stored per row. Also refreshes
-# `data/rt_by_release.csv` and `data/r0_by_release.csv`, the per-release
-# posterior R_T and initial-R0 summaries, in the same style as
-# `data/released_estimates.csv` (see `scripts/refresh_releases.jl`).
+# Score every past release's saved forecasts against the now-observed
+# data, plus a persistence baseline, and write tidy score tables to
+# `data/forecast_scores.csv` and `data/province_forecast_scores.csv`.
+# Each row carries `log_rel_to_baseline`, its log-CRPS relative skill to
+# that baseline. Also refreshed are the per-release posterior summaries
+# `data/rt_by_release.csv` and `data/r0_by_release.csv`, in the style of
+# `data/released_estimates.csv` (see `scripts/refresh_releases.jl`), and
+# the per-fit `rt_`, `size_` and `r0_by_release_by_stream.csv` overlays.
 #
-# Both kinds of results release are scored: `results-vX.Y.Z` from a
-# version tag and `results-<run number>` from a push to `main`. At most one
-# release per data day is kept, keyed on the cut-off each release was built
-# from rather than when it was published, since releases sharing a cut-off
-# carry the same forecast (see `select_daily_releases` in
-# `src/scoring.jl`). Reading the cut-off means fetching every candidate's
-# `observations.toml` before the selection, so the driver fetches those
-# first and the rest of each winner's assets after.
+# The inputs are the assets of every results release on GitHub: a
+# forecast archive (`stream_forecasts.csv`, `forecast.csv`, or a
+# reconstruction on the optional `forecasts-backfill` release), the
+# frozen archive `forecast_frozen.csv`, the per-province
+# `province_forecast.csv`, each release's own `observations.toml`
+# vintage, `posterior_draws.csv` and `stream_estimates.csv`. Both
+# `results-vX.Y.Z` from a version tag and `results-<run number>` from a
+# push to `main` are scored, at most one release per data day (see
+# `select_daily_releases` in `src/scoring.jl`).
 #
-# The forecast a release is scored from comes from the first of these it
-# carries: `stream_forecasts.csv`, which holds every model's forecast in
-# the archive schema plus a `fit` column; `forecast.csv`, the joint model's
-# forecast alone, read as `fit = "joint"`; or the reconstruction
-# `scripts/backfill_forecasts.jl` publishes for the release's code tag on
-# the optional `forecasts-backfill` release (`forecast_v1.9.0.csv` for
-# `results-v1.9.0`), scored under `<tag> (backfill)`. A saved forecast is
-# always preferred over a reconstructed one; the backfill release is absent
-# by default, in which case releases without a stored forecast are skipped.
-#
-# A forecast archive (see `forecast_archive` in `src/forecast.jl`) has one
-# row per (made_date, horizon, target_date, stream, draw, fit): the
-# forecast draws for the incident "confirmed cases", "confirmed deaths",
-# "recovered" and "onset reports" streams and the level "isolation beds"
-# stream. "onset reports" is the new reported count the digitised
-# symptom-onset triangle adds over the horizon; only releases from the one
-# that first carried it can be scored on it, and no earlier release can be
-# backfilled for it. This script
-# scores each fit of each stream against the data that has since arrived,
-# using `score_draws` (CRPS, log-CRPS, its dispersion/overprediction/
-# underprediction decomposition, 50/90% coverage and bias), against one
-# persistence baseline per stream (`fit = "baseline"`, `baseline_draws`):
-# the centre carried forward as before (the observed count over the
-# same-length window ending at the forecast's cut-off for the incident
-# streams, the last observed occupancy for isolation beds), with the
-# spread simulated as an iterated day-by-day random walk from the stream's
-# own past first differences, in the style of the COVID-19 Forecast Hub
-# baseline, falling back to a Poisson spread when a stream has too little
-# history yet. The baseline is built from the release's own
-# `observations.toml` vintage, frozen no later than each group's own
-# made_date (`vintage_observations`), not from the current, possibly
-# later-revised manifest, so a correction or backfill that landed after
-# the release's own cut-off cannot leak into its baseline (a residual gap
-# remains for the frozen archive, where made_date can sit weeks before the
-# release's own cut-off; see the driver's `tag_obs_path` comment). A
-# stream no individual
-# model fits, "recovered", is scored for the joint and the baseline only. A
-# forecast group whose target runs past the stream's own reporting
-# coverage (`truth_at`, `stream_coverage_end`) is not scored at all, the
-# same way a not-yet-observed target is not. A group whose baseline window
-# opens before the vintage stream's own first observation
-# (`baseline_window_covered`) keeps its fits' scores but gets no baseline
-# row, since the centre available there is a saturated or zero cumulative
-# rather than a measured persistence.
-#
-# The two confirmed streams carry retrospective harmonisation-break days
-# (`[confirmed_break_dates]` in `observations.toml`, see `src/data.jl`), on
-# which the cumulative headline steps by far more than the day's own
-# notifications because a provincial base was integrated. Both the truth
-# and the baseline subtract that day's backfill (the net vintage step less
-# the printed 24h count, `break_correction`) from any window containing it,
-# so a forecast is scored on transmission rather than on transmission plus
-# a base integration, and the two sides of the comparison read the same
-# corrected series (issue #511).
-#
-# The occupancy levels carry their own reclassification-break days
-# (`[occupancy_break_dates]`), where the reported in-bed stock changes basis
-# between reports. No 24h count is published to split those steps by, so
-# there is nothing to subtract: the baseline instead drops any window
-# spanning one, so a change of reporting basis does not enter the walk it
-# simulates (`spans_occupancy_break`). The forecast side carries the same
-# knowledge as the fitted offset the occupancy likelihood absorbs the step
-# with, which `forecast_reported` adds to the projected level so the
-# projection and the reported truth are on one scale.
-#
-# A release that carries the per-province forecast archive
-# (`province_forecast.csv`, see `province_forecast_archive` in
-# `src/forecast.jl`) is scored province by province too, into
-# `data/province_forecast_scores.csv`. Each row's national stream label and
-# its own `province` column are composed into one label,
-# `"<stream> [<patch>]"`, so the provincial forecasts run through the same
-# grouping, persistence baseline and aggregation as the national ones. A
-# patch's truth is its member provinces' cumulative counts
-# (`PROVINCE_MEMBERS`) summed vintage by vintage, read from the same
-# `observations.toml`. Releases published before the asset existed carry
-# none, which is a quiet skip. A window holding a harmonisation-break day is
-# not scored for a province at all: the printed 24h count the national
-# correction subtracts is national only, so splitting it across provinces
-# would invent a number.
-#
-# Each release's `stream_estimates.csv`, when present, also feeds the
-# per-fit `data/rt_by_release_by_stream.csv`,
-# `data/size_by_release_by_stream.csv` and `data/r0_by_release_by_stream.csv`
-# R_T, C_T and R0 overlays.
-#
-# Re-run whenever a new release is published: it always recomputes the
-# tables from every release currently on GitHub, so re-running is
-# idempotent and just refreshes the output CSVs in place.
+# Re-run whenever a new release is published. It recomputes the tables
+# from every release currently on GitHub, so a re-run is idempotent.
 #
 # Requires the `gh` CLI, authenticated against the repo. Runs under the
 # package's own environment with no extra dependencies: `CSV.jl` is not a
@@ -346,7 +260,9 @@ end
 ## `onset_reports_new` and no onset level. A window over which the rescan
 ## reads a smaller total floors at zero here, as every incident stream's
 ## truth does, and `forecast_onsets` floors its replicate the same way, so
-## the two sides of the score meet the same convention.
+## the two sides of the score meet the same convention. Only a release whose
+## forecast carries the triangle can be scored on this stream, and a
+## reconstruction cannot add it to an earlier one.
 const STREAM_HISTORY = Dict(
     "reported cases" => (:reported_history, :incident),
     "suspected deaths" => (:deaths_history, :incident),
@@ -639,6 +555,11 @@ end
 ## Whether `(from_date, to_date]` spans one of `stream`'s occupancy
 ## reclassification breaks, so the change across it is a change of reporting
 ## basis rather than a day of the occupancy walk.
+##
+## Only the baseline drops such a window. The forecast side carries the same
+## knowledge as the fitted offset the occupancy likelihood absorbs the step
+## with, which `forecast_reported` adds to the projected level, so the
+## projection and the reported truth are on one scale.
 function spans_occupancy_break(obs, grid_date, stream, from_date, to_date)
     for d in occupancy_break_dates(obs, grid_date, stream)
         from_date < d <= to_date && return true
@@ -783,60 +704,33 @@ function _window_total_steps(obs, grid_date, stream, hist, made_date, horizon)
 end
 
 ## Persistence baseline draws for one forecast group, in the style of the
-## COVID-19 Forecast Hub baseline (`COVIDhub-baseline`): what today looks
-## like versus yesterday, where yesterday is itself a forecast from the day
-## before it, iterated day by day out to the forecast horizon — a
-## zero-drift random walk whose step distribution comes from the stream's
-## own reporting history, rather than a Poisson's few-percent spread at a
-## count of several hundred (which makes the baseline a near-point forecast
-## and any skill ratio against it explode).
+## COVID-19 Forecast Hub baseline (`COVIDhub-baseline`): a zero-drift random
+## walk iterated day by day to the horizon, with steps drawn from the
+## stream's own reporting history. A Poisson spread is a few percent at a
+## count of several hundred, which makes the baseline a near-point forecast
+## and any skill ratio against it explode.
 ##
-## The centre is unchanged: for an incident stream, the observed count over
-## the horizon-length window ending at `made_date`; for the level stream
-## ("isolation beds"), the last observed occupancy at or before
-## `made_date`. `obs` must reflect only data available at `made_date` — the
-## caller is responsible for passing a `made_date`-vintage manifest (see
-## `vintage_observations`), not the current, possibly later-revised one, so
-## the baseline never sees a correction that landed after the forecast was
-## made. For the two confirmed streams the same harmonisation-break
-## correction `truth_at` applies is subtracted from this window too (see
-## `break_correction`), so the persistence centre and the truth it is
-## compared against read the same corrected series (issue #511); zero for
-## every other stream.
+## The centre is the observed count over the horizon-length window ending at
+## `made_date` for an incident stream, and the last observed occupancy for
+## the level stream ("isolation beds"). The Hub centres on the single most
+## recent observation instead. These streams are sparse cumulative counts
+## days apart, so one vintage would be a far noisier centre than the window.
+## For the two confirmed streams the window's harmonisation correction is
+## subtracted, as it is from the truth, so both sides read the same series
+## (see `break_correction`). `obs` must be a `made_date` vintage (see
+## `vintage_observations`).
 ##
-## The spread simulates the walk explicitly, on the same quantity the
-## centre measures. For the level stream that is the occupancy itself, so
-## the pool is the stream's own past first differences (`_history_diffs`).
-## For an incident stream the target is the count over a `horizon`-length
-## window, so the pool is the change between consecutive vintages in that
-## window total (`_window_total_steps`), not the change in the cumulative
-## series, which is the window's incidence rather than a change in it.
-##
-## Either way a `window`-day change is converted to a one-day step by
-## dividing by `sqrt(window)` rather than `window`. Under a zero-drift
-## random walk a `window`-day change has variance `window * sigma^2` for the
-## walk's own one-day variance `sigma^2`, so dividing by `sqrt(window)` (not
-## `window`) is what recovers an estimate of `sigma` itself; dividing by
-## `window` instead would still shrink with history length but by the wrong
-## power, understating the spread by a further factor of `window`. The
-## per-day steps are symmetrised about zero, so a run of only-rising or
-## only-falling history does not bias the walk one way; one predictive draw
-## then sums `horizon` independent daily steps sampled with replacement from
-## that step pool, the same "iterate day by day to the horizon" construction
-## the Hub baseline uses. Summing `horizon` iid steps of variance `sigma^2`
-## gives a total variance `horizon * sigma^2`, so the spread grows with the
-## square root of the horizon.
-##
-## Centre-versus-Hub check: `COVIDhub-baseline` centres each target on the
-## single most recent observation; this baseline instead centres an
-## incident stream on the observed count over the whole horizon-length
-## window ending at `made_date`, since the streams here are noisy, sparse
-## cumulative counts (a handful of vintages, days apart) rather than a
-## dense daily series, so "yesterday's single value" would be a much
-## noisier centre than the last `horizon` days pooled. The level stream
-## (isolation beds) already centres on the single last observed occupancy,
-## matching the Hub convention directly. Both centres were left as
-## pre-existing; only the spread changed here.
+## The spread simulates the walk on the quantity the centre measures. For
+## the level stream that is the occupancy, so the pool is its past first
+## differences (`_history_diffs`). For an incident stream it is a window
+## total, so the pool is the change between consecutive vintages in that
+## total (`_window_total_steps`), not the change in the cumulative series,
+## which is the window's incidence rather than a change in it. A
+## `window`-day change becomes a one-day step by dividing by `sqrt(window)`,
+## since under a zero-drift walk such a change has variance
+## `window * sigma^2`. Steps are symmetrised about zero, so an only-rising
+## or only-falling history does not bias the walk, and one draw sums
+## `horizon` of them sampled with replacement.
 ##
 ## Falls back to the plain Poisson draw when fewer than three past
 ## differences are available, so an early made-date still scores.
@@ -949,39 +843,28 @@ end
 const _VINTAGE_CACHE = Dict{Tuple{String, Date}, Any}()
 
 ## The observation manifest and matching `grid_date` as they stood at
-## `made_date`, for the persistence baseline: loaded from `obs_path` (a
-## release's own `observations.toml` snapshot, already fetched by the
-## driver to read its cut-off) and truncated no later than `made_date` with
-## `load_observations`' `cutoff_date`, the same freezing `freeze_observations`
-## does. This is what makes the baseline honest — it sees only the
-## revisions and vintages that had landed by `made_date`, not whatever the
-## manifest says today after any later correction or backfill, which would
-## otherwise leak information the forecast itself never had.
+## `made_date`, for the persistence baseline: loaded from `obs_path`, the
+## release's own `observations.toml` snapshot, and truncated no later than
+## `made_date` by `load_observations`' `cutoff_date`.
 ##
-## `obs_path === nothing` falls back to the given `obs`/`grid_date` (the
-## current manifest) unchanged, e.g. from a test's synthetic `obs` NamedTuple
-## that carries no manifest file to load, or a caller that has no per-release
-## snapshot available.
+## This is where the no-leak rule is enforced, and the rest of the script
+## refers here. The baseline sees only the vintages and revisions that had
+## landed by `made_date`, not whatever the manifest says today, so a
+## correction or backfill made after a forecast cannot leak into the
+## baseline that forecast is judged against.
 ##
-## A `made_date` before the manifest's earliest vintage is valid: `history`
-## and `event_days` (in `load_observations`) simply return empty series for
-## it, the same "no vintage yet" state `cum_at`/`_history_diffs` already
-## handle, so `baseline_draws` falls back to its Poisson floor rather than
-## erroring.
+## `obs_path === nothing` returns `obs`/`grid_date` unchanged, for a caller
+## with no snapshot, such as a test's synthetic `obs`. A `made_date` before
+## the earliest vintage is valid: `history` and `event_days` return empty
+## series, the "no vintage yet" state `cum_at`/`_history_diffs` handle, so
+## `baseline_draws` falls back to its Poisson floor rather than erroring.
 ##
-## The one thing taken from the current manifest rather than the snapshot is
-## the harmonisation-break declaration, which is an annotation rather than a
-## vintage (see `carry_break_days`).
-##
-## The digitised symptom-onset triangle is a sibling CSV of the manifest
-## rather than a block inside it, and a release snapshot is fetched on its
-## own into a temporary directory with no such sibling, so the loader would
-## read an absent file and degrade the onset stream to a no-op, leaving
-## every onset group with an empty history, an uncovered baseline window and
-## so no persistence baseline at all. The package's own triangle is named
-## explicitly instead and truncated to `made_date` by the same
-## `cutoff_date` freeze as every other history, so the baseline sees the
-## vintages published by the made date and no later one.
+## Break days are an annotation rather than a vintage, so they come from the
+## current manifest (`carry_break_days`). The onset triangle is a sibling
+## CSV of the manifest and a snapshot is fetched alone, so the package's own
+## copy is named explicitly (`ONSET_CURVE_PATH`) and frozen by the same
+## `cutoff_date`. Without it the onset stream would load empty and get no
+## baseline at all.
 function vintage_observations(obs_path, made_date, obs, grid_date)
     isnothing(obs_path) && return obs, grid_date
     key = (obs_path, made_date)
@@ -999,43 +882,21 @@ end
 ## release's forecast archive against `obs` (the current observations),
 ## returning one row per group plus one persistence-baseline row per
 ## (made_date, horizon, target_date, stream), tagged `fit = "baseline"`.
+## Rows of an archive that carries no `fit` column are read as
+## `default_fit`.
 ##
-## `fit` names the model a forecast came from. A `stream_forecasts.csv`
-## carries it per row; a plain `forecast.csv` predates the per-stream fits
-## and holds the joint model's forecast alone, so its rows are read as
-## `default_fit` (`joint`). A stream no individual model fits, "recovered",
-## therefore yields `joint` and `baseline` rows and no others: the absent fit
-## is simply a fit that contributed no rows. The frozen-fit archive
-## (`forecast_frozen.csv`) carries no `fit` column either, so it is scored
-## with `default_fit = "frozen"`.
+## `vintage_obs_path`, when given, is the release's own
+## `observations.toml`, the manifest the baseline is built from (see
+## `vintage_observations`). `obs`/`grid_date` still give the truth every
+## fit is scored against, which is correctly the now-observed data.
 ##
-## `vintage_obs_path`, when given, is the release's own `observations.toml`
-## snapshot: the persistence baseline is built from that manifest, frozen no
-## later than each group's own `made_date` (see `vintage_observations`),
-## rather than from `obs`, so a revision or backfill that landed after
-## `made_date` cannot leak into the baseline. `obs`/`grid_date` are still used
-## for the truth every fit (including the baseline) is scored against, which
-## is correctly the now-observed data regardless.
-##
-## A group whose baseline window is uncovered (see
-## `baseline_window_covered`) gets no baseline row, counted in
-## `.no_baseline`; its fits keep their own scores.
-##
-## Groups whose `target_date` is not yet observed are skipped (counted in
-## `.skipped` for the caller to log), and so are groups whose `target_date`
-## runs past the stream's own reporting coverage (counted in `.stopped`),
-## kept apart because the two are not the same finding: one is a target the
-## world has not reached yet, the other is a stream that stopped being
-## updated before the target, whose unmoved cumulative total is not an
-## observed zero (see `truth_at`, `stream_coverage_end`).
-##
-## An archive carrying a `province` column (`province_forecast.csv`) is the
-## per-province split of the national streams. Each row's label is composed
-## from the two columns (`province_stream_label`), so every patch is scored
-## as its own stream against its own pooled truth and its own persistence
-## baseline. Groups whose window holds a harmonisation-break day are dropped
-## (counted in `.spans_break`), since that day's backfill is published
-## nationally only (see `spans_confirmed_break`).
+## Groups that are not scored are counted apart for the caller to log: a
+## target not yet observed (`.skipped`), one past the stream's own
+## reporting coverage (`.stopped`, see `truth_at`), and, for the
+## per-province archive (`province_stream_label`), a window holding a
+## harmonisation break (`.spans_break`, see `spans_confirmed_break`). A
+## group whose baseline window is uncovered (`baseline_window_covered`)
+## keeps its fits' scores and gets no baseline row (`.no_baseline`).
 function score_release(tag, forecast_path, obs, grid_date;
         default_fit = JOINT_FIT, vintage_obs_path = nothing)
     header, rows = read_simple_csv(forecast_path)
@@ -1402,29 +1263,20 @@ if abspath(PROGRAM_FILE) == @__FILE__
         ## The release's own `observations.toml` snapshot, already on disk
         ## from the selection pass above (`fetch_asset` is idempotent and
         ## `tagdir(tag)` names the same directory both times), so this is a
-        ## local read, not a second network fetch. Used as the vintage
-        ## manifest the persistence baseline is built from (see
-        ## `vintage_observations`); `nothing` when the earlier fetch failed,
-        ## in which case `score_release` falls back to the current `obs` and
-        ## this release's baseline can leak a later revision — logged below
-        ## rather than left a silent fallback, since this release was
-        ## already selected to be scored.
+        ## local read rather than a second fetch. It is the vintage manifest
+        ## the baseline is built from (see `vintage_observations`), and
+        ## `nothing` when the earlier fetch failed, warned about below.
         ##
-        ## This snapshot is the release's own cut-off, not `made_date`'s: for
-        ## the ordinary (non-frozen) scoring below `made_date` sits at or
-        ## near the release's own cut-off, so the two are close together, but
-        ## for the frozen scoring further down `made_date` is a fixed
-        ## historical cut-off (e.g. 20 May) reused across many later release
-        ## tags, so it can sit weeks before the snapshot used. `cutoff_date`
-        ## in `vintage_observations`/`load_observations` only excludes
-        ## vintages dated after `made_date`; it cannot un-revise a value that
-        ## was already baked into the release-cutoff snapshot before
-        ## `made_date`, if the correction landed between `made_date` and the
-        ## release's own cut-off. This residual risk is not closed here — it
-        ## would need a `made_date`-specific manifest snapshot per frozen
-        ## cut-off, which is not archived — so the frozen baseline is honest
-        ## about revisions that land after the release's cut-off but can
-        ## still see one that lands between `made_date` and that cut-off.
+        ## The snapshot is the release's own cut-off, not `made_date`'s. For
+        ## the ordinary scoring below the two sit close together, but the
+        ## frozen scoring further down reuses one fixed historical
+        ## `made_date` (e.g. 20 May) across many later tags. `cutoff_date`
+        ## only excludes vintages dated after `made_date`, so it cannot
+        ## un-revise a value already baked into the release-cutoff snapshot.
+        ## Closing that gap would need a `made_date`-specific snapshot per
+        ## frozen cut-off, which is not archived, so the frozen baseline can
+        ## still see a correction that landed between `made_date` and the
+        ## release's own cut-off.
         tag_obs_path = let p = joinpath(tagdir(tag), OBS_ASSET)
             isfile(p) ? p : nothing
         end
