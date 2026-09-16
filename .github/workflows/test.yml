@@ -72,6 +72,16 @@ jobs:
     name: Quality (package and docstring checks)
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # Pin the pkgimage targets rather than compiling for whichever machine
+    # runs the job. GitHub's ubuntu-latest fleet is mixed and Julia discards a
+    # pkgimage built for a microarchitecture the host does not match, so a
+    # depot cache restored from an earlier run is thrown away and the whole
+    # stack recompiles. See docs.yml, where this cost the render jobs ~16 min
+    # each. Only the two ubuntu-only jobs take it: macOS-latest is arm64, so
+    # the matrix would need a per-cell value.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -87,6 +97,10 @@ jobs:
   downgrade-compat:
     name: Downgrade compat (Julia 1.11)
     runs-on: ubuntu-latest
+    # Pinned pkgimage targets, as in `quality` above.
+    env:
+      JULIA_CPU_TARGET: >-
+        generic;sandybridge,-xsaveopt,clone_all;haswell,-rdrnd,base(1)
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
