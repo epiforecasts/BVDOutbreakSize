@@ -189,6 +189,9 @@ The unallocated row is the report's own count of cases and deaths it has not att
 It is worded `Autres ZS (données non ventilées)` (018 to 032, 94 cases and 10 deaths throughout), `Autres zones non encore identifiées` (034 to 058, 17 cases), `Non identifiées` (059 to 068, 17 cases) and `A ventiler` (088 onward, deaths only).
 It is kept as `<province>.unallocated`, with a printed `NA` recorded as 0, so that the zone rows plus the unallocated row partition the province.
 Only Ituri has ever printed one.
+Its count falls twice: on 18 June (SitRep 035) from 94 cases and 10 deaths to 17 and 0, and on 22 July (SitRep 069) from 17 cases to 0.
+Each fall is a reattribution of counts the report had carried as unallocated into named zones, so on those dates the zone rows rise by more than the province (163 zone cases against a province increment of 86 on 18 June, and 374 clamped zone cases against 347 on 22 July).
+The composition model leaves those two Ituri vintages out: `zone_increment_matrix` zeroes the patch's column on any date its unallocated count falls and lists the dates, and since the increments are differences of cumulative counts the next vintage is unaffected.
 
 Spelling varies between vintages.
 The scanner's alias table resolves `Gethy` to `gety`, `Nai-Nia` (SitRep 030) to `nia_nia`, `MakisoKisangani` (SitRep 064) and the wrapped `Makiso-` / `Kisangani` to `makiso_kisangani`, the wrapped `Boma` / `Mangbetu` to `boma_mangbetu`, `Bambu-mine` to `bambu` and `Mungbwalu` to `mongbwalu`, plus the variants the mirror's `aliases.csv` records from vintages this archive lacks (`Nyakunde`, `Rumba`, `Mongbalu`, `Tchomai`, `Wanierukula`, `Manguripa`).

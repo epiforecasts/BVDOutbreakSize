@@ -745,6 +745,41 @@ end
     @test_throws ErrorException zone_fit_inputs(syn.chain, empty; kw...)
 end
 
+@testitem "zone_fit_inputs: a reattribution vintage is left out" setup=[
+    ZoneSynthetic
+] begin
+    syn = zone_synthetic()
+    hist = deepcopy(syn.obs.zone_confirmed_history)
+    nv = length(syn.days)
+    ## Patch a carries 20 unallocated cases over the first three vintages,
+    ## attributed to z1 at the fourth.
+    un = vcat(fill(20, 3), zeros(Int, nv - 3))
+    hist["a"]["unallocated"] = (; days = copy(syn.days), counts = un)
+    z1 = hist["a"]["z1"]
+    hist["a"]["z1"] = (; days = z1.days, counts = z1.counts .+ (20 .- un))
+    obs = merge(syn.obs, (; zone_confirmed_history = hist))
+    inputs = zone_fit_inputs(syn.chain, obs; zones = nothing,
+        patch_names = ["a", "b"], patch_labels = ["A", "B"])
+    zd = inputs.model_data
+    day4 = syn.days[4]
+    @test zone_reattribution_days(hist) == Dict("a" => [day4])
+    @test inputs.excluded ==
+          [(; patch = "a", date = obs.seeding + Day(day4 - 1))]
+    ## The fourth column is zeroed for patch a only, so its cell is not
+    ## scored, while every other column is the plain difference.
+    @test all(iszero, inputs.counts[1:5, 4])
+    @test inputs.counts[6:8, 4] == syn.counts[6:8, 4]
+    rest = setdiff(1:nv, 4)
+    @test inputs.counts[:, rest] == syn.counts[:, rest]
+    @test !any(c -> zd.cell_patch[c] == 1 && zd.cell_vintage[c] == 4,
+        eachindex(zd.cell_patch))
+    @test any(c -> zd.cell_patch[c] == 2 && zd.cell_vintage[c] == 4,
+        eachindex(zd.cell_patch))
+    ## The cumulative at the cut-off still carries the reattributed cases.
+    @test inputs.cumulative[1] == sum(syn.counts[1, :]) + 20
+    @test isempty(zone_inputs(syn).excluded)
+end
+
 @testitem "bvd_zone: mixing redistributes force within the patch" setup=[
     ZoneSynthetic
 ] begin
