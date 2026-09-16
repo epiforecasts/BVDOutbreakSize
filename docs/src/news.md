@@ -118,7 +118,8 @@ section of their own (#412).
 province over time, posterior predictive checks on both compositions, and a
 per-province summary figure.
 - The summary reports each province's infections, reproduction number and
-case-fatality ratio, and the diagnostics table carries the no-patch control.
+case-fatality ratio as a table per quantity, a row per province and a column
+per interval level, and the diagnostics table carries the no-patch control.
 - The methods section carries the model's maths: the seeding, the renewal with
 importation, the national read-back, the gravity kernel and the per-origin
 intensity.
