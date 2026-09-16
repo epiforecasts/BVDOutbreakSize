@@ -212,7 +212,7 @@ Advancing the headlines while leaving these behind both drops data and can break
 | Headline `Cumul décès confirmés` (+ lethality %) | `confirmed_death_history` |
 | Headline `Guéris — cumul` | `recovered_history` |
 | Headline `Patients en isolement` (+ occupancy %) | `isolation_history`; occupancy → `bed_capacity_history` (= occupancy ÷ rate) |
-| Headline / Tableau 3 `Cas suspects du jour` | `suspected_daily_history` |
+| Headline / Tableau 3 `Cas suspects du jour`; from SitRep 084 the alert table's `Alertes vérifiées et validées (cas suspect)` Vivants + Décédés | `suspected_daily_history` |
 | Laboratory 24h `échantillons analysés` per province (§4.3 table, or §3.2 bullets in the analytique format) | `tests_analysed_daily_history` |
 | Occupation table (Tableau 6/7, or Tableau 5/6 in the analytique format): `Total admissions (24h)`, `Sorties — décédés / non-cas / évadés`, `Patients au lit (J-1)`, `dont confirmés / suspects` | `treatment_admissions_history`, `treatment_deaths_history`, `treatment_ruleout_history`, `treatment_absconded_history`, `treatment_aulit_history`, `treatment_confirmed_incare_history`, `treatment_suspect_incare_history` |
 
@@ -254,7 +254,9 @@ Note any disagreement in the `source =` string and prefer the auditable value.
   `treatment_admissions_history`, `treatment_deaths_history`, `treatment_ruleout_history`, `treatment_absconded_history`, `treatment_aulit_history`, `treatment_confirmed_incare_history` and `treatment_suspect_incare_history` are frozen at SitRep 080, since no vintage from 081 prints the table that carried them (issue #562).
   `bed_capacity_history` is NOT frozen — it continues from the PECH/section-1.6 prose's per-province `lits` mentions (a partial, not national, total: whichever provinces print a bed count that vintage), following the precedent already set for SitReps 081-082.
 - **SitRep 084 "MVEBDB" brief format**: from 06 August 2026 INSP switched to a much shorter (~6-page) template under a new "TASK FORCE PRESIDENTIELLE EBOLA 17" letterhead.
-  It drops the page-1 `Cas suspects du jour` tile and Tableau 3 entirely (`suspected_daily_history` frozen at SitRep 083, 5 August), replacing it with a differently-structured national alert-validation funnel that is not a like-for-like replacement.
+  It drops the page-1 `Cas suspects du jour` tile, replacing it with the national alert-validation table.
+  That table is the pre-084 Tableau 3 transposed, so `suspected_daily_history` continues on its `Alertes vérifiées et validées (cas suspect)` Vivants + Décédés total, which the old table printed as its own `Total cas suspects du jour` row (exact on all 20 overlap vintages; see the block's `source =` string and issue #708).
+  SitRep 084 itself is excluded: its Nord-Kivu row both validates and invalidates more alerts than the province received, carrying the national total to 948 (83.1% of alerts validated, against 16.9-33.6% elsewhere in this format).
   It DOES give the 24h analysed-sample national total directly in prose (§1.4), a cleaner source than the previous per-province summation, so `tests_analysed_daily_history` is unaffected and continues through 085.
   SitRep 085's page-1 isolation tile (595) exactly matches Ituri's own province-level occupancy that day, strongly suggesting it is not a genuine national total (084's equivalent tile clearly was); excluded from `isolation_history`, which steps from 084 straight to 086.
   Full writeup and evidence in issue #562.
