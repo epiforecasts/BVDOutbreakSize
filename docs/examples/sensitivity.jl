@@ -288,9 +288,7 @@ MarkdownTable(province_validation_table) #hide
 # Each zone's forecast is the province forecast above times the zone's projected share of the province's confirmed reports over the week, from the [health-zone model](@ref "Health-zone model") melded from the frozen fit.
 # The observed count is the change in each zone's cumulative confirmed cases between the frozen cut-off and the current data, clamped at zero.
 # When the zone tables end before the current cut-off, the week scored is shortened to the days they cover.
-# The scores set the zone model against two simpler rules for the same split: holding each zone's cumulative share at the cut-off, and repeating the previous week's zone counts.
-# The log score is the log probability of the observed split of each province's weekly total under each rule.
-# The province totals are scored with the continuous ranked probability score and their 90% coverage, against the previous week's total.
+# The scores and the two persistence rules they are set against are those of the [zone forecast scoring](@ref "Forecast scoring against a persistence baseline") in the analysis methods.
 # The figure shows the fifteen zones with the largest forecast medians and the fold below the scores holds every zone.
 
 #md # ```@raw html
@@ -305,35 +303,51 @@ frozen_zone_inputs = zone_fit_inputs(frozen_lastweek.chn, frozen_local.o)
 ## The horizon is the days from the frozen cut-off to the last zone
 ## vintage, at most the week. A shorter week needs its own national
 ## forecast at that horizon, since the zone split scales its total; at the
-## full week it is the province forecast above.
+## full week it is the province forecast above. Zone tables that end at
+## or before the frozen cut-off leave no day to score, and the section
+## shows a note in place of its outputs.
 zone_validation_horizon = min(7,
     value(zone_inputs_live.dates[end] - frozen_local.o.cutoff))
-zone_validation_forecast = zone_validation_horizon == 7 ?
-                           validation_forecast :
-                           forecast_reported(frozen_lastweek.chn;
-    horizon = zone_validation_horizon,
-    obs_cases = frozen_lastweek.o.reported_cases,
-    obs_deaths = frozen_lastweek.o.total_deaths,
-    obs_confirmed = frozen_lastweek.o.confirmed_cases,
-    obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
-    obs_recovered = frozen_lastweek.o.recovered_cases,
-    grid_n = frozen_lastweek.o.n,
-    onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end)
-zone_truth = zone_forecast_truth(obs, frozen_zone_inputs;
-    made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon)
-zone_validation_table = zone_forecast_vs_truth(frozen_local.chn,
-    frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
-    truth = zone_truth, horizon = zone_validation_horizon)
-zone_validation_scores = zone_forecast_scores(frozen_local.chn,
-    frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
-    truth = zone_truth, horizon = zone_validation_horizon)
-zone_validation_fig = plot_zone_forecast(zone_validation_table;
-    patch_labels = frozen_zone_inputs.patch_labels,
-    xlabel = "New confirmed cases over $(zone_validation_horizon) days",
-    title = "Zone forecast from $(frozen_local.o.cutoff) against observed")
+_zone_validation_missing = Markdown.parse(
+    "_The zone tables end at or before the frozen cut-off, so the zone " *
+    "forecast is not scored in this build._")
+if zone_validation_horizon >= 1
+    zone_validation_forecast = zone_validation_horizon == 7 ?
+                               validation_forecast :
+                               forecast_reported(frozen_lastweek.chn;
+        horizon = zone_validation_horizon,
+        obs_cases = frozen_lastweek.o.reported_cases,
+        obs_deaths = frozen_lastweek.o.total_deaths,
+        obs_confirmed = frozen_lastweek.o.confirmed_cases,
+        obs_confirmed_deaths = frozen_lastweek.o.confirmed_deaths,
+        obs_recovered = frozen_lastweek.o.recovered_cases,
+        grid_n = frozen_lastweek.o.n,
+        onset_grid_start = _val_grid_start, onset_grid_end = _val_grid_end)
+    zone_truth = zone_forecast_truth(obs, frozen_zone_inputs;
+        made_date = frozen_local.o.cutoff, horizon = zone_validation_horizon)
+    zone_validation_table = zone_forecast_vs_truth(frozen_local.chn,
+        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
+        truth = zone_truth, horizon = zone_validation_horizon)
+    zone_validation_scores = zone_forecast_scores(frozen_local.chn,
+        frozen_lastweek.chn, zone_validation_forecast, frozen_zone_inputs;
+        truth = zone_truth, horizon = zone_validation_horizon)
+    zone_validation_fig = plot_zone_forecast(zone_validation_table;
+        patch_labels = frozen_zone_inputs.patch_labels,
+        xlabel = "New confirmed cases over $(zone_validation_horizon) days",
+        title = "Zone forecast from $(frozen_local.o.cutoff) against observed")
+else
+    ## The frames stay frames, since the release assets below write them.
+    zone_validation_table = DataFrame()
+    zone_validation_scores = DataFrame()
+    zone_validation_fig = _zone_validation_missing
+end;
 ## The scores rounded for display. Share persistence carries no total
-## forecast, so its total columns are blank.
-zone_validation_scores_table = let s = zone_validation_scores
+## forecast, so its total columns are blank. No patch is scored when every
+## observed total is zero or incomplete, which leaves an empty frame
+## without the columns.
+zone_validation_scores_table = isempty(zone_validation_scores) ?
+                               _zone_validation_missing :
+                               let s = zone_validation_scores
     fmt(x, d) = isnan(x) ? "" : string(round(x; digits = d))
     DataFrame("Province" => s.patch, "Rule" => s.method,
         "Observed total" => s.observed,
@@ -342,6 +356,9 @@ zone_validation_scores_table = let s = zone_validation_scores
         "Total within 90%" => [ismissing(x) ? "" : string(x)
                                for x in s.within_90])
 end;
+zone_validation_table_display = isempty(zone_validation_table) ?
+                                _zone_validation_missing :
+                                zone_validation_table;
 
 #md # ```@raw html
 #md # </details>
@@ -355,7 +372,7 @@ MarkdownTable(zone_validation_scores_table) #hide
 #md # <details><summary>Zone forecast against observed, every zone</summary>
 #md # ```
 
-MarkdownTable(zone_validation_table) #hide
+MarkdownTable(zone_validation_table_display) #hide
 
 #md # ```@raw html
 #md # </details>

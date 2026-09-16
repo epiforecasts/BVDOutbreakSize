@@ -133,18 +133,6 @@ laboratory throughput from section 4.3, as `[province_confirmed_history]`,
 - The longer series narrows the signal that identifies provincial
 ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
 scans stopped in July, and provincial test positivity has converged.
-- Added per-health-zone confirmed cases and deaths from Tableau 2 as
-`[zone_confirmed_history]` and `[zone_death_history]`, 85 vintages from 1 June
-to 12 September over 62 zones, each province's unallocated row kept so the
-zones partition the province exactly on every date.
-`scripts/scan_zone_tableau2.jl` scans them, `scripts/confirm_zone_data.jl`
-cross-checks them against the INRB-UMIE mirror (3043 of 3057 case cells and
-3049 of 3059 death cells agree, every disagreement the mirror's), and
-`data/health_zones.csv` and `data/health_zones.geojson` carry the zones'
-population, centroid, DHIS2 code and boundaries.
-`load_observations` exposes the blocks as `zone_confirmed_history` and
-`zone_death_history`, `zone_increment_matrix` reshapes them per patch and
-`load_health_zones` reads the metadata.
 
 ### Report
 
