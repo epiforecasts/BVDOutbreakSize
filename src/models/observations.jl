@@ -786,12 +786,29 @@ late_days, late_increments, late_analysed, late_start)` of grid
 day-indices and per-window counts. `late_analysed[i]` is the observed 24h
 analysed denominator for late day `i` (0 when none was published). The
 observed and late groups are empty when no laboratory history is present
-and every confirmed vintage becomes an early window. Pure integer
-bookkeeping on the observed data, so it carries no gradient.
+and every confirmed vintage becomes an early window.
+
+`early_start` and `late_start` are grid days on every path but two. An empty
+`confirmed_history` returns `0` for both, and a `confirmed_history` with no
+`lab_history` returns `0` for `late_start` alone. Those two are the shortcut
+returns, and `0` there is a sentinel rather than a day. Elsewhere each is a
+real day whether or not its own window list is empty, since `early_start` is
+the first confirmed vintage and `late_start` the last laboratory day,
+neither of which depends on how many windows fell out.
+
+An empty group's start is still read: [`confirmed_cases_model`](@ref) passes
+it to [`bin_increments`](@ref) as a one-element edge list. The single bin
+that comes back is dropped, so the value cannot reach the likelihood, but a
+caller reading the sentinel as a grid day would index on `0`.
+
+Pure integer bookkeeping on the observed data, so it carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]),
         confirmed_break_days = Int[])
+    ## Both starts are the sentinel `0` rather than a grid day. With no
+    ## confirmed vintage there is no first one to pin to, and the bin this
+    ## edge produces downstream is dropped before it reaches the likelihood.
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
@@ -1532,8 +1549,9 @@ Three pieces:
     background, tied to the case background by `cfr_bg` (see
     [`deaths_model`](@ref) and [`background_cfr_model`](@ref)), keeps
     `q_death` below one.
-  - Assay positivity. `p = s · q_death + (1 − spec)(1 − q_death)` with PCR
-    sensitivity `s` ([`test_sensitivity_model`](@ref)) and specificity
+  - Assay positivity. `p = s_test · q_death + (1 − spec)(1 − q_death)` with
+    PCR sensitivity `s_test`, named as [`confirmed_cases_model`](@ref)
+    names it ([`test_sensitivity_model`](@ref)), and specificity
     `spec` ([`test_specificity_model`](@ref)), the same form as the
     confirmed-case positivity, drawn from the same priors as separate
     death-stream parameters.
@@ -1569,7 +1587,7 @@ positivity and the expected confirmed-death count.
         specificity = test_specificity_model())
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
-    s = sens_state.s_test
+    s_test = sens_state.s_test
     spec = spec_state.spec
     n = length(deaths_daily)
 
@@ -1583,21 +1601,24 @@ positivity and the expected confirmed-death count.
     ## and a reassignment would box them.
     _widened = eltype(susp_death_raw) === Any
     susp_death = _widened ?
-                 convert(Vector{typeof(s)}, susp_death_raw) : susp_death_raw
+                 convert(Vector{typeof(s_test)}, susp_death_raw) :
+                 susp_death_raw
     bvd_death = _widened ?
-                convert(Vector{typeof(s)}, bvd_death_raw) : bvd_death_raw
+                convert(Vector{typeof(s_test)}, bvd_death_raw) :
+                bvd_death_raw
 
     ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
-    ## tested-positive probability p = s·q + (1 − spec)(1 − q).
-    lo = eps(typeof(s))
-    hi = one(s) - lo
+    ## tested-positive probability p = s_test·q + (1 − spec)(1 − q).
+    lo = eps(typeof(s_test))
+    hi = one(s_test) - lo
     q_death_daily = map(eachindex(susp_death)) do t
         den = susp_death[t]
-        ratio = den > lo ? bvd_death[t] / den : one(s)
-        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
+        ratio = den > lo ? bvd_death[t] / den : one(s_test)
+        clamp(isfinite(ratio) ? ratio : one(s_test), lo, hi)
     end
-    p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
-                                        (one(s) .- q_death_daily)
+    p_pos_daily = s_test .* q_death_daily .+
+                  (one(s_test) - spec) .*
+                  (one(s_test) .- q_death_daily)
 
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
@@ -1658,7 +1679,7 @@ positivity and the expected confirmed-death count.
     q_death := q_death_daily[n]
     p_death_conf := p_pos_daily[n]
 
-    return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
+    return (; τ_death, scaling = sc, s_test, spec, q_death, p_death_conf,
         confirmed_death_daily, expected_confirmed_deaths)
 end
 
@@ -2375,20 +2396,27 @@ series for forecasting and replication.
     occ_T = min(dem_T, C_T)
     overall_los = CFR_iso * death_los_state.mean +
                   (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
-    expected_isolation := safe_rate(occ_T)
-    expected_bed_demand := safe_rate(dem_T)
+    ## Each cut-off quantity below is both `:=`-tracked onto the chain and
+    ## returned, so it is bound once and used twice. Computing it twice puts
+    ## the work on the gradient path twice, and lets an edit to one copy
+    ## leave the chain and the returned value disagreeing.
+    isolation_T = safe_rate(occ_T)
+    bed_demand_T = safe_rate(dem_T)
+    expected_isolation := isolation_T
+    expected_bed_demand := bed_demand_T
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    expected_admissions := safe_rate(isempty(admit_daily) ? z0 :
-                                     admit_daily[end])
-    expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
-                                        deaths_daily[end])
-    expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :
-                                   ruleout_daily[end])
+    admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    incare_deaths_T = safe_rate(isempty(deaths_daily) ? z0 :
+                                deaths_daily[end])
+    ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[end])
+    expected_admissions := admissions_T
+    expected_incare_deaths := incare_deaths_T
+    expected_ruleouts := ruleouts_T
     ## Unmet demand: the uncapped demand above the censored occupancy.
     bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
-    bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
+    bed_utilisation := isolation_T / safe_rate(C_T)
     isolation_severity := sev_state.δ_iso
     isolation_bvd_admission := p_iso_bvd
     incare_cfr := CFR_iso
@@ -2396,9 +2424,11 @@ series for forecasting and replication.
     treatment_overall_los := overall_los
     conf_incare_T = isempty(conf_split) ? z0 : conf_split[end]
     susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[end], z0)
-    expected_confirmed_incare := safe_rate(conf_incare_T)
-    expected_suspect_incare := safe_rate(susp_incare_T)
-    incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
+    conf_incare_rate = safe_rate(conf_incare_T)
+    susp_incare_rate = safe_rate(susp_incare_T)
+    expected_confirmed_incare := conf_incare_rate
+    expected_suspect_incare := susp_incare_rate
+    incare_confirmed_share := conf_incare_rate / bed_demand_T
     ## Raw, since ρ can exceed one. ρ < 1 means occupied suspects are
     ## confirmed slower than the borrowed community hazard, held for repeated
     ## exclusion testing.
@@ -2406,7 +2436,8 @@ series for forecasting and replication.
     ## How much of the observed reclassification the model absorbed as a
     ## reporting artefact, the rest carried by real demand. Fitted and
     ## possibly negative, so reported raw rather than through `safe_rate`.
-    occupancy_break := isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    break_T = isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    occupancy_break := break_T
 
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
@@ -2420,20 +2451,16 @@ series for forecasting and replication.
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
         break_grid_days,
-        occupancy_break = isempty(occ_break_offset) ? z0 :
-                          last(occ_break_offset),
+        occupancy_break = break_T,
         confirmed_incare = conf_split, suspect_incare = susp_split,
         confirmed_incare_deaths_daily, incare_confirm_modifier = ρ_conf,
-        expected_confirmed_incare = safe_rate(conf_incare_T),
-        expected_suspect_incare = safe_rate(susp_incare_T),
-        expected_isolation = safe_rate(occ_T),
-        expected_bed_demand = safe_rate(dem_T),
-        expected_admissions = safe_rate(isempty(admit_daily) ? z0 :
-                                        admit_daily[end]),
-        expected_incare_deaths = safe_rate(isempty(deaths_daily) ? z0 :
-                                           deaths_daily[end]),
-        expected_ruleouts = safe_rate(isempty(ruleout_daily) ? z0 :
-                                      ruleout_daily[end]))
+        expected_confirmed_incare = conf_incare_rate,
+        expected_suspect_incare = susp_incare_rate,
+        expected_isolation = isolation_T,
+        expected_bed_demand = bed_demand_T,
+        expected_admissions = admissions_T,
+        expected_incare_deaths = incare_deaths_T,
+        expected_ruleouts = ruleouts_T)
 end
 
 """
