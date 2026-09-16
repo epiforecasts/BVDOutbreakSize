@@ -6,6 +6,67 @@ Major versions of the report are kept as
 each push to `main` also republishes the rendered analysis and the
 `output/` artifacts.
 
+## Unreleased
+
+Changes since v2.0.0
+
+### Model
+
+- A health-zone model disaggregates each patch of the headline joint model over the health zones that have reported a confirmed case (#706).
+It is a two-stage Markov melding in which the zone stage receives the patch posterior and feeds nothing back: patch infections, the generation interval and the infection-to-report delay are fixed at the joint posterior means, each zone's infections are a share of its patch's, the shares follow a renewal on the zone's own force of infection scaled by a weekly-knot deviation walk, and the per-vintage zone increments are scored with a Dirichlet-multinomial composition conditional on the allocated patch total.
+Zone reproduction numbers invert the zone renewal and are paired with joint draws for every reported quantity.
+Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk; zone ascertainment is taken as equal within a patch; deaths and between-zone mixing are off by default and fitted as sensitivity variants.
+`fit_zone` fits it from a parent chain with a data-informed start, two chains, 600 draws after 400 adaptation steps and a tree-depth cap of 8.
+
+### Data
+
+- Added per-health-zone confirmed cases and deaths from Tableau 2 as
+`[zone_confirmed_history]` and `[zone_death_history]`, 85 vintages from 1 June
+to 12 September over 62 zones, each province's unallocated row kept so the
+zones partition the province exactly on every date (#706).
+`scripts/scan_zone_tableau2.jl` scans them, `scripts/confirm_zone_data.jl`
+cross-checks them against the INRB-UMIE mirror (3043 of 3057 case cells and
+3049 of 3059 death cells agree, every disagreement the mirror's), and
+`data/health_zones.csv` and `data/health_zones.geojson` carry the zones'
+population, centroid, DHIS2 code and boundaries.
+`load_observations` exposes the blocks as `zone_confirmed_history` and
+`zone_death_history`, `zone_increment_matrix` reshapes them per patch and
+`load_health_zones` reads the metadata.
+
+### Report
+
+- The methods carry the health-zone model: the cut two-stage melding, the
+share renewal and its deviation walk, the Dirichlet-multinomial composition,
+the implied zone reproduction number and the assumptions the zone stage makes,
+with its prior sample, sampler settings, forecast projection and scoring under
+model fitting and evaluation (#706).
+- Added a health-zone results section: choropleths of the reproduction
+number, the one-week forecast and the cases to date, zone reproduction-number
+trajectories against their patch, a ranking by the probability of growth, the
+composition check with the prior predictive, the posterior predictive per
+vintage and cumulative and a calibration table, the one-week zone forecast and
+the zone fit diagnostics.
+- The release adds `zone_summary.csv` and `zone_forecast.csv`, and the
+summary page gains the zone maps, the zone forecast, and an interactive
+health-zone map reading the per-zone estimates.
+- The sensitivity page validates the one-week zone forecast beside the
+province one, scoring each province's observed zone split against the
+share-persistence and naive-persistence rules, and gains a health-zone
+sensitivity section: the zone posteriors under a low and a high parent draw,
+with and without between-zone mixing, with and without the zone deaths, and
+the frozen and live zone fits' reproduction numbers over the past week.
+The release adds `zone_forecast_validation.csv` and `zone_forecast_scores.csv`.
+- `scripts/zone_fit_report.jl` writes a standalone fit report for the zone
+model: prior predictive check, simulation-based recovery, sampler diagnostics,
+posterior predictive checks and the ranking and map.
+
+### Infrastructure
+
+- The fit registry and the docs workflow gain a dependent stage (#706).
+The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
+The zone sensitivity variants `local_mixing`, `local_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
+`BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
+
 ## v2.0.0
 
 Changes since v1.18.0
