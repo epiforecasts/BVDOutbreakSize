@@ -233,10 +233,20 @@ end
 
     withenv("BVD_FIT_LOG" => "none", "BVD_ZONE_SAMPLES" => nothing,
         "BVD_ZONE_WARMUP" => nothing) do
-        ## A missing parent is an error, not a refit: the zone fitter must
-        ## not run.
-        @test_throws Exception spec("local").thunk()
-        @test_throws Exception spec("local_frozen_validation").thunk()
+        ## A missing parent is a strict cache miss, not a refit: the zone
+        ## fitter must not run.
+        miss(thunk) =
+            try
+                thunk()
+                nothing
+            catch err
+                err
+            end
+        for id in ("local", "local_frozen_validation")
+            err = miss(spec(id).thunk)
+            @test err isa ErrorException
+            @test occursin("MISS", err.msg)
+        end
         @test isempty(calls)
 
         ## A fake headline under the joint's own key reaches the zone fitter

@@ -187,7 +187,9 @@ joint_warmup(default::Integer) = parse(Int,
     get(ENV, "BVD_JOINT_WARMUP", string(default)))
 
 ## Sampler settings for the health-zone fits. `BVD_ZONE_SAMPLES` and
-## `BVD_ZONE_WARMUP` override the draw and adaptation counts.
+## `BVD_ZONE_WARMUP` override the draw and adaptation counts. Like
+## `BVD_JOINT_*` they sit outside the content hash, so a short local run
+## writes its chain under the production key.
 zone_samples(default::Integer) = parse(Int,
     get(ENV, "BVD_ZONE_SAMPLES", string(default)))
 zone_warmup(default::Integer) = parse(Int,
@@ -634,6 +636,11 @@ function build_fit_specs(obs;
             max_depth = zone_max_depth(),
             callback = fit_callback(name), variant...)
     end
+    ## A dependent key shares the parent's content hash but says nothing
+    ## about the parent chain's bytes, so a parent refit under an unchanged
+    ## key pairs with the zone chain already cached against the old parent.
+    ## The fixed per-chain seed keeps such a refit near-identical, so the
+    ## pairing holds.
     push!(specs,
         ## The health-zone fit on the current data, melded from the headline.
         (; id = "local", kind = :chain, needs = ["joint"],
