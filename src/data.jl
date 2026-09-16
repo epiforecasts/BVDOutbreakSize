@@ -258,6 +258,9 @@ function load_observations(
         for prov in sort!([k for k in keys(block) if block[k] isa AbstractDict])
             zones = Dict{String, ZoneHistory}()
             for (zone, vals) in block[prov]
+                length(vals) == length(block["dates"]) || error(
+                    "$key: $prov.$zone has $(length(vals)) entries for " *
+                    "$(length(block["dates"])) dates")
                 v = Int.(vals[keep])
                 zones[String(zone)] = (; days = idx[ord], counts = v[ord])
             end
