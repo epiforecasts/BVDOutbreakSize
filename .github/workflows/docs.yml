@@ -68,10 +68,12 @@ jobs:
             Pkg.develop(PackageSpec(path=pwd()))
             Pkg.instantiate()
             Pkg.precompile()'
-      # Recorded so a job that still recompiles from a restored depot can
-      # be told apart from one that simply landed on a different machine.
-      # With JULIA_CPU_TARGET pinned above, the CPU here must no longer
-      # decide whether the cache survives.
+      # Temporary, and duplicated in the other job on purpose rather than
+      # pulled into a composite action: it exists to confirm the diagnosis
+      # behind JULIA_CPU_TARGET above and comes out once a run shows the
+      # render reusing the depot. Until then it tells a job that recompiled
+      # from a restored depot apart from one that simply landed on a
+      # different machine, which the timings alone cannot do.
       - name: Record the runner's CPU
         run: |
           echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
@@ -265,10 +267,12 @@ jobs:
           # enters the cache key, so each render misses the shared depot and
           # re-precompiles the whole stack (~530 deps) before rendering.
           include-matrix: false
-      # Recorded so a job that still recompiles from a restored depot can
-      # be told apart from one that simply landed on a different machine.
-      # With JULIA_CPU_TARGET pinned above, the CPU here must no longer
-      # decide whether the cache survives.
+      # Temporary, and duplicated in the other job on purpose rather than
+      # pulled into a composite action: it exists to confirm the diagnosis
+      # behind JULIA_CPU_TARGET above and comes out once a run shows the
+      # render reusing the depot. Until then it tells a job that recompiled
+      # from a restored depot apart from one that simply landed on a
+      # different machine, which the timings alone cannot do.
       - name: Record the runner's CPU
         run: |
           echo "\`${{ github.job }}\` on $(julia -e 'print(Sys.CPU_NAME)')" \
