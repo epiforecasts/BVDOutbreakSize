@@ -2091,6 +2091,7 @@ cfr_prior_fig #hide
 # A zone's increment $y_{z,v}$ at vintage $v$ is the difference of its cumulative count from the previous vintage, clamped at zero, and the first vintage's increment is its cumulative count.
 # The allocated patch total $N_{p,v} = \sum_{z \in p} y_{z,v}$ excludes the report's unallocated row.
 # A patch and vintage with no allocated cases is not scored.
+# A vintage on which a province's unallocated count falls is a reattribution of counts into named zones rather than new cases, so that province's zone split is not scored on that date.
 # The composition check pushes each posterior draw's expected shares through the allocation at that vintage's observed total, and the prior draws through the same allocation for a prior predictive band.
 # The zone grid starts on day $t_0$, 42 days before the first zone vintage, and carries weekly knots $k = 1, \dots, K$ from there to the cut-off.
 #
