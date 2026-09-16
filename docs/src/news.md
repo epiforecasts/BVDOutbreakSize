@@ -107,6 +107,8 @@ A per-fit matrix job said nothing about the chain it produced, so whether a fit 
 It goes to the job summary and to the job log.
 A cache hit records that the fit was reused rather than refitted.
 `fit_diagnostics` carries the tail effective sample size alongside the bulk one to support this.
+- The reduced-data-streams banner is gone from the README and the summary dashboard.
+The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 
 ### Performance
 
