@@ -23,7 +23,8 @@ using Distributions: Distribution, pdf, cdf, Poisson,
                      Gamma, TDist, truncated, censored, product_distribution,
                      DirichletMultinomial
 using CensoredDistributions: double_interval_censored
-using StatsFuns: logit, logistic, loggamma
+using SpecialFunctions: loggamma
+using StatsFuns: logit, logistic
 import CairoMakie
 import AlgebraOfGraphics as AoG
 import PairPlots
