@@ -503,6 +503,43 @@ function province_increment_matrix(province_history,
 end
 
 """
+    province_testing_covariate(province_lab_daily_history, province_names,
+                               populations)
+
+Per-capita laboratory effort in each patch, logged and centred to mean
+zero, for the covariate on the prior for relative case ascertainment in
+[`province_composition_model`](@ref).
+
+Sums each patch's `<province>_analysed` daily counts over the whole
+laboratory window, pooling the source provinces a patch covers (see
+[`PROVINCE_MEMBERS`](@ref)), and divides by `populations[p]`. Centring
+matches the sum-to-zero ascertainment the composition identifies.
+
+Returns a length-`n_patches` vector of zeros when the laboratory history
+is absent, when a patch has no analysed series, or when a patch analysed
+nothing over the window. A zero covariate recovers the model without it.
+"""
+function province_testing_covariate(province_lab_daily_history,
+        province_names::AbstractVector = PROVINCE_NAMES,
+        populations::AbstractVector{<:Real} = PROVINCE_POPULATIONS)
+    np = length(province_names)
+    length(populations) == np || error(
+        "province_testing_covariate: $(length(populations)) populations " *
+        "for $(np) patches.")
+    none = zeros(np)
+    isempty(province_lab_daily_history) && return none
+    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in province_names]
+    series = [["$(m)_analysed" for m in ms] for ms in members]
+    any(ks -> any(k -> !haskey(province_lab_daily_history, k), ks), series) &&
+        return none
+    analysed = [sum(sum(province_lab_daily_history[k].counts) for k in ks)
+                for ks in series]
+    any(iszero, analysed) && return none
+    log_rate = log.(analysed ./ populations)
+    return log_rate .- (sum(log_rate) / np)
+end
+
+"""
     freeze_observations(cutoff_date; path = default manifest)
 
 Load the observation manifest frozen to `cutoff_date`. Every dated

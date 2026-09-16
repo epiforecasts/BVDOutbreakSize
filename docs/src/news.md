@@ -10,6 +10,18 @@ each push to `main` also republishes the rendered analysis and the
 
 Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
+### Model
+
+- The prior on a province's relative case ascertainment carries its laboratory
+throughput per head of population, logged and centred across patches, with a
+sampled coefficient (#410).
+Ituri analyses about 372 samples per 100k over the laboratory window against
+Nord-Kivu's 104, and nothing else in the model represented that contrast, so it
+was free to land in the provincial reproduction number.
+The per-province positives are not fitted.
+They are the differencing of the per-province confirmed counts the case
+composition already scores.
+
 ### Report
 
 - The reduced-data-streams banner is gone from the README and the summary dashboard (#723).
