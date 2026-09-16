@@ -158,7 +158,7 @@ export JOINT_FIT, BASELINE_FIT, FROZEN_FIT,
        province_composition_model,
 # health-zone model
        bvd_zone, fit_zone, zone_fit_inputs, zone_parent_inputs,
-       zone_share_renewal, dirichlet_multinomial_logpdf,
+       zone_share_renewal,
        reconstruct_zone_shares, reconstruct_zone_rt, zone_infections,
        zone_forecast_shares, zone_forecast_draws, zone_forecast_archive,
        zone_overview_table,
