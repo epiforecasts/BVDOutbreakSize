@@ -105,7 +105,9 @@ end
 
 @testitem "zone_increment_matrix totals equal the zone-sum increments" begin
     using BVDOutbreakSize: load_observations, zone_increment_matrix,
-                           PROVINCE_NAMES, PROVINCE_MEMBERS
+                           zone_reattribution_days, PROVINCE_NAMES,
+                           PROVINCE_MEMBERS
+    using Dates: Date, Day
 
     obs = load_observations()
     zh = obs.zone_confirmed_history
@@ -118,20 +120,39 @@ end
         @test size(r.increments) == (length(r.zones), length(days))
         @test r.totals == vec(sum(r.increments; dims = 1))
         @test all(>=(0), r.increments)
+        keep = [!(d in r.excluded) for d in days]
         for (i, (p, z)) in enumerate(r.zones)
             @test z != "unallocated"
             @test p in PROVINCE_MEMBERS[r.patch]
             c = zh[p][z].counts
-            @test r.increments[i, :] == max.(diff(vcat(0, c)), 0)
+            plain = max.(diff(vcat(0, c)), 0)
+            @test r.increments[i, keep] == plain[keep]
+            @test all(iszero, r.increments[i, .!keep])
         end
     end
+    ## The reattribution vintages: Ituri's unallocated row falls on 18 June
+    ## (cases and deaths) and on 22 July (cases), and no other province's
+    ## ever does, so exactly those two Ituri columns are zeroed.
+    dates(ds) = [obs.seeding + Day(d - 1) for d in ds]
+    re = zone_reattribution_days(zh)
+    @test collect(keys(re)) == ["ituri"]
+    @test dates(re["ituri"]) == [Date("2026-06-18"), Date("2026-07-22")]
+    @test dates(zone_reattribution_days(obs.zone_death_history)["ituri"]) ==
+          [Date("2026-06-18")]
+    ituri = res[findfirst(r -> r.patch == "ituri", res)]
+    @test dates(ituri.excluded) == [Date("2026-06-18"), Date("2026-07-22")]
+    @test all(r -> r.patch == "ituri" || isempty(r.excluded), res)
+    ## Without a reattribution table every column is kept.
+    plain = zone_increment_matrix(zh, PROVINCE_NAMES;
+        reattribution = Dict{String, Vector{Int}}())
+    @test all(r -> isempty(r.excluded), plain)
+    @test all(>=(0), plain[1].increments)
     ## Every zone lands in exactly one patch.
     all_zones = reduce(vcat, (r.zones for r in res))
     @test allunique(all_zones)
     @test length(all_zones) ==
           sum(count(!=("unallocated"), keys(zs)) for zs in values(zh))
     ## The unallocated rows are what separate the totals from the province.
-    ituri = res[findfirst(r -> r.patch == "ituri", res)]
     prov = obs.province_confirmed_history["ituri"]
     for (j, day) in enumerate(days)
         k = findfirst(==(day), prov.days)

@@ -822,11 +822,15 @@ Zones are the health-zone rows of `obs.zone_confirmed_history`
 [`PROVINCE_NAMES`](@ref) and ordered patch by patch; `unallocated`
 pseudo-rows are never units. Per vintage the zone increments are the
 consecutive-vintage differences clamped at zero, the first vintage's
-increment its cumulative, and the allocated patch total their sum. Cells
-with a zero allocated total are dropped here, so the model scores only
-positive totals. The walking set is the zones whose cumulative confirmed
-count at the cut-off is at least `walk_threshold`, in patches with at least
-two such zones. The grid starts `lead_days` before the first vintage and
+increment its cumulative, and the allocated patch total their sum. A
+vintage on which a patch's unallocated count falls in either zone block
+is a reattribution into the zones and is zeroed for that patch
+([`zone_increment_matrix`](@ref)); `excluded` lists those `(patch, date)`
+pairs. Cells with a zero allocated total are dropped here, so the model
+scores only positive totals. The walking set is the zones whose
+cumulative confirmed count at the cut-off is at least `walk_threshold`,
+in patches with at least two such zones. The grid starts `lead_days`
+before the first vintage and
 carries knots every `week` days ([`knot_days`](@ref)) to the cut-off.
 `share_scale` is the softmax scale of the initial shares and `rt_floor`
 the cumulative zone infections below which `R_T_zone` is undefined; both
@@ -862,8 +866,19 @@ function zone_fit_inputs(parent_chain, obs;
         "days is $(np * n); the parent must be fitted to the same data " *
         "cut-off.")
     I_bar = exp.(reshape(parent.log_infections, np, n))
-    ## Zone units and counts, patch by patch.
-    per_patch = zone_increment_matrix(obs.zone_confirmed_history, patch_names)
+    ## Zone units and counts, patch by patch. A vintage on which a patch's
+    ## unallocated count falls in either block is a reattribution into the
+    ## zones and is left out of that patch's composition.
+    death_history = hasproperty(obs, :zone_death_history) ?
+                    obs.zone_death_history : Dict{String, Any}()
+    reattribution = mergewith(vcat,
+        zone_reattribution_days(obs.zone_confirmed_history),
+        zone_reattribution_days(death_history))
+    per_patch = zone_increment_matrix(obs.zone_confirmed_history, patch_names;
+        reattribution)
+    excluded = [(; patch = String(entry.patch),
+                    date = obs.seeding + Day(d - 1))
+                for entry in per_patch for d in entry.excluded]
     isempty(per_patch) && error(
         "zone_fit_inputs: the observations carry no zone histories.")
     zone_province = String[]
@@ -942,8 +957,6 @@ function zone_fit_inputs(parent_chain, obs;
         t0, n)
     ## Optional death composition: cumulative allocated deaths at the last
     ## vintage, zones absent from the death table counting zero.
-    death_history = hasproperty(obs, :zone_death_history) ?
-                    obs.zone_death_history : Dict{String, Any}()
     death_counts = reshape(
         [_zone_last_cumulative(death_history, zone_province[z],
              zone_names[z]) for z in 1:nz], nz, 1)
@@ -992,7 +1005,7 @@ function zone_fit_inputs(parent_chain, obs;
         zone_names, patch_of_zone, patch_ranges,
         patch_names = collect(String, patch_names),
         patch_labels = collect(String, patch_labels),
-        days, dates, counts, cumulative, walking = collect(walking),
+        days, dates, counts, cumulative, excluded, walking = collect(walking),
         walk_threshold, knots, t0, n, week, share_scale, rt_floor,
         seeding = obs.seeding, cutoff = obs.cutoff, z_w_start,
         I_bar, g = parent.g, f = parent.f, death_pmf,

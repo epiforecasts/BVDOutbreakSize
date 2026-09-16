@@ -531,7 +531,32 @@ function province_increment_matrix(province_history,
 end
 
 """
-    zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS)
+    zone_reattribution_days(zone_history)
+
+The vintage days on which a province's `unallocated` cumulative count
+falls, keyed by province, from the per-health-zone histories loaded by
+[`load_observations`](@ref). A fall means the report has attributed
+cases (or deaths) it had carried as unallocated to named zones, so on
+that day the zones' cumulative counts rise by more than the province's.
+A province whose unallocated row never falls, or that has none, is
+absent. [`zone_increment_matrix`](@ref) leaves those vintages out of the
+composition.
+"""
+function zone_reattribution_days(zone_history)
+    out = Dict{String, Vector{Int}}()
+    for (prov, zones) in zone_history
+        haskey(zones, "unallocated") || continue
+        h = zones["unallocated"]
+        falls = [h.days[i] for i in 2:length(h.days)
+                 if h.counts[i] < h.counts[i - 1]]
+        isempty(falls) || (out[String(prov)] = falls)
+    end
+    return out
+end
+
+"""
+    zone_increment_matrix(zone_history, patch_names, members = PROVINCE_MEMBERS;
+        reattribution = zone_reattribution_days(zone_history))
 
 Reshape the per-health-zone cumulative histories loaded by
 [`load_observations`](@ref) into one increment matrix per patch, the
@@ -546,22 +571,38 @@ than a silent reshape. Increments are the differences of consecutive
 cumulative counts, the first from zero, clamped at zero as for the
 provinces since a zone's cumulative can fall when cases are reattributed.
 
+A vintage on which a member province's unallocated count falls
+(`reattribution`, the days per province of
+[`zone_reattribution_days`](@ref)) is a reattribution of counts the
+report had carried as unallocated into named zones. The zone increments
+would read them as new cases, so that column is set to zero for the
+patch, which drops the cell from the composition, and its days are
+returned as `excluded`. The next vintage's increment is still the
+difference of the cumulative counts, so nothing is counted twice. Pass
+the merged days of more than one history (the death block's falls as
+well as the case block's) to exclude the union, or an empty `Dict` to
+keep every vintage.
+
 Returns a vector with one named tuple per patch: `patch` (its name),
 `zones` (a vector of `(province, zone)` key pairs in row order), `days`,
-`increments` (the `(n_zones × n_vintages)` matrix) and `totals` (the
-column sums, the allocated count each vintage's composition conditions
-on). A patch none of whose provinces has zone data gets an empty matrix.
-An empty `zone_history` returns an empty vector.
+`increments` (the `(n_zones × n_vintages)` matrix), `totals` (the column
+sums, the allocated count each vintage's composition conditions on) and
+`excluded` (the zeroed vintage days). A patch none of whose provinces
+has zone data gets an empty matrix. An empty `zone_history` returns an
+empty vector.
 """
 function zone_increment_matrix(zone_history, patch_names::AbstractVector,
-        members::AbstractDict = PROVINCE_MEMBERS)
+        members::AbstractDict = PROVINCE_MEMBERS;
+        reattribution::AbstractDict = zone_reattribution_days(zone_history))
     out = @NamedTuple{patch::String, zones::Vector{Tuple{String, String}},
-        days::Vector{Int}, increments::Matrix{Int}, totals::Vector{Int}}[]
+        days::Vector{Int}, increments::Matrix{Int}, totals::Vector{Int},
+        excluded::Vector{Int}}[]
     isempty(zone_history) && return out
     days = nothing
     for nm in patch_names
+        provs = get(members, nm, [nm])
         keys_ = Tuple{String, String}[]
-        for prov in get(members, nm, [nm])
+        for prov in provs
             haskey(zone_history, prov) || continue
             for zone in sort!(collect(keys(zone_history[prov])))
                 zone == "unallocated" && continue
@@ -571,7 +612,8 @@ function zone_increment_matrix(zone_history, patch_names::AbstractVector,
         if isempty(keys_)
             push!(out,
                 (; patch = String(nm), zones = keys_, days = Int[],
-                    increments = Matrix{Int}(undef, 0, 0), totals = Int[]))
+                    increments = Matrix{Int}(undef, 0, 0), totals = Int[],
+                    excluded = Int[]))
             continue
         end
         for (prov, zone) in keys_
@@ -587,9 +629,17 @@ function zone_increment_matrix(zone_history, patch_names::AbstractVector,
             c = zone_history[prov][zone].counts
             inc[i, :] = max.(diff(vcat(0, c)), 0)
         end
+        excluded = sort!(unique!(Int[d
+                                     for prov in provs
+                                     for d in get(reattribution, prov, Int[])
+                                     if d in days]))
+        for d in excluded
+            inc[:, findfirst(==(d), days)] .= 0
+        end
         push!(out,
             (; patch = String(nm), zones = keys_, days = copy(days),
-                increments = inc, totals = vec(sum(inc; dims = 1))))
+                increments = inc, totals = vec(sum(inc; dims = 1)),
+                excluded))
     end
     return out
 end
