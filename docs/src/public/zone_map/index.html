@@ -252,7 +252,7 @@ Nothing else is fetched.
   // snake_case key from a display name, the fallback join when the geojson
   // carries no `zone` property (zones without cases, or the raw mirror file).
   function slug(s) {
-    return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+    return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
   }
   function parseCSV(text) {

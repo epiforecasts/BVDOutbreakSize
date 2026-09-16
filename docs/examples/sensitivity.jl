@@ -1677,7 +1677,8 @@ end
 
 ## The comparison table and the reproduction-number and share dot plots of
 ## a set of variants, or the placeholder when this build ran no re-fits.
-_zone_sens_missing = Markdown.md"_Health-zone sensitivity re-fits not shown in this build._"
+_zone_sens_missing = Markdown.parse(
+    "_Health-zone sensitivity re-fits not shown in this build._")
 function _zone_variant_outputs(variants, what)
     RUN_SENSITIVITY || return (; table = _zone_sens_missing,
         rt = _zone_sens_missing, share = _zone_sens_missing)
@@ -1703,7 +1704,7 @@ zone_live_summary = _zone_cutoff_summaries(chn_local, zone_inputs_live);
 # The check re-fits the zone model on the two draws of the headline fit nearest its 5th and 95th percentiles of cumulative infections, in place of the posterior mean.
 
 #md # ```@raw html
-#md # <details><summary>Zone posteriors under the low and high parent draws</summary>
+#md # <details><summary>Zone posteriors by parent draw</summary>
 #md # ```
 
 ## The parent-draw re-fits read their inputs from the same draw.
@@ -1745,8 +1746,8 @@ zone_mixing = _zone_variant_outputs(
 
 ## The mixing fraction per province, as a median with its 90% interval.
 zone_mixing_epsilon_table = RUN_SENSITIVITY ?
-                            let eps = vec(collect(chn_local_mixing[:mixing_epsilon_zone])),
-    np = length(zone_inputs_live.patch_names)
+                            let np = length(zone_inputs_live.patch_names),
+    eps = vec(collect(chn_local_mixing[:mixing_epsilon_zone]))
 
     fmt(x) = string(round(x; digits = 3))
     cell(v) = string(fmt(median(v)), " (", fmt(quantile(v, 0.05)), "–",

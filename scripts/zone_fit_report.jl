@@ -467,7 +467,9 @@ function stage_d(chn)
     x = float.(INPUTS.days)
     fig = Figure(; size = (300 * np, 260))
     have_parent = _has_key(PARENT, :province_shares)
-    pdays = OBS.province_confirmed_history["ituri"].days
+    ## The parent's spatial vintages, shared by every province it fits.
+    pdays = province_increment_matrix(OBS.province_confirmed_history,
+        INPUTS.patch_names, np).days
     for p in 1:np
         ax = Axis(fig[1, p]; title = INPUTS.patch_labels[p],
             xlabel = "Grid day", ylabel = "Share of allocated total")
@@ -516,34 +518,29 @@ function stage_e(chn)
     <h3>Zones ranked by P(R_T &gt; 1)</h3>$(html_table(shown; digits = 2))
     """
     keep = findall(isfinite, ov.rt_median)
-    if isdefined(BVDOutbreakSize, :plot_zone_ranking)
-        ranking = DataFrame(label = ov.zone[keep],
-            patch = ov.patch_index[keep], rt_median = ov.rt_median[keep],
-            rt_lo90 = ov.rt_lo90[keep], rt_hi90 = ov.rt_hi90[keep],
-            p_rt_above_one = ov.p_rt_above_one[keep],
-            walking = ov.walking[keep])
-        fig = BVDOutbreakSize.plot_zone_ranking(ranking;
-            patch_labels = INPUTS.patch_labels)
-        path = joinpath(OUT, "e_ranking.png")
-        save(path, fig)
-        body *= "<h3>Ranking</h3>" * png_tag(path; width = "60%")
-    end
-    if isdefined(BVDOutbreakSize, :plot_zone_map)
-        ## The geojson keys a zone without the manifest's province prefix.
-        zone_map_keys = [String(last(split(k, "."; limit = 2)))
-                         for k in INPUTS.zone_keys]
-        rt = [filter(isfinite, m[:, INPUTS.n])
-              for m in reconstruct_zone_rt(chn, INPUTS; parent_chain = PARENT)]
-        zs = findall(!isempty, rt)
-        fig = BVDOutbreakSize.plot_zone_map([median(rt[z]) for z in zs],
-            zone_map_keys[zs]; lower = [quantile(rt[z], 0.05) for z in zs],
-            upper = [quantile(rt[z], 0.95) for z in zs], diverging_at = 1.0,
-            scale = log10, title = "Reproduction number at the cut-off",
-            colorbar_label = "R")
-        path = joinpath(OUT, "e_map.png")
-        save(path, fig)
-        body *= "<h3>Current R_T by zone</h3>" * png_tag(path; width = "70%")
-    end
+    ranking = DataFrame(label = ov.zone[keep],
+        patch = ov.patch_index[keep], rt_median = ov.rt_median[keep],
+        rt_lo90 = ov.rt_lo90[keep], rt_hi90 = ov.rt_hi90[keep],
+        p_rt_above_one = ov.p_rt_above_one[keep],
+        walking = ov.walking[keep])
+    fig = plot_zone_ranking(ranking; patch_labels = INPUTS.patch_labels)
+    path = joinpath(OUT, "e_ranking.png")
+    save(path, fig)
+    body *= "<h3>Ranking</h3>" * png_tag(path; width = "60%")
+    ## The geojson keys a zone without the manifest's province prefix.
+    zone_map_keys = [String(last(split(k, "."; limit = 2)))
+                     for k in INPUTS.zone_keys]
+    rt = [filter(isfinite, m[:, INPUTS.n])
+          for m in reconstruct_zone_rt(chn, INPUTS; parent_chain = PARENT)]
+    zs = findall(!isempty, rt)
+    fig = plot_zone_map([median(rt[z]) for z in zs],
+        zone_map_keys[zs]; lower = [quantile(rt[z], 0.05) for z in zs],
+        upper = [quantile(rt[z], 0.95) for z in zs], diverging_at = 1.0,
+        scale = log10, title = "Reproduction number at the cut-off",
+        colorbar_label = "R")
+    path = joinpath(OUT, "e_map.png")
+    save(path, fig)
+    body *= "<h3>Current R_T by zone</h3>" * png_tag(path; width = "70%")
     write_fragment("e", "Zone ranking and map", body)
 end
 

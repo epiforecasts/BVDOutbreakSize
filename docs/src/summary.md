@@ -118,7 +118,7 @@ The map needs a browser, so it appears only on the documentation site.
 
 ```@raw html
 <p><a href="zone_map/index.html" target="_blank" rel="noopener">Open the map in a new tab</a>.</p>
-<iframe src="zone_map/index.html" title="Health-zone map" loading="lazy" style="width:100%;height:640px;border:1px solid var(--vp-c-divider);border-radius:8px;background:#fcfcfb"></iframe>
+<iframe src="zone_map/index.html" title="Health-zone map" loading="lazy" style="width:100%;height:640px;border:1px solid var(--vp-c-divider);border-radius:8px;background:var(--vp-c-bg)"></iframe>
 ```
 
 ---
