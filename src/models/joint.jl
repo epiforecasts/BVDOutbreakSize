@@ -33,17 +33,11 @@
         incubation_pmf = onset_state.incubation_pmf)
 end
 
-## Cumulative confirmed-case trajectory on the observed scale: the fitted
-## increments with the testing-onset baseline re-added. The laboratory
-## capacity is gated to zero before testing began and the first confirmed
-## vintage is treated as the initial condition (a baseline the early windows
-## do not score), so the reconstructed cumulative counts only the fitted
-## increments. Adding the first observed confirmed count back from the
-## testing onset onward makes the trajectory comparable to the observed
-## confirmed total (and keeps the delay-corrected confirmed-CFR denominator
-## on the right level). Shared by [`bvd_joint`](@ref) and
-## [`confirmed_only_model`](@ref) so both carry the same quantity under the
-## same name.
+## Cumulative confirmed-case trajectory on the observed scale, shared by the
+## joint and the confirmed-only composer. The first confirmed vintage is the
+## initial condition and is not scored, so the reconstruction counts only the
+## fitted increments. Adding that first count back from the testing onset
+## makes the trajectory comparable to the observed total.
 function _cumulative_confirmed(confirmed_daily, confirmed_history, n::Integer)
     base = isempty(confirmed_history.counts) ? 0 :
            Int(confirmed_history.counts[1])
@@ -52,16 +46,11 @@ function _cumulative_confirmed(confirmed_daily, confirmed_history, n::Integer)
     return cumsum(confirmed_daily) .+ [t >= cap ? base : 0 for t in 1:n]
 end
 
-## Why every composer exposes its stream's cumulative trajectory as a `:=`
-## alias: [`forecast_stream`](@ref) and [`forecast_reported`](@ref) read the
-## cut-off daily rate off the chain as that trajectory's last increment,
-## falling back to inverting the stream's cumulative total under exponential
-## growth when the chain carries none. That inversion collapses towards zero
-## once the fitted growth rate is at or below zero, which is not what a
-## stream still reporting daily is doing, so an individual fit without the
-## alias projects below both the joint and the data it is scored against.
-## The names are the same un-prefixed ones in every composer, so one
-## `_STREAM_SPEC` entry per stream serves both fit kinds.
+## Every composer exposes its stream's cumulative trajectory under the same
+## un-prefixed `:=` name. The forecasters read the cut-off daily rate off it
+## as its last increment, and without one fall back to inverting the
+## cumulative total under exponential growth, which collapses towards zero as
+## the fitted growth rate reaches zero (see [`forecast_stream`](@ref)).
 
 """
 Exports-only composer (geographic-spread analogue). Runs the infection
@@ -107,8 +96,6 @@ deaths likelihood only. See [`deaths_model`](@ref).
     deaths_state ~ to_submodel(
         deaths(deaths_history, total_deaths, latent.onsets,
         dispersion_state.k; suspected_daily_deaths_history))
-    ## Suspected-death trajectory under the same name [`bvd_joint`](@ref)
-    ## uses, so this fit is forecast from its own cut-off daily rate.
     cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
 end
 
@@ -135,8 +122,6 @@ then conditions on the reported-cases likelihood. See
     cases_state ~ to_submodel(
         cases(reported_history, reported_cases, latent.onsets,
         dispersion_state.k, asc_state.p_drc; suspected_daily_history))
-    ## Reported-case trajectory under the same name [`bvd_joint`](@ref) uses,
-    ## so this fit is forecast from its own cut-off daily rate.
     cumulative_reports := cumsum(cases_state.reports_daily)
 end
 
@@ -205,8 +190,6 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
     ## through. This alias closes over the returned NamedTuple instead, which
     ## is assigned once and not boxed.
     expected_confirmed_T := confirmed_state.expected_confirmed
-    ## Confirmed-case trajectory under the same name [`bvd_joint`](@ref)
-    ## uses, so this fit is forecast from its own cut-off daily rate.
     cumulative_confirmed := _cumulative_confirmed(
         confirmed_state.confirmed_daily, confirmed_history, n)
 end
@@ -366,8 +349,6 @@ on the confirmed-death likelihood alone. See
         confirmed_deaths_history, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_deaths,
         confirmed_break_sd))
-    ## Confirmed-death trajectory under the same name [`bvd_joint`](@ref)
-    ## uses, so this fit is forecast from its own cut-off daily rate.
     cumulative_confirmed_deaths := cumsum(
         confirmed_deaths_state.confirmed_death_daily)
 end
@@ -1021,15 +1002,11 @@ reproduction number implied by the summed patch infections.
     ## (onset-to-report ⊕ receipt) and the onset-to-death-confirmation kernel
     ## (onset-to-death ⊕ receipt) are exposed alongside so the residual delay
     ## between a confirmed case and its confirmed death can be rebuilt per
-    ## draw off the chain. The testing-onset baseline is re-added by
-    ## `_cumulative_confirmed`, which the confirmed-only composer shares.
+    ## draw off the chain.
     cumulative_confirmed := _cumulative_confirmed(
         confirmed_state.confirmed_daily, confirmed_history, n)
-    ## Cumulative trajectories for the remaining observed count streams, so
-    ## the forecast reads each stream's own cut-off daily rate off the chain
-    ## rather than inverting its cumulative total under exponential growth.
-    ## Each of these sums to the stream's cut-off expected total, so none
-    ## needs the baseline re-add the confirmed-case path above takes.
+    ## Each of the remaining count streams sums to its own cut-off expected
+    ## total, so none needs the baseline re-add the confirmed path takes.
     cumulative_reports := cumsum(cases_state.reports_daily)
     cumulative_deaths_total := cumsum(deaths_state.deaths_daily)
     cumulative_confirmed_deaths := cumsum(
