@@ -30,7 +30,7 @@
 #   Létalité; the unallocated row is "Non identifiées". Absent from 084-086
 #   (the brief format). SitRep 087 prints the 24h flow alone with no
 #   cumulative columns, so it has nothing this script can read.
-# - 088-121: as 059-083, with an "A ventiler *" row of confirmed deaths in
+# - 088-122: as 059-083, with an "A ventiler *" row of confirmed deaths in
 #   the province's treatment centres not yet attributed to a zone (its
 #   cases cell prints NA). Tshopo has a zone named Tshopo from SitRep 091.
 #

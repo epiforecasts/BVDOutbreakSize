@@ -181,7 +181,7 @@ The table has been printed in four layouts.
 SitReps 018 to 032 head each province with a bare name and close it with a `Sous-total` row, and print the Létalité without a `%` sign before 021.
 SitReps 034 to 058 put the province totals on the province row itself.
 SitReps 059 to 083 add the 24h columns to the right of the Létalité.
-SitReps 088 to 121 add an `A ventiler` row of deaths in the province's treatment centres not yet attributed to a zone, with `NA` in its cases cell.
+SitReps 088 to 122 add an `A ventiler` row of deaths in the province's treatment centres not yet attributed to a zone, with `NA` in its cases cell.
 SitRep 033 gives the split as prose only, 084 to 086 (the brief format) carry no zone table, and 087 prints the 24h flow with no cumulative columns.
 None of those four is scanned.
 SitReps 048 (1 July) and 057 (10 July) are in `insp_sitrep_scanned.csv` but have no PDF in the archive, so they are not scanned either; the scanner lists any report in that position.
@@ -207,10 +207,9 @@ Six vintages are left out because their zone rows do not sum to their own printe
 SitRep 053 is kept: its zone rows match the committed Nord-Kivu value (149/88) while its printed province row (144/81) does not.
 SitRep 080 prints the table with the Létalité column displaced one row down and the province row without one, which the parse tolerates; its cases and deaths reconcile.
 SitRep 116 prints `1` in Buta's Létalité cell.
-SitRep 122 is not in `insp_sitrep_scanned.csv` yet and so is not scanned.
 
 `scripts/confirm_zone_data.jl` (`task confirm-zone-data`) cross-checks both blocks against the INRB-UMIE mirror's per-zone `cumulative_confirmed_cases` and `cumulative_confirmed_deaths` CSVs, its `NA` zone read as the unallocated row.
-Of the 3057 case cells and 3059 death cells the two transcriptions share, 3043 and 3049 agree.
+Of the 3119 case cells and 3121 death cells the two transcriptions share, 3105 and 3111 agree.
 Every disagreement was re-read from the PDF and the manifest matches the printed table in each case.
 On 3 June the mirror's unallocated row reads 97 cases and 1 death against the printed 94 and 10.
 On 4 and 8 June it gives Miti-Murhesa 1 case against the printed 3 (3 in every vintage).
