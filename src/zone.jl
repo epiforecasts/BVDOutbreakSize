@@ -81,14 +81,15 @@ end
 ## `I_z / Λ_z` on the grid days from one draw's daily shares `(n_days ×
 ## n_zones)` and patch infections `I_p` `(n_patches × n)`, the days before
 ## `t0` at the initial share, with the first grid day on which each zone's
-## cumulative infections reach `floor` (`n_days + 1` if never).
+## cumulative infections reach `rt_floor` (`n_days + 1` if never).
 function _zone_rt_daily(shares::AbstractMatrix, w0::AbstractVector,
         I_p::AbstractMatrix, g::AbstractVector,
-        patch_of_zone::AbstractVector{<:Integer}, t0::Integer, floor::Real)
+        patch_of_zone::AbstractVector{<:Integer}, t0::Integer,
+        rt_floor::Real)
     nd, nz = size(shares)
     L = length(g)
     out = zeros(Float64, nd, nz)
-    first = fill(nd + 1, nz)
+    first_day = fill(nd + 1, nz)
     for z in 1:nz
         p = patch_of_zone[z]
         cum = w0[z] * sum(@view I_p[p, 1:(t0 - 1)])
@@ -102,11 +103,11 @@ function _zone_rt_daily(shares::AbstractMatrix, w0::AbstractVector,
             end
             I = I_p[p, t] * shares[j, z]
             cum += I
-            cum >= floor && first[z] > nd && (first[z] = j)
+            cum >= rt_floor && first_day[z] > nd && (first_day[z] = j)
             out[j, z] = I / max(Λ, floatmin())
         end
     end
-    return out, first
+    return out, first_day
 end
 
 """
@@ -117,13 +118,14 @@ per draw from the shares. With `parent_chain`, draw `j` is paired with a
 random parent draw `σ(j)` (the picks of [`zone_infections`](@ref) at the
 same `rng`) and the patch infections are that draw's rather than the
 cut's posterior mean, so the interval carries the patch uncertainty. A
-zone is reported from the day its cumulative infections reach `floor` in
-the median draw, and holds `NaN` in every draw before that day, so the
-reported draws are never a selected subset. Returns one `(ndraws × n)`
-matrix per zone.
+zone is reported from the day its cumulative infections reach `rt_floor`
+(the fit's `inputs.rt_floor` by default) in the median draw, and holds
+`NaN` in every draw before that day, so the reported draws are never a
+selected subset. Returns one `(ndraws × n)` matrix per zone.
 """
 function reconstruct_zone_rt(chn, inputs; parent_chain = nothing,
-        floor::Real = 10.0, rng::AbstractRNG = MersenneTwister(20260518))
+        rt_floor::Real = inputs.rt_floor,
+        rng::AbstractRNG = MersenneTwister(20260518))
     zd = inputs.model_data
     states = _zone_states(chn, inputs)
     ndraws = length(states)
@@ -134,19 +136,19 @@ function reconstruct_zone_rt(chn, inputs; parent_chain = nothing,
     nz = length(inputs.zone_keys)
     nd = zd.n - zd.t0 + 1
     out = [fill(NaN, ndraws, inputs.n) for _ in 1:nz]
-    first = zeros(Int, ndraws, nz)
+    first_day = zeros(Int, ndraws, nz)
     for (i, st) in enumerate(states)
         I_p = parents === nothing ? zd.I_bar : parents[pick[i]]
         shares = zone_forward(zd, st.δ_knots, st.w0, st.ε).shares
-        r, first[i, :] = _zone_rt_daily(shares, st.w0, I_p, zd.g,
-            inputs.patch_of_zone, zd.t0, floor)
+        r, first_day[i, :] = _zone_rt_daily(shares, st.w0, I_p, zd.g,
+            inputs.patch_of_zone, zd.t0, rt_floor)
         for z in 1:nz, j in 1:nd
 
             out[z][i, zd.t0 + j - 1] = r[j, z]
         end
     end
     for z in 1:nz
-        start = ceil(Int, median(view(first, :, z)))
+        start = ceil(Int, median(view(first_day, :, z)))
         out[z][:, 1:min(zd.t0 + start - 2, inputs.n)] .= NaN
     end
     return out
@@ -205,8 +207,7 @@ function _zone_extended_data(inputs; horizon::Integer = 7, week::Integer = 7,
     nd = n + horizon - zd.t0 + 1
     return merge(zd,
         (; I_bar = I_ext, n = n + horizon, days,
-            fixed.force_pre, fixed.report_pre, fixed.report_pre_cum,
-            fixed.infections_pre,
+            fixed.force_pre, fixed.report_pre_cum, fixed.infections_pre,
             report_matrix = zone_delay_operator(zd.f, nd),
             report_pre_rows = zone_report_pre_rows(fixed.report_pre,
                 inputs.patch_of_zone, zd.t0, n + horizon)))
@@ -358,9 +359,10 @@ reproduction number is also given numerically as `rt_median`, `rt_lo90`
 and `rt_hi90` (`NaN` below the reporting floor), the probability unrounded
 as `p_rt_above_one`, and the patch as its index `patch_index`. It is
 rebuilt by [`reconstruct_zone_rt`](@ref), with the patch uncertainty when
-`parent_chain` is given. Walking zones sort first, by the probability that
-the reproduction number exceeds one, then the level-only zones in the
-same order, then the zones below the reporting floor.
+`parent_chain` is given. Walking zones sort first, in decreasing order of
+the probability that the reproduction number exceeds one with those below
+the reporting floor last among them, then the level-only zones in the
+same order.
 """
 function zone_overview_table(chn, inputs; parent_chain = nothing,
         digits::Integer = 2)
@@ -432,31 +434,35 @@ $(TYPEDSIGNATURES)
 
 The observed new confirmed cases per zone over `(made_date, made_date +
 horizon]`, from the zone histories in `obs` (a later vintage than the fit's),
-in the order of `inputs.zone_keys`: the cumulative on or before the target
-date minus the cumulative on or before `made_date`, clamped at zero, or
-`missing` where the history has no vintage on or after the target date.
+in the order of `inputs.zone_keys`: the cumulative at the vintage on the
+target date minus the cumulative at the last vintage on or before
+`made_date`, clamped at zero. A zone whose history has no vintage on the
+target date itself is `missing`, since the nearest vintage either side
+would count a different window; [`zone_forecast_vs_truth`](@ref) shows
+such a zone unscored and [`zone_forecast_scores`](@ref) skips its patch.
 """
 function zone_forecast_truth(obs, inputs; made_date::Date,
         horizon::Integer = 7)
     hist = obs.zone_confirmed_history
     target = made_date + Day(horizon)
+    dates(h) = [obs.seeding + Day(d - 1) for d in h.days]
     at(h, date) = begin
-        ds = [obs.seeding + Day(d - 1) for d in h.days]
-        idx = findlast(<=(date), ds)
+        idx = findlast(<=(date), dates(h))
         idx === nothing ? 0 : Int(h.counts[idx])
     end
-    covered(h, date) = any(d -> obs.seeding + Day(d - 1) >= date, h.days)
+    on(h, date) = begin
+        idx = findfirst(==(date), dates(h))
+        idx === nothing ? nothing : Int(h.counts[idx])
+    end
     out = Vector{Union{Missing, Int}}(undef, length(inputs.zone_keys))
     for z in eachindex(inputs.zone_keys)
         prov = inputs.zone_province[z]
         zone = inputs.zone_names[z]
         h = haskey(hist, prov) && haskey(hist[prov], zone) ?
             hist[prov][zone] : nothing
-        out[z] = if h === nothing || !covered(h, target)
-            missing
-        else
-            max(at(h, target) - at(h, made_date), 0)
-        end
+        final = h === nothing ? nothing : on(h, target)
+        out[z] = final === nothing ? missing :
+                 max(final - at(h, made_date), 0)
     end
     return out
 end
@@ -787,7 +793,7 @@ function zone_composition_draws(chn, inputs; cumulative::Bool = false,
             tot[v] > 0 && (observed[z, v] = obs[k, v] / tot[v])
         end
         for i in 1:ndraws
-            κ = (1 - ρs[i]) / ρs[i]
+            κ = _zone_kappa(ρs[i])
             y = zeros(Int, m, nv)
             e = zeros(Float64, m, nv)
             for v in 1:nv

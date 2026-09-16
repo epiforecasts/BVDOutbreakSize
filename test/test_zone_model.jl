@@ -68,7 +68,7 @@
         fixed = zone_fixed_terms(I_bar, g, f, t0)
         patch_of_zone = [1, 1, 1, 1, 1, 2, 2, 2]
         zd = (; I_bar, g, f, patch_ranges, knots, t0, n, days,
-            fixed.force_pre, fixed.report_pre, fixed.report_pre_cum,
+            fixed.force_pre, fixed.report_pre_cum,
             fixed.infections_pre, mixing_kernel = zeros(nz, nz),
             interp = zone_interpolation_weights(knots, t0, n),
             report_matrix = zone_delay_operator(f, n - t0 + 1),
@@ -122,9 +122,11 @@
             knots, counts, nz)
     end
 
-    zone_inputs(syn; kwargs...) = zone_fit_inputs(syn.chain, syn.obs;
-        zones = nothing, patch_names = ["a", "b"], patch_labels = ["A", "B"],
-        walk_threshold = 30, kwargs...)
+    function zone_inputs(syn; zones = nothing, walk_threshold = 30,
+            kwargs...)
+        return zone_fit_inputs(syn.chain, syn.obs; zones, walk_threshold,
+            patch_names = ["a", "b"], patch_labels = ["A", "B"], kwargs...)
+    end
 end
 
 @testitem "dirichlet_multinomial_logpdf: matches Distributions" begin
@@ -145,7 +147,7 @@ end
     ZoneSynthetic
 ] begin
     using BVDOutbreakSize: zone_composition_logpdf,
-                           dirichlet_multinomial_logpdf
+                           dirichlet_multinomial_logpdf, _zone_kappa
     using Distributions: DirichletMultinomial, logpdf
 
     syn = zone_synthetic()
@@ -170,6 +172,16 @@ end
     lp2 = zone_composition_logpdf(zd.counts, 100 .* C, zd.cell_patch,
         zd.cell_vintage, zd.cell_total, zd.cell_const, zd.patch_ranges, κ)
     @test lp2 ≈ lp rtol = 1e-10
+    ## The concentration stays finite and positive at both ends of `ρ`'s
+    ## support, so a saturated proposal never scores `NaN`.
+    for ρ_end in (0.0, 1.0)
+        κ_end = _zone_kappa(ρ_end)
+        @test isfinite(κ_end) && κ_end > 0
+        @test isfinite(zone_composition_logpdf(zd.counts, C, zd.cell_patch,
+            zd.cell_vintage, zd.cell_total, zd.cell_const, zd.patch_ranges,
+            κ_end))
+    end
+    @test _zone_kappa(0.05) ≈ 19 rtol = 1e-12
     ## Every scored cell has a positive allocated total.
     @test all(>(0), zd.cell_total)
     @test all(
@@ -377,7 +389,8 @@ end
     at(z_w, z_level, z_drift) = (; z_w, σ_level = truth.σ_level, z_level,
         δ_halflife = 42.0, σ_δ = truth.σ_δ, z_drift, ρ = 1e-4)
     loglik(params) = begin
-        vi = DynamicPPL.VarInfo(Xoshiro(1), m, DynamicPPL.InitFromParams(params))
+        vi = DynamicPPL.VarInfo(Xoshiro(1), m,
+            DynamicPPL.InitFromParams(params))
         DynamicPPL.loglikelihood(m, vi)
     end
     base = loglik(at(truth.z_w, truth.z_level, truth.z_drift))
