@@ -101,10 +101,11 @@ end
     ## The split the report's posterior predictive checks partition on.
     reporting = Set(status.stream[status.reporting])
     for s in (:confirmed_cases, :confirmed_deaths, :recovered,
-        :isolation_beds, :tests_analysed_daily, :onset_reports)
+        :isolation_beds, :tests_analysed_daily, :onset_reports,
+        :suspected_daily)
         @test s in reporting
     end
-    for s in (:suspected_cases, :suspected_deaths, :suspected_daily,
+    for s in (:suspected_cases, :suspected_deaths,
         :suspected_daily_deaths, :tests_analysed, :treatment_admissions,
         :treatment_deaths, :treatment_ruleouts, :treatment_absconded,
         :treatment_beds, :suspect_beds)
