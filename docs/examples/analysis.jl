@@ -2416,6 +2416,20 @@ summary_ranges = let
         "30% ", start_from(s.hi30), "–", start_from(s.lo30),
         ", 60% ", start_from(s.hi60), "–", start_from(s.lo60),
         ", 90% ", start_from(s.hi90), "–", start_from(s.lo90))
+    ## One interval as a bare `lo–hi`, for a table cell that takes its level
+    ## from the column header rather than repeating it in every cell.
+    bound(s, lvl, d) = string(
+        round(getproperty(s, Symbol("lo", lvl)); digits = d), "–",
+        round(getproperty(s, Symbol("hi", lvl)); digits = d))
+    bound_i(s, lvl) = string(
+        round(Int, getproperty(s, Symbol("lo", lvl))), "–",
+        round(Int, getproperty(s, Symbol("hi", lvl))))
+    ## One province block of the per-province table: a row per province, a
+    ## column per interval level. Three of these stacked read down each
+    ## province in one pass.
+    prov_rows(cell) = join(
+        ["| $(PROVINCE_LABELS[p]) | $(cell(p, 30)) | $(cell(p, 60)) | " *
+         "$(cell(p, 90)) |" for p in 1:N_PATCHES], "\n")
     f_lo = round(sC.lo90 / obs.confirmed_cases; digits = 1)
     f_hi = round(sC.hi90 / obs.confirmed_cases; digits = 1)
 
@@ -2446,15 +2460,6 @@ summary_ranges = let
       to have been $(ints_f(sR0, 2)) and the latest to be $(ints_f(sRT, 2)).
     - **Case-fatality ratio:** the case-fatality ratio is estimated to be
       $(ints_f(scfr, 2)).
-    - **By province, infections to date:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_i(sprov[p]))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, reproduction number at the cut-off:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_rt[p], 2))"
-            for p in 1:N_PATCHES], "\n"))
-    - **By province, case-fatality ratio:**
-    $(join(["  - $(PROVINCE_LABELS[p]): $(ints_f(sprov_cfr[p], 1))%"
-            for p in 1:N_PATCHES], "\n"))
     - **Shift from priors:** how far the data has moved each estimate from
       its prior, in prior interquartile ranges, where a value of one means
       the posterior median sits one prior interquartile range from the prior
@@ -2462,6 +2467,26 @@ summary_ranges = let
       The fit moves the cumulative infection count by $(moves[1].second),
       the outbreak age by $(moves[2].second) and the doubling time by
       $(moves[3].second); the largest move is in the $(biggest.first).
+
+    **By province.** Equal-tailed credible intervals at the cut-off.
+
+    Infections to date:
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound_i(sprov[p], l)))
+
+    Reproduction number:
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound(sprov_rt[p], l, 2)))
+
+    Case-fatality ratio (%):
+
+    | Province | 30% | 60% | 90% |
+    |---|---|---|---|
+    $(prov_rows((p, l) -> bound(sprov_cfr[p], l, 1)))
     """)
 end;
 
