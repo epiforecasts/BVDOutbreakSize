@@ -2329,20 +2329,27 @@ series for forecasting and replication.
     occ_T = min(dem_T, C_T)
     overall_los = CFR_iso * death_los_state.mean +
                   (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
-    expected_isolation := safe_rate(occ_T)
-    expected_bed_demand := safe_rate(dem_T)
+    ## Each cut-off quantity below is both `:=`-tracked onto the chain and
+    ## returned, so it is bound once and used twice. Computing it twice puts
+    ## the work on the gradient path twice, and lets an edit to one copy
+    ## leave the chain and the returned value disagreeing.
+    isolation_T = safe_rate(occ_T)
+    bed_demand_T = safe_rate(dem_T)
+    expected_isolation := isolation_T
+    expected_bed_demand := bed_demand_T
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    expected_admissions := safe_rate(isempty(admit_daily) ? z0 :
-                                     admit_daily[end])
-    expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
-                                        deaths_daily[end])
-    expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :
-                                   ruleout_daily[end])
+    admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    incare_deaths_T = safe_rate(isempty(deaths_daily) ? z0 :
+                                deaths_daily[end])
+    ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[end])
+    expected_admissions := admissions_T
+    expected_incare_deaths := incare_deaths_T
+    expected_ruleouts := ruleouts_T
     ## Unmet demand: the uncapped demand above the censored occupancy.
     bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
-    bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
+    bed_utilisation := isolation_T / safe_rate(C_T)
     isolation_severity := sev_state.δ_iso
     isolation_bvd_admission := p_iso_bvd
     incare_cfr := CFR_iso
@@ -2350,9 +2357,11 @@ series for forecasting and replication.
     treatment_overall_los := overall_los
     conf_incare_T = isempty(conf_split) ? z0 : conf_split[end]
     susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[end], z0)
-    expected_confirmed_incare := safe_rate(conf_incare_T)
-    expected_suspect_incare := safe_rate(susp_incare_T)
-    incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
+    conf_incare_rate = safe_rate(conf_incare_T)
+    susp_incare_rate = safe_rate(susp_incare_T)
+    expected_confirmed_incare := conf_incare_rate
+    expected_suspect_incare := susp_incare_rate
+    incare_confirmed_share := conf_incare_rate / bed_demand_T
     ## Raw, since ρ can exceed one. ρ < 1 means occupied suspects are
     ## confirmed slower than the borrowed community hazard, held for repeated
     ## exclusion testing.
@@ -2360,7 +2369,8 @@ series for forecasting and replication.
     ## How much of the observed reclassification the model absorbed as a
     ## reporting artefact, the rest carried by real demand. Fitted and
     ## possibly negative, so reported raw rather than through `safe_rate`.
-    occupancy_break := isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    break_T = isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    occupancy_break := break_T
 
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
@@ -2374,20 +2384,16 @@ series for forecasting and replication.
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
         break_grid_days,
-        occupancy_break = isempty(occ_break_offset) ? z0 :
-                          last(occ_break_offset),
+        occupancy_break = break_T,
         confirmed_incare = conf_split, suspect_incare = susp_split,
         confirmed_incare_deaths_daily, incare_confirm_modifier = ρ_conf,
-        expected_confirmed_incare = safe_rate(conf_incare_T),
-        expected_suspect_incare = safe_rate(susp_incare_T),
-        expected_isolation = safe_rate(occ_T),
-        expected_bed_demand = safe_rate(dem_T),
-        expected_admissions = safe_rate(isempty(admit_daily) ? z0 :
-                                        admit_daily[end]),
-        expected_incare_deaths = safe_rate(isempty(deaths_daily) ? z0 :
-                                           deaths_daily[end]),
-        expected_ruleouts = safe_rate(isempty(ruleout_daily) ? z0 :
-                                      ruleout_daily[end]))
+        expected_confirmed_incare = conf_incare_rate,
+        expected_suspect_incare = susp_incare_rate,
+        expected_isolation = isolation_T,
+        expected_bed_demand = bed_demand_T,
+        expected_admissions = admissions_T,
+        expected_incare_deaths = incare_deaths_T,
+        expected_ruleouts = ruleouts_T)
 end
 
 """
