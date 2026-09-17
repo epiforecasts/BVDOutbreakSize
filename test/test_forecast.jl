@@ -150,7 +150,7 @@ end
     @test all(fc.recovered_new .<= fc.recovered_cum)
     tbl = forecast_table(fc)
     @test "DRC isolation beds" in tbl[!, "Stream"]
-    @test "DRC recovered" in tbl[!, "Stream"]
+    @test "DRC recovered among confirmed" in tbl[!, "Stream"]
     @test "demand at T+7" in tbl[!, "Quantity"]
     @test "occupancy at T+7" in tbl[!, "Quantity"]
     ## The bed forecast is validated against an observed occupancy when one is
@@ -255,7 +255,8 @@ end
     @test "Quantity" in names(tbl)
     @test Set(tbl[!, "Stream"]) == Set([
         "DRC reported cases", "DRC suspected deaths", "DRC confirmed cases",
-        "DRC confirmed deaths", "DRC recovered", "DRC isolation beds"])
+        "DRC confirmed deaths", "DRC recovered among confirmed",
+        "DRC isolation beds"])
     ## A stream present in the frame but absent from `observed` is skipped, and
     ## without an observed occupancy the beds row is dropped.
     tbl2 = forecast_vs_truth(fc;
@@ -425,6 +426,8 @@ end
         expected_confirmed_deaths_T ~ truncated(Normal(17.0, 3.0); lower = 0.5)
         expected_exports_T ~ truncated(Normal(12.0, 3.0); lower = 0.5)
         expected_bed_demand_T ~ truncated(Normal(600.0, 80.0); lower = 1.0)
+        expected_recovered_T ~ truncated(Normal(300.0, 30.0); lower = 1.0)
+        recovered_dispersion ~ truncated(Normal(10.0, 3.0); lower = 1.0)
         bed_capacity ~ truncated(Normal(430.0, 40.0); lower = 1.0)
         return nothing
     end
@@ -480,6 +483,9 @@ end
         :confirmed_cases => 210, :confirmed_deaths => 17,
         :exports => 12, :isolation_beds => 359)
     const STREAM_ALL = collect(keys(STREAM_OBS))
+    ## Recovered has no single-stream fit, so it is reachable from the
+    ## joint-shaped chain alone and is kept out of `STREAM_ALL`.
+    const STREAM_JOINT_OBS = Dict(:recovered => 295)
 end
 
 @testitem "forecast_stream covers every stream from a joint-shaped chain" tags=[
@@ -488,8 +494,8 @@ end
     using BVDOutbreakSize: forecast_stream
 
     chn=_toplevel_chain(200)
-    for s in STREAM_ALL
-        fc=forecast_stream(chn, s; horizon = 7, obs_value = STREAM_OBS[s])
+    for (s, obs_value) in merge(STREAM_OBS, STREAM_JOINT_OBS)
+        fc=forecast_stream(chn, s; horizon = 7, obs_value = obs_value)
         @test fc isa Vector
         @test length(fc) == 200
         @test all(fc .>= 0)
@@ -565,7 +571,8 @@ end
     using BVDOutbreakSize: cases_only_model, deaths_only_model,
                            confirmed_only_model, confirmed_deaths_only_model,
                            treatment_only_model, exports_only_model,
-                           _STREAM_SPEC, _resolve_draws, _bed_capacity
+                           _STREAM_SPEC, _resolve_draws, _bed_capacity,
+                           _has_key
 
     ## The fixtures above pin `forecast_stream`'s key resolution against
     ## hand-written chains, which cannot catch `_STREAM_SPEC` naming a key
@@ -597,6 +604,10 @@ end
         if stream === :isolation_beds
             @test !isnothing(_bed_capacity(chn))
         end
+        ## The by-dataset reproduction-number panels draw their reference
+        ## band off the renewal walk each fit carries, so a composer that
+        ## does not expose the walk base loses its band with no error.
+        @test _has_key(chn, Symbol("rt_state.log_R0"))
     end
 end
 
@@ -873,7 +884,8 @@ end
     import FlexiChains
     using BVDOutbreakSize: load_observations, bvd_joint,
                            genetic_seeding_model, _daily_at_cutoff,
-                           _daily_at_cutoff_any, _draws, _STREAM_SPEC
+                           _daily_at_cutoff_any, _draws, _STREAM_SPEC,
+                           _resolve_draws
 
     ## `_STREAM_SPEC` and `forecast_reported` name a cumulative trajectory
     ## per observed count stream. A name the model never exposes falls back
@@ -922,6 +934,15 @@ end
     ## the per-stream forecaster takes the same route.
     @test !isnothing(
         _daily_at_cutoff_any(chn, _STREAM_SPEC[:confirmed_deaths].trajectory))
+
+    ## Recovered has no single-stream fit, so the joint is the only chain
+    ## its spec can resolve against. All three of its keys must be there or
+    ## the stream drops out of `stream_forecasts.csv` and stops being
+    ## scored, which is how it was lost once already.
+    rec = _STREAM_SPEC[:recovered]
+    @test !isnothing(_resolve_draws(chn, rec.expected))
+    @test !isnothing(_resolve_draws(chn, rec.dispersion))
+    @test !isnothing(_daily_at_cutoff_any(chn, rec.trajectory))
 end
 
 @testitem "forecast_reported carries the occupancy reclassification offset" tags=[
