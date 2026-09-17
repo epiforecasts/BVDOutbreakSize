@@ -63,8 +63,20 @@
 # poppler must be on PATH either way (apt install poppler-utils /
 # brew install poppler). See scripts/README.md.
 #
+# Incremental by default. Digitising a vintage means extracting the figure
+# and walking it pixel by pixel, and a data update adds one or two vintages
+# to a file that already holds every earlier one. So a run reuses the rows
+# out_csv already carries and opens the PDF only for the CONFIG vintages
+# missing from it. The rows are written back in the same order either way,
+# so an incremental run and a full one produce the same file.
+#
+# A change to the digitiser itself does not invalidate those reused rows, so
+# re-run with --rebuild after touching the digitising code, which re-reads
+# every vintage. Each run prints how many vintages it reused and how many it
+# read, so a run that should have re-read everything and did not is visible.
+#
 # Usage:
-#   python3 scripts/digitize_onset_curve.py [pdf_dir] [out_csv]
+#   python3 scripts/digitize_onset_curve.py [pdf_dir] [out_csv] [--rebuild]
 # Defaults: pdf_dir = data/sitrep_pdfs, out_csv = data/onset_curve_scanned.csv
 # Download the PDFs first with scripts/download_sitreps.jl.
 
@@ -158,6 +170,7 @@ CONFIG = {
     "119": ("2026-09-10", "2026-09-07"),
     "120": ("2026-09-11", "2026-09-07"),
     "121": ("2026-09-12", "2026-09-07"),
+    "122": ("2026-09-13", "2026-09-14"),
 }
 
 # Every figure through SitRep 083 draws its y-axis on a 0/20/40/60/80 grid,
@@ -204,6 +217,7 @@ Y_AXIS_STEP = {
     "119": 25,
     "120": 25,
     "121": 25,
+    "122": 25,
 }
 
 
@@ -489,13 +503,49 @@ def digitize(im, last_tick_date, y_step=20):
     return rows
 
 
+HEADER = ["sitrep", "report_date", "onset_date",
+          "confirmed_alive", "confirmed_dead", "confirmed_total"]
+
+
+def digitised_rows(out_csv):
+    """Rows out_csv already holds, keyed by SitRep, so a run can reuse a
+    vintage it has already read rather than open the PDF again. An absent,
+    empty or differently-headed file yields nothing, and every vintage is
+    then read, which is what a first run does anyway."""
+    rows = {}
+    if not os.path.isfile(out_csv):
+        return rows
+    with open(out_csv, newline="") as f:
+        r = csv.reader(f)
+        try:
+            if next(r) != HEADER:
+                return {}
+        except StopIteration:
+            return {}
+        for row in r:
+            if row:
+                rows.setdefault(row[0], []).append(tuple(row))
+    return rows
+
+
 def main():
-    pdf_dir = sys.argv[1] if len(sys.argv) > 1 else "data/sitrep_pdfs"
-    out_csv = (sys.argv[2] if len(sys.argv) > 2
-               else "data/onset_curve_scanned.csv")
+    args = [a for a in sys.argv[1:] if a != "--rebuild"]
+    rebuild = "--rebuild" in sys.argv[1:]
+    pdf_dir = args[0] if len(args) > 0 else "data/sitrep_pdfs"
+    out_csv = args[1] if len(args) > 1 else "data/onset_curve_scanned.csv"
+    cached = {} if rebuild else digitised_rows(out_csv)
+    reused = 0
+    read_now = 0
     out_rows = []
     for sr in sorted(CONFIG):
         report_date, last_tick = CONFIG[sr]
+        # Already digitised, so its rows are carried through untouched. They
+        # are written in the same sorted order as any other, so reusing them
+        # cannot reorder the file.
+        if sr in cached:
+            out_rows.extend(cached[sr])
+            reused += 1
+            continue
         pdf = os.path.join(pdf_dir, f"SitRep_MVE_{sr}_2026.pdf")
         if not os.path.isfile(pdf):
             print(f"skip {sr}: {pdf} not found", file=sys.stderr)
@@ -521,12 +571,16 @@ def main():
               f"total {total} confirmed")
         for onset, alive, dead in rows:
             out_rows.append((sr, report_date, onset, alive, dead, alive + dead))
+        read_now += 1
     with open(out_csv, "w", newline="") as f:
         w = csv.writer(f, lineterminator="\n")  # LF, matching the Julia ref
-        w.writerow(["sitrep", "report_date", "onset_date",
-                    "confirmed_alive", "confirmed_dead", "confirmed_total"])
+        w.writerow(HEADER)
         w.writerows(out_rows)
-    print(f"wrote {len(out_rows)} rows to {out_csv}")
+    print(f"wrote {len(out_rows)} rows to {out_csv}: "
+          f"{read_now} vintages read, {reused} reused from the existing file")
+    if reused:
+        print("re-run with --rebuild to re-read every vintage after "
+              "changing the digitiser")
 
 
 if __name__ == "__main__":

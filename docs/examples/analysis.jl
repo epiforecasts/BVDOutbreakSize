@@ -4867,16 +4867,19 @@ for f in stream_fits, (stream, label, obs_value) in f.streams,
     end
 end
 
-## Confirmed/suspect ward-bed occupancy for the joint, taken from the joint's
-## own `forecast_reported` runs (partitioned by the cut-off confirmed share in
-## `forecast_reported`, not re-derived here) so the ward beds are scored on the
-## same footing as the total occupancy in the preferred `stream_forecasts.csv`
-## asset. `forecast_stream` cannot project these — the split is not a growable
-## stream but a partition of the total — so they are read from the archive
-## runs. Dormant until the chain carries the confirmed in-care split:
-## `forecast_reported` emits these columns only when the confirmed in-care
-## prevalence `expected_confirmed_incare_T` is present, so the guard skips
-## them otherwise.
+## Confirmed/suspect ward-bed occupancy for the joint, read from the joint's
+## own `forecast_reported` runs so the ward beds are scored on the same
+## footing as the total occupancy in the preferred `stream_forecasts.csv`
+## asset. `forecast_stream` cannot project these. The split is not a growable
+## stream but a partition of the total.
+##
+## Dead as it stands. `forecast_reported` projects the total occupancy alone
+## and emits neither column, so the guard below always skips and nothing
+## reaches `stream_forecasts.csv` under these two labels. The joint does
+## carry the cut-off split (`expected_confirmed_incare_T`), so what is
+## missing is the partition of the projected level, not the quantity to
+## partition it by. Kept, with the guard, so the loop starts writing the
+## moment `forecast_reported` grows those columns.
 for (h, fc) in forecast_runs,
     (col, label) in ((:suspect_occupancy, "isolation beds (suspected)"),
         (:confirmed_occupancy, "treatment beds"))

@@ -13,7 +13,9 @@ Uganda imports come from WHO.
 The rendered report fills in the build date and the exact data cut-off automatically.
 
 > **Reduced data streams.**
-> The situation reports stopped publishing the daily new-suspected-case count on 6 August 2026, so it is frozen at its last published value.
+> The situation reports dropped the daily new-suspected-case tile on 6 August 2026.
+> The count continues from the alert-validation table that replaced it, which is the same construction under a new layout, so the series resumes on 7 August.
+> The 6 August report is left out, its alert table being internally inconsistent.
 > The treatment-centre patient-movement table was dropped on 3 August, and although the reports returned to their full format on 12 August with per-province prose covering much of the same ground, that stream stays frozen, since the prose does not carry the table's own counts (issue #562).
 > Every other stream continues, so the most recent weeks rest on fewer streams than earlier ones.
 > See the inclusion rules in `data/README.md`.

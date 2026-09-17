@@ -675,9 +675,13 @@ When the forecast carries the confirmed/suspect ward split
 the cut-off confirmed share), the two ward occupancy levels are archived too
 as `treatment beds` (confirmed) and `isolation beds (suspected)`, each scored
 against its own Tableau 6 occupancy sub-stock. The total `isolation beds`
-occupancy stays as its own stream. Streams a forecast does not carry are
-skipped. `thin` keeps every `thin`-th draw so the archive stays compact when
-it is saved as a release asset.
+occupancy stays as its own stream. Nothing produces those two columns yet:
+[`forecast_reported`](@ref) projects the total occupancy alone, so the two
+ward entries are reachable only from a forecast a caller has partitioned
+itself, which today is the tests. Streams a forecast does not carry are
+skipped, so this costs a real forecast nothing. `thin` keeps every
+`thin`-th draw so the archive stays compact when it is saved as a release
+asset.
 """
 function forecast_archive(fcs; made_date::Date, thin::Integer = 1)
     streams = (
@@ -968,9 +972,10 @@ end
 ##   pooled vector cannot be reached ahead of a stream's scalar, and
 ##   `forecast_stream` guards on the resolved length as a backstop.
 ## - `trajectory`: the stream's cumulative trajectory, whose last increment
-##   is the cut-off daily rate. Only the joint exposes any (as un-prefixed
-##   `:=` aliases). An empty list means the daily rate is always inferred
-##   from the cut-off cumulative instead.
+##   is the cut-off daily rate. The joint and the stream's own single-stream
+##   composer expose it under the same un-prefixed `:=` name, so one entry
+##   serves both. An empty list means neither fit carries one and the daily
+##   rate is inferred from the cut-off cumulative instead.
 ## - `kind`: `:cumulative` streams report a total accrued to the cut-off, so
 ##   the forecast is the new count over the horizon. `:level` streams report
 ##   a prevalence, so the forecast is the level at the horizon.
@@ -1177,9 +1182,12 @@ That needs the fitted triangle's own onset/report-day grid, so
 
 `obs_value` is the stream's observed count at the cut-off, the cumulative
 total for the incident streams or the observed occupancy for
-`:isolation_beds`. It anchors the reported quantity rather than changing it,
-since the incident streams return the increment and the level stream is
-projected from the fitted stock.
+`:isolation_beds`. No returned quantity depends on it: the incident streams
+return the increment their cut-off cumulative cancels out of, and the level
+stream is projected from the fitted stock. It is kept so a caller states the
+base each stream is being projected on top of, and so this signature reads
+against [`forecast_reported`](@ref)'s `obs_*` arguments, which do set that
+function's cumulative columns.
 
 The reproduction number keeps evolving over the horizon exactly as in
 [`forecast_reported`](@ref). The joint carries the cut-off `R_T`, `r` and `T`
@@ -1310,9 +1318,13 @@ function forecast_stream(chn, stream::Symbol;
     @inbounds for i in 1:nd
         rs = isnothing(evolving) ? nothing : evolving.paths[i]
         means = _daily_means(daily[i], rs, r[i], nh)
-        ## Formed as `forecast_reported` forms its `*_new` columns.
-        cum = round(Int, obs_value) + _replicate_new(i, means)
-        out[i] = max(cum - round(Int, obs_value), 0)
+        ## The new count over the horizon, as `forecast_reported` forms its
+        ## `*_new` columns: `obs_value + replicate` less `obs_value`, floored
+        ## at zero. `_replicate_new` sums non-negative count draws, so the
+        ## cut-off cumulative cancels exactly and the floor never binds. The
+        ## increment is taken directly rather than round-tripped through a
+        ## cumulative that is added and removed again.
+        out[i] = _replicate_new(i, means)
     end
     return out
 end

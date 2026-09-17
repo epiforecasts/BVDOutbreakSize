@@ -152,35 +152,29 @@ thunk runs. The sensitivity re-fits, including the zone variants
 """
 ## Sampler settings for the headline and its spatial control.
 ##
-## Both must use the same adapt delta and the same draw count. They are the
-## two halves of the spatial sensitivity, so a difference between their C_T
-## posteriors is only readable as evidence about the spatial structure if
-## nothing else about the two fits differs.
+## Both fits must use the same draw count, adaptation and acceptance target.
+## They are the two halves of the spatial sensitivity, so a difference
+## between their `C_T` posteriors reads as evidence about the spatial
+## structure only if nothing else differs.
 ##
-## Adapt delta is 0.90. Lowering it to 0.80 was measured and does not help:
+## 750 draws and 500 adaptation steps at a target acceptance of 0.80. The
+## effective sample size is limited by adaptation rather than by the draw
+## count, so the budget goes there: at 900 draws and 400 adaptation steps the
+## headline returned 48 bulk and 39 tail against the control's 256 and 203,
+## at a worst R-hat of 1.07 against 1.02.
+##
+## The binding constraint is the fit job's `timeout-minutes: 350`, under a
+## hard six-hour ceiling on a GitHub-hosted job. At 900 draws and 400
+## adaptation steps the headline took 320 minutes and the control 200. Total
+## iterations are held at or below that, so adaptation is bought with draws
+## rather than with wall-clock.
+##
 ## NUTS terminates at the tree-depth cap on every iteration of both fits, at
-## 1023 leapfrog steps, rather than at a U-turn, and it did so at 0.80 too on
-## an adapted step size of 0.003. Exploration is therefore truncated, and the
-## effective sample size is limited by that rather than by the draw count.
-## Raising `max_depth` is the direct fix, but each extra level doubles the
-## leapfrog steps, which does not fit the fit job's `timeout-minutes: 350`.
+## 1023 leapfrog steps, rather than at a U-turn. Raising `max_depth` is the
+## direct fix and each extra level doubles the leapfrog steps, which does not
+## fit the budget. A lower acceptance target lengthens the step and shortens
+## the trajectories instead.
 ##
-## The draw count is 1000 rather than the 500 every other fit uses, because
-## at 500 the headline returned 78 bulk and 64 tail effective samples over
-## its 1000 draws. Three patches cost 1.32 times a single patch per gradient,
-## measured with the two models interleaved so machine load falls on both
-## equally: 8.4 ms at one patch (217 parameters) against 11.1 ms at three
-## (300). At 500 draws and 200 adaptation steps over two chains, three
-## patches took 204 minutes locally against the single patch's 132, and the
-## single patch takes 145 to 153 minutes on the CI runner. Scaling by the
-## Measured on CI at 750 draws, 200 adaptation steps and a target acceptance
-## of 0.90: the four-patch headline took 268 minutes and its single-population
-## control 137, against the job's 350-minute cap. The patch fit costs about
-## twice the control while its gradient costs only about a fifth more, so the
-## excess is trajectory length rather than gradient cost, which is what the
-## acceptance target buys back. Dropping it to 0.80 lengthens the step and
-## shortens the trajectories, and the time that frees goes into adaptation,
-## where the shortfall actually is: the bulk effective sample size was 25.
 ## `BVD_JOINT_SAMPLES`, `BVD_JOINT_WARMUP` and `BVD_JOINT_TARGET_ACCEPT`
 ## override all three without editing this file.
 joint_target_accept() = parse(Float64,
@@ -481,8 +475,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common..., patch_only...);
-                samples = joint_samples(900), chains = chains,
-                n_adapts = joint_warmup(400),
+                samples = joint_samples(750), chains = chains,
+                n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("joint"))),
         ## Sensitivity: the same model with the spatial structure turned off
@@ -504,8 +498,8 @@ function build_fit_specs(obs;
                     obs.reported_cases, obs.exports_deaths,
                     obs.confirmed_cases, obs.tests_analysed;
                     joint_common...);
-                samples = joint_samples(900), chains = chains,
-                n_adapts = joint_warmup(400),
+                samples = joint_samples(750), chains = chains,
+                n_adapts = joint_warmup(500),
                 target_accept = joint_target_accept(),
                 callback = fit_callback("sens_no_patches"))),
         (; id = "exports",

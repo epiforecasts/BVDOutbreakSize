@@ -133,6 +133,13 @@ laboratory throughput from section 4.3, as `[province_confirmed_history]`,
 - The longer series narrows the signal that identifies provincial
 ascertainment: Nord-Kivu holds 16.4% of confirmed cases against 9% when the
 scans stopped in July, and provincial test positivity has converged.
+- The daily new-suspect series resumes from 7 August, adding 38 days to 13
+September after a freeze at 5 August (#708).
+The situation reports' alert-validation table is the pre-084 Tableau 3
+transposed, and its validated-suspect columns reproduce the old table's own
+daily suspect total exactly on all 20 vintages that print both.
+SitRep 084 stays out: its Nord-Kivu row both validates and invalidates more
+alerts than the province received.
 
 ### Report
 
@@ -166,6 +173,19 @@ A cache hit records that the fit was reused rather than refitted.
 
 - The province composition no longer boxes the locals its likelihood closure
 captures (#412).
+- The joint gradient costs about 30% less.
+The onset reporting delay evaluated its hazard about 87,000 times per
+gradient and now evaluates it about 8,500, by walking the survival product
+once for both halves of the ratio and sharing one delay-CDF table across the
+anchor series and the moments.
+The treatment-centre cohort walk stops where the clinical-stay survival
+reaches zero rather than running to the start of the grid, and the two
+abscond flows share one recurrence.
+- The draws move, the target does not.
+The log density is unchanged bit for bit, but reverse mode accumulates in a
+different order, so a fixed-seed chain no longer reproduces an earlier
+vintage draw for draw.
+Summaries agree within Monte Carlo error rather than exactly.
 
 ### Fixed
 

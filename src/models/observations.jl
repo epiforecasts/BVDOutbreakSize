@@ -251,6 +251,50 @@ beds are full rather than the occupancy going flat in demand. A `missing`
 end
 
 """
+    nearest_recorded(days, counts, day)
+
+Entry of `counts` whose `days` value is nearest `day`, ties going to the
+earliest. A data lookup with no sampled input. Written as a scan rather
+than an `argmin` over a broadcast so that it allocates nothing on the
+gradient path.
+"""
+function nearest_recorded(days::AbstractVector{<:Integer},
+        counts::AbstractVector, day::Integer)
+    best = 1
+    best_dist = abs(days[1] - day)
+    @inbounds for j in 2:length(days)
+        dist = abs(days[j] - day)
+        if dist < best_dist
+            best_dist = dist
+            best = j
+        end
+    end
+    return counts[best]
+end
+
+"""
+    last_recorded_before(days, counts, day, fallback)
+
+Entry of `counts` at the latest `days` value strictly before `day`, ties
+going to the earliest, or `fallback` when there is no such record. A data
+lookup with no sampled input, written as a scan so that it allocates
+nothing on the gradient path.
+"""
+function last_recorded_before(days::AbstractVector{<:Integer},
+        counts::AbstractVector, day::Integer, fallback)
+    best = 0
+    best_day = 0
+    @inbounds for j in eachindex(days)
+        dj = days[j]
+        if dj < day && (best == 0 || dj > best_day)
+            best_day = dj
+            best = j
+        end
+    end
+    return best == 0 ? fallback : counts[best]
+end
+
+"""
     censoring_cap(iso_days, iso_obs, capacity_history)
 
 Per-report-day right-censoring bound for the isolation-occupancy
@@ -285,13 +329,8 @@ function censoring_cap(iso_days, iso_obs, capacity_history)
     cap = Vector{Float64}(undef, m)
     @inbounds for (i, d) in enumerate(iso_days)
         di = Int(d)
-        c = if !have_cap
-            nocap
-        else
-            ## nearest recorded capacity by day distance (data lookup, no AD)
-            j = argmin(abs.(cdays .- di))
-            ccounts[j]
-        end
+        ## nearest recorded capacity by day distance (data lookup, no AD)
+        c = have_cap ? nearest_recorded(cdays, ccounts, di) : nocap
         o = iso_obs === missing ? 0.0 : Float64(iso_obs[i])
         cap[i] = max(c, o)
     end
@@ -747,12 +786,29 @@ late_days, late_increments, late_analysed, late_start)` of grid
 day-indices and per-window counts. `late_analysed[i]` is the observed 24h
 analysed denominator for late day `i` (0 when none was published). The
 observed and late groups are empty when no laboratory history is present
-and every confirmed vintage becomes an early window. Pure integer
-bookkeeping on the observed data, so it carries no gradient.
+and every confirmed vintage becomes an early window.
+
+`early_start` and `late_start` are grid days on every path but two. An empty
+`confirmed_history` returns `0` for both, and a `confirmed_history` with no
+`lab_history` returns `0` for `late_start` alone. Those two are the shortcut
+returns, and `0` there is a sentinel rather than a day. Elsewhere each is a
+real day whether or not its own window list is empty, since `early_start` is
+the first confirmed vintage and `late_start` the last laboratory day,
+neither of which depends on how many windows fell out.
+
+An empty group's start is still read: [`confirmed_cases_model`](@ref) passes
+it to [`bin_increments`](@ref) as a one-element edge list. The single bin
+that comes back is dropped, so the value cannot reach the likelihood, but a
+caller reading the sentinel as a grid day would index on `0`.
+
+Pure integer bookkeeping on the observed data, so it carries no gradient.
 """
 function confirmed_positivity_windows(confirmed_history, lab_history,
         lab_daily_history = (; days = Int[], counts = Int[]),
         confirmed_break_days = Int[])
+    ## Both starts are the sentinel `0` rather than a grid day. With no
+    ## confirmed vintage there is no first one to pin to, and the bin this
+    ## edge produces downstream is dropped before it reaches the likelihood.
     empty = (; obs_days = Int[], obs_positives = Int[], obs_analysed = Int[],
         early_days = Int[], early_increments = Int[], early_start = 0,
         late_days = Int[], late_increments = Int[], late_analysed = Int[],
@@ -1493,8 +1549,9 @@ Three pieces:
     background, tied to the case background by `cfr_bg` (see
     [`deaths_model`](@ref) and [`background_cfr_model`](@ref)), keeps
     `q_death` below one.
-  - Assay positivity. `p = s · q_death + (1 − spec)(1 − q_death)` with PCR
-    sensitivity `s` ([`test_sensitivity_model`](@ref)) and specificity
+  - Assay positivity. `p = s_test · q_death + (1 − spec)(1 − q_death)` with
+    PCR sensitivity `s_test`, named as [`confirmed_cases_model`](@ref)
+    names it ([`test_sensitivity_model`](@ref)), and specificity
     `spec` ([`test_specificity_model`](@ref)), the same form as the
     confirmed-case positivity, drawn from the same priors as separate
     death-stream parameters.
@@ -1530,7 +1587,7 @@ positivity and the expected confirmed-death count.
         specificity = test_specificity_model())
     sens_state ~ to_submodel(sensitivity)
     spec_state ~ to_submodel(specificity)
-    s = sens_state.s_test
+    s_test = sens_state.s_test
     spec = spec_state.spec
     n = length(deaths_daily)
 
@@ -1544,21 +1601,24 @@ positivity and the expected confirmed-death count.
     ## and a reassignment would box them.
     _widened = eltype(susp_death_raw) === Any
     susp_death = _widened ?
-                 convert(Vector{typeof(s)}, susp_death_raw) : susp_death_raw
+                 convert(Vector{typeof(s_test)}, susp_death_raw) :
+                 susp_death_raw
     bvd_death = _widened ?
-                convert(Vector{typeof(s)}, bvd_death_raw) : bvd_death_raw
+                convert(Vector{typeof(s_test)}, bvd_death_raw) :
+                bvd_death_raw
 
     ## Death-pool BVD composition per day, q = bvd / (bvd + bg), and the assay
-    ## tested-positive probability p = s·q + (1 − spec)(1 − q).
-    lo = eps(typeof(s))
-    hi = one(s) - lo
+    ## tested-positive probability p = s_test·q + (1 − spec)(1 − q).
+    lo = eps(typeof(s_test))
+    hi = one(s_test) - lo
     q_death_daily = map(eachindex(susp_death)) do t
         den = susp_death[t]
-        ratio = den > lo ? bvd_death[t] / den : one(s)
-        clamp(isfinite(ratio) ? ratio : one(s), lo, hi)
+        ratio = den > lo ? bvd_death[t] / den : one(s_test)
+        clamp(isfinite(ratio) ? ratio : one(s_test), lo, hi)
     end
-    p_pos_daily = s .* q_death_daily .+ (one(s) - spec) .*
-                                        (one(s) .- q_death_daily)
+    p_pos_daily = s_test .* q_death_daily .+
+                  (one(s_test) - spec) .*
+                  (one(s_test) .- q_death_daily)
 
     if case_analysed_daily !== nothing
         scale_state ~ to_submodel(scaling)
@@ -1619,7 +1679,7 @@ positivity and the expected confirmed-death count.
     q_death := q_death_daily[n]
     p_death_conf := p_pos_daily[n]
 
-    return (; τ_death, scaling = sc, s_test = s, spec, q_death, p_death_conf,
+    return (; τ_death, scaling = sc, s_test, spec, q_death, p_death_conf,
         confirmed_death_daily, expected_confirmed_deaths)
 end
 
@@ -1666,27 +1726,56 @@ and `κ = 0` recovers the plain [`convolve_delay`](@ref).
 """
 function abscond_thinned_flow(adm::AbstractVector, pmf::AbstractVector,
         κ::Real, conf_hazard::AbstractVector)
-    n = length(adm)
-    T = promote_type(eltype(adm), eltype(pmf), typeof(κ), eltype(conf_hazard))
-    out = zeros(T, n)
+    return first(abscond_thinned_flows(adm, pmf, adm, pmf, κ, conf_hazard))
+end
+
+"""
+    abscond_thinned_flows(adm1, pmf1, adm2, pmf2, κ, conf_hazard)
+
+The two [`abscond_thinned_flow`](@ref) flows that share an abscond rate and
+a confirmation hazard, walked in one pass. The cohort survival `S(t, d)`
+depends on neither the admissions nor the stay schedule, so the two flows
+run off one recurrence. Returns `(out1, out2)`.
+"""
+function abscond_thinned_flows(adm1::AbstractVector, pmf1::AbstractVector,
+        adm2::AbstractVector, pmf2::AbstractVector,
+        κ::Real, conf_hazard::AbstractVector)
+    n = length(adm1)
+    T = promote_type(eltype(adm1), eltype(pmf1), eltype(adm2), eltype(pmf2),
+        typeof(κ), eltype(conf_hazard))
+    out1 = zeros(T, n)
+    out2 = zeros(T, n)
     one_T = one(T)
-    nmax = length(pmf)
+    nmax1 = length(pmf1)
+    nmax2 = length(pmf2)
     @inbounds for t in 1:n
-        a = adm[t]
-        iszero(a) && continue
-        dmax = min(nmax - 1, n - t)
+        a1 = adm1[t]
+        a2 = adm2[t]
+        (iszero(a1) && iszero(a2)) && continue
+        dmax1 = min(nmax1 - 1, n - t)
+        dmax2 = min(nmax2 - 1, n - t)
+        ## Both schedules run to `dboth`; only the longer one runs past it.
+        dboth = min(dmax1, dmax2)
         ## Admission day: the cohort is not yet in the stock the balance
         ## charges absconds against, so it faces no abscond hazard.
-        out[t] += a * pmf[1]
+        out1[t] += a1 * pmf1[1]
+        out2[t] += a2 * pmf2[1]
         surv = one_T
         unconf = one_T
-        for d in 1:dmax
+        for d in 1:dboth
             unconf *= one_T - conf_hazard[t + d - 1]
             surv *= one_T - κ * unconf
-            out[t + d] += a * pmf[d + 1] * surv
+            out1[t + d] += a1 * pmf1[d + 1] * surv
+            out2[t + d] += a2 * pmf2[d + 1] * surv
+        end
+        for d in (dboth + 1):max(dmax1, dmax2)
+            unconf *= one_T - conf_hazard[t + d - 1]
+            surv *= one_T - κ * unconf
+            d <= dmax1 && (out1[t + d] += a1 * pmf1[d + 1] * surv)
+            d <= dmax2 && (out2[t + d] += a2 * pmf2[d + 1] * surv)
         end
     end
-    return out
+    return out1, out2
 end
 
 """
@@ -1874,13 +1963,13 @@ function two_clock_confirmed(A_bvd::AbstractVector, conf_hazard::AbstractVector,
         acc = zero(T)
         ## `prod_unconf` = probability cohort `u` is still unconfirmed at day
         ## `t`, `∏_{j=u+1}^{t}(1 − hazard_j)`, extended one factor per step as
-        ## `u` walks back from `t`.
+        ## `u` walks back from `t`. `S_clin` is zero past its support, so the
+        ## walk stops at cohort age `L - 1`.
         prod_unconf = one_T
-        for u in t:-1:1
+        for u in t:-1:max(1, t - L + 1)
             d = t - u
-            s = d < L ? S_clin[d + 1] : zero(T)
             cdf_conf = one_T - prod_unconf
-            acc += A_bvd[u] * cdf_conf * s
+            acc += A_bvd[u] * cdf_conf * S_clin[d + 1]
             prod_unconf *= (one_T - conf_hazard[u])
         end
         O_conf[t] = acc
@@ -1915,20 +2004,11 @@ function admission_headroom(adm_days, adm_obs, capacity_history,
     head = Vector{Float64}(undef, m)
     @inbounds for (i, d) in enumerate(adm_days)
         di = Int(d)
-        cap = if have_cap
-            j = argmin(abs.(cdays .- di))
-            ccounts[j]
-        else
-            nocap
-        end
+        cap = have_cap ? nearest_recorded(cdays, ccounts, di) : nocap
         ## Previous day's observed occupancy, the most recent record strictly
         ## before this admission day. No prior record ⇒ a large no-op headroom.
-        prev_occ = if have_occ
-            prior = findall(<(di), idays)
-            isempty(prior) ? -nocap : icounts[prior[argmax(idays[prior])]]
-        else
-            -nocap
-        end
+        prev_occ = have_occ ?
+                   last_recorded_before(idays, icounts, di, -nocap) : -nocap
         h = cap - prev_occ
         o = adm_obs === missing ? 0.0 : Float64(adm_obs[i])
         head[i] = max(h, o + 0.5)
@@ -2173,10 +2253,10 @@ series for forecasting and replication.
     ## ([`abscond_thinned_flow`](@ref)). Background admissions are never
     ## confirmed, so a flat cohort-age thinning is exact for the rule-outs
     ## ([`abscond_thinned`](@ref)).
-    deaths_daily = abscond_thinned_flow(CFR_iso .* A_bvd,
-        death_los_state.pmf, κ, conf_hazard)
-    recover_daily = abscond_thinned_flow((one(CFR_iso) - CFR_iso) .* A_bvd,
-        recovery_los_state.pmf, κ, conf_hazard)
+    deaths_daily, recover_daily = abscond_thinned_flows(
+        CFR_iso .* A_bvd, death_los_state.pmf,
+        (one(CFR_iso) - CFR_iso) .* A_bvd, recovery_los_state.pmf,
+        κ, conf_hazard)
     ruleout_daily = convolve_delay(A_bg,
         abscond_thinned(ruleout_los_state.pmf, κ))
     ## Still-in-a-bed survival for the two-clock confirmed sub-stock below.
@@ -2316,20 +2396,27 @@ series for forecasting and replication.
     occ_T = min(dem_T, C_T)
     overall_los = CFR_iso * death_los_state.mean +
                   (one(CFR_iso) - CFR_iso) * recovery_los_state.mean
-    expected_isolation := safe_rate(occ_T)
-    expected_bed_demand := safe_rate(dem_T)
+    ## Each cut-off quantity below is both `:=`-tracked onto the chain and
+    ## returned, so it is bound once and used twice. Computing it twice puts
+    ## the work on the gradient path twice, and lets an edit to one copy
+    ## leave the chain and the returned value disagreeing.
+    isolation_T = safe_rate(occ_T)
+    bed_demand_T = safe_rate(dem_T)
+    expected_isolation := isolation_T
+    expected_bed_demand := bed_demand_T
     ## Cut-off daily flows: the end-of-grid value of each modelled daily
     ## series, the one-week-ahead forecast base for admissions, in-care
     ## deaths and rule-outs.
-    expected_admissions := safe_rate(isempty(admit_daily) ? z0 :
-                                     admit_daily[end])
-    expected_incare_deaths := safe_rate(isempty(deaths_daily) ? z0 :
-                                        deaths_daily[end])
-    expected_ruleouts := safe_rate(isempty(ruleout_daily) ? z0 :
-                                   ruleout_daily[end])
+    admissions_T = safe_rate(isempty(admit_daily) ? z0 : admit_daily[end])
+    incare_deaths_T = safe_rate(isempty(deaths_daily) ? z0 :
+                                deaths_daily[end])
+    ruleouts_T = safe_rate(isempty(ruleout_daily) ? z0 : ruleout_daily[end])
+    expected_admissions := admissions_T
+    expected_incare_deaths := incare_deaths_T
+    expected_ruleouts := ruleouts_T
     ## Unmet demand: the uncapped demand above the censored occupancy.
     bed_shortfall := safe_rate(max(dem_T - occ_T, z0))
-    bed_utilisation := safe_rate(occ_T) / safe_rate(C_T)
+    bed_utilisation := isolation_T / safe_rate(C_T)
     isolation_severity := sev_state.δ_iso
     isolation_bvd_admission := p_iso_bvd
     incare_cfr := CFR_iso
@@ -2337,9 +2424,11 @@ series for forecasting and replication.
     treatment_overall_los := overall_los
     conf_incare_T = isempty(conf_split) ? z0 : conf_split[end]
     susp_incare_T = isempty(susp_split) ? z0 : max(susp_split[end], z0)
-    expected_confirmed_incare := safe_rate(conf_incare_T)
-    expected_suspect_incare := safe_rate(susp_incare_T)
-    incare_confirmed_share := safe_rate(conf_incare_T) / safe_rate(dem_T)
+    conf_incare_rate = safe_rate(conf_incare_T)
+    susp_incare_rate = safe_rate(susp_incare_T)
+    expected_confirmed_incare := conf_incare_rate
+    expected_suspect_incare := susp_incare_rate
+    incare_confirmed_share := conf_incare_rate / bed_demand_T
     ## Raw, since ρ can exceed one. ρ < 1 means occupied suspects are
     ## confirmed slower than the borrowed community hazard, held for repeated
     ## exclusion testing.
@@ -2347,7 +2436,8 @@ series for forecasting and replication.
     ## How much of the observed reclassification the model absorbed as a
     ## reporting artefact, the rest carried by real demand. Fitted and
     ## possibly negative, so reported raw rather than through `safe_rate`.
-    occupancy_break := isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    break_T = isempty(occ_break_offset) ? z0 : last(occ_break_offset)
+    occupancy_break := break_T
 
     return (; p_iso, p_iso_bvd, δ_iso = sev_state.δ_iso,
         CFR_iso, β_iso, capacity = C_T,
@@ -2361,20 +2451,16 @@ series for forecasting and replication.
         abscond_daily,
         break_steps = b, break_offset = occ_break_offset,
         break_grid_days,
-        occupancy_break = isempty(occ_break_offset) ? z0 :
-                          last(occ_break_offset),
+        occupancy_break = break_T,
         confirmed_incare = conf_split, suspect_incare = susp_split,
         confirmed_incare_deaths_daily, incare_confirm_modifier = ρ_conf,
-        expected_confirmed_incare = safe_rate(conf_incare_T),
-        expected_suspect_incare = safe_rate(susp_incare_T),
-        expected_isolation = safe_rate(occ_T),
-        expected_bed_demand = safe_rate(dem_T),
-        expected_admissions = safe_rate(isempty(admit_daily) ? z0 :
-                                        admit_daily[end]),
-        expected_incare_deaths = safe_rate(isempty(deaths_daily) ? z0 :
-                                           deaths_daily[end]),
-        expected_ruleouts = safe_rate(isempty(ruleout_daily) ? z0 :
-                                      ruleout_daily[end]))
+        expected_confirmed_incare = conf_incare_rate,
+        expected_suspect_incare = susp_incare_rate,
+        expected_isolation = isolation_T,
+        expected_bed_demand = bed_demand_T,
+        expected_admissions = admissions_T,
+        expected_incare_deaths = incare_deaths_T,
+        expected_ruleouts = ruleouts_T)
 end
 
 """
@@ -2564,8 +2650,8 @@ end
 """
     onset_report_G(δ, logit_h0, γ, u, grid_start)
 
-Normalised delay CDF `G(u, δ) = cdf(u, δ) / cdf(u, D-1)`
-([`onset_report_cdf_extrapolated`](@ref) supplying both terms), so
+Normalised delay CDF `G(u, δ) = cdf(u, δ) / cdf(u, D-1)`, both terms
+being [`onset_report_cdf_extrapolated`](@ref) values off one walk, so
 `G(u, D-1) = 1` by construction and `G` is a proper delay distribution
 rather than an asymptote that drifts with the hazard level. Built on the
 extrapolated cdf (calendar index clamped rather than assumed in-range)
@@ -2587,10 +2673,21 @@ allocation-free.
 """
 function onset_report_G(δ::Integer, logit_h0::AbstractVector,
         γ::AbstractVector, u::Integer, grid_start::Integer)
+    T = promote_type(eltype(logit_h0), eltype(γ))
     D = length(logit_h0)
-    num = onset_report_cdf_extrapolated(δ, logit_h0, γ, u, grid_start)
-    den = onset_report_cdf_extrapolated(D - 1, logit_h0, γ, u, grid_start)
-    return num / safe_rate(den)
+    ng = length(γ)
+    ## The numerator truncates the denominator's own survival product at
+    ## `min(δ, D - 1)`, so one walk over the delay support gives both.
+    jn = min(Int(δ), D - 1)
+    surv = one(T)
+    num = zero(T)
+    @inbounds for j in 0:(D - 1)
+        gi = clamp(u + j - grid_start + 1, 1, ng)
+        surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
+        j == jn && (num = one(T) - surv)
+    end
+    δ < 0 && (num = zero(T))
+    return num / safe_rate(one(T) - surv)
 end
 
 """
@@ -2641,6 +2738,43 @@ function onset_nowcast(observed::Real, onsets_u::Real, δ::Integer,
 end
 
 """
+    onset_report_cdf_table(logit_h0, γ, grid_start, u_lo, u_hi)
+
+[`onset_report_cdf_extrapolated`](@ref) at every delay `d = 0 … D-1` for
+every onset date `u in u_lo:u_hi`, as a `D × (u_hi - u_lo + 1)` matrix:
+`table[d + 1, k]` is the value at delay `d` and onset date `u_lo + k - 1`.
+A column is one pass of the survival recurrence, so it holds the normalised
+delay CDF's numerators alongside its denominator `table[D, k]`. Returns a
+`D × 0` matrix when `u_hi < u_lo`.
+
+[`onset_reporting_model`](@ref) builds one table over its own onset-date
+grid, which [`onset_report_anchor_series`](@ref) and
+[`onset_report_moments`](@ref) then both read, so the reporting hazard is
+evaluated once per `(delay, onset date)` cell for the whole stream rather
+than once per use. Pure, top-level, single indexed loop (see
+[`onset_report_cdf`](@ref) for the AD-safety rationale).
+"""
+function onset_report_cdf_table(logit_h0::AbstractVector,
+        γ::AbstractVector, grid_start::Integer, u_lo::Integer,
+        u_hi::Integer)
+    D = length(logit_h0)
+    ng = length(γ)
+    T = promote_type(eltype(logit_h0), eltype(γ))
+    nu = max(Int(u_hi) - Int(u_lo) + 1, 0)
+    table = Matrix{T}(undef, D, nu)
+    @inbounds for k in 1:nu
+        u = Int(u_lo) + k - 1
+        surv = one(T)
+        for j in 0:(D - 1)
+            gi = clamp(u + j - grid_start + 1, 1, ng)
+            surv *= (one(T) - logistic(logit_h0[j + 1] + γ[gi]))
+            table[j + 1, k] = one(T) - surv
+        end
+    end
+    return table
+end
+
+"""
     onset_report_anchor(logit_h0, γ, u, grid_start, a)
 
 Delay-weighted average of the calendar-indexed daily ascertainment series
@@ -2654,30 +2788,14 @@ reaches one, so they inherit the underflow corner
 anchor with them. `a` is indexed on the calendar/report axis and clamped at
 both ends, which is what reconciles the onset-indexed `anchor(u)` with a
 report-indexed series such as the confirmed pipeline's daily ascertainment
-(see [`onset_reporting_model`](@ref)). Pure, top-level, allocation-free.
+(see [`onset_reporting_model`](@ref)). Pure and top-level, over a
+one-column [`onset_report_cdf_table`](@ref).
 """
-function onset_report_anchor(logit_h0::AbstractVector, γ::AbstractVector,
-        u::Integer, grid_start::Integer, a::AbstractVector)
-    D = length(logit_h0)
-    T = promote_type(eltype(logit_h0), eltype(γ), eltype(a))
-    na = length(a)
-    ng = length(γ)
-    ## `G(u, d)` shares one survival product across every `d`, and its
-    ## denominator does not depend on `d`, so the whole weighted sum runs in
-    ## a single pass rather than rebuilding `G` from scratch per delay.
-    invden = inv(safe_rate(onset_report_cdf_extrapolated(
-        D - 1, logit_h0, γ, u, grid_start)))
-    surv = one(T)
-    g_prev = zero(T)
-    acc = zero(T)
-    @inbounds for d in 0:(D - 1)
-        gi = clamp(u + d - Int(grid_start) + 1, 1, ng)
-        surv *= (one(T) - logistic(logit_h0[d + 1] + γ[gi]))
-        g_cur = (one(T) - surv) * invden
-        acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
-        g_prev = g_cur
-    end
-    return acc
+function onset_report_anchor(logit_h0::AbstractVector,
+        γ::AbstractVector, u::Integer, grid_start::Integer,
+        a::AbstractVector)
+    table = onset_report_cdf_table(logit_h0, γ, grid_start, u, u)
+    return onset_report_anchor_series(table, u, a)[1]
 end
 
 """
@@ -2685,19 +2803,48 @@ end
 
 [`onset_report_anchor`](@ref) evaluated for every onset date `u in
 grid_start:grid_end`, the onset-date grid the ascertainment walk spans (see
-[`onset_reporting_model`](@ref)). Returns an empty vector when `grid_end <
-grid_start`. Pure, top-level, single indexed loop.
+[`onset_reporting_model`](@ref)), over a delay-CDF table
+([`onset_report_cdf_table`](@ref)) built here. Returns an empty vector when
+`grid_end < grid_start`.
 """
 function onset_report_anchor_series(logit_h0::AbstractVector,
         γ::AbstractVector, grid_start::Integer, grid_end::Integer,
         a::AbstractVector)
-    lo = Int(grid_start)
-    hi = Int(grid_end)
-    T = promote_type(eltype(logit_h0), eltype(γ), eltype(a))
-    hi < lo && return T[]
-    out = Vector{T}(undef, hi - lo + 1)
-    @inbounds for (k, u) in enumerate(lo:hi)
-        out[k] = onset_report_anchor(logit_h0, γ, u, grid_start, a)
+    table = onset_report_cdf_table(logit_h0, γ, grid_start,
+        grid_start, grid_end)
+    return onset_report_anchor_series(table, grid_start, a)
+end
+
+"""
+    onset_report_anchor_series(cdf_table, u_lo, a)
+
+[`onset_report_anchor`](@ref) for every onset date the delay-CDF table
+[`onset_report_cdf_table`](@ref) spans, its column `k` being onset date
+`u_lo + k - 1`. This is the form [`onset_reporting_model`](@ref) calls, off
+the table it shares with [`onset_report_moments`](@ref). Pure, top-level,
+one indexed loop over the table and no further hazard evaluation.
+"""
+function onset_report_anchor_series(cdf_table::AbstractMatrix,
+        u_lo::Integer, a::AbstractVector)
+    D = size(cdf_table, 1)
+    nu = size(cdf_table, 2)
+    T = promote_type(eltype(cdf_table), eltype(a))
+    na = length(a)
+    out = Vector{T}(undef, nu)
+    ## `G(u, d)` shares one survival product across every `d`, and its
+    ## denominator does not depend on `d`, so the weighted sum runs off the
+    ## onset date's table column rather than rebuilding `G` per delay.
+    @inbounds for k in 1:nu
+        u = Int(u_lo) + k - 1
+        invden = inv(safe_rate(D > 0 ? cdf_table[D, k] : zero(T)))
+        g_prev = zero(T)
+        acc = zero(T)
+        for d in 0:(D - 1)
+            g_cur = cdf_table[d + 1, k] * invden
+            acc += (g_cur - g_prev) * a[clamp(u + d, 1, na)]
+            g_prev = g_cur
+        end
+        out[k] = acc
     end
     return out
 end
@@ -2728,19 +2875,51 @@ no special-casing). An `onset_idx` outside `1:length(onsets)` contributes a
 zero rate rather than indexing out of bounds. Returns `(; means, level_cur,
 level_prev)`, each a length-`length(onset_idx)` vector. `level_cur`/
 `level_prev` are reused by [`onset_report_scales`](@ref) to grow the
-observation scale with the modelled (not observed) magnitude. Pure,
-top-level, single indexed loop (see [`onset_report_cdf`](@ref) for the
-AD-safety rationale).
+observation scale with the modelled (not observed) magnitude. The hazard
+enters through a delay-CDF table ([`onset_report_cdf_table`](@ref)) built
+here over `extrema(onset_idx)`. Pure and top-level (see
+[`onset_report_cdf`](@ref) for the AD-safety rationale).
 """
 function onset_report_moments(onsets::AbstractVector,
-        logit_h0::AbstractVector, γ::AbstractVector, grid_start::Integer,
+        logit_h0::AbstractVector, γ::AbstractVector,
+        grid_start::Integer, alpha::AbstractVector,
+        onset_idx::AbstractVector{<:Integer},
+        cur_report_idx::AbstractVector{<:Integer},
+        prev_report_idx::AbstractVector{<:Integer})
+    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
+        eltype(alpha))
+    isempty(onset_idx) &&
+        return (; means = T[], level_cur = T[], level_prev = T[])
+    u_lo, u_hi = extrema(onset_idx)
+    table = onset_report_cdf_table(logit_h0, γ, grid_start, u_lo,
+        u_hi)
+    return onset_report_moments(table, u_lo, onsets, grid_start, alpha,
+        onset_idx, cur_report_idx, prev_report_idx)
+end
+
+"""
+    onset_report_moments(cdf_table, u_lo, onsets, grid_start, alpha,
+        onset_idx, cur_report_idx, prev_report_idx)
+
+[`onset_report_moments`](@ref) off a delay-CDF table
+([`onset_report_cdf_table`](@ref)) whose column `k` is onset date
+`u_lo + k - 1`, which is the form [`onset_reporting_model`](@ref) calls off
+the table it shares with [`onset_report_anchor_series`](@ref). The table
+must span every `onset_idx`; the method above builds one over
+`extrema(onset_idx)`, and the model's own grid starts at
+`minimum(onset_days)` and ends at or after `maximum(report_days)`. Pure,
+top-level, one indexed loop over the table and no further hazard
+evaluation.
+"""
+function onset_report_moments(cdf_table::AbstractMatrix, u_lo::Integer,
+        onsets::AbstractVector, grid_start::Integer,
         alpha::AbstractVector,
         onset_idx::AbstractVector{<:Integer},
         cur_report_idx::AbstractVector{<:Integer},
         prev_report_idx::AbstractVector{<:Integer})
     m = length(onset_idx)
-    T = promote_type(eltype(onsets), eltype(logit_h0), eltype(γ),
-        eltype(alpha))
+    D = size(cdf_table, 1)
+    T = promote_type(eltype(onsets), eltype(cdf_table), eltype(alpha))
     means = Vector{T}(undef, m)
     level_cur = Vector{T}(undef, m)
     level_prev = Vector{T}(undef, m)
@@ -2748,14 +2927,21 @@ function onset_report_moments(onsets::AbstractVector,
     na = length(alpha)
     @inbounds for i in 1:m
         u = onset_idx[i]
+        k = u - Int(u_lo) + 1
         onset_rate = (u >= 1 && u <= n) ? onsets[u] : zero(T)
         α = alpha[clamp(u - Int(grid_start) + 1, 1, na)]
         δ_cur = cur_report_idx[i] - u
         δ_prev = prev_report_idx[i] - u
-        F_cur = onset_report_F(δ_cur, logit_h0, γ, u, grid_start, α)
-        F_prev = onset_report_F(δ_prev, logit_h0, γ, u, grid_start, α)
-        level_cur[i] = onset_rate * F_cur
-        level_prev[i] = onset_rate * F_prev
+        ## `F = α · num / den`, both numerators and the denominator read
+        ## off this onset date's column. A negative delay is the
+        ## right-truncation case and contributes exactly zero.
+        num_cur = (δ_cur < 0 || D == 0) ? zero(T) :
+                  cdf_table[min(Int(δ_cur), D - 1) + 1, k]
+        num_prev = (δ_prev < 0 || D == 0) ? zero(T) :
+                   cdf_table[min(Int(δ_prev), D - 1) + 1, k]
+        sden = safe_rate(D > 0 ? cdf_table[D, k] : zero(T))
+        level_cur[i] = onset_rate * (α * (num_cur / sden))
+        level_prev[i] = onset_rate * (α * (num_prev / sden))
         means[i] = level_cur[i] - level_prev[i]
     end
     return (; means, level_cur, level_prev)
@@ -3339,8 +3525,14 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
     ## fitted hazard and the caller-supplied calendar-indexed daily
     ## ascertainment `anchor` (the confirmed pipeline's own series, or the
     ## length-1 constant default). Attached unprefixed for the same reason.
-    anchor_series = onset_report_anchor_series(hazard_state.logit_h0,
-        hazard_state.γ, grid_start, grid_end, anchor)
+    ## One delay-CDF table over the onset-date grid, read by both the
+    ## anchor series and the per-cell moments, so the reporting hazard is
+    ## evaluated once per (delay, onset date) cell for the whole stream.
+    cdf_table = onset_report_cdf_table(hazard_state.logit_h0,
+        hazard_state.γ, hazard_state.grid_start, grid_start,
+        grid_end)
+    anchor_series = onset_report_anchor_series(cdf_table, grid_start,
+        anchor)
     asc_state ~ to_submodel(
         ascertainment(anchor_series, grid_start, grid_end), false)
     alpha = asc_state.alpha
@@ -3356,9 +3548,9 @@ hyperparameters re-exposed at this level for the pairs-plot summary.
         max(vintages.n_vintages, 1)))
     scan_level = one(σ_scan) .+ σ_scan .* z_scan
 
-    moments = onset_report_moments(onsets, hazard_state.logit_h0,
-        hazard_state.γ, hazard_state.grid_start, alpha, onset_days,
-        report_days, prev_report_days)
+    moments = onset_report_moments(cdf_table, grid_start, onsets,
+        hazard_state.grid_start, alpha, onset_days, report_days,
+        prev_report_days)
     scanned = onset_scan_adjust(moments.level_cur, moments.level_prev,
         scan_level, vintages.vintage_idx, vintages.prev_vintage_idx)
     scales = onset_report_scales(scanned.means, scanned.level_cur,
