@@ -721,6 +721,85 @@ function province_cfr_table(
     return df
 end
 
+## --- Ratios a nested model inherits --------------------------------------
+
+"""
+Posterior draws of the ratios a nested model inherits from this fit.
+
+Returns `(; IFR, confirmed_ascertainment, province_ascertainment)`. `IFR`
+is the infection fatality ratio and `confirmed_ascertainment` the national
+probability that an infection is laboratory-confirmed by the cut-off, both
+vectors of draws. `province_ascertainment` is a vector of draw vectors, one
+per province in the order of `PROVINCE_NAMES`, or `nothing` on a chain
+fitted without the per-province case composition.
+
+The draws are returned rather than summarised so a nested model can fit its
+own priors to them, which is what a health-zone model inside a province
+needs. The definitions are in [`bvd_joint`](@ref).
+"""
+function derived_ratio_draws(
+        chn;
+        n_patches::Integer = length(PROVINCE_NAMES)
+    )
+    for key in (:IFR, :confirmed_ascertainment)
+        _has_key(chn, key) || error(
+            "chain carries no `$(key)`; it was not sampled from `bvd_joint`."
+        )
+    end
+    prov = _has_key(chn, :province_confirmed_ascertainment) ?
+        _per_patch(chn, :province_confirmed_ascertainment, n_patches) :
+        nothing
+    return (;
+        IFR = _draws(chn, :IFR),
+        confirmed_ascertainment = _draws(chn, :confirmed_ascertainment),
+        province_ascertainment = prov,
+    )
+end
+
+"""
+Credible intervals for the ratios a nested model inherits (see
+[`derived_ratio_draws`](@ref)): one row per quantity with the equal-tailed
+30%, 60% and 90% interval endpoints as percentages, and no central
+estimate. The province rows are dropped on a chain fitted without the
+per-province case composition.
+"""
+function derived_ratio_table(
+        chn;
+        n_patches::Integer = length(PROVINCE_NAMES),
+        patch_labels::AbstractVector = PROVINCE_LABELS,
+        digits::Integer = 1
+    )
+    d = derived_ratio_draws(chn; n_patches)
+    df = DataFrame(
+        quantity = String[],
+        lower_90 = Float64[], lower_60 = Float64[], lower_30 = Float64[],
+        upper_30 = Float64[], upper_60 = Float64[], upper_90 = Float64[]
+    )
+    function add!(label, draws)
+        s = posterior_summary(100 .* draws)
+        return push!(
+            df,
+            (
+                label, round(s.lo90; digits), round(s.lo60; digits),
+                round(s.lo30; digits), round(s.hi30; digits),
+                round(s.hi60; digits), round(s.hi90; digits),
+            )
+        )
+    end
+    add!("Infection fatality ratio (%)", d.IFR)
+    add!("Confirmed-case ascertainment (%)", d.confirmed_ascertainment)
+    if d.province_ascertainment !== nothing
+        np = min(n_patches, length(patch_labels))
+        for p in 1:np
+            add!(
+                string(patch_labels[p], " ascertainment (%)"),
+                d.province_ascertainment[p]
+            )
+        end
+    end
+    return _prettify(df)
+end
+
 ## Streams the per-province split covers, as the forecast column and the
 ## stream label. The label is the one `forecast_archive` gives the national
 ## stream, so a province row names the stream it is a share of, and the

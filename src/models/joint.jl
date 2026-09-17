@@ -624,6 +624,84 @@ function _patch_confirmed_increments(
     return out
 end
 
+## Window total of a delayed series, without forming the convolution. For a
+## delay PMF with CDF `K`, the total of `x` pushed through it and summed to
+## the cut-off `n` is `sum_s x(s) K(n - s)`, so one pass over the series
+## replaces a full convolution. The derived ratios below divide by these
+## totals, so they run once per patch per draw and stay off the convolution
+## path.
+function _window_total_from_cdf(x::AbstractVector, cdf::AbstractVector)
+    n = length(x)
+    L = length(cdf)
+    Ts = promote_type(eltype(x), eltype(cdf))
+    acc = zero(Ts)
+    @inbounds for s in 1:n
+        d = n - s
+        acc += x[s] * (d >= L ? cdf[L] : cdf[d + 1])
+    end
+    return acc
+end
+
+## Per-patch window totals of an `(n_patches x n)` onset matrix pushed
+## through `pmf`, one entry per patch.
+function _patch_delayed_totals(
+        onsets_matrix::AbstractMatrix,
+        pmf::AbstractVector
+    )
+    cdf = cumsum(pmf)
+    return [
+        _window_total_from_cdf(vec(@view onsets_matrix[p, :]), cdf)
+            for p in axes(onsets_matrix, 1)
+    ]
+end
+
+"""
+Per-province confirmed-case ascertainment on an absolute scale: the
+probability that an infection in a province is laboratory-confirmed by the
+cut-off, corrected for the infections too recent to have been confirmed
+yet.
+
+[`province_composition_model`](@ref) samples `relative_asc`, a sum-to-zero
+log contrast with geometric mean one. It carries the provincial contrast
+and no level, since a composition is invariant to a common factor. The
+level is the national confirmed total `confirmed_total`, which the national
+confirmed stream fits.
+
+Write `M_p` for the province's modelled confirmed volume to the cut-off
+under the laboratory receipt delay `receipt_pmf`, the weight the
+composition itself uses, and `E_p` for its onsets weighted by the
+onset-to-confirmation CDF `confirmation_pmf`, the infections there that
+have had time to be confirmed. Then
+
+```math
+\\alpha_p = \\frac{C_{\\text{conf}}(T)\\,
+    \\mathrm{asc}_p M_p}{E_p \\sum_q \\mathrm{asc}_q M_q}.
+```
+
+The numerator is the national total split by the composition's own
+weights. The denominator is a completed-outcome count, so `alpha_p` is not
+the cut-off ratio of confirmed cases to infections, which is biased down by
+the recent infections that could not yet have been confirmed.
+
+By construction `sum_p alpha_p E_p` is the national confirmed total, so the
+`E`-weighted mean of the province ascertainments is the national
+ascertainment.
+"""
+function _province_confirmed_ascertainment(
+        onsets_matrix::AbstractMatrix,
+        receipt_pmf::AbstractVector, confirmation_pmf::AbstractVector,
+        relative_asc::AbstractVector, confirmed_total::Real
+    )
+    weights = relative_asc .*
+        _patch_delayed_totals(onsets_matrix, receipt_pmf)
+    exposed = _patch_delayed_totals(onsets_matrix, confirmation_pmf)
+    scale = safe_rate(confirmed_total) / safe_rate(sum(weights))
+    return [
+        safe_rate(scale * weights[p]) / safe_rate(exposed[p])
+            for p in eachindex(exposed)
+    ]
+end
+
 """
 Joint composer over all data streams. Runs the generating infection
 process once on a daily grid of length `n` (day `n` is the cut-off),
@@ -732,6 +810,16 @@ patch, for [`patch_summary_table`](@ref) and
 knots `delta_knots` from which [`reconstruct_patch_rt`](@ref) rebuilds the
 provincial trajectories. `R_T` is the force-of-infection-weighted
 reproduction number implied by the summed patch infections.
+
+Three ratios are exposed for a nested model to inherit, read together by
+[`derived_ratio_draws`](@ref). `IFR` is the infection fatality ratio, the
+BVD deaths the infections to the cut-off go on to cause over those
+infections. `confirmed_ascertainment` is the probability an infection is
+laboratory-confirmed by the cut-off, and
+`province_confirmed_ascertainment` is its per-province counterpart, present
+only when the case composition is scored. Both ascertainments divide by the
+infections that have had time to be confirmed rather than by all of them,
+so neither is the right-censored cut-off ratio.
 """
 @model function bvd_joint(
         n::Integer,
@@ -1056,6 +1144,15 @@ reproduction number implied by the summed patch infections.
         )
     end
 
+    ## The confirmed-case trajectory and the onset-to-confirmation delay,
+    ## both wanted by the ascertainment ratios below and both exposed as
+    ## deterministics further down. Computed once here rather than twice.
+    conf_cumulative = _cumulative_confirmed(
+        confirmed_state.confirmed_daily, confirmed_history, n
+    )
+    onset_to_confirmation = convolve_pmf(
+        cases_state.report_pmf, confirmed_state.receipt_pmf
+    )
     ## Per-province composition of the confirmed cases, conditional on the
     ## national total (already scored above), so no observation is counted
     ## twice. Skipped when no spatial-table data is supplied.
@@ -1089,6 +1186,22 @@ reproduction number implied by the summed patch infections.
         ## Elasticity of relative ascertainment on each patch's logged tests
         ## per head, the covariate on its prior.
         province_testing_coefficient := composition_state.testing_coefficient
+        ## The same ascertainment on an absolute scale, the probability that
+        ## an infection in that province is laboratory-confirmed by the
+        ## cut-off. The contrast above is sum-to-zero on the log scale and
+        ## so has no level of its own. This pairs it with the national
+        ## confirmed total and divides by the infections there that have had
+        ## time to be confirmed, so a fast-growing province is not read as a
+        ## poorly ascertained one (see
+        ## [`_province_confirmed_ascertainment`](@ref)). A nested health-zone
+        ## model takes its ascertainment prior from this rather than from the
+        ## contrast, which is not on a probability scale.
+        province_confirmed_ascertainment := _province_confirmed_ascertainment(
+            patch_state.onsets_matrix,
+            confirmed_state.receipt_pmf, onset_to_confirmation,
+            composition_state.province_ascertainment,
+            @inbounds(conf_cumulative[n])
+        )
     end
     ## Per-province composition of the confirmed deaths. This is the term
     ## that identifies the provincial split. The case composition weights
@@ -1156,9 +1269,7 @@ reproduction number implied by the summed patch infections.
     ## (onset-to-death ⊕ receipt) are exposed alongside so the residual delay
     ## between a confirmed case and its confirmed death can be rebuilt per
     ## draw off the chain.
-    cumulative_confirmed := _cumulative_confirmed(
-        confirmed_state.confirmed_daily, confirmed_history, n
-    )
+    cumulative_confirmed := conf_cumulative
     ## Each of the remaining count streams sums to its own cut-off expected
     ## total, so none needs the baseline re-add the confirmed path takes.
     cumulative_reports := cumsum(cases_state.reports_daily)
@@ -1167,9 +1278,7 @@ reproduction number implied by the summed patch infections.
         confirmed_deaths_state.confirmed_death_daily
     )
     cumulative_recovered := cumsum(recovered_state.recovered_daily)
-    onset_to_confirmation_pmf := convolve_pmf(
-        cases_state.report_pmf, confirmed_state.receipt_pmf
-    )
+    onset_to_confirmation_pmf := onset_to_confirmation
     onset_to_death_confirmation_pmf := convolve_pmf(
         deaths_state.od_pmf, confirmed_state.receipt_pmf
     )
@@ -1209,6 +1318,31 @@ reproduction number implied by the summed patch infections.
     R_T := patch_state.R_T
     expected_infections_T := @inbounds(patch_state.infections_total[n])
     CFR := deaths_state.CFR
+    ## Infection fatality ratio: the BVD deaths, reported or not, that the
+    ## infections up to the cut-off go on to cause, over those infections.
+    ## The deaths are lagged onto the infections that caused them rather
+    ## than set against the infections standing at the same day, so this is
+    ## not the cut-off ratio of deaths to infections, which is biased down
+    ## by the infections too recent to have died.
+    ##
+    ## Every infection reaches onset through a delay that thins nothing and
+    ## then dies at `CFR`, so the lagged ratio is the fatality parameter
+    ## itself. It is aliased here rather than rebuilt from the trajectories,
+    ## which would put two convolution totals on the gradient path to
+    ## recover a number the model already carries. The model has no
+    ## asymptomatic fraction, so it cannot separate an infection fatality
+    ## ratio from an onset-level one.
+    IFR := deaths_state.CFR
+    ## National confirmed-case ascertainment, the probability that an
+    ## infection is laboratory-confirmed by the cut-off. The denominator is
+    ## the infections that have had time to be confirmed, so the ratio is
+    ## the completed-outcome fraction rather than the censored cut-off one.
+    ## It is the level the per-province ascertainments share.
+    confirmed_exposed = _window_total_from_cdf(
+        onsets, cumsum(onset_to_confirmation)
+    )
+    confirmed_ascertainment := safe_rate(@inbounds(conf_cumulative[n])) /
+        safe_rate(confirmed_exposed)
     ## Per-patch quantities, as vector deterministics (one entry per patch).
     C_T_patch := patch_state.C_T_patch
     R_T_patch := [@inbounds(patch_state.Rt_matrix[p, n]) for p in 1:n_patches]

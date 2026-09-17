@@ -2192,6 +2192,48 @@ prior_pair_fig #hide
 # The gap between the two reflects the difference in case and death ascertainment that the structural CFR has to absorb.
 # The result is shown in the [confirmed case-fatality ratio results](@ref "Confirmed case-fatality ratio") below.
 #
+# #### Infection fatality ratio and case ascertainment
+#
+# Two ratios are reported for a nested model to inherit.
+# Both divide by the infections that have had time to produce the outcome rather than by every infection to the cut-off.
+# Write $I_p(s)$ for the daily infections in province $p$ and $I(s)$ for their sum, $f_\text{inc}$ for the incubation period, $f_d$ for the onset-to-death delay and $f_c$ for the onset-to-confirmation delay.
+# $F$ with a subscript is the cumulative distribution of the delay named there, and $T$ is the cut-off.
+#
+# The infection fatality ratio is the deaths, reported or not, that the infections up to the cut-off go on to cause, over those infections:
+#
+# ```math
+# \mathrm{IFR}(T) =
+#   \frac{\sum_{t \le T} \mathrm{CFR}\,
+#         (I * f_\text{inc} * f_d)(t)}
+#        {\sum_{s \le T} I(s)\, F_{\text{inc} * d}(T - s)}. \tag{60}
+# ```
+#
+# A death is set against the infection that caused it, not against the infections standing on the day it occurred.
+# The cut-off ratio of deaths to infections is a smaller and different number, because a fatal infection close to the cut-off enters the denominator before it can enter the numerator.
+# Numerator and denominator cancel here.
+# Every infection reaches onset through a delay that thins nothing and then dies with probability CFR, so the ratio is the fatality parameter itself.
+# The model carries no asymptomatic fraction, so it cannot hold an infection fatality ratio apart from an onset-level one, and the equality is a property of the model rather than a result.
+#
+# Confirmed-case ascertainment is the same construction on the confirmed stream, with $C_\text{conf}(T)$ the modelled cumulative confirmed cases:
+#
+# ```math
+# \alpha(T) = \frac{C_\text{conf}(T)}
+#   {\sum_{s \le T} I(s)\, F_{\text{inc} * c}(T - s)}. \tag{61}
+# ```
+#
+# The provincial version splits that national total between provinces the way the case composition splits it, then divides each province's share by its own denominator:
+#
+# ```math
+# \alpha_p(T) = \frac{C_\text{conf}(T)\, a_p M_p}
+#   {\bigl(\sum_q a_q M_q\bigr)
+#    \sum_{s \le T} I_p(s)\, F_{\text{inc} * c}(T - s)}, \tag{62}
+# ```
+#
+# Here $a_p$ is the relative case ascertainment the composition samples and $M_p$ the province's modelled confirmed volume to the cut-off, the quantity $a_p$ weights there.
+# The relative ascertainment is a contrast with geometric mean one, so it carries no level and is not a probability.
+# Equation (62) pairs it with the level the national confirmed stream fits.
+# Weighting the provincial ratios by their own denominators recovers the national confirmed total, so the national ascertainment is their infection-weighted mean.
+#
 # #### One-week-ahead forecast
 #
 # We project each DRC stream seven days beyond the cut-off.
@@ -4148,6 +4190,26 @@ no_onward_fig = plot_no_onward_deaths(
 
 no_onward_fig #hide
 
+# ### Ratios a nested model inherits
+#
+# The infection fatality ratio and the confirmed-case ascertainment, both defined in the [infection fatality ratio](@ref "Infection fatality ratio and case ascertainment") Methods section.
+# A model nested inside a province takes its priors from these draws rather than from this model's parameterisation.
+# The fatality ratio is the fatality parameter under the definition above, so it repeats the structural ratio quoted below rather than adding to it.
+# The ascertainment rows are the share of infections laboratory-confirmed by the cut-off, once the infections too recent to have been confirmed are taken out of the denominator.
+# The table gives interval endpoints and no central estimate.
+
+#md # ```@raw html
+#md # <details><summary>Build the inherited-ratio table</summary>
+#md # ```
+
+derived_ratios = derived_ratio_table(chn_joint);
+
+#md # ```@raw html
+#md # </details>
+#md # ```
+
+derived_ratios #hide
+
 # ### Confirmed case-fatality ratio
 #
 # The delay-corrected confirmed CFR, defined in the [delay-corrected confirmed CFR](@ref "Delay-corrected confirmed case-fatality ratio") Methods section, is set against the structural (infection-based) CFR and the naive confirmed ratio.
@@ -4556,6 +4618,9 @@ CSV.write(
     joinpath(output_dir, "confirmed_cfr_summary.csv"),
     confirmed_cfr_summary
 )
+## Ratios a nested model inherits, published so a health-zone model can take
+## its priors from this fit without re-running it.
+CSV.write(joinpath(output_dir, "derived_ratios.csv"), derived_ratios)
 
 ## Copy the input data so the release records what produced these
 ## results.

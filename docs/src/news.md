@@ -12,6 +12,23 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
+- The joint fit reports an infection fatality ratio, and a confirmed-case
+ascertainment both nationally and per province (#755).
+Both are tracked deterministics rather than sampled parameters, so neither
+adds a dimension to the fit.
+Both divide by the infections that have had time to produce the outcome
+rather than by every infection to the cut-off, so neither is the
+right-censored cut-off ratio.
+The fatality ratio comes out as the fatality parameter itself.
+Every infection reaches onset through a delay that thins nothing and then
+dies at that rate, and the model has no asymptomatic fraction to hold the
+two apart.
+The per-province ascertainment pairs the relative contrast the case
+composition samples, which has geometric mean one and is not a probability,
+with the level the national confirmed stream fits.
+A nested health-zone model reads all three off the parent chain rather than
+off its parameterisation.
+
 - The prior on a province's relative case ascertainment carries its laboratory
 throughput per head of population, logged and centred across patches, with a
 sampled coefficient (#410).
