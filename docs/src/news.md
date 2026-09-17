@@ -92,6 +92,13 @@ Only runs carrying that head branch are cancelled, so runs on `main`, on other p
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
+- Julia code is formatted with Runic rather than JuliaFormatter (#744).
+The isolated formatter environment existed to hold one exact version, and its compat string `"=2.12.0, 2.12"` did not do that.
+Julia reads a comma-separated compat string as a union, so the exact version unioned with a caret range covering everything below 3.0 and narrowed nothing.
+The environment accepted any 2.x at or above 2.12.0 and resolved 2.14.0 in practice.
+Runic takes no configuration, so the style cannot drift with settings either.
+The pin is now a single `=` string, and a quality test fails when the environment and the pre-commit hook declare different versions.
+The switch reformatted 121 files and added `ext/` to the checked directories.
 
 ### Dependencies
 
