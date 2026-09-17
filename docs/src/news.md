@@ -12,10 +12,6 @@ Changes since v2.0.0
 
 ### Performance
 
-- The joint gradient costs about 30% less, and the log density is bit-identical (#717).
-`onset_report_G` walked the reporting hazard twice, once for the numerator and once for the denominator, though the numerator is a prefix of the denominator's own survival product.
-One walk now records both, and the delay CDF is built once over the onset-date grid for the anchor series and the moments to share.
-At the production data the hazard fell from about 87,000 evaluations per gradient to about 8,500.
 - The sampler budget moves from draws into adaptation (#716).
 The headline patch fit returned 48 bulk and 39 tail effective samples at a worst R-hat of 1.07, against 256 and 203 at 1.02 for the single-population control on the same data through the same pipeline.
 Five times the effective sample from the same draw count places the limit at adaptation rather than at the draw count.
@@ -27,9 +23,6 @@ Each run now opens a PDF only for the vintages the file is missing, and an incre
 
 ### Data
 
-- The daily new-suspect series resumes from 7 August and runs to 13 September (#713).
-It had been frozen at 282, on 5 August, on the view that the alert table from SitRep 084 counted something else.
-Re-reading the reports shows the earlier Tableau 3 was the same alert-investigation funnel, so the two tables print the same quantity.
 - The model cut-off advances to SitRep 122, 13 September (#709).
 Confirmed cases reach 7258 and confirmed deaths 3510.
 Every fitted stream's net change matches that report's own printed 24-hour figure, with no harmonisation anywhere in the run.
