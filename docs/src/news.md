@@ -12,7 +12,7 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 
 ### Model
 
-- The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 1.0, the pooling prior `confirmed_positivity_model` already uses (#TBD3).
+- The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 1.0, the pooling prior `confirmed_positivity_model` already uses (#746).
 The posterior sits at 0.17 to 0.22, so the data set the scale and the prior only holds it non-negative and proper.
 The old scale of 0.1 guarded the degeneracy between the background rate and the outbreak size, a live risk while the suspected series ran a few weeks and the background rested on few vintages.
 The series now runs to mid-September and the daily new-suspect counts bear on the background every day of it, so that justification is retired rather than restated.
