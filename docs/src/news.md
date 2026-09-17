@@ -16,6 +16,9 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 The inclusion rules in `data/README.md` record which streams each vintage carries and which are frozen.
 - Recovered is labelled recovered among confirmed wherever the stream is named (#737).
 It counts survivors among laboratory-confirmed cases recorded as discharged, not recoveries overall, and every neighbouring stream already carried confirmed in its label.
+- The forecasts-versus-now overlay draws only the streams that carry a persistence baseline (#737).
+Reported cases and suspected deaths froze on 26 May and hold one scored point each with no baseline, so they were two rows of near-empty panels; the score tables already dropped them under the same rule.
+Their scored history stays in the released data.
 
 ### Fixed
 
