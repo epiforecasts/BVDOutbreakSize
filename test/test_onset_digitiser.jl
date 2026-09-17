@@ -134,10 +134,20 @@ end
     ## 930 at 0 and 931 at +1) - the two ranges disagree with each other, not
     ## just with shift 0, and every value is within a few percent of the
     ## others, consistent with this stream's own digitisation noise rather
-    ## than a misread tick.)
+    ## than a misread tick.) 122->123 splits the same way round: full-range
+    ## prefers shift +1 by about a percent (1298 against 1313 at 0 and 1329
+    ## at -1) while the stable region lands on 0 (910 against 1003/933).
+    ## 123->124 is the sharpest pair since 102->103, both ranges preferring
+    ## +1 by a wide margin (full 756 against 988 at 0 and 1178 at -1; stable
+    ## 597 against 879/1017). An axis error cannot explain it: 123 and 124
+    ## print the same first tick (06 avr 2026) and the same last tick (14
+    ## sept 2026), both read off 12x crops of the embedded figures, so the
+    ## two axes are calibrated identically and no one-day offset between
+    ## them is possible.
     documented = Dict("093" => "094", "096" => "097", "099" => "100",
         "102" => "103", "112" => "113", "115" => "116", "116" => "117",
-        "119" => "120", "120" => "121", "121" => "122")
+        "119" => "120", "120" => "121", "121" => "122", "122" => "123",
+        "123" => "124")
 
     unexpected = Tuple{String, String, Int, Int}[]
     resolved = String[]
