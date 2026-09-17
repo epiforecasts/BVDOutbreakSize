@@ -39,6 +39,11 @@ logs/
 /scripts/out/*.log
 /scripts/out/*.txt
 
+# Saved benchmark results. `task benchmark` writes results.json to the
+# working directory; the numbers are machine-specific and are compared
+# between two runs, never stored.
+/results.json
+
 *.html
 
 # Transient docs build logs captured at the repo root
