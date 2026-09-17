@@ -154,13 +154,7 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         cases = reported_cases_model,
         confirmed = confirmed_cases_model,
         dispersion = surveillance_dispersion_model(),
-        ascertainment = pooled_ascertainment_model(),
-        confirmed_positivity_link::Symbol = :composition,
-        ## Off here, unlike [`bvd_joint`](@ref). With no treatment or onset
-        ## stream and a `cases_state` run at a missing cut-off, `τ_test`
-        ## reaches the likelihood only through the `κ · τ_test` product,
-        ## which is not identified.
-        specimen_intensity::Bool = false)
+        ascertainment = pooled_ascertainment_model())
     latent ~ to_submodel(
         _latent(n, breakpoint, infection, onset_incidence), false)
     dispersion_state ~ to_submodel(dispersion)
@@ -170,6 +164,10 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
     cases_state ~ to_submodel(
         cases((; days = Int[], counts = Int[]), missing, latent.onsets,
         k, p_drc))
+    ## No specimen-intensity factor here, unlike [`bvd_joint`](@ref). With
+    ## no treatment or onset stream and a `cases_state` run at a missing
+    ## cut-off, `τ_test` reaches the likelihood only through the
+    ## `κ · τ_test` product, which is not identified.
     confirmed_state ~ to_submodel(
         confirmed(confirmed_history, confirmed_cases, latent.onsets, k,
         p_drc, cases_state.bg_daily, cases_state.τ_test,
@@ -177,10 +175,7 @@ stream can be forecast from this fit ([`forecast_stream`](@ref)).
         lab_history, lab_daily_history,
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
-        confirmed_break_sd,
-        specimen_intensity = specimen_intensity ?
-                             specimen_intensity_model() : nothing,
-        positivity_link = confirmed_positivity_link))
+        confirmed_break_sd))
     ## Cut-off expected confirmed count, aliased under the un-prefixed name
     ## [`bvd_joint`](@ref) uses so both fit kinds carry one key and the
     ## confirmed stream can be forecast from this fit
@@ -584,10 +579,9 @@ and lagged by a confirmation-to-recovery delay (see
 
 `breakpoint` is the intervention day passed to the reproduction-number
 walk (e.g. the first WHO situation report). `genetic` injects the genetic
-seeding submodel when `tmrca_days` is given. `specimen_intensity` (on by
-default) scales the analysed volume by specimens analysed per suspect
-([`specimen_intensity_model`](@ref)), which `τ_test` alone, being a
-probability, cannot exceed one of.
+seeding submodel when `tmrca_days` is given. The analysed volume is scaled
+by specimens analysed per suspect ([`specimen_intensity_model`](@ref)),
+which `τ_test` alone, being a probability, cannot exceed one of.
 
 Tracked deterministics: `C_T` (cumulative infections by the cut-off), the
 established reproduction number `R0` (= the first `R_t`), `r` and
@@ -706,7 +700,6 @@ reproduction number implied by the summed patch infections.
         ascertainment = pooled_ascertainment_model(),
         background_re::Bool = false,
         confirmed_positivity_link::Symbol = :composition,
-        specimen_intensity::Bool = true,
         genetic = nothing,
         onset_to_sample = nejm_onset_to_sample(),
         tmrca_days::Union{Missing, Real} = missing,
@@ -825,8 +818,7 @@ reproduction number implied by the summed patch infections.
         tests_analysed, confirmed_break_days,
         confirmed_break_gross = confirmed_break_gross_cases,
         confirmed_break_sd,
-        specimen_intensity = specimen_intensity ?
-                             specimen_intensity_model() : nothing,
+        specimen_intensity = specimen_intensity_model(),
         positivity_link = confirmed_positivity_link))
     ## Symptom-onset reporting-triangle stream
     ## ([`onset_reporting_model`](@ref)), the only direct observation of the

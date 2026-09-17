@@ -30,6 +30,10 @@ Non-centring suits a walk the prior dominates, and this is not one: on the 16 Se
 The gain, if any, is in effective samples per unit time rather than in gradient cost.
 Every fit-cache key changes, so the next build refits.
 
+- The model bodies lost four configuration switches that no fit selected (#PRNUM).
+The confirmed-case stream carried a probe that left the unanchored laboratory windows unscored, the suspected-death stream carried two unused background fallbacks, and the specimen-intensity factor was turned on in the joint model and off in the confirmed-only model by a keyword neither ever set.
+Every published fit took the same branch each time, so the alternatives are gone and the results are unchanged.
+
 ### Report
 
 - The fit diagnostics sit under the headline results rather than in the methods section, and the summary dashboard carries them too (#747).
