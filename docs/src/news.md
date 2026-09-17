@@ -23,6 +23,11 @@ Filtering its explanation comment left a blank line, which Literate counts as vi
 - The province forecast test again catches the share column it guards (#736).
 An overlap check replaced the dropped median assertion, and the wrong column's interval overlaps the band too.
 The whole interval must now sit inside it.
+- The fit cache key covers `data/observations.toml`, the manifest every observation is read from (#738).
+The digest hashed `*.csv` only, so a data update that touched the manifest alone left every key unchanged and served each fit from cache against the previous data.
+Four of the twenty-five most recent commits to the manifest changed no hashed CSV, one of them adding a month of fitted daily new-suspect history.
+The digest now covers every file under `data/` apart from an explicit exclude list, so an input in a format nothing has read before cannot be missed the same way.
+Every key changes, so the next build refits from scratch.
 
 ### Infrastructure
 
