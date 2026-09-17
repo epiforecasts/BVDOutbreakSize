@@ -443,6 +443,21 @@ function load_observations(
 end
 
 """
+    patch_members(province_names)
+
+Source provinces each patch pools, in the order of `province_names`.
+
+A name with no [`PROVINCE_MEMBERS`](@ref) entry is its own province, which
+keeps the province helpers usable with an arbitrary province list.
+[`province_increment_matrix`](@ref) and
+[`province_testing_covariate`](@ref) both resolve patches through this, so
+how a patch maps to the manifest blocks it covers is written once.
+"""
+function patch_members(province_names::AbstractVector)
+    [get(PROVINCE_MEMBERS, nm, [nm]) for nm in province_names]
+end
+
+"""
     province_increment_matrix(province_history, province_names, n_patches)
 
 Reshape the per-province cumulative histories loaded by
@@ -463,11 +478,7 @@ function province_increment_matrix(province_history,
     empty = (; days = Int[], increments = Matrix{Int}(undef, 0, 0))
     isempty(province_history) && return empty
     names = province_names[1:min(n_patches, length(province_names))]
-    ## A patch may pool several source provinces (see `PROVINCE_MEMBERS`),
-    ## so resolve each patch to the manifest blocks it covers. A name with no
-    ## membership entry is its own province, which keeps this usable with an
-    ## arbitrary province list.
-    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in names]
+    members = patch_members(names)
     any(ms -> any(m -> !haskey(province_history, m), ms), members) &&
         return empty
     hists = [[province_history[m] for m in ms] for ms in members]
@@ -528,7 +539,7 @@ function province_testing_covariate(province_lab_daily_history,
         "for $(np) patches.")
     none = zeros(np)
     isempty(province_lab_daily_history) && return none
-    members = [get(PROVINCE_MEMBERS, nm, [nm]) for nm in province_names]
+    members = patch_members(province_names)
     series = [["$(m)_analysed" for m in ms] for ms in members]
     any(ks -> any(k -> !haskey(province_lab_daily_history, k), ks), series) &&
         return none
