@@ -2151,7 +2151,16 @@ cfr_prior_fig #hide
 # ```
 #
 # $\rho$ is the intra-class correlation of the allocation, one value shared across patches and vintages.
-# We assume case ascertainment is equal across the zones of a patch, so the shares are shares of reported infections.
+#
+# The allocated confirmed deaths of every vintage follow a second Dirichlet-multinomial of the same form within each patch, on the infection-to-confirmed-death delay rather than the infection-to-report delay, with its own intra-class correlation $\rho_{\text{death}}$.
+# A case table and a death table do not disperse alike, so the two compositions do not share one concentration.
+#
+# The deaths are what make the zone ascertainment estimate mean something.
+# A zone's confirmed cases observe the product of its incidence and its case-finding, and cases alone cannot separate them.
+# Both compositions are normalised within a patch, so a factor common to the zones of a patch cancels from either.
+# We assume zone case fatality is constant within a patch, and the death shares then weight zones by incidence alone, leaving the case shares to identify relative ascertainment as the residual.
+# This is the argument the province model makes one level up, with one difference worth stating: there the provincial case-fatality ratios are partially pooled and estimated, whereas here constancy within a patch is assumed rather than fitted.
+# There is no per-zone lethality multiplier. A free one would cancel from the case shares and be absorbed by the death shares, reabsorbing the very signal the deaths carry, and 62 zones against 3103 allocated deaths would not identify it.
 #
 # The implied zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
 #
@@ -2170,8 +2179,9 @@ cfr_prior_fig #hide
 # There is no mixing between the zones of a patch.
 # The increments are consecutive-vintage differences clamped at zero.
 # The walking set depends on the data and can differ between fits at different cut-offs.
-# The zone deaths are not used, since the reports' unallocated death row holds in-care deaths awaiting a zone.
-# The mixing, the deaths and the choice of a low or high patch draw in place of the mean are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
+# A revision can move counts out of named zones, which leaves the unallocated row flat and the clamp absorbing the fall.
+# The death composition therefore leaves out any vintage on which a named zone loses more than one death, which is five vintages beyond those the unallocated row identifies; the case composition keeps the unallocated rule.
+# The mixing and the choice of a low or high patch draw in place of the mean, and a cases-only fit without the death composition, are fitted as variants in the [health-zone model sensitivity](@ref "Health-zone model sensitivity").
 
 #md # ```@raw html
 #md # <details><summary>Model: bvd_zone</summary>

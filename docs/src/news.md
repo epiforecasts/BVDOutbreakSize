@@ -14,10 +14,19 @@ Unreleased, and collecting the work merged since the `V2.0.0` tag.
 - The shared background random-walk innovation SD `σ_bg` has a half-normal prior of scale 0.3 rather than 0.1 (#740).
 The daily new-suspect series resumed to the cut-off in #713 pulls the posterior to 0.17 to 0.22, about twice the old scale, and the joint fit stopped mixing when it landed.
 The prior still regularises the background against the outbreak-size degeneracy, it no longer pulls against the data.
+- The health-zone model conditions on the confirmed cases and the confirmed deaths together (#711).
+The allocated zone deaths of every vintage are a second Dirichlet-multinomial within the patch, on the infection-to-confirmed-death delay rather than the case delay, with its own overdispersion.
+Deaths were previously off by default and, when on, contributed one composition of the cumulative allocated deaths at the final vintage, which saw the end-state allocation and no timing.
+The deaths are what separate a zone's incidence from its ascertainment: both compositions are normalised within a patch, so with zone case fatality assumed constant within a patch the death shares weight zones by incidence alone, leaving the case shares to identify relative ascertainment.
+There is no per-zone lethality multiplier, which would cancel from the case shares and be absorbed by the death shares, reabsorbing the signal.
+The sensitivity variant is now `local_no_deaths`, the cases-only fit, rather than a deaths-on variant.
+- A revision that moves deaths out of named zones leaves the unallocated row flat, so the reattribution rule that reads only that row does not see it and the increment clamp absorbs the fall (#711).
+`zone_cumulative_falls` reports every such fall, and the death composition excludes any vintage on which a named zone loses more than one death, five vintages beyond the unallocated rule.
+The confirmed-case composition keeps the unallocated rule, so that stream is unchanged; three of its vintages carry a fall the rule does not see.
 - A health-zone model disaggregates each patch of the headline joint model over the health zones that have reported a confirmed case (#711).
 It is a two-stage Markov melding in which the zone stage receives the patch posterior and feeds nothing back: patch infections, the generation interval and the infection-to-report delay are fixed at the joint posterior means, each zone's infections are a share of its patch's, the shares follow a renewal on the zone's own force of infection scaled by a weekly-knot deviation walk, and the per-vintage zone increments are scored with a Dirichlet-multinomial composition conditional on the allocated patch total.
 Zone reproduction numbers invert the zone renewal and are paired with joint draws for every reported quantity.
-Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk; zone ascertainment is taken as equal within a patch; deaths and between-zone mixing are off by default and fitted as sensitivity variants.
+Zones with fewer than 30 confirmed cases carry a decaying level rather than a walk; between-zone mixing is off by default and fitted as a sensitivity variant.
 `fit_zone` fits it from a parent chain with a data-informed start, two chains, 600 draws after 400 adaptation steps and a tree-depth cap of 8.
 
 ### Data
@@ -82,7 +91,7 @@ Agents write short test drivers and benchmark scripts there rather than into `sc
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
 - The fit registry and the docs workflow gain a dependent stage (#711).
 The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
-The zone sensitivity variants `local_mixing`, `local_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
+The zone sensitivity variants `local_mixing`, `local_no_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
 `BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
 
 ### Dependencies
