@@ -32,12 +32,22 @@ Every key changes, so the next build refits from scratch.
 
 ### Infrastructure
 
+- Per-component AD gradient benchmarks, run on pull requests that touch the differentiated surface (#729).
+One log-density evaluation and one gradient are timed per model component, rather than for `bvd_joint`, whose gradient costs about 14 ms behind an 18 minute cold compile and reports one number that says nothing about where the time went.
+The component list is shared with the AD gradient tests, so nothing can be timed without also being asserted differentiable.
+Enzyme is a second backend, behind `BVD_BENCH_ENZYME=true`.
+Every component under both backends did not finish inside a 90 minute job, where Mooncake alone took 34 minutes.
+- The benchmark suite says why it dropped a (component, backend) pair (#741).
+The gradient smoke test caught every exception and returned false, so an omitted pair gave no reason for it.
 - One-off harnesses written at the repository root are ignored (#726).
 Agents write short test drivers and benchmark scripts there rather than into `scratch/`, and six had accumulated in one worktree.
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
 
 ### Dependencies
 
+- The formatter environment pins JuliaFormatter to one version again, and Dependabot no longer opens pull requests for it (#741).
+`JuliaFormatter = "=2.12.0, 2.12"` reads as a union, so the exact pin was unioned with everything below 3.0.0 and any 2.x resolved; the environment had been doing that since #500 on 4 August.
+The pin resolves 2.12.0 again, which reports the tree clean, so no file is reformatted.
 - The docs, test and scripts environments no longer carry compat entries for Julia standard libraries, and Dependabot no longer opens pull requests for them (#728).
 Dependabot had written bounds such as `SHA = "0.7.0, 1, < 0.0.1"` that match no version, one of which merged in #699.
 Standard libraries ship with Julia, so these environments have nothing to pin.
