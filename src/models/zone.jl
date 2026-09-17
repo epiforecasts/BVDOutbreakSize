@@ -528,6 +528,32 @@ function _zone_rt_at(infections::AbstractMatrix, forces::AbstractMatrix,
     return out
 end
 
+"""
+$(TYPEDSIGNATURES)
+
+Within-patch relative multiplier `exp(σ (z_z − mean_p z))`, the log-scale
+contrasts summing to zero inside each patch so the level stays with the
+patch and only the contrasts are identified. This is the province model's
+per-province severity construction over the zones of a patch.
+"""
+function zone_relative_multiplier(z::AbstractVector, σ::Real,
+        patch_ranges::AbstractVector{<:UnitRange})
+    Tp = promote_type(eltype(z), typeof(float(σ)))
+    out = ones(Tp, length(z))
+    @inbounds for zs in patch_ranges
+        isempty(zs) && continue
+        m = zero(Tp)
+        for i in zs
+            m += z[i]
+        end
+        m /= length(zs)
+        for i in zs
+            out[i] = exp(σ * (z[i] - m))
+        end
+    end
+    return out
+end
+
 ## Dirichlet-multinomial concentration `(1 − ρ) / ρ` from the composition
 ## dispersion `ρ`, with `ρ` and `1 − ρ` floored at machine epsilon so a
 ## proposal at either end of `[0, 1]` gives a finite, positive `κ`.
@@ -599,11 +625,20 @@ the case delay, with its own concentration from `ρ_death`.
 
 Both compositions are normalised within a patch, so a per-zone lethality
 multiplier would cancel from the case shares and be absorbed by the death
-shares, reabsorbing the signal the deaths carry. There is none: zone case
-fatality is assumed constant within a patch. That assumption is what makes
-the death shares weight zones by incidence alone, leaving the case shares
-to identify relative ascertainment. It is an assumption here, where the
-province model partially pools its provincial ratios instead.
+shares, reabsorbing the signal the deaths carry. By default there is none:
+zone case fatality is assumed constant within a patch. That assumption is
+what makes the death shares weight zones by incidence alone, leaving the
+case shares to identify relative ascertainment.
+
+The province model does not assume it, it partially pools its provincial
+ratios. `severity = true` is that choice scaled down, for testing the
+assumption rather than replacing it: a per-zone relative case fatality
+`exp(σ (z − mean_p z))`, the log contrasts summing to zero within the
+patch, with `σ ~ N⁺(0, 0.3)`, the province model's own scale prior. A
+posterior `σ` well below its prior says the data hold the zones of a patch
+to one ratio and the default is vindicated; a posterior that resists says
+the multiplier is competing with the incidence split for the same
+signal.
 
 `mixing = true` adds one shared within-patch mixing fraction per patch,
 `ε_p ~ Beta(1, 100)`, redistributing force through the gravity kernel
@@ -623,11 +658,13 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
 @model function bvd_zone(zd;
         mixing::Bool = false,
         deaths::Bool = true,
+        severity::Bool = false,
         region_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         region_drift_sd_prior = truncated(Normal(0, 0.1); lower = 0),
         region_halflife_prior = LogNormal(log(42), 0.6),
         rho_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
         rho_death_prior = truncated(Normal(0, 0.1); lower = 0, upper = 1),
+        severity_sd_prior = truncated(Normal(0, 0.3); lower = 0),
         mixing_prior = Beta(1, 100),
         offset_prior = Normal(0, 1))
     nz = size(zd.counts, 1)
@@ -643,6 +680,13 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
     ## composition carries its own concentration rather than sharing one.
     if deaths
         ρ_death ~ rho_death_prior
+    end
+    ## Optional per-zone relative case fatality, partially pooled within the
+    ## patch exactly as the province model pools its provincial ratios. Off
+    ## by default: see the model docstring.
+    if deaths && severity
+        σ_severity ~ severity_sd_prior
+        z_severity ~ product_distribution(fill(offset_prior, nz))
     end
     ## Sampled only when used, or they would be prior-only dimensions.
     n_drift = zd.n_walking * (K - 1)
@@ -672,6 +716,13 @@ trajectories are rebuilt from these by [`zone_forward`](@ref).
                       zd.death_pre_rows .* transpose(w0)
         D = zone_report_increments(death_daily, w0, zd.patch_ranges,
             zd.death_days, zd.t0, zd.death_pre_cum)
+        if severity
+            sev = zone_relative_multiplier(z_severity, σ_severity,
+                zd.patch_ranges)
+            zone_severity_sd := σ_severity
+            zone_severity_relative := sev
+            D = D .* sev
+        end
         @addlogprob! zone_composition_logpdf(zd.death_counts, D,
             zd.death_cell_patch, zd.death_cell_vintage,
             zd.death_cell_total, zd.death_cell_const, zd.patch_ranges,
@@ -1123,7 +1174,7 @@ unconstrained vector and each chain's initial log joint density.
 """
 function zone_initial_params(model, inputs; chains::Integer = 2,
         seed::Integer = 20260518, jitter::Real = 0.1, mixing::Bool = false,
-        deaths::Bool = true)
+        deaths::Bool = true, severity::Bool = false)
     zd = inputs.model_data
     nz = length(inputs.z_w_start)
     K = length(zd.knots)
@@ -1135,6 +1186,10 @@ function zone_initial_params(model, inputs; chains::Integer = 2,
     end
     if deaths
         params = merge(params, (; ρ_death = 0.05))
+    end
+    if deaths && severity
+        params = merge(params,
+            (; σ_severity = 0.1, z_severity = zeros(nz)))
     end
     if mixing
         params = merge(params,
@@ -1185,6 +1240,7 @@ function fit_zone(parent_chain, obs;
         callback = nothing,
         mixing::Bool = false,
         deaths::Bool = true,
+        severity::Bool = false,
         parent_summary::Symbol = :mean,
         walk_threshold::Integer = 30,
         lead_days::Integer = 42,
@@ -1208,9 +1264,9 @@ function fit_zone(parent_chain, obs;
         error(
             "fit_zone: deaths = true but the observations carry no allocated " *
             "zone deaths.")
-    model = bvd_zone(zd; mixing, deaths)
+    model = bvd_zone(zd; mixing, deaths, severity)
     start = zone_initial_params(model, inputs; chains, seed, jitter,
-        mixing, deaths)
+        mixing, deaths, severity)
     n_zones = length(inputs.zone_keys)
     n_walking = count(inputs.walking)
     n_knots = length(inputs.knots)
