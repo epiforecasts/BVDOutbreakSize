@@ -40,7 +40,6 @@ The allocated zone deaths of every vintage are a second Dirichlet-multinomial wi
 Deaths were previously off by default and, when on, contributed one composition of the cumulative allocated deaths at the final vintage, which saw the end-state allocation and no timing.
 The deaths are what separate a zone's incidence from its ascertainment: both compositions are normalised within a patch, so with zone case fatality assumed constant within a patch the death shares weight zones by incidence alone, leaving the case shares to identify relative ascertainment.
 There is no per-zone lethality multiplier, which would cancel from the case shares and be absorbed by the death shares, reabsorbing the signal.
-The sensitivity variant is now `local_no_deaths`, the cases-only fit, rather than a deaths-on variant.
 - A revision that moves deaths out of named zones leaves the unallocated row flat, so the reattribution rule that reads only that row does not see it and the increment clamp absorbs the fall (#711).
 `zone_cumulative_falls` reports every such fall, and the death composition excludes any vintage on which a named zone loses more than one death, five vintages beyond the unallocated rule.
 The confirmed-case composition keeps the unallocated rule, so that stream is unchanged; three of its vintages carry a fall the rule does not see.
@@ -158,7 +157,7 @@ Agents write short test drivers and benchmark scripts there rather than into `sc
 The rules are anchored to the root, so the tracked `scripts/bench_*.jl` files are untouched.
 - The fit registry and the docs workflow gain a dependent stage (#711).
 The health-zone fits `local` and `local_frozen_validation` run after the headline and validation joints and are initialised from their cached chains, which they load strictly rather than refit.
-The zone sensitivity variants `local_mixing`, `local_no_deaths`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
+The zone sensitivity variants `local_mixing`, `local_parent_low` and `local_parent_high` run in the same stage on release builds.
 `BVD_FIT_STAGE` selects the stage for `docs/fits/list.jl` and `docs/fits/all.jl`, and `task fit-dependent` runs the second stage alone.
 - Julia code is formatted with Runic rather than JuliaFormatter (#744).
 The isolated formatter environment existed to hold one exact version, and its compat string `"=2.12.0, 2.12"` did not do that.

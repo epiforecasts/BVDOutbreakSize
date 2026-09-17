@@ -1,6 +1,6 @@
 module BVDOutbreakSize
 
-using Statistics: quantile, mean, cor, median, cov, std
+using Statistics: quantile, mean, cor, median, cov, std, var
 using LinearAlgebra: cholesky, Symmetric, tr, I, Diagonal, diag,
     issuccess
 using Statistics: quantile, mean, cor, median, std

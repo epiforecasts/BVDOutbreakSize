@@ -248,7 +248,6 @@ if !@isdefined(_BVD_SETUP_LOADED)
         ## The zone-model sensitivity re-fits, each one switch away from
         ## `chn_local`.
         chn_local_mixing = _fits["local_mixing"]
-        chn_local_no_deaths = _fits["local_no_deaths"]
         chn_local_parent_low = _fits["local_parent_low"]
         chn_local_parent_high = _fits["local_parent_high"]
     end

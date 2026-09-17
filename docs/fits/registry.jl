@@ -165,7 +165,7 @@ before running: empty for a base fit, the parent id for the health-zone fits
 parent is an error, not a refit. `zone_fitter` fits a zone model from a
 parent chain, `BVDOutbreakSize.fit_zone` when `nothing`, resolved when the
 thunk runs. The sensitivity re-fits, including the zone variants
-`local_mixing`, `local_no_deaths`, `local_parent_low` and
+`local_mixing`, `local_parent_low` and
 `local_parent_high`, are appended only when `run_sensitivity` is true.
 """
 ## Sampler settings for the headline and its spatial control.
@@ -815,7 +815,6 @@ function build_fit_specs(
     if run_sensitivity
         for (id, variant) in (
                 ("local_mixing", (; mixing = true)),
-                ("local_no_deaths", (; deaths = false)),
                 ("local_parent_low", (; parent_summary = :draw_low)),
                 ("local_parent_high", (; parent_summary = :draw_high)),
             )

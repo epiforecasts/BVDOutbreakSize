@@ -2181,9 +2181,16 @@ cfr_prior_fig #hide
 # \pi^{D}_{z} = \frac{\theta_z I_z}{\sum_{z' \in p} \theta_{z'} I_{z'}}. \tag{62}
 # ```
 #
-# Taking $\theta_z = \theta_p$ within a patch, $\theta_p$ cancels and $\pi^{D}_{z} = I_z / \sum_{z' \in p} I_{z'}$, so the deaths identify the incidence split and the cases then identify $a_z$ relative to its patch.
-# A free $\theta_z$ would cancel from $\pi^{C}$ and be absorbed by $\pi^{D}$, returning the confound.
-# The province model estimates its provincial lethality with partial pooling; here constancy within a patch is assumed.
+# Relative ascertainment $a_z$ and relative fatality $\theta_z$ are log contrasts summing to zero within the patch,
+#
+# ```math
+# a_z = \exp\bigl(\sigma_a (z^a_z - \bar z^a_p)\bigr),
+# \qquad
+# \theta_z = \exp\bigl(\sigma_\theta (z^\theta_z - \bar z^\theta_p)\bigr), \tag{63}
+# ```
+#
+# with $\sigma_a$ and $\sigma_\theta$ taking their priors from the province model's posterior for the same scales between provinces.
+# The pooling is what separates $I_z$ from $a_z$ and $\theta_z$: as $\sigma$ shrinks the shares weight zones by incidence alone, and a zone departs from its province only as far as its own counts require.
 #
 # The implied zone reproduction number inverts the zone renewal, as Equation (19) does nationally:
 #
@@ -2208,13 +2215,10 @@ cfr_prior_fig #hide
 #
 # #### Departures from the province model
 #
-# The zone model follows the province model's deviation structure, gravity function, composition form and reporting conventions. Three departures remain.
+# The zone model follows the province model's deviation structure, gravity function, composition form, inherited priors and reporting conventions. Two departures remain.
 #
 # - Zone infections are a share of the patch total rather than a renewal in their own right, so no infection crosses a patch boundary.
-# - The drift scale is shared across zones, where the province model gives each patch its own. A per-patch scale is the natural next step.
-# - The deviation scale priors are looser, $N^{+}(0, 0.3)$ and $N^{+}(0, 0.1)$ against $N^{+}(0, 0.15)$ and $N^{+}(0, 0.05)$, a zone departing from its patch further than a province from the country.
-#
-# Case fatality is assumed constant within a patch rather than partially pooled; the sensitivity page fits the province choice scaled down and reports whether the data support the assumption.
+# - One drift scale is shared across zones, where the province model gives each patch its own.
 
 #md # ```@raw html
 #md # <details><summary>Model: bvd_zone</summary>

@@ -2112,38 +2112,6 @@ zone_mixing.share #hide
 
 MarkdownTable(zone_mixing_epsilon_table) #hide
 
-# ### Zone deaths
-#
-# The headline zone fit conditions on the confirmed cases and the confirmed deaths together, each as a per-vintage composition within the patch.
-# The deaths are what separate a zone's incidence from its ascertainment: both compositions are normalised within a patch, so with case fatality taken as constant within a patch the death shares weight zones by incidence alone and the case shares are left to identify relative ascertainment.
-# The variant drops the death composition, leaving the cases-only fit in which the two are confounded.
-
-#md # ```@raw html
-#md # <details><summary>Zone posteriors with and without the death composition</summary>
-#md # ```
-
-zone_deaths = _zone_variant_outputs(
-    RUN_SENSITIVITY ?
-        [
-            "cases and deaths" => zone_live_summary,
-            "cases only" => _zone_cutoff_summaries(
-                chn_local_no_deaths,
-                zone_inputs_live
-            ),
-        ] : nothing,
-    "with and without the death composition"
-);
-
-#md # ```@raw html
-#md # </details>
-#md # ```
-
-MarkdownTable(zone_deaths.table) #hide
-
-zone_deaths.rt #hide
-
-zone_deaths.share #hide
-
 # ### Change over the past week
 #
 # The frozen zone fit and the live one condition on different weeks of data and on different parent fits.

@@ -244,7 +244,7 @@ end
     dependent = dependent_fit_ids(obs; run_sensitivity = true)
     @test dependent == [
         "local", "local_frozen_validation", "local_mixing",
-        "local_no_deaths", "local_parent_low", "local_parent_high",
+        "local_parent_low", "local_parent_high",
     ]
     @test dependent_fit_ids(obs; run_sensitivity = false) ==
         ["local", "local_frozen_validation"]
@@ -360,7 +360,6 @@ end
         ## exactly its own switch to the zone fitter's keywords.
         variants = (
             ("local_mixing", :mixing, true),
-            ("local_no_deaths", :deaths, false),
             ("local_parent_low", :parent_summary, :draw_low),
             ("local_parent_high", :parent_summary, :draw_high),
         )
