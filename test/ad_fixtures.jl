@@ -125,11 +125,19 @@ Which Enzyme pairs actually register is left to
 composers but not `bvd_joint` (epiforecasts/BVDOutbreakSize#445).
 """
 function backends()
-    out = [(name = "Mooncake", adtype = default_adtype())]
+    ## `Any` for the adtype, not the element type Julia would infer from the
+    ## Mooncake entry: a concretely-typed vector cannot hold the Enzyme one,
+    ## and the `catch` below would swallow the conversion error and report
+    ## Mooncake alone.
+    out = NamedTuple{(:name, :adtype), Tuple{String, Any}}[]
+    push!(out, (name = "Mooncake", adtype = default_adtype()))
     try
         push!(out, (name = "Enzyme", adtype = enzyme_adtype()))
-    catch
-        ## No Enzyme extension loaded: Mooncake alone.
+    catch err
+        ## No Enzyme extension loaded. Said out loud rather than swallowed,
+        ## so a run that quietly halves its backends is visible in the log.
+        println(stderr, "[fixtures] no Enzyme backend: ",
+            sprint(showerror, err))
     end
     return out
 end
